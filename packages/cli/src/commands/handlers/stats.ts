@@ -14,10 +14,6 @@ export default Runtime.handler(
     const project = Option.getOrUndefined(input.project)
     if ([days !== undefined, year !== undefined, input.all].filter(Boolean).length > 1)
       yield* Effect.fail(new Error("--days, --year, and --all cannot be combined"))
-    if (days !== undefined && days < 0) yield* Effect.fail(new Error("--days must be zero or greater"))
-    if (year !== undefined && (year < 1970 || year > 9_999))
-      yield* Effect.fail(new Error("--year must be between 1970 and 9999"))
-    if (input.limit < 1) yield* Effect.fail(new Error("--limit must be greater than zero"))
 
     const server = yield* ServerConnection.resolve({
       server: Option.getOrUndefined(input.server),
@@ -47,11 +43,13 @@ export default Runtime.handler(
       ? JSON.stringify(stats, null, 2)
       : renderStats(stats, {
           label: range.label,
+          scope: project === undefined ? "all projects" : project === "." ? "current project" : "selected project",
           models: input.models || input.full,
           tools: input.tools || input.full,
           cost: input.cost || input.full,
           limit: input.limit,
           color: process.stdout.isTTY && process.env.NO_COLOR === undefined,
+          width: process.stdout.columns ?? 80,
         })
     process.stdout.write(output + EOL)
   }),
@@ -59,11 +57,13 @@ export default Runtime.handler(
 
 type RenderOptions = {
   label: string
+  scope: string
   models: boolean
   tools: boolean
   cost: boolean
   limit: number
   color: boolean
+  width: number
 }
 
 const colors = terminalPalette()
@@ -80,25 +80,36 @@ export function renderStats(stats: SessionStatsInfo, options: RenderOptions) {
     .filter((value) => value !== undefined)
     .join(" · ")
   const toolSummary =
-    toolRate === undefined ? "no tool calls" : `${style(formatPercent(toolRate), primary, options.color)} tools`
+    toolRate === undefined ? "no tool calls" : `${style(formatPercent(toolRate), primary, options.color)} tool success`
   const details = options.models || options.tools || options.cost
+  const empty = stats.sessions === 0 && stats.prompts === 0 && stats.steps === 0
+  const heading = `${style("opencode stats", primary, options.color)} ${style(`· ${options.label} · ${options.scope}`, "2", options.color)}`
   const lines = details
-    ? []
-    : [
-        `${style("opencode stats", primary, options.color)} ${style(`· ${options.label}`, "2", options.color)}`,
-        "",
-        ...renderActivity(stats.activity, stats.range.from, stats.range.to, options.color),
-        "",
-        sessionLine,
-        `${metricCount(stats.prompts, "prompt", options.color)} · ${metricCount(stats.steps, "step", options.color)} · ${metricCount(totalTokens, "token", options.color)}`,
-        `${toolSummary} · ${metricCount(stats.activeDays, "active day", options.color)} · best streak ${style(stats.streak.toString(), primary, options.color)} day${stats.streak === 1 ? "" : "s"}`,
-        "",
-        style("opencode.ai", "2", options.color),
-      ]
+    ? [style(`${options.label} · ${options.scope}`, "2", options.color)]
+    : empty
+      ? [
+          heading,
+          "",
+          style("no activity in this range", "2", options.color),
+          "",
+          style("opencode.ai", "2", options.color),
+        ]
+      : [
+          heading,
+          "",
+          ...renderActivity(stats.activity, stats.range.from, stats.range.to, options.color, options.width),
+          "",
+          sessionLine,
+          `${metricCount(stats.prompts, "prompt", options.color)} · ${metricCount(stats.steps, "step", options.color)} · ${metricCount(totalTokens, "token", options.color)}`,
+          `${toolSummary} · ${metricCount(stats.activeDays, "active day", options.color)} · best streak ${style(stats.streak.toString(), primary, options.color)} day${stats.streak === 1 ? "" : "s"}`,
+          "",
+          style("opencode.ai", "2", options.color),
+        ]
 
-  if (options.cost) lines.push(...renderCost(stats))
-  if (options.models) lines.push(...(lines.length > 0 ? [""] : []), ...renderModels(stats, options.limit))
-  if (options.tools) lines.push(...(lines.length > 0 ? [""] : []), ...renderTools(stats, options.limit))
+  if (options.cost) lines.push(...(lines.length > 0 ? [""] : []), ...renderCost(stats))
+  if (options.models)
+    lines.push(...(lines.length > 0 ? [""] : []), ...renderModels(stats, options.limit, options.width))
+  if (options.tools) lines.push(...(lines.length > 0 ? [""] : []), ...renderTools(stats, options.limit, options.width))
   return lines.join(EOL)
 }
 
@@ -123,16 +134,26 @@ function statsRange(input: { days?: number; year?: number; all: boolean }) {
   }
 }
 
-function renderActivity(activity: SessionStatsInfo["activity"], from: number, to: number, color: boolean) {
+function renderActivity(
+  activity: SessionStatsInfo["activity"],
+  from: number,
+  to: number,
+  color: boolean,
+  width: number,
+) {
   const values = new Map(activity.map((day) => [day.date, day.steps]))
+  const rangeStart = dateOrdinal(new Date(from))
+  const rangeEnd = dateOrdinal(new Date(to - 1))
   const end = new Date(to - 1)
   end.setHours(12, 0, 0, 0)
   end.setDate(end.getDate() + (7 - mondayIndex(end) - 1))
   const start = new Date(from)
   start.setHours(12, 0, 0, 0)
   start.setDate(start.getDate() - mondayIndex(start))
+  const maxWeeks = Math.max(1, Math.min(53, width - 4))
+  const totalWeeks = Math.floor((dateOrdinal(end) - dateOrdinal(start)) / 7) + 1
   const latest = new Date(end)
-  latest.setDate(latest.getDate() - 52 * 7)
+  latest.setDate(latest.getDate() - (maxWeeks - 1) * 7)
   if (start < latest) start.setTime(latest.getTime())
 
   const active = [...values.values()].filter((value) => value > 0)
@@ -146,12 +167,14 @@ function renderActivity(activity: SessionStatsInfo["activity"], from: number, to
     Array.from({ length: 7 }, (_, day) => {
       const date = new Date(week)
       date.setDate(date.getDate() + day)
+      const ordinal = dateOrdinal(date)
+      if (ordinal < rangeStart || ordinal > rangeEnd) return " "
       return activityGlyph(values.get(dateKey(date)) ?? 0, levels, color)
     }),
   )
   const weekdays = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]
   return [
-    style("activity", `1;${colors.primary}`, color),
+    style(totalWeeks > maxWeeks ? `activity · last ${maxWeeks} weeks` : "activity", `1;${colors.primary}`, color),
     `   ${style(monthLabels(weekStarts), "2", color)}`,
     ...weekdays.flatMap((label, day) => [
       `${style(label, "2", color)} ${weeks.map((week) => week[day]).join("")}`,
@@ -163,7 +186,7 @@ function renderActivity(activity: SessionStatsInfo["activity"], from: number, to
 }
 
 function renderCost(stats: SessionStatsInfo) {
-  const input = stats.tokens.input + stats.tokens.cache.read
+  const input = stats.tokens.input + stats.tokens.cache.read + stats.tokens.cache.write
   const cached = input === 0 ? 0 : (stats.tokens.cache.read / input) * 100
   return [
     "COST & TOKENS",
@@ -177,30 +200,54 @@ function renderCost(stats: SessionStatsInfo) {
   ]
 }
 
-function renderModels(stats: SessionStatsInfo, limit: number) {
+function renderModels(stats: SessionStatsInfo, limit: number, width: number) {
   if (stats.models.length === 0) return ["MODELS", "  no model usage"]
+  const models = stats.models.slice(0, limit)
+  if (width < 68)
+    return [
+      "MODELS",
+      ...models.flatMap((item) => [
+        truncate(
+          `${item.model.providerID}/${item.model.id}${item.model.variant ? `#${item.model.variant}` : ""}`,
+          width,
+        ),
+        `  ${formatNumber(tokenTotal(item.tokens))} tokens · ${formatNumber(item.steps)} steps · $${item.cost.toFixed(2)}`,
+      ]),
+    ]
   return [
     "MODELS",
     tableHeader("model", "tokens", "steps", "cost"),
-    ...stats.models
-      .slice(0, limit)
-      .map((item) =>
-        tableRow(
-          `${item.model.providerID}/${item.model.id}${item.model.variant ? `#${item.model.variant}` : ""}`,
-          formatNumber(tokenTotal(item.tokens)),
-          formatNumber(item.steps),
-          `$${item.cost.toFixed(2)}`,
-        ),
+    ...models.map((item) =>
+      tableRow(
+        `${item.model.providerID}/${item.model.id}${item.model.variant ? `#${item.model.variant}` : ""}`,
+        formatNumber(tokenTotal(item.tokens)),
+        formatNumber(item.steps),
+        `$${item.cost.toFixed(2)}`,
       ),
+    ),
   ]
 }
 
-function renderTools(stats: SessionStatsInfo, limit: number) {
+function renderTools(stats: SessionStatsInfo, limit: number, width: number) {
   if (stats.toolUsage.length === 0) return ["TOOL RELIABILITY", "  no tool calls"]
+  const tools = stats.toolUsage.slice(0, limit)
+  if (width < 68)
+    return [
+      "TOOL RELIABILITY",
+      ...tools.flatMap((tool) => {
+        const terminal = tool.succeeded + tool.failed
+        return [
+          truncate(tool.name, width),
+          `  ${formatNumber(tool.calls)} calls · ${terminal === 0 ? "-" : formatPercent((tool.failed / terminal) * 100)} error · ${tool.durationP50 === undefined ? "-" : formatDuration(tool.durationP50)} p50`,
+        ]
+      }),
+      "",
+      `${formatNumber(stats.tools.succeeded + stats.tools.failed)} finished calls · ${formatNumber(stats.tools.unfinished)} unfinished`,
+    ]
   return [
     "TOOL RELIABILITY",
     tableHeader("tool", "calls", "error", "p50"),
-    ...stats.toolUsage.slice(0, limit).map((tool) => {
+    ...tools.map((tool) => {
       const terminal = tool.succeeded + tool.failed
       return tableRow(
         tool.name,
@@ -210,7 +257,7 @@ function renderTools(stats: SessionStatsInfo, limit: number) {
       )
     }),
     "",
-    `${formatNumber(stats.tools.succeeded + stats.tools.failed)} terminal calls · ${formatNumber(stats.tools.unfinished)} unfinished`,
+    `${formatNumber(stats.tools.succeeded + stats.tools.failed)} finished calls · ${formatNumber(stats.tools.unfinished)} unfinished`,
   ]
 }
 
@@ -283,10 +330,12 @@ function terminalPalette() {
       primary: "38;2;59;125;216",
       activity: ["38;2;153;169;192", "38;2;122;155;200", "38;2;90;140;208", "38;2;59;125;216"],
     }
-  return {
-    primary: "38;2;250;178;131",
-    activity: ["38;2;117;99;87", "38;2;161;125;102", "38;2;206;152;116", "38;2;250;178;131"],
-  }
+  if (Number.isFinite(background))
+    return {
+      primary: "38;2;250;178;131",
+      activity: ["38;2;117;99;87", "38;2;161;125;102", "38;2;206;152;116", "38;2;250;178;131"],
+    }
+  return { primary: "36", activity: ["2;36", "36", "1;36", "1;96"] }
 }
 
 function monthLabels(weeks: Date[]) {

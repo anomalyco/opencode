@@ -1,4 +1,5 @@
 import { Argument, Flag } from "effect/unstable/cli"
+import { Schema } from "effect"
 import { Spec } from "../framework/spec"
 
 declare const OPENCODE_CLI_NAME: string | undefined
@@ -191,8 +192,16 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
       description: "Show shareable usage statistics",
       params: {
         ...ServerParams,
-        days: Flag.integer("days").pipe(Flag.withDescription("Show the last N days; 0 means today"), Flag.optional),
-        year: Flag.integer("year").pipe(Flag.withDescription("Show a calendar year"), Flag.optional),
+        days: Flag.integer("days").pipe(
+          Flag.withSchema(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
+          Flag.withDescription("Show the last N days; 0 means today"),
+          Flag.optional,
+        ),
+        year: Flag.integer("year").pipe(
+          Flag.withSchema(Schema.Int.check(Schema.isBetween({ minimum: 1970, maximum: 9_999 }))),
+          Flag.withDescription("Show a calendar year"),
+          Flag.optional,
+        ),
         all: Flag.boolean("all").pipe(Flag.withDescription("Show lifetime statistics"), Flag.withDefault(false)),
         project: Flag.string("project").pipe(
           Flag.withDescription('Filter by project ID, or use "." for the current project'),
@@ -203,6 +212,7 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
         cost: Flag.boolean("cost").pipe(Flag.withDescription("Show cost and token details"), Flag.withDefault(false)),
         full: Flag.boolean("full").pipe(Flag.withDescription("Show every detailed section"), Flag.withDefault(false)),
         limit: Flag.integer("limit").pipe(
+          Flag.withSchema(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
           Flag.withDescription("Number of rows in detailed sections"),
           Flag.withDefault(5),
         ),

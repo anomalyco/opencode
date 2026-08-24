@@ -31,14 +31,13 @@ const stats: SessionStatsInfo = {
 describe("stats rendering", () => {
   test("keeps the default card shareable", () => {
     const output = renderStats(stats, options())
-    expect(output).toContain("opencode stats · 2026 so far")
+    expect(output).toContain("opencode stats · 2026 so far · all projects")
     expect(output).toContain("activity")
-    expect(output).toContain("Mo ··")
-    expect(output).toMatch(/Mo .*\n\nTu/)
-    expect(output).toMatch(/Su .*\n\n   less/)
+    expect(output).toMatch(/Mo .*(?:\r?\n){2}Tu/)
+    expect(output).toMatch(/Su .*(?:\r?\n){2}   less/)
     expect(output).toContain("less ·░▒▓█ more")
     expect(output).toContain("2 sessions · 1 subagent")
-    expect(output).toContain("80.0% tools · 2 active days · best streak 2 days")
+    expect(output).toContain("80.0% tool success · 2 active days · best streak 2 days")
     expect(output).not.toContain("private_tool")
     expect(output).not.toContain("$12.34")
   })
@@ -50,25 +49,52 @@ describe("stats rendering", () => {
     expect(output).toContain("private_tool")
     expect(output).toContain("tool")
     expect(output).toContain("calls")
+    expect(output).toContain("cached input        32.3%")
     expect(output).not.toContain("opencode stats")
     expect(output).not.toContain("activity")
   })
 
   test("uses the OpenCode palette in color mode", () => {
     const output = renderStats(stats, options({ color: true }))
-    expect(output).toContain("\x1b[1;38;2;")
+    expect(output).toContain("\x1b[1;36m")
     expect(output).not.toContain("38;5;45")
+  })
+
+  test("uses compact layouts in narrow terminals", () => {
+    const output = renderStats(stats, options({ models: true, width: 48 }))
+    expect(output).toContain("anthropic/sonnet")
+    expect(output).toContain("18.5k tokens · 6 steps · $12.34")
+    expect(output.split(/\r?\n/).every((line) => line.length <= 48)).toBe(true)
+  })
+
+  test("renders a concise empty state", () => {
+    const output = renderStats(
+      { ...stats, sessions: 0, subagents: 0, prompts: 0, steps: 0, activeDays: 0, streak: 0, activity: [] },
+      options(),
+    )
+    expect(output).toContain("no activity in this range")
+    expect(output).not.toContain("less ·░▒▓█ more")
+  })
+
+  test("labels activity when terminal width truncates the requested range", () => {
+    const output = renderStats(
+      { ...stats, range: { from: Date.UTC(2020, 0, 1), to: Date.UTC(2026, 0, 8) } },
+      options({ width: 20 }),
+    )
+    expect(output).toContain("activity · last 16 weeks")
   })
 })
 
 function options(input: Partial<Parameters<typeof renderStats>[1]> = {}): Parameters<typeof renderStats>[1] {
   return {
     label: "2026 so far",
+    scope: "all projects",
     models: false,
     tools: false,
     cost: false,
     limit: 5,
     color: false,
+    width: 80,
     ...input,
   }
 }
