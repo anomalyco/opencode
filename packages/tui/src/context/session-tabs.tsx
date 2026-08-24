@@ -162,19 +162,14 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
         [
           () => (enabled() && route.data.type === "session" ? route.data.sessionID : undefined),
           () => config.tabs.scope,
-          () => paths.cwd,
         ],
         ([routed]) => {
           if (!routed || routed === "dummy") return
           const sessionID = root(routed)
           cancelledTabs.delete(sessionID)
           history = recordSessionTabHistory(history, sessionID)
+          if (state().tabs.some((tab) => tab.sessionID === sessionID)) return
           const fallback = newTab() ? NEW_SESSION_TAB_TITLE : undefined
-          const tabs = openSessionTab(state().tabs, {
-            sessionID,
-            title: title(sessionID, state().tabs.find((tab) => tab.sessionID === sessionID)?.title, fallback),
-          })
-          if (tabs === state().tabs) return
           update((draft) => {
             if (cancelledTabs.has(sessionID)) return
             draft.tabs = openSessionTab(draft.tabs, {
@@ -185,20 +180,6 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
         },
       ),
     )
-
-    createEffect(() => {
-      if (!enabled() || route.data.type !== "session" || route.data.sessionID === "dummy") return
-      const sessionID = root(route.data.sessionID)
-      const tab = state().tabs.find((tab) => tab.sessionID === sessionID)
-      if (!tab) return
-      const nextTitle = title(sessionID, tab.title)
-      if (!nextTitle || nextTitle === tab.title) return
-      update((draft) => {
-        const tab = draft.tabs.find((tab) => tab.sessionID === sessionID)
-        if (!tab) return
-        draft.tabs = openSessionTab(draft.tabs, { sessionID, title: title(sessionID, tab.title) })
-      })
-    })
 
     // Viewed state is server-global, so acknowledgement runs even with tabs disabled: other
     // clients rely on this client reporting what its user has seen.
