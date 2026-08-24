@@ -117,10 +117,23 @@ function createServerCtx(
       ? sync.data.project.find((x) => x.id === projectID)
       : sync.data.project.find((x) => x.worktree === project.worktree)
 
+    // Local metadata: v1 servers persist name/icon/commands client-side via projectMeta.
+    // A stored empty-string name means "reset to folder name" and must still override.
+    const meta = childStore.projectMeta
+    const base = {
+      ...metadata,
+      ...project,
+      ...(meta?.name === undefined ? {} : { name: meta.name }),
+      ...(meta?.icon || meta?.commands
+        ? {
+            icon: { ...metadata?.icon, ...meta.icon },
+            commands: { ...metadata?.commands, ...meta.commands },
+          }
+        : {}),
+    }
     // Preserve local icon override from per-workspace localStorage cache (childStore.icon).
     // Without this, different subdirectories of the same git repo would share the same
     // icon from the database instead of using their individual overrides.
-    const base = { ...metadata, ...project }
     if (childStore.icon) {
       return { ...base, icon: { ...base.icon, override: childStore.icon } }
     }
