@@ -54,7 +54,12 @@ export async function discoverThemes(directories: string[]) {
   for (const directory of directories) {
     const files = await Glob.scan("themes/*.json", { cwd: directory, absolute: true, dot: true, symlink: true })
     for (const file of files) {
-      result[path.basename(file, ".json")] = JSON.parse(await readFile(file, "utf8")) as unknown
+      await readFile(file, "utf8")
+        .then((content) => JSON.parse(content) as unknown)
+        .then((theme) => {
+          result[path.basename(file, ".json")] = theme
+        })
+        .catch((error) => console.warn("[tui.theme] failed to load custom theme", { file, error }))
     }
   }
   return result
