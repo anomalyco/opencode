@@ -71,7 +71,7 @@
       "@tailwindcss/vite": "4.1.11",
       "diff": "8.0.2",
       "dompurify": "3.3.1",
-      "drizzle-kit": "1.0.0-rc.2",
+      "drizzle-kit": "1.0.0-rc.5-ab785fc",
       "drizzle-orm": "1.0.0-rc.5-169397b",
       "effect": "4.0.0-rc.111",
       "ai": "6.0.168",
