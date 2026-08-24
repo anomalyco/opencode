@@ -119,6 +119,7 @@ jobs:
               query($owner: String!, $repo: String!, $number: Int!) {
                 repository(owner: $owner, name: $repo) {
                   pullRequest(number: $number) {
+                    baseRefName
                     closingIssuesReferences(first: 1) {
                       totalCount
                     }
@@ -133,9 +134,18 @@ jobs:
               number: pr.number
             });
 
+            const baseRef = result.repository.pullRequest.baseRefName;
             const linkedIssues = result.repository.pullRequest.closingIssuesReferences.totalCount;
 
-            if (linkedIssues === 0) {
+            // When targeting a non-default branch, GitHub does not build closing
+            // references, so fall back to scanning the PR body for a keyword.
+            const closingKeywordPattern = /(fixes|closes|resolves)\s+#(\d+)/i;
+            const hasClosingKeyword = closingKeywordPattern.test(pr.body || '');
+            const hasLinkedIssues = baseRef === context.repo.default_branch
+              ? linkedIssues > 0
+              : hasClosingKeyword;
+
+            if (!hasLinkedIssues) {
               await addLabel('needs:issue');
               await comment('issue', `Thanks for your contribution!
 
