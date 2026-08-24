@@ -18,19 +18,6 @@ describe("desktop menu", () => {
     expect(items.every((item) => item.type === "item" && item.command === "logs.export" && !item.action)).toBe(true)
   })
 
-  test("opens a new window through the desktop command registry", () => {
-    const item = DESKTOP_MENU.flatMap((menu) => menu.items ?? []).find(
-      (entry) => entry.type === "item" && entry.labelKey === "desktop.menu.newWindow",
-    )
-
-    expect(item).toMatchObject({
-      type: "item",
-      command: "window.new",
-      accelerator: { macos: "Cmd+Shift+N" },
-    })
-    expect(item).not.toHaveProperty("action")
-  })
-
   test("provides translated labels for role-backed entries", () => {
     const windowMenu = DESKTOP_MENU.find((menu) => menu.role === "windowMenu")
     const roleItems = DESKTOP_MENU.flatMap((menu) => menu.items ?? []).filter(
