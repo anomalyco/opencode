@@ -318,15 +318,21 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
     return (setGlobalStore as (...args: unknown[]) => unknown)(...input)
   }) as typeof setGlobalStore
 
+  // Wait for the local sidecar to be reachable before firing a data fan-out,
+  // otherwise the batch of `get`/`list` requests races the server's cold start
+  // and throws `TypeError: Failed to fetch`. When the server never becomes
+  // reachable, fail fast with a readable error instead of silently fanning out
+  // into a dead server.
+  const ensureServerReady = async () => {
+    if (!ServerConnection.local(serverSDK.server)) return
+    const ready = await waitForServerReady(serverSDK.server.http, globalThis.fetch)
+    if (!ready) throw new Error(language.t("app.server.unreachable", { server: serverSDK.url }))
+  }
+
   const bootstrap = useQuery(() => ({
     queryKey: [serverSDK.scope, "bootstrap"],
     queryFn: async () => {
-      // Wait for the local sidecar to be reachable before firing the bootstrap
-      // fan-out, otherwise the first batch of `get`/`list` requests races the
-      // server's cold start and throws `TypeError: Failed to fetch`.
-      if (ServerConnection.local(serverSDK.server)) {
-        await waitForServerReady(serverSDK.server.http, globalThis.fetch)
-      }
+      await ensureServerReady()
       await bootstrapGlobal({
         serverSDK: serverSDK.client,
         serverAPI: serverSDK.api,
@@ -485,9 +491,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
     const promise = Promise.resolve().then(async () => {
       // Same readiness gate as the global bootstrap: a directory may be opened
       // after a server restart, so re-check before its data fan-out.
-      if (ServerConnection.local(serverSDK.server)) {
-        await waitForServerReady(serverSDK.server.http, globalThis.fetch)
-      }
+      await ensureServerReady()
       const child = children.ensureChild(directory)
       const cache = children.vcsCache.get(key)
       if (!cache) return
@@ -515,12 +519,23 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
       })
     })
 
-    booting.set(key, promise)
-    void promise.finally(() => {
+    // Surface the negative result to the caller (and the user) instead of
+    // leaving an unhandled rejection: a failed readiness gate or fan-out shows
+    // the same toast as other per-directory load failures.
+    const tracked = promise.catch((err) => {
+      showToast({
+        variant: "error",
+        title: language.t("toast.project.reloadFailed.title", { project: getFilename(directory) }),
+        description: formatServerError(err, language.t),
+      })
+    })
+
+    booting.set(key, tracked)
+    void tracked.finally(() => {
       booting.delete(key)
       children.unpin(key)
     })
-    return promise
+    return tracked
   }
 
   const indexSession = (info: Parameters<typeof session.remember>[0]) => {
