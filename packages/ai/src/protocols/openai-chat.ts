@@ -659,7 +659,7 @@ const detectZaiToolStream = (
 
 const lowerOptions = (request: LLMRequest, supportsStore: boolean) => {
   const options = OpenAIOptions.resolve(request)
-  const cacheKey = ProviderShared.clampPromptCacheKey(request.promptCacheKey)
+  const cacheKey = request.cache === "none" ? undefined : ProviderShared.clampPromptCacheKey(request.promptCacheKey)
   return {
     ...(supportsStore && options.store !== undefined ? { store: options.store } : {}),
     // For providers that support `store`, ensure stateless `store:false` is sent
