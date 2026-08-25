@@ -364,9 +364,9 @@ const lowerUserMessage = Effect.fn("OpenAIChat.lowerUserMessage")(function* (
 
 const lowerAssistantMessage = Effect.fn("OpenAIChat.lowerAssistantMessage")(function* (
   message: OpenAIChatRequestMessage,
-  configuredField?: string,
-  options: LoweringOptions = {},
-  requireReasoning = configuredField !== undefined,
+  configuredField: string | undefined,
+  requireReasoning: boolean,
+  options: LoweringOptions,
 ) {
   const content: TextPart[] = []
   const reasoning: ReasoningPart[] = []
@@ -457,13 +457,13 @@ const lowerToolMessages = Effect.fn("OpenAIChat.lowerToolMessages")(function* (
 
 const lowerMessage = Effect.fn("OpenAIChat.lowerMessage")(function* (
   message: OpenAIChatRequestMessage,
-  reasoningField?: string,
-  options: LoweringOptions = {},
-  requireReasoning?: boolean,
+  reasoningField: string | undefined,
+  requireReasoning: boolean,
+  options: LoweringOptions,
 ) {
   if (message.role === "user") return [yield* lowerUserMessage(message, options)]
   if (message.role === "assistant")
-    return [yield* lowerAssistantMessage(message, reasoningField, options, requireReasoning)]
+    return [yield* lowerAssistantMessage(message, reasoningField, requireReasoning, options)]
   return (yield* lowerToolMessages(message, options)).messages
 })
 
@@ -567,7 +567,7 @@ const lowerMessages = Effect.fn("OpenAIChat.lowerMessages")(function* (request: 
       continue
     }
     flushImages()
-    messages.push(...(yield* lowerMessage(message, reasoningField, lowering, requireReasoning)))
+    messages.push(...(yield* lowerMessage(message, reasoningField, requireReasoning, lowering)))
   }
   flushImages()
   return messages
