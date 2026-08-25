@@ -3,6 +3,7 @@ import type { AssistantMessage, Message, Part, SessionStatus, UserMessage } from
 import { createMemo, type Accessor } from "solid-js"
 import { reuseTimelineRows } from "./row-reconciliation"
 import { Timeline, TimelineRow } from "./rows"
+import { selectActiveTimelineMessageID, selectTimelineUserMessages } from "./closure"
 
 export { reuseTimelineRows } from "./row-reconciliation"
 
@@ -29,6 +30,12 @@ export function createTimelineProjection(input: {
     })
     return result
   })
+  const activeMessageID = createMemo(() =>
+    selectActiveTimelineMessageID(input.messages(), input.userMessages(), input.status()),
+  )
+  const timelineUserMessages = createMemo(() =>
+    selectTimelineUserMessages(input.messages(), input.userMessages(), input.parts),
+  )
   const projection = createMemo(() =>
     Timeline.constructSessionMessageRows(
       input.sessionMessages(),
@@ -37,10 +44,10 @@ export function createTimelineProjection(input: {
       input.showReasoningSummaries(),
       input.status().type,
       input.inlineComments(),
-      input.userMessages(),
+      timelineUserMessages(),
+      activeMessageID() ?? null,
     ),
   )
-  const activeMessageID = createMemo(() => projection().activeMessageID)
   const rows = createMemo((previous: TimelineRow.TimelineRow[] | undefined) =>
     reuseTimelineRows(previous, projection().rows),
   )

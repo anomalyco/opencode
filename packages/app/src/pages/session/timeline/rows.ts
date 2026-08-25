@@ -5,11 +5,13 @@ import { groupParts, renderable, type PartGroup } from "@opencode-ai/session-ui/
 import { TimelineRow, type SummaryDiff } from "./timeline-row"
 import { uniqueSummaryDiffs } from "./summary-diffs"
 import { compareMessages } from "@/utils/session-message"
+import { closureTimelineMessageID } from "./closure"
 
 export { TimelineRow, type SummaryDiff } from "./timeline-row"
 
 export type TimelineRowMap = {
   TurnGap: { userMessageID: string }
+  ClosureEvidence: { messageID: string }
   CommentStrip: {
     userMessageID: string
   }
@@ -41,6 +43,7 @@ export namespace Timeline {
     status: SessionStatus["type"],
     inlineComments: boolean,
     projectedUserMessages: UserMessage[],
+    selectedActiveMessageID?: string | null,
   ) {
     const turns: { user: UserMessage; assistants: AssistantMessage[] }[] = []
     const turnByUserID = new Map<string, (typeof turns)[number]>()
@@ -80,7 +83,10 @@ export namespace Timeline {
       if (index >= 0) turns.splice(index, 0, turn)
       turnByUserID.set(user.id, turn)
     })
-    const activeMessageID = turns.at(-1)?.user.id
+    // The projection passes `null` when no human turn is active; direct current-row callers that
+    // omit this coordinate retain their established last-turn derivation.
+    const activeMessageID =
+      selectedActiveMessageID === undefined ? turns.at(-1)?.user.id : (selectedActiveMessageID ?? undefined)
     return {
       activeMessageID,
       rows: turns.flatMap((turn, index) =>
@@ -111,8 +117,13 @@ export namespace Timeline {
   ) {
     const rows: TimelineRow.TimelineRow[] = []
 
-    const previousUserMessage = index > 0
     const userParts = getMessageParts(userMessage.id)
+    if (closureTimelineMessageID(userMessage, userParts)) {
+      rows.push(new TimelineRow.ClosureEvidence({ messageID: userMessage.id }))
+      return rows
+    }
+
+    const previousUserMessage = index > 0
     const comments = userParts.flatMap((p) => MessageComment.fromPart(p) ?? [])
     const compaction = userParts.some((p) => p.type === "compaction")
     const interruptedMessageIndex = assistantMessages.findIndex((m) => m.error?.name === "MessageAbortedError")

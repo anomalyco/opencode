@@ -8,6 +8,9 @@ export namespace TimelineRow {
   export class TurnGap extends Data.TaggedClass("TurnGap")<{
     userMessageID: string
   }> {}
+  export class ClosureEvidence extends Data.TaggedClass("ClosureEvidence")<{
+    messageID: string
+  }> {}
   export class CommentStrip extends Data.TaggedClass("CommentStrip")<{
     userMessageID: string
   }> {}
@@ -42,6 +45,7 @@ export namespace TimelineRow {
 
   export type TimelineRow =
     | TurnGap
+    | ClosureEvidence
     | CommentStrip
     | UserMessage
     | TurnDivider
@@ -55,6 +59,8 @@ export namespace TimelineRow {
     switch (row._tag) {
       case "TurnGap":
         return `turn-gap:${row.userMessageID}`
+      case "ClosureEvidence":
+        return `closure-evidence:${row.messageID}`
       case "CommentStrip":
         return `comment-strip:${row.userMessageID}`
       case "UserMessage":

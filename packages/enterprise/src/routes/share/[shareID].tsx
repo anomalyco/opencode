@@ -1,5 +1,7 @@
 import { Message, Model, Part, Session, SessionStatus, SnapshotFileDiff, UserMessage } from "@opencode-ai/sdk/v2"
 import { SessionTurn } from "@opencode-ai/session-ui/session-turn"
+import { Message as MessageDisplay } from "@opencode-ai/session-ui/message-part"
+import { closureEvidencePart, partitionUserTranscript } from "@opencode-ai/session-ui/closure-record"
 import { SessionReview } from "@opencode-ai/session-ui/session-review"
 import { DataProvider } from "@opencode-ai/session-ui/context"
 import { FileComponentProvider } from "@opencode-ai/ui/context/file"
@@ -197,13 +199,16 @@ export default function () {
                       const [store, setStore] = createStore({
                         messageId: undefined as string | undefined,
                       })
-                      const messages = createMemo(() =>
-                        data().sessionID
-                          ? (data().message[data().sessionID]?.filter((m) => m.role === "user") ?? []).sort(
+                      const transcript = createMemo(() => {
+                        const list = data().sessionID
+                          ? [...(data().message[data().sessionID] ?? [])].sort(
                               (a, b) => a.time.created - b.time.created,
                             )
-                          : [],
-                      )
+                          : []
+                        return partitionUserTranscript(list, (messageID) => data().part[messageID] ?? [])
+                      })
+                      const messages = createMemo(() => transcript().human)
+                      const transcriptMessages = createMemo(() => transcript().visible)
                       const firstUserMessage = createMemo(() => messages().at(0))
                       const activeMessage = createMemo(
                         () => messages().find((m) => m.id === store.messageId) ?? firstUserMessage(),
@@ -220,6 +225,13 @@ export default function () {
                       const model = createMemo(() => data().model[data().sessionID]?.find((m) => m.id === modelID()))
                       const diffs = createMemo(() => data().session_diff[data().sessionID] ?? [])
                       const [diffStyle, setDiffStyle] = createSignal<"unified" | "split">("unified")
+                      const activeTranscript = createMemo(() => {
+                        const active = activeMessage()?.id
+                        return transcriptMessages().filter((message) => {
+                          if (message.id === active) return true
+                          return !!closureEvidencePart(message, data().part[message.id] ?? [])
+                        })
+                      })
 
                       const title = () => (
                         <div class="flex flex-col gap-4">
@@ -248,17 +260,26 @@ export default function () {
                         <div class="relative mt-2 pb-8 min-w-0 w-full h-full overflow-y-auto no-scrollbar">
                           <div class="px-4 py-6">{title()}</div>
                           <div class="flex flex-col gap-15 items-start justify-start mt-4">
-                            <For each={messages()}>
+                            <For each={transcriptMessages()}>
                               {(message) => (
-                                <SessionTurn
-                                  sessionID={data().sessionID}
-                                  messageID={message.id}
-                                  classes={{
-                                    root: "min-w-0 w-full relative",
-                                    content: "flex flex-col justify-between !overflow-visible",
-                                    container: "px-4",
-                                  }}
-                                />
+                                <Show
+                                  when={closureEvidencePart(message, data().part[message.id] ?? [])}
+                                  fallback={
+                                    <SessionTurn
+                                      sessionID={data().sessionID}
+                                      messageID={message.id}
+                                      classes={{
+                                        root: "min-w-0 w-full relative",
+                                        content: "flex flex-col justify-between !overflow-visible",
+                                        container: "px-4",
+                                      }}
+                                    />
+                                  }
+                                >
+                                  <div data-share-row="branch-closure" class="min-w-0 w-full px-4">
+                                    <MessageDisplay message={message} parts={data().part[message.id] ?? []} />
+                                  </div>
+                                </Show>
                               )}
                             </For>
                           </div>
@@ -331,19 +352,33 @@ export default function () {
                                       }
                                     />
                                   </Show>
-                                  <SessionTurn
-                                    sessionID={data().sessionID}
-                                    messageID={store.messageId ?? firstUserMessage()!.id!}
-                                    classes={{
-                                      root: "grow",
-                                      content: "flex flex-col justify-between",
-                                      container: "w-full pb-20 px-6",
-                                    }}
-                                  >
+                                  <div class="grow min-w-0">
+                                    <For each={activeTranscript()}>
+                                      {(message) => (
+                                        <Show
+                                          when={closureEvidencePart(message, data().part[message.id] ?? [])}
+                                          fallback={
+                                            <SessionTurn
+                                              sessionID={data().sessionID}
+                                              messageID={message.id}
+                                              classes={{
+                                                root: "grow",
+                                                content: "flex flex-col justify-between",
+                                                container: "w-full pb-20 px-6",
+                                              }}
+                                            />
+                                          }
+                                        >
+                                          <div data-share-row="branch-closure" class="min-w-0 w-full px-6 pb-6">
+                                            <MessageDisplay message={message} parts={data().part[message.id] ?? []} />
+                                          </div>
+                                        </Show>
+                                      )}
+                                    </For>
                                     <div classList={{ "w-full flex items-center justify-center pb-8 shrink-0": true }}>
                                       <Logo class="w-58.5 opacity-12" />
                                     </div>
-                                  </SessionTurn>
+                                  </div>
                                 </div>
                               </div>
                               <Show when={diffs().length > 0}>

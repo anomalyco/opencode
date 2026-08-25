@@ -18,6 +18,7 @@ import { useLanguage } from "@/context/language"
 import { useProviders } from "@/hooks/use-providers"
 import { useSDK } from "@/context/sdk"
 import { useSessionLayout } from "@/pages/session/session-layout"
+import { selectHumanUserMessages } from "@opencode-ai/session-ui/closure-record"
 import { getSessionContext } from "./session-context-metrics"
 import { estimateSessionContextBreakdown, type SessionContextBreakdownKey } from "./session-context-breakdown"
 import { createSessionContextFormatter } from "./session-context-format"
@@ -114,7 +115,7 @@ export function SessionContextTab() {
   )
 
   const userMessages = createMemo(
-    () => messages().filter((m) => m.role === "user") as UserMessage[],
+    () => selectHumanUserMessages(messages(), (messageID) => sync().data.part[messageID] ?? []),
     emptyUserMessages,
     { equals: same },
   )
@@ -147,11 +148,10 @@ export function SessionContextTab() {
 
   const counts = createMemo(() => {
     const all = messages()
-    const user = all.reduce((count, x) => count + (x.role === "user" ? 1 : 0), 0)
     const assistant = all.reduce((count, x) => count + (x.role === "assistant" ? 1 : 0), 0)
     return {
       all: all.length,
-      user,
+      user: userMessages().length,
       assistant,
     }
   })
