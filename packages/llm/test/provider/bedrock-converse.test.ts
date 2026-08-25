@@ -388,6 +388,19 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
+  it.effect("rejects an event-stream frame above the 16 MiB maximum", () =>
+    Effect.gen(function* () {
+      const prelude = new Uint8Array(8)
+      new DataView(prelude.buffer).setUint32(0, 0xffffffff, false)
+      const error = yield* LLMClient.generate(baseRequest).pipe(
+        Effect.provide(fixedBytes(concat([prelude, new Uint8Array(64)]))),
+        Effect.flip,
+      )
+
+      expect(error.message).toContain("exceeding the 16 MiB protocol maximum")
+    }),
+  )
+
   it.effect("rejects requests with no auth path", () =>
     Effect.gen(function* () {
       const unsignedModel = AmazonBedrock.configure({

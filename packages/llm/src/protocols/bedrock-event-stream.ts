@@ -45,11 +45,10 @@ const consumeFrames = (route: string) => (state: FrameBufferState, chunk: Uint8A
       const view = cursor.buffer.subarray(cursor.offset)
       const totalLength = new DataView(view.buffer, view.byteOffset, view.byteLength).getUint32(0, false)
       if (totalLength > MAX_EVENT_STREAM_MESSAGE_LENGTH) {
-        yield* ProviderShared.eventError(
+        return yield* ProviderShared.eventError(
           route,
           `Bedrock event-stream frame declares ${totalLength} bytes, exceeding the 16 MiB protocol maximum`,
         )
-        break
       }
       if (view.length < totalLength) break
 
