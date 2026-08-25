@@ -472,7 +472,9 @@ function layoutRankedNodes(
           )
         })
       const nodeGap =
-        targetWidth !== undefined && naturalWidth > targetWidth && !needsLabelLanes ? minNodeGap : roomyNodeGap
+        targetWidth !== undefined && naturalWidth > targetWidth && (!needsLabelLanes || !diagram.subgraphs?.length)
+          ? minNodeGap
+          : roomyNodeGap
       const bands: { nodes: FlowchartNode[]; width: number; height: number }[] = []
       for (const node of nodes) {
         const size = sizes.get(node.id)!
@@ -529,9 +531,16 @@ function layoutLocalSubgraphDirections(
   targetWidth?: number,
 ): boolean {
   let wrapped = false
-  for (const subgraph of [...(diagram.subgraphs ?? [])].reverse()) {
-    if (!subgraph.direction || subgraph.direction === diagram.direction) continue
-    const childSubgraphs = (diagram.subgraphs ?? []).filter((child) => child.parentId === subgraph.id)
+  const subgraphs = diagram.subgraphs ?? []
+  const subgraphById = new Map(subgraphs.map((subgraph) => [subgraph.id, subgraph]))
+  for (const subgraph of [...subgraphs].reverse()) {
+    let parent = subgraph.parentId ? subgraphById.get(subgraph.parentId) : undefined
+    while (parent && !parent.direction) parent = parent.parentId ? subgraphById.get(parent.parentId) : undefined
+    const direction =
+      subgraph.direction ??
+      (parent && subgraphs.filter((child) => child.parentId === parent.id).length > 1 ? parent.direction : undefined)
+    if (!direction || direction === diagram.direction) continue
+    const childSubgraphs = subgraphs.filter((child) => child.parentId === subgraph.id)
     const coveredNodeIds = new Set(childSubgraphs.flatMap((child) => [...collectSubgraphNodeIds(diagram, child.id)]))
     const items = [
       ...childSubgraphs.flatMap((child) => {
@@ -558,7 +567,7 @@ function layoutLocalSubgraphDirections(
     }
     const nodes = items.map((item): FlowchartNode => ({ id: item.id, label: item.id, shape: "box" }))
     const localDiagram: FlowchartDiagram = {
-      direction: subgraph.direction,
+      direction,
       nodes,
       edges: diagram.edges.flatMap((edge) => {
         const from = itemByEndpoint.get(edge.from)
@@ -572,7 +581,7 @@ function layoutLocalSubgraphDirections(
     )
     const localLayout = layoutRankedNodes(
       localDiagram,
-      subgraph.direction,
+      direction,
       itemSizes,
       Math.max(minNodeGap, SUBGRAPH_PADDING_X * 2 + 1),
       requestedMinRankGap,
@@ -790,7 +799,21 @@ function separateTopLevelItems(
     }
   }
   if (hasLocalDirection) {
-    items.sort((a, b) => (horizontal ? a.bounds.centerX - b.bounds.centerX : a.bounds.centerY - b.bounds.centerY))
+    const outgoing = new Map(items.map((item) => [item.id, new Set<string>()]))
+    for (const edge of diagram.edges) {
+      const from = itemByEndpoint.get(edge.from)
+      const to = itemByEndpoint.get(edge.to)
+      if (from && to && from !== to) outgoing.get(from)?.add(to)
+    }
+    const ranks = rankGraphComponents(
+      items.map((item) => item.id),
+      outgoing,
+    )
+    items.sort(
+      (a, b) =>
+        ranks.get(a.id)! - ranks.get(b.id)! ||
+        (horizontal ? a.bounds.centerX - b.bounds.centerX : a.bounds.centerY - b.bounds.centerY),
+    )
     let cursor: number | undefined
     let moved = false
     for (const item of items) {

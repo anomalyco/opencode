@@ -1098,6 +1098,78 @@ describe("FlowchartDiagram", () => {
     expect(boundsIntersect(layout.subgraphBounds.get("Left")!, layout.subgraphBounds.get("Right")!)).toBe(false)
   })
 
+  test.each([80, 144])("keeps nested deployment groups compact and dependency-ordered at width %s", (width) => {
+    const layout = layoutFlowchartDiagram(
+      `flowchart LR
+  Browser([Browser]) --> Gateway[Gateway]
+  subgraph Cloud[Cloud platform]
+    direction TB
+    subgraph Compute[Compute]
+      API[API service] --> Worker[Background worker]
+    end
+    subgraph Storage[Storage]
+      Database[(Database)]
+      Cache[(Cache)]
+    end
+    API --> Database
+    Worker --> Cache
+  end
+  Gateway --> API
+  Worker --> Result([Result])`,
+      { compact: true, layoutMaxWidth: width },
+    )
+    const cloud = layout.subgraphBounds.get("Cloud")!
+    const compute = layout.subgraphBounds.get("Compute")!
+    const storage = layout.subgraphBounds.get("Storage")!
+    const result = layout.bounds.get("Result")!
+
+    expect(layout.bounds.get("Worker")!.top).toBeGreaterThan(layout.bounds.get("API")!.top)
+    expect(layout.bounds.get("Database")!.centerY).toBe(layout.bounds.get("Cache")!.centerY)
+    expect(storage.top).toBeGreaterThan(compute.top + compute.height - 1)
+    expect(cloud.width).toBeLessThanOrEqual(50)
+    expect([...layout.subgraphBounds.values()].every((frame) => frame.labelSide === "top")).toBe(true)
+    expect(boundsContains(cloud, compute)).toBe(true)
+    expect(boundsContains(cloud, storage)).toBe(true)
+    expect(boundsIntersect(cloud, result)).toBe(false)
+    if (layout.diagram.direction === "TD") expect(result.top).toBeGreaterThan(cloud.top + cloud.height - 1)
+    if (layout.diagram.direction === "LR") expect(result.left).toBeGreaterThan(cloud.left + cloud.width - 1)
+
+    for (const route of layout.routes.filter(
+      (route) =>
+        (route.edge.from === "API" && route.edge.to === "Database") ||
+        (route.edge.from === "Worker" && route.edge.to === "Cache"),
+    )) {
+      for (const point of route.points) {
+        expect(point.x).toBeGreaterThan(cloud.left)
+        expect(point.x).toBeLessThan(cloud.left + cloud.width - 1)
+        expect(point.y).toBeGreaterThan(cloud.top)
+        expect(point.y).toBeLessThan(cloud.top + cloud.height - 1)
+      }
+    }
+  })
+
+  test("keeps responsive labeled fan-out on one rank with a shared source junction", () => {
+    const content = `flowchart LR
+  Request([Request]) --> Gateway[API gateway]
+  Gateway -->|authenticate| Auth[Authentication]
+  Gateway -->|rate limit| Limit[Rate limiter]
+  Gateway -->|cache lookup| Cache[(Response cache)]
+  Auth --> Worker[Request worker]
+  Limit --> Worker
+  Cache --> Worker
+  Worker --> Response([Response])`
+    const layout = layoutFlowchartDiagram(content, { compact: true, layoutMaxWidth: 80 })
+    const branches = layout.routes.filter((route) => route.edge.from === "Gateway")
+    const gateway = layout.bounds.get("Gateway")!
+
+    expect(new Set(["Auth", "Limit", "Cache"].map((id) => layout.bounds.get(id)!.centerY)).size).toBe(1)
+    expect(new Set(branches.map((route) => JSON.stringify(route.points[0]))).size).toBe(1)
+    expect(branches.flatMap((route) => route.points).every((point) => point.y > gateway.top)).toBe(true)
+    for (const label of ["authenticate", "rate limit", "cache lookup"]) {
+      expect(renderFlowchartDiagram(content, { compact: true, layoutMaxWidth: 80 })).toContain(label)
+    }
+  })
+
   test("does not change parallel routes for a non-binding width target", () => {
     const diagram = parseMermaidFlowchartDiagram(`flowchart TD
   A[A] -->|one| B[B]

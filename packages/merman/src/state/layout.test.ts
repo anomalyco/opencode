@@ -232,6 +232,33 @@ describe("StateDiagramLayout", () => {
     expect(dirty.centerX).toBeLessThan(closing.centerX)
   })
 
+  test("does not reserve an unused right-side lane for aligned nested composite transitions", () => {
+    const diagram = prepareVisibleStateDiagram(
+      parseMermaidStateDiagram(`stateDiagram-v2
+  direction TB
+  state Session {
+    [*] --> Open
+    state Open {
+      [*] --> Clean
+      Clean --> Dirty: edit
+      Dirty --> Clean: save
+      Dirty --> [*]
+    }
+    Open --> Closing: request close
+    Closing --> Open: cancel
+    Closing --> [*]: closed
+    note right of Dirty: unsaved changes
+  }
+  [*] --> Session: hydrate
+  Session --> [*]: release`),
+    )
+    const layout = createStateDiagramLayout(diagram, { minStateGap: 5 })
+    const open = layout.compositeBounds.get("Open")!
+    const session = layout.compositeBounds.get("Session")!
+
+    expect(session.width).toBeLessThanOrEqual(open.width + 4)
+  })
+
   test.each(["TB", "TD"] as const)(
     "contains nested internal feedback with strict margins in %s diagrams",
     (direction) => {

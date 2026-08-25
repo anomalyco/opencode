@@ -882,7 +882,14 @@ function addVerticalElbowTransition(builder: StateTransitionRenderBuilder): void
   const metrics = measureStateTransitionLabel(transition.label)
   if (topToBottom) {
     const leftLabelX = startX - metrics.width - 2
-    const labelX = hasReverse || endX < startX ? (leftLabelX >= 0 ? leftLabelX : startX + 4) : startX + 2
+    const labelX =
+      from.width === 1 && Math.abs(endX - startX) >= metrics.width + 2
+        ? Math.min(startX, endX) + Math.floor((Math.abs(endX - startX) - metrics.width) / 2)
+        : hasReverse || endX < startX
+          ? leftLabelX >= 0
+            ? leftLabelX
+            : startX + 4
+          : startX + 2
     addLabel(
       builder,
       labelX,
@@ -1289,14 +1296,26 @@ function placeStateTransitionLabels(
         width,
         height: plan.label!.lines.length,
       })
+    const sharesLoopCorridor = plans.some(
+      (candidate) =>
+        candidate.route.transition.from === plan.route.transition.from &&
+        candidate.route.kind === (plan.route.kind === "self" ? "vertical" : "self"),
+    )
+    const corridorTop =
+      sharesLoopCorridor &&
+      (plan.route.kind === "self" ||
+        (plan.route.kind === "vertical" && plan.route.from.centerY < plan.route.to.centerY))
+        ? plan.route.from.top + plan.route.from.height
+        : undefined
+    const corridorBottom = corridorTop === undefined ? undefined : Math.max(...plan.path.map(([, y]) => y))
     const isClear = (x: number, y: number): boolean => {
-      if (x < 0 || y < 0) return false
+      if (x < 0 || y < 0 || (corridorTop !== undefined && (y < corridorTop || y > corridorBottom!))) return false
       return space.isFree(labelClaim(x, y), {
         clearance: {
           body: statePadding,
-          label: { x: 1, y: 0 },
+          label: { x: 1, y: sharesLoopCorridor ? 1 : 0 },
           route:
-            plan.pathRepaired || plan.route.kind === "side-parallel" || needsLaneClearance
+            plan.pathRepaired || plan.route.kind === "side-parallel" || needsLaneClearance || corridorTop !== undefined
               ? {
                   x: 1,
                   y: 0,
@@ -1309,7 +1328,12 @@ function placeStateTransitionLabels(
     const candidates = stateTransitionLabelCandidates(plan, width, plan.label.lines.length)
     const nearby = candidates.find(
       (candidate) =>
-        (!(plan.pathRepaired || plan.route.kind === "side-parallel" || needsLaneClearance) ||
+        (!(
+          plan.pathRepaired ||
+          plan.route.kind === "side-parallel" ||
+          needsLaneClearance ||
+          corridorTop !== undefined
+        ) ||
           labelDistanceToPath(candidate.x, candidate.y, width, plan.label!.lines.length, plan.path) >= 2) &&
         isClear(candidate.x, candidate.y),
     )

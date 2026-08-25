@@ -100,6 +100,113 @@ const fixtures = [
   [*] --> Session: hydrate
   Session --> [*]: release`,
   },
+  {
+    id: "flow-fanout",
+    title: "Fan-out and reconvergence",
+    source: `flowchart LR
+  Request([Request]) --> Gateway[API gateway]
+  Gateway -->|authenticate| Auth[Authentication]
+  Gateway -->|rate limit| Limit[Rate limiter]
+  Gateway -->|cache lookup| Cache[(Response cache)]
+  Auth --> Worker[Request worker]
+  Limit --> Worker
+  Cache --> Worker
+  Worker --> Response([Response])`,
+  },
+  {
+    id: "flow-feedback",
+    title: "Retry and failure routes",
+    source: `flowchart TD
+  Start([Incoming job]) --> Validate{Valid?}
+  Validate -->|yes| Queue[(Job queue)]
+  Validate -->|no| Reject[Reject request]
+  Queue --> Execute[Execute job]
+  Execute -->|retry| Queue
+  Execute -->|failed| Failed[Dead letter queue]
+  Execute -->|complete| Complete([Complete])`,
+  },
+  {
+    id: "flow-nested-groups",
+    title: "Nested deployment groups",
+    source: `flowchart LR
+  Browser([Browser]) --> Gateway[Gateway]
+  subgraph Cloud[Cloud platform]
+    direction TB
+    subgraph Compute[Compute]
+      API[API service] --> Worker[Background worker]
+    end
+    subgraph Storage[Storage]
+      Database[(Database)]
+      Cache[(Cache)]
+    end
+    API --> Database
+    Worker --> Cache
+  end
+  Gateway --> API
+  Worker --> Result([Result])`,
+  },
+  {
+    id: "flow-long-labels",
+    title: "Long route labels",
+    source: `flowchart LR
+  Client[Desktop client] -->|exchange authorization code| Auth[Authorization service]
+  Auth -->|validate signed access token| API[Application API]
+  API -->|read tenant configuration| Database[(Tenant database)]
+  API -->|publish background work item| Queue[(Work queue)]
+  Queue --> Worker[Background worker]
+  Worker -->|notify subscribed clients| Client`,
+  },
+  {
+    id: "state-choice",
+    title: "Choice and recovery",
+    source: `stateDiagram-v2
+  direction TB
+  [*] --> Pending
+  Pending --> Decision: review
+  state Decision <<choice>>
+  Decision --> Approved: accept
+  Decision --> Rejected: reject
+  Rejected --> Pending: retry
+  Approved --> [*]: complete`,
+  },
+  {
+    id: "state-parallel",
+    title: "Parallel transitions",
+    source: `stateDiagram-v2
+  direction LR
+  [*] --> Idle
+  Idle --> Active: first request
+  Idle --> Active: second request
+  Idle --> Active: resumed request
+  Active --> Idle: reset
+  Active --> [*]: shutdown`,
+  },
+  {
+    id: "state-notes",
+    title: "Notes and feedback routes",
+    source: `stateDiagram-v2
+  direction LR
+  [*] --> Draft
+  Draft --> Review: submit
+  Review --> Published: approve
+  Published --> Draft: revise
+  note left of Draft: Content is editable
+  note right of Review: Requires two approvals
+  note right of Published: Readers can subscribe`,
+  },
+  {
+    id: "state-self-loops",
+    title: "State self-transitions",
+    source: `stateDiagram-v2
+  direction TB
+  [*] --> Listening
+  Listening --> Listening: heartbeat
+  Listening --> Listening: refresh token
+  Listening --> Connected: client connected
+  Connected --> Connected: received message
+  Connected --> Listening: disconnected
+  Connected --> [*]: shutdown`,
+  },
 ] as const
 
 const components = [
@@ -429,6 +536,7 @@ function MermanLayoutsStory(props: { context: Plugin.Context }) {
           { shortcut: "tab", label: "component" },
           { shortcut: "c", label: "color" },
           ...(component().dimmable ? [{ shortcut: "d", label: "dim" }] : []),
+          { shortcut: "drag", label: "pan" },
           { shortcut: "r", label: "reset" },
           { shortcut: "esc", label: "back" },
         ]}
