@@ -8,6 +8,7 @@ import { AppProcess } from "@opencode-ai/util/process"
 import type { DiffOptions, Interface } from "../vcs.js"
 import { chunksByFile, emptyPatch, MAX_PATCH_BYTES, MAX_TOTAL_PATCH_BYTES, PATCH_CONTEXT_LINES } from "./patch.js"
 import type { Patch } from "./patch.js"
+import { gitExecutable } from "../util/git-executable.js"
 
 /**
  * Git adapter for the Vcs service. Ported from the V1 pipeline: patches are
@@ -128,7 +129,7 @@ function makeGit(proc: AppProcess.Interface) {
   const run = Effect.fnUntraced(
     function* (args: string[], opts: { cwd: string; maxOutputBytes?: number }) {
       const result = yield* proc.run(
-        ChildProcess.make("git", [...cfg, ...args], {
+        ChildProcess.make(gitExecutable, [...cfg, ...args], {
           cwd: opts.cwd,
           extendEnv: true,
           stdin: "ignore",

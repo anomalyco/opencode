@@ -22,6 +22,7 @@ import { makeGlobalNode } from "./effect/app-node.js"
 import { filesystem, path } from "./effect/app-node-platform.js"
 
 const toError = (err: unknown): Error => (err instanceof globalThis.Error ? err : new globalThis.Error(String(err)))
+const nativeWindowsExtensions = new Set([".com", ".exe"])
 
 const toTag = (err: NodeJS.ErrnoException): PlatformError.SystemErrorTag => {
   switch (err.code) {
@@ -261,7 +262,14 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
   const launchProcess = (command: ChildProcess.StandardCommand, opts: NodeChildProcess.SpawnOptions) =>
     Effect.callback<readonly [NodeChildProcess.ChildProcess, ExitSignal], PlatformError.PlatformError>((resume) => {
       const signal = Deferred.makeUnsafe<readonly [code: number | null, signal: NodeJS.Signals | null]>()
-      const proc = launch(command.command, command.args, opts)
+      const native =
+        process.platform === "win32" &&
+        !opts.shell &&
+        path.isAbsolute(command.command) &&
+        nativeWindowsExtensions.has(path.extname(command.command).toLowerCase())
+      const proc = native
+        ? NodeChildProcess.spawn(command.command, command.args, opts)
+        : launch(command.command, command.args, opts)
       let end = false
       let exit: readonly [code: number | null, signal: NodeJS.Signals | null] | undefined
       proc.on("error", (err) => {
