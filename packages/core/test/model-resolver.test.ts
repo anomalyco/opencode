@@ -880,6 +880,12 @@ describe("ModelResolver", () => {
           { thinking: { type: "adaptive", display: "summarized" }, effort: "high" },
         ],
         [
+          "@ai-sdk/cerebras",
+          "@opencode-ai/ai/providers/cerebras",
+          { reasoningEffort: "high" },
+          { reasoningEffort: "high" },
+        ],
+        [
           "@ai-sdk/openai-compatible",
           "@opencode-ai/ai/providers/openai-compatible",
           { reasoningEffort: "high" },
@@ -902,6 +908,12 @@ describe("ModelResolver", () => {
           "@opencode-ai/ai/providers/openrouter",
           { reasoning: { effort: "high" } },
           { reasoning: { effort: "high" } },
+        ],
+        [
+          "@ai-sdk/togetherai",
+          "@opencode-ai/ai/providers/togetherai",
+          { reasoningEffort: "high" },
+          { reasoningEffort: "high" },
         ],
         ["@ai-sdk/xai", "@opencode-ai/ai/providers/xai", { reasoningEffort: "high" }, { reasoningEffort: "high" }],
       ] as const
@@ -950,12 +962,14 @@ describe("ModelResolver", () => {
           "openai.gpt-oss-120b",
         ],
         ["@ai-sdk/azure", "@opencode-ai/ai/providers/azure/responses", "api-model"],
+        ["@ai-sdk/cerebras", "@opencode-ai/ai/providers/cerebras", "api-model"],
         ["@ai-sdk/google", "@opencode-ai/ai/providers/google", "api-model"],
         ["@ai-sdk/google-vertex", "@opencode-ai/ai/providers/google-vertex", "api-model"],
         ["@ai-sdk/google-vertex/anthropic", "@opencode-ai/ai/providers/google-vertex/messages", "claude-sonnet-4-6"],
         ["@ai-sdk/openai", "@opencode-ai/ai/providers/openai", "api-model"],
         ["@ai-sdk/openai-compatible", "@opencode-ai/ai/providers/openai-compatible", "api-model"],
         ["@openrouter/ai-sdk-provider", "@opencode-ai/ai/providers/openrouter", "api-model"],
+        ["@ai-sdk/togetherai", "@opencode-ai/ai/providers/togetherai", "api-model"],
         ["@ai-sdk/xai", "@opencode-ai/ai/providers/xai", "api-model"],
       ] as const
 
@@ -1070,6 +1084,12 @@ describe("ModelResolver", () => {
           settings: { reasoning: { effort: "high" } },
         }),
       )
+      const cerebras = yield* ModelResolver.fromCatalogModel(
+        model(Provider.aisdk("@ai-sdk/cerebras"), { settings: { reasoningEffort: "high" } }),
+      )
+      const togetherai = yield* ModelResolver.fromCatalogModel(
+        model(Provider.aisdk("@ai-sdk/togetherai"), { settings: { reasoningEffort: "high" } }),
+      )
       const xai = yield* ModelResolver.fromCatalogModel(
         model(Provider.aisdk("@ai-sdk/xai"), { settings: { reasoningEffort: "high" } }),
       )
@@ -1090,6 +1110,12 @@ describe("ModelResolver", () => {
       expect(google.route.defaults.providerOptions).toEqual({ thinkingConfig: { thinkingBudget: 1_024 } })
       expect(openrouter.route.id).toBe("openrouter")
       expect(openrouter.route.defaults.providerOptions).toEqual({ reasoning: { effort: "high" } })
+      expect(cerebras.route.id).toBe("cerebras-chat")
+      expect(cerebras.route.defaults.providerOptions).toEqual({ reasoningEffort: "high" })
+      expect(String(cerebras.provider)).toBe("test-provider")
+      expect(togetherai.route.id).toBe("togetherai-chat")
+      expect(togetherai.route.defaults.providerOptions).toEqual({ reasoningEffort: "high" })
+      expect(String(togetherai.provider)).toBe("test-provider")
       expect(xai.route.id).toBe("openai-responses")
       expect(xai.route.defaults.providerOptions).toEqual({
         reasoningEffort: "high",

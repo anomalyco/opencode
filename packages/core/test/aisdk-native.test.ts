@@ -61,6 +61,33 @@ describe("AISDKNative", () => {
     })
   })
 
+  test("maps Cerebras and Together AI settings, headers, and reasoning options to native providers", () => {
+    for (const name of ["cerebras", "togetherai"]) {
+      expect(
+        map(`@ai-sdk/${name}`, {
+          apiKey: "secret",
+          baseURL: `https://${name}.example/v1`,
+          headers: { "x-provider": name },
+          name: "custom-provider",
+          reasoningEffort: "high",
+          customOption: { enabled: true },
+        }),
+      ).toEqual({
+        package: `@opencode-ai/ai/providers/${name}`,
+        settings: {
+          apiKey: "secret",
+          baseURL: `https://${name}.example/v1`,
+          providerOptions: { reasoningEffort: "high", customOption: { enabled: true } },
+        },
+        headers: { "x-provider": name },
+      })
+      expect(map(`@ai-sdk/${name}`, {})).toEqual({
+        package: `@opencode-ai/ai/providers/${name}`,
+        settings: {},
+      })
+    }
+  })
+
   test("maps Google Vertex settings to the native provider", () => {
     expect(
       map("@ai-sdk/google-vertex", {

@@ -11,7 +11,6 @@ import { GatewayPlugin } from "@opencode-ai/core/plugin/provider/gateway"
 import { GroqPlugin } from "@opencode-ai/core/plugin/provider/groq"
 import { MistralPlugin } from "@opencode-ai/core/plugin/provider/mistral"
 import { PerplexityPlugin } from "@opencode-ai/core/plugin/provider/perplexity"
-import { TogetherAIPlugin } from "@opencode-ai/core/plugin/provider/togetherai"
 import { VenicePlugin } from "@opencode-ai/core/plugin/provider/venice"
 import { Provider } from "@opencode-ai/core/provider"
 import { testEffect } from "../lib/effect"
@@ -27,7 +26,6 @@ const providers = [
   { id: "groq", plugin: GroqPlugin, package: "@ai-sdk/groq", provider: "groq.chat" },
   { id: "mistral", plugin: MistralPlugin, package: "@ai-sdk/mistral", provider: "mistral.chat" },
   { id: "perplexity", plugin: PerplexityPlugin, package: "@ai-sdk/perplexity", provider: "perplexity" },
-  { id: "togetherai", plugin: TogetherAIPlugin, package: "@ai-sdk/togetherai", provider: "togetherai.chat" },
   { id: "venice", plugin: VenicePlugin, package: "venice-ai-sdk-provider", provider: "custom-provider.chat" },
 ] as const
 

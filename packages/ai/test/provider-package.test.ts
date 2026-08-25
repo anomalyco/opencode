@@ -26,6 +26,8 @@ describe("provider package entrypoints", () => {
       import("@opencode-ai/ai/providers/amazon-bedrock/mantle"),
       import("@opencode-ai/ai/providers/amazon-bedrock/mantle/chat"),
       import("@opencode-ai/ai/providers/amazon-bedrock/mantle/responses"),
+      import("@opencode-ai/ai/providers/togetherai"),
+      import("@opencode-ai/ai/providers/cerebras"),
     ])
 
     for (const module of modules) expect(module.model).toBeFunction()
