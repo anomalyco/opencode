@@ -508,6 +508,7 @@ const layer = Layer.effect(
           // restart the step instead of surfacing the provider error.
           if (
             recoverOverflow &&
+            compaction.enabled() &&
             !publisher.record().outputStarted &&
             isContextOverflowFailure(overflowFailure ?? streamFailure) &&
             (yield* restore(compaction.compact(compactionInput))).status === "completed"
