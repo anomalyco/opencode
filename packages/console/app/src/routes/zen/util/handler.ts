@@ -236,10 +236,12 @@ export async function handler(
           })
           headers.delete("host")
           headers.delete("content-length")
-          headers.delete("x-opencode-request")
-          if (!isNewInference) headers.delete("x-opencode-session")
-          headers.delete("x-opencode-project")
-          headers.delete("x-opencode-client")
+          if (!isNewInference) {
+            headers.delete("x-opencode-session")
+            headers.delete("x-opencode-project")
+            headers.delete("x-opencode-client")
+            headers.delete("x-opencode-request")
+          }
           return headers
         })(),
         body: reqBody,
