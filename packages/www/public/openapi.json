@@ -6749,6 +6749,90 @@
         "summary": "Remove credential"
       }
     },
+    "/api/credential/{credentialID}/activate": {
+      "post": {
+        "tags": ["credential"],
+        "operationId": "v2.credential.activate",
+        "parameters": [
+          {
+            "name": "credentialID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Activate a stored integration credential.",
+        "summary": "Activate credential"
+      }
+    },
     "/api/project": {
       "get": {
         "tags": ["project"],
@@ -6792,6 +6876,89 @@
         },
         "description": "List known projects.",
         "summary": "List projects"
+      }
+    },
+    "/api/project/{projectID}": {
+      "patch": {
+        "tags": ["project"],
+        "operationId": "v2.project.update",
+        "parameters": [
+          {
+            "name": "projectID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Project",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Project"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ProjectNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Update project display metadata and workspace commands.",
+        "summary": "Update project",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "icon": {
+                    "$ref": "#/components/schemas/Project.Icon"
+                  },
+                  "commands": {
+                    "$ref": "#/components/schemas/Project.Commands"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
       }
     },
     "/api/project/current": {
@@ -11193,7 +11360,7 @@
             }
           }
         },
-        "description": "Create a worktree for a project.",
+        "description": "Create a worktree for a project and run its configured setup script.",
         "summary": "Create worktree",
         "requestBody": {
           "content": {
@@ -15194,6 +15361,9 @@
           },
           "requireFinishReason": {
             "type": "boolean"
+          },
+          "requireAssistantAfterTool": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false
@@ -15436,6 +15606,9 @@
           },
           "source": {
             "$ref": "#/components/schemas/Permission.Source"
+          },
+          "message": {
+            "type": "string"
           }
         },
         "required": ["id", "sessionID", "action", "resources"],
@@ -15913,6 +16086,23 @@
       "Project.Vcs": {
         "type": "string",
         "enum": ["git", "hg"]
+      },
+      "ProjectNotFoundErrorEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["ProjectNotFoundError"]
+          },
+          "projectID": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "projectID", "message"],
+        "additionalProperties": false
       },
       "Prompt.AgentAttachment": {
         "type": "object",
