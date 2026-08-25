@@ -459,7 +459,15 @@ If you encounter "I'm sorry, but I cannot assist with that request" errors, try 
 
 #### Microsoft Entra ID (Azure CLI)
 
-You can use your Azure CLI session instead of an API key. [Install the Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli), run `az login`, then select **Microsoft Entra ID (Azure CLI)** when connecting the **Azure** provider and enter the same Resource name. Use `az login --tenant TENANT_ID` if the Resource belongs to a different tenant.
+You can use your Azure CLI session instead of an API key. [Install the Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli), run `az login`, then run `/connect`, select **Azure**, choose **Microsoft Entra ID (Azure CLI)**, and enter your Resource name. Use `az login --tenant TENANT_ID` if the Resource belongs to a different tenant.
+
+Find the Resource name by opening your Azure OpenAI or Foundry Resource in the [Azure portal](https://portal.azure.com/) or [Microsoft Foundry](https://ai.azure.com/). It is also the first part of the endpoint: `my-models` in `https://my-models.openai.azure.com/` or `https://my-models.services.ai.azure.com/`. If your identity can list Resources, you can also find their names and Resource groups with:
+
+```bash
+az cognitiveservices account list \
+  --query "[].{name:name,resourceGroup:resourceGroup}" \
+  --output table
+```
 
 OpenCode finds the Resource group and discovers its deployed models from the active Azure CLI subscription. Run `az account set --subscription NAME_OR_ID` first if the Resource is in a different subscription. Set `AZURE_RESOURCE_GROUP` to skip listing the subscription and query a known Resource directly.
 
