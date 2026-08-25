@@ -347,7 +347,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           const info = models()?.find((item) => item.providerID === value.providerID && item.id === value.modelID)
           return {
             provider: provider?.name ?? value.providerID,
-            model: info?.name ?? `${value.modelID} (unavailable)`,
+            model: info?.name ?? value.modelID,
             reasoning: (info?.variants?.length ?? 0) !== 0,
           }
         }),
