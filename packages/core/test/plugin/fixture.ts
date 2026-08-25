@@ -5,6 +5,7 @@ import { Command } from "@opencode-ai/core/command"
 import { Config } from "@opencode-ai/core/config"
 import { Credential } from "@opencode-ai/core/credential"
 import { LayerNodePlatform } from "@opencode-ai/util/effect/app-node-platform"
+import { AppProcess } from "@opencode-ai/util/process"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Bus } from "@opencode-ai/core/bus"
 import { FileSystem } from "@opencode-ai/core/filesystem"
@@ -56,6 +57,7 @@ const permissionLayer = Layer.succeed(
 
 export const PluginTestLayer = LayerNode.compile(
   LayerNode.group([
+    AppProcess.node,
     FileSystem.node,
     FSUtil.node,
     Location.node,
