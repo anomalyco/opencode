@@ -1,11 +1,11 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
-import { LLM } from "../../src/index.js"
+import { LLM, Message } from "../../src/index.js"
 import { AmazonBedrockMantle } from "../../src/providers.js"
 import { compileRequest, LLMClient } from "../../src/route/client.js"
 import { it } from "../lib/effect.js"
-import { dynamicResponse } from "../lib/http.js"
+import { dynamicResponse, fixedResponse } from "../lib/http.js"
 import { sseEvents } from "../lib/sse.js"
 import { recordedTests } from "../recorded-test.js"
 
@@ -81,6 +81,39 @@ describe("Amazon Bedrock Mantle provider", () => {
       )
 
       expect(seen).toEqual([{ url: "https://mantle.test/v1/chat/completions", authorization: "Bearer test-key" }])
+    }),
+  )
+
+  it.effect("replays reasoning with Mantle's message-prefixed item ids", () =>
+    Effect.gen(function* () {
+      const model = AmazonBedrockMantle.configure({ apiKey: "test-key" }).responses("openai.gpt-oss-120b")
+      const item = { type: "reasoning", id: "msg_95d4d0af4350432a", encrypted_content: "mantle-state" }
+      const response = yield* LLMClient.generate(LLM.request({ model, prompt: "Think." })).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "response.output_item.added", item },
+              { type: "response.reasoning_summary_text.delta", item_id: item.id, delta: "Considering." },
+              { type: "response.output_item.done", item },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      const prepared = yield* compileRequest(
+        LLM.request({ model, messages: [response.message, Message.user("Continue.")] }),
+      )
+
+      expect(prepared.body.input).toEqual([
+        {
+          type: "reasoning",
+          id: "msg_95d4d0af4350432a",
+          summary: [{ type: "summary_text", text: "Considering." }],
+          encrypted_content: "mantle-state",
+        },
+        { role: "user", content: [{ type: "input_text", text: "Continue." }] },
+      ])
     }),
   )
 })
