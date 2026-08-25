@@ -234,6 +234,9 @@ export async function handler(
             }
             headers.set(k, v)
           })
+          if (isNewInference) {
+            headers.set("x-opencode-model", model)
+          }
           headers.delete("host")
           headers.delete("content-length")
           if (!isNewInference) {
