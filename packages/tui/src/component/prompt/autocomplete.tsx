@@ -24,7 +24,7 @@ import type { FileSystemEntry } from "@opencode-ai/client"
 import { Skill } from "@opencode-ai/schema/skill"
 import { stringWidth } from "../../util/string-width"
 import { parseFileLineRange, stripFileLineRange } from "../../prompt/parse"
-import { moveSelection, revealSelectionOffset } from "../../ui/select-controller"
+import { moveSelection, reconcileSelectionWindow, revealSelectionOffset } from "../../ui/select-controller"
 import {
   directoryAutocompleteExactValue,
   directoryAutocompleteMatches,
@@ -664,6 +664,18 @@ export function Autocomplete(props: {
     scroll.scrollBy(offset - scroll.scrollTop)
   }
 
+  function syncSelectionWindow() {
+    if (!scroll) return
+    const selected = reconcileSelectionWindow(store.selected, {
+      count: options().length,
+      limit: Math.min(height(), options().length),
+      offset: scroll.scrollTop,
+    })
+    if (selected === store.selected) return
+    setConfirming(undefined)
+    setStore("selected", selected)
+  }
+
   function select() {
     const selected = options()[store.selected]
     if (!selected) return
@@ -899,6 +911,7 @@ export function Autocomplete(props: {
         height={height()}
         scrollbarOptions={{ visible: false }}
         scrollAcceleration={scrollAcceleration()}
+        onMouseScroll={() => queueMicrotask(syncSelectionWindow)}
       >
         <Index
           each={options()}
