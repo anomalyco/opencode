@@ -119,7 +119,7 @@ describe("search tools", () => {
               error: {
                 type: "tool.execution",
                 message:
-                  'Invalid arguments for tool "grep":\n- pattern: Pattern must not be empty\nCorrect the arguments and retry the tool.',
+                  'Invalid arguments for tool "grep":\n- pattern: Pattern must not be empty\n\nArguments provided:\n{\n  "pattern": ""\n}\n\nUpdate the arguments and call the tool again.',
               },
             })
           }),

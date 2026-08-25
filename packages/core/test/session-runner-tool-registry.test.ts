@@ -514,7 +514,7 @@ describe("Tool", () => {
         error: {
           type: "tool.execution",
           message:
-            'Invalid arguments for tool "transformed":\n- value: Expected boolean\nCorrect the arguments and retry the tool.',
+            'Invalid arguments for tool "transformed":\n- value: Expected boolean\n\nArguments provided:\n{\n  "value": "yes"\n}\n\nUpdate the arguments and call the tool again.',
         },
       })
       expect(executed).toEqual(["yes"])

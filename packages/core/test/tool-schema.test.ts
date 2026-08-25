@@ -174,7 +174,7 @@ test("portable schema failures become tool failures", async () => {
   expect(error).toEqual(
     new Tool.Error({
       message:
-        'Invalid arguments for tool "invalid":\n- value: expected a string\n- nested.count: expected a positive integer\nCorrect the arguments and retry the tool.',
+        'Invalid arguments for tool "invalid":\n- value: expected a string\n- nested.count: expected a positive integer\n\nArguments provided:\n1\n\nUpdate the arguments and call the tool again.',
     }),
   )
 })
@@ -195,7 +195,7 @@ test("Effect schema failures use normalized input issues", async () => {
   ).toEqual(
     new Tool.Error({
       message:
-        'Invalid arguments for tool "effect":\n- value: Expected string\n- nested.count: Expected a value greater than or equal to 1\nCorrect the arguments and retry the tool.',
+        'Invalid arguments for tool "effect":\n- value: Expected string\n- nested.count: Expected a value greater than or equal to 1\n\nArguments provided:\n{\n  "value": 1,\n  "nested": {\n    "count": 0\n  }\n}\n\nUpdate the arguments and call the tool again.',
     }),
   )
 })
@@ -224,7 +224,7 @@ test("input error prompts limit normalized issues", async () => {
   expect(await Effect.runPromise(Effect.flip(execute(tool, {}, {} as Tool.Context)))).toEqual(
     new Tool.Error({
       message:
-        'Invalid arguments for tool "limited":\n- root: issue 1\n- root: issue 2\n- root: issue 3\n- root: issue 4\n- root: issue 5\n- ...and 1 more issue\nCorrect the arguments and retry the tool.',
+        'Invalid arguments for tool "limited":\n- root: issue 1\n- root: issue 2\n- root: issue 3\n- root: issue 4\n- root: issue 5\n- ...and 1 more issue\n\nArguments provided:\n{}\n\nUpdate the arguments and call the tool again.',
     }),
   )
 })
@@ -280,12 +280,14 @@ test("raw JSON schemas validate and decode tool input", async () => {
   })
   expect(await Effect.runPromise(Effect.flip(execute(tool, { value: 1 }, {} as Tool.Context)))).toEqual(
     new Tool.Error({
-      message: 'Invalid arguments for tool "raw":\n- value: Expected string\nCorrect the arguments and retry the tool.',
+      message:
+        'Invalid arguments for tool "raw":\n- value: Expected string\n\nArguments provided:\n{\n  "value": 1\n}\n\nUpdate the arguments and call the tool again.',
     }),
   )
   expect(await Effect.runPromise(Effect.flip(execute(tool, {}, {} as Tool.Context)))).toEqual(
     new Tool.Error({
-      message: 'Invalid arguments for tool "raw":\n- value: Missing key\nCorrect the arguments and retry the tool.',
+      message:
+        'Invalid arguments for tool "raw":\n- value: Missing key\n\nArguments provided:\n{}\n\nUpdate the arguments and call the tool again.',
     }),
   )
   expect(
@@ -293,7 +295,7 @@ test("raw JSON schemas validate and decode tool input", async () => {
   ).toEqual(
     new Tool.Error({
       message:
-        'Invalid arguments for tool "raw":\n- nested.count: Expected a value greater than or equal to 1\nCorrect the arguments and retry the tool.',
+        'Invalid arguments for tool "raw":\n- nested.count: Expected a value greater than or equal to 1\n\nArguments provided:\n{\n  "value": "ok",\n  "nested": {\n    "count": 0\n  }\n}\n\nUpdate the arguments and call the tool again.',
     }),
   )
   expect(
@@ -301,7 +303,7 @@ test("raw JSON schemas validate and decode tool input", async () => {
   ).toEqual(
     new Tool.Error({
       message:
-        'Invalid arguments for tool "raw":\n- value: Expected string\n- nested.count: Expected a value greater than or equal to 1\nCorrect the arguments and retry the tool.',
+        'Invalid arguments for tool "raw":\n- value: Expected string\n- nested.count: Expected a value greater than or equal to 1\n\nArguments provided:\n{\n  "value": 1,\n  "nested": {\n    "count": 0\n  }\n}\n\nUpdate the arguments and call the tool again.',
     }),
   )
 })
@@ -325,7 +327,7 @@ test("raw JSON schemas resolve draft-07 definitions", async () => {
   expect(await Effect.runPromise(Effect.flip(execute(tool, { value: 1 }, {} as Tool.Context)))).toEqual(
     new Tool.Error({
       message:
-        'Invalid arguments for tool "draft-07":\n- value: Expected value\nCorrect the arguments and retry the tool.',
+        'Invalid arguments for tool "draft-07":\n- value: Expected value\n\nArguments provided:\n{\n  "value": 1\n}\n\nUpdate the arguments and call the tool again.',
     }),
   )
 })
