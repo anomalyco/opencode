@@ -100,7 +100,11 @@ describe("QuestionTool", () => {
         }),
       ).toMatchObject({
         status: "error",
-        error: { type: "tool.execution", message: expect.stringContaining("Invalid tool input") },
+        error: {
+          type: "tool.execution",
+          message:
+            'Invalid arguments for tool "question":\n- questions: Expected a value with a length of at least 1\nCorrect the arguments and retry the tool.',
+        },
       })
       expect(capturedInput()).toBeUndefined()
     }),

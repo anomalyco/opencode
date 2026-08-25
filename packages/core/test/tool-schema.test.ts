@@ -144,7 +144,12 @@ test("portable schema failures become tool failures", async () => {
     "~standard": {
       version: 1,
       vendor: "test",
-      validate: (_value: unknown) => ({ issues: [{ message: "expected a string" }] }),
+      validate: (_value: unknown) => ({
+        issues: [
+          { path: ["value"], message: "expected a string" },
+          { path: [{ key: "nested" }, { key: "count" }], message: "expected a positive integer" },
+        ],
+      }),
       jsonSchema: {
         input: () => ({ type: "string" }),
         output: () => ({ type: "string" }),
@@ -166,7 +171,62 @@ test("portable schema failures become tool failures", async () => {
       ),
     ),
   )
-  expect(error).toEqual(new Tool.Error({ message: "Invalid tool input: expected a string" }))
+  expect(error).toEqual(
+    new Tool.Error({
+      message:
+        'Invalid arguments for tool "invalid":\n- value: expected a string\n- nested.count: expected a positive integer\nCorrect the arguments and retry the tool.',
+    }),
+  )
+})
+
+test("Effect schema failures use normalized input issues", async () => {
+  const tool: Info = {
+    name: "effect",
+    description: "Effect tool",
+    input: Schema.Struct({
+      value: Schema.String,
+      nested: Schema.Struct({ count: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)) }),
+    }),
+    execute: () => Effect.succeed({ content: "unused" }),
+  }
+
+  expect(
+    await Effect.runPromise(Effect.flip(execute(tool, { value: 1, nested: { count: 0 } }, {} as Tool.Context))),
+  ).toEqual(
+    new Tool.Error({
+      message:
+        'Invalid arguments for tool "effect":\n- value: Expected string\n- nested.count: Expected a value greater than or equal to 1\nCorrect the arguments and retry the tool.',
+    }),
+  )
+})
+
+test("input error prompts limit normalized issues", async () => {
+  const input = {
+    "~standard": {
+      version: 1,
+      vendor: "test",
+      validate: (_value: unknown) => ({
+        issues: Array.from({ length: 6 }, (_, index) => ({ message: `issue ${index + 1}` })),
+      }),
+      jsonSchema: {
+        input: () => ({}),
+        output: () => ({}),
+      },
+    },
+  }
+  const tool: Info = {
+    name: "limited",
+    description: "Limited issues",
+    input,
+    execute: () => Effect.succeed({ content: "unused" }),
+  }
+
+  expect(await Effect.runPromise(Effect.flip(execute(tool, {}, {} as Tool.Context)))).toEqual(
+    new Tool.Error({
+      message:
+        'Invalid arguments for tool "limited":\n- root: issue 1\n- root: issue 2\n- root: issue 3\n- root: issue 4\n- root: issue 5\n- ...and 1 more issue\nCorrect the arguments and retry the tool.',
+    }),
+  )
 })
 
 test("canonical results carry metadata with typed output", async () => {
@@ -219,16 +279,29 @@ test("raw JSON schemas validate and decode tool input", async () => {
     content: [{ type: "text", text: '{"value":"ok"}' }],
   })
   expect(await Effect.runPromise(Effect.flip(execute(tool, { value: 1 }, {} as Tool.Context)))).toEqual(
-    new Tool.Error({ message: 'Invalid tool input: Expected string\n  at ["value"]' }),
+    new Tool.Error({
+      message: 'Invalid arguments for tool "raw":\n- value: Expected string\nCorrect the arguments and retry the tool.',
+    }),
   )
   expect(await Effect.runPromise(Effect.flip(execute(tool, {}, {} as Tool.Context)))).toEqual(
-    new Tool.Error({ message: 'Invalid tool input: Missing key\n  at ["value"]' }),
+    new Tool.Error({
+      message: 'Invalid arguments for tool "raw":\n- value: Missing key\nCorrect the arguments and retry the tool.',
+    }),
   )
   expect(
     await Effect.runPromise(Effect.flip(execute(tool, { value: "ok", nested: { count: 0 } }, {} as Tool.Context))),
   ).toEqual(
     new Tool.Error({
-      message: 'Invalid tool input: Expected a value greater than or equal to 1\n  at ["nested"]["count"]',
+      message:
+        'Invalid arguments for tool "raw":\n- nested.count: Expected a value greater than or equal to 1\nCorrect the arguments and retry the tool.',
+    }),
+  )
+  expect(
+    await Effect.runPromise(Effect.flip(execute(tool, { value: 1, nested: { count: 0 } }, {} as Tool.Context))),
+  ).toEqual(
+    new Tool.Error({
+      message:
+        'Invalid arguments for tool "raw":\n- value: Expected string\n- nested.count: Expected a value greater than or equal to 1\nCorrect the arguments and retry the tool.',
     }),
   )
 })
@@ -250,7 +323,10 @@ test("raw JSON schemas resolve draft-07 definitions", async () => {
     content: [{ type: "text", text: '{"value":"ok"}' }],
   })
   expect(await Effect.runPromise(Effect.flip(execute(tool, { value: 1 }, {} as Tool.Context)))).toEqual(
-    new Tool.Error({ message: 'Invalid tool input: Expected value\n  at ["value"]' }),
+    new Tool.Error({
+      message:
+        'Invalid arguments for tool "draft-07":\n- value: Expected value\nCorrect the arguments and retry the tool.',
+    }),
   )
 })
 

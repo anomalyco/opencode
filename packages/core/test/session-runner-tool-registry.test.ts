@@ -511,7 +511,11 @@ describe("Tool", () => {
         }),
       ).toMatchObject({
         status: "error",
-        error: { type: "tool.execution", message: expect.stringContaining("Invalid tool input") },
+        error: {
+          type: "tool.execution",
+          message:
+            'Invalid arguments for tool "transformed":\n- value: Expected boolean\nCorrect the arguments and retry the tool.',
+        },
       })
       expect(executed).toEqual(["yes"])
 

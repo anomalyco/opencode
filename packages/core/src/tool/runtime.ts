@@ -1,7 +1,17 @@
 import type { ToolDefinition } from "@opencode-ai/ai"
 import { Tool } from "@opencode-ai/schema/tool"
 import type { StandardJSONSchemaV1, StandardSchemaV1 } from "@standard-schema/spec"
-import { Cache, Effect, JsonSchema, Schema, SchemaRepresentation } from "effect"
+import { Cache, Effect, JsonSchema, Schema, SchemaIssue, SchemaRepresentation } from "effect"
+
+type InputIssue = {
+  readonly path: ReadonlyArray<PropertyKey>
+  readonly message: string
+}
+
+type InputResult = { readonly value: unknown } | { readonly issues: ReadonlyArray<InputIssue> }
+
+const formatEffectIssue = SchemaIssue.makeFormatterStandardSchemaV1()
+const inputIssueLimit = 5
 
 const jsonSchemas = Effect.runSync(
   Cache.make<JsonSchema.JsonSchema, Schema.Codec<unknown> | undefined>({
@@ -23,7 +33,7 @@ export const definition = (tool: Tool.Info<any, any>): ToolDefinition => ({
 
 export const execute = (tool: Tool.Info<any, any>, input: unknown, context: Tool.Context) =>
   Effect.gen(function* () {
-    const decoded = yield* decodeInput(tool.input, input)
+    const decoded = yield* decodeInput(tool, input)
     // Tool implementations declare `Tool.Error` but plugins can fail with anything at
     // runtime. A foreign typed failure would slip past every `catchTag("Tool.Error")`
     // downstream and leave its call permanently unsettled, so the declared contract is
@@ -55,19 +65,83 @@ export const execute = (tool: Tool.Info<any, any>, input: unknown, context: Tool
     }
   })
 
-const decodeInput = (schema: Tool.ValueSchema<any>, value: unknown) => {
-  if (Schema.isSchema(schema))
-    return Schema.decodeUnknownEffect(schema)(value).pipe(
-      Effect.mapError((error) => new Tool.Error({ message: `Invalid tool input: ${error.message}` })),
-    )
-  if (isStandardSchema(schema)) return validateStandard(schema, value, "Invalid tool input")
-  return Cache.get(jsonSchemas, schema).pipe(
-    Effect.flatMap((schema) =>
-      schema === undefined ? Effect.succeed(value) : Schema.decodeUnknownEffect(schema)(value),
+const decodeInput = (tool: Tool.Info<any, any>, value: unknown) =>
+  decodeInputResult(tool.input, value).pipe(
+    Effect.flatMap((result) =>
+      "issues" in result
+        ? Effect.fail(new Tool.Error({ message: formatInputIssues(effectiveName(tool), result.issues) }))
+        : Effect.succeed(result.value),
     ),
-    Effect.mapError((error) => new Tool.Error({ message: `Invalid tool input: ${error.message}` })),
+  )
+
+const decodeInputResult = (schema: Tool.ValueSchema<any>, value: unknown): Effect.Effect<InputResult> => {
+  if (Schema.isSchema(schema)) return decodeEffectInput(schema, value)
+  if (isStandardSchema(schema)) return validateStandardResult(schema, value)
+  return Cache.get(jsonSchemas, schema).pipe(
+    Effect.flatMap((schema) => (schema === undefined ? Effect.succeed({ value }) : decodeEffectInput(schema, value))),
   )
 }
+
+const decodeEffectInput = (schema: Schema.Codec<unknown>, value: unknown): Effect.Effect<InputResult> =>
+  Schema.decodeUnknownEffect(schema)(value, { errors: "all" }).pipe(
+    Effect.map((value) => ({ value })),
+    Effect.catch((error) => Effect.succeed({ issues: normalizeEffectIssues(error.issue) })),
+  )
+
+const normalizeEffectIssues = (issue: SchemaIssue.Issue): ReadonlyArray<InputIssue> =>
+  formatEffectIssue(issue).issues.map(normalizeStandardIssue)
+
+const normalizeStandardIssue = (issue: StandardSchemaV1.Issue): InputIssue => ({
+  path: issue.path?.map((segment) => (typeof segment === "object" ? segment.key : segment)) ?? [],
+  message: issue.message,
+})
+
+const validateStandardResult = (
+  schema: StandardSchemaV1<any, any> & StandardJSONSchemaV1<any, any>,
+  value: unknown,
+): Effect.Effect<InputResult> =>
+  Effect.gen(function* () {
+    const pending = yield* Effect.try({
+      try: () => schema["~standard"].validate(value),
+      catch: (error) => error,
+    }).pipe(
+      Effect.catch((error) =>
+        Effect.succeed({ issues: [{ message: error instanceof Error ? error.message : String(error) }] }),
+      ),
+    )
+    const result =
+      pending instanceof Promise
+        ? yield* Effect.tryPromise({
+            try: () => pending,
+            catch: (error) => error,
+          }).pipe(
+            Effect.catch((error) =>
+              Effect.succeed({ issues: [{ message: error instanceof Error ? error.message : String(error) }] }),
+            ),
+          )
+        : pending
+    if (result.issues) return { issues: result.issues.map(normalizeStandardIssue) }
+    return { value: result.value }
+  })
+
+const formatInputIssues = (tool: string, issues: ReadonlyArray<InputIssue>) => {
+  const visible = issues.slice(0, inputIssueLimit)
+  const remaining = issues.length - visible.length
+  const details = visible.map((issue) => `- ${formatInputPath(issue.path)}: ${issue.message}`)
+  if (remaining > 0) details.push(`- ...and ${remaining} more ${remaining === 1 ? "issue" : "issues"}`)
+  return `Invalid arguments for tool "${tool}":\n${details.join("\n")}\nCorrect the arguments and retry the tool.`
+}
+
+const formatInputPath = (path: ReadonlyArray<PropertyKey>) =>
+  path.reduce<string>(
+    (result, segment) =>
+      typeof segment === "number"
+        ? `${result}[${segment}]`
+        : result === ""
+          ? String(segment)
+          : `${result}.${String(segment)}`,
+    "",
+  ) || "root"
 
 const jsonSchema = (schema: JsonSchema.JsonSchema) => {
   const draft =
@@ -104,24 +178,15 @@ const validateStandard = (
   value: unknown,
   prefix: string,
 ) =>
-  Effect.gen(function* () {
-    const pending = yield* Effect.try({
-      try: () => schema["~standard"].validate(value),
-      catch: (error) => standardFailure(prefix, error),
-    })
-    const result =
-      pending instanceof Promise
-        ? yield* Effect.tryPromise({ try: () => pending, catch: (error) => standardFailure(prefix, error) })
-        : pending
-    if (result.issues)
-      return yield* new Tool.Error({
-        message: `${prefix}: ${result.issues.map((issue) => issue.message).join(", ")}`,
-      })
-    return result.value
-  })
-
-const standardFailure = (prefix: string, error: unknown) =>
-  new Tool.Error({ message: `${prefix}: ${error instanceof Error ? error.message : String(error)}` })
+  validateStandardResult(schema, value).pipe(
+    Effect.flatMap((result) =>
+      "issues" in result
+        ? Effect.fail(
+            new Tool.Error({ message: `${prefix}: ${result.issues.map((issue) => issue.message).join(", ")}` }),
+          )
+        : Effect.succeed(result.value),
+    ),
+  )
 
 const inputJsonSchema = (schema: Tool.ValueSchema<any>): JsonSchema.JsonSchema => {
   if (schema === undefined || schema === null) return {}
