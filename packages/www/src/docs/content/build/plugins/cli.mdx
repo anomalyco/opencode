@@ -15,6 +15,9 @@ export default Plugin.define({
 })
 ```
 
+Import `@opencode-ai/plugin/tui` directly. OpenCode resolves this import at runtime, so local CLI plugins do not need an
+absolute path to an OpenCode checkout.
+
 ## Context
 
 `setup` receives configuration, app metadata, the current location, the OpenCode client, cached data, theme tokens, the
