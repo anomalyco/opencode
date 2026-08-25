@@ -285,6 +285,7 @@ export const Event = Schema.StructWithRest(
   Schema.Struct({
     type: Schema.String,
     delta: Schema.optional(Schema.String),
+    arguments: Schema.optional(Schema.String),
     text: Schema.optional(Schema.String),
     item_id: Schema.optional(Schema.String),
     summary_index: Schema.optional(Schema.Number),
@@ -996,12 +997,23 @@ const onFunctionCallArgumentsDelta = Effect.fn("OpenResponses.onFunctionCallArgu
   state: ParserState,
   event: Event,
 ) {
-  if (!event.item_id || !event.delta || !state.tools[event.item_id]) return [state, NO_EVENTS] satisfies StepResult
+  if (!event.item_id) return [state, NO_EVENTS] satisfies StepResult
+  const tool = state.tools[event.item_id]
+  if (!tool) return [state, NO_EVENTS] satisfies StepResult
+  if (event.type === "response.function_call_arguments.done" && event.arguments === undefined)
+    return [state, NO_EVENTS] satisfies StepResult
+  if (event.arguments !== undefined && !event.arguments.startsWith(tool.input))
+    return [
+      { ...state, tools: ToolStream.start(state.tools, event.item_id, { ...tool, input: event.arguments }) },
+      NO_EVENTS,
+    ] satisfies StepResult
+  const delta = event.arguments === undefined ? event.delta : event.arguments.slice(tool.input.length)
+  if (!delta) return [state, NO_EVENTS] satisfies StepResult
   const result = ToolStream.appendExisting(
     state.id,
     state.tools,
     event.item_id,
-    event.delta,
+    delta,
     `${state.name} tool argument delta is missing its tool call`,
   )
   if (ToolStream.isError(result)) return yield* result
@@ -1212,7 +1224,7 @@ export const step = (state: ParserState, event: Event) => {
       return ProviderShared.eventError(state.id, `${event.type} message is missing id`)
     return Effect.succeed(onOutputItemAdded(state, event))
   }
-  if (event.type === "response.function_call_arguments.delta")
+  if (event.type === "response.function_call_arguments.delta" || event.type === "response.function_call_arguments.done")
     return event.item_id
       ? onFunctionCallArgumentsDelta(state, event)
       : ProviderShared.eventError(state.id, `${event.type} is missing item_id`)
