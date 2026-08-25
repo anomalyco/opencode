@@ -80,6 +80,7 @@ export type SessionTabsController = Pick<ContextController, "tabs" | "current" |
   newTab?: () => boolean
   add?: () => void
   detail?: (sessionID: string) => string | undefined
+  promote?: (sessionID: string) => void
   status(sessionID: string): SessionTabsStatus
 }
 const NEW_SESSION_TAB: SessionTab = { sessionID: "new", title: NEW_SESSION_TAB_TITLE }
@@ -253,6 +254,9 @@ function TabContextMenu(props: { state: TabContextMenuState; tabs: SessionTabsCo
       ...(props.tabs.add ? [{ title: "New tab", run: () => props.tabs.add?.() }] : []),
       ...(sessionID
         ? [
+            ...(props.tabs.promote && props.tabs.tabs().find((tab) => tab.sessionID === sessionID)?.preview
+              ? [{ title: "Keep open", run: () => props.tabs.promote?.(sessionID) }]
+              : []),
             {
               title: "Rename",
               run: () => DialogSessionRename.show(dialog, sessionID, props.state.title),
@@ -434,7 +438,10 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
     if (didDrag) suppressClick = true
     setDragging(undefined)
     const pending = preview()
-    if (pending?.sessionID === source) tabs.move(pending.sessionID, pending.index)
+    if (pending?.sessionID === source) {
+      if (tabs.tabs().find((tab) => tab.sessionID === source)?.preview) tabs.promote?.(source)
+      tabs.move(pending.sessionID, pending.index)
+    }
     tabs.select(source)
   }
 
@@ -738,7 +745,10 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                         fg={foreground()}
                         wrapMode="none"
                         selectable={false}
-                        attributes={selected() ? TextAttributes.BOLD : undefined}
+                        attributes={
+                          (selected() ? TextAttributes.BOLD : 0) | (tab.preview ? TextAttributes.ITALIC : 0) ||
+                          undefined
+                        }
                       >
                         <Show
                           when={scrolling() || titleGlow.value().level > 0 || titleFades()}
@@ -891,7 +901,7 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
 }
 
 function HorizontalSessionTabs(props: { controller?: SessionTabsController; animations?: boolean } = {}) {
-  const tabs = props.controller ?? useSessionTabs()
+  const tabs: SessionTabsController = props.controller ?? useSessionTabs()
   const dimensions = useTerminalDimensions()
   const theme = useTheme()
   const { mode } = useThemes()
@@ -1103,7 +1113,10 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
     if (didDrag) suppressClick = true
     setDragging(undefined)
     const pending = preview()
-    if (pending?.sessionID === source) tabs.move(pending.sessionID, pending.index)
+    if (pending?.sessionID === source) {
+      if (tabs.tabs().find((tab) => tab.sessionID === source)?.preview) tabs.promote?.(source)
+      tabs.move(pending.sessionID, pending.index)
+    }
     if (source === NEW_SESSION_TAB.sessionID) return
     tabs.select(source)
   }
@@ -1300,7 +1313,7 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
                   fg={foreground()}
                   wrapMode="none"
                   selectable={false}
-                  attributes={bold()}
+                  attributes={(bold() ?? 0) | (tab.preview ? TextAttributes.ITALIC : 0) || undefined}
                 >
                   <Show when={scrolling() || glows() || titleFades()} fallback={visibleTitle()}>
                     <Index each={visibleTitleParts()}>

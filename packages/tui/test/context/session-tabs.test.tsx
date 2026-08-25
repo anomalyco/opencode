@@ -41,6 +41,7 @@ async function renderSessionTabs(
     newLocation?: "launch" | "inherit"
     tabsEnabled?: boolean
     viewFailures?: number
+    preview?: boolean
   },
 ) {
   const temporary = options?.state ? undefined : await tmpdir()
@@ -148,6 +149,7 @@ async function renderSessionTabs(
           <ConfigProvider
             config={createTuiResolvedConfig({
               tabs: { enabled: options?.tabsEnabled ?? true },
+              experimental: options?.preview ? { "session-preview-tabs": true } : undefined,
               session: { new_location: options?.newLocation ?? "launch" },
             })}
           >
@@ -253,6 +255,125 @@ test("loads location metadata when an open session moves", async () => {
     await wait(() => setup.data.session.get("first")?.location.directory === destination)
     await wait(() => setup.locations.includes(destination))
     await wait(() => setup.vcsLocations.includes(destination))
+  } finally {
+    await setup.destroy()
+  }
+})
+
+test("replaces session previews without replacing permanent tabs or opening existing tabs again", async () => {
+  const setup = await renderSessionTabs("first", { persisted: ["first", "permanent"], preview: true })
+
+  try {
+    await wait(() => setup.tabs.tabs().length === 2)
+    setup.route.navigate({ type: "session", sessionID: "preview-one" })
+    await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "preview-one" && tab.preview === true))
+
+    setup.tabs.select("permanent")
+    await wait(() => setup.tabs.current() === "permanent")
+    expect(setup.tabs.tabs().map((tab) => tab.sessionID)).toEqual(["first", "permanent", "preview-one"])
+
+    setup.route.navigate({ type: "session", sessionID: "preview-two" })
+    await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "preview-two" && tab.preview === true))
+    expect(setup.tabs.tabs().map((tab) => tab.sessionID)).toEqual(["first", "permanent", "preview-two"])
+
+    setup.tabs.promote("preview-two")
+    await wait(() => setup.tabs.tabs().find((tab) => tab.sessionID === "preview-two")?.preview === false)
+
+    setup.route.navigate({ type: "session", sessionID: "preview-three" })
+    await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "preview-three" && tab.preview === true))
+    expect(setup.tabs.tabs().map((tab) => tab.sessionID)).toEqual([
+      "first",
+      "permanent",
+      "preview-two",
+      "preview-three",
+    ])
+  } finally {
+    await setup.destroy()
+  }
+})
+
+test("promotes session previews only when user prompts are admitted", async () => {
+  const setup = await renderSessionTabs("preview", { preview: true })
+
+  try {
+    await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "preview" && tab.preview === true))
+    setup.emit({
+      id: "evt_synthetic",
+      created: Date.now(),
+      type: "session.inbox.enqueued",
+      durable: { aggregateID: "preview", seq: 1, version: 1 },
+      data: {
+        sessionID: "preview",
+        inboxID: "msg_synthetic",
+        item: { type: "synthetic", payload: { text: "editor context" }, delivery: "steer" },
+      },
+    })
+    await Bun.sleep(20)
+    expect(setup.tabs.tabs().find((tab) => tab.sessionID === "preview")?.preview).toBe(true)
+
+    setup.emit({
+      id: "evt_user",
+      created: Date.now(),
+      type: "session.inbox.enqueued",
+      durable: { aggregateID: "preview", seq: 2, version: 1 },
+      data: {
+        sessionID: "preview",
+        inboxID: "msg_user",
+        item: { type: "user", payload: { text: "keep this session" }, delivery: "steer" },
+      },
+    })
+    await wait(() => setup.tabs.tabs().find((tab) => tab.sessionID === "preview")?.preview === false)
+  } finally {
+    await setup.destroy()
+  }
+})
+
+test("reopens a previously permanent session as a preview after a user prompt", async () => {
+  const setup = await renderSessionTabs("permanent", { persisted: ["permanent"], preview: true })
+
+  try {
+    await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "permanent"))
+    setup.emit({
+      id: "evt_existing",
+      created: Date.now(),
+      type: "session.inbox.enqueued",
+      durable: { aggregateID: "permanent", seq: 1, version: 1 },
+      data: {
+        sessionID: "permanent",
+        inboxID: "msg_existing",
+        item: { type: "user", payload: { text: "existing session" }, delivery: "steer" },
+      },
+    })
+    await wait(() => setup.data.session.pending.list("permanent").length > 0)
+
+    setup.tabs.close("permanent")
+    await wait(() => setup.tabs.tabs().length === 0)
+    setup.route.navigate({ type: "session", sessionID: "permanent" })
+    await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "permanent" && tab.preview === true))
+  } finally {
+    await setup.destroy()
+  }
+})
+
+test("keeps a newly submitted home session permanent when admission arrives before navigation", async () => {
+  const setup = await renderSessionTabs("created", { home: true, preview: true })
+
+  try {
+    setup.emit({
+      id: "evt_created",
+      created: Date.now(),
+      type: "session.inbox.enqueued",
+      durable: { aggregateID: "created", seq: 1, version: 1 },
+      data: {
+        sessionID: "created",
+        inboxID: "msg_created",
+        item: { type: "user", payload: { text: "new session" }, delivery: "steer" },
+      },
+    })
+    await wait(() => setup.data.session.pending.list("created").length > 0)
+    setup.route.navigate({ type: "session", sessionID: "created" })
+    await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "created"))
+    expect(setup.tabs.tabs().find((tab) => tab.sessionID === "created")?.preview).not.toBe(true)
   } finally {
     await setup.destroy()
   }
