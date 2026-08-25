@@ -138,6 +138,12 @@ describe("plugin.azure", () => {
     expect(hooks.auth?.methods[1].prompts).toEqual(hooks.auth?.methods[0].prompts)
   })
 
+  test("hides Azure CLI authentication when the Azure CLI is not installed", () => {
+    const hooks = createAzureAuthHooks(azureShell([]), fetch, [], false)
+
+    expect(hooks.auth?.methods.map((method) => method.type)).toEqual(["api"])
+  })
+
   test("lists Azure CLI resources and allows entering another resource", () => {
     delete process.env.AZURE_RESOURCE_NAME
     const hooks = createAzureAuthHooks(azureShell([]), fetch, [

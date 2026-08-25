@@ -158,32 +158,11 @@ export function createDialogProviderOptions() {
                   () => (
                     <DialogSelect
                       title="Select auth method"
-                      options={methods.map((method, index) => {
-                        const unavailable =
-                          providerID === "azure" &&
-                          method.type === "oauth" &&
-                          !Bun.which("az", { PATH: process.env.PATH })
-                        return {
-                          title: method.label,
-                          value: index,
-                          ...(unavailable
-                            ? {
-                                titleView: <span style={{ fg: theme.textMuted }}>{method.label}</span>,
-                                description: "requires Azure CLI",
-                              }
-                            : {}),
-                        }
-                      })}
-                      onSelect={(option) => {
-                        const method = methods[option.value]
-                        if (
-                          providerID === "azure" &&
-                          method?.type === "oauth" &&
-                          !Bun.which("az", { PATH: process.env.PATH })
-                        )
-                          return
-                        resolve(option.value)
-                      }}
+                      options={methods.map((x, index) => ({
+                        title: x.label,
+                        value: index,
+                      }))}
+                      onSelect={(option) => resolve(option.value)}
                     />
                   ),
                   () => resolve(null),
@@ -318,9 +297,7 @@ function AutoMethod(props: AutoMethodProps) {
         <Link href={props.authorization.url} fg={theme.primary} />
         <text fg={theme.textMuted}>{props.authorization.instructions}</text>
       </box>
-      <text fg={theme.textMuted}>
-        {props.providerID === "azure" ? "Discovering Azure models..." : "Waiting for authorization..."}
-      </text>
+      <text fg={theme.textMuted}>Waiting for authorization...</text>
       <text fg={theme.text}>
         c <span style={{ fg: theme.textMuted }}>copy</span>
       </text>

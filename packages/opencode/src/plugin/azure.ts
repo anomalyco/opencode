@@ -47,21 +47,23 @@ type AzureShell = (strings: TemplateStringsArray, ...values: string[]) => AzureC
 type AzureAccount = { readonly name: string; readonly resourceGroup: string }
 
 export async function AzureAuthPlugin(input: PluginInput): Promise<Hooks> {
+  const available = Boolean(Bun.which("az", { PATH: process.env.PATH }))
   const accounts =
-    !process.env.AZURE_RESOURCE_NAME && Bun.which("az", { PATH: process.env.PATH })
+    !process.env.AZURE_RESOURCE_NAME && !process.env.AZURE_RESOURCE_GROUP && available
       ? await input.$`az cognitiveservices account list --output json --only-show-errors`
           .quiet()
           .json()
           .then(decodeAzureAccounts)
           .catch(() => [])
       : []
-  return createAzureAuthHooks(input.$, fetch, accounts)
+  return createAzureAuthHooks(input.$, fetch, accounts, available)
 }
 
 export function createAzureAuthHooks(
   shell: AzureShell,
   request: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> = fetch,
   accounts: readonly AzureAccount[] = [],
+  available = true,
 ): Hooks {
   const tokens = new Map<string, { token: string; expires: number }>()
   async function token(scope: string) {
@@ -113,7 +115,7 @@ export function createAzureAuthHooks(
         ]
       : prompts
 
-  return {
+  const hooks: Hooks = {
     provider: {
       id: "azure",
       async models(provider, context) {
@@ -186,6 +188,8 @@ export function createAzureAuthHooks(
       ],
     },
   }
+  if (!available && hooks.auth) hooks.auth.methods = hooks.auth.methods.filter((method) => method.type !== "oauth")
+  return hooks
 }
 
 async function discoverAzureModels(models: Provider["models"], resourceName: string, shell: AzureShell) {
