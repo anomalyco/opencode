@@ -9,6 +9,7 @@ import { Workspace } from "@opencode-ai/console-core/workspace.js"
 import { Dropdown, DropdownItem } from "~/component/dropdown"
 import { Modal } from "~/component/modal"
 import { useI18n } from "~/context/i18n"
+import { checkRateLimit } from "~/routes/zen/util/redis"
 import "./workspace-picker.css"
 
 const getWorkspaces = query(async () => {
@@ -39,6 +40,7 @@ const createWorkspace = action(async (form: FormData) => {
   const name = form.get("workspaceName") as string
   if (name?.trim()) {
     return withActor(async () => {
+      await checkRateLimit("workspace", Actor.account())
       const workspaceID = await Workspace.create({ name: name.trim() })
       return redirect(`/workspace/${workspaceID}`)
     })
