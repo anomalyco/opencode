@@ -38,6 +38,20 @@ const SUPPORTED_MCP_RESOURCE_ATTACHMENT_MIMES = new Set([
   "image/webp",
 ])
 
+// T-07 (perf): a conversão de tool MCP (`convertTool` + extração/transform de
+// schema) é CARA e era refeita a cada resolução de sessão. Cacheia por
+// (def × model): a chave externa é a identidade do objeto `def`, então o cache
+// auto-invalida quando o MCP publica ToolsChanged (novo `def`) — sem precisar
+// escutar o evento. O wrapper de EXECUÇÃO (que captura o contexto da sessão)
+// NUNCA é cacheado: é reconstruído por chamada, então não há vazamento entre
+// sessões.
+type ConvertedToolCacheEntry = {
+  base: AITool
+  execute: NonNullable<AITool["execute"]>
+  inputSchema: AITool["inputSchema"]
+}
+const CONVERTED_TOOL_CACHE = new WeakMap<object, WeakMap<object, ConvertedToolCacheEntry>>()
+
 export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   agent: Agent.Info
   model: Provider.Model
@@ -388,13 +402,27 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   if (flags.experimentalCodeMode) return tools
 
   for (const [key, entry] of Object.entries(yield* mcp.tools())) {
-    const item = McpCatalog.convertTool(entry.def, entry.client, entry.timeout)
-    const execute = item.execute
-    if (!execute) continue
-
-    const schema = yield* Effect.promise(() => Promise.resolve(asSchema(item.inputSchema).jsonSchema))
-    const transformed = ProviderTransform.schema(input.model, { ...schema, properties: schema.properties ?? {} })
-    item.inputSchema = jsonSchema(transformed)
+    const defKey = entry.def as object
+    let byModel = CONVERTED_TOOL_CACHE.get(defKey)
+    if (!byModel) {
+      byModel = new WeakMap()
+      CONVERTED_TOOL_CACHE.set(defKey, byModel)
+    }
+    const modelKey = input.model as unknown as object
+    let cached = byModel.get(modelKey)
+    if (!cached) {
+      const converted = McpCatalog.convertTool(entry.def, entry.client, entry.timeout)
+      const rawExecute = converted.execute
+      if (!rawExecute) continue
+      const schema = yield* Effect.promise(() => Promise.resolve(asSchema(converted.inputSchema).jsonSchema))
+      const transformed = ProviderTransform.schema(input.model, { ...schema, properties: schema.properties ?? {} })
+      cached = { base: converted, execute: rawExecute, inputSchema: jsonSchema(transformed) }
+      byModel.set(modelKey, cached)
+    }
+    const execute = cached.execute
+    // Item NOVO por sessão: espalha a base cacheada (não a muta) e re-aplica o
+    // wrapper de execução abaixo, que captura o contexto DESTA sessão.
+    const item: AITool = { ...cached.base, inputSchema: cached.inputSchema }
     item.execute = (args, opts) =>
       run.promise(
         Effect.gen(function* () {
