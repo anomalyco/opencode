@@ -238,6 +238,44 @@ describe("OpenAI-compatible Chat route", () => {
     }),
   )
 
+  it.effect("normalizes tool call IDs for the selected model family", () =>
+    Effect.gen(function* () {
+      const longID = `call_${"a".repeat(48)}`
+      const cases = [
+        { provider: "custom", model: "mistral-small", id: "toolu_01CBhTTz95qkd9LJMdC9sf8t", expected: "toolu01CB" },
+        { provider: "custom", model: "devstral-small", id: "abc", expected: "abc000000" },
+        { provider: "custom", model: "codestral-latest", id: "toolu_01CBhTTz95", expected: "toolu01CB" },
+        { provider: "custom", model: "pixtral-large", id: "toolu_01CBhTTz95", expected: "toolu01CB" },
+        { provider: "custom", model: "open-mixtral-8x22b", id: "toolu_01CBhTTz95", expected: "toolu01CB" },
+        { provider: "gateway", model: "anthropic/claude-sonnet-4", id: "call|item/+", expected: "call_item__" },
+        { provider: "gateway", model: "openai/gpt-4o", id: longID, expected: longID.slice(0, 40) },
+        { provider: "custom", model: "ordinary-model", id: "call|item/+", expected: "call|item/+" },
+        { provider: "mistral", model: "zai-glm-5-2", id: "call_long_identifier", expected: "call_long_identifier" },
+      ]
+
+      yield* Effect.forEach(cases, (item) =>
+        Effect.gen(function* () {
+          const prepared = yield* compileRequest(
+            LLM.request({
+              model: OpenAICompatibleChat.route
+                .with({ provider: item.provider, endpoint: { baseURL: "https://api.custom.test/v1" } })
+                .model({ id: item.model }),
+              messages: [
+                Message.assistant([ToolCallPart.make({ id: item.id, name: "lookup", input: {} })]),
+                Message.tool({ id: item.id, name: "lookup", result: { type: "content", value: [] } }),
+              ],
+            }),
+          )
+
+          expect(prepared.body.messages).toMatchObject([
+            { role: "assistant", tool_calls: [{ id: item.expected }] },
+            { role: "tool", tool_call_id: item.expected },
+          ])
+        }),
+      )
+    }),
+  )
+
   it.effect("bridges tool results for Mistral-family models and honors compatibility overrides", () =>
     Effect.gen(function* () {
       const cases = [

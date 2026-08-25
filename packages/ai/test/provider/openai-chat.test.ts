@@ -388,6 +388,35 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("limits OpenAI and Azure Chat tool call IDs to 40 characters", () =>
+    Effect.gen(function* () {
+      const id = `call_${"a".repeat(48)}`
+      const models = [
+        model,
+        Azure.configure({ baseURL: "https://opencode-test.openai.azure.com/openai/", apiKey: "test" }).chat("gpt-4o"),
+      ]
+
+      yield* Effect.forEach(models, (selected) =>
+        Effect.gen(function* () {
+          const prepared = yield* compileRequest(
+            LLM.request({
+              model: selected,
+              messages: [
+                Message.assistant([ToolCallPart.make({ id, name: "lookup", input: {} })]),
+                Message.tool({ id, name: "lookup", result: "Sunny" }),
+              ],
+            }),
+          )
+
+          expect(prepared.body.messages).toMatchObject([
+            { role: "assistant", tool_calls: [{ id: id.slice(0, 40) }] },
+            { role: "tool", tool_call_id: id.slice(0, 40) },
+          ])
+        }),
+      )
+    }),
+  )
+
   it.effect("preserves structured tool errors for the model", () =>
     Effect.gen(function* () {
       const error = { error: { type: "unknown", message: "Tool execution interrupted" } }

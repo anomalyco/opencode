@@ -278,6 +278,7 @@ interface LoweringOptions {
   readonly cacheControl?: (
     cache: CacheHint | undefined,
   ) => Schema.Schema.Type<typeof OpenAIChatCacheControl> | undefined
+  readonly toolCallID?: (id: string) => string
 }
 
 const lowerTool = (
@@ -304,8 +305,8 @@ const lowerToolChoice = (toolChoice: NonNullable<LLMRequest["toolChoice"]>) =>
     tool: (name) => ({ type: "function" as const, function: { name } }),
   })
 
-const lowerToolCall = (part: ToolCallPart): OpenAIChatAssistantToolCall => ({
-  id: part.id,
+const lowerToolCall = (part: ToolCallPart, options: LoweringOptions): OpenAIChatAssistantToolCall => ({
+  id: options.toolCallID?.(part.id) ?? part.id,
   type: "function",
   function: {
     name: part.name,
@@ -381,7 +382,7 @@ const lowerAssistantMessage = Effect.fn("OpenAIChat.lowerAssistantMessage")(func
       continue
     }
     if (part.type === "tool-call") {
-      toolCalls.push(lowerToolCall(part))
+      toolCalls.push(lowerToolCall(part, options))
       continue
     }
   }
@@ -427,7 +428,7 @@ const lowerToolMessages = Effect.fn("OpenAIChat.lowerToolMessages")(function* (
     if (part.result.type !== "content") {
       messages.push({
         role: "tool",
-        tool_call_id: part.id,
+        tool_call_id: options.toolCallID?.(part.id) ?? part.id,
         content: ProviderShared.toolResultText(part),
         cache_control: options.cacheControl?.(part.cache),
       })
@@ -437,7 +438,7 @@ const lowerToolMessages = Effect.fn("OpenAIChat.lowerToolMessages")(function* (
     const text = content.filter((item) => item.type === "text").map((item) => item.text)
     messages.push({
       role: "tool",
-      tool_call_id: part.id,
+      tool_call_id: options.toolCallID?.(part.id) ?? part.id,
       content: text.join("\n"),
       cache_control: options.cacheControl?.(part.cache),
     })
@@ -478,11 +479,19 @@ const lowerMessages = Effect.fn("OpenAIChat.lowerMessages")(function* (request: 
           ]
         : [{ role: "system", content: ProviderShared.joinText(request.system) }]
   const messages = [...system]
-  const requireAssistantAfterTool =
-    request.model.compatibility?.requireAssistantAfterTool ??
-    ["mistral", "devstral", "codestral", "pixtral", "mixtral"].some((family) =>
-      request.model.id.toLowerCase().includes(family),
-    )
+  const modelID = request.model.id.toLowerCase()
+  const mistral = ["mistral", "devstral", "codestral", "pixtral", "mixtral"].some((family) => modelID.includes(family))
+  const lowering = {
+    ...options,
+    toolCallID: (id: string) => {
+      if (mistral) return id.replace(/[^a-zA-Z0-9]/g, "").slice(0, 9).padEnd(9, "0")
+      if (modelID.includes("claude")) return id.replace(/[^a-zA-Z0-9_-]/g, "_")
+      if (request.model.provider === "openai" || request.model.provider === "azure" || modelID.startsWith("openai/"))
+        return id.slice(0, 40)
+      return id
+    },
+  }
+  const requireAssistantAfterTool = request.model.compatibility?.requireAssistantAfterTool ?? mistral
   const bridgeTools = () => {
     if (requireAssistantAfterTool && messages.at(-1)?.role === "tool") messages.push({ role: "assistant", content: "Done." })
   }
@@ -539,13 +548,13 @@ const lowerMessages = Effect.fn("OpenAIChat.lowerMessages")(function* (request: 
     if (message.role === "assistant" && message.content.every((part) => part.type === "text" && part.text.trim() === ""))
       continue
     if (message.role === "tool") {
-      const lowered = yield* lowerToolMessages(message, options)
+      const lowered = yield* lowerToolMessages(message, lowering)
       messages.push(...lowered.messages)
       pendingImages.push(...lowered.images)
       continue
     }
     flushImages()
-    messages.push(...(yield* lowerMessage(message, request.model.compatibility?.reasoningField, options)))
+    messages.push(...(yield* lowerMessage(message, request.model.compatibility?.reasoningField, lowering)))
   }
   flushImages()
   return messages
