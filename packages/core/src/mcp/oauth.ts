@@ -1,6 +1,6 @@
 export * as MCPOAuth from "./oauth.js"
 
-import { auth, type OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js"
+import { auth, extractWWWAuthenticateParams, type OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js"
 import type { OAuthClientInformationMixed, OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js"
 import { Deferred, Effect } from "effect"
 import { Credential } from "@opencode-ai/schema/credential"
@@ -213,8 +213,33 @@ export const authorize = (input: {
       return toCredential({ methodID: input.methodID, serverUrl: input.config.url, tokens, client })
     })
 
+    // RFC 9728: a server can publish its protected-resource metadata at the exact URL it names in the
+    // 401 challenge's resource_metadata parameter (AWS Bedrock AgentCore does, with the ARN in the path).
+    // The SDK only tries origin-derived well-known paths when that URL is absent, which 404s on such
+    // servers and degrades to treating the resource host itself as the authorization server. Probe the
+    // endpoint once and thread the challenge URL into both auth() calls so discovery and the later code
+    // exchange resolve the same authorization server. Transport-driven connects already extract this
+    // URL from their own 401 handling; the interactive authorize() flow is the path that skipped it.
+    const challenge = yield* Effect.tryPromise({
+      try: async () => {
+        const response = await fetch(input.config.url, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize" }),
+        })
+        await response.body?.cancel().catch(() => {})
+        return extractWWWAuthenticateParams(response).resourceMetadataUrl
+      },
+      catch: () => undefined,
+    })
+
     const result = yield* Effect.tryPromise({
-      try: () => auth(oauthProvider, { serverUrl: input.config.url, scope: oauth?.scope }),
+      try: () =>
+        auth(oauthProvider, {
+          serverUrl: input.config.url,
+          scope: oauth?.scope,
+          ...(challenge ? { resourceMetadataUrl: challenge } : {}),
+        }),
       catch: (error) => (error instanceof Error ? error : new Error(String(error))),
     })
 
@@ -238,7 +263,12 @@ export const authorize = (input: {
         Effect.flatMap((value) =>
           Effect.tryPromise({
             try: () =>
-              auth(oauthProvider, { serverUrl: input.config.url, authorizationCode: value, scope: oauth?.scope }),
+              auth(oauthProvider, {
+                serverUrl: input.config.url,
+                authorizationCode: value,
+                scope: oauth?.scope,
+                ...(challenge ? { resourceMetadataUrl: challenge } : {}),
+              }),
             catch: (error) => (error instanceof Error ? error : new Error(String(error))),
           }),
         ),

@@ -73,4 +73,61 @@ describe("MCP OAuth", () => {
   test("rejects an invalid redirect URL", async () => {
     await expect(authorize("not a URL")).rejects.toThrow("cannot be parsed as a URL")
   })
+
+  test("follows the resource_metadata URL from the 401 challenge", async () => {
+    const issuer = Bun.serve({
+      port: 0,
+      fetch: (request) => {
+        const url = new URL(request.url)
+        if (url.pathname === "/.well-known/oauth-authorization-server")
+          return Response.json({
+            issuer: url.origin + "/",
+            authorization_endpoint: `${url.origin}/authorize`,
+            token_endpoint: `${url.origin}/token`,
+            response_types_supported: ["code"],
+          })
+        return new Response(null, { status: 404 })
+      },
+    })
+
+    // Path-shaped metadata that only the WWW-Authenticate challenge names; the origin-derived
+    // well-known lookups 404, so without the challenge URL discovery treats this host as the AS.
+    const resource = Bun.serve({
+      port: 0,
+      fetch: (request) => {
+        const url = new URL(request.url)
+        const endpoint = "/runtimes/arn%3Atest/invocations"
+        if (url.pathname === `${endpoint}/.well-known/oauth-protected-resource`)
+          return Response.json({ resource: url.origin + endpoint, authorization_servers: [issuer.url.href] })
+        if (url.pathname === endpoint)
+          return new Response(null, {
+            status: 401,
+            headers: {
+              "www-authenticate": `Bearer resource_metadata="${url.origin}${endpoint}/.well-known/oauth-protected-resource"`,
+            },
+          })
+        return new Response(null, { status: 404 })
+      },
+    })
+
+    const authorization = await Effect.runPromise(
+      Effect.scoped(
+        MCPOAuth.authorize({
+          name: "test",
+          config: new ConfigMCP.Remote({
+            type: "remote",
+            url: `${resource.url.href}runtimes/arn%3Atest/invocations`,
+            oauth: { client_id: "client" },
+          }),
+          methodID: Integration.MethodID.make("oauth"),
+        }).pipe(Effect.map((result) => new URL(result.url))),
+      ),
+    )
+
+    expect(authorization.origin).toBe(issuer.url.origin)
+    expect(authorization.pathname).toBe("/authorize")
+
+    resource.stop(true)
+    issuer.stop(true)
+  })
 })
