@@ -2779,6 +2779,8 @@ export type SessionMessagesResponse = {
     previous?: string
     next?: string
   }
+  total: number
+  startIndex?: number
 }
 
 export type ProviderNotFoundError = {
@@ -11994,9 +11996,11 @@ export type V2SessionMessagesData = {
     limit?: number
     order?: "asc" | "desc"
     /**
-     * Opaque pagination cursor returned as cursor.previous or cursor.next in the previous response. Do not combine with order.
+     * Opaque pagination cursor returned as cursor.previous or cursor.next in the previous response. Do not combine with order, index, or around.
      */
     cursor?: string
+    index?: string
+    around?: string
   }
   url: "/api/session/{sessionID}/message"
 }

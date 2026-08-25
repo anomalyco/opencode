@@ -3,7 +3,7 @@ export * from "./session/schema"
 
 import { DateTime, Effect, Layer, Schema, Context, Stream } from "effect"
 import { ListAnchor } from "@opencode-ai/schema/session"
-import { and, asc, desc, eq, gt, like, lt, or, type SQL } from "drizzle-orm"
+import { and, asc, count, desc, eq, gt, like, lt, or, type SQL } from "drizzle-orm"
 import { ProjectV2 } from "./project"
 import { WorkspaceV2 } from "./workspace"
 import { ModelV2 } from "./model"
@@ -110,19 +110,30 @@ export type MessageNotFoundError = SessionRevert.MessageNotFoundError
 
 export type Error = NotFoundError | MessageDecodeError | OperationUnavailableError | PromptConflictError
 
+export type MessagesInput = {
+  sessionID: SessionSchema.ID
+  limit?: number
+  order?: "asc" | "desc"
+  cursor?: {
+    id: SessionMessage.ID
+    direction: "previous" | "next"
+  }
+  index?: number
+  around?: SessionMessage.ID
+}
+
+export type MessagesPage = {
+  readonly messages: SessionMessage.Message[]
+  readonly total: number
+  readonly startIndex?: number
+}
+
 export interface Interface {
   readonly list: (input?: ListInput) => Effect.Effect<SessionSchema.Info[]>
   readonly create: (input: CreateInput) => Effect.Effect<SessionSchema.Info>
   readonly get: (sessionID: SessionSchema.ID) => Effect.Effect<SessionSchema.Info, NotFoundError>
-  readonly messages: (input: {
-    sessionID: SessionSchema.ID
-    limit?: number
-    order?: "asc" | "desc"
-    cursor?: {
-      id: SessionMessage.ID
-      direction: "previous" | "next"
-    }
-  }) => Effect.Effect<SessionMessage.Message[], NotFoundError | MessageDecodeError>
+  readonly messages: (input: MessagesInput) => Effect.Effect<SessionMessage.Message[], NotFoundError | MessageDecodeError>
+  readonly messagesPage: (input: MessagesInput) => Effect.Effect<MessagesPage, NotFoundError | MessageDecodeError>
   readonly message: (input: {
     sessionID: SessionSchema.ID
     messageID: SessionMessage.ID
@@ -302,10 +313,81 @@ const layer = Layer.effect(
         return (direction === "previous" ? rows.toReversed() : rows).map((row) => fromRow(row))
       }),
       messages: Effect.fn("V2Session.messages")(function* (input) {
+        return (yield* result.messagesPage(input)).messages
+      }),
+      messagesPage: Effect.fn("V2Session.messagesPage")(function* (input) {
         yield* result.get(input.sessionID)
+        const totalRow = yield* db
+          .select({ value: count() })
+          .from(SessionMessageTable)
+          .where(eq(SessionMessageTable.session_id, input.sessionID))
+          .get()
+          .pipe(Effect.orDie)
+        const total = totalRow?.value ?? 0
         const direction = input.cursor?.direction ?? "next"
         const requestedOrder = input.order ?? "desc"
         const order = direction === "previous" ? (requestedOrder === "asc" ? "desc" : "asc") : requestedOrder
+
+        const denseRank = (messageID: SessionMessage.ID, rankOrder: "asc" | "desc") =>
+          Effect.gen(function* () {
+            const target = yield* db
+              .select({ seq: SessionMessageTable.seq })
+              .from(SessionMessageTable)
+              .where(and(eq(SessionMessageTable.session_id, input.sessionID), eq(SessionMessageTable.id, messageID)))
+              .get()
+              .pipe(Effect.orDie)
+            if (!target) return undefined
+            const before = yield* db
+              .select({ value: count() })
+              .from(SessionMessageTable)
+              .where(
+                and(
+                  eq(SessionMessageTable.session_id, input.sessionID),
+                  rankOrder === "asc" ? lt(SessionMessageTable.seq, target.seq) : gt(SessionMessageTable.seq, target.seq),
+                ),
+              )
+              .get()
+              .pipe(Effect.orDie)
+            return before?.value ?? 0
+          })
+
+        const loadOffset = (start: number) =>
+          Effect.gen(function* () {
+            if (start >= total) return [] as SessionMessage.Message[]
+            const query = db
+              .select()
+              .from(SessionMessageTable)
+              .where(eq(SessionMessageTable.session_id, input.sessionID))
+              .orderBy(order === "asc" ? asc(SessionMessageTable.seq) : desc(SessionMessageTable.seq))
+              .offset(start)
+            const rows = yield* (input.limit === undefined ? query.all() : query.limit(input.limit).all()).pipe(
+              Effect.orDie,
+            )
+            return yield* Effect.forEach(rows, decode)
+          })
+
+        if (input.around) {
+          const rank = yield* denseRank(input.around, order)
+          if (rank === undefined) return { messages: [], total }
+          const window = input.limit ?? 1
+          const start = Math.max(0, rank - Math.floor((window - 1) / 2))
+          const messages = yield* loadOffset(start)
+          return {
+            messages,
+            total,
+            startIndex: messages.length > 0 ? start : undefined,
+          }
+        }
+
+        if (input.index !== undefined) {
+          const messages = yield* loadOffset(input.index)
+          return {
+            messages,
+            total,
+            startIndex: messages.length > 0 ? input.index : undefined,
+          }
+        }
+
         const anchor = input.cursor
           ? yield* db
               .select({ seq: SessionMessageTable.seq })
@@ -316,7 +398,7 @@ const layer = Layer.effect(
               .get()
               .pipe(Effect.orDie)
           : undefined
-        if (input.cursor && !anchor) return []
+        if (input.cursor && !anchor) return { messages: [], total }
         const boundary = anchor
           ? order === "asc"
             ? gt(SessionMessageTable.seq, anchor.seq)
@@ -333,7 +415,10 @@ const layer = Layer.effect(
         const rows = yield* (input.limit === undefined ? query.all() : query.limit(input.limit).all()).pipe(
           Effect.orDie,
         )
-        return yield* Effect.forEach(direction === "previous" ? rows.toReversed() : rows, decode)
+        const messages = yield* Effect.forEach(direction === "previous" ? rows.toReversed() : rows, decode)
+        const startIndex =
+          messages[0] === undefined ? undefined : yield* denseRank(messages[0].id, requestedOrder)
+        return { messages, total, startIndex }
       }),
       message: Effect.fn("V2Session.message")(function* (input) {
         const stored = yield* store.message(input.messageID)
