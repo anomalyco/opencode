@@ -34,16 +34,16 @@ describe("shell", () => {
 
   test("falls back when configured shell cannot be resolved", async () => {
     await withShell(undefined, async () => {
-      const configured = ShellSelect.resolve({ preference: "configured" })
-      const compatible = ShellSelect.resolve({ preference: "compatible" })
-      expect(ShellSelect.resolve({ preference: "configured" }, "opencode-missing-shell")).toBe(configured)
-      expect(ShellSelect.resolve({ preference: "compatible" }, "opencode-missing-shell")).toBe(compatible)
+      const configured = ShellSelect.resolve({ priority: "config" })
+      const compatible = ShellSelect.resolve({ priority: "compat" })
+      expect(ShellSelect.resolve({ priority: "config" }, "opencode-missing-shell")).toBe(configured)
+      expect(ShellSelect.resolve({ priority: "compat" }, "opencode-missing-shell")).toBe(compatible)
     })
   })
 
   test("falls back for terminal-only shells when compatibility is required", () => {
-    expect(ShellSelect.name(ShellSelect.resolve({ preference: "compatible" }, "fish"))).not.toBe("fish")
-    expect(ShellSelect.name(ShellSelect.resolve({ preference: "compatible" }, "nu"))).not.toBe("nu")
+    expect(ShellSelect.name(ShellSelect.resolve({ priority: "compat" }, "fish"))).not.toBe("fish")
+    expect(ShellSelect.name(ShellSelect.resolve({ priority: "compat" }, "nu"))).not.toBe("nu")
   })
 
   test("builds command args per shell family", () => {
@@ -63,14 +63,14 @@ describe("shell", () => {
   if (process.platform === "win32") {
     test("rejects blacklisted shells case-insensitively", async () => {
       await withShell("NU.EXE", async () => {
-        expect(ShellSelect.name(ShellSelect.resolve({ preference: "compatible" }))).not.toBe("nu")
+        expect(ShellSelect.name(ShellSelect.resolve({ priority: "compat" }))).not.toBe("nu")
       })
     })
 
     test("normalizes Git Bash shell paths from env", async () => {
       const shell = "/cygdrive/c/Program Files/Git/bin/bash.exe"
       await withShell(shell, async () => {
-        expect(ShellSelect.resolve({ preference: "configured" })).toBe(FSUtil.windowsPath(shell))
+        expect(ShellSelect.resolve({ priority: "config" })).toBe(FSUtil.windowsPath(shell))
       })
     })
 
@@ -78,19 +78,19 @@ describe("shell", () => {
       const bash = ShellSelect.gitbash()
       if (!bash) return
       await withShell("/usr/bin/bash", async () => {
-        expect(ShellSelect.resolve({ preference: "compatible" })).toBe(bash)
-        expect(ShellSelect.resolve({ preference: "configured" })).toBe(bash)
+        expect(ShellSelect.resolve({ priority: "compat" })).toBe(bash)
+        expect(ShellSelect.resolve({ priority: "config" })).toBe(bash)
       })
     })
 
     test("resolves bare bash to Git Bash before PATH", async () => {
       const bash = ShellSelect.gitbash()
       if (!bash) return
-      expect(ShellSelect.resolve({ preference: "compatible" }, "bash")).toBe(bash)
-      expect(ShellSelect.resolve({ preference: "configured" }, "bash")).toBe(bash)
+      expect(ShellSelect.resolve({ priority: "compat" }, "bash")).toBe(bash)
+      expect(ShellSelect.resolve({ priority: "config" }, "bash")).toBe(bash)
       await withShell("bash", async () => {
-        expect(ShellSelect.resolve({ preference: "compatible" })).toBe(bash)
-        expect(ShellSelect.resolve({ preference: "configured" })).toBe(bash)
+        expect(ShellSelect.resolve({ priority: "compat" })).toBe(bash)
+        expect(ShellSelect.resolve({ priority: "config" })).toBe(bash)
       })
     })
 
@@ -98,7 +98,7 @@ describe("shell", () => {
       const shell = which("pwsh") || which("powershell")
       if (!shell) return
       await withShell(path.win32.basename(shell), async () => {
-        expect(ShellSelect.resolve({ preference: "configured" })).toBe(shell)
+        expect(ShellSelect.resolve({ priority: "config" })).toBe(shell)
       })
     })
   }

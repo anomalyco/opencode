@@ -187,7 +187,7 @@ export const Plugin = {
                   command: input.command,
                   cwd: input.workdir,
                   timeout,
-                  shell: yield* shellSelect.resolve({ preference: "compatible" }),
+                  shell: yield* shellSelect.resolve({ priority: "compat" }),
                   metadata: { sessionID: context.sessionID },
                 },
                 (invocation) =>
@@ -343,7 +343,7 @@ export const Plugin = {
       Effect.gen(function* () {
         const tool = event.tools[name]
         if (!tool) return
-        const selected = yield* shellSelect.resolve({ preference: "compatible" })
+        const selected = yield* shellSelect.resolve({ priority: "compat" })
         tool.description = description(ShellSelect.name(selected))
       }),
     )

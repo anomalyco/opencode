@@ -230,7 +230,7 @@ const layer = () =>
           command: input.command,
           cwd: input.cwd ?? location.directory,
           timeout: input.timeout,
-          shell: input.shell ?? (yield* shell.resolve({ preference: "configured" })),
+          shell: input.shell ?? (yield* shell.resolve({ priority: "config" })),
           env: {
             ...(sessionEnvironment ?? process.env),
             TERM: "xterm-256color",

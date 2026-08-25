@@ -42,7 +42,7 @@ export type Draft = {
 }
 
 export type ResolveInput = {
-  preference: "configured" | "compatible"
+  priority: "config" | "compat"
 }
 
 export interface Interface extends State.Transformable<Draft> {
@@ -171,14 +171,14 @@ let defaultConfigured: { bin?: string; value: string } | undefined
 let defaultCompatible: { bin?: string; value: string } | undefined
 
 export function resolve(input: ResolveInput, configShell?: string, options?: Options, bin?: string) {
-  const filter = input.preference === "compatible" ? { compatible: true } : undefined
+  const filter = input.priority === "compat" ? { compatible: true } : undefined
   if (configShell) return select(configShell, options, filter, bin)
   if (options?.gitbash) return select(process.env.SHELL, options, filter, bin)
-  const cached = input.preference === "compatible" ? defaultCompatible : defaultConfigured
+  const cached = input.priority === "compat" ? defaultCompatible : defaultConfigured
   if (cached && cached.bin === bin) return cached.value
   const value = select(process.env.SHELL, undefined, filter, bin) ?? fallback(bin)
-  if (input.preference === "compatible") defaultCompatible = { bin, value }
-  if (input.preference === "configured") defaultConfigured = { bin, value }
+  if (input.priority === "compat") defaultCompatible = { bin, value }
+  if (input.priority === "config") defaultConfigured = { bin, value }
   return value
 }
 resolve.reset = () => {
