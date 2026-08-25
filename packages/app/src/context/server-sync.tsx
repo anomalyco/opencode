@@ -176,6 +176,40 @@ export function seedActiveSessionStatuses(
   }
 }
 
+/**
+ * Repairs state that drifted while the event stream was down.
+ *
+ * Status is otherwise driven purely by `session.execution.*` events, so a run
+ * that finished during the outage stays busy forever — a spinner with nothing
+ * behind it. A run that kept going lost its deltas, so its timeline is frozen
+ * part-way through a message. Both need the server to be re-read.
+ *
+ * Unlike {@link seedActiveSessionStatuses} this overwrites what events wrote,
+ * so it is only safe once the server has been asked what is actually running.
+ */
+export function reconcileActiveSessionStatuses(
+  session: Pick<ServerSession, "data" | "set" | "sync">,
+  active: SessionActiveOutput | Record<string, SessionStatus>,
+) {
+  for (const [sessionID, status] of Object.entries(session.data.session_status)) {
+    if (!status || status.type === "idle") continue
+    if (active[sessionID] !== undefined) continue
+    session.set("session_status", sessionID, { type: "idle" })
+  }
+  // Reload by what is held locally, never by what the status now reads. A
+  // directory bootstrap racing this one also rewrites session_status from the
+  // server, so by the time this runs a finished session may already read idle
+  // and would look like it needs nothing — while its timeline is still frozen
+  // mid-message. Any session holding messages may have missed events; the rest
+  // load on demand when they are opened.
+  const resync = Object.keys(session.data.message)
+  for (const sessionID of resync)
+    void session.sync(sessionID, { force: true }).catch((err) => {
+      console.warn("[server-sync] failed to resync session after reconnect", { sessionID, err })
+    })
+  return resync
+}
+
 function makeQueryOptionsApi(
   scope: ServerScope,
   serverSDK: () => OpencodeClient,
@@ -243,18 +277,21 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
       active: async () => {
         if ((await serverSDK.protocol) === "v1") {
           const statuses = (await serverSDK.client.session.status()).data ?? {}
-          seedActiveSessionStatuses(session, statuses)
-          for (const sessionID of Object.keys(statuses)) {
-            void session.resolve(sessionID).catch(() => undefined)
-          }
-          return Object.fromEntries(
+          const running = Object.fromEntries(
             Object.entries(statuses).flatMap(([sessionID, status]) =>
               status.type === "idle" ? [] : [[sessionID, { type: "running" as const }]],
             ),
           )
+          seedActiveSessionStatuses(session, statuses)
+          reconcileActiveSessionStatuses(session, running)
+          for (const sessionID of Object.keys(statuses)) {
+            void session.resolve(sessionID).catch(() => undefined)
+          }
+          return running
         }
         const active = await serverSDK.api.session.active()
         seedActiveSessionStatuses(session, active)
+        reconcileActiveSessionStatuses(session, active)
         for (const sessionID of Object.keys(active)) {
           void session.resolve(sessionID).catch(() => undefined)
         }
@@ -527,6 +564,41 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
       loadLsp() {},
     })
   }
+
+  // Repairs directly instead of through activeSessionsQuery. Going through the
+  // query made the repair conditional on that query being idle, and a first
+  // fetch that never settles leaves it permanently skipped: the stream
+  // reconnects, the bootstrap runs, and the timeline stays frozen mid-message.
+  // Refetching would not have helped either - it dedupes onto the same wedged
+  // request. The repair has to be able to run whatever that query is doing.
+  const repairAfterReconnect = async () => {
+    try {
+      const active =
+        (await serverSDK.protocol) === "v1"
+          ? Object.fromEntries(
+              Object.entries((await serverSDK.client.session.status()).data ?? {}).flatMap(([sessionID, status]) =>
+                status.type === "idle" ? [] : [[sessionID, { type: "running" as const }]],
+              ),
+            )
+          : await serverSDK.api.session.active()
+      seedActiveSessionStatuses(session, active)
+      const resynced = reconcileActiveSessionStatuses(session, active)
+      queryClient.setQueryData(
+        loadActiveSessionsQuery(serverSDK.scope, { active: async () => active }).queryKey,
+        active,
+      )
+      console.warn("[server-sync] repaired state after event stream reconnect", {
+        active: Object.keys(active),
+        resynced,
+      })
+    } catch (err) {
+      console.warn("[server-sync] reconnect repair failed", err)
+    }
+  }
+
+  // Driven by the transport rather than by a `server.connected` frame, so the
+  // repair still runs when the replacement stream delivers nothing.
+  onCleanup(serverSDK.event.onReconnect(() => void repairAfterReconnect()))
 
   const unsub = serverSDK.event.listen((e) => {
     const directory = e.name

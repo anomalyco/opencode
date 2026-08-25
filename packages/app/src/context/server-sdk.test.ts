@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test"
-import { adaptServerEvent, coalesceServerEvents, enqueueServerEvent, resumeStreamAfterPageShow } from "./server-sdk"
+import {
+  adaptServerEvent,
+  coalesceServerEvents,
+  createActivityTrackingFetch,
+  enqueueServerEvent,
+  resumeStreamAfterPageShow,
+} from "./server-sdk"
 import type { OpenCodeEvent } from "@opencode-ai/client/promise"
 import type { Event } from "@opencode-ai/sdk/v2/client"
 
@@ -12,6 +18,44 @@ describe("resumeStreamAfterPageShow", () => {
     resumeStreamAfterPageShow({ persisted: true } as PageTransitionEvent, start)
 
     expect(starts).toBe(1)
+  })
+})
+
+describe("createActivityTrackingFetch", () => {
+  const stream = (chunks: string[], contentType = "text/event-stream") =>
+    new Response(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          for (const chunk of chunks) controller.enqueue(new TextEncoder().encode(chunk))
+          controller.close()
+        },
+      }),
+      { headers: { "content-type": contentType } },
+    )
+
+  test("reports heartbeat frames the SSE parser discards", async () => {
+    let activity = 0
+    const fetch = createActivityTrackingFetch(
+      async () => stream([": heartbeat\n\n", ": heartbeat\n\n"]),
+      () => activity++,
+    )
+
+    const response = await fetch("http://localhost/api/event")
+    expect(await response.text()).toBe(": heartbeat\n\n: heartbeat\n\n")
+    // One on response, one per delivered chunk.
+    expect(activity).toBe(3)
+  })
+
+  test("passes non-stream responses through untouched", async () => {
+    let activity = 0
+    const original = stream(["{}"], "application/json")
+    const fetch = createActivityTrackingFetch(
+      async () => original,
+      () => activity++,
+    )
+
+    expect(await fetch("http://localhost/api/health")).toBe(original)
+    expect(activity).toBe(0)
   })
 })
 
