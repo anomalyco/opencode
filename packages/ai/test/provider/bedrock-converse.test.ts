@@ -716,6 +716,32 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
+  it.effect("ignores unknown normal stream events", () =>
+    Effect.gen(function* () {
+      const body = concat([
+        eventFrame("messageStart", { role: "assistant" }),
+        eventFrame("futureEvent", { message: "Ignore this" }),
+        eventFrame("messageStop", { stopReason: "end_turn" }),
+      ])
+      const response = yield* LLMClient.generate(baseRequest).pipe(Effect.provide(fixedBytes(body)))
+
+      expect(response.finishReason).toEqual({ normalized: "stop", raw: "end_turn" })
+    }),
+  )
+
+  it.effect("fails unknown stream exceptions after message stop", () =>
+    Effect.gen(function* () {
+      const body = concat([
+        eventFrame("messageStart", { role: "assistant" }),
+        eventFrame("messageStop", { stopReason: "end_turn" }),
+        exceptionFrame("futureException", { message: "A future provider failure" }),
+      ])
+      const error = yield* LLMClient.generate(baseRequest).pipe(Effect.provide(fixedBytes(body)), Effect.flip)
+
+      expect(error.reason).toMatchObject({ _tag: "UnknownProvider", message: "A future provider failure" })
+    }),
+  )
+
   it.effect("classifies throttlingException as a rate limit", () =>
     Effect.gen(function* () {
       const body = concat([

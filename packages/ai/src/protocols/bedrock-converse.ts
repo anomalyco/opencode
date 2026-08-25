@@ -212,11 +212,7 @@ const BedrockEvent = Schema.Struct({
       metrics: Schema.optional(Schema.Unknown),
     }),
   ),
-  internalServerException: Schema.optional(BedrockStreamException),
-  modelStreamErrorException: Schema.optional(BedrockStreamException),
-  validationException: Schema.optional(BedrockStreamException),
-  throttlingException: Schema.optional(BedrockStreamException),
-  serviceUnavailableException: Schema.optional(BedrockStreamException),
+  exception: Schema.optional(Schema.Struct({ type: Schema.String, details: BedrockStreamException })),
 })
 type BedrockEvent = Schema.Schema.Type<typeof BedrockEvent>
 
@@ -650,22 +646,14 @@ const step = (state: ParserState, event: BedrockEvent) =>
       ] as const
     }
 
-    const exception = (
-      [
-        ["internalServerException", event.internalServerException],
-        ["modelStreamErrorException", event.modelStreamErrorException],
-        ["serviceUnavailableException", event.serviceUnavailableException],
-        ["throttlingException", event.throttlingException],
-        ["validationException", event.validationException],
-      ] as const
-    ).find((entry) => entry[1] !== undefined)
-    if (exception) {
+    if (event.exception) {
       return yield* new AIError({
         module: ADAPTER,
         method: "stream",
         reason: classifyProviderFailure({
-          message: exception[1]?.message ?? exception[1]?.originalMessage ?? "Bedrock Converse stream error",
-          code: exception[0],
+          message:
+            event.exception.details.message ?? event.exception.details.originalMessage ?? "Bedrock Converse stream error",
+          code: event.exception.type,
         }),
       })
     }
