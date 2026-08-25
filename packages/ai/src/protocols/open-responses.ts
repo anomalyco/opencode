@@ -442,14 +442,11 @@ export const lowerToolChoice = (protocolName: string, toolChoice: NonNullable<LL
 
 // Server-issued item ids need a nonempty prefix and suffix, but the prefix is
 // provider-defined and does not necessarily identify the item's semantic type.
-const ITEM_ID_PATTERN = /^(?=.{1,64}$)[A-Za-z0-9-]+_[A-Za-z0-9_-]+$/
 const itemID = (providerMetadata: ProviderMetadata | undefined, providerMetadataKey: string) => {
   const metadata = providerMetadata?.[providerMetadataKey]
-  return ProviderShared.isRecord(metadata) &&
-    typeof metadata.itemId === "string" &&
-    ITEM_ID_PATTERN.test(metadata.itemId)
-    ? metadata.itemId
-    : undefined
+  if (!ProviderShared.isRecord(metadata) || typeof metadata.itemId !== "string") return undefined
+  const separator = metadata.itemId.indexOf("_")
+  return separator > 0 && separator < metadata.itemId.length - 1 ? metadata.itemId : undefined
 }
 
 const lowerToolCall = (part: ToolCallPart, providerMetadataKey: string): OpenResponsesInputItem => {

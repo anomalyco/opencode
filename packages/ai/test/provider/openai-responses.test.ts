@@ -3165,7 +3165,7 @@ describe("OpenAI Responses route", () => {
               {
                 type: "text",
                 text: "World",
-                providerMetadata: { openai: { itemId: `m${"a".repeat(64)}` } },
+                providerMetadata: { openai: { itemId: `message_${"a".repeat(64)}` } },
               },
               {
                 type: "reasoning",
@@ -3208,6 +3208,7 @@ describe("OpenAI Responses route", () => {
         },
         {
           type: "message",
+          id: `message_${"a".repeat(64)}`,
           role: "assistant",
           content: [{ type: "output_text", text: "World" }],
         },
