@@ -22,14 +22,19 @@ export default function NewSessionPage(props: { draftId: string }) {
   )
   const workspace = createNewSessionWorkspaceController({
     selected: () => draftTab()?.worktree,
+    selectedBranch: () => draftTab()?.branch,
     setSelected: (worktree) => {
       if (search.draftId) tabs.updateDraft(search.draftId, { worktree })
+    },
+    setSelectedBranch: (branch) => {
+      if (search.draftId) tabs.updateDraft(search.draftId, { branch })
     },
     onViewAll: openWorkspaces,
   })
   const composer = createNewSessionComposerAdapter({
     draftID: props.draftId,
     worktree: workspace.selection.value,
+    branch: workspace.bar.branch,
     submitted: workspace.selection.remember,
   })
   const model = createComposerModel(composer.adapter)

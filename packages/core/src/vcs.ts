@@ -4,7 +4,7 @@ import path from "path"
 import { Context, Effect, Layer, Stream } from "effect"
 import { FileDiff } from "@opencode-ai/schema/file-diff"
 import { FileSystem } from "@opencode-ai/schema/filesystem"
-import { FileStatus, Info, Mode } from "@opencode-ai/schema/vcs"
+import { BranchList, FileStatus, Info, Mode } from "@opencode-ai/schema/vcs"
 import { VcsEvent } from "@opencode-ai/schema/vcs-event"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { FSUtil } from "@opencode-ai/util/fs-util"
@@ -14,7 +14,7 @@ import { Bus } from "./bus.js"
 import { VcsGit } from "./vcs/git.js"
 import { VcsHg } from "./vcs/hg.js"
 
-export { FileStatus, Info, Mode }
+export { BranchList, FileStatus, Info, Mode }
 
 export interface DiffOptions {
   readonly context?: number
@@ -22,6 +22,7 @@ export interface DiffOptions {
 
 export interface Interface {
   readonly info: () => Effect.Effect<Info>
+  readonly branches: () => Effect.Effect<BranchList>
   readonly status: () => Effect.Effect<FileStatus[]>
   readonly diff: (mode: Mode, options?: DiffOptions) => Effect.Effect<FileDiff.Info[]>
 }
@@ -72,6 +73,10 @@ const layer = Layer.effect(
     return Service.of({
       info: Effect.fn("Vcs.info")(function* () {
         return state.info
+      }),
+      branches: Effect.fn("Vcs.branches")(function* () {
+        if (!impl) return []
+        return yield* impl.branches()
       }),
       status: Effect.fn("Vcs.status")(function* () {
         if (!impl) return []

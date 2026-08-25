@@ -13,6 +13,7 @@ export const CreateInput = Schema.Struct({
   projectID: ProjectID,
   strategy: StrategyID,
   from: optional(AbsolutePath),
+  branch: optional(Schema.Trim.pipe(Schema.check(Schema.isNonEmpty()))),
   directory: AbsolutePath,
   name: optional(Schema.String),
 }).annotate({ identifier: "Worktree.CreateInput" })

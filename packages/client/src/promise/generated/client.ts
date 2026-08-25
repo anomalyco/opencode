@@ -218,6 +218,8 @@ import type {
   VcsGetOutput,
   VcsStatusInput,
   VcsStatusOutput,
+  VcsBranchesInput,
+  VcsBranchesOutput,
   VcsDiffInput,
   VcsDiffOutput,
   DebugLocationListOutput,
@@ -1736,6 +1738,7 @@ export function make(options: ClientOptions) {
             body: {
               strategy: input["strategy"],
               from: input["from"],
+              branch: input["branch"],
               directory: input["directory"],
               name: input["name"],
             },
@@ -1812,6 +1815,18 @@ export function make(options: ClientOptions) {
           {
             method: "GET",
             path: `/api/vcs/status`,
+            query: { location: input?.["location"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      branches: (input?: VcsBranchesInput, requestOptions?: RequestOptions) =>
+        request<VcsBranchesOutput>(
+          {
+            method: "GET",
+            path: `/api/vcs/branches`,
             query: { location: input?.["location"] },
             successStatus: 200,
             declaredStatuses: [401, 400],

@@ -1,4 +1,4 @@
-import { createEffect, createMemo } from "solid-js"
+import { createEffect, createMemo, createResource } from "solid-js"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useServerSDK } from "@/runtime/server/client"
 import { useData } from "@/runtime/server/current"
@@ -32,8 +32,10 @@ export function normalizeNewSessionWorktree(value: string, directory: string, pr
 export function resolveNewSessionBranch(input: {
   worktree: string
   directory: string
+  createBranch?: string
   worktreeBranch: (worktree: string) => string | undefined
 }) {
+  if (input.worktree === "create" && input.createBranch) return input.createBranch
   const directory = input.worktree === "main" || input.worktree === "create" ? input.directory : input.worktree
   return input.worktreeBranch(directory)
 }
@@ -44,7 +46,9 @@ export function resolveNewSessionGit(input: { projectVcs?: string; branch?: stri
 
 export function createNewSessionWorkspaceController(input: {
   selected: () => string | undefined
+  selectedBranch: () => string | undefined
   setSelected: (worktree: string | undefined) => void
+  setSelectedBranch: (branch: string | undefined) => void
   onViewAll: () => void
 }) {
   const sdk = useWorkspaceLocation()
@@ -86,6 +90,14 @@ export function createNewSessionWorkspaceController(input: {
     }),
   )
   const projectRoot = createMemo(() => currentProject()?.worktree ?? sdk().directory)
+  const [branches] = createResource(
+    () => (visible() ? projectRoot() : undefined),
+    (directory) =>
+      serverSDK.api.vcs
+        .branches({ location: { directory } })
+        .then((response) => response.data)
+        .catch(() => []),
+  )
   createEffect(() => {
     void Promise.all([data.location.syncInfo({ directory: sdk().directory }), data.project.sync()]).catch(
       () => undefined,
@@ -98,6 +110,7 @@ export function createNewSessionWorkspaceController(input: {
     resolveNewSessionBranch({
       worktree: value(),
       directory: sdk().directory,
+      createBranch: input.selectedBranch(),
       worktreeBranch: (worktree) => data.location.vcs.info({ directory: worktree })?.branch.current,
     }),
   )
@@ -116,10 +129,19 @@ export function createNewSessionWorkspaceController(input: {
         const current = value()
         return current === "create" || (!!project && isWorkspaceDirectory(project, current))
       }),
-      reset: () => input.setSelected(undefined),
+      reset: () => {
+        input.setSelected(undefined)
+        input.setSelectedBranch(undefined)
+      },
       remember,
       set: (worktree: string) => {
+        input.setSelectedBranch(undefined)
         input.setSelected(normalizeNewSessionWorktree(worktree, sdk().directory, currentProject()?.worktree))
+      },
+      create: (branch: string) => {
+        input.setSelectedBranch(branch)
+        input.setSelected("create")
+        remember("create")
       },
     },
     project: {
@@ -129,6 +151,10 @@ export function createNewSessionWorkspaceController(input: {
         return project ? workspaceDirectories(project) : []
       },
       git: visible,
+      branches: () => {
+        const current = data.location.vcs.info({ directory: sdk().directory })?.branch.current
+        return [...new Set([...(branches() ?? []), ...(current ? [current] : [])])]
+      },
       openAll: input.onViewAll,
     },
     bar: {

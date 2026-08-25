@@ -69,9 +69,11 @@ export function NewSessionView(props: {
                       value={props.workspace.selection.value()}
                       projectRoot={props.workspace.project.root()}
                       workspaces={props.workspace.project.workspaces()}
+                      branches={props.workspace.project.branches()}
                       branch={props.workspace.bar.branch()}
                       onboarding={onboardingReady() && !onboarding.used}
                       onChange={select}
+                      onCreate={props.workspace.selection.create}
                       onDone={props.composer.restoreFocus}
                       onViewAll={props.workspace.project.openAll}
                     />

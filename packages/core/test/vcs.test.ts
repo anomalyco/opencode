@@ -64,10 +64,25 @@ describe("Vcs", () => {
       Effect.gen(function* () {
         const vcs = yield* Vcs.Service
         expect(yield* vcs.info()).toEqual({ branch: {} })
+        expect(yield* vcs.branches()).toEqual([])
         expect(yield* vcs.status()).toEqual([])
         expect(yield* vcs.diff("working")).toEqual([])
         expect(yield* vcs.diff("branch")).toEqual([])
       }).pipe(provide(directory)),
+    ),
+  )
+
+  it.live("lists local branches", () =>
+    withGit((directory) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(async () => {
+          await fs.writeFile(path.join(directory, "file.txt"), "one\n")
+          await commitAll(directory, "initial")
+          await $`git branch feature`.cwd(directory).quiet()
+        })
+        const vcs = yield* Vcs.Service
+        expect(yield* vcs.branches()).toEqual(["feature", "main"])
+      }),
     ),
   )
 

@@ -42,6 +42,20 @@ export const VcsGroup = HttpApiGroup.make("server.vcs")
       ),
   )
   .add(
+    HttpApiEndpoint.get("vcs.branches", "/api/vcs/branches", {
+      query: LocationQuery,
+      success: Location.response(Vcs.BranchList),
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.vcs.branches",
+          summary: "VCS branches",
+          description: "List local and remote branches available at the requested location.",
+        }),
+      ),
+  )
+  .add(
     HttpApiEndpoint.get("vcs.diff", "/api/vcs/diff", {
       query: DiffQuery,
       success: Location.response(Schema.Array(FileDiff.Info)),
