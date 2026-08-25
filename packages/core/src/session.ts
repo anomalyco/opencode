@@ -596,7 +596,11 @@ const layer = Layer.effect(
               yield* plugins.flush
               return yield* Image.Service
             }).pipe(Effect.provide(locations.get(session.location)))
-            const skills = Skill.Service.pipe(Effect.provide(locations.get(session.location)))
+            const skills = Effect.gen(function* () {
+              const plugins = yield* PluginSupervisor.Service
+              yield* plugins.flush
+              return yield* Skill.Service
+            }).pipe(Effect.provide(locations.get(session.location)))
             const prompt = yield* resolvePrompt(
               { text: input.text, files: input.files, agents: input.agents, skills: input.skills },
               image,
@@ -717,16 +721,21 @@ const layer = Layer.effect(
       }),
       skill: Effect.fn("Session.skill")(function* (input) {
         const session = yield* result.get(input.sessionID)
-        const skills = yield* Skill.Service.pipe(Effect.provide(locations.get(session.location)))
-        const skill = (yield* skills.list()).find((item) => item.id === input.skill)
+        const skills = yield* Effect.gen(function* () {
+          const plugins = yield* PluginSupervisor.Service
+          yield* plugins.flush
+          return yield* Skill.Service
+        }).pipe(Effect.provide(locations.get(session.location)))
+        const skill = yield* skills.get(input.skill)
         if (!skill) return yield* new SkillNotFoundError({ skill: input.skill })
+        const prepared = yield* Skill.prepare(fs, skill).pipe(Effect.orDie)
         yield* bus.publish(
           SessionEvent.Skill.Activated,
           {
             sessionID: input.sessionID,
-            id: skill.id,
-            name: skill.name,
-            text: skill.content,
+            id: prepared.id,
+            name: prepared.name,
+            text: prepared.output,
           },
           { id: input.id ? Event.ID.make(input.id.replace(/^msg_/, "evt_")) : undefined },
         )
@@ -970,16 +979,21 @@ const resolvePrompt = Effect.fn("Session.resolvePrompt")(function* (
   const selected = yield* Effect.gen(function* () {
     if (!requested?.length) return undefined
     const skillService = yield* skills
-    const available = yield* skillService.list()
-    return yield* Effect.forEach(requested, (attachment) => {
-      const skill = available.find((item) => item.id === attachment.id)
-      if (!skill) return Effect.fail(new SkillNotFoundError({ skill: attachment.id }))
-      return Effect.succeed({
-        id: skill.id,
-        name: skill.name,
-        mention: attachment.mention,
-      })
-    })
+    const prepared = new Map<Skill.ID, string>()
+    return yield* Effect.forEach(requested, (attachment) =>
+      Effect.gen(function* () {
+        const skill = yield* skillService.get(attachment.id)
+        if (!skill) return yield* new SkillNotFoundError({ skill: attachment.id })
+        const text = prepared.get(skill.id) ?? (yield* Skill.prepare(fs, skill).pipe(Effect.orDie)).output
+        prepared.set(skill.id, text)
+        return {
+          id: skill.id,
+          name: skill.name,
+          text,
+          mention: attachment.mention,
+        }
+      }),
+    )
   })
   return Prompt.make({ text: input.text, agents: input.agents, files, skills: selected?.length ? selected : undefined })
 })

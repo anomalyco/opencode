@@ -5,6 +5,7 @@ import path from "path"
 import { DateTime, Effect, Layer, Stream } from "effect"
 import { Money } from "@opencode-ai/schema/money"
 import { Shell } from "@opencode-ai/schema/shell"
+import { Skill } from "@opencode-ai/schema/skill"
 import { Agent } from "@opencode-ai/core/agent"
 import { asc, eq } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
@@ -1178,6 +1179,13 @@ describe("SessionTransfer", () => {
               id: sourceMessageID,
               type: "user",
               text: "Imported message",
+              skills: [
+                {
+                  id: Skill.ID.make("effect"),
+                  name: Skill.Name.make("Effect"),
+                  text: "Private skill instructions from /private/project",
+                },
+              ],
               time: { created: DateTime.makeUnsafe(100) },
             },
             {
@@ -1207,7 +1215,11 @@ describe("SessionTransfer", () => {
       const sanitized = yield* transfer.export({ sessionID, sanitize: true })
       expect(sanitized.info.time).toMatchObject({ idle: DateTime.makeUnsafe(200), viewed: DateTime.makeUnsafe(150) })
       expect(sanitized.messages).toMatchObject([
-        { id: sourceMessageID, text: `[redacted:text:${sourceMessageID}]` },
+        {
+          id: sourceMessageID,
+          text: `[redacted:text:${sourceMessageID}]`,
+          skills: [{ id: "effect", name: "[redacted:skill-name:0]", text: "[redacted:skill:0]" }],
+        },
         { id: errorMessageID, error: { type: "test_error", message: "Original error" } },
       ])
 

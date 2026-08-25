@@ -23,6 +23,7 @@ import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { Location } from "@opencode-ai/core/location"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Money } from "@opencode-ai/schema/money"
+import { Skill } from "@opencode-ai/schema/skill"
 import { DateTime, Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { asc, eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
@@ -231,6 +232,13 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
       id: SessionMessage.ID.create(),
       type: "user" as const,
       text: "Manual compaction should include this short conversation.",
+      skills: [
+        {
+          id: Skill.ID.make("effect"),
+          name: Skill.Name.make("Effect"),
+          text: "Use Effect services and generators.",
+        },
+      ],
       time: { created: DateTime.makeUnsafe(0) },
     }
     const session = yield* insertSession(sessionID, { parent_id: parentID })
@@ -261,6 +269,7 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
     })
     expect(requests[0]?.generation).toBeUndefined()
     expect(JSON.stringify(requests[0]?.messages)).toContain("Manual compaction should include this short conversation.")
+    expect(JSON.stringify(requests[0]?.messages)).toContain("Use Effect services and generators.")
     expect(yield* store.context(sessionID)).toMatchObject([
       { type: "compaction", reason: "manual", summary: "manual summary", recent: "" },
     ])

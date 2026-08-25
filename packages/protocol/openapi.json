@@ -16200,6 +16200,9 @@
           "name": {
             "type": "string"
           },
+          "text": {
+            "type": "string"
+          },
           "mention": {
             "$ref": "#/components/schemas/Prompt.Mention"
           }

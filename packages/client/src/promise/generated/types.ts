@@ -476,7 +476,7 @@ export type PromptFileAttachment = {
 
 export type PromptAgentAttachment = { name: string; mention?: PromptMention }
 
-export type PromptSkillAttachment = { id: string; name: string; mention?: PromptMention }
+export type PromptSkillAttachment = { id: string; name: string; text?: string; mention?: PromptMention }
 
 export type SessionMessageAssistantText = { type: "text"; text: string; state?: SessionMessageProviderState }
 
@@ -2740,6 +2740,7 @@ export type SessionImportInput = {
           readonly skills?: ReadonlyArray<{
             readonly id: string
             readonly name: string
+            readonly text?: string
             readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
           }>
           readonly type: "user"
@@ -3015,6 +3016,7 @@ export type SessionImportInput = {
           readonly skills?: ReadonlyArray<{
             readonly id: string
             readonly name: string
+            readonly text?: string
             readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
           }>
           readonly type: "user"
@@ -3290,6 +3292,7 @@ export type SessionImportInput = {
           readonly skills?: ReadonlyArray<{
             readonly id: string
             readonly name: string
+            readonly text?: string
             readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
           }>
           readonly type: "user"

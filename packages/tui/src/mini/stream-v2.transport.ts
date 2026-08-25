@@ -190,6 +190,7 @@ function pendingPrompt(item: SessionInboxInfo): FooterQueuedPrompt | undefined {
     messageID: item.id,
     prompt: { messageID: item.id, text: item.payload.text, parts: [] },
     delivery: item.delivery,
+    ...(item.payload.skills?.length ? { skills: item.payload.skills } : {}),
   }
 }
 
@@ -956,15 +957,20 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       syncPending()
       const visible = state.messageIDs.has(event.data.inboxID)
       if (waiting || pending) state.messageIDs.add(event.data.inboxID)
-      if (!waiting && pending && !visible) {
+      if (pending && !visible) {
         write([
-          {
-            kind: "user",
-            source: "system",
-            text: pending.prompt.text,
-            phase: "start",
-            messageID: event.data.inboxID,
-          },
+          ...(pending.skills ?? []).map((skill) => skillCommit(event.data.inboxID, skill.name, skill.id)),
+          ...(!waiting
+            ? [
+                {
+                  kind: "user" as const,
+                  source: "system" as const,
+                  text: pending.prompt.text,
+                  phase: "start" as const,
+                  messageID: event.data.inboxID,
+                },
+              ]
+            : []),
         ])
       }
       write([], { phase: "running", status: "waiting for assistant" })
@@ -979,6 +985,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       if (state.messageIDs.has(event.data.inboxID)) return
       state.messageIDs.add(event.data.inboxID)
       write([
+        ...(pending.skills ?? []).map((skill) => skillCommit(event.data.inboxID, skill.name, skill.id)),
         {
           kind: "user",
           source: "system",
