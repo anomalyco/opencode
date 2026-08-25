@@ -2787,6 +2787,20 @@ export type ProviderNotFoundError = {
   message: string
 }
 
+export type ContextSource = {
+  key: string
+  kind: "system" | "instructions" | "environment" | "skills" | "references"
+  title: string
+  path?: string
+  editable: boolean
+  content: string
+}
+
+export type ContextWriteInstructionPayload = {
+  path: string
+  content: string
+}
+
 export type OutputFormat1 =
   | {
       type: "text"
@@ -12890,6 +12904,77 @@ export type V2FsFindResponses = {
 }
 
 export type V2FsFindResponse = V2FsFindResponses[keyof V2FsFindResponses]
+
+export type V2ContextInspectData = {
+  body?: never
+  path?: never
+  query?: {
+    location?: {
+      directory?: string
+      workspace?: string
+    }
+    agent?: string
+  }
+  url: "/api/context"
+}
+
+export type V2ContextInspectErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+}
+
+export type V2ContextInspectError = V2ContextInspectErrors[keyof V2ContextInspectErrors]
+
+export type V2ContextInspectResponses = {
+  /**
+   * Success
+   */
+  200: {
+    location: LocationInfo
+    data: Array<ContextSource>
+  }
+}
+
+export type V2ContextInspectResponse = V2ContextInspectResponses[keyof V2ContextInspectResponses]
+
+export type V2ContextWriteInstructionData = {
+  body: ContextWriteInstructionPayload
+  path?: never
+  query?: never
+  url: "/api/context/instructions"
+}
+
+export type V2ContextWriteInstructionErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+}
+
+export type V2ContextWriteInstructionError = V2ContextWriteInstructionErrors[keyof V2ContextWriteInstructionErrors]
+
+export type V2ContextWriteInstructionResponses = {
+  /**
+   * Success
+   */
+  200: {
+    location: LocationInfo
+    data: ContextSource
+  }
+}
+
+export type V2ContextWriteInstructionResponse =
+  V2ContextWriteInstructionResponses[keyof V2ContextWriteInstructionResponses]
 
 export type V2CommandListData = {
   body?: never

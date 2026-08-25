@@ -21,6 +21,7 @@ import { LocationGroup } from "./groups/location"
 import { IntegrationGroup } from "./groups/integration"
 import { CredentialGroup } from "./groups/credential"
 import { ProjectCopyGroup } from "./groups/project-copy"
+import { ContextGroup } from "./groups/context"
 
 // Protocol owns middleware placement, while Server injects concrete keys so Core service identities stay downstream.
 const makeApiFromGroup = <
@@ -46,6 +47,7 @@ const makeApiFromGroup = <
     .add(CredentialGroup.middleware(locationMiddleware))
     .add(makePermissionGroup(locationMiddleware, sessionLocationMiddleware))
     .add(FileSystemGroup.middleware(locationMiddleware))
+    .add(ContextGroup.middleware(locationMiddleware))
     .add(CommandGroup.middleware(locationMiddleware))
     .add(SkillGroup.middleware(locationMiddleware))
     .add(eventGroup)

@@ -1,6 +1,6 @@
 export * as InstructionContext from "./instruction-context"
 
-import { Array, Effect, Layer, Schema } from "effect"
+import { Array, Context, Effect, Layer, Schema } from "effect"
 import { isAbsolute, join, relative, sep } from "path"
 import { FSUtil } from "./fs-util"
 import { Flag } from "./flag/flag"
@@ -11,15 +11,22 @@ import { SystemContext } from "./system-context/index"
 import { SystemContextRegistry } from "./system-context/registry"
 import { makeLocationNode } from "./effect/app-node"
 
-class File extends Schema.Class<File>("InstructionContext.File")({
+export class File extends Schema.Class<File>("InstructionContext.File")({
   path: AbsolutePath,
   content: Schema.String,
 }) {}
 
+export interface Interface {
+  readonly list: () => Effect.Effect<ReadonlyArray<File>>
+}
+
+export class Service extends Context.Service<Service, Interface>()("@opencode/v2/InstructionContext") {}
+
 const Files = Schema.Array(File)
 const key = SystemContext.Key.make("core/instructions")
 
-const layer = Layer.effectDiscard(
+const layer = Layer.effect(
+  Service,
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
     const global = yield* Global.Service
@@ -37,7 +44,7 @@ const layer = Layer.effectDiscard(
         removed: () => "Previously loaded instructions no longer apply.",
       })
 
-    const observe = Effect.fn("InstructionContext.observe")(function* () {
+    const discover = Effect.fn("InstructionContext.discover")(function* () {
       const start = yield* fs.resolve(location.directory)
       const stop = yield* fs.resolve(location.project.directory)
       const fromProject = relative(stop, start)
@@ -75,7 +82,7 @@ const layer = Layer.effectDiscard(
 
     yield* registry.register({
       key,
-      load: observe().pipe(
+      load: discover().pipe(
         Effect.map((files) =>
           files === SystemContext.unavailable
             ? source(files)
@@ -86,6 +93,13 @@ const layer = Layer.effectDiscard(
         Effect.catch(() => Effect.succeed(source(SystemContext.unavailable))),
         Effect.catchDefect(() => Effect.succeed(source(SystemContext.unavailable))),
       ),
+    })
+
+    return Service.of({
+      list: Effect.fn("InstructionContext.list")(function* () {
+        const files = yield* discover().pipe(Effect.catch(() => Effect.succeed(SystemContext.unavailable)))
+        return files === SystemContext.unavailable ? [] : files
+      }),
     })
   }),
 )

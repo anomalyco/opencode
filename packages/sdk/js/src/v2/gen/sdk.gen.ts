@@ -24,6 +24,7 @@ import type {
   ConfigProvidersResponses,
   ConfigUpdateErrors,
   ConfigUpdateResponses,
+  ContextWriteInstructionPayload,
   EventSubscribeResponses,
   EventTuiCommandExecute,
   EventTuiPromptAppend,
@@ -267,6 +268,10 @@ import type {
   V2AgentListResponses,
   V2CommandListErrors,
   V2CommandListResponses,
+  V2ContextInspectErrors,
+  V2ContextInspectResponses,
+  V2ContextWriteInstructionErrors,
+  V2ContextWriteInstructionResponses,
   V2CredentialRemoveErrors,
   V2CredentialRemoveResponses,
   V2CredentialUpdateErrors,
@@ -6498,6 +6503,69 @@ export class Fs extends HeyApiClient {
   }
 }
 
+export class Context extends HeyApiClient {
+  /**
+   * Inspect system context
+   *
+   * Return every source that would be sent to the model for the requested location and agent.
+   */
+  public inspect<ThrowOnError extends boolean = false>(
+    parameters?: {
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+      agent?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "location" },
+            { in: "query", key: "agent" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<V2ContextInspectResponses, V2ContextInspectErrors, ThrowOnError>({
+      url: "/api/context",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Write instructions file
+   *
+   * Write an AGENTS.md file relative to the requested location.
+   */
+  public writeInstruction<ThrowOnError extends boolean = false>(
+    parameters: {
+      contextWriteInstructionPayload: ContextWriteInstructionPayload
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ key: "contextWriteInstructionPayload", map: "body" }] }])
+    return (options?.client ?? this.client).post<
+      V2ContextWriteInstructionResponses,
+      V2ContextWriteInstructionErrors,
+      ThrowOnError
+    >({
+      url: "/api/context/instructions",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Command2 extends HeyApiClient {
   /**
    * List commands
@@ -7036,6 +7104,11 @@ export class V2 extends HeyApiClient {
   private _fs?: Fs
   get fs(): Fs {
     return (this._fs ??= new Fs({ client: this.client }))
+  }
+
+  private _context?: Context
+  get context(): Context {
+    return (this._context ??= new Context({ client: this.client }))
   }
 
   private _command?: Command2

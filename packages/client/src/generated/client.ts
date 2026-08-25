@@ -81,6 +81,10 @@ import type {
   FilesListOutput,
   FilesFindInput,
   FilesFindOutput,
+  ServerContextInspectInput,
+  ServerContextInspectOutput,
+  ServerContextWriteInstructionInput,
+  ServerContextWriteInstructionOutput,
   CommandsListInput,
   CommandsListOutput,
   SkillsListInput,
@@ -775,6 +779,32 @@ export function make(options: ClientOptions) {
             query: { location: input["location"], query: input["query"], type: input["type"], limit: input["limit"] },
             successStatus: 200,
             declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+    },
+    "server.context": {
+      inspect: (input?: ServerContextInspectInput, requestOptions?: RequestOptions) =>
+        request<ServerContextInspectOutput>(
+          {
+            method: "GET",
+            path: `/api/context`,
+            query: { location: input?.["location"], agent: input?.["agent"] },
+            successStatus: 200,
+            declaredStatuses: [400, 401],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      writeInstruction: (input: ServerContextWriteInstructionInput, requestOptions?: RequestOptions) =>
+        request<ServerContextWriteInstructionOutput>(
+          {
+            method: "POST",
+            path: `/api/context/instructions`,
+            body: { path: input["path"], content: input["content"] },
+            successStatus: 200,
+            declaredStatuses: [400, 401],
             empty: false,
           },
           requestOptions,

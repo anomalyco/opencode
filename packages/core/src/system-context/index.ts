@@ -131,6 +131,14 @@ type Entry = AvailableEntry | UnavailableEntry
 /** The identity context. */
 export const empty = context([])
 
+/** Renders each admitted source of a context individually for inspection. */
+export const inspect = (value: SystemContext): Effect.Effect<ReadonlyArray<{ key: Key; text: string }>> =>
+  observe(value).pipe(
+    Effect.map((entries) =>
+      entries.flatMap((entry) => (entry._tag === "Available" ? [{ key: entry.key, text: entry.baseline().text }] : [])),
+    ),
+  )
+
 /** Closes a typed source into a context that composes with differently typed sources. */
 export function make<A>(source: Source<A>): SystemContext {
   const decode = Schema.decodeUnknownOption(source.codec)

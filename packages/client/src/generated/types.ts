@@ -2495,6 +2495,54 @@ export type FilesFindOutput = {
   readonly data: ReadonlyArray<{ readonly path: string; readonly type: "file" | "directory" }>
 }
 
+export type ServerContextInspectInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+    readonly agent?: string | undefined
+  }["location"]
+  readonly agent?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+    readonly agent?: string | undefined
+  }["agent"]
+}
+
+export type ServerContextInspectOutput = {
+  readonly location: {
+    readonly directory: string
+    readonly workspaceID?: string
+    readonly project: { readonly id: string; readonly directory: string }
+  }
+  readonly data: ReadonlyArray<{
+    readonly key: string
+    readonly kind: "system" | "instructions" | "environment" | "skills" | "references"
+    readonly title: string
+    readonly path?: string | null
+    readonly editable: boolean
+    readonly content: string
+  }>
+}
+
+export type ServerContextWriteInstructionInput = {
+  readonly path: { readonly path: string; readonly content: string }["path"]
+  readonly content: { readonly path: string; readonly content: string }["content"]
+}
+
+export type ServerContextWriteInstructionOutput = {
+  readonly location: {
+    readonly directory: string
+    readonly workspaceID?: string
+    readonly project: { readonly id: string; readonly directory: string }
+  }
+  readonly data: {
+    readonly key: string
+    readonly kind: "system" | "instructions" | "environment" | "skills" | "references"
+    readonly title: string
+    readonly path?: string | null
+    readonly editable: boolean
+    readonly content: string
+  }
+}
+
 export type CommandsListInput = {
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined

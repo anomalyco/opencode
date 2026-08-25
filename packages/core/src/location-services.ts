@@ -12,6 +12,7 @@ import { FileSystemSearch } from "./filesystem/search"
 import { Watcher } from "./filesystem/watcher"
 import { Image } from "./image"
 import { Integration } from "./integration"
+import { InstructionContext } from "./instruction-context"
 import { Location } from "./location"
 import { LocationMutation } from "./location-mutation"
 import { LocationServiceMap } from "./location-service-map"
@@ -62,6 +63,7 @@ export const locationServices = LayerNode.group([
   SystemContextBuiltIns.node,
   LocationMutation.node,
   FileMutation.node,
+  InstructionContext.node,
   PermissionV2.node,
   ToolOutputStore.node,
   ToolRegistry.node,

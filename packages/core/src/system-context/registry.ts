@@ -9,9 +9,20 @@ export interface Entry {
   readonly load: Effect.Effect<SystemContext.SystemContext>
 }
 
+export interface InspectSource {
+  readonly key: SystemContext.Key
+  readonly text: string
+}
+
+export interface InspectEntry {
+  readonly registryKey: SystemContext.Key
+  readonly sources: ReadonlyArray<InspectSource>
+}
+
 export interface Interface {
   readonly register: (entry: Entry) => Effect.Effect<void, never, Scope.Scope>
   readonly load: () => Effect.Effect<SystemContext.SystemContext>
+  readonly inspect: () => Effect.Effect<ReadonlyArray<InspectEntry>>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SystemContextRegistry") {}
@@ -40,6 +51,21 @@ const layer = Layer.effect(
         const current = (yield* Ref.get(entries)).toSorted((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))
         return SystemContext.combine(
           yield* Effect.forEach(current, (entry) => entry.load, { concurrency: "unbounded" }),
+        )
+      }),
+      inspect: Effect.fn("SystemContextRegistry.inspect")(function* () {
+        const current = (yield* Ref.get(entries)).toSorted((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))
+        return yield* Effect.forEach(
+          current,
+          (entry) =>
+            Effect.gen(function* () {
+              const context = yield* entry.load
+              return {
+                registryKey: entry.key,
+                sources: yield* SystemContext.inspect(context),
+              }
+            }),
+          { concurrency: "unbounded" },
         )
       }),
     })
