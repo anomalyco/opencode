@@ -1,7 +1,6 @@
 export type SessionTab = {
   sessionID: string
   title?: string
-  preview?: boolean
 }
 
 export type SessionTabUnread = "activity" | "error"
@@ -39,19 +38,9 @@ export const sessionTabOverflowWidth = (count: number) => String(count).length +
 
 export function openSessionTab(tabs: SessionTab[], tab: SessionTab): SessionTab[] {
   const index = tabs.findIndex((item) => item.sessionID === tab.sessionID)
-  if (index === -1) {
-    const preview = tab.preview ? tabs.findIndex((item) => item.preview) : -1
-    if (preview !== -1) return tabs.map((item, position) => (position === preview ? tab : item))
-    return [...tabs, tab]
-  }
+  if (index === -1) return [...tabs, tab]
   if (!tab.title || tabs[index]?.title === tab.title) return tabs
   return tabs.map((item, position) => (position === index ? { ...item, title: tab.title } : item))
-}
-
-export function promoteSessionTab(tabs: SessionTab[], sessionID: string): SessionTab[] {
-  const index = tabs.findIndex((tab) => tab.sessionID === sessionID && tab.preview)
-  if (index === -1) return tabs
-  return tabs.map((tab, position) => (position === index ? { ...tab, preview: false } : tab))
 }
 
 export function closeSessionTab(tabs: SessionTab[], sessionID: string) {

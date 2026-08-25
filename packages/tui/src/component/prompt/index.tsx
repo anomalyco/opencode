@@ -1260,6 +1260,7 @@ export function Prompt(props: PromptProps) {
     }
 
     const target = sessionID
+    sessionTabs.promote(target)
     history.append(entry)
     const dispatch = (send: () => Promise<unknown>) => {
       const setup = newSession

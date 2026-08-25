@@ -80,12 +80,30 @@ export type SessionTabsController = Pick<ContextController, "tabs" | "current" |
   newTab?: () => boolean
   add?: () => void
   detail?: (sessionID: string) => string | undefined
+  isPreview?: (sessionID: string) => boolean
   promote?: (sessionID: string) => void
   status(sessionID: string): SessionTabsStatus
 }
 const NEW_SESSION_TAB: SessionTab = { sessionID: "new", title: NEW_SESSION_TAB_TITLE }
 const glowTextColor = (base: RGBA, glow: RGBA, index: number, width: number, level = 1) =>
   tint(base, glow, 0.12 * unreadGlowIntensity(index, width) * level)
+
+function createPreviewDoubleClick(tabs: SessionTabsController) {
+  let previous: { sessionID: string; time: number } | undefined
+  return (sessionID: string) => {
+    if (!tabs.isPreview?.(sessionID)) {
+      previous = undefined
+      return
+    }
+    const now = Date.now()
+    if (previous?.sessionID === sessionID && now - previous.time < 300) {
+      previous = undefined
+      tabs.promote?.(sessionID)
+      return
+    }
+    previous = { sessionID, time: now }
+  }
+}
 
 function createNumberIgnition(runs: () => boolean, prompt: () => number, animations: () => boolean) {
   const ignition = createAnimatable({ level: 0 }, { enabled: animations, transition: tween({ duration: 0.7 }) })
@@ -254,7 +272,7 @@ function TabContextMenu(props: { state: TabContextMenuState; tabs: SessionTabsCo
       ...(props.tabs.add ? [{ title: "New tab", run: () => props.tabs.add?.() }] : []),
       ...(sessionID
         ? [
-            ...(props.tabs.promote && props.tabs.tabs().find((tab) => tab.sessionID === sessionID)?.preview
+            ...(props.tabs.promote && props.tabs.isPreview?.(sessionID)
               ? [{ title: "Keep open", run: () => props.tabs.promote?.(sessionID) }]
               : []),
             {
@@ -370,6 +388,7 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
   const [addHovered, setAddHovered] = createSignal(false)
   const marquee = createTabMarquee(animations)
   const hovered = marquee.hovered
+  const handleClick = createPreviewDoubleClick(tabs)
   // OpenTUI captures the first drag target, which may differ from the tab pressed on a fast move.
   const [dragging, setDragging] = createSignal<string>()
   const [preview, setPreview] = createSignal<{ sessionID: string; index: number }>()
@@ -407,7 +426,6 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
   const itemStatus = (tab: SessionTab) => statuses().get(tab.sessionID)!
   let rail: { screenX: number; screenY: number } | undefined
   let scroll: ScrollBoxRenderable | undefined
-  let lastClick: { sessionID: string; time: number } | undefined
   let didDrag = false
   let addPressed = false
   // A captured drag ends with a synthetic up on its drop target; do not turn that into a click.
@@ -439,10 +457,7 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
     if (didDrag) suppressClick = true
     setDragging(undefined)
     const pending = preview()
-    if (pending?.sessionID === source) {
-      if (tabs.tabs().find((tab) => tab.sessionID === source)?.preview) tabs.promote?.(source)
-      tabs.move(pending.sessionID, pending.index)
-    }
+    if (pending?.sessionID === source) tabs.move(pending.sessionID, pending.index)
     tabs.select(source)
   }
 
@@ -659,11 +674,7 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                       return
                     }
                     didDrag = false
-                    const now = Date.now()
-                    const doubleClick =
-                      tab.preview && lastClick?.sessionID === tab.sessionID && now - lastClick.time < 300
-                    if (doubleClick) tabs.promote?.(tab.sessionID)
-                    lastClick = tab.preview && !doubleClick ? { sessionID: tab.sessionID, time: now } : undefined
+                    handleClick(tab.sessionID)
                     marquee.enter(tab.sessionID, title(), hoveredTitleWidth())
                     setDragging(tab.sessionID)
                   }}
@@ -752,8 +763,8 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                         wrapMode="none"
                         selectable={false}
                         attributes={
-                          (selected() ? TextAttributes.BOLD : 0) | (tab.preview ? TextAttributes.ITALIC : 0) ||
-                          undefined
+                          (selected() ? TextAttributes.BOLD : 0) |
+                            (tabs.isPreview?.(tab.sessionID) ? TextAttributes.ITALIC : 0) || undefined
                         }
                       >
                         <Show
@@ -907,7 +918,7 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
 }
 
 function HorizontalSessionTabs(props: { controller?: SessionTabsController; animations?: boolean } = {}) {
-  const tabs: SessionTabsController = props.controller ?? useSessionTabs()
+  const tabs = props.controller ?? useSessionTabs()
   const dimensions = useTerminalDimensions()
   const theme = useTheme()
   const { mode } = useThemes()
@@ -916,6 +927,7 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
   const [addHovered, setAddHovered] = createSignal(false)
   const marquee = createTabMarquee(animations)
   const hovered = marquee.hovered
+  const handleClick = createPreviewDoubleClick(tabs)
   // OpenTUI captures the first drag target, which may differ from the tab pressed on a fast move.
   const [dragging, setDragging] = createSignal<string>()
   // A drag reorders a local preview and persists one move on release instead of writing
@@ -925,7 +937,6 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
   const [contextMenu, setContextMenu] = createSignal<TabContextMenuState>()
   const [closeHold, setCloseHold] = createSignal<MouseCloseHold>()
   let strip: { screenX: number; screenY: number; width: number; height: number } | undefined
-  let lastClick: { sessionID: string; time: number } | undefined
   let didDrag = false
   let addPressed = false
   let closeHoldTimer: ReturnType<typeof setTimeout> | undefined
@@ -1120,10 +1131,7 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
     if (didDrag) suppressClick = true
     setDragging(undefined)
     const pending = preview()
-    if (pending?.sessionID === source) {
-      if (tabs.tabs().find((tab) => tab.sessionID === source)?.preview) tabs.promote?.(source)
-      tabs.move(pending.sessionID, pending.index)
-    }
+    if (pending?.sessionID === source) tabs.move(pending.sessionID, pending.index)
     if (source === NEW_SESSION_TAB.sessionID) return
     tabs.select(source)
   }
@@ -1294,10 +1302,7 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
                 }
                 didDrag = false
                 releaseCloseHold()
-                const now = Date.now()
-                const doubleClick = tab.preview && lastClick?.sessionID === tab.sessionID && now - lastClick.time < 300
-                if (doubleClick) tabs.promote?.(tab.sessionID)
-                lastClick = tab.preview && !doubleClick ? { sessionID: tab.sessionID, time: now } : undefined
+                handleClick(tab.sessionID)
                 marquee.enter(tab.sessionID, title(), hoveredTitleWidth())
                 setDragging(tab.sessionID)
               }}
@@ -1324,7 +1329,9 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
                   fg={foreground()}
                   wrapMode="none"
                   selectable={false}
-                  attributes={(bold() ?? 0) | (tab.preview ? TextAttributes.ITALIC : 0) || undefined}
+                  attributes={
+                    (bold() ?? 0) | (tabs.isPreview?.(tab.sessionID) ? TextAttributes.ITALIC : 0) || undefined
+                  }
                 >
                   <Show when={scrolling() || glows() || titleFades()} fallback={visibleTitle()}>
                     <Index each={visibleTitleParts()}>

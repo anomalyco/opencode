@@ -71,12 +71,13 @@ test("the tab context menu keeps preview tabs open without offering promotion fo
   const controller = {
     tabs: () => [
       { sessionID: "first", title: "First" },
-      { sessionID: "second", title: "Second", preview: true },
+      { sessionID: "second", title: "Second" },
     ],
     current: active,
     select: setActive,
     close() {},
     move() {},
+    isPreview: (sessionID: string) => sessionID === "second",
     promote: (sessionID: string) => promoted.push(sessionID),
     status: () => EMPTY_SESSION_TAB_STATUS,
   } satisfies SessionTabsController
@@ -127,12 +128,13 @@ test("double-clicking a preview tab keeps it open without promoting permanent ta
   const controller = {
     tabs: () => [
       { sessionID: "first", title: "First" },
-      { sessionID: "second", title: "Second", preview: true },
+      { sessionID: "second", title: "Second" },
     ],
     current: active,
     select: setActive,
     close() {},
     move() {},
+    isPreview: (sessionID: string) => sessionID === "second",
     promote: (sessionID: string) => promoted.push(sessionID),
     status: () => EMPTY_SESSION_TAB_STATUS,
   } satisfies SessionTabsController

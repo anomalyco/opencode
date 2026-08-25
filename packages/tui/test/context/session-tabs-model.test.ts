@@ -6,7 +6,6 @@ import {
   moveSessionTab,
   moveSessionTabHistory,
   openSessionTab,
-  promoteSessionTab,
   recordClosedSessionTab,
   recordSessionTabHistory,
   reopenSessionTab,
@@ -97,29 +96,6 @@ describe("session tabs", () => {
     expect(tabs).toEqual([{ sessionID: "a", title: "New" }])
     expect(openSessionTab(tabs, { sessionID: "b" })).toEqual([{ sessionID: "a", title: "New" }, { sessionID: "b" }])
     expect(openSessionTab(tabs, { sessionID: "a", title: "New" })).toBe(tabs)
-  })
-
-  test("replaces the previous preview while preserving permanent tabs and its position", () => {
-    const tabs = [{ sessionID: "first" }, { sessionID: "preview", preview: true }, { sessionID: "last" }]
-
-    expect(openSessionTab(tabs, { sessionID: "next", preview: true })).toEqual([
-      { sessionID: "first" },
-      { sessionID: "next", preview: true },
-      { sessionID: "last" },
-    ])
-    expect(openSessionTab(tabs, { sessionID: "first", preview: true })).toBe(tabs)
-    expect(openSessionTab(tabs, { sessionID: "permanent" })).toEqual([...tabs, { sessionID: "permanent" }])
-  })
-
-  test("promotes previews without changing permanent or missing tabs", () => {
-    const tabs = [{ sessionID: "first" }, { sessionID: "preview", preview: true }]
-
-    expect(promoteSessionTab(tabs, "preview")).toEqual([
-      { sessionID: "first" },
-      { sessionID: "preview", preview: false },
-    ])
-    expect(promoteSessionTab(tabs, "first")).toBe(tabs)
-    expect(promoteSessionTab(tabs, "missing")).toBe(tabs)
   })
 
   test("selects the right tab then the left tab after closing", () => {

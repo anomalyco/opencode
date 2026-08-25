@@ -4,7 +4,7 @@ import type { OpenCodeEvent } from "@opencode-ai/client"
 import { testRender } from "@opentui/solid"
 import { mkdirSync, watch } from "fs"
 import path from "path"
-import { ConfigProvider } from "../../src/config"
+import { ConfigProvider, useConfig } from "../../src/config"
 import { ClientProvider, useClient } from "../../src/context/client"
 import { DataProvider, useData } from "../../src/context/data"
 import { LocationProvider } from "../../src/context/location"
@@ -32,7 +32,7 @@ async function renderSessionTabs(
     state?: string
     title?: string
     home?: boolean
-    persisted?: string[]
+    persisted?: (string | { sessionID: string; preview?: boolean })[]
     sessionGate?: Promise<void>
     sessionDirectories?: Record<string, string>
     sessionParents?: Record<string, string>
@@ -55,7 +55,7 @@ async function renderSessionTabs(
         global: { tabs: [], unread: { ses_legacy: "error" } },
         cwd: {
           [directory]: {
-            tabs: options.persisted.map((sessionID) => ({ sessionID })),
+            tabs: options.persisted.map((tab) => (typeof tab === "string" ? { sessionID: tab } : tab)),
             unread: { ses_legacy: "activity" },
           },
         },
@@ -132,6 +132,12 @@ async function renderSessionTabs(
   let client!: ReturnType<typeof useClient>
   let data!: ReturnType<typeof useData>
   let storage!: ReturnType<typeof useStorage>
+  let config!: ReturnType<typeof useConfig>
+  let configuration = {
+    tabs: { enabled: options?.tabsEnabled ?? true },
+    experimental: options?.preview ? { "session-preview-tabs": true } : undefined,
+    session: { new_location: options?.newLocation ?? "launch" },
+  }
 
   function Probe() {
     tabs = useSessionTabs()
@@ -139,6 +145,7 @@ async function renderSessionTabs(
     client = useClient()
     data = useData()
     storage = useStorage()
+    config = useConfig()
     return <box />
   }
 
@@ -147,11 +154,15 @@ async function renderSessionTabs(
       <TuiAppProvider value={{ name: "test", version: "test", channel: "test" }}>
         <StorageProvider>
           <ConfigProvider
-            config={createTuiResolvedConfig({
-              tabs: { enabled: options?.tabsEnabled ?? true },
-              experimental: options?.preview ? { "session-preview-tabs": true } : undefined,
-              session: { new_location: options?.newLocation ?? "launch" },
-            })}
+            config={createTuiResolvedConfig(configuration)}
+            service={{
+              get: async () => configuration,
+              update: async (update) => {
+                configuration = structuredClone(configuration)
+                update(configuration)
+                return configuration
+              },
+            }}
           >
             <RouteProvider
               initialRoute={options?.home ? { type: "home" } : { type: "session", sessionID: initialSessionID }}
@@ -190,6 +201,11 @@ async function renderSessionTabs(
     focus: () => app.renderer.emit("focus"),
     blur: () => app.renderer.emit("blur"),
     flush: () => storage.flush(),
+    setPreviews: (enabled: boolean) =>
+      config.update((draft) => {
+        draft.experimental ??= {}
+        draft.experimental["session-preview-tabs"] = enabled
+      }),
     async destroy() {
       app.renderer.destroy()
       await storage.flush()
@@ -266,21 +282,27 @@ test("replaces session previews without replacing permanent tabs or opening exis
   try {
     await wait(() => setup.tabs.tabs().length === 2)
     setup.route.navigate({ type: "session", sessionID: "preview-one" })
-    await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "preview-one" && tab.preview === true))
+    await wait(
+      () => setup.tabs.tabs().some((tab) => tab.sessionID === "preview-one") && setup.tabs.isPreview("preview-one"),
+    )
 
     setup.tabs.select("permanent")
     await wait(() => setup.tabs.current() === "permanent")
     expect(setup.tabs.tabs().map((tab) => tab.sessionID)).toEqual(["first", "permanent", "preview-one"])
 
     setup.route.navigate({ type: "session", sessionID: "preview-two" })
-    await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "preview-two" && tab.preview === true))
+    await wait(
+      () => setup.tabs.tabs().some((tab) => tab.sessionID === "preview-two") && setup.tabs.isPreview("preview-two"),
+    )
     expect(setup.tabs.tabs().map((tab) => tab.sessionID)).toEqual(["first", "permanent", "preview-two"])
 
     setup.tabs.promote("preview-two")
-    await wait(() => setup.tabs.tabs().find((tab) => tab.sessionID === "preview-two")?.preview === false)
+    expect(setup.tabs.isPreview("preview-two")).toBe(false)
 
     setup.route.navigate({ type: "session", sessionID: "preview-three" })
-    await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "preview-three" && tab.preview === true))
+    await wait(
+      () => setup.tabs.tabs().some((tab) => tab.sessionID === "preview-three") && setup.tabs.isPreview("preview-three"),
+    )
     expect(setup.tabs.tabs().map((tab) => tab.sessionID)).toEqual([
       "first",
       "permanent",
@@ -296,7 +318,7 @@ test("promotes session previews only when user prompts are admitted", async () =
   const setup = await renderSessionTabs("preview", { preview: true })
 
   try {
-    await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "preview" && tab.preview === true))
+    await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "preview") && setup.tabs.isPreview("preview"))
     setup.emit({
       id: "evt_synthetic",
       created: Date.now(),
@@ -309,7 +331,7 @@ test("promotes session previews only when user prompts are admitted", async () =
       },
     })
     await Bun.sleep(20)
-    expect(setup.tabs.tabs().find((tab) => tab.sessionID === "preview")?.preview).toBe(true)
+    expect(setup.tabs.isPreview("preview")).toBe(true)
 
     setup.emit({
       id: "evt_user",
@@ -322,7 +344,7 @@ test("promotes session previews only when user prompts are admitted", async () =
         item: { type: "user", payload: { text: "keep this session" }, delivery: "steer" },
       },
     })
-    await wait(() => setup.tabs.tabs().find((tab) => tab.sessionID === "preview")?.preview === false)
+    await wait(() => !setup.tabs.isPreview("preview"))
   } finally {
     await setup.destroy()
   }
@@ -349,16 +371,19 @@ test("reopens a previously permanent session as a preview after a user prompt", 
     setup.tabs.close("permanent")
     await wait(() => setup.tabs.tabs().length === 0)
     setup.route.navigate({ type: "session", sessionID: "permanent" })
-    await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "permanent" && tab.preview === true))
+    await wait(
+      () => setup.tabs.tabs().some((tab) => tab.sessionID === "permanent") && setup.tabs.isPreview("permanent"),
+    )
   } finally {
     await setup.destroy()
   }
 })
 
-test("keeps a newly submitted home session permanent when admission arrives before navigation", async () => {
+test("keeps an explicitly promoted home session permanent when admission arrives before navigation", async () => {
   const setup = await renderSessionTabs("created", { home: true, preview: true })
 
   try {
+    setup.tabs.promote("created")
     setup.emit({
       id: "evt_created",
       created: Date.now(),
@@ -373,7 +398,165 @@ test("keeps a newly submitted home session permanent when admission arrives befo
     await wait(() => setup.data.session.pending.list("created").length > 0)
     setup.route.navigate({ type: "session", sessionID: "created" })
     await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "created"))
-    expect(setup.tabs.tabs().find((tab) => tab.sessionID === "created")?.preview).not.toBe(true)
+    expect(setup.tabs.isPreview("created")).toBe(false)
+  } finally {
+    await setup.destroy()
+  }
+})
+
+test("stores preview tab membership without persisting preview identity", async () => {
+  const setup = await renderSessionTabs("preview", { preview: true })
+
+  try {
+    await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "preview") && setup.tabs.isPreview("preview"))
+    await setup.flush()
+    const stored = await Bun.file(path.join(setup.state, "test", "tui", "tabs.json")).json()
+
+    expect(stored.cwd[directory].tabs).toHaveLength(1)
+    expect(stored.cwd[directory].tabs[0].sessionID).toBe("preview")
+    expect(stored.cwd[directory].tabs[0]).not.toHaveProperty("preview")
+    expect(await Bun.file(path.join(setup.state, "test", "tui", "session-tab-preview.json")).exists()).toBe(false)
+  } finally {
+    await setup.destroy()
+  }
+})
+
+test("removes preview flags from legacy persisted tabs without treating them as local previews", async () => {
+  const setup = await renderSessionTabs("legacy", {
+    home: true,
+    persisted: [{ sessionID: "legacy", preview: true }],
+    preview: true,
+  })
+
+  try {
+    const file = path.join(setup.state, "test", "tui", "tabs.json")
+    await wait(async () => !("preview" in (await Bun.file(file).json()).cwd[directory].tabs[0]))
+
+    expect(setup.tabs.isPreview("legacy")).toBe(false)
+  } finally {
+    await setup.destroy()
+  }
+})
+
+test("unrelated user admissions do not pre-promote an unopened local session", async () => {
+  const setup = await renderSessionTabs("remote", { home: true, preview: true })
+
+  try {
+    setup.emit({
+      id: "evt_remote",
+      created: Date.now(),
+      type: "session.inbox.enqueued",
+      durable: { aggregateID: "remote", seq: 1, version: 1 },
+      data: {
+        sessionID: "remote",
+        inboxID: "msg_remote",
+        item: { type: "user", payload: { text: "another client" }, delivery: "steer" },
+      },
+    })
+    await wait(() => setup.data.session.pending.list("remote").length > 0)
+
+    setup.route.navigate({ type: "session", sessionID: "remote" })
+    await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "remote"))
+
+    expect(setup.tabs.isPreview("remote")).toBe(true)
+  } finally {
+    await setup.destroy()
+  }
+})
+
+test("each client replaces only its own preview in shared tab storage", async () => {
+  await using temporary = await tmpdir()
+  const clients: Awaited<ReturnType<typeof renderSessionTabs>>[] = []
+
+  try {
+    const first = await renderSessionTabs("first", { state: temporary.path, preview: true })
+    clients.push(first)
+    await wait(() => first.tabs.tabs().some((tab) => tab.sessionID === "first"))
+
+    const second = await renderSessionTabs("first", { state: temporary.path, preview: true })
+    clients.push(second)
+    expect(second.tabs.isPreview("first")).toBe(false)
+
+    second.route.navigate({ type: "session", sessionID: "second" })
+    await wait(() => first.tabs.tabs().some((tab) => tab.sessionID === "second"))
+    expect(first.tabs.isPreview("first")).toBe(true)
+    expect(second.tabs.isPreview("second")).toBe(true)
+
+    first.route.navigate({ type: "session", sessionID: "third" })
+    await wait(() => second.tabs.tabs().some((tab) => tab.sessionID === "third"))
+
+    expect(second.tabs.tabs().map((tab) => tab.sessionID)).toEqual(["third", "second"])
+    expect(first.tabs.isPreview("third")).toBe(true)
+    expect(second.tabs.isPreview("second")).toBe(true)
+  } finally {
+    await Promise.allSettled(clients.map((client) => client.destroy()))
+  }
+})
+
+test("reopening a closed preview makes it permanent without replacing the current preview", async () => {
+  const setup = await renderSessionTabs("permanent", { persisted: ["permanent"], preview: true })
+
+  try {
+    await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "permanent"))
+    setup.route.navigate({ type: "session", sessionID: "closed-preview" })
+    await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "closed-preview"))
+    expect(setup.tabs.isPreview("closed-preview")).toBe(true)
+
+    setup.tabs.close("closed-preview")
+    await wait(() => setup.tabs.current() === "permanent" && setup.tabs.tabs().length === 1)
+    setup.route.navigate({ type: "session", sessionID: "current-preview" })
+    await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "current-preview"))
+
+    setup.tabs.reopen()
+    await wait(() => setup.tabs.current() === "closed-preview" && setup.tabs.tabs().length === 3)
+    await setup.flush()
+
+    expect(setup.tabs.tabs().map((tab) => tab.sessionID)).toEqual(["permanent", "closed-preview", "current-preview"])
+    expect(setup.tabs.isPreview("closed-preview")).toBe(false)
+    expect(setup.tabs.isPreview("current-preview")).toBe(true)
+  } finally {
+    await setup.destroy()
+  }
+})
+
+test("moving a preview promotes it before opening another preview", async () => {
+  const setup = await renderSessionTabs("first", { persisted: ["first", "last"], preview: true })
+
+  try {
+    await wait(() => setup.tabs.tabs().length === 2)
+    setup.route.navigate({ type: "session", sessionID: "moved-preview" })
+    await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "moved-preview"))
+
+    setup.tabs.move("moved-preview", 0)
+    expect(setup.tabs.isPreview("moved-preview")).toBe(false)
+    await wait(() => setup.tabs.tabs()[0]?.sessionID === "moved-preview")
+
+    setup.route.navigate({ type: "session", sessionID: "next-preview" })
+    await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "next-preview"))
+
+    expect(setup.tabs.tabs().map((tab) => tab.sessionID)).toEqual(["moved-preview", "first", "last", "next-preview"])
+    expect(setup.tabs.isPreview("next-preview")).toBe(true)
+  } finally {
+    await setup.destroy()
+  }
+})
+
+test("disabling previews clears local identity and prevents stale replacement after re-enabling", async () => {
+  const setup = await renderSessionTabs("first", { preview: true })
+
+  try {
+    await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "first") && setup.tabs.isPreview("first"))
+
+    await setup.setPreviews(false)
+    expect(setup.tabs.isPreview("first")).toBe(false)
+
+    await setup.setPreviews(true)
+    expect(setup.tabs.isPreview("first")).toBe(false)
+    setup.route.navigate({ type: "session", sessionID: "next" })
+    await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "next"))
+
+    expect(setup.tabs.tabs().map((tab) => tab.sessionID)).toEqual(["first", "next"])
+    expect(setup.tabs.isPreview("next")).toBe(true)
   } finally {
     await setup.destroy()
   }
