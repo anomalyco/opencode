@@ -209,6 +209,23 @@ describe("Instruction.resolve", () => {
   test.todo("fetches remote instructions from config URLs via HttpClient", () => {})
 })
 
+describe("Instruction.find", () => {
+  it.live("returns override over base in same directory", () =>
+    withFiles(
+      {
+        "AGENTS.override.md": "# Override",
+        "AGENTS.md": "# Base",
+      },
+      (dir) =>
+        Effect.gen(function* () {
+          const svc = yield* Instruction.Service
+          const found = yield* svc.find(dir)
+          expect(found).toBe(path.join(dir, "AGENTS.override.md"))
+        }),
+    ),
+  )
+})
+
 describe("Instruction.system", () => {
   it.live("loads both project and global AGENTS.md when both exist", () =>
     Effect.gen(function* () {
@@ -244,6 +261,27 @@ describe("Instruction.system", () => {
         provideInstance(projectTmp),
         provideInstruction({ home: globalTmp, config: globalTmp }, { disableClaudeCodePrompt: true }),
       )
+    }),
+  )
+
+  it.live("override in same directory wins over base in same directory", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpWithFiles({
+        "AGENTS.override.md": "# Override",
+        "AGENTS.md": "# Base",
+      })
+
+      yield* Effect.gen(function* () {
+        const svc = yield* Instruction.Service
+        const paths = yield* svc.systemPaths()
+        expect(paths.has(path.join(tmp, "AGENTS.override.md"))).toBe(true)
+        expect(paths.has(path.join(tmp, "AGENTS.md"))).toBe(false)
+
+        const rules = yield* svc.system()
+        expect(rules).toHaveLength(1)
+        expect(rules[0]).toContain("# Override")
+        expect(rules[0]).not.toContain("# Base")
+      }).pipe(provideInstance(tmp), provideInstruction({ home: tmp, config: tmp }))
     }),
   )
 })
