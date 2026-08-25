@@ -27,9 +27,11 @@ export const Parameters = Schema.Struct({
 const WebSearchProviderSchema = Schema.Literals(["exa", "parallel"])
 export type WebSearchProvider = Schema.Schema.Type<typeof WebSearchProviderSchema>
 
-export function selectWebSearchProvider(sessionID: string, flags = { exa: false, parallel: false }): WebSearchProvider {
-  const override = process.env.OPENCODE_WEBSEARCH_PROVIDER
-  if (override === "exa" || override === "parallel") return override
+export function selectWebSearchProvider(
+  sessionID: string,
+  flags: { exa: boolean; parallel: boolean; provider?: WebSearchProvider } = { exa: false, parallel: false },
+): WebSearchProvider {
+  if (flags.provider) return flags.provider
   if (flags.parallel) return "parallel"
   if (flags.exa) return "exa"
 
@@ -112,6 +114,7 @@ export const WebSearchTool = Tool.define(
           const provider = selectWebSearchProvider(ctx.sessionID, {
             exa: flags.enableExa,
             parallel: flags.enableParallel,
+            provider: flags.websearchProvider,
           })
           const title = webSearchProviderLabel(provider)
           yield* ctx.metadata({ title: `${title} "${params.query}"`, metadata: { provider } })

@@ -37,6 +37,10 @@ export class Service extends ConfigService.Service<Service>()("@opencode/Runtime
     enabled: bool("OPENCODE_ENABLE_PARALLEL"),
     legacy: bool("OPENCODE_EXPERIMENTAL_PARALLEL"),
   }).pipe(Config.map((flags) => flags.enabled || flags.legacy)),
+  websearchProvider: Config.string("OPENCODE_WEBSEARCH_PROVIDER").pipe(
+    Config.map((value) => (value === "exa" || value === "parallel" ? value : undefined)),
+    Config.orElse(() => Config.succeed(undefined)),
+  ),
   enableExperimentalModels: bool("OPENCODE_ENABLE_EXPERIMENTAL_MODELS"),
   enableQuestionTool: bool("OPENCODE_ENABLE_QUESTION_TOOL"),
   experimentalReferences: enabledByExperimental("OPENCODE_EXPERIMENTAL_REFERENCES"),
