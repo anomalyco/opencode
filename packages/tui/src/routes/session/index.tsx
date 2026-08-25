@@ -224,6 +224,9 @@ export function Session(props: {
     open: false,
     tab: undefined as string | undefined,
   })
+  createEffect(() => {
+    if (props.promptMuted && composer.open) setComposer("open", false)
+  })
   const disabled = createMemo(() => promptedPermissions().length > 0 || forms().length > 0)
 
   const lastAssistant = createMemo(() => {
