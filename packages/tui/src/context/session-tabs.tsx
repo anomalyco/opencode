@@ -331,8 +331,6 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       event.on("session.inbox.enqueued", (evt) => {
         if (!enabled() || evt.data.item.type !== "user") return
         const sessionID = root(evt.data.sessionID)
-        if (previews() && previewID() === sessionID && state().tabs.some((tab) => tab.sessionID === sessionID))
-          setPreview(undefined)
         if (current() === sessionID || !state().tabs.some((tab) => tab.sessionID === sessionID)) return
         setPromptPulses((pulses) => ({ ...pulses, [sessionID]: (pulses[sessionID] ?? 0) + 1 }))
       }),

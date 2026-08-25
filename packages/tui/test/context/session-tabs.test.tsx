@@ -328,7 +328,7 @@ test("replaces session previews without replacing permanent tabs or opening exis
   }
 })
 
-test("promotes session previews only when user prompts are admitted", async () => {
+test("server-wide prompt admissions do not promote a local session preview", async () => {
   const setup = await renderSessionTabs("preview", { preview: true })
 
   try {
@@ -348,7 +348,33 @@ test("promotes session previews only when user prompts are admitted", async () =
     expect(setup.tabs.isPreview("preview")).toBe(true)
 
     setup.emit(admitted("preview", "msg_2"))
-    await wait(() => !setup.tabs.isPreview("preview"))
+    await wait(() => setup.data.session.pending.list("preview").length === 2)
+    expect(setup.tabs.isPreview("preview")).toBe(true)
+
+    setup.tabs.promote("preview")
+    expect(setup.tabs.isPreview("preview")).toBe(false)
+  } finally {
+    await setup.destroy()
+  }
+})
+
+test("promotes a local preview before its tab has finished persisting", async () => {
+  const setup = await renderSessionTabs("permanent", { persisted: ["permanent"], preview: true })
+
+  try {
+    await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "permanent"))
+    setup.route.navigate({ type: "session", sessionID: "preview" })
+
+    expect(setup.tabs.isPreview("preview")).toBe(true)
+    expect(setup.tabs.tabs().some((tab) => tab.sessionID === "preview")).toBe(false)
+
+    setup.tabs.promote("preview")
+    expect(setup.tabs.isPreview("preview")).toBe(false)
+    await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "preview"))
+
+    setup.route.navigate({ type: "session", sessionID: "next" })
+    await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "next"))
+    expect(setup.tabs.tabs().map((tab) => tab.sessionID)).toEqual(["permanent", "preview", "next"])
   } finally {
     await setup.destroy()
   }
