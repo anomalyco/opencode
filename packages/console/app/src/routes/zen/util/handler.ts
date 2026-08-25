@@ -1114,7 +1114,7 @@ export async function handler(
           enrichment: (() => {
             if (billingSource === "subscription") return { plan: "sub" }
             if (billingSource === "byok") return { plan: "byok" }
-            if (billingSource === "lite") return { plan: "lite" }
+            if (billingSource === "lite") return { plan: "lite", costMultiplier: modelInfo.costMultiplier }
             return undefined
           })(),
         }),
