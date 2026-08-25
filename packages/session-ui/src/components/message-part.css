@@ -1336,8 +1336,18 @@
 body[data-new-layout] [data-component="user-message"] {
   font-weight: 440;
 
+  [data-slot="user-message-body"] {
+    max-width: min(80%, 64ch);
+  }
+
+  [data-slot="user-message-attachments"] + [data-slot="user-message-body"] {
+    margin-top: 8px;
+  }
+
   [data-slot="user-message-text"] {
-    background: var(--v2-background-bg-layer-01);
+    background: var(--v2-overlay-simple-overlay-hover);
+    padding: 10px 14px;
+    border-radius: 16px;
   }
 
   [data-slot="user-message-comments"] {
@@ -1367,19 +1377,10 @@ body[data-new-layout] [data-component="user-message"] {
     }
   }
 
-  [data-slot="user-message-body"] + [data-slot="user-message-attachments"],
-  [data-slot="user-message-comments"] + [data-slot="user-message-attachments"] {
-    margin-top: 8px;
-  }
-
   [data-slot="user-message-text"][data-comments] {
-    width: 342px;
-    padding-bottom: 12px;
+    width: 346px;
+    padding-bottom: 14px;
   }
-}
-
-[data-color-scheme="light"] body[data-new-layout] [data-component="user-message"] [data-slot="user-message-text"] {
-  background: var(--v2-background-bg-layer-02);
 }
 
 body:not([data-new-layout]) {

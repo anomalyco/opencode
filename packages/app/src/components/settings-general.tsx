@@ -55,6 +55,11 @@ type ShellSelectOption = {
   label: string
 }
 
+const followupOptions = [
+  { value: "queue" as const, labelKey: "settings.general.row.followup.option.queue" },
+  { value: "steer" as const, labelKey: "settings.general.row.followup.option.steer" },
+]
+
 // To prevent audio from overlapping/playing very quickly when navigating the settings menus,
 // delay the playback by 100ms during quick selection changes and pause existing sounds.
 const stopDemoSound = () => {
@@ -344,6 +349,23 @@ export const SettingsGeneral: Component = () => {
             size="small"
             triggerVariant="settings"
             triggerStyle={{ "min-width": "180px" }}
+          />
+        </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.followup.title")}
+          description={language.t("settings.general.row.followup.description")}
+        >
+          <Select
+            data-action="settings-followup"
+            options={followupOptions}
+            current={followupOptions.find((option) => option.value === settings.general.followup())}
+            value={(option) => option.value}
+            label={(option) => language.t(option.labelKey)}
+            onSelect={(option) => option && settings.general.setFollowup(option.value)}
+            variant="secondary"
+            size="small"
+            triggerVariant="settings"
           />
         </SettingsRow>
 

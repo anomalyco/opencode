@@ -28,6 +28,10 @@ import {
 import "./settings-v2.css"
 
 const schemeOptions: ("system" | "light" | "dark")[] = ["system", "light", "dark"]
+const followupOptions = [
+  { id: "queue" as const, labelKey: "settings.general.row.followup.option.queue" },
+  { id: "steer" as const, labelKey: "settings.general.row.followup.option.steer" },
+]
 const fontSettings = {
   ui: {
     action: "settings-ui-font",
@@ -332,6 +336,23 @@ export const SettingsGeneralV2: Component<{
         <PermissionScopeSetting controller={permissionScope} />
 
         <ShellSetting controller={shell} />
+
+        <SettingsRowV2
+          title={language.t("settings.general.row.followup.title")}
+          description={language.t("settings.general.row.followup.description")}
+        >
+          <SelectV2
+            appearance="inline"
+            data-action="settings-followup"
+            options={followupOptions}
+            current={followupOptions.find((option) => option.id === settings.general.followup())}
+            placement="bottom-end"
+            gutter={6}
+            value={(option) => option.id}
+            label={(option) => language.t(option.labelKey)}
+            onSelect={(option) => option && settings.general.setFollowup(option.id)}
+          />
+        </SettingsRowV2>
 
         <SettingsRowV2
           title={language.t("settings.general.row.reasoningSummaries.title")}

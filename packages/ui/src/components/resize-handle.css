@@ -5,13 +5,14 @@
   &::after {
     content: "";
     position: absolute;
-    opacity: 0;
-    transition: opacity 0.15s ease-in-out;
+    transition: background-color 0.15s ease-in-out;
+    background-color: var(--v2-border-border-base, var(--border-weak-base));
+    border-radius: 9999px;
   }
 
   &:hover::after,
   &:active::after {
-    opacity: 1;
+    background-color: var(--v2-border-border-strong, var(--border-strong-base));
   }
 
   &:where([data-direction="horizontal"]) {

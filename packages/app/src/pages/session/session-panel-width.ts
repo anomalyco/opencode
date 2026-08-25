@@ -4,7 +4,9 @@
 // minimum for the review pane and let the chat panel take everything else.
 export const SESSION_PANEL_WIDTH_MIN = 450
 export const REVIEW_PANE_WIDTH_MIN = 480
-export const REVIEW_PANE_WIDTH_MIN_SPLIT = 800
+// Split diffs show two columns; reserving less keeps the chat panel's resize
+// range non-degenerate on common window widths (800 locked max to min at ~1250px).
+export const REVIEW_PANE_WIDTH_MIN_SPLIT = 640
 
 export function sessionPanelWidthMax(input: { available: number; split: boolean }) {
   const pane = input.split ? REVIEW_PANE_WIDTH_MIN_SPLIT : REVIEW_PANE_WIDTH_MIN

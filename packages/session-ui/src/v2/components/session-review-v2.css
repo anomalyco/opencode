@@ -54,10 +54,6 @@
   overflow: visible;
 }
 
-[data-component="session-review-v2-sidebar-root"] [data-component="resize-handle"]::after {
-  background: var(--v2-border-border-muted, var(--border-weak-base));
-}
-
 [data-component="session-review-v2-sidebar-root"] [data-slot="session-review-v2-sidebar-header"] {
   display: flex;
   align-items: center;
