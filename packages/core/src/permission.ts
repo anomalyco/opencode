@@ -167,6 +167,7 @@ const layer = Layer.effect(
       readonly action: string
       readonly agent?: Agent.ID
     }) {
+      if (yield* hooks.has("permission", "evaluate")) return false
       const rules = yield* configured(input.sessionID, input.agent)
       const relevant = rules.filter((rule) => Wildcard.match(input.action, rule.action))
       for (let index = relevant.length - 1; index >= 0; index--) {
