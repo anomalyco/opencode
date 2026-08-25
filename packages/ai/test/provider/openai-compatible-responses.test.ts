@@ -225,6 +225,44 @@ describe("Open Responses-compatible route", () => {
     }),
   )
 
+  it.effect("replays only shared hosted tool items", () =>
+    Effect.gen(function* () {
+      const model = configure({
+        apiKey: "test-key",
+        baseURL: "https://responses.example.test/v1",
+        provider: "example",
+      }).model("example-model")
+      const items = [
+        { type: "web_search_call", id: "ws_1", status: "completed" },
+        { type: "x_search_call", id: "x_search_1", status: "completed" },
+        { type: "future_call", id: "future_1", status: "completed" },
+        { type: "file_search_call", id: "fs_1", queries: "not-an-array" },
+      ]
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: items.map((item) =>
+            Message.assistant({
+              type: "tool-result",
+              id: item.id,
+              name: item.type,
+              result: { type: "json", value: item },
+              providerExecuted: true,
+              providerMetadata: { openresponses: { itemId: item.id } },
+            }),
+          ),
+        }),
+      )
+
+      expect(prepared.body.input).toEqual([
+        items[0],
+        { role: "user", content: [{ type: "input_text", text: JSON.stringify(items[1]) }] },
+        { role: "user", content: [{ type: "input_text", text: JSON.stringify(items[2]) }] },
+        { role: "user", content: [{ type: "input_text", text: JSON.stringify(items[3]) }] },
+      ])
+    }),
+  )
+
   it.effect("routes response deltas by output index", () =>
     Effect.gen(function* () {
       const model = configure({

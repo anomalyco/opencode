@@ -793,6 +793,14 @@
               "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
               "description": "Submit dialog prompt"
             },
+            "dialog.integration.rename": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Rename integration account"
+            },
+            "dialog.integration.delete": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Delete integration account"
+            },
             "dialog.worktree.generate": {
               "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
               "description": "Generate worktree name"
@@ -945,7 +953,7 @@
           "type": "object",
           "properties": {
             "timeout": {
-              "anyOf": [{ "type": "integer", "exclusiveMinimum": 0 }, { "type": "null" }],
+              "anyOf": [{ "type": "integer", "allOf": [{ "exclusiveMinimum": 0 }] }, { "type": "null" }],
               "description": "Time in milliseconds to wait for a key after the leader key"
             }
           },
@@ -961,7 +969,7 @@
           "type": "object",
           "properties": {
             "speed": {
-              "anyOf": [{ "type": "number", "minimum": 0.001 }, { "type": "null" }],
+              "anyOf": [{ "type": "number", "allOf": [{ "minimum": 0.001 }] }, { "type": "null" }],
               "description": "Distance scrolled per input tick"
             },
             "acceleration": {
@@ -990,7 +998,7 @@
             },
             "sound": { "anyOf": [{ "type": "boolean" }, { "type": "null" }], "description": "Play attention sounds" },
             "volume": {
-              "anyOf": [{ "type": "number", "minimum": 0, "maximum": 1 }, { "type": "null" }],
+              "anyOf": [{ "type": "number", "allOf": [{ "minimum": 0 }, { "maximum": 1 }] }, { "type": "null" }],
               "description": "Attention sound volume from 0 to 1"
             },
             "sound_pack": {
@@ -1189,7 +1197,7 @@
               "description": "Restore session history on resume and terminal resize"
             },
             "replay_limit": {
-              "anyOf": [{ "type": "integer", "exclusiveMinimum": 0 }, { "type": "null" }],
+              "anyOf": [{ "type": "integer", "allOf": [{ "exclusiveMinimum": 0 }] }, { "type": "null" }],
               "description": "Maximum number of newest messages restored during replay"
             }
           },
@@ -1303,8 +1311,7 @@
                 "preventDefault": { "anyOf": [{ "type": "boolean" }, { "type": "null" }] },
                 "fallthrough": { "anyOf": [{ "type": "boolean" }, { "type": "null" }] }
               },
-              "required": ["key"],
-              "allOf": [{ "type": "object", "additionalProperties": {} }]
+              "required": ["key"]
             }
           ]
         },
@@ -1351,8 +1358,7 @@
                   "preventDefault": { "anyOf": [{ "type": "boolean" }, { "type": "null" }] },
                   "fallthrough": { "anyOf": [{ "type": "boolean" }, { "type": "null" }] }
                 },
-                "required": ["key"],
-                "allOf": [{ "type": "object", "additionalProperties": {} }]
+                "required": ["key"]
               }
             ]
           }
