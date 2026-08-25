@@ -217,6 +217,7 @@ export function nextTreeScrollTop(current: number, delta: number, scrollHeight: 
 
 export function nextSuggestionIndex(current: number, delta: -1 | 1, count: number) {
   if (count === 0) return -1
+  if (current === -1) return delta === 1 ? 0 : count - 1
   return (current + delta + count) % count
 }
 
