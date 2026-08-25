@@ -194,6 +194,12 @@ export function createPromptInputV2Controller(input: {
   // event.timeStamp so the guard never depends on the event clock source.
   const imeComposing = (event: KeyboardEvent) =>
     event.isComposing || composing || event.keyCode === 229 || performance.now() - lastCompositionEnd < 100
+  // True while a composition is in flight or just ended. The editor must stay
+  // completely inert in this window: dispatching state updates or touching the
+  // selection makes Safari abort the composition and split it into per-letter
+  // micro compositions, after which the confirming Enter arrives as a plain
+  // keyCode 13 that no guard can recognize.
+  const imeActive = () => composing || performance.now() - lastCompositionEnd < 100
 
   const onKeyDown = (event: KeyboardEvent) => {
     if (
@@ -306,6 +312,7 @@ export function createPromptInputV2Controller(input: {
     dispatch,
     onKeyDown,
     imeComposing,
+    imeActive,
     onCompositionStart() {
       composing = true
     },
