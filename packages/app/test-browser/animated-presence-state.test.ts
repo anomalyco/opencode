@@ -1,22 +1,30 @@
 import { expect, test } from "bun:test"
-import { createAnimatedPresenceState } from "@opencode-ai/ui/hooks"
+import { createAnimatedPresence } from "../src/runtime/animated-presence"
 import { createRoot, createSignal } from "solid-js"
 
 test("animates visibility changes without animating initial presence", () => {
   createRoot((dispose) => {
     const [value, setValue] = createSignal<string | undefined>("steer")
-    const state = createAnimatedPresenceState(value)
+    const presence = createAnimatedPresence(value, () => null)
 
-    expect(state()).toEqual({ show: true, animate: false, value: "steer" })
+    expect(presence.show()).toBe(true)
+    expect(presence.animate()).toBe(false)
+    expect(presence.value()).toBe("steer")
+    expect(presence.present()).toBe(true)
 
     setValue("queue")
-    expect(state()).toEqual({ show: true, animate: false, value: "queue" })
+    expect(presence.animate()).toBe(false)
+    expect(presence.value()).toBe("queue")
 
     setValue(undefined)
-    expect(state()).toEqual({ show: false, animate: true, value: "queue" })
+    expect(presence.show()).toBe(false)
+    expect(presence.animate()).toBe(true)
+    expect(presence.value()).toBe("queue")
 
     setValue("steer")
-    expect(state()).toEqual({ show: true, animate: true, value: "steer" })
+    expect(presence.show()).toBe(true)
+    expect(presence.animate()).toBe(true)
+    expect(presence.value()).toBe("steer")
 
     dispose()
   })
@@ -25,12 +33,16 @@ test("animates visibility changes without animating initial presence", () => {
 test("animates the first appearance when initially hidden", () => {
   createRoot((dispose) => {
     const [value, setValue] = createSignal<string | undefined>()
-    const state = createAnimatedPresenceState(value)
+    const presence = createAnimatedPresence(value, () => null)
 
-    expect(state()).toEqual({ show: false, animate: false, value: undefined })
+    expect(presence.show()).toBe(false)
+    expect(presence.animate()).toBe(false)
+    expect(presence.present()).toBe(false)
 
     setValue("steer")
-    expect(state()).toEqual({ show: true, animate: true, value: "steer" })
+    expect(presence.show()).toBe(true)
+    expect(presence.animate()).toBe(true)
+    expect(presence.value()).toBe("steer")
 
     dispose()
   })
