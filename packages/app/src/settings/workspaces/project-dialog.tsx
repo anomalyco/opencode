@@ -39,7 +39,7 @@ function ProjectSettingsDialog(props: { project: LocalProject; server: ServerCon
       <Button type="button" variant="neutral" disabled={model.save.isPending} onClick={model.close}>
         {language.t("common.cancel")}
       </Button>
-      <Button type="submit" variant="contrast" disabled={!model.supported || model.save.isPending}>
+      <Button type="submit" variant="contrast" disabled={model.save.isPending}>
         {model.save.isPending ? language.t("common.saving") : language.t("common.save")}
       </Button>
     </DialogFooter>

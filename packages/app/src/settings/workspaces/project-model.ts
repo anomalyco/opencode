@@ -8,7 +8,6 @@ import { type LocalProject } from "@/shell/state/layout"
 import { ServerConnection } from "@/runtime/server/registry"
 
 export function createEditProjectModel(props: { project: LocalProject; server: ServerConnection.Any }) {
-  const supported = true
   const dialog = useDialog()
   const global = useGlobal()
   const serverCtx = createMemo(() => global.ensureServerCtx(props.server))
@@ -92,7 +91,7 @@ export function createEditProjectModel(props: { project: LocalProject; server: S
 
   function submit(event: SubmitEvent) {
     event.preventDefault()
-    if (!supported || save.isPending) return
+    if (save.isPending) return
     save.mutate()
   }
 
@@ -102,7 +101,6 @@ export function createEditProjectModel(props: { project: LocalProject; server: S
     folderName,
     defaultName,
     save,
-    supported,
     submit,
     drop,
     dragOver,
