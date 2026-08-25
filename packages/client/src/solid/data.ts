@@ -521,6 +521,9 @@ export function createData(config: CreateDataInput) {
         void result.location.vcs.sync().catch((error) => console.error("Failed to preload VCS info", error))
         void result.project.sync().catch((error) => console.error("Failed to preload projects", error))
         return
+      case "project.updated":
+        setStore("project", "info", event.data.id, reconcile(event.data))
+        return
       case "session.created":
         sessionOutbox.delete(event.data.sessionID)
         result.session.invalidate(event.data.sessionID)

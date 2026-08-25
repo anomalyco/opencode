@@ -2,17 +2,20 @@ import { describe, expect } from "bun:test"
 import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
-import { Effect, Layer } from "effect"
+import { Effect, Fiber, Stream } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { Bus } from "@opencode-ai/core/bus"
 import { Database } from "@opencode-ai/core/database/database"
 import { Project } from "@opencode-ai/core/project"
+import { ProjectSchema } from "@opencode-ai/core/project/schema"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Hash } from "@opencode-ai/util/hash"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
-const it = testEffect(Layer.merge(AppNodeBuilder.build(Project.node), AppNodeBuilder.build(Database.node)))
+const it = testEffect(AppNodeBuilder.build(LayerNode.group([Project.node, Database.node, Bus.node])))
 
 describe("Project.list", () => {
   it.effect("returns complete projects ordered by recent update", () =>
@@ -157,6 +160,72 @@ describe("Project.resolve", () => {
       expect(result.canonical).toBe(result.directory)
       expect(result.previous).toBeUndefined()
       expect(result.vcs).toBeUndefined()
+    }),
+  )
+
+  it.live("does not publish project updates for first or repeated resolutions", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      yield* Effect.promise(() => initRepo(tmp.path, { commit: true, remote: "git@github.com:owner/repo.git" }))
+      const project = yield* Project.Service
+      const bus = yield* Bus.Service
+      const updates: Project.Info[] = []
+      yield* bus.subscribe(ProjectSchema.Event.Updated).pipe(
+        Stream.runForEach((event) => Effect.sync(() => updates.push(event.data))),
+        Effect.forkScoped({ startImmediately: true }),
+      )
+
+      yield* project.resolve(abs(tmp.path))
+      yield* project.resolve(abs(tmp.path))
+      yield* Effect.yieldNow
+
+      expect(updates).toEqual([])
+    }),
+  )
+
+  it.live("publishes preserved project metadata when its canonical directory is renamed", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      const before = path.join(tmp.path, "before")
+      const after = path.join(tmp.path, "after")
+      yield* Effect.promise(() => fs.mkdir(before))
+      yield* Effect.promise(() => initRepo(before, { commit: true, remote: "git@github.com:owner/repo.git" }))
+      const project = yield* Project.Service
+      const bus = yield* Bus.Service
+      const initial = yield* project.resolve(abs(before))
+      yield* project.update({ projectID: initial.id, name: "Preserved name" })
+      const updated = yield* bus
+        .subscribe(ProjectSchema.Event.Updated)
+        .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
+
+      yield* Effect.promise(() => fs.rename(before, after))
+      const renamed = yield* project.resolve(abs(after))
+      const events = Array.from(yield* Fiber.join(updated))
+
+      expect(renamed.id).toBe(initial.id)
+      expect(renamed.canonical).toBe(yield* real(after))
+      expect(events).toHaveLength(1)
+      expect(events.map((event) => event.data)).toEqual((yield* project.list()).filter((item) => item.id === initial.id))
+      expect(events[0]?.data).toMatchObject({
+        id: initial.id,
+        canonical: yield* real(after),
+        name: "Preserved name",
+      })
+
+      yield* bus.subscribe(ProjectSchema.Event.Updated).pipe(
+        Stream.runForEach((event) => Effect.sync(() => events.push(event))),
+        Effect.forkScoped({ startImmediately: true }),
+      )
+      yield* project.resolve(abs(after))
+      yield* Effect.yieldNow
+
+      expect(events).toHaveLength(1)
     }),
   )
 

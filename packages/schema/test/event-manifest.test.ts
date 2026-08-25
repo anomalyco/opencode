@@ -41,6 +41,7 @@ describe("public event manifest", () => {
     expect(EventManifest.Server.get("mcp.resources.changed")).toBe(McpEvent.ResourcesChanged)
     expect(EventManifest.Server.get("session.created")).toBe(SessionEvent.Created)
     expect(EventManifest.Server.get("session.deleted")).toBe(SessionEvent.Deleted)
+    expect(EventManifest.Server.get("project.updated")).toBe(Project.Event.Updated)
     expect(EventManifest.Server.has("mcp.tools.changed")).toBe(false)
     expect(EventManifest.Server.has("question.asked")).toBe(false)
     expect(EventManifest.Server.has("question.replied")).toBe(false)
