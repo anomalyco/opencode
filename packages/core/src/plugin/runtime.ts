@@ -26,6 +26,7 @@ export interface Interface {
     | "interrupt"
     | "synthetic"
     | "wait"
+    | "context"
   >
   readonly job: Pick<Job.Interface, "start" | "wait" | "block" | "background" | "cancel">
   readonly location: {
@@ -81,6 +82,7 @@ export const layerWithCell = (cell: Cell) =>
         interrupt: (sessionID) => require(cell, (runtime) => runtime.session.interrupt(sessionID)),
         synthetic: (input) => require(cell, (runtime) => runtime.session.synthetic(input)),
         wait: (sessionID) => require(cell, (runtime) => runtime.session.wait(sessionID)),
+        context: (sessionID) => require(cell, (runtime) => runtime.session.context(sessionID)),
       },
       job: {
         start: (input) => require(cell, (runtime) => runtime.job.start(input)),
