@@ -9,7 +9,6 @@ import { closeHomeProject, errorMessage, homeProjectDirectories } from "@/shell/
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { showToast } from "@/shell/notifications/toast"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { createResource } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { HomeController } from "../model"
 import { useGlobal } from "@/runtime/server/runtime"
@@ -22,14 +21,9 @@ export function createHomeProjectsController(home: HomeController) {
   const openSettings = useSettingsCommand()
   const serverManagement = useServerActionsController()
   const global = useGlobal()
-  const [_state, setState, _, ready] = persisted(
+  const [state, setState] = persisted(
     Persist.global("home.servers"),
     createStore({ collapsed: {} as Record<string, boolean> }),
-  )
-  const [state] = createResource(
-    () => ready.promise ?? Promise.resolve(),
-    (promise) => promise.then(() => _state),
-    { initialValue: _state },
   )
   function directories(project: LocalProject) {
     return [project.worktree, ...(project.sandboxes ?? [])]
@@ -50,10 +44,10 @@ export function createHomeProjectsController(home: HomeController) {
       list: home.server.list,
       health: home.server.health,
       projects: home.project.forServer,
-      collapsed: (conn: ServerConnection.Any) => state().collapsed[ServerConnection.key(conn)] ?? false,
+      collapsed: (conn: ServerConnection.Any) => state.collapsed[ServerConnection.key(conn)] ?? false,
       toggleCollapsed: (conn: ServerConnection.Any) => {
         const key = ServerConnection.key(conn)
-        setState("collapsed", key, !state().collapsed[key])
+        setState("collapsed", key, !state.collapsed[key])
       },
       canDefault: serverManagement.defaults.available,
       defaultKey: serverManagement.defaults.key,

@@ -3,7 +3,7 @@ import { type HomeProjectSelection, useLayout } from "@/shell/state/layout"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { useTabs } from "@/shell/tabs/tabs"
 import { toggleHomeProjectSelection } from "@/shell/layout/helpers"
-import { createEffect, createMemo, startTransition } from "solid-js"
+import { createEffect, createMemo } from "solid-js"
 
 export function createHomeController() {
   const layout = useLayout()
@@ -49,8 +49,7 @@ export function createHomeController() {
     selection: {
       value: selection,
       set: setSelection,
-      focusServer: (conn: ServerConnection.Any) =>
-        void startTransition(() => setSelection({ server: ServerConnection.key(conn) })),
+      focusServer: (conn: ServerConnection.Any) => setSelection({ server: ServerConnection.key(conn) }),
     },
     server: {
       list: () => servers.visible,

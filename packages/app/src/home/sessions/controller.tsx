@@ -72,7 +72,7 @@ export function createHomeSessionsController(home: HomeController) {
     if (!ctx || !conn) return []
     const server = ServerConnection.key(conn)
     return retainHomeSessions(
-      mergeHomeSessionIndex(sessionLoad.data?.() ?? [], ctx.data.session.list()).filter(
+      mergeHomeSessionIndex(sessionLoad.isPending ? [] : (sessionLoad.data?.() ?? []), ctx.data.session.list()).filter(
         (session) => !removed.keys.includes(`${server}\0${session.id}`),
       ),
       HOME_SESSION_LIMIT,
@@ -256,7 +256,7 @@ export function createHomeSessionsController(home: HomeController) {
     data: {
       records,
       groups,
-      loading: () => sessionLoad.isLoading,
+      loading: () => sessionLoad.isPending,
       searchRecords: allRecords,
     },
     session: {

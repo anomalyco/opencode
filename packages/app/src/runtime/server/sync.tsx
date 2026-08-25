@@ -66,11 +66,11 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
     provider_auth: {},
     get path() {
       const EMPTY = { state: "", config: "", worktree: "", directory: "", home: "" }
-      if (pathQuery.isLoading) return EMPTY
+      if (pathQuery.isPending) return EMPTY
       return pathQuery.data ?? EMPTY
     },
     get config() {
-      if (configQuery.isLoading) return {}
+      if (configQuery.isPending) return {}
       return configQuery.data ?? {}
     },
     get reload() {
