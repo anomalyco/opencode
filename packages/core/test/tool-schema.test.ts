@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
+import { z } from "zod"
 import type { Info } from "@opencode-ai/schema/tool"
 import { Tool } from "../src/tool"
 import { definition, execute } from "../src/tool/runtime"
@@ -137,6 +138,43 @@ test("portable schemas validate and describe typed tools", async () => {
   })
   const result = await Effect.runPromise(execute(tool, { count: "41" }, {} as Tool.Context))
   expect(result.output).toBe("42")
+})
+
+test("Zod schemas validate, transform, and describe typed tools", async () => {
+  const tool: Info = {
+    name: "zod",
+    description: "Zod tool",
+    input: z.object({ count: z.string().transform(Number) }),
+    output: z.object({ count: z.number() }),
+    execute: ({ count }) => Effect.succeed({ output: { count: count + 1 } }),
+  }
+
+  expect(definition(tool)).toEqual({
+    name: "zod",
+    description: "Zod tool",
+    inputSchema: {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      type: "object",
+      properties: { count: { type: "string" } },
+      required: ["count"],
+    },
+    outputSchema: {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      type: "object",
+      properties: { count: { type: "number" } },
+      required: ["count"],
+      additionalProperties: false,
+    },
+  })
+  expect(await Effect.runPromise(execute(tool, { count: "41" }, {} as Tool.Context))).toMatchObject({
+    output: { count: 42 },
+  })
+  expect(await Effect.runPromise(Effect.flip(execute(tool, { count: 41 }, {} as Tool.Context)))).toEqual(
+    new Tool.Error({
+      message:
+        'Invalid arguments for tool "zod":\n- count: Invalid input: expected string, received number\n\nArguments provided:\n{\n  "count": 41\n}\n\nUpdate the arguments and call the tool again.',
+    }),
+  )
 })
 
 test("portable schema failures become tool failures", async () => {
