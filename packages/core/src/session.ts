@@ -142,7 +142,7 @@ export class BusyError extends Schema.TaggedError<BusyError>()("Session.BusyErro
 export class MessageUpdateError extends Schema.TaggedError<MessageUpdateError>()("Session.MessageUpdateError", {
   sessionID: SessionSchema.ID,
   messageID: SessionMessage.ID,
-  reason: Schema.Literals(["not_assistant", "incomplete"]),
+  reason: Schema.Literals(["not_assistant", "incomplete", "unfinished_tool"]),
 }) {}
 export class InboxConflictError extends Schema.TaggedError<InboxConflictError>()("Session.InboxConflictError", {
   sessionID: SessionSchema.ID,
@@ -572,6 +572,7 @@ const layer = Layer.effect(
       }),
       updateMessage: Effect.fn("Session.updateMessage")(function* (input) {
         yield* result.get(input.sessionID)
+        if ((yield* execution.active).has(input.sessionID)) return yield* new BusyError({ sessionID: input.sessionID })
         const message = yield* result.message(input)
         if (!message) return yield* new MessageNotFoundError({ sessionID: input.sessionID, messageID: input.messageID })
         if (message.type !== "assistant")
@@ -580,12 +581,22 @@ const layer = Layer.effect(
             messageID: input.messageID,
             reason: "not_assistant",
           })
-        if ((yield* execution.active).has(input.sessionID)) return yield* new BusyError({ sessionID: input.sessionID })
         if (!message.time.completed)
           return yield* new MessageUpdateError({
             sessionID: input.sessionID,
             messageID: input.messageID,
             reason: "incomplete",
+          })
+        if (
+          input.content.some(
+            (content) =>
+              content.type === "tool" && (content.state.status === "streaming" || content.state.status === "running"),
+          )
+        )
+          return yield* new MessageUpdateError({
+            sessionID: input.sessionID,
+            messageID: input.messageID,
+            reason: "unfinished_tool",
           })
         yield* bus.publish(SessionEvent.MessageContentUpdated, {
           sessionID: input.sessionID,

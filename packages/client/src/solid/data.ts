@@ -167,6 +167,10 @@ function createSync() {
     has(key: string) {
       return state.has(key)
     },
+    pending(key: string) {
+      const active = state.get(key)
+      return active !== undefined && active !== true
+    },
     invalidate(key?: string) {
       if (key) {
         const active = state.get(key)
@@ -705,12 +709,17 @@ export function createData(config: CreateDataInput) {
           match.time.completed = event.created
         })
         return
-      case "session.message.content.updated":
-        message.update(event.data.sessionID, (draft, index) => {
-          const assistant = message.assistant(draft, index, event.data.messageID)
-          if (assistant) assistant.content = [...event.data.content]
-        })
+      case "session.message.content.updated": {
+        if (store.session.message[event.data.sessionID])
+          message.update(event.data.sessionID, (draft, index) => {
+            const assistant = message.assistant(draft, index, event.data.messageID)
+            if (assistant) assistant.content = [...event.data.content]
+          })
+        if (!sync.pending(`session.message:${event.data.sessionID}`)) return
+        result.session.message.invalidate(event.data.sessionID)
+        void result.session.message.sync(event.data.sessionID)
         return
+      }
       case "session.step.started":
         message.update(event.data.sessionID, (draft, index) => {
           const position = index.get(event.data.assistantMessageID)

@@ -135,24 +135,33 @@ test("loads bounded message pages", async () => {
   }
 })
 
-test("projects assistant content replacement events into cached messages", async () => {
+test("preserves assistant content replacement events across an active message read", async () => {
   const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  const release = Promise.withResolvers<void>()
+  let requests = 0
+  const content = [
+    { type: "text" as const, text: "replacement" },
+    { type: "reasoning" as const, text: "reasoning", time: { created: 3 } },
+  ]
   const api = OpenCode.make({
     baseUrl: "http://opencode.local",
-    fetch: async () =>
-      Response.json({
+    fetch: async () => {
+      const current = ++requests
+      if (current === 2) await release.promise
+      return Response.json({
         data: [
           {
             id: "msg_assistant",
             type: "assistant",
             agent: "build",
             model: { id: "model", providerID: "provider" },
-            content: [{ type: "text", text: "original" }],
+            content: current === 3 ? content : [{ type: "text", text: "original" }],
             time: { created: 1, completed: 2 },
           },
         ],
         cursor: {},
-      }),
+      })
+    },
   })
   const setup = createRoot((dispose) => ({
     data: createData({
@@ -171,6 +180,9 @@ test("projects assistant content replacement events into cached messages", async
 
   try {
     await setup.data.session.message.sync("ses_refresh")
+    setup.data.session.message.invalidate("ses_refresh")
+    const stale = setup.data.session.message.sync("ses_refresh")
+    await wait(() => requests === 2)
     const updated: OpenCodeEvent = {
       id: "evt_message_updated",
       created: 3,
@@ -179,15 +191,16 @@ test("projects assistant content replacement events into cached messages", async
       data: {
         sessionID: "ses_refresh",
         messageID: "msg_assistant",
-        content: [
-          { type: "text", text: "replacement" },
-          { type: "reasoning", text: "reasoning", time: { created: 3 } },
-        ],
+        content,
       },
     }
     listeners.forEach((listener) => listener({ name: updated.type, details: updated }))
 
-    expect(setup.data.session.message.list("ses_refresh")[0]).toMatchObject({ content: updated.data.content })
+    expect(setup.data.session.message.list("ses_refresh")[0]).toMatchObject({ content })
+    release.resolve()
+    await stale
+    await wait(() => requests === 3)
+    expect(setup.data.session.message.list("ses_refresh")[0]).toMatchObject({ content })
   } finally {
     setup.dispose()
   }

@@ -475,19 +475,6 @@ export type SessionLogOutput =
           readonly id: Event.ID
           readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
-          readonly type: "session.message.content.updated"
-          readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
-          readonly location?: Location.Ref | undefined
-          readonly data: {
-            readonly sessionID: Session.ID
-            readonly messageID: SessionMessage.ID
-            readonly content: ReadonlyArray<SessionMessage.AssistantContentEncoded>
-          }
-        }
-      | {
-          readonly id: Event.ID
-          readonly created: number
-          readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.deleted"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
           readonly location?: Location.Ref | undefined
@@ -688,7 +675,7 @@ export type SessionLogOutput =
             readonly assistantMessageID: SessionMessage.ID
             readonly finish: "stop" | "length" | "tool-calls" | "content-filter" | "error" | "unknown"
             readonly rawFinish?: string | undefined
-            readonly providerState?: { readonly [x: string]: unknown } | undefined
+            readonly providerState?: SessionMessage.ProviderState | undefined
             readonly cost: number & Brand.Brand<"Money.USD">
             readonly tokens: {
               readonly input: number
@@ -713,7 +700,7 @@ export type SessionLogOutput =
             readonly error: { readonly type: string; readonly message: string; readonly status?: number | undefined }
             readonly finish?: "content-filter" | undefined
             readonly rawFinish?: string | undefined
-            readonly providerState?: { readonly [x: string]: unknown } | undefined
+            readonly providerState?: SessionMessage.ProviderState | undefined
             readonly cost?: (number & Brand.Brand<"Money.USD">) | undefined
             readonly tokens?:
               | {
@@ -752,7 +739,7 @@ export type SessionLogOutput =
             readonly assistantMessageID: SessionMessage.ID
             readonly ordinal: number
             readonly text: string
-            readonly state?: { readonly [x: string]: unknown } | undefined
+            readonly state?: SessionMessage.ProviderState | undefined
           }
         }
       | {
@@ -766,7 +753,7 @@ export type SessionLogOutput =
             readonly sessionID: Session.ID
             readonly assistantMessageID: SessionMessage.ID
             readonly ordinal: number
-            readonly state?: { readonly [x: string]: unknown } | undefined
+            readonly state?: SessionMessage.ProviderState | undefined
           }
         }
       | {
@@ -781,7 +768,7 @@ export type SessionLogOutput =
             readonly assistantMessageID: SessionMessage.ID
             readonly ordinal: number
             readonly text: string
-            readonly state?: { readonly [x: string]: unknown } | undefined
+            readonly state?: SessionMessage.ProviderState | undefined
           }
         }
       | {
@@ -825,7 +812,7 @@ export type SessionLogOutput =
             readonly id: string
             readonly input: { readonly [x: string]: unknown }
             readonly executed: boolean
-            readonly state?: { readonly [x: string]: unknown } | undefined
+            readonly state?: SessionMessage.ProviderState | undefined
           }
         }
       | {
@@ -861,7 +848,7 @@ export type SessionLogOutput =
             ]
             readonly metadata?: { readonly [x: string]: Schema.Json } | undefined
             readonly executed: boolean
-            readonly resultState?: { readonly [x: string]: unknown } | undefined
+            readonly resultState?: SessionMessage.ProviderState | undefined
           }
         }
       | {
@@ -900,7 +887,7 @@ export type SessionLogOutput =
               | undefined
             readonly metadata?: { readonly [x: string]: Schema.Json } | undefined
             readonly executed: boolean
-            readonly resultState?: { readonly [x: string]: unknown } | undefined
+            readonly resultState?: SessionMessage.ProviderState | undefined
           }
         }
       | {
@@ -986,6 +973,19 @@ export type SessionLogOutput =
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
           readonly location?: Location.Ref | undefined
           readonly data: { readonly sessionID: Session.ID; readonly to: SessionMessage.ID }
+        }
+      | {
+          readonly id: Event.ID
+          readonly created: number
+          readonly metadata?: { readonly [x: string]: unknown } | undefined
+          readonly type: "session.message.content.updated"
+          readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
+          readonly location?: Location.Ref | undefined
+          readonly data: {
+            readonly sessionID: Session.ID
+            readonly messageID: SessionMessage.ID
+            readonly content: ReadonlyArray<SessionMessage.AssistantContentEncoded>
+          }
         }
       | {
           readonly id: Event.ID

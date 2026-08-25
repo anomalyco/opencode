@@ -1,6 +1,7 @@
 import { describe, expect } from "bun:test"
+import path from "path"
 import { Effect, Layer, Stream } from "effect"
-import { eq } from "drizzle-orm"
+import { asc, eq } from "drizzle-orm"
 import { Agent } from "@opencode-ai/core/agent"
 import { Bus } from "@opencode-ai/core/bus"
 import { Database } from "@opencode-ai/core/database/database"
@@ -9,6 +10,7 @@ import { EventTable } from "@opencode-ai/core/event/sql"
 import { Location } from "@opencode-ai/core/location"
 import { Model } from "@opencode-ai/core/model"
 import { Project } from "@opencode-ai/core/project"
+import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { Provider } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
@@ -19,6 +21,7 @@ import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { Money } from "@opencode-ai/schema/money"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 import { globalProjectLayer } from "./lib/project"
 
@@ -114,6 +117,65 @@ describe("Session.updateMessage", () => {
     }),
   )
 
+  it.effect("replays updated assistant content into a fresh projection", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const bus = yield* Bus.Service
+      const db = (yield* Database.Service).db
+      const created = yield* session.create({ location })
+      const messageID = SessionMessage.ID.create()
+      yield* start(bus, created.id, messageID)
+      yield* complete(bus, created.id, messageID)
+      const content = [
+        SessionMessage.AssistantReasoning.make({
+          type: "reasoning",
+          text: "replayed reasoning",
+          time: { created: created.time.created },
+        }),
+      ]
+      yield* session.updateMessage({ sessionID: created.id, messageID, content })
+
+      const serialized = (yield* db
+        .select()
+        .from(EventTable)
+        .where(eq(EventTable.aggregate_id, created.id))
+        .orderBy(asc(EventTable.seq))
+        .all()
+        .pipe(Effect.orDie)).map((event) => ({
+        id: event.id,
+        created: event.created,
+        aggregateID: event.aggregate_id,
+        seq: event.seq,
+        type: event.type,
+        data: event.data,
+      }))
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      const target = AppNodeBuilder.build(
+        LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionStore.node]),
+        [
+          [Database.node, Database.configured({ path: path.join(tmp.path, "target.sqlite") })],
+          [Bus.node, Bus.configured({ persist: true })],
+        ],
+      )
+
+      yield* Effect.gen(function* () {
+        const database = (yield* Database.Service).db
+        const replay = yield* Bus.Service
+        const store = yield* SessionStore.Service
+        yield* database
+          .insert(ProjectTable)
+          .values({ id: Project.ID.global, worktree: location.directory, sandboxes: [] })
+          .run()
+          .pipe(Effect.orDie)
+        yield* Effect.forEach(serialized, (event) => replay.replay(event), { discard: true })
+        expect((yield* store.message(messageID))?.message).toMatchObject({ content })
+      }).pipe(Effect.provide(Layer.fresh(target)))
+    }),
+  )
+
   it.effect("rejects missing and cross-session messages", () =>
     Effect.gen(function* () {
       const session = yield* Session.Service
@@ -134,7 +196,7 @@ describe("Session.updateMessage", () => {
     }),
   )
 
-  it.effect("rejects non-assistant and incomplete assistant messages", () =>
+  it.effect("rejects non-assistant messages, incomplete assistants, and unfinished tools", () =>
     Effect.gen(function* () {
       const session = yield* Session.Service
       const bus = yield* Bus.Service
@@ -153,6 +215,18 @@ describe("Session.updateMessage", () => {
       expect(yield* Effect.flip(session.updateMessage({ sessionID: created.id, messageID, content: [] }))).toEqual(
         new Session.MessageUpdateError({ sessionID: created.id, messageID, reason: "incomplete" }),
       )
+
+      yield* complete(bus, created.id, messageID)
+      const unfinished = SessionMessage.AssistantTool.make({
+        type: "tool",
+        id: "call_unfinished",
+        name: "read",
+        state: { status: "streaming", input: "" },
+        time: { created: created.time.created },
+      })
+      expect(
+        yield* Effect.flip(session.updateMessage({ sessionID: created.id, messageID, content: [unfinished] })),
+      ).toEqual(new Session.MessageUpdateError({ sessionID: created.id, messageID, reason: "unfinished_tool" }))
     }),
   )
 

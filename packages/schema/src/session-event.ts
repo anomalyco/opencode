@@ -123,6 +123,7 @@ export const MessageContentUpdated = Event.durable({
   schema: {
     ...Base,
     messageID: SessionMessage.ID,
+    // Public events are framed directly, so timestamps must already be encoded.
     content: Schema.Array(SessionMessage.AssistantContentEncoded),
   },
 })
@@ -610,7 +611,6 @@ export const Definitions = Event.inventory(
   Moved,
   Renamed,
   Viewed,
-  MessageContentUpdated,
   UsageUpdated,
   Deleted,
   Forked,
@@ -651,6 +651,7 @@ export const Definitions = Event.inventory(
   RevertEvent.Staged,
   RevertEvent.Cleared,
   RevertEvent.Committed,
+  MessageContentUpdated,
 )
 
 // UsageRecorded is durable but internal: excluded from Definitions so it never reaches the public manifest.

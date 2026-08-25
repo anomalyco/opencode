@@ -103,6 +103,22 @@ it.live("updates completed assistant message content through the session HTTP AP
     )
     expect(projected.data.content).toEqual(content)
     expect((yield* update(state.assistant, { text: "not a content array" })).status).toBe(400)
+    const unfinished = yield* update(state.assistant, {
+      content: [
+        {
+          type: "tool",
+          id: "call_unfinished",
+          name: "read",
+          state: { status: "streaming", input: "" },
+          time: { created: 123 },
+        },
+      ],
+    })
+    expect(unfinished.status).toBe(400)
+    expect(yield* Effect.promise(() => unfinished.json())).toMatchObject({
+      _tag: "InvalidRequestError",
+      field: "content",
+    })
     const nonAssistant = yield* update(state.user, { content: [] })
     expect(nonAssistant.status).toBe(400)
     expect(yield* Effect.promise(() => nonAssistant.json())).toMatchObject({ _tag: "InvalidRequestError" })

@@ -155,16 +155,6 @@ export type InstructionEntryKey = string
 
 export type SessionGenerateResponse = { data: { text: string } }
 
-export type SessionMessageProviderState1 = { [x: string]: any }
-
-export type SessionMessageToolStateRunning1 = {
-  status: "running"
-  input: { [x: string]: any }
-  metadata: { [x: string]: JsonValue }
-}
-
-export type ToolFileContent1 = { type: "file"; uri: string; mime: string; name?: string | undefined }
-
 export type SessionInboxSyntheticPayload1 = { text: string; description?: string; metadata?: { [x: string]: any } }
 
 export type ShellInfo = {
@@ -178,6 +168,16 @@ export type ShellInfo = {
   exit?: number
   metadata: { [x: string]: any }
   time: { started: number; completed?: number }
+}
+
+export type SessionMessageProviderState1 = { [x: string]: any }
+
+export type ToolFileContent1 = { type: "file"; uri: string; mime: string; name?: string | undefined }
+
+export type SessionMessageToolStateRunning1 = {
+  status: "running"
+  input: { [x: string]: any }
+  metadata: { [x: string]: JsonValue }
 }
 
 export type EventLogSynced = { type: "log.synced"; aggregateID: string; seq?: number }
@@ -1179,13 +1179,37 @@ export type McpResourcesChanged = {
   data: { server: string }
 }
 
-export type SessionMessageAssistantText1 = { type: "text"; text: string; state?: SessionMessageProviderState1 }
+export type SessionShellStarted = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.shell.started"
+  durable: { aggregateID: string; seq: number; version: 1 }
+  location?: LocationRef
+  data: { sessionID: string; shell: ShellInfo }
+}
 
-export type SessionMessageAssistantReasoning1 = {
-  type: "reasoning"
-  text: string
-  state?: SessionMessageProviderState1
-  time?: { created: number; completed?: number }
+export type SessionShellEnded = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.shell.ended"
+  durable: { aggregateID: string; seq: number; version: 1 }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    shell: ShellInfo
+    output: { output: string; cursor: number; size: number; truncated: boolean }
+  }
+}
+
+export type ShellCreated = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "shell.created"
+  location?: LocationRef
+  data: { info: ShellInfo }
 }
 
 export type SessionStepEnded = {
@@ -1288,40 +1312,16 @@ export type SessionToolCalled = {
   }
 }
 
+export type SessionMessageAssistantText1 = { type: "text"; text: string; state?: SessionMessageProviderState1 }
+
+export type SessionMessageAssistantReasoning1 = {
+  type: "reasoning"
+  text: string
+  state?: SessionMessageProviderState1
+  time?: { created: number; completed?: number }
+}
+
 export type ToolContent1 = ToolTextContent | ToolFileContent1
-
-export type SessionShellStarted = {
-  id: string
-  created: number
-  metadata?: { [x: string]: any }
-  type: "session.shell.started"
-  durable: { aggregateID: string; seq: number; version: 1 }
-  location?: LocationRef
-  data: { sessionID: string; shell: ShellInfo }
-}
-
-export type SessionShellEnded = {
-  id: string
-  created: number
-  metadata?: { [x: string]: any }
-  type: "session.shell.ended"
-  durable: { aggregateID: string; seq: number; version: 1 }
-  location?: LocationRef
-  data: {
-    sessionID: string
-    shell: ShellInfo
-    output: { output: string; cursor: number; size: number; truncated: boolean }
-  }
-}
-
-export type ShellCreated = {
-  id: string
-  created: number
-  metadata?: { [x: string]: any }
-  type: "shell.created"
-  location?: LocationRef
-  data: { info: ShellInfo }
-}
 
 export type ModelCompatibility = {
   reasoningField?: ModelReasoningField
@@ -1690,21 +1690,6 @@ export type SessionForked = {
   }
 }
 
-export type SessionMessageToolStateCompleted1 = {
-  status: "completed"
-  input: { [x: string]: any }
-  content: [ToolContent1, ...Array<ToolContent1>]
-  metadata?: { [x: string]: JsonValue }
-}
-
-export type SessionMessageToolStateError1 = {
-  status: "error"
-  input: { [x: string]: any }
-  error: SessionStructuredError
-  content?: [ToolContent1, ...Array<ToolContent1>]
-  metadata?: { [x: string]: JsonValue }
-}
-
 export type SessionToolSuccess = {
   id: string
   created: number
@@ -1740,6 +1725,21 @@ export type SessionToolFailed = {
     executed: boolean
     resultState?: SessionMessageProviderState1
   }
+}
+
+export type SessionMessageToolStateCompleted1 = {
+  status: "completed"
+  input: { [x: string]: any }
+  content: [ToolContent1, ...Array<ToolContent1>]
+  metadata?: { [x: string]: JsonValue }
+}
+
+export type SessionMessageToolStateError1 = {
+  status: "error"
+  input: { [x: string]: any }
+  error: SessionStructuredError
+  content?: [ToolContent1, ...Array<ToolContent1>]
+  metadata?: { [x: string]: JsonValue }
 }
 
 export type ModelInfo = {
@@ -2121,7 +2121,6 @@ export type SessionEventDurable =
   | SessionMoved
   | SessionRenamed
   | SessionViewed
-  | SessionMessageContentUpdated
   | SessionDeleted
   | SessionForked
   | SessionInboxDelivered
@@ -2156,6 +2155,7 @@ export type SessionEventDurable =
   | SessionRevertStaged
   | SessionRevertCleared
   | SessionRevertCommitted
+  | SessionMessageContentUpdated
   | SessionUsageRecorded
 
 export type IntegrationInfo = {
@@ -2177,7 +2177,6 @@ export type V2Event =
   | SessionMoved
   | SessionRenamed
   | SessionViewed
-  | SessionMessageContentUpdated
   | SessionUsageUpdated
   | SessionDeleted
   | SessionForked
@@ -2218,6 +2217,7 @@ export type V2Event =
   | SessionRevertStaged
   | SessionRevertCleared
   | SessionRevertCommitted
+  | SessionMessageContentUpdated
   | FilesystemChanged
   | ReferenceUpdated
   | PermissionAsked
