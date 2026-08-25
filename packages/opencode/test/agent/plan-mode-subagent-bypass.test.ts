@@ -158,3 +158,87 @@ it.effect("subagent inherits parent session deny rules as hard runtime ceilings"
     expect(Permission.evaluate("bash", "git status", effective).action).toBe("deny")
   }),
 )
+
+it.effect("subagent does not inherit a parent session deny that a later rule re-allowed", () =>
+  Effect.sync(() => {
+    const executor = testAgent({
+      name: "executor",
+      mode: "subagent",
+      permission: {
+        bash: "allow",
+      },
+    })
+    // Session rules are append-only with last-match-wins evaluation. A parent
+    // that appended `bash deny` (e.g. a plan-style restriction) and later
+    // `bash allow` is effectively allowed, so its new subagents must not be
+    // pinned to the stale deny.
+    const parentSessionPermission: PermissionV1.Ruleset = [
+      { permission: "bash", pattern: "*", action: "deny" },
+      { permission: "bash", pattern: "*", action: "allow" },
+    ]
+    const derived = deriveSubagentSessionPermission({
+      parentSessionPermission,
+      subagent: executor,
+    })
+    const effective = Permission.merge(executor.permission, derived)
+
+    expect(Permission.evaluate("bash", "git status", parentSessionPermission).action).toBe("allow")
+    expect(derived.filter((rule) => rule.permission === "bash")).toEqual([])
+    expect(Permission.evaluate("bash", "git status", effective).action).toBe("allow")
+  }),
+)
+
+it.effect("subagent keeps a parent session deny that a later rule only partially overrides", () =>
+  Effect.sync(() => {
+    const executor = testAgent({
+      name: "executor",
+      mode: "subagent",
+      permission: {
+        bash: "allow",
+      },
+    })
+    // The later allow targets a narrower pattern, so the broad deny is still
+    // part of the parent's ceiling for everything else. Inheriting it stays
+    // conservative: the subagent is denied even the narrower pattern.
+    const effective = Permission.merge(
+      executor.permission,
+      deriveSubagentSessionPermission({
+        parentSessionPermission: [
+          { permission: "bash", pattern: "*", action: "deny" },
+          { permission: "bash", pattern: "git *", action: "allow" },
+        ],
+        subagent: executor,
+      }),
+    )
+
+    expect(Permission.evaluate("bash", "rm -rf /tmp/x", effective).action).toBe("deny")
+    expect(Permission.evaluate("bash", "git status", effective).action).toBe("deny")
+  }),
+)
+
+it.effect("re-allowing one permission does not drop unrelated parent session denies", () =>
+  Effect.sync(() => {
+    const executor = testAgent({
+      name: "executor",
+      mode: "subagent",
+      permission: {
+        bash: "allow",
+        edit: "allow",
+      },
+    })
+    const effective = Permission.merge(
+      executor.permission,
+      deriveSubagentSessionPermission({
+        parentSessionPermission: [
+          { permission: "bash", pattern: "*", action: "deny" },
+          { permission: "edit", pattern: "*", action: "deny" },
+          { permission: "bash", pattern: "*", action: "allow" },
+        ],
+        subagent: executor,
+      }),
+    )
+
+    expect(Permission.evaluate("bash", "git status", effective).action).toBe("allow")
+    expect(Permission.evaluate("edit", "/some/file.ts", effective).action).toBe("deny")
+  }),
+)
