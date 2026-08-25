@@ -1,0 +1,1363 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://opencode.ai/v2/cli.json",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "anyOf": [{ "type": "string" }, { "type": "null" }],
+      "description": "JSON Schema for CLI configuration"
+    },
+    "theme": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "name": { "anyOf": [{ "type": "string" }, { "type": "null" }], "description": "Theme name" },
+            "mode": {
+              "anyOf": [{ "type": "string", "enum": ["system", "dark", "light"] }, { "type": "null" }],
+              "description": "Color mode; 'system' follows the terminal"
+            }
+          },
+          "additionalProperties": false
+        },
+        { "type": "null" }
+      ],
+      "description": "Color theme settings"
+    },
+    "keybinds": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "leader": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Leader key for keybind combinations"
+            },
+            "app.exit": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Exit the application"
+            },
+            "app.debug": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Toggle debug panel"
+            },
+            "app.console": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Toggle console"
+            },
+            "app.scrap": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Open scrap screen"
+            },
+            "app.toggle.animations": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Toggle animations"
+            },
+            "app.toggle.file_context": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Toggle file context"
+            },
+            "app.toggle.diffwrap": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Toggle diff wrapping"
+            },
+            "app.toggle.paste_summary": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Toggle paste summary"
+            },
+            "command.palette.show": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "List available commands"
+            },
+            "help.show": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Open help dialog"
+            },
+            "docs.open": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Open documentation"
+            },
+            "opencode.settings": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Open settings"
+            },
+            "server.pair": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Pair device"
+            },
+            "service.restart": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Restart service"
+            },
+            "permission.mode": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Toggle auto-approve permissions"
+            },
+            "diff.open": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Open diff viewer"
+            },
+            "diff.close": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Close diff viewer"
+            },
+            "diff.down": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Move diff viewer down"
+            },
+            "diff.up": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Move diff viewer up"
+            },
+            "diff.page.down": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Page diff viewer down"
+            },
+            "diff.page.up": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Page diff viewer up"
+            },
+            "diff.toggle": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Toggle diff viewer item"
+            },
+            "diff.expand": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Expand diff viewer item"
+            },
+            "diff.expand_all": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Expand all diff viewer folders"
+            },
+            "diff.collapse": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Collapse diff viewer item"
+            },
+            "diff.switch_focus": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Switch diff viewer focus"
+            },
+            "diff.next_hunk": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Jump to next diff hunk"
+            },
+            "diff.previous_hunk": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Jump to previous diff hunk"
+            },
+            "diff.next_file": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Jump to next diff file"
+            },
+            "diff.previous_file": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Jump to previous diff file"
+            },
+            "diff.toggle_file_tree": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Toggle diff viewer file tree"
+            },
+            "diff.single_patch": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Toggle single patch view"
+            },
+            "diff.switch_source": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Switch diff viewer source"
+            },
+            "diff.toggle_view": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Toggle diff viewer split or unified view"
+            },
+            "diff.mark_reviewed": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Toggle selected diff file reviewed"
+            },
+            "diff.help": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Show more diff viewer shortcuts"
+            },
+            "prompt.editor": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Open external editor"
+            },
+            "theme.switch": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "List available themes"
+            },
+            "theme.switch_mode": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Switch between light and dark theme mode"
+            },
+            "theme.mode.lock": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Lock or unlock theme mode"
+            },
+            "session.sidebar.toggle": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Toggle sidebar"
+            },
+            "session.toggle.scrollbar": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Toggle session scrollbar"
+            },
+            "opencode.status": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "View status"
+            },
+            "opencode.debug": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "View debug info"
+            },
+            "session.export": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Export session to editor"
+            },
+            "session.copy": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Copy session transcript"
+            },
+            "session.move": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Move session"
+            },
+            "session.new": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Create a new session"
+            },
+            "session.list": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "List all sessions"
+            },
+            "open.menu": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Open recent sessions and projects"
+            },
+            "session.tab.next": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Switch to next open session tab"
+            },
+            "session.tab.previous": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Switch to previous open session tab"
+            },
+            "session.tab.history.back": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Go back in session tab history"
+            },
+            "session.tab.history.forward": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Go forward in session tab history"
+            },
+            "session.tab.next_unread": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Switch to next unread session tab"
+            },
+            "session.tab.previous_unread": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Switch to previous unread session tab"
+            },
+            "session.tab.close": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Close current session tab"
+            },
+            "session.tab.reopen": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Reopen last closed session tab"
+            },
+            "session.timeline": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Show session timeline"
+            },
+            "session.fork": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Fork session from message"
+            },
+            "session.rename": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Rename session"
+            },
+            "session.delete": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Delete session"
+            },
+            "session.share": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Share current session"
+            },
+            "session.unshare": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Unshare current session"
+            },
+            "session.interrupt": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Interrupt current session"
+            },
+            "session.background": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Background blocking session tools"
+            },
+            "session.compact": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Compact the session"
+            },
+            "session.cd": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Change working directory"
+            },
+            "session.queued_prompts": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Manage queued prompts"
+            },
+            "queued_prompt.delete": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Delete queued prompt"
+            },
+            "session.toggle.exploration_grouping": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Toggle related tool call grouping"
+            },
+            "session.child.first": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Toggle subagent picker"
+            },
+            "session.child.next": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Go to next child session"
+            },
+            "session.child.previous": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Go to previous child session"
+            },
+            "session.parent": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Go to parent session"
+            },
+            "session.pin.toggle": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Pin or unpin session in the session list"
+            },
+            "session.quick_switch.1": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Switch to session in quick slot 1"
+            },
+            "session.quick_switch.2": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Switch to session in quick slot 2"
+            },
+            "session.quick_switch.3": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Switch to session in quick slot 3"
+            },
+            "session.quick_switch.4": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Switch to session in quick slot 4"
+            },
+            "session.quick_switch.5": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Switch to session in quick slot 5"
+            },
+            "session.quick_switch.6": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Switch to session in quick slot 6"
+            },
+            "session.quick_switch.7": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Switch to session in quick slot 7"
+            },
+            "session.quick_switch.8": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Switch to session in quick slot 8"
+            },
+            "session.quick_switch.9": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Switch to session in quick slot 9"
+            },
+            "session.tab.select.1": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Switch to session tab 1"
+            },
+            "session.tab.select.2": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Switch to session tab 2"
+            },
+            "session.tab.select.3": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Switch to session tab 3"
+            },
+            "session.tab.select.4": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Switch to session tab 4"
+            },
+            "session.tab.select.5": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Switch to session tab 5"
+            },
+            "session.tab.select.6": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Switch to session tab 6"
+            },
+            "session.tab.select.7": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Switch to session tab 7"
+            },
+            "session.tab.select.8": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Switch to session tab 8"
+            },
+            "session.tab.select.9": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Switch to session tab 9"
+            },
+            "session.tab.select.10": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Switch to session tab 10"
+            },
+            "stash.delete": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Delete stash entry"
+            },
+            "model.dialog.provider": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Open provider list from model dialog"
+            },
+            "model.dialog.favorite": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Toggle model favorite status"
+            },
+            "model.list": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "List available models"
+            },
+            "model.cycle_recent": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Next recently used model"
+            },
+            "model.cycle_recent_reverse": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Previous recently used model"
+            },
+            "model.cycle_favorite": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Next favorite model"
+            },
+            "model.cycle_favorite_reverse": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Previous favorite model"
+            },
+            "mcp.list": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "List MCP servers"
+            },
+            "provider.connect": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Connect integration"
+            },
+            "agent.list": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "List agents"
+            },
+            "agent.cycle": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Next agent"
+            },
+            "agent.cycle.reverse": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Previous agent"
+            },
+            "variant.cycle": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Cycle model variants"
+            },
+            "variant.list": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "List model variants"
+            },
+            "session.page.up": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Scroll messages up by one page"
+            },
+            "session.page.down": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Scroll messages down by one page"
+            },
+            "session.line.up": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Scroll messages up by one line"
+            },
+            "session.line.down": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Scroll messages down by one line"
+            },
+            "session.half.page.up": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Scroll messages up by half page"
+            },
+            "session.half.page.down": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Scroll messages down by half page"
+            },
+            "session.first": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Navigate to first message"
+            },
+            "session.last": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Navigate to last message"
+            },
+            "session.message.next": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Navigate to next message"
+            },
+            "session.message.previous": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Navigate to previous message"
+            },
+            "session.message.user.next": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Navigate to next user message"
+            },
+            "session.message.user.previous": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Navigate to previous user message"
+            },
+            "session.messages_last_user": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Navigate to last user message"
+            },
+            "messages.copy": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Copy message"
+            },
+            "session.undo": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Undo message"
+            },
+            "session.redo": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Redo message"
+            },
+            "session.toggle.thinking": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Toggle thinking blocks visibility"
+            },
+            "prompt.submit": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Submit prompt"
+            },
+            "prompt.queue": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Queue prompt"
+            },
+            "prompt.editor_context.clear": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Clear editor context"
+            },
+            "prompt.images.view": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "View image attachments"
+            },
+            "prompt.skills": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Open skill selector"
+            },
+            "prompt.stash": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Stash prompt"
+            },
+            "prompt.stash.pop": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Pop stashed prompt"
+            },
+            "prompt.stash.list": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "List stashed prompts"
+            },
+            "prompt.clear": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Clear input field"
+            },
+            "prompt.paste": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Paste from clipboard"
+            },
+            "input.submit": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Submit input"
+            },
+            "input.newline": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Insert newline in input"
+            },
+            "input.move.left": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Move cursor left in input"
+            },
+            "input.move.right": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Move cursor right in input"
+            },
+            "input.move.up": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Move cursor up in input"
+            },
+            "input.move.down": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Move cursor down in input"
+            },
+            "input.select.left": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Select left in input"
+            },
+            "input.select.right": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Select right in input"
+            },
+            "input.select.up": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Select up in input"
+            },
+            "input.select.down": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Select down in input"
+            },
+            "input.line.home": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Move to start of line in input"
+            },
+            "input.line.end": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Move to end of line in input"
+            },
+            "input.select.line.home": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Select to start of line in input"
+            },
+            "input.select.line.end": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Select to end of line in input"
+            },
+            "input.visual.line.home": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Move to start of visual line in input"
+            },
+            "input.visual.line.end": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Move to end of visual line in input"
+            },
+            "input.select.visual.line.home": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Select to start of visual line in input"
+            },
+            "input.select.visual.line.end": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Select to end of visual line in input"
+            },
+            "input.buffer.home": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Move to start of buffer in input"
+            },
+            "input.buffer.end": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Move to end of buffer in input"
+            },
+            "input.select.buffer.home": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Select to start of buffer in input"
+            },
+            "input.select.buffer.end": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Select to end of buffer in input"
+            },
+            "input.delete.line": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Delete line in input"
+            },
+            "input.delete.to.line.end": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Delete to end of line in input"
+            },
+            "input.delete.to.line.start": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Delete to start of line in input"
+            },
+            "input.backspace": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Backspace in input"
+            },
+            "input.delete": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Delete character in input"
+            },
+            "input.undo": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Undo in input"
+            },
+            "input.redo": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Redo in input"
+            },
+            "input.word.forward": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Move word forward in input"
+            },
+            "input.word.backward": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Move word backward in input"
+            },
+            "input.select.word.forward": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Select word forward in input"
+            },
+            "input.select.word.backward": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Select word backward in input"
+            },
+            "input.delete.word.forward": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Delete word forward in input"
+            },
+            "input.delete.word.backward": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Delete word backward in input"
+            },
+            "input.select.all": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Select all in input"
+            },
+            "prompt.history.previous": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Previous history item"
+            },
+            "prompt.history.next": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Next history item"
+            },
+            "composer.subagent.up": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Previous subagent"
+            },
+            "composer.subagent.down": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Next subagent"
+            },
+            "composer.subagent.select": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Navigate to subagent"
+            },
+            "composer.subagent.interrupt": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Interrupt subagent"
+            },
+            "composer.shell.up": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Previous shell"
+            },
+            "composer.shell.down": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Next shell"
+            },
+            "composer.shell.kill": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Kill shell command"
+            },
+            "dialog.select.prev": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Move to previous dialog item"
+            },
+            "dialog.select.next": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Move to next dialog item"
+            },
+            "dialog.select.page_up": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Move up one page in dialog"
+            },
+            "dialog.select.page_down": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Move down one page in dialog"
+            },
+            "dialog.select.home": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Move to first dialog item"
+            },
+            "dialog.select.end": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Move to last dialog item"
+            },
+            "dialog.select.submit": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Submit selected dialog item"
+            },
+            "dialog.prompt.submit": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Submit dialog prompt"
+            },
+            "dialog.worktree.generate": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Generate worktree name"
+            },
+            "dialog.move_session.new": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "New worktree"
+            },
+            "dialog.move_session.delete": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Delete worktree"
+            },
+            "dialog.move_session.refresh": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Refresh worktrees"
+            },
+            "prompt.autocomplete.prev": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Move to previous autocomplete item"
+            },
+            "prompt.autocomplete.next": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Move to next autocomplete item"
+            },
+            "prompt.autocomplete.hide": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Hide autocomplete"
+            },
+            "prompt.autocomplete.select": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Select autocomplete item"
+            },
+            "prompt.autocomplete.complete": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Complete autocomplete item"
+            },
+            "permission.prompt.fullscreen": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Toggle permission prompt fullscreen"
+            },
+            "plugins.toggle": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Toggle plugin"
+            },
+            "dialog.mcp.toggle": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Toggle MCP server"
+            },
+            "dialog.plugins.install": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Install plugin from plugin dialog"
+            },
+            "terminal.suspend": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Suspend terminal"
+            },
+            "terminal.title.toggle": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Toggle terminal title"
+            },
+            "plugins.list": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Open plugin manager dialog"
+            },
+            "plugins.install": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Install plugin"
+            },
+            "which-key.toggle": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Toggle which-key panel"
+            },
+            "which-key.layout.toggle": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Switch which-key layout"
+            },
+            "which-key.pending.toggle": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Toggle which-key pending preview"
+            },
+            "which-key.group.previous": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Previous which-key group"
+            },
+            "which-key.group.next": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Next which-key group"
+            },
+            "which-key.scroll.up": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Scroll which-key up"
+            },
+            "which-key.scroll.down": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Scroll which-key down"
+            },
+            "which-key.page.up": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Page which-key up"
+            },
+            "which-key.page.down": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Page which-key down"
+            },
+            "which-key.home": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Jump to first which-key binding"
+            },
+            "which-key.end": {
+              "anyOf": [{ "$ref": "#/$defs/TuiKeybind.BindingValue" }, { "type": "null" }],
+              "description": "Jump to last which-key binding"
+            }
+          },
+          "additionalProperties": false,
+          "description": "TUI keybinding overrides"
+        },
+        { "type": "null" }
+      ],
+      "description": "Custom key bindings"
+    },
+    "plugins": {
+      "anyOf": [
+        {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              { "type": "string" },
+              {
+                "type": "object",
+                "properties": {
+                  "package": { "type": "string", "description": "Plugin package name or path" },
+                  "options": {
+                    "anyOf": [{ "type": "object" }, { "type": "null" }],
+                    "description": "Options passed to the plugin"
+                  }
+                },
+                "required": ["package"],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        { "type": "null" }
+      ],
+      "description": "Ordered plugin enablement directives and external package declarations"
+    },
+    "leader": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "timeout": {
+              "anyOf": [{ "type": "integer", "exclusiveMinimum": 0 }, { "type": "null" }],
+              "description": "Time in milliseconds to wait for a key after the leader key"
+            }
+          },
+          "additionalProperties": false
+        },
+        { "type": "null" }
+      ],
+      "description": "Leader key behavior"
+    },
+    "scroll": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "speed": {
+              "anyOf": [{ "type": "number", "minimum": 0.001 }, { "type": "null" }],
+              "description": "Distance scrolled per input tick"
+            },
+            "acceleration": {
+              "anyOf": [{ "type": "boolean" }, { "type": "null" }],
+              "description": "Accelerate scrolling from repeated input"
+            }
+          },
+          "additionalProperties": false
+        },
+        { "type": "null" }
+      ],
+      "description": "Scrolling behavior"
+    },
+    "attention": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "anyOf": [{ "type": "boolean" }, { "type": "null" }],
+              "description": "Enable attention alerts"
+            },
+            "notifications": {
+              "anyOf": [{ "type": "boolean" }, { "type": "null" }],
+              "description": "Show system notifications"
+            },
+            "sound": { "anyOf": [{ "type": "boolean" }, { "type": "null" }], "description": "Play attention sounds" },
+            "volume": {
+              "anyOf": [{ "type": "number", "minimum": 0, "maximum": 1 }, { "type": "null" }],
+              "description": "Attention sound volume from 0 to 1"
+            },
+            "sound_pack": {
+              "anyOf": [{ "type": "string" }, { "type": "null" }],
+              "description": "Active attention sound pack ID"
+            },
+            "sounds": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "default": { "type": "string" },
+                    "question": { "type": "string" },
+                    "permission": { "type": "string" },
+                    "error": { "type": "string" },
+                    "done": { "type": "string" },
+                    "subagent_done": { "type": "string" }
+                  },
+                  "additionalProperties": false
+                },
+                { "type": "null" }
+              ],
+              "description": "Sound file overrides by attention event"
+            }
+          },
+          "additionalProperties": false
+        },
+        { "type": "null" }
+      ],
+      "description": "System notification and sound settings"
+    },
+    "diffs": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "wrap": {
+              "anyOf": [{ "type": "string", "enum": ["word", "none"] }, { "type": "null" }],
+              "description": "Line wrapping behavior in diff output"
+            },
+            "tree": { "anyOf": [{ "type": "boolean" }, { "type": "null" }], "description": "Show the diff file tree" },
+            "single": {
+              "anyOf": [{ "type": "boolean" }, { "type": "null" }],
+              "description": "Show only the selected file patch"
+            },
+            "view": {
+              "anyOf": [{ "type": "string", "enum": ["auto", "split", "unified"] }, { "type": "null" }],
+              "description": "Diff layout; 'auto' selects a layout from the available width"
+            }
+          },
+          "additionalProperties": false
+        },
+        { "type": "null" }
+      ],
+      "description": "Diff presentation settings"
+    },
+    "terminal": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "title": {
+              "anyOf": [{ "type": "boolean" }, { "type": "null" }],
+              "description": "Update the terminal window title"
+            },
+            "copy": {
+              "anyOf": [{ "type": "string", "enum": ["manual", "select"] }, { "type": "null" }],
+              "description": "Copy text manually or immediately after selecting it"
+            }
+          },
+          "additionalProperties": false
+        },
+        { "type": "null" }
+      ],
+      "description": "Terminal integration settings"
+    },
+    "prompt": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "editor": {
+              "anyOf": [{ "type": "boolean" }, { "type": "null" }],
+              "description": "Include the active editor file or selection as prompt context"
+            },
+            "paste": {
+              "anyOf": [{ "type": "string", "enum": ["compact", "full"] }, { "type": "null" }],
+              "description": "Display large pastes as compact placeholders or full text"
+            },
+            "image_preview": {
+              "anyOf": [{ "type": "boolean" }, { "type": "null" }],
+              "description": "Show image attachment previews above the prompt input"
+            }
+          },
+          "additionalProperties": false
+        },
+        { "type": "null" }
+      ],
+      "description": "Prompt input behavior"
+    },
+    "session": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "sidebar": {
+              "anyOf": [{ "type": "string", "enum": ["auto", "hide"] }, { "type": "null" }],
+              "description": "Session sidebar visibility; 'auto' shows it when space permits"
+            },
+            "scrollbar": {
+              "anyOf": [{ "type": "boolean" }, { "type": "null" }],
+              "description": "Show the session transcript scrollbar"
+            },
+            "thinking": {
+              "anyOf": [{ "type": "string", "enum": ["show", "hide"] }, { "type": "null" }],
+              "description": "Show or hide model reasoning by default"
+            },
+            "grouping": {
+              "anyOf": [{ "type": "string", "enum": ["auto", "none"] }, { "type": "null" }],
+              "description": "Group related transcript items automatically or render each item separately"
+            },
+            "image_preview": {
+              "anyOf": [{ "type": "boolean" }, { "type": "null" }],
+              "description": "Show user attachment and tool-result images in the session transcript"
+            },
+            "markdown": {
+              "anyOf": [{ "type": "string", "enum": ["source", "rendered"] }, { "type": "null" }],
+              "description": "Show Markdown syntax markers or conceal them in rendered transcript content"
+            },
+            "new_location": {
+              "anyOf": [{ "type": "string", "enum": ["launch", "inherit"] }, { "type": "null" }],
+              "description": "Start new sessions in the TUI launch directory or inherit the active session location"
+            }
+          },
+          "additionalProperties": false
+        },
+        { "type": "null" }
+      ],
+      "description": "Session transcript presentation settings"
+    },
+    "tabs": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "anyOf": [{ "type": "boolean" }, { "type": "null" }],
+              "description": "Use a persistent tab strip instead of pinned quick-switch sessions"
+            },
+            "scope": {
+              "anyOf": [{ "type": "string", "enum": ["global", "cwd"] }, { "type": "null" }],
+              "description": "Share tabs globally or keep a separate set for each working directory"
+            },
+            "layout": {
+              "anyOf": [{ "type": "string", "enum": ["horizontal", "vertical"] }, { "type": "null" }],
+              "description": "Show tabs in a horizontal strip or vertical sidebar"
+            }
+          },
+          "additionalProperties": false
+        },
+        { "type": "null" }
+      ],
+      "description": "Tab strip settings"
+    },
+    "mini": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "thinking": {
+              "anyOf": [{ "type": "string", "enum": ["show", "hide"] }, { "type": "null" }],
+              "description": "Show or hide model reasoning"
+            },
+            "shell_output": {
+              "anyOf": [{ "type": "string", "enum": ["show", "hide"] }, { "type": "null" }],
+              "description": "Show or hide raw shell tool output"
+            },
+            "turn_summary": {
+              "anyOf": [{ "type": "string", "enum": ["show", "hide"] }, { "type": "null" }],
+              "description": "Show or hide the agent, model, and duration summary in scrollback"
+            },
+            "footer": {
+              "anyOf": [{ "type": "string", "enum": ["show", "hide"] }, { "type": "null" }],
+              "description": "Show or hide persistent activity, model, usage, and context details in the footer"
+            },
+            "splash": {
+              "anyOf": [{ "type": "string", "enum": ["show", "hide"] }, { "type": "null" }],
+              "description": "Show or hide the entry and exit splash banners"
+            },
+            "mono": {
+              "anyOf": [{ "type": "boolean" }, { "type": "null" }],
+              "description": "Use monochrome ASCII output"
+            },
+            "replay": {
+              "anyOf": [{ "type": "boolean" }, { "type": "null" }],
+              "description": "Restore session history on resume and terminal resize"
+            },
+            "replay_limit": {
+              "anyOf": [{ "type": "integer", "exclusiveMinimum": 0 }, { "type": "null" }],
+              "description": "Maximum number of newest messages restored during replay"
+            }
+          },
+          "additionalProperties": false
+        },
+        { "type": "null" }
+      ],
+      "description": "Mini transcript presentation settings"
+    },
+    "debug": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "devtools": {
+              "anyOf": [{ "type": "boolean" }, { "type": "null" }],
+              "description": "Show the DevTools debug bar"
+            },
+            "timing": {
+              "anyOf": [{ "type": "boolean" }, { "type": "null" }],
+              "description": "Show time-to-first-draw diagnostics"
+            },
+            "turn_tokens": {
+              "anyOf": [
+                { "anyOf": [{ "type": "boolean" }, { "type": "string", "enum": ["verbose"] }] },
+                { "type": "null" }
+              ],
+              "description": "Show per-turn token usage diagnostics, optionally with tool call inputs"
+            }
+          },
+          "additionalProperties": false
+        },
+        { "type": "null" }
+      ],
+      "description": "Debugging settings"
+    },
+    "experimental": {
+      "anyOf": [{ "type": "object", "additionalProperties": { "type": "boolean" } }, { "type": "null" }],
+      "description": "Experimental features that may change or be removed at any time"
+    },
+    "animations": {
+      "anyOf": [{ "type": "boolean" }, { "type": "null" }],
+      "description": "Enable interface animations"
+    },
+    "mouse": { "anyOf": [{ "type": "boolean" }, { "type": "null" }], "description": "Enable terminal mouse capture" },
+    "cursor": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "style": {
+              "anyOf": [{ "type": "string", "enum": ["block", "underline", "line", "default"] }, { "type": "null" }],
+              "description": "Cursor shape. Use 'default' to preserve the terminal setting"
+            },
+            "blinking": {
+              "anyOf": [{ "type": "boolean" }, { "type": "null" }],
+              "description": "Whether the cursor blinks. Has no effect when style is 'default'"
+            }
+          },
+          "additionalProperties": false,
+          "description": "Terminal cursor settings"
+        },
+        { "type": "null" }
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "TuiKeybind.BindingValue": {
+      "anyOf": [
+        { "type": "boolean", "enum": [false] },
+        { "type": "string", "enum": ["none"] },
+        {
+          "anyOf": [
+            { "type": "string" },
+            {
+              "type": "object",
+              "properties": {
+                "name": { "type": "string" },
+                "ctrl": { "anyOf": [{ "type": "boolean" }, { "type": "null" }] },
+                "shift": { "anyOf": [{ "type": "boolean" }, { "type": "null" }] },
+                "meta": { "anyOf": [{ "type": "boolean" }, { "type": "null" }] },
+                "super": { "anyOf": [{ "type": "boolean" }, { "type": "null" }] },
+                "hyper": { "anyOf": [{ "type": "boolean" }, { "type": "null" }] }
+              },
+              "required": ["name"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "anyOf": [
+                    { "type": "string" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "name": { "type": "string" },
+                        "ctrl": { "anyOf": [{ "type": "boolean" }, { "type": "null" }] },
+                        "shift": { "anyOf": [{ "type": "boolean" }, { "type": "null" }] },
+                        "meta": { "anyOf": [{ "type": "boolean" }, { "type": "null" }] },
+                        "super": { "anyOf": [{ "type": "boolean" }, { "type": "null" }] },
+                        "hyper": { "anyOf": [{ "type": "boolean" }, { "type": "null" }] }
+                      },
+                      "required": ["name"],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "event": { "anyOf": [{ "type": "string", "enum": ["press", "release"] }, { "type": "null" }] },
+                "preventDefault": { "anyOf": [{ "type": "boolean" }, { "type": "null" }] },
+                "fallthrough": { "anyOf": [{ "type": "boolean" }, { "type": "null" }] }
+              },
+              "required": ["key"],
+              "allOf": [{ "type": "object", "additionalProperties": {} }]
+            }
+          ]
+        },
+        {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              { "type": "string" },
+              {
+                "type": "object",
+                "properties": {
+                  "name": { "type": "string" },
+                  "ctrl": { "anyOf": [{ "type": "boolean" }, { "type": "null" }] },
+                  "shift": { "anyOf": [{ "type": "boolean" }, { "type": "null" }] },
+                  "meta": { "anyOf": [{ "type": "boolean" }, { "type": "null" }] },
+                  "super": { "anyOf": [{ "type": "boolean" }, { "type": "null" }] },
+                  "hyper": { "anyOf": [{ "type": "boolean" }, { "type": "null" }] }
+                },
+                "required": ["name"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "key": {
+                    "anyOf": [
+                      { "type": "string" },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "name": { "type": "string" },
+                          "ctrl": { "anyOf": [{ "type": "boolean" }, { "type": "null" }] },
+                          "shift": { "anyOf": [{ "type": "boolean" }, { "type": "null" }] },
+                          "meta": { "anyOf": [{ "type": "boolean" }, { "type": "null" }] },
+                          "super": { "anyOf": [{ "type": "boolean" }, { "type": "null" }] },
+                          "hyper": { "anyOf": [{ "type": "boolean" }, { "type": "null" }] }
+                        },
+                        "required": ["name"],
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "event": { "anyOf": [{ "type": "string", "enum": ["press", "release"] }, { "type": "null" }] },
+                  "preventDefault": { "anyOf": [{ "type": "boolean" }, { "type": "null" }] },
+                  "fallthrough": { "anyOf": [{ "type": "boolean" }, { "type": "null" }] }
+                },
+                "required": ["key"],
+                "allOf": [{ "type": "object", "additionalProperties": {} }]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

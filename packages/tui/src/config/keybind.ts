@@ -30,7 +30,7 @@ export const BindingValueSchema = Schema.Union([
   Schema.Literal("none"),
   BindingItem,
   Schema.Array(BindingItem),
-])
+]).annotate({ identifier: "TuiKeybind.BindingValue" })
 export type BindingValueSchema = Schema.Schema.Type<typeof BindingValueSchema>
 
 type Definition = {

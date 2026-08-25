@@ -7,8 +7,8 @@
     "dev": "bun run generate && astro dev --host --port 3000",
     "build": "bun run generate && astro build && bun script/pagefind.ts && bun run validate && bun script/prepare-cloudflare.ts",
     "deploy": "wrangler deploy --config dist/server/wrangler.json",
-    "generate": "bun script/generate-openapi.ts",
-    "check:generated": "bun script/generate-openapi.ts --check",
+    "generate": "bun script/generate-openapi.ts && bun --cwd ../cli script/schema.ts ../www/public/cli.json",
+    "check:generated": "bun script/generate-openapi.ts --check && bun --cwd ../cli script/schema.ts ../www/public/cli.json --check",
     "validate": "bun script/validate-links.ts",
     "typecheck": "astro check"
   },

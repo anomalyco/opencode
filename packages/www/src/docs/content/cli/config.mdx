@@ -18,6 +18,16 @@ Set `$XDG_CONFIG_HOME` to use a different config directory:
 $XDG_CONFIG_HOME/opencode/cli.json
 ```
 
+Add the published JSON Schema for editor validation and autocomplete:
+
+```json title="cli.json"
+{
+  "$schema": "https://opencode.ai/v2/cli.json"
+}
+```
+
+OpenCode includes this automatically when it creates or migrates your CLI config.
+
 ## Theme
 
 Set the theme and color mode:
