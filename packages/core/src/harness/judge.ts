@@ -9,7 +9,7 @@ import { SessionSchema } from "../session/schema"
 import { Config } from "../config"
 import { makeLocationNode } from "../effect/app-node"
 import { harness_task, harness_subtask_feedback } from "./schema"
-import { QualityGate } from "./quality_gate"
+import { QualityGate } from "./quality-gate"
 import { eq } from "drizzle-orm"
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -265,6 +265,30 @@ const layer = Layer.effect(
             .join("\n")
         : "No explicit subtasks recorded."
 
+      const qualityResult = input.sessionID
+        ? yield* qualityGate.evaluateSession(input.sessionID)
+        : {
+            passed: false,
+            score: 0,
+            completedTodos: 0,
+            totalTodos: 0,
+            failedTools: [],
+            verificationCommands: [],
+            passedVerificationCommands: [],
+            failedVerificationCommands: [],
+            issues: [
+              "No session ID was provided for Quality Gate evaluation.",
+            ],
+            failureReasons: [
+              "No session ID was provided for Quality Gate evaluation.",
+            ],
+            summary:
+              "Quality Gate could not verify execution evidence.",
+          }
+
+      console.error("🔥 QUALITY GATE RESULT:")
+      console.error(JSON.stringify(qualityResult, null, 2))
+
       const evalRes = yield* LLM.generateObject({
         // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
         model: model as Parameters<typeof LLM.generateObject>[0]["model"],
@@ -312,27 +336,6 @@ ${input.userResponse ?? "None"}
       // QUALITY GATE
       // Existing Judge logic above is unchanged.
       // ==================================================
-
-      console.error("🔥 STARTING QUALITY GATE")
-
-      const qualityResult = input.sessionID
-        ? yield* qualityGate.evaluateSession(input.sessionID)
-        : {
-            passed: false,
-            score: 0,
-            completedTodos: 0,
-            totalTodos: 0,
-            failedTools: [],
-            verificationCommands: [],
-            issues: [
-              "No session ID was provided for Quality Gate evaluation.",
-            ],
-            summary:
-              "Quality Gate could not verify execution evidence.",
-          }
-
-      console.error("🔥 QUALITY GATE RESULT:")
-      console.error(JSON.stringify(qualityResult, null, 2))
 
       // Combine existing LLM Judge decision with Quality Gate.
       const finalSatisfied =
