@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Cause, Deferred, Effect, Fiber, Layer } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Layer } from "effect"
 import { Agent } from "@opencode-ai/core/agent"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -251,6 +251,24 @@ describe("Permission", () => {
 
       expect(result.effect).toBe("ask")
       expect(yield* service.get(result.id)).toMatchObject({ message: "Confirm production access" })
+    }),
+  )
+
+  it.effect("allows cancellation while a permission reviewer is running", () =>
+    Effect.gen(function* () {
+      yield* setup([{ action: "read", resource: "*", effect: "allow" }])
+      const hooks = yield* PluginHooks.Service
+      const started = yield* Deferred.make<void>()
+      yield* hooks.register("permission", "evaluate", () =>
+        Deferred.succeed(started, undefined).pipe(Effect.andThen(Effect.never)),
+      )
+      const service = yield* Permission.Service
+      const fiber = yield* service.assert(assertion()).pipe(Effect.forkScoped)
+
+      yield* Deferred.await(started)
+      yield* Fiber.interrupt(fiber)
+      const exit = yield* Fiber.await(fiber)
+      expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBe(true)
     }),
   )
 

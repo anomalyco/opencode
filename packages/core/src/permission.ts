@@ -243,34 +243,36 @@ const layer = Layer.effect(
     })
 
     const assert = Effect.fn("Permission.assert")((input: AssertInput) =>
-      Effect.uninterruptibleMask((restore) =>
-        Effect.gen(function* () {
-          const result = yield* evaluateInput(input)
-          if (result.effect === "deny") {
-            return yield* new BlockedError({
-              rules: relevant(input, result.rules),
-              permission: input.action,
-              resources: input.resources,
-              reason: result.message,
-            })
-          }
-          if (result.effect === "allow") return
-          const item = yield* create(request(input, result.message), input.agent)
-          return yield* restore(Deferred.await(item.deferred)).pipe(
-            // Deliberate defect tunnel: leaves wrap execution in blanket `mapError`, which
-            // must not convert a user's decline into model-facing tool output. The decline
-            // resurfaces as a typed failure at SessionModelRequest.executeTool. A decline
-            // WITH feedback (CorrectedError) intentionally stays typed so the leaf can turn
-            // it into ToolFailure and the model continues.
-            Effect.catchTag("Permission.DeclinedError", (error) => Effect.die(error)),
-            Effect.ensuring(
-              Effect.sync(() => {
-                pending.delete(item.request.id)
-              }),
-            ),
-          )
-        }),
-      ),
+      Effect.gen(function* () {
+        const result = yield* evaluateInput(input)
+        return yield* Effect.uninterruptibleMask((restore) =>
+          Effect.gen(function* () {
+            if (result.effect === "deny") {
+              return yield* new BlockedError({
+                rules: relevant(input, result.rules),
+                permission: input.action,
+                resources: input.resources,
+                reason: result.message,
+              })
+            }
+            if (result.effect === "allow") return
+            const item = yield* create(request(input, result.message), input.agent)
+            return yield* restore(Deferred.await(item.deferred)).pipe(
+              // Deliberate defect tunnel: leaves wrap execution in blanket `mapError`, which
+              // must not convert a user's decline into model-facing tool output. The decline
+              // resurfaces as a typed failure at SessionModelRequest.executeTool. A decline
+              // WITH feedback (CorrectedError) intentionally stays typed so the leaf can turn
+              // it into ToolFailure and the model continues.
+              Effect.catchTag("Permission.DeclinedError", (error) => Effect.die(error)),
+              Effect.ensuring(
+                Effect.sync(() => {
+                  pending.delete(item.request.id)
+                }),
+              ),
+            )
+          }),
+        )
+      }),
     )
 
     const reply = Effect.fn("Permission.reply")((input: ReplyInput) =>
