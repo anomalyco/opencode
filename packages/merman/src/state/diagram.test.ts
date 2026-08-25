@@ -835,8 +835,8 @@ ${labels.map((label) => `  A --> B: ${label}`).join("\n")}`)
     expect(output).toMatchInlineSnapshot(`
       "╭───╮ alpha route label that is deliberately long
       │ A ├───┬──╮
-      ╰─┬─╯   │  │
-        │     │  │ gamma route label that is deliberately long
+      ╰─┬─╯   │  │ gamma route label that is deliberately long
+        │     │  │
         │     │  │ beta route label that is deliberately long
         │     │  │
         ▼     │  │

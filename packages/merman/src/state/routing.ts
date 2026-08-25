@@ -1302,18 +1302,21 @@ function placeStateTransitionLabels(
         candidate.route.kind === (plan.route.kind === "self" ? "vertical" : "self"),
     )
     const corridorTop =
-      sharesLoopCorridor &&
-      (plan.route.kind === "self" ||
-        (plan.route.kind === "vertical" && plan.route.from.centerY < plan.route.to.centerY))
-        ? plan.route.from.top + plan.route.from.height
-        : undefined
+      plan.route.kind === "side-parallel" &&
+      plans.some((candidate) => candidate !== plan && candidate.route.transition.to === plan.route.transition.to)
+        ? Math.min(...plan.path.map(([, y]) => y))
+        : sharesLoopCorridor &&
+            (plan.route.kind === "self" ||
+              (plan.route.kind === "vertical" && plan.route.from.centerY < plan.route.to.centerY))
+          ? plan.route.from.top + plan.route.from.height
+          : undefined
     const corridorBottom = corridorTop === undefined ? undefined : Math.max(...plan.path.map(([, y]) => y))
     const isClear = (x: number, y: number): boolean => {
       if (x < 0 || y < 0 || (corridorTop !== undefined && (y < corridorTop || y > corridorBottom!))) return false
       return space.isFree(labelClaim(x, y), {
         clearance: {
           body: statePadding,
-          label: { x: 1, y: sharesLoopCorridor ? 1 : 0 },
+          label: { x: 1, y: 1 },
           route:
             plan.pathRepaired || plan.route.kind === "side-parallel" || needsLaneClearance || corridorTop !== undefined
               ? {

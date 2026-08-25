@@ -105,7 +105,7 @@ describe("state component styles", () => {
       .join("")
       .indexOf("transition label")
 
-    expect(styled.chunks.some((chunk) => chunk.text.includes("transition label") && chunk.bg === background)).toBe(true)
+    expect(styled.chunks.some((chunk) => chunk.text === " transition label " && chunk.bg === background)).toBe(true)
     expect(styled.chunks.some((chunk) => chunk.text.includes("A") && chunk.bg !== undefined)).toBe(false)
     expect(row[start - 1]?.style).toBe("label")
     expect(row[start + "transition label".length]?.style).toBe("label")

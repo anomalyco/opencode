@@ -286,6 +286,39 @@ describe("createStateTransitionRenderPlans", () => {
     }
   })
 
+  test("separates nested feedback labels without moving them outside their routes", () => {
+    const diagram = prepareVisibleStateDiagram(
+      parseMermaidStateDiagram(`stateDiagram-v2
+  direction TB
+  state Session {
+    [*] --> Open
+    state Open {
+      [*] --> Clean
+      Clean --> Dirty: edit
+      Dirty --> Clean: save
+      Dirty --> [*]
+    }
+    Open --> Closing: request close
+    Closing --> Open: cancel
+    Closing --> [*]: closed
+    note right of Dirty: unsaved changes
+  }
+  [*] --> Session: hydrate
+  Session --> [*]: release`),
+    )
+    const layout = createStateDiagramLayout(diagram, { minStateGap: 5 })
+    const plans = createStateTransitionRenderPlans(diagram, layout.bounds, 30, { noteBounds: layout.noteBounds })
+    const crowded = plans.filter((plan) => ["edit", "save", "cancel"].includes(plan.route.transition.label))
+
+    for (const [index, plan] of crowded.entries()) {
+      expect(plan.label!.y).toBeGreaterThanOrEqual(Math.min(...plan.path.map(([, y]) => y)))
+      expect(plan.label!.y).toBeLessThanOrEqual(Math.max(...plan.path.map(([, y]) => y)))
+      for (const other of crowded.slice(index + 1)) {
+        expect(Math.abs(plan.label!.y - other.label!.y)).toBeGreaterThan(1)
+      }
+    }
+  })
+
   test("keeps vertical branch routes out of unrelated state bounds", () => {
     const diagram = prepareVisibleStateDiagram(
       parseMermaidStateDiagram(`stateDiagram-v2
