@@ -3157,7 +3157,7 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("skips non-persisted reasoning ids without encrypted state", () =>
+  it.effect("replays stateless reasoning without encrypted state", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         LLM.request({
@@ -3187,6 +3187,12 @@ describe("OpenAI Responses route", () => {
       expect(prepared.body).toMatchObject({
         input: [
           { role: "user", content: [{ type: "input_text", text: "What changed?" }] },
+          {
+            type: "reasoning",
+            id: "rs_1",
+            summary: [{ type: "summary_text", text: "Checked the previous diff." }],
+            encrypted_content: null,
+          },
           { role: "assistant", content: [{ type: "output_text", text: "The parser changed." }] },
           { role: "user", content: [{ type: "input_text", text: "Summarize it." }] },
         ],

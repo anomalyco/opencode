@@ -657,14 +657,7 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
     }
   }
 
-  // With store:false, Responses APIs only accept previous reasoning items when the
-  // complete item has encrypted state. Summary blocks for one item may carry
-  // that state only on the last block, so filter after they have been joined.
-  return store === false
-    ? input.filter(
-        (item) => !("type" in item) || item.type !== "reasoning" || typeof item.encrypted_content === "string",
-      )
-    : input
+  return input
 })
 
 const lowerOptions = (request: LLMRequest) => {
