@@ -2,6 +2,7 @@ import type { ToolDefinition } from "@opencode-ai/ai"
 import { Tool } from "@opencode-ai/schema/tool"
 import type { StandardJSONSchemaV1, StandardSchemaV1 } from "@standard-schema/spec"
 import { Cache, Effect, JsonSchema, Schema, SchemaIssue, SchemaRepresentation } from "effect"
+import { $ZodType, toJSONSchema } from "zod/v4/core"
 
 const formatEffectIssues = SchemaIssue.makeFormatterStandardSchemaV1()
 
@@ -129,13 +130,15 @@ const encodeOutput = (schema: Tool.ValueSchema<any>, value: unknown) => {
   )
 }
 
-const isStandardSchema = (
-  schema: Tool.ValueSchema<any>,
-): schema is StandardSchemaV1<any, any> & StandardJSONSchemaV1<any, any> =>
+const isStandardSchema = (schema: Tool.ValueSchema<any>): schema is StandardSchemaV1<any, any> =>
   typeof schema === "object" && schema !== null && "~standard" in schema
 
+const isStandardJSONSchema = (
+  schema: StandardSchemaV1<any, any>,
+): schema is StandardSchemaV1<any, any> & StandardJSONSchemaV1<any, any> => "jsonSchema" in schema["~standard"]
+
 const validateStandard = (
-  schema: StandardSchemaV1<any, any> & StandardJSONSchemaV1<any, any>,
+  schema: StandardSchemaV1<any, any>,
   value: unknown,
 ): Effect.Effect<StandardSchemaV1.Result<unknown>> =>
   Effect.gen(function* () {
@@ -150,13 +153,19 @@ const validateStandard = (
 
 const inputJsonSchema = (schema: Tool.ValueSchema<any>): JsonSchema.JsonSchema => {
   if (schema === undefined || schema === null) return {}
-  if (isStandardSchema(schema)) return schema["~standard"].jsonSchema.input({ target: "draft-2020-12" })
+  if (isStandardSchema(schema)) return standardJsonSchema(schema, "input")
   return Schema.isSchema(schema) ? toJsonSchema(schema) : schema
 }
 
 const outputJsonSchema = (schema: Tool.ValueSchema<any>): JsonSchema.JsonSchema => {
-  if (isStandardSchema(schema)) return schema["~standard"].jsonSchema.output({ target: "draft-2020-12" })
+  if (isStandardSchema(schema)) return standardJsonSchema(schema, "output")
   return Schema.isSchema(schema) ? toJsonSchema(schema) : schema
+}
+
+const standardJsonSchema = (schema: StandardSchemaV1<any, any>, io: "input" | "output"): JsonSchema.JsonSchema => {
+  if (isStandardJSONSchema(schema)) return schema["~standard"].jsonSchema[io]({ target: "draft-2020-12" })
+  if (schema instanceof $ZodType) return toJSONSchema(schema, { target: "draft-2020-12", io })
+  throw new Error(`Schema vendor "${schema["~standard"].vendor}" does not support JSON Schema conversion`)
 }
 
 const toJsonSchema = (schema: Schema.Top): JsonSchema.JsonSchema => {
