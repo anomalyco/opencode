@@ -5,9 +5,9 @@ const maximumComponent = "9007199254740991"
 const versionPattern =
   /^v?([0-9]+)\.([0-9]+)\.([0-9]+)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/
 
-export function action(current: string, latest: string, policy: Policy): Action {
+export function action(current: string, latest: string, policy: Policy, installed = current): Action {
   if (policy === false) return "none"
-  const currentVersion = parseReleaseVersion(current)
+  const currentVersion = parseReleaseVersion(installed)
   const latestVersion = parseReleaseVersion(latest)
   if (!currentVersion || !latestVersion || sameRelease(currentVersion, latestVersion)) return "none"
   // Major upgrades are never installed automatically.

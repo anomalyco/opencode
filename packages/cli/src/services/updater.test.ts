@@ -32,6 +32,14 @@ describe("updater", () => {
     expect(action("1.2.3", "1.2.3", true)).toBe("none")
   })
 
+  test("skips an installed update but still accepts the next release", () => {
+    const current = "0.0.0-next-16473"
+    const installed = "0.0.0-beta-17498"
+    expect(action(current, installed, true)).toBe("upgrade")
+    expect(action(current, installed, true, installed)).toBe("none")
+    expect(action(current, "0.0.0-beta-17499", true, installed)).toBe("upgrade")
+  })
+
   test("upgrades when latest is lower (rollback)", () => {
     expect(action("1.2.4", "1.2.3", true)).toBe("upgrade")
   })
