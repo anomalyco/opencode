@@ -216,22 +216,23 @@ export const firecrawlCrawlHandler = Effect.fn("Cli.firecrawl.crawl")(function* 
   const FirecrawlApp = (yield* Effect.promise(() => import("@mendable/firecrawl-js"))).default
   const app = new FirecrawlApp({ apiKey })
 
+  const scrapeOptions: Record<string, unknown> = {
+    formats: args.formats === "both" ? ["markdown", "html"] : [args.formats],
+    timeout: args.timeout,
+    onlyMainContent: true,
+  }
+  if (args.cookie) {
+    scrapeOptions.headers = {
+      Cookie: args.cookie,
+    }
+  }
   const crawlOptions: Record<string, unknown> = {
     limit: args.limit,
     maxDepth: args["max-depth"],
-    scrapeOptions: {
-      formats: args.formats === "both" ? ["markdown", "html"] : [args.formats],
-      timeout: args.timeout,
-      onlyMainContent: true,
-    },
+    scrapeOptions,
   }
   if (args["exclude-patterns"].length > 0) {
     crawlOptions.excludePaths = args["exclude-patterns"]
-  }
-  if (args.cookie) {
-    crawlOptions.scrapeOptions.headers = {
-      Cookie: args.cookie,
-    }
   }
 
   UI.println(UI.Style.TEXT_DIM + "  Starting crawl..." + UI.Style.TEXT_NORMAL)
@@ -240,12 +241,7 @@ export const firecrawlCrawlHandler = Effect.fn("Cli.firecrawl.crawl")(function* 
   let crawlResult: { data?: Array<{ markdown?: string; html?: string; metadata?: { sourceURL?: string } }> }
   try {
     crawlResult = yield* Effect.tryPromise({
-      try: () =>
-        app.crawlUrl(args.url, crawlOptions, (status: { current: number; total: number }) => {
-          if (status.current && status.total) {
-            process.stderr.write(`\r  Progress: ${status.current}/${status.total} pages`)
-          }
-        }),
+      try: () => app.crawlUrl(args.url, crawlOptions),
       catch: (e) => new CliError({ message: `Crawl failed: ${e instanceof Error ? e.message : String(e)}` }),
     }) as Effect.Effect<{ data?: Array<{ markdown?: string; html?: string; metadata?: { sourceURL?: string } }> }, CliError>
   } catch (error: unknown) {

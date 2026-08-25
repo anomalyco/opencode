@@ -1,0 +1,127 @@
+{
+  "success": true,
+  "request": {
+    "url": "https://pypi.org/project/scrapling/",
+    "fetch_mode": "http"
+  },
+  "response": {
+    "status_code": 200,
+    "final_url": "https://pypi.org/project/scrapling/",
+    "content_type": "text/html; charset=UTF-8",
+    "response_time_ms": 241.01
+  },
+  "page": {
+    "title": "scrapling · PyPI",
+    "description": "Scrapling is an undetectable, powerful, flexible, high-performance Python library that makes Web Scraping easy and effortless as it should be!",
+    "language": "en",
+    "canonical_url": "https://pypi.org/project/scrapling/"
+  },
+  "content": {
+    "text": "Skip to main content Switch to mobile version Search PyPI Search Help Docs Sponsors Log in Register Menu Help Docs Sponsors Log in Register Search PyPI Search scrapling 0.4.14 Scrapling is an undetectable, powerful, flexible, high-performance Python library that makes Web Scraping easy and effortless as it should be! pip install scrapling Copy PIP instructions Description Download files Release hi ...",
+    "headings": [
+      {
+        "level": 1,
+        "text": "scrapling 0.4.14"
+      },
+      {
+        "level": 1,
+        "text": "Effortless Web Scraping for the Modern Web"
+      },
+      {
+        "level": 1,
+        "text": "Platinum Sponsors"
+      },
+      {
+        "level": 1,
+        "text": "Sponsors"
+      },
+      {
+        "level": 2,
+        "text": "Key Features"
+      },
+      {
+        "level": 3,
+        "text": "Spiders - A Full Crawling Framework"
+      }
+    ],
+    "paragraphs": [
+      "Scrapling is an undetectable, powerful, flexible, high-performance Python library that makes Web Scraping easy and effortless as it should be!",
+      "pip install scrapling Copy PIP instructions",
+      "العربيه | Español | Português (Brasil) | Français | Deutsch | 简体中文 | 日本語 | Русский | 한국어",
+      "Selection methods · Fetchers · Spiders · Proxy Rotation · CLI · MCP",
+      "Scrapling is an adaptive Web Scraping framework that handles everything from a single request to a full-scale crawl."
+    ]
+  },
+  "links": [
+    {
+      "text": "",
+      "url": "https://pypi.org/",
+      "rel": [],
+      "external": false
+    },
+    {
+      "text": "Help",
+      "url": "https://pypi.org/help/",
+      "rel": [],
+      "external": false
+    },
+    {
+      "text": "Docs",
+      "url": "https://docs.pypi.org/",
+      "rel": [],
+      "external": true
+    },
+    {
+      "text": "Sponsors",
+      "url": "https://pypi.org/sponsors/",
+      "rel": [],
+      "external": false
+    },
+    {
+      "text": "Log in",
+      "url": "https://pypi.org/account/login/?next=https%3A%2F%2Fpypi.org%2Fproject%2Fscrapling%2F",
+      "rel": [],
+      "external": false
+    }
+  ],
+  "images": [
+    {
+      "src": "https://pypi.org/static/images/logo-small.0e0855d0.svg",
+      "alt": "PyPI",
+      "title": null
+    },
+    {
+      "src": "https://pypi-camo.freetls.fastly.net/d3da53dd618980874f7abcb571affc0eab60fbbb/68747470733a2f2f7261772e67697468756275736572636f6e74656e742e636f6d2f443456696e63692f53637261706c696e672f6d61696e2f646f63732f6173736574732f636f7665725f6c696768742e7376673f73616e6974697a653d74727565",
+      "alt": "Scrapling Poster",
+      "title": null
+    },
+    {
+      "src": "https://pypi-camo.freetls.fastly.net/a004c6f3f7b64963a8e193f07f1d16aa81ea9636/68747470733a2f2f7472656e6473686966742e696f2f6170692f62616467652f7265706f7369746f726965732f3134323434",
+      "alt": "D4Vinci%2FScrapling | Trendshift",
+      "title": null
+    }
+  ],
+  "metadata": {
+    "description": "Scrapling is an undetectable, powerful, flexible, high-performance Python library that makes Web Scraping easy and effortless as it should be!",
+    "keywords": null,
+    "canonical": "https://pypi.org/project/scrapling/",
+    "robots": null,
+    "author": null,
+    "og": {
+      "title": "scrapling",
+      "description": "Scrapling is an undetectable, powerful, flexible, high-performance Python library that makes Web Scraping easy and effortless as it should be!",
+      "image": "https://pypi.org/static/images/og-card.00947198.webp",
+      "type": "website",
+      "site_name": "PyPI",
+      "url": "https://pypi.org/project/scrapling/"
+    },
+    "twitter": {
+      "card": "summary_large_image",
+      "title": null,
+      "description": null,
+      "image": null,
+      "site": null
+    }
+  },
+  "error": null
+}
