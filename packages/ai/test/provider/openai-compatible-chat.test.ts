@@ -238,6 +238,47 @@ describe("OpenAI-compatible Chat route", () => {
     }),
   )
 
+  it.effect("bridges tool results for Mistral-family models and honors compatibility overrides", () =>
+    Effect.gen(function* () {
+      const cases = [
+        { id: "mistral-small", bridge: true },
+        { id: "devstral-small", bridge: true },
+        { id: "codestral-latest", bridge: true },
+        { id: "pixtral-large", bridge: true },
+        { id: "open-mixtral-8x22b", bridge: true },
+        { id: "ordinary-model", bridge: false },
+        { id: "ordinary-model", override: true, bridge: true },
+        { id: "mistral-small", override: false, bridge: false },
+      ] as const
+
+      yield* Effect.forEach(cases, (item) =>
+        Effect.gen(function* () {
+          const selected = OpenAICompatibleChat.route
+            .with({ provider: "custom", endpoint: { baseURL: "https://api.custom.test/v1" } })
+            .model({
+              id: item.id,
+              compatibility: "override" in item ? { bridgeToolResults: item.override } : undefined,
+            })
+          const prepared = yield* compileRequest(
+            LLM.request({
+              model: selected,
+              messages: [
+                Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: {} })]),
+                Message.tool({ id: "call_1", name: "lookup", result: "Sunny" }),
+                Message.user("What next?"),
+              ],
+            }),
+          )
+
+          expect(prepared.body.messages.map((message) => message.role)).toEqual(
+            item.bridge ? ["assistant", "tool", "assistant", "user"] : ["assistant", "tool", "user"],
+          )
+          if (item.bridge) expect(prepared.body.messages[2]).toEqual({ role: "assistant", content: "Done." })
+        }),
+      )
+    }),
+  )
+
   it.effect("posts to the configured compatible endpoint and parses text usage", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(request).pipe(

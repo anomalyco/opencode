@@ -453,6 +453,30 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("bridges image tool results before their synthetic user message when required", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: LanguageModel.update(model, { compatibility: { bridgeToolResults: true } }),
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "call_image", name: "read", input: {} })]),
+            Message.tool({
+              id: "call_image",
+              name: "read",
+              result: {
+                type: "content",
+                value: [{ type: "file", uri: "data:image/png;base64,AAECAw==", mime: "image/png", name: "pixel.png" }],
+              },
+            }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.messages.map((message) => message.role)).toEqual(["assistant", "tool", "assistant", "user"])
+      expect(prepared.body.messages[2]).toEqual({ role: "assistant", content: "Done." })
+    }),
+  )
+
   it.effect("orders parallel tool responses before one aggregated vision message", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(

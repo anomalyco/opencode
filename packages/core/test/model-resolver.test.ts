@@ -392,6 +392,7 @@ describe("ModelResolver", () => {
             reasoningField: "vendor_reasoning",
             maxTokensField: "max_completion_tokens",
             requireFinishReason: false,
+            bridgeToolResults: true,
           },
           settings: {
             apiKey: "settings-secret",
@@ -417,6 +418,7 @@ describe("ModelResolver", () => {
       expect(resolved.compatibility?.reasoningField).toBe("vendor_reasoning")
       expect(resolved.compatibility?.maxTokensField).toBe("max_completion_tokens")
       expect(resolved.compatibility?.requireFinishReason).toBe(false)
+      expect(resolved.compatibility?.bridgeToolResults).toBe(true)
       expect(prepared.body).toMatchObject({ max_completion_tokens: 10 })
       expect(prepared.body).not.toHaveProperty("max_tokens")
       expect(resolved.route.endpoint.baseURL).toBe("https://compatible.example/v1")
