@@ -11,6 +11,7 @@ import { Credential } from "@opencode-ai/core/credential"
 import { Config } from "@opencode-ai/core/config"
 import { PermissionSaved } from "@opencode-ai/core/permission/saved"
 import { PtyTicket } from "@opencode-ai/core/pty/ticket"
+import { PersistentPty } from "@opencode-ai/core/persistent-pty"
 import { Project } from "@opencode-ai/core/project"
 import { Session } from "@opencode-ai/core/session"
 import { SessionTransfer } from "@opencode-ai/core/session/transfer"
@@ -59,6 +60,7 @@ const applicationServiceNodes = [
   SdkPlugins.node,
   PermissionSaved.node,
   PtyTicket.node,
+  PersistentPty.node,
   Credential.node,
   WellKnown.node,
   PtyEnvironment.node,
