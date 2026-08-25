@@ -1417,6 +1417,7 @@ export type PermissionRequest = {
   save?: Array<string>
   metadata?: { [x: string]: JsonValue }
   source?: PermissionSource
+  message?: string
 }
 
 export type PermissionAsked = {
@@ -1433,6 +1434,7 @@ export type PermissionAsked = {
     save?: Array<string>
     metadata?: { [x: string]: any }
     source?: PermissionSource
+    message?: string
   }
 }
 

@@ -48,6 +48,9 @@ export function host(overrides: Overrides = {}): Plugin.Context {
     event: overrides.event ?? {
       subscribe: () => Stream.empty,
     },
+    generate: overrides.generate ?? {
+      text: () => Effect.die("unused generate.text"),
+    },
     integration: overrides.integration ?? {
       list: () => Effect.die("unused integration.list"),
       get: () => Effect.die("unused integration.get"),
@@ -80,6 +83,12 @@ export function host(overrides: Overrides = {}): Plugin.Context {
       disconnect: () => Effect.die("unused mcp.disconnect"),
       transform: () => Effect.die("unused mcp.transform"),
       reload: () => Effect.die("unused mcp.reload"),
+    },
+    permission: overrides.permission ?? {
+      hook: () => Effect.die("unused permission.hook"),
+      list: () => Effect.die("unused permission.list"),
+      get: () => Effect.die("unused permission.get"),
+      reply: () => Effect.die("unused permission.reply"),
     },
     plugin: overrides.plugin ?? {
       list: () => Effect.die("unused plugin.list"),
@@ -134,6 +143,7 @@ export function host(overrides: Overrides = {}): Plugin.Context {
       synthetic: overrides.session?.synthetic ?? (() => Effect.die("unused session.synthetic")),
       interrupt: overrides.session?.interrupt ?? (() => Effect.die("unused session.interrupt")),
       wait: overrides.session?.wait ?? (() => Effect.die("unused session.wait")),
+      context: overrides.session?.context ?? (() => Effect.die("unused session.context")),
     },
   }
 }

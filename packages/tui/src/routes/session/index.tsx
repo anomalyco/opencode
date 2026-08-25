@@ -768,8 +768,13 @@ export function Session(props: { verticalTabsWidth: number }) {
       title: "Rename session",
       id: "session.rename",
       group: "Session",
-      slash: { name: "rename" },
-      run: () => DialogSessionRename.show(dialog, route.sessionID, session()?.title),
+      slash: { name: "rename", arguments: true as const },
+      run: (input?: string) => {
+        if (input === undefined) return DialogSessionRename.show(dialog, route.sessionID, session()?.title)
+        void client.api.session
+          .rename({ sessionID: route.sessionID, title: input.trim() })
+          .catch((error) => toast.error(error))
+      },
     },
     {
       title: "Jump to message",
@@ -1823,6 +1828,9 @@ function SessionGroupView(props: {
     })
   const grouped = createMemo(() => parts(props.refs))
   const pending = createMemo(() => parts(props.pending))
+  const completed = createMemo(
+    () => props.completed || (grouped().length > 0 && grouped().every((part) => part.time.completed !== undefined)),
+  )
   const label = createMemo(() => {
     const counts = grouped().reduce<Record<string, number>>((result, part) => {
       const tool = toolDisplay(part.name)
@@ -1833,7 +1841,7 @@ function SessionGroupView(props: {
     const tools = Object.entries(counts).map(
       ([name, count]) => `${count} ${count === 1 ? name : name === "search" ? "searches" : `${name}s`}`,
     )
-    return `${props.completed ? "Explored" : "Exploring"} — ${tools.join(", ")}`
+    return `${completed() ? "Explored" : "Exploring"} — ${tools.join(", ")}`
   })
   return (
     <Show when={grouped().length > 0 || pending().length > 0}>
@@ -1843,11 +1851,11 @@ function SessionGroupView(props: {
       >
         <Show when={grouped().length > 0}>
           <InlineToolRow
-            icon={props.completed ? "→" : "✱"}
+            icon={completed() ? "→" : "✱"}
             color={hover() ? theme.text.default : theme.text.subdued}
-            complete={props.completed}
+            complete={completed()}
             pending={label()}
-            spinner={!props.completed}
+            spinner={!completed()}
             onMouseOver={() => setHover(true)}
             onMouseOut={() => setHover(false)}
             onMouseUp={() => {

@@ -8,6 +8,7 @@ test("collects each SEA asset key once", async () => {
   const keys = assets.map((asset) => asset.key)
 
   expect(new Set(keys).size).toBe(keys.length)
+  if (process.platform !== "win32") expect(keys.filter((key) => key === "opencode-pty/opencode-pty")).toHaveLength(1)
   expect(assets.filter((asset) => asset.key === shellParserWasmAssets.runtime)).toEqual([
     {
       key: shellParserWasmAssets.runtime,
