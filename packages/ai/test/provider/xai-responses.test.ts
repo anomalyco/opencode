@@ -133,14 +133,12 @@ describe("xAI Responses route", () => {
 
   it.effect("parses xAI hosted tool items", () =>
     Effect.gen(function* () {
+      const item = { type: "x_search_call", id: "x_search_1", status: "completed", action: { query: "news" } }
       const response = yield* LLMClient.generate(LLM.request({ model, prompt: "Search X" })).pipe(
         Effect.provide(
           fixedResponse(
             sseEvents(
-              {
-                type: "response.output_item.done",
-                item: { type: "x_search_call", id: "x_search_1", status: "completed", action: { query: "news" } },
-              },
+              { type: "response.output_item.done", item },
               { type: "response.completed", response: { id: "response_1" } },
             ),
           ),
@@ -152,6 +150,11 @@ describe("xAI Responses route", () => {
         name: "x_search",
         input: { query: "news" },
         providerExecuted: true,
+        providerMetadata: { xai: { itemId: "x_search_1" } },
+      })
+      expect(response.events.find(LLMEvent.is.toolResult)).toMatchObject({
+        result: { type: "json", value: item },
+        providerMetadata: { xai: { itemId: "x_search_1" } },
       })
     }),
   )

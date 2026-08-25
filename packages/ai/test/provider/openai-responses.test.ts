@@ -2758,7 +2758,7 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("closes reasoning summary parts when storage is not disabled", () =>
+  it.effect("preserves final reasoning metadata when storage is enabled", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(LLMRequest.update(request, { providerOptions: { store: true } })).pipe(
         Effect.provide(
@@ -2776,7 +2776,7 @@ describe("OpenAI Responses route", () => {
               { type: "response.reasoning_summary_part.done", item_id: "rs_1", summary_index: 1 },
               {
                 type: "response.output_item.done",
-                item: { type: "reasoning", id: "rs_1", encrypted_content: null },
+                item: { type: "reasoning", id: "rs_1", encrypted_content: "encrypted-state" },
               },
               { type: "response.completed", response: { id: "resp_1" } },
             ),
@@ -2786,7 +2786,11 @@ describe("OpenAI Responses route", () => {
 
       expect(response.events.filter((event) => event.type === "reasoning-end")).toEqual([
         { type: "reasoning-end", id: "rs_1:0", providerMetadata: { openai: { itemId: "rs_1" } } },
-        { type: "reasoning-end", id: "rs_1:1", providerMetadata: { openai: { itemId: "rs_1" } } },
+        {
+          type: "reasoning-end",
+          id: "rs_1:1",
+          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
+        },
       ])
     }),
   )
@@ -2891,7 +2895,7 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("references stored reasoning items by id", () =>
+  it.effect("replays complete reasoning items when storage is enabled", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         LLM.request({
@@ -2901,7 +2905,7 @@ describe("OpenAI Responses route", () => {
               {
                 type: "reasoning",
                 text: "Checked the previous diff.",
-                providerMetadata: { openai: { itemId: "rs_1" } },
+                providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
               },
             ]),
           ],
@@ -2909,12 +2913,20 @@ describe("OpenAI Responses route", () => {
         }),
       )
 
-      expect(prepared.body.input).toEqual([{ type: "item_reference", id: "rs_1" }])
+      expect(prepared.body.input).toEqual([
+        {
+          type: "reasoning",
+          id: "rs_1",
+          summary: [{ type: "summary_text", text: "Checked the previous diff." }],
+          encrypted_content: "encrypted-state",
+        },
+      ])
     }),
   )
 
-  it.effect("references stored provider-executed hosted tool results by id", () =>
+  it.effect("replays complete hosted tool items when storage is enabled", () =>
     Effect.gen(function* () {
+      const item = { type: "web_search_call", id: "ws_1", status: "completed" }
       const prepared = yield* compileRequest(
         LLM.request({
           model,
@@ -2931,7 +2943,7 @@ describe("OpenAI Responses route", () => {
                 type: "tool-result",
                 id: "ws_1",
                 name: "web_search",
-                result: { type: "json", value: { type: "web_search_call", id: "ws_1", status: "completed" } },
+                result: { type: "json", value: item },
                 providerExecuted: true,
                 providerMetadata: { openai: { itemId: "ws_1" } },
               },
@@ -2943,7 +2955,7 @@ describe("OpenAI Responses route", () => {
       )
 
       expect(prepared.body.input).toEqual([
-        { type: "item_reference", id: "ws_1" },
+        item,
         { role: "user", content: [{ type: "input_text", text: "Continue." }] },
       ])
     }),
@@ -2951,6 +2963,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("replays stateless hosted tool results as native provider items", () =>
     Effect.gen(function* () {
+      const item = { type: "web_search_call", id: "ws_1", status: "completed" }
       const prepared = yield* compileRequest(
         LLM.request({
           model,
@@ -2968,7 +2981,7 @@ describe("OpenAI Responses route", () => {
                 type: "tool-result",
                 id: "ws_1",
                 name: "web_search",
-                result: { type: "json", value: { type: "web_search_call", id: "ws_1", status: "completed" } },
+                result: { type: "json", value: item },
                 providerExecuted: true,
                 providerMetadata: { openai: { itemId: "ws_1" } },
               },
@@ -2987,8 +3000,9 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("preserves foreign hosted tool results as portable message content", () =>
+  it.effect("preserves foreign hosted tool results as portable message content when storage is enabled", () =>
     Effect.gen(function* () {
+      const item = { type: "web_search_call", id: "ws_1", status: "completed" }
       const prepared = yield* compileRequest(
         LLM.request({
           model: xaiModel,
@@ -3005,13 +3019,14 @@ describe("OpenAI Responses route", () => {
                 type: "tool-result",
                 id: "ws_1",
                 name: "web_search",
-                result: { type: "json", value: { type: "web_search_call", id: "ws_1", status: "completed" } },
+                result: { type: "json", value: item },
                 providerExecuted: true,
                 providerMetadata: { openai: { itemId: "ws_1" } },
               },
             ]),
             Message.user("Continue."),
           ],
+          providerOptions: { store: true },
         }),
       )
 
@@ -3110,25 +3125,28 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("keeps well-formed hosted references and drops malformed ones under storage", () =>
+  it.effect("falls back to portable hosted results when stored item metadata is malformed", () =>
     Effect.gen(function* () {
-      const hostedResult = (itemId: string) => [
-        ToolCallPart.make({
-          id: itemId,
-          name: "web_search",
-          input: { query: "effect 4" },
-          providerExecuted: true,
-          providerMetadata: { openai: { itemId } },
-        }),
-        {
-          type: "tool-result" as const,
-          id: itemId,
-          name: "web_search",
-          result: { type: "json" as const, value: { status: "completed" } },
-          providerExecuted: true as const,
-          providerMetadata: { openai: { itemId } },
-        },
-      ]
+      const hostedResult = (itemId: string) => {
+        const item = { type: "web_search_call", id: itemId, status: "completed" }
+        return [
+          ToolCallPart.make({
+            id: itemId,
+            name: "web_search",
+            input: { query: "effect 4" },
+            providerExecuted: true,
+            providerMetadata: { openai: { itemId } },
+          }),
+          {
+            type: "tool-result" as const,
+            id: itemId,
+            name: "web_search",
+            result: { type: "json" as const, value: item },
+            providerExecuted: true as const,
+            providerMetadata: { openai: { itemId } },
+          },
+        ]
+      }
       const prepared = yield* compileRequest(
         LLM.request({
           model,
@@ -3137,7 +3155,13 @@ describe("OpenAI Responses route", () => {
         }),
       )
 
-      expect(prepared.body.input).toEqual([{ type: "item_reference", id: "ws_1" }])
+      expect(prepared.body.input).toEqual([
+        { type: "web_search_call", id: "ws_1", status: "completed" },
+        {
+          role: "user",
+          content: [{ type: "input_text", text: '{"type":"web_search_call","id":"bad ref","status":"completed"}' }],
+        },
+      ])
     }),
   )
 
@@ -3179,6 +3203,43 @@ describe("OpenAI Responses route", () => {
         { role: "user", content: [{ type: "input_text", text: "Generate a black triangle." }] },
         { role: "user", content: [{ type: "input_image", image_url: "data:image/png;base64,AQID" }] },
         { role: "user", content: [{ type: "input_text", text: "Make it blue." }] },
+      ])
+    }),
+  )
+
+  it.effect("preserves foreign hosted images as portable image content when storage is enabled", () =>
+    Effect.gen(function* () {
+      const item = { type: "image_generation_call", id: "ig_1", status: "completed", result: "AQID" }
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: xaiModel,
+          messages: [
+            Message.assistant([
+              ToolCallPart.make({
+                id: "ig_1",
+                name: "image_generation",
+                input: {},
+                providerExecuted: true,
+                providerMetadata: { openai: { itemId: "ig_1" } },
+              }),
+              ToolResultPart.make({
+                id: "ig_1",
+                name: "image_generation",
+                result: {
+                  type: "content",
+                  value: [{ type: "file", uri: "data:image/png;base64,AQID", mime: "image/png" }],
+                },
+                providerExecuted: true,
+                providerMetadata: { openai: { itemId: "ig_1" } },
+              }),
+            ]),
+          ],
+          providerOptions: { store: true },
+        }),
+      )
+
+      expect(prepared.body.input).toEqual([
+        { role: "user", content: [{ type: "input_image", image_url: "data:image/png;base64,AQID" }] },
       ])
     }),
   )
@@ -3892,13 +3953,15 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("decodes image generation output as image content", () =>
+  it.effect("replays hosted image results as portable content regardless of storage", () =>
     Effect.gen(function* () {
       const item = {
         type: "image_generation_call",
         id: "ig_1",
         status: "completed",
         result: "AQID",
+        action: "generate",
+        output_format: "png",
       }
       const response = yield* LLMClient.generate(request).pipe(
         Effect.provide(
@@ -3911,6 +3974,9 @@ describe("OpenAI Responses route", () => {
         ),
       )
 
+      expect(response.events.find(LLMEvent.is.toolCall)).toMatchObject({
+        providerMetadata: { openai: { itemId: "ig_1" } },
+      })
       expect(response.events.find(LLMEvent.is.toolResult)).toMatchObject({
         id: "ig_1",
         name: "image_generation",
@@ -3919,7 +3985,52 @@ describe("OpenAI Responses route", () => {
           type: "content",
           value: [{ type: "file", uri: "data:image/png;base64,AQID", mime: "image/png" }],
         },
+        providerMetadata: { openai: { itemId: "ig_1" } },
       })
+
+      const prepared = yield* Effect.forEach([false, true], (store) =>
+        compileRequest(LLM.request({ model, messages: [response.message], providerOptions: { store } })),
+      )
+      expect(prepared.map((request) => request.body.input)).toEqual([
+        [{ role: "user", content: [{ type: "input_image", image_url: "data:image/png;base64,AQID" }] }],
+        [{ role: "user", content: [{ type: "input_image", image_url: "data:image/png;base64,AQID" }] }],
+      ])
+    }),
+  )
+
+  it.effect("preserves failed hosted tool results as portable error content", () =>
+    Effect.gen(function* () {
+      const item = {
+        type: "web_search_call",
+        id: "ws_failed",
+        status: "failed",
+        error: { code: "search_failed", message: "Search unavailable" },
+      }
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "response.output_item.done", item },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.events.find(LLMEvent.is.toolResult)).toMatchObject({
+        result: { type: "error", value: item.error },
+        providerMetadata: { openai: { itemId: "ws_failed" } },
+      })
+
+      const prepared = yield* compileRequest(
+        LLM.request({ model, messages: [response.message], providerOptions: { store: true } }),
+      )
+      expect(prepared.body.input).toEqual([
+        {
+          role: "user",
+          content: [{ type: "input_text", text: '{"code":"search_failed","message":"Search unavailable"}' }],
+        },
+      ])
     }),
   )
 
