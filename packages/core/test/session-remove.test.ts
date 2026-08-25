@@ -60,8 +60,7 @@ describe("Session.remove", () => {
       yield* session.environment({ sessionID: parent.id, variables: { SESSION_ENV: "parent" } })
       yield* session.environment({ sessionID: child.id, variables: { SESSION_ENV: "child" } })
       const locations = yield* LocationServiceMap.Service
-      yield* locations.contextEffect(location)
-      yield* Effect.addFinalizer(() => locations.invalidate(location))
+      yield* Effect.acquireRelease(locations.contextEffect(location), () => locations.invalidate(location))
       closed.length = 0
 
       yield* session.remove(parent.id)

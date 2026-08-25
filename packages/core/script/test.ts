@@ -1,8 +1,9 @@
 import fs from "fs/promises"
-import os from "os"
 import path from "path"
+import { tmpdir } from "../test/fixture/tmpdir"
 
-const home = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "opencode-core-home-")))
+await using directory = await tmpdir("opencode-core-home-")
+const home = directory.path
 const temporary = path.join(home, "tmp")
 await fs.mkdir(temporary)
 
@@ -48,5 +49,4 @@ const result = await child.exited
 process.off("SIGINT", interrupt)
 process.off("SIGTERM", terminate)
 
-await fs.rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
 process.exitCode = result

@@ -3,11 +3,6 @@ import os from "os"
 import path from "path"
 import { Global } from "@opencode-ai/util/global"
 
-const within = (directory: string, root: string) => {
-  const relative = path.relative(root, directory)
-  return relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)
-}
-
 describe("Core test environment", () => {
   test("isolates global home and XDG roots", () => {
     const home = process.env.OPENCODE_TEST_HOME
@@ -16,11 +11,11 @@ describe("Core test environment", () => {
 
     expect(os.homedir()).toBe(home)
     expect(Global.Path.home).toBe(home)
-    expect(within(Global.Path.config, home)).toBeTrue()
-    expect(within(Global.Path.data, home)).toBeTrue()
-    expect(within(Global.Path.cache, home)).toBeTrue()
-    expect(within(Global.Path.state, home)).toBeTrue()
-    expect(within(os.tmpdir(), home)).toBeTrue()
+    expect(Global.Path.config).toBe(path.join(home, ".config", "opencode"))
+    expect(Global.Path.data).toBe(path.join(home, ".local", "share", "opencode"))
+    expect(Global.Path.cache).toBe(path.join(home, ".cache", "opencode"))
+    expect(Global.Path.state).toBe(path.join(home, ".local", "state", "opencode"))
+    expect(os.tmpdir()).toBe(path.join(home, "tmp"))
     expect(process.env.OPENCODE_CONFIG_DIR).toBe(Global.Path.config)
     expect(process.env.OPENCODE_CONFIG).toBeUndefined()
     expect(process.env.OPENCODE_CONFIG_CONTENT).toBeUndefined()
