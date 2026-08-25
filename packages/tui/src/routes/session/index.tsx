@@ -768,7 +768,7 @@ export function Session(props: { verticalTabsWidth: number }) {
       title: "Rename session",
       id: "session.rename",
       group: "Session",
-      slash: { name: "rename" },
+      slash: { name: "rename", aliases: ["title"] },
       run: () => DialogSessionRename.show(dialog, route.sessionID, session()?.title),
     },
     {
@@ -790,7 +790,7 @@ export function Session(props: { verticalTabsWidth: number }) {
       title: "Fork session",
       id: "session.fork",
       group: "Session",
-      slash: { name: "fork" },
+      slash: { name: "fork", aliases: ["branch"] },
       run: () => {
         dialog.replace(() => (
           <DialogFork
@@ -837,7 +837,7 @@ export function Session(props: { verticalTabsWidth: number }) {
       title: "Undo previous message",
       id: "session.undo",
       group: "Session",
-      slash: { name: "undo" },
+      slash: { name: "undo", aliases: ["rewind"] },
       run: () => {
         const message = messagesBeforeRevert().findLast(
           (message): message is SessionMessageUser => message.type === "user" && !!message.text.trim(),

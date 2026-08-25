@@ -42,6 +42,7 @@ export type AutocompleteOption = {
   display: string
   value?: string
   aliases?: string[]
+  priority?: number
   disabled?: boolean
   description?: string
   isDirectory?: boolean
@@ -532,6 +533,7 @@ export function Autocomplete(props: {
         display: `/${slash.name}`,
         description: command.description ?? command.title,
         aliases: slash.aliases?.map((alias) => `/${alias}`),
+        priority: slash.priority,
         onSelect: slash.arguments ? () => insertSlash(slash.name) : command.run,
       }
     })
@@ -627,9 +629,12 @@ export function Autocomplete(props: {
           const displayResult = objResults[0]
           let score = objResults.score
           const prefix = store.visible === "reference" ? "@" : store.visible === "command" ? "/" : ""
-          if (displayResult && displayResult.target.startsWith(prefix + searchValue)) {
+          const startsWithPrefix = (target?: string) => target?.startsWith(prefix + searchValue) === true
+          if (startsWithPrefix(displayResult?.target) || objResults.obj.aliases?.some(startsWithPrefix)) {
             score *= 2
           }
+          const priority = objResults.obj.priority ?? 0
+          if (priority > 0) score *= 1 + priority
           const frecencyScore = objResults.obj.path ? frecency.getFrecency(objResults.obj.path) : 0
           return score * (1 + frecencyScore)
         },

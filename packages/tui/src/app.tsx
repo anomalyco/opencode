@@ -704,7 +704,7 @@ function App(props: { pair?: DialogPairCredentials }) {
         title: "Switch session",
         category: "Session",
         suggested: data.session.list().length > 0,
-        slash: { name: "sessions", aliases: ["resume", "continue"] },
+        slash: { name: "sessions", aliases: ["resume", "continue"], priority: 2 },
         run: () => {
           dialog.replace(() => <DialogSessionList />)
         },
@@ -714,7 +714,7 @@ function App(props: { pair?: DialogPairCredentials }) {
         title: "New session",
         suggested: route.data.type === "session",
         category: "Session",
-        slash: { name: "new", aliases: ["clear"] },
+        slash: { name: "new", aliases: ["clear", "reset"], priority: 1 },
         run: () => {
           const model = local.model.current()
           const current =
@@ -817,7 +817,7 @@ function App(props: { pair?: DialogPairCredentials }) {
         suggested: true,
         category: "Agent",
         // Bias /mo toward /models over /move without changing global fuzzy scoring.
-        slash: { name: "models", aliases: ["mo"] },
+        slash: { name: "models", aliases: ["mo", "model", "m"], priority: 2 },
         run: () => {
           dialog.replace(() => <DialogModel />)
         },
@@ -871,7 +871,7 @@ function App(props: { pair?: DialogPairCredentials }) {
         name: "mcp.list",
         title: "MCP servers",
         category: "Agent",
-        slash: { name: "mcps" },
+        slash: { name: "mcps", aliases: ["mcp"] },
         run: () => {
           dialog.replace(() => <DialogMcp />)
         },
@@ -937,7 +937,7 @@ function App(props: { pair?: DialogPairCredentials }) {
         name: "opencode.settings",
         title: "Open settings",
         suggested: true,
-        slash: { name: "settings" },
+        slash: { name: "settings", aliases: ["config"] },
         run: () => {
           dialog.replace(() => <DialogConfig />)
         },
@@ -994,7 +994,7 @@ function App(props: { pair?: DialogPairCredentials }) {
       {
         name: "theme.switch",
         title: "Switch theme",
-        slash: { name: "themes" },
+        slash: { name: "themes", aliases: ["theme"] },
         run: () => {
           dialog.replace(() => <DialogThemeList />)
         },
