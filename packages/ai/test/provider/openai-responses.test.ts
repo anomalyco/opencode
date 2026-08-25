@@ -518,6 +518,56 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("continues a tool call from authoritative completed response output", () =>
+    Effect.gen(function* () {
+      const firstRequest = {
+        type: "response.create",
+        model: "gpt-5.2",
+        store: false,
+        input: [{ role: "user", content: [{ type: "input_text", text: "Weather?" }] }],
+      }
+      const first = continuationDriver(firstRequest)
+      const firstCreate = yield* first.create(undefined)
+      const saved = checkpoint(
+        yield* first.observe(
+          firstCreate,
+          ProviderShared.encodeJson({
+            type: "response.completed",
+            response: {
+              id: "resp_1",
+              output: [
+                {
+                  type: "function_call",
+                  id: "fc_1",
+                  status: "completed",
+                  call_id: "call_1",
+                  name: "weather",
+                  arguments: '{ "city": "Paris" }',
+                },
+              ],
+            },
+          }),
+        ),
+      )
+      const second = continuationDriver({
+        ...firstRequest,
+        input: [
+          ...firstRequest.input,
+          { type: "function_call", call_id: "call_1", name: "weather", arguments: '{"city":"Paris"}' },
+          { type: "function_call_output", call_id: "call_1", output: '{"temperature":22}' },
+        ],
+      })
+
+      const create = yield* second.create(saved)
+
+      expect(create.mode).toBe("incremental")
+      expect(ProviderShared.decodeJson(create.message)).toMatchObject({
+        previous_response_id: "resp_1",
+        input: [{ type: "function_call_output", call_id: "call_1", output: '{"temperature":22}' }],
+      })
+    }),
+  )
+
   it.effect("continues a promoted steer after the completed assistant output", () =>
     Effect.gen(function* () {
       const firstInput = [{ role: "user", content: [{ type: "input_text", text: "First" }] }]
@@ -3033,6 +3083,163 @@ describe("OpenAI Responses route", () => {
 
       expect(response.events.find(LLMEvent.is.toolCall)).toMatchObject({ input: { query: "output-item-done" } })
       expect(response.events.filter(LLMEvent.is.toolCall)).toHaveLength(1)
+    }),
+  )
+
+  it.effect("treats empty completed output item arguments as authoritative", () =>
+    Effect.gen(function* () {
+      const body = sseEvents(
+        {
+          type: "response.output_item.added",
+          item: { type: "function_call", id: "fc_item_1", call_id: "call_1", name: "lookup", arguments: "" },
+        },
+        { type: "response.function_call_arguments.delta", item_id: "fc_item_1", delta: '{"query":"streamed"}' },
+        {
+          type: "response.output_item.done",
+          item: { type: "function_call", id: "fc_item_1", call_id: "call_1", name: "lookup", arguments: "" },
+        },
+        { type: "response.completed", response: { id: "resp_1" } },
+      )
+      const response = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse(body)))
+
+      expect(response.events.find(LLMEvent.is.toolCall)).toMatchObject({ input: {} })
+      expect(response.events.filter(LLMEvent.is.toolCall)).toHaveLength(1)
+    }),
+  )
+
+  it.effect("uses completed response output when output item completion is missing", () =>
+    Effect.gen(function* () {
+      const body = sseEvents(
+        {
+          type: "response.output_item.added",
+          item: { type: "function_call", id: "fc_item_1", call_id: "call_1", name: "lookup", arguments: "" },
+        },
+        { type: "response.function_call_arguments.delta", item_id: "fc_item_1", delta: '{"query":"wea' },
+        {
+          type: "response.completed",
+          response: {
+            id: "resp_1",
+            output: [
+              {
+                type: "function_call",
+                id: "fc_item_1",
+                call_id: "call_1",
+                name: "lookup",
+                arguments: '{"query":"weather"}',
+              },
+            ],
+          },
+        },
+      )
+      const response = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse(body)))
+
+      expect(response.events.find(LLMEvent.is.toolCall)).toMatchObject({
+        id: "call_1",
+        input: { query: "weather" },
+        providerMetadata: { openai: { itemId: "fc_item_1" } },
+      })
+      expect(response.events.filter(LLMEvent.is.toolInputEnd)).toHaveLength(1)
+      expect(response.events.filter(LLMEvent.is.toolCall)).toHaveLength(1)
+      expect(response.finishReason.normalized).toBe("tool-calls")
+    }),
+  )
+
+  it.effect("lets completed response output override arguments done", () =>
+    Effect.gen(function* () {
+      const body = sseEvents(
+        {
+          type: "response.output_item.added",
+          item: { type: "function_call", id: "fc_item_1", call_id: "call_1", name: "lookup", arguments: "" },
+        },
+        {
+          type: "response.function_call_arguments.done",
+          item_id: "fc_item_1",
+          arguments: '{"query":"arguments-done"}',
+        },
+        {
+          type: "response.completed",
+          response: {
+            output: [
+              {
+                type: "function_call",
+                id: "fc_item_1",
+                call_id: "call_1",
+                name: "lookup",
+                arguments: '{"query":"completed"}',
+              },
+            ],
+          },
+        },
+      )
+      const response = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse(body)))
+
+      expect(response.events.find(LLMEvent.is.toolCall)).toMatchObject({ input: { query: "completed" } })
+    }),
+  )
+
+  it.effect("preserves explicit empty arguments from completed response output", () =>
+    Effect.gen(function* () {
+      const body = sseEvents(
+        {
+          type: "response.output_item.added",
+          item: { type: "function_call", id: "fc_item_1", call_id: "call_1", name: "lookup", arguments: "" },
+        },
+        { type: "response.function_call_arguments.delta", item_id: "fc_item_1", delta: '{"query":"streamed"}' },
+        {
+          type: "response.completed",
+          response: {
+            output: [{ type: "function_call", id: "fc_item_1", call_id: "call_1", name: "lookup", arguments: "" }],
+          },
+        },
+      )
+      const response = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse(body)))
+
+      expect(response.events.find(LLMEvent.is.toolCall)).toMatchObject({ input: {} })
+    }),
+  )
+
+  it.effect("does not repeat function calls already finalized by an output item", () =>
+    Effect.gen(function* () {
+      const item = {
+        type: "function_call",
+        id: "fc_item_1",
+        call_id: "call_1",
+        name: "lookup",
+        arguments: '{"query":"weather"}',
+      }
+      const body = sseEvents(
+        { type: "response.output_item.added", item: { ...item, arguments: "" } },
+        { type: "response.output_item.done", item },
+        { type: "response.completed", response: { output: [item] } },
+      )
+      const response = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse(body)))
+
+      expect(response.events.filter(LLMEvent.is.toolInputEnd)).toHaveLength(1)
+      expect(response.events.filter(LLMEvent.is.toolCall)).toHaveLength(1)
+    }),
+  )
+
+  it.effect("does not finalize pending function calls from incomplete response output", () =>
+    Effect.gen(function* () {
+      const item = {
+        type: "function_call",
+        id: "fc_item_1",
+        call_id: "call_1",
+        name: "lookup",
+        arguments: '{"query":"partial',
+      }
+      const body = sseEvents(
+        { type: "response.output_item.added", item: { ...item, arguments: "" } },
+        { type: "response.function_call_arguments.delta", item_id: "fc_item_1", delta: item.arguments },
+        {
+          type: "response.incomplete",
+          response: { incomplete_details: { reason: "max_output_tokens" }, output: [item] },
+        },
+      )
+      const response = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse(body)))
+
+      expect(response.events.some(LLMEvent.is.toolCall)).toBeFalse()
+      expect(response.finishReason.normalized).toBe("length")
     }),
   )
 

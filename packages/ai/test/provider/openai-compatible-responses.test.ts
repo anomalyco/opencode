@@ -225,6 +225,48 @@ describe("Open Responses-compatible route", () => {
     }),
   )
 
+  it.effect("finalizes pending function calls from completed response output", () =>
+    Effect.gen(function* () {
+      const model = configure({
+        apiKey: "test-key",
+        baseURL: "https://responses.example.test/v1",
+        provider: "example",
+      }).model("example-model")
+      const response = yield* LLMClient.generate(LLM.request({ model, prompt: "Look it up." })).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              {
+                type: "response.output_item.added",
+                item: { type: "function_call", id: "item_1", call_id: "call_1", name: "lookup", arguments: "" },
+              },
+              { type: "response.function_call_arguments.delta", item_id: "item_1", delta: '{"query":"par' },
+              {
+                type: "response.completed",
+                response: {
+                  output: [
+                    {
+                      type: "function_call",
+                      id: "item_1",
+                      call_id: "call_1",
+                      name: "lookup",
+                      arguments: '{"query":"complete"}',
+                    },
+                  ],
+                },
+              },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.events.find(LLMEvent.is.toolCall)).toMatchObject({
+        input: { query: "complete" },
+        providerMetadata: { openresponses: { itemId: "item_1" } },
+      })
+    }),
+  )
+
   it.effect("reconciles raw reasoning finals without streamed deltas", () =>
     Effect.gen(function* () {
       const model = configure({
