@@ -6,6 +6,7 @@ import { Locale } from "../../util/locale"
 import { DialogMessage } from "./dialog-message"
 import { useDialog } from "../../ui/dialog"
 import type { PromptInfo } from "../../component/prompt/history"
+import { isHumanUserMessage } from "../../util/closure-record"
 
 export function DialogTimeline(props: {
   sessionID: string
@@ -23,8 +24,9 @@ export function DialogTimeline(props: {
     const messages = sync.data.message[props.sessionID] ?? []
     const result = [] as DialogSelectOption<string>[]
     for (const message of messages) {
-      if (message.role !== "user") continue
-      const part = (sync.data.part[message.id] ?? []).find(
+      const parts = sync.data.part[message.id] ?? []
+      if (!isHumanUserMessage(message, parts)) continue
+      const part = parts.find(
         (x) => x.type === "text" && !x.synthetic && !x.ignored,
       ) as TextPart
       if (!part) continue

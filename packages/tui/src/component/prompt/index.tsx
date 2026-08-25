@@ -42,6 +42,8 @@ import { Locale } from "../../util/locale"
 import { errorMessage } from "../../util/error"
 import { formatDuration } from "../../util/format"
 import { abortSessionBranch } from "../../util/session-abort"
+import { decideInterrupt, INTERRUPT_WINDOW_MS } from "../../util/session-interrupt"
+import { isHumanUserMessage } from "../../util/closure-record"
 import { createColors, createFrames } from "../../ui/spinner"
 import { useDialog } from "../../ui/dialog"
 import { DialogProvider as DialogProviderConnect } from "../dialog-provider"
@@ -259,7 +261,7 @@ export function Prompt(props: PromptProps) {
     if (!props.sessionID) return undefined
     const messages = sync.data.message[props.sessionID]
     if (!messages) return undefined
-    return messages.findLast((m): m is UserMessage => m.role === "user")
+    return messages.findLast((m): m is UserMessage => isHumanUserMessage(m, sync.data.part[m.id] ?? []))
   })
 
   const usage = createMemo(() => {
@@ -287,6 +289,7 @@ export function Prompt(props: PromptProps) {
     mode: "normal" | "shell"
     extmarkToPartIndex: Map<number, number>
     interrupt: number
+    interruptAt: number
     placeholder: number
   }>({
     placeholder: randomIndex(list().length),
@@ -297,6 +300,7 @@ export function Prompt(props: PromptProps) {
     mode: "normal",
     extmarkToPartIndex: new Map(),
     interrupt: 0,
+    interruptAt: 0,
   })
 
   createEffect(
@@ -403,34 +407,46 @@ export function Prompt(props: PromptProps) {
         // when a session has no work, so a request with nothing to close costs one round trip.
         enabled: Boolean(props.sessionID),
         run: () => {
-          if (auto()?.visible) return
-          if (!input.focused) return
-          // TODO: this should be its own command
-          if (store.mode === "shell") {
+          const outcome = decideInterrupt({
+            sessionID: props.sessionID,
+            autocompleteVisible: Boolean(auto()?.visible),
+            focused: input.focused,
+            mode: store.mode,
+            armed: store.interrupt,
+            armedAt: store.interruptAt,
+            now: Date.now(),
+          })
+
+          if (outcome.kind === "blocked") return
+          if (outcome.kind === "exit_shell") {
             setStore("mode", "normal")
             return
           }
-          if (!props.sessionID) return
-
-          setStore("interrupt", store.interrupt + 1)
-
-          setTimeout(() => {
-            setStore("interrupt", 0)
-          }, 5000)
-
-          if (store.interrupt >= 2) {
-            void abortSessionBranch({
-              client: sdk.client,
-              sessionID: props.sessionID,
-              onFailure: (error) =>
-                toast.show({
-                  title: "Interrupt failed",
-                  message: errorMessage(error),
-                  variant: "error",
-                }),
-            })
-            setStore("interrupt", 0)
+          if (outcome.kind === "arm") {
+            setStore("interrupt", outcome.armed)
+            setStore("interruptAt", outcome.armedAt)
+            // The timer clears only the sequence that scheduled it. The decision itself
+            // expires the window from `armedAt`, so a stale timer cannot cancel a later
+            // sequence and a delayed timer cannot keep an expired press alive.
+            setTimeout(() => {
+              if (store.interruptAt !== outcome.armedAt) return
+              setStore("interrupt", 0)
+            }, INTERRUPT_WINDOW_MS)
+            dialog.clear()
+            return
           }
+
+          setStore("interrupt", 0)
+          void abortSessionBranch({
+            client: sdk.client,
+            sessionID: outcome.sessionID,
+            onFailure: (error) =>
+              toast.show({
+                title: "Interrupt failed",
+                message: errorMessage(error),
+                variant: "error",
+              }),
+          })
           dialog.clear()
         },
       },
@@ -1072,15 +1088,20 @@ export function Prompt(props: PromptProps) {
 
     if (store.mode === "shell") {
       move.startSubmit()
-      void sdk.client.session.shell({
-        sessionID,
-        agent: agent.name,
-        model: {
-          providerID: selectedModel.providerID,
-          modelID: selectedModel.modelID,
-        },
-        command: inputText,
-      })
+      void sdk.client.session
+        .shell(
+          {
+            sessionID,
+            agent: agent.name,
+            model: {
+              providerID: selectedModel.providerID,
+              modelID: selectedModel.modelID,
+            },
+            command: inputText,
+          },
+          { throwOnError: true },
+        )
+        .catch((error) => toast.show({ message: errorMessage(error), variant: "error" }))
       setStore("mode", "normal")
     } else if (
       inputText.startsWith("/") &&
@@ -1094,19 +1115,24 @@ export function Prompt(props: PromptProps) {
       const restOfInput = firstLineEnd === -1 ? "" : inputText.slice(firstLineEnd + 1)
       const args = firstLineArgs.join(" ") + (restOfInput ? "\n" + restOfInput : "")
 
-      void sdk.client.session.command({
-        sessionID,
-        command: command.slice(1),
-        arguments: args,
-        agent: agent.name,
-        model: `${selectedModel.providerID}/${selectedModel.modelID}`,
-        variant,
-        parts: nonTextParts.filter((x) => x.type === "file"),
-      })
+      void sdk.client.session
+        .command(
+          {
+            sessionID,
+            command: command.slice(1),
+            arguments: args,
+            agent: agent.name,
+            model: `${selectedModel.providerID}/${selectedModel.modelID}`,
+            variant,
+            parts: nonTextParts.filter((x) => x.type === "file"),
+          },
+          { throwOnError: true },
+        )
+        .catch((error) => toast.show({ message: errorMessage(error), variant: "error" }))
     } else {
       move.startSubmit()
-      sdk.client.session
-        .prompt(
+      try {
+        await sdk.client.session.promptAsync(
           {
             sessionID,
             ...selectedModel,
@@ -1124,13 +1150,15 @@ export function Prompt(props: PromptProps) {
           },
           { throwOnError: true },
         )
-        .catch((error) => {
-          toast.show({
-            title: "Failed to send prompt",
-            message: errorMessage(error),
-            variant: "error",
-          })
+      } catch (error) {
+        toast.show({
+          title: "Failed to send prompt",
+          message: errorMessage(error),
+          variant: "error",
         })
+        if (finishMoveProgress) move.finishSubmit()
+        return false
+      }
       if (editorParts.length > 0) editor.markSelectionSent()
     }
     history.append({

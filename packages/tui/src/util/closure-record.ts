@@ -17,6 +17,12 @@ export function isMessageNavigationStop(message: Message, parts: Part[]) {
   return parts.some((part) => part.type === "text" && !part.synthetic && !part.ignored)
 }
 
+export function transcriptStatus(message: Message | undefined, parts: Part[]): "idle" | "working" {
+  if (!message || isCompleteClosurePair({ info: message, parts })) return "idle"
+  if (message.role === "user") return "working"
+  return message.time.completed ? "idle" : "working"
+}
+
 export function taskSpinnerRunning(
   partStatus: string,
   background: boolean,

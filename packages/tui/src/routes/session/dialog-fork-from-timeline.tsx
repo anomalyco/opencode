@@ -8,6 +8,7 @@ import { useRoute } from "../../context/route"
 import { useDialog, type DialogContext } from "../../ui/dialog"
 import type { PromptInfo } from "../../component/prompt/history"
 import { stripPromptPartIDs as strip } from "../../prompt/part"
+import { isHumanUserMessage } from "../../util/closure-record"
 
 export function DialogForkFromTimeline(props: { sessionID: string; onMove: (messageID?: string) => void }) {
   const sync = useSync()
@@ -35,8 +36,9 @@ export function DialogForkFromTimeline(props: { sessionID: string; onMove: (mess
     } satisfies DialogSelectOption<string | undefined>
     const result = [] as DialogSelectOption<string | undefined>[]
     for (const message of messages) {
-      if (message.role !== "user") continue
-      const part = (sync.data.part[message.id] ?? []).find(
+      const parts = sync.data.part[message.id] ?? []
+      if (!isHumanUserMessage(message, parts)) continue
+      const part = parts.find(
         (x) => x.type === "text" && !x.synthetic && !x.ignored,
       ) as TextPart
       if (!part) continue
@@ -49,7 +51,6 @@ export function DialogForkFromTimeline(props: { sessionID: string; onMove: (mess
             sessionID: props.sessionID,
             messageID: message.id,
           })
-          const parts = sync.data.part[message.id] ?? []
           const prompt = parts.reduce(
             (agg, part) => {
               if (part.type === "text") {

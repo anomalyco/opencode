@@ -89,6 +89,7 @@ import {
   isMessageNavigationStop,
   taskSpinnerRunning,
 } from "../../util/closure-record"
+import { collectSubtree } from "../../util/session-tree"
 
 addDefaultParsers(parsers.parsers)
 
@@ -213,9 +214,12 @@ export function Session() {
   onCleanup(() => setEpilogue())
   const children = createMemo(() => {
     const parentID = session()?.parentID ?? session()?.id
+    // Newest first. Session ids are descending, so ascending-id order used to express that;
+    // after the 2026-08-14T11:19:55.136Z wrap new sessions get high ids and sorted last,
+    // rendering as the oldest. Order by creation time, keeping raw id as a stable tie-break.
     return sync.data.session
       .filter((x) => x.parentID === parentID || x.id === parentID)
-      .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+      .toSorted((a, b) => b.time.created - a.time.created || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
   })
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
   const messagesBeforeRevert = () => {
@@ -237,14 +241,14 @@ export function Session() {
         )
       : [],
   )
-  const permissions = createMemo(() => {
-    if (session()?.parentID) return []
-    return children().flatMap((x) => sync.data.permission[x.id] ?? [])
+  // Full descendant tree (any depth) so depth-2+ subagent prompts surface - not just direct children.
+  const descendants = createMemo(() => {
+    const rootID = session()?.id
+    if (!rootID || session()?.parentID) return []
+    return collectSubtree(sync.data.session, rootID)
   })
-  const questions = createMemo(() => {
-    if (session()?.parentID) return []
-    return children().flatMap((x) => sync.data.question[x.id] ?? [])
-  })
+  const permissions = createMemo(() => descendants().flatMap((id) => sync.data.permission[id] ?? []))
+  const questions = createMemo(() => descendants().flatMap((id) => sync.data.question[id] ?? []))
   const visible = createMemo(() => !session()?.parentID && permissions().length === 0 && questions().length === 0)
   const disabled = createMemo(() => permissions().length > 0 || questions().length > 0)
 
@@ -319,6 +323,7 @@ export function Session() {
       }
       editor.reconnect(result.data.directory)
       await sync.session.sync(sessionID)
+      void sync.session.syncTree(sessionID).catch(() => {})
       if (route.sessionID === sessionID && scroll) scroll.scrollBy(100_000)
     })().catch((error) => {
       if (route.sessionID !== sessionID) return
@@ -685,8 +690,9 @@ export function Session() {
               variant: "error",
             }),
           action: async () => {
+            const boundaryIndex = messages().findIndex((x) => x.id === messageID)
             const message = messages().find(
-              (x) => x.id > messageID && isHumanUserMessage(x, sync.data.part[x.id] ?? []),
+              (x, i) => boundaryIndex >= 0 && i > boundaryIndex && isHumanUserMessage(x, sync.data.part[x.id] ?? []),
             )
             if (!message) {
               void sdk.client.session.unrevert({
