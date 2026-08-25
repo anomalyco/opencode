@@ -491,7 +491,7 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
-  it.effect("emits malformed tool input as an unexecuted tool error", () =>
+  it.effect("recovers incomplete tool input at finalization", () =>
     Effect.gen(function* () {
       const body = eventStreamBody(
         ["messageStart", { role: "assistant" }],
@@ -508,10 +508,10 @@ describe("Bedrock Converse route", () => {
       )
       const response = yield* LLMClient.generate(baseRequest).pipe(Effect.provide(fixedBytes(body)))
 
-      expect(response.events.find((event) => event.type === "tool-input-error")).toMatchObject({
+      expect(response.events.find((event) => event.type === "tool-call")).toMatchObject({
         id: "tool_1",
         name: "lookup",
-        raw: '{"query":"partial',
+        input: { query: "partial" },
       })
       expect(response.finishReason).toEqual({ normalized: "tool-calls", raw: "end_turn" })
     }),
