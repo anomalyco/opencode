@@ -24,6 +24,16 @@ export class ProviderNotFound extends Schema.TaggedError<ProviderNotFound>()("Wo
 }) {}
 
 export interface Interface {
+  /**
+   * Get-or-create the provider resource backing this logical workspace.
+   *
+   * MUST be idempotent per `workspaceID`: core retries the same ID after
+   * failures and process crashes, including a crash between a successful
+   * create and the binding being persisted, and another process may race the
+   * same ID. Key the resource by `workspaceID` (a provider tag or a
+   * deterministic name) and adopt an existing match instead of creating a
+   * duplicate.
+   */
   readonly create: (input: {
     readonly workspaceID: Workspace.ID
   }) => Effect.Effect<{ readonly binding: Binding }, Error>
@@ -37,9 +47,17 @@ export interface Interface {
     readonly binding: Binding
     readonly saveBinding: (binding: Binding) => Effect.Effect<void>
   }) => Effect.Effect<void, Error>
+  /**
+   * Release the provider resource for this workspace.
+   *
+   * `binding` is null when none was persisted: the workspace was never
+   * provisioned, or provisioning was interrupted mid-create. Look up any
+   * resource previously created for `workspaceID` and clean it up, treating
+   * absence as success.
+   */
   readonly destroy: (input: {
     readonly workspaceID: Workspace.ID
-    readonly binding: Binding
+    readonly binding: Binding | null
   }) => Effect.Effect<void, Error>
 }
 

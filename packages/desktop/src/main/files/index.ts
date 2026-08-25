@@ -85,10 +85,7 @@ function make(fs: FileSystem.FileSystem, path: Path.Path) {
       )
     }),
     revealPath: Effect.fn("DesktopFiles.revealPath")(function* (target: string) {
-      const exists = yield* fs.stat(target).pipe(
-        Effect.as(true),
-        Effect.catch(() => Effect.succeed(false)),
-      )
+      const exists = yield* fs.exists(target).pipe(Effect.orElseSucceed(() => false))
       if (!exists) return false
       shell.showItemInFolder(target)
       return true
@@ -98,6 +95,9 @@ function make(fs: FileSystem.FileSystem, path: Path.Path) {
       if (image.isEmpty()) return null
       const size = image.getSize()
       return { buffer: new Uint8Array(image.toPNG()).buffer, width: size.width, height: size.height }
+    },
+    writeClipboardText(text: string) {
+      clipboard.writeText(text)
     },
   }
 }

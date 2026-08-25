@@ -36,12 +36,14 @@ export interface BasicToolProps {
   defer?: boolean
   locked?: boolean
   animated?: boolean
+  rail?: boolean
   onSubtitleClick?: () => void
   onTriggerClick?: JSX.EventHandlerUnion<HTMLElement, MouseEvent>
   onTriggerKeyDown?: JSX.EventHandlerUnion<HTMLElement, KeyboardEvent>
   triggerHref?: string
   triggerAsLink?: boolean
   clickable?: boolean
+  compact?: boolean
 }
 
 const SPRING = { type: "spring" as const, visualDuration: 0.35, bounce: 0 }
@@ -255,16 +257,35 @@ export function BasicTool(props: BasicToolProps) {
   )
 
   return (
-    <Collapsible open={open()} onOpenChange={handleOpenChange} class="tool-collapsible">
+    <Collapsible
+      open={open()}
+      onOpenChange={props.locked ? undefined : handleOpenChange}
+      class="tool-collapsible"
+      data-compact={props.compact ? "true" : undefined}
+      data-rail={props.rail === false ? "false" : undefined}
+    >
       <Show
-        when={props.triggerAsLink || props.triggerHref}
+        when={!props.locked && (props.triggerAsLink || props.triggerHref)}
         fallback={
-          <Collapsible.Trigger
-            data-hide-details={props.hideDetails ? "true" : undefined}
-            onClick={props.onTriggerClick}
+          <Show
+            when={!props.locked}
+            fallback={
+              <div
+                data-slot="collapsible-trigger"
+                data-locked
+                data-hide-details={props.hideDetails ? "true" : undefined}
+              >
+                {trigger()}
+              </div>
+            }
           >
-            {trigger()}
-          </Collapsible.Trigger>
+            <Collapsible.Trigger
+              data-hide-details={props.hideDetails ? "true" : undefined}
+              onClick={props.onTriggerClick}
+            >
+              {trigger()}
+            </Collapsible.Trigger>
+          </Show>
         }
       >
         <Collapsible.Trigger

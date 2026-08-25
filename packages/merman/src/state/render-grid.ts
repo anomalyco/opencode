@@ -7,11 +7,12 @@ import type { StateCellStyle } from "./types.js"
 export type StateGrid = DiagramCanvas<StateCellStyle>
 
 export function renderStateGridText(grid: StateGrid): string {
-  return grid.toString({ trimBottom: true })
+  return grid.toString({ trimTop: true, trimBottom: true })
 }
 
 export function renderStateGridStyledText(grid: StateGrid, colors: StateStyleColors): StyledText {
   return renderDiagramGridStyledText(grid, (run) => (run.style ? colors[run.style] : undefined), undefined, {
+    trimTop: true,
     trimBottom: true,
   })
 }

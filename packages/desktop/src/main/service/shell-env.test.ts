@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import * as NodePath from "@effect/platform-node/NodePath"
 import { Effect } from "effect"
 
-import { isNushell, mergeShellEnv, parseShellEnv, resolveUserShell } from "./shell-env"
+import { isNushell, parseShellEnv, resolveUserShell } from "./shell-env"
 
 describe("shell env", () => {
   test("parseShellEnv supports null-delimited pairs", () => {
@@ -17,23 +17,6 @@ describe("shell env", () => {
 
     expect(Object.keys(env).length).toBe(1)
     expect(env.OK).toBe("1")
-  })
-
-  test("mergeShellEnv keeps explicit overrides", () => {
-    const env = mergeShellEnv(
-      {
-        PATH: "/shell/path",
-        HOME: "/tmp/home",
-      },
-      {
-        PATH: "/desktop/path",
-        OPENCODE_CLIENT: "desktop",
-      },
-    )
-
-    expect(env.PATH).toBe("/desktop/path")
-    expect(env.HOME).toBe("/tmp/home")
-    expect(env.OPENCODE_CLIENT).toBe("desktop")
   })
 
   test("resolveUserShell falls back to the login shell before /bin/sh", () => {

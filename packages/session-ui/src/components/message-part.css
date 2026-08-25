@@ -263,33 +263,6 @@
   }
 }
 
-[data-component="compaction-part"] {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-
-  [data-slot="compaction-part-divider"] {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 10px 0;
-    width: 100%;
-  }
-
-  [data-slot="compaction-part-line"] {
-    flex: 1 1 auto;
-    height: 1px;
-    background: var(--v2-border-border-base);
-  }
-
-  [data-slot="compaction-part-label"] {
-    flex: 0 0 auto;
-    white-space: nowrap;
-    text-align: center;
-  }
-}
-
 [data-component="reasoning-part"] {
   width: 100%;
   color: var(--v2-text-text-muted);
@@ -326,7 +299,7 @@
 [data-component="tool-output"] {
   white-space: pre;
   padding: 0;
-  margin-bottom: 24px;
+  margin-bottom: 0px;
   height: fit-content;
   display: flex;
   flex-direction: column;
@@ -419,9 +392,42 @@
     overflow-wrap: anywhere;
   }
 
-  [data-slot="bash-prompt"] {
-    user-select: none;
+  &[data-variant="shell"] {
+    background: var(--v2-background-bg-base);
+
+    [data-slot="bash-pre"] {
+      padding: 0;
+    }
+
+    [data-slot="bash-pre"] code {
+      font-family: var(--v2-font-family-code);
+      font-weight: 440;
+      line-height: var(--line-height-base);
+      letter-spacing: -0.04px;
+    }
+
+    [data-slot="bash-command"],
+    [data-slot="bash-result"] {
+      display: block;
+      padding: 12px;
+    }
+
+    [data-slot="bash-result"] {
+      border-block-start: 0.5px solid var(--v2-border-border-base);
+      background: var(--v2-background-bg-layer-01);
+      color: var(--v2-text-text-muted);
+    }
+
+    [data-slot="bash-command"] {
+      color: var(--v2-text-text-base);
+    }
   }
+}
+
+[data-component="collapsible"].tool-collapsible:has(
+    > [data-slot="collapsible-content"] [data-component="bash-output"][data-variant="shell"]
+  ) {
+  --tool-content-gap: 6px;
 }
 
 [data-component="edit-trigger"],
@@ -569,12 +575,13 @@
 }
 
 [data-component="exa-tool-output"] {
-  width: 100%;
   display: flex;
   flex-direction: column;
+  min-width: 0;
+  width: 100%;
   font-family: var(--font-family-sans);
-  font-size: var(--font-size-base);
-  line-height: var(--line-height-large);
+  font-size: 13px;
+  line-height: 16px;
   color: var(--v2-text-text-muted);
 }
 
@@ -589,27 +596,39 @@
 [data-slot="exa-tool-links"] {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+  flex: 1 0 0;
 }
 
 [data-slot="exa-tool-link"] {
-  display: block;
+  width: fit-content;
   max-width: 100%;
-  font: inherit;
-  line-height: inherit;
-  color: var(--v2-text-text-accent);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  align-self: flex-start;
+}
+
+[data-slot="exa-tool-more"] {
+  all: unset;
+  cursor: pointer;
+  width: fit-content;
+  font-family: var(--font-family-sans);
+  font-size: 13px;
+  font-weight: var(--font-weight-regular, 440);
+  line-height: var(--line-height-compact);
+  letter-spacing: -0.04px;
+  color: var(--v2-text-text-faint, #808080);
+  user-select: none;
 
   &:hover {
-    color: var(--v2-text-text-accent);
+    color: var(--v2-text-text-muted);
+    text-decoration: underline;
+    text-underline-offset: 2px;
   }
 
-  &:visited {
-    color: var(--v2-text-text-accent);
+  &:focus-visible {
+    outline: 1px solid var(--v2-text-text-accent);
+    outline-offset: 2px;
   }
 }
 
@@ -655,17 +674,59 @@
 }
 
 [data-component="context-tool-group-list"] {
-  padding-top: 0;
-  padding-right: 0;
-  padding-bottom: 0;
-  padding-left: 12px;
+  /* The 28px compact trigger centers a 16px line box, already leaving 6px above this list. */
+  padding: 4px 0 0 12px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  /* 16px line boxes with 13px gaps reproduce the design's 29px row pitch for 13px solid rows. */
+  gap: 13px;
 
   [data-slot="context-tool-group-item"] {
     min-width: 0;
     padding: 0;
+    opacity: 0.8;
+
+    [data-slot="basic-tool-tool-info-structured"] {
+      gap: 6px;
+    }
+
+    [data-slot="basic-tool-tool-title"],
+    [data-slot="basic-tool-tool-subtitle"],
+    [data-slot="basic-tool-tool-arg"],
+    [data-slot="context-tool-group-matches"] {
+      font-family: var(--v2-font-family-sans);
+      font-size: 13px;
+      font-weight: 440;
+      line-height: var(--line-height-compact);
+      letter-spacing: -0.04px;
+    }
+
+    [data-slot="basic-tool-tool-subtitle"] {
+      color: var(--v2-text-text-faint);
+    }
+
+    [data-slot="context-tool-group-dot"] {
+      flex-shrink: 0;
+      width: 6px;
+      height: 6px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+
+      &::before {
+        content: "";
+        width: 2.25px;
+        height: 2.25px;
+        border-radius: 50%;
+        background-color: var(--v2-icon-icon-muted);
+      }
+    }
+
+    [data-slot="context-tool-group-matches"] {
+      flex-shrink: 0;
+      white-space: nowrap;
+      color: var(--v2-text-text-faint);
+    }
   }
 }
 
@@ -1216,10 +1277,19 @@
 
   > [data-component="collapsible"] > [data-slot="collapsible-content"] {
     border: none;
+    border-inline-start: none;
+    margin-inline-start: 0;
+    padding-inline-start: 0;
+    padding-bottom: 0;
     background: transparent;
+
+    &::before {
+      display: none;
+    }
   }
 
-  > [data-component="collapsible"] > [data-slot="collapsible-trigger"][aria-expanded="true"] {
+  > [data-component="collapsible"] > [data-slot="collapsible-trigger"][aria-expanded="true"],
+  > [data-component="collapsible"] > [data-slot="collapsible-trigger"][data-locked] {
     position: sticky;
     top: var(--sticky-accordion-top, 0px);
     z-index: 20;
@@ -1320,20 +1390,37 @@
   }
 }
 
-[data-component="tool-loaded-file"] {
+[data-component="tool-loaded-item"] {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 0 4px 28px;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
   font-family: var(--font-family-sans);
-  font-size: var(--font-size-small);
-  font-weight: var(--font-weight-regular);
-  line-height: var(--line-height-large);
-  color: var(--v2-text-text-muted);
+  font-size: 13px;
+  /* Loaded values truncate, so they require the full compact line box for descenders. */
+  line-height: var(--line-height-compact);
+  letter-spacing: -0.04px;
+  color: var(--v2-text-text-base);
 
-  [data-slot="icon-svg"] {
+  [data-slot="tool-loaded-label"] {
     flex-shrink: 0;
-    color: var(--icon-weak);
+    font-weight: 530;
+  }
+
+  [data-slot="tool-loaded-value"] {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 440;
+  }
+
+  [data-slot="tool-loaded-kind"] {
+    flex-shrink: 0;
+    margin-inline-start: -2px;
+    font-weight: 440;
+    color: var(--v2-text-text-muted);
   }
 }
 

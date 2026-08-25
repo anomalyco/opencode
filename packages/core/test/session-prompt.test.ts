@@ -48,6 +48,7 @@ const execution = Layer.succeed(
       Effect.sync(() => {
         interruptCalls.push(sessionID)
         interruptContinuations.push(options?.continue)
+        return activeSessions.delete(sessionID)
       }),
     wake: (sessionID) =>
       Effect.sync(() => {
@@ -74,7 +75,7 @@ const locations = Layer.effect(
             }),
             Layer.mock(Snapshot.Service, {
               capture: () =>
-                ready ? Effect.succeed(undefined) : Effect.die(new Error("Snapshot used before plugins were ready")),
+                ready ? Effect.undefined : Effect.die(new Error("Snapshot used before plugins were ready")),
               restore: () =>
                 ready ? Effect.void : Effect.die(new Error("Snapshot used before plugins were ready")),
             }),
@@ -193,7 +194,7 @@ describe("Session.prompt", () => {
       interruptCalls.length = 0
       wakeCalls.length = 0
 
-      yield* session.interrupt(sessionID)
+      expect(yield* session.interrupt(sessionID)).toBeFalse()
       expect(interruptCalls).toEqual([sessionID])
       expect(wakeCalls).toEqual([])
       expect(yield* session.messages({ sessionID })).toEqual([])

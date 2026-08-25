@@ -185,7 +185,11 @@ async function compileExecutable(item: (typeof allTargets)[number]) {
     headers: { Accept: "application/octet-stream", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
   })
   if (!response.ok) throw new Error(`Failed to download ${name} from Bun release ${release}: ${response.status}`)
-  await Bun.write(archive, response)
+  // Stream to disk instead of `Bun.write(archive, response)`: passing the Response object
+  // hangs forever if it gets GC'd mid-download (https://github.com/oven-sh/bun/issues/40278).
+  const sink = Bun.file(archive).writer()
+  for await (const chunk of response.body!) await sink.write(chunk)
+  await sink.end()
   await $`unzip -oq ${archive} -d ${cache}`
   await rm(archive)
   return executable

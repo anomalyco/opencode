@@ -3,11 +3,11 @@ import type { Prompt } from "@/composer/state"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import {
   clonePromptHistoryComments,
-  clonePromptParts,
   prependHistoryEntry,
   type PromptHistoryComment,
   type PromptHistoryStoredEntry,
 } from "./entry"
+import { clonePrompt } from "../prompt-parts"
 
 export type ComposerHistoryStore = {
   entries: (mode: "normal" | "shell") => PromptHistoryStoredEntry[]
@@ -23,7 +23,7 @@ export function upgradeHistoryState(value: unknown) {
   return {
     ...value,
     entries: entries.flatMap((entry): PromptHistoryStoredEntry[] => {
-      if (Array.isArray(entry)) return [{ prompt: clonePromptParts(entry as Prompt), comments: [] }]
+      if (Array.isArray(entry)) return [{ prompt: clonePrompt(entry as Prompt), comments: [] }]
       if (!entry || typeof entry !== "object" || !("prompt" in entry) || !Array.isArray(entry.prompt)) return []
       if (!("comments" in entry) || !Array.isArray(entry.comments)) return []
       return [entry as PromptHistoryStoredEntry]
@@ -64,7 +64,7 @@ export function createComposerHistory() {
     add(prompt: Prompt, mode: "normal" | "shell", comments: PromptHistoryComment[]) {
       const ready = mode === "shell" ? shellInit : normalInit
       if (!(ready instanceof Promise)) return history.add(prompt, mode, comments)
-      const saved = clonePromptParts(prompt)
+      const saved = clonePrompt(prompt)
       const metadata = clonePromptHistoryComments(comments)
       void ready.then(() => history.add(saved, mode, metadata))
     },

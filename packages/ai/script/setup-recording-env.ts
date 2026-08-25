@@ -370,7 +370,7 @@ const responseError = Effect.fn("RecordingEnv.responseError")(function* (
   response: HttpClientResponse.HttpClientResponse,
 ) {
   if (response.status >= 200 && response.status < 300) return undefined
-  const body = yield* response.text.pipe(Effect.catch(() => Effect.succeed("")))
+  const body = yield* response.text.pipe(Effect.orElseSucceed(() => ""))
   return `${response.status}${body ? `: ${body.slice(0, 180)}` : ""}`
 })
 

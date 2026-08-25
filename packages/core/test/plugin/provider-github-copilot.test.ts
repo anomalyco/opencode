@@ -6,6 +6,7 @@ import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Model } from "@opencode-ai/core/model"
+import { ModelResolver } from "@opencode-ai/core/model-resolver"
 import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
@@ -198,16 +199,23 @@ describe("GithubCopilotPlugin", () => {
   it.effect("rewrites models.dev fallback models to the GitHub Copilot package", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
+      const aisdk = yield* AISDK.Service
       yield* catalog.transform((catalog) => {
         catalog.provider.update(Provider.ID.githubCopilot, () => {})
         catalog.model.update(Provider.ID.githubCopilot, Model.ID.make("gpt-5.6-sol"), (model) => {
-          model.package = "@ai-sdk/openai-compatible"
+          model.package = Provider.aisdk("@ai-sdk/openai-compatible")
         })
       })
       yield* addPlugin()
-      expect(required(yield* catalog.model.get(Provider.ID.githubCopilot, Model.ID.make("gpt-5.6-sol"))).package).toBe(
-        "@ai-sdk/github-copilot",
-      )
+      const fallback = required(yield* catalog.model.get(Provider.ID.githubCopilot, Model.ID.make("gpt-5.6-sol")))
+      expect(fallback.package).toBe(Provider.aisdk("@ai-sdk/github-copilot"))
+
+      const resolved = yield* ModelResolver.fromCatalogModel(fallback, undefined, {
+        loadPackage: () => Effect.die("Copilot must not load a native provider package"),
+        loadAISDK: (model) => aisdk.model(model),
+      })
+      expect(resolved.route.id).toBe("ai-sdk:@ai-sdk/github-copilot")
+      expect(resolved.route.providerMetadataKey).toBe("copilot")
     }),
   )
 

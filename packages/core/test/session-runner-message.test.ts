@@ -1020,7 +1020,7 @@ Recent work
     ])
   })
 
-  test("preserves assistant text provider state across same-provider model changes and failures", () => {
+  test("drops assistant text provider state across model changes and failures", () => {
     const messages = toLLMMessages(
       [
         SessionMessage.Assistant.make({
@@ -1040,6 +1040,36 @@ Recent work
         }),
       ],
       Model.Ref.make({ id: Model.ID.make("new"), providerID: Provider.ID.make("provider") }),
+    )
+
+    expect(messages[0]?.content).toEqual([
+      {
+        type: "text",
+        text: "Checking.",
+        providerMetadata: undefined,
+      },
+    ])
+  })
+
+  test("preserves assistant text provider state for the same model", () => {
+    const messages = toLLMMessages(
+      [
+        SessionMessage.Assistant.make({
+          id: id("assistant-phase"),
+          type: "assistant",
+          agent: build,
+          model: { id: Model.ID.make("same"), providerID: Provider.ID.make("provider") },
+          content: [
+            SessionMessage.AssistantText.make({
+              type: "text",
+              text: "Checking.",
+              state: { phase: "commentary" },
+            }),
+          ],
+          time: { created, completed: created },
+        }),
+      ],
+      Model.Ref.make({ id: Model.ID.make("same"), providerID: Provider.ID.make("provider") }),
     )
 
     expect(messages[0]?.content).toEqual([

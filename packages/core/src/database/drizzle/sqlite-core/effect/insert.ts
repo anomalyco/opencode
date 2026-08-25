@@ -3,14 +3,15 @@ import type * as Effect from "effect/Effect"
 import { applyEffectWrapper, type QueryEffectHKTBase } from "drizzle-orm/effect-core/query-effect"
 import { entityKind, is } from "drizzle-orm/entity"
 import type { SelectResultFields } from "drizzle-orm/query-builders/select.types"
+import type { TypedQueryBuilder } from "drizzle-orm/query-builders/query-builder"
 import type { RunnableQuery } from "drizzle-orm/runnable-query"
 import type { Query, SQLWrapper } from "drizzle-orm/sql/sql"
-import { Param, SQL, sql } from "drizzle-orm/sql/sql"
+import { SQL, sql } from "drizzle-orm/sql/sql"
 import type { SQLiteDialect } from "drizzle-orm/sqlite-core/dialect"
 import type { IndexColumn } from "drizzle-orm/sqlite-core/indexes"
 import type {
   SQLiteInsertConfig,
-  SQLiteInsertSelectQueryBuilder,
+  SQLiteInsertSelection,
   SQLiteInsertValue,
 } from "drizzle-orm/sqlite-core/query-builders/insert"
 import type { SelectedFieldsFlat } from "drizzle-orm/sqlite-core/query-builders/select.types"
@@ -152,34 +153,24 @@ export class SQLiteEffectInsertBuilder<
     if (values.length === 0) {
       throw new Error("values() must be called with at least one value")
     }
-    const mappedValues = values.map((entry) => {
-      const result: Record<string, Param | SQL> = {}
-      const cols = getTableColumnsRuntime(this.table)
-      for (const colKey of Object.keys(entry)) {
-        const colValue = entry[colKey as keyof typeof entry]
-        result[colKey] = is(colValue, SQL) ? colValue : new Param(colValue, cols[colKey])
-      }
-      return result
-    })
-
-    return new SQLiteEffectInsertBase(this.table, mappedValues, this.session, this.dialect, this.withList)
+    return new SQLiteEffectInsertBase(this.table, values, this.session, this.dialect, this.withList)
   }
 
   select(
-    selectQuery: (qb: QueryBuilder) => SQLiteInsertSelectQueryBuilder<TTable>,
+    selectQuery: (qb: QueryBuilder) => TypedQueryBuilder<SQLiteInsertSelection<TTable>>,
   ): SQLiteEffectInsertBase<TTable, TRunResult, undefined, false, never, TEffectHKT>
   select(
     selectQuery: (qb: QueryBuilder) => SQL,
   ): SQLiteEffectInsertBase<TTable, TRunResult, undefined, false, never, TEffectHKT>
   select(selectQuery: SQL): SQLiteEffectInsertBase<TTable, TRunResult, undefined, false, never, TEffectHKT>
   select(
-    selectQuery: SQLiteInsertSelectQueryBuilder<TTable>,
+    selectQuery: TypedQueryBuilder<SQLiteInsertSelection<TTable>>,
   ): SQLiteEffectInsertBase<TTable, TRunResult, undefined, false, never, TEffectHKT>
   select(
     selectQuery:
       | SQL
-      | SQLiteInsertSelectQueryBuilder<TTable>
-      | ((qb: QueryBuilder) => SQLiteInsertSelectQueryBuilder<TTable> | SQL),
+      | TypedQueryBuilder<SQLiteInsertSelection<TTable>>
+      | ((qb: QueryBuilder) => TypedQueryBuilder<SQLiteInsertSelection<TTable>> | SQL),
   ): SQLiteEffectInsertBase<TTable, TRunResult, undefined, false, never, TEffectHKT> {
     const select = typeof selectQuery === "function" ? selectQuery(new QueryBuilder()) : selectQuery
 

@@ -455,7 +455,7 @@ describe("Plugin", () => {
       const registry = yield* Tool.Service
       const executed: unknown[] = []
       const seen: {
-        before?: unknown
+        before?: { input: unknown; inputSchema: unknown }
         after?: { input: unknown; status: string; content: unknown; metadata: unknown }
       } = {}
 
@@ -480,7 +480,7 @@ describe("Plugin", () => {
             yield* ctx.tool
               .hook("execute.before", (event) =>
                 Effect.sync(() => {
-                  seen.before = event.input
+                  seen.before = { input: event.input, inputSchema: event.inputSchema }
                   event.input = { text: "before-mutated" }
                 }),
               )
@@ -526,7 +526,15 @@ describe("Plugin", () => {
         call: { type: "tool-call", id: "call-hooks", name: "echo", input: { text: "original" } },
       })
 
-      expect(seen.before).toEqual({ text: "original" })
+      expect(seen.before).toEqual({
+        input: { text: "original" },
+        inputSchema: {
+          type: "object",
+          properties: { text: { type: "string" } },
+          required: ["text"],
+          additionalProperties: false,
+        },
+      })
       expect(executed).toEqual([{ text: "before-mutated" }])
       expect(seen.after).toEqual({
         input: { text: "before-mutated" },

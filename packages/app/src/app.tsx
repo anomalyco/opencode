@@ -105,14 +105,16 @@ export function AppInterface(props: {
   // providers beneath it.
   const Root = (rootProps: ParentProps) => (
     <TabsProvider>
-      <BodyTypography />
-      <CommandProvider>
-        <DesktopCommands />
-        <HighlightsProvider>
-          {props.children}
-          {rootProps.children}
-        </HighlightsProvider>
-      </CommandProvider>
+      <GlobalProvider>
+        <BodyTypography />
+        <CommandProvider>
+          <DesktopCommands />
+          <HighlightsProvider>
+            {props.children}
+            {rootProps.children}
+          </HighlightsProvider>
+        </CommandProvider>
+      </GlobalProvider>
     </TabsProvider>
   )
 
@@ -123,11 +125,9 @@ export function AppInterface(props: {
       servers={props.servers}
     >
       <SettingsProvider>
-        <GlobalProvider>
-          <Dynamic component={props.router ?? Router} root={Root}>
-            <AppRoutes />
-          </Dynamic>
-        </GlobalProvider>
+        <Dynamic component={props.router ?? Router} root={Root}>
+          <AppRoutes />
+        </Dynamic>
       </SettingsProvider>
     </ServersProvider>
   )

@@ -16,6 +16,7 @@ export function createActiveComposerAdapter(input: {
   if (!id) throw new Error("Active Composer requires a Session ID")
 
   const prompt = useComposerState()
+  prompt.current()
   const state = prompt.capture()
   const data = useData()
   const server = useServerSDK()
@@ -36,7 +37,11 @@ export function createActiveComposerAdapter(input: {
       current: () => data.session.get(id),
       admitted: (messageID) => data.session.input.has(id, messageID) || !!data.session.message.get(id, messageID),
     }),
-    interrupt: () => server.api.session.interrupt({ sessionID: id, continue: true }).catch(() => undefined),
+    interrupt: () =>
+      server.api.session
+        .interrupt({ sessionID: id, continue: true })
+        .then(() => undefined)
+        .catch(() => undefined),
   }
   return adapter
 }

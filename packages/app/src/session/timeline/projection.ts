@@ -8,6 +8,7 @@ export function createTimelineProjection(input: {
   sessionMessages: Accessor<SessionMessageInfo[]>
   status: Accessor<SessionStatus>
   showReasoningSummaries: Accessor<boolean>
+  pendingUserMessageIDs: Accessor<ReadonlySet<string>>
 }) {
   const sessionMessageByID = createMemo(
     () => new Map(input.sessionMessages().map((message) => [message.id, message] as const)),
@@ -63,7 +64,8 @@ export function createTimelineProjection(input: {
     input.sessionMessages().forEach((message) => {
       if (message.type === "user") userID = message.id
       if (message.type === "shell") userID = undefined
-      if (message.type !== "assistant" || !userID) return
+      if (message.type !== "assistant") return
+      if (!userID) userID = message.id
       const messages = result.get(userID)
       if (messages) {
         messages.push(message)
@@ -74,7 +76,12 @@ export function createTimelineProjection(input: {
     return result
   })
   const projection = createMemo(() =>
-    Timeline.constructSessionMessageRows(input.sessionMessages(), input.showReasoningSummaries(), input.status()),
+    Timeline.constructSessionMessageRows(
+      input.sessionMessages(),
+      input.showReasoningSummaries(),
+      input.status(),
+      input.pendingUserMessageIDs(),
+    ),
   )
   const activeMessageID = createMemo(() => projection().activeMessageID)
   const rows = createMemo((previous: TimelineRow.TimelineRow[] | undefined) =>

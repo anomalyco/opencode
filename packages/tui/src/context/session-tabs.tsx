@@ -1,5 +1,5 @@
-import { createEffect, createMemo, createSignal, onCleanup } from "solid-js"
-import { useRenderer } from "@opentui/solid"
+import { createEffect, createMemo, createSignal, on, onCleanup } from "solid-js"
+import { useKeyboard, useRenderer } from "@opentui/solid"
 import { isDeepEqual } from "remeda"
 import { createSimpleContext } from "./helper"
 import { useClient } from "./client"
@@ -25,12 +25,12 @@ import {
   type ClosedSessionTab,
   type SessionTab,
   type SessionTabHistory,
-  type SessionTabUnread,
 } from "./session-tabs-model"
 
 type TabsState = {
   tabs: SessionTab[]
-  unread: Record<string, SessionTabUnread>
+  // Kept empty for rollback compatibility with clients that still read this field.
+  unread: Record<string, unknown>
 }
 
 type PersistedState = {
@@ -47,6 +47,8 @@ const empty = (): TabsState => ({ tabs: [], unread: {} })
 
 // Deliberately after connect settles: the visible session's mount syncs win the first slots.
 const TAB_PREFETCH_DELAY = 300
+const VIEW_RETRY_DELAY = 250
+const VIEW_RETRY_MAX_DELAY = 5_000
 
 export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimpleContext({
   name: "SessionTabs",
@@ -60,8 +62,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     const paths = useTuiPaths()
     const renderer = useRenderer()
     const enabled = () => config.tabs.enabled
-    // Focus reporting emits transitions, so an interactive launch owns unread state until its first blur.
-    const [focused, setFocused] = createSignal(true)
+    const [focused, setFocused] = createSignal<boolean>()
     // Keyed reconcile keeps tab object identity across reorders, so strip rows move instead of
     // mutating in place, which per-row animations and drag state depend on.
     const [store, updateStore] = useStorage().store<PersistedState>("tabs", {
@@ -87,6 +88,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
 
     const onFocus = () => setFocused(true)
     const onBlur = () => setFocused(false)
+    useKeyboard(onFocus)
     renderer.on("focus", onFocus)
     renderer.on("blur", onBlur)
     onCleanup(() => {
@@ -112,16 +114,21 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       const session = data.session.get(sessionID)
       return session?.title ?? persisted ?? fallback ?? (session ? withTimestampedFallback(session) : undefined)
     }
+    const isUnread = (sessionID: string) => {
+      const info = data.session.get(sessionID)
+      return info?.time.idle !== undefined && (info.time.viewed === undefined || info.time.idle > info.time.viewed)
+    }
+    const family = (sessionID: string) => {
+      const session = root(sessionID)
+      const members = data.session.family(session)
+      return members.length > 0 ? members : [session]
+    }
     const normalize = (value: TabsState) => ({
       tabs: value.tabs.reduce<SessionTab[]>((tabs, tab) => {
         const sessionID = root(tab.sessionID)
         return openSessionTab(tabs, { sessionID, title: title(sessionID, tab.title) })
       }, []),
-      unread: Object.entries(value.unread).reduce<Record<string, SessionTabUnread>>((result, entry) => {
-        const sessionID = root(entry[0])
-        result[sessionID] = result[sessionID] === "error" ? "error" : entry[1]
-        return result
-      }, {}),
+      unread: {},
     })
     const current = () => (route.data.type === "session" ? root(route.data.sessionID) : undefined)
     const newTab = createMemo((open = false) => {
@@ -132,58 +139,82 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     }, false)
     const status = (sessionID: string) => {
       const session = root(sessionID)
-      const members = data.session.family(session)
-      const family = members.length > 0 ? members : [session]
+      const members = family(session)
       return {
-        unread: state().unread[session],
+        // Unread reads the root session only: background subagent completions wake the parent,
+        // whose own idle transition then carries the signal.
+        unread: !isUnread(session)
+          ? undefined
+          : data.session.get(session)?.outcome === "failed"
+            ? ("error" as const)
+            : ("activity" as const),
         promptPulse: promptPulses()[session] ?? 0,
-        attention: family.some(
+        attention: members.some(
           (id) => (data.session.permission.list(id)?.length ?? 0) > 0 || (data.session.form.list(id)?.length ?? 0) > 0,
         ),
-        busy: family.some((id) => data.session.status(id) === "running" || data.session.pending.list(id).length > 0),
+        busy: members.some((id) => data.session.status(id) === "running" || data.session.pending.list(id).length > 0),
       }
     }
 
-    function markUnread(sessionID: string, unread: SessionTabUnread) {
-      if (!enabled() || !focused()) return
-      const session = root(sessionID)
-      if (current() === session || !state().tabs.some((tab) => tab.sessionID === session)) return
-      if (state().unread[session] === unread) return
-      update((draft) => {
-        if (!draft.tabs.some((tab) => tab.sessionID === session)) return
-        draft.unread[session] = unread
-      })
-    }
+    // Shared storage updates must not re-admit a tab unless this client changes route or scope.
+    createEffect(
+      on(
+        [
+          () => (enabled() && route.data.type === "session" ? route.data.sessionID : undefined),
+          () => config.tabs.scope,
+        ],
+        ([routed]) => {
+          if (!routed || routed === "dummy") return
+          const sessionID = root(routed)
+          cancelledTabs.delete(sessionID)
+          history = recordSessionTabHistory(history, sessionID)
+          if (state().tabs.some((tab) => tab.sessionID === sessionID)) return
+          const fallback = newTab() ? NEW_SESSION_TAB_TITLE : undefined
+          update((draft) => {
+            if (cancelledTabs.has(sessionID)) return
+            draft.tabs = openSessionTab(draft.tabs, {
+              sessionID,
+              title: title(sessionID, draft.tabs.find((tab) => tab.sessionID === sessionID)?.title, fallback),
+            })
+          })
+        },
+      ),
+    )
 
+    // Viewed state is server-global, so acknowledgement runs even with tabs disabled: other
+    // clients rely on this client reporting what its user has seen.
+    const acknowledged = new Map<string, number>()
+    const [viewRetry, setViewRetry] = createSignal(0)
+    let viewRetryTimer: ReturnType<typeof setTimeout> | undefined
+    let viewRetryAttempt = 0
+    onCleanup(() => clearTimeout(viewRetryTimer))
     createEffect(() => {
-      if (!enabled()) return
+      viewRetry()
+      if (focused() !== true) return
       if (route.data.type !== "session" || route.data.sessionID === "dummy") return
       const sessionID = root(route.data.sessionID)
-      cancelledTabs.delete(sessionID)
-      history = recordSessionTabHistory(history, sessionID)
-      const fallback = newTab() ? NEW_SESSION_TAB_TITLE : undefined
-      const tabs = openSessionTab(state().tabs, {
-        sessionID,
-        title: title(sessionID, state().tabs.find((tab) => tab.sessionID === sessionID)?.title, fallback),
-      })
-      if (tabs === state().tabs) return
-      update((draft) => {
-        if (cancelledTabs.has(sessionID)) return
-        draft.tabs = openSessionTab(draft.tabs, {
-          sessionID,
-          title: title(sessionID, draft.tabs.find((tab) => tab.sessionID === sessionID)?.title, fallback),
-        })
-      })
-    })
-
-    createEffect(() => {
-      if (!enabled() || !focused()) return
-      if (route.data.type !== "session" || route.data.sessionID === "dummy") return
-      const sessionID = root(route.data.sessionID)
-      if (!state().unread[sessionID]) return
-      update((draft) => {
-        delete draft.unread[sessionID]
-      })
+      const idle = data.session.get(sessionID)?.time.idle
+      if (idle === undefined || !isUnread(sessionID) || acknowledged.get(sessionID) === idle) return
+      // Record before the request so event-driven re-runs don't re-post the same watermark.
+      acknowledged.set(sessionID, idle)
+      void client.api.session.view({ sessionID, idle }).then(
+        () => {
+          clearTimeout(viewRetryTimer)
+          viewRetryTimer = undefined
+          viewRetryAttempt = 0
+        },
+        () => {
+          if (acknowledged.get(sessionID) !== idle) return
+          acknowledged.delete(sessionID)
+          if (viewRetryTimer) return
+          const delay = Math.min(VIEW_RETRY_DELAY * 2 ** viewRetryAttempt, VIEW_RETRY_MAX_DELAY)
+          viewRetryAttempt++
+          viewRetryTimer = setTimeout(() => {
+            viewRetryTimer = undefined
+            setViewRetry((value) => value + 1)
+          }, delay)
+        },
+      )
     })
 
     createEffect(() => {
@@ -214,7 +245,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       const sessionIDs = signature.split("\n")
       let stale = false
       void (async () => {
-        await Promise.allSettled(sessionIDs.map((sessionID) => data.session.sync(sessionID)))
+        await Promise.allSettled(sessionIDs.map((sessionID) => data.session.sync(sessionID, { children: true })))
         if (stale) return
         const locations = new Map(
           sessionIDs
@@ -248,9 +279,6 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       })
     })
 
-    onCleanup(event.on("session.execution.succeeded", (evt) => markUnread(evt.data.sessionID, "activity")))
-    onCleanup(event.on("session.execution.interrupted", (evt) => markUnread(evt.data.sessionID, "activity")))
-    onCleanup(event.on("session.execution.failed", (evt) => markUnread(evt.data.sessionID, "error")))
     onCleanup(
       event.on("session.moved", (evt) => {
         if (!enabled() || !state().tabs.some((tab) => tab.sessionID === root(evt.data.sessionID))) return
@@ -287,7 +315,6 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       history = previous.history
       update((draft) => {
         draft.tabs = closeSessionTab(draft.tabs, target).tabs
-        delete draft.unread[target]
       })
       setPromptPulses((pulses) => {
         if (pulses[target] === undefined) return pulses
@@ -384,7 +411,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       cycleUnread(direction: 1 | -1) {
         if (!enabled()) return
         const tab = cycleSessionTab(state().tabs, current(), direction, (tab) =>
-          Boolean(state().unread[tab.sessionID] || status(tab.sessionID).attention),
+          Boolean(status(tab.sessionID).unread || status(tab.sessionID).attention),
         )
         if (tab) route.navigate({ type: "session", sessionID: tab.sessionID })
       },

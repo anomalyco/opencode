@@ -7,6 +7,7 @@ import type { ComposerModel } from "./model"
 import { createComposerEditor } from "./editor/interaction"
 import type { ComposerPersistedState, ComposerSuggestion } from "./types"
 import { buildPromptRequest } from "./request"
+import { promptLength } from "./prompt-parts"
 import { SessionPreview } from "@/session/story-model"
 import { Skill } from "@opencode-ai/schema/skill"
 import { resolveSessionComposerSelection } from "@/session/composer/selection"
@@ -57,7 +58,7 @@ function ComposerStory(props: {
 }) {
   const [draft, setDraft] = createStore<ComposerPersistedState>({
     prompt: props.prompt ?? [{ type: "text", content: "", start: 0, end: 0 }],
-    cursor: props.prompt?.reduce((length, part) => length + ("content" in part ? part.content.length : 0), 0) ?? 0,
+    cursor: props.prompt ? promptLength(props.prompt) : 0,
     model: { providerID: STORY_MODEL.providerID, modelID: STORY_MODEL.id, variant: STORY_MODEL.variant },
     context: { items: props.comments ?? [] },
   })

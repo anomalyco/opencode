@@ -31,7 +31,7 @@ export const layer = Layer.effect(
     const file = path.join(global.config, "cli.json")
 
     const readJson = Effect.fnUntraced(function* () {
-      const text = yield* fs.readFileString(file).pipe(Effect.catch(() => Effect.succeed(undefined)))
+      const text = yield* fs.readFileString(file).pipe(Effect.orElseSucceed(() => undefined))
       if (text === undefined) return undefined
       const errors: ParseError[] = []
       const value: any = parse(text, errors, { allowTrailingComma: true })
@@ -87,7 +87,7 @@ export const layer = Layer.effect(
           const next = produce(current, update)
           const edits = changes(current, next)
           if (!edits.length) return current
-          const text = yield* fs.readFileString(file).pipe(Effect.catch(() => Effect.succeed("{}")))
+          const text = yield* fs.readFileString(file).pipe(Effect.orElseSucceed(() => "{}"))
           const updated = edits.reduce(
             (text, edit) =>
               applyEdits(

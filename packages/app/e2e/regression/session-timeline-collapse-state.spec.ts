@@ -99,7 +99,7 @@ test.describe("regression: session timeline local row state", () => {
     await wrapper.evaluate((element) => {
       ;(element as HTMLElement).dataset.regressionMarker = "before-stream"
     })
-    await wrapper.locator('[data-slot="collapsible-trigger"]').first().click()
+    await wrapper.locator('[data-scope="apply-patch"] button').click()
     await expectExpanded(wrapper, false)
 
     events.push(...textEvents())
@@ -139,7 +139,7 @@ test.describe("regression: session timeline local row state", () => {
     expect(siblingProbe).toEqual({
       fileMarker: "before",
       frameMarker: "before",
-      rowKey: `assistant-part:${userMessageID}:part:${assistantMessageID}:${editPartID}`,
+      rowKey: `assistant-part:file:part:${assistantMessageID}:${editPartID}`,
       rowMarker: "before",
       shadowRoots: 0,
       toolMarker: "before",
@@ -179,8 +179,8 @@ test.describe("regression: session timeline local row state", () => {
     await expectSessionTitle(page, title)
 
     const wrapper = page.locator(`[data-timeline-part-id="${editPartID}"]`).first()
-    const trigger = wrapper.locator('[data-slot="collapsible-trigger"]').first()
-    const diff = wrapper.locator('[data-component="edit-content"]').first()
+    const trigger = wrapper.locator('[data-component="sticky-accordion-header"]')
+    const diff = wrapper.locator('[data-component="apply-patch-file-diff"]').first()
     await expectAppVisible(diff)
     await expect.poll(() => wrapper.evaluate((element) => element.getBoundingClientRect().height)).toBeGreaterThan(500)
     const samples = await wrapper.evaluate(async (element) => {
@@ -190,8 +190,8 @@ test.describe("regression: session timeline local row state", () => {
       for (const offset of [0, 120, 240, 360, 480]) {
         root.scrollBy(0, offset - (result.at(-1)?.offset ?? 0))
         await new Promise(requestAnimationFrame)
-        const trigger = element.querySelector<HTMLElement>('[data-slot="collapsible-trigger"]')!
-        const diff = element.querySelector<HTMLElement>('[data-component="edit-content"]')!
+        const trigger = element.querySelector<HTMLElement>('[data-component="sticky-accordion-header"]')!
+        const diff = element.querySelector<HTMLElement>('[data-component="apply-patch-file-diff"]')!
         result.push({
           offset,
           trigger: trigger.getBoundingClientRect().y,
@@ -202,7 +202,7 @@ test.describe("regression: session timeline local row state", () => {
       return result
     })
 
-    expect(samples[0]!.trigger).toBeLessThan(samples[0]!.diff)
+    expect(samples[0]!.trigger).toBeGreaterThanOrEqual(samples[0]!.diff)
     expect(samples.every((sample) => Math.abs(sample.trigger - samples[0]!.trigger) <= 1)).toBe(true)
     expect(samples.every((sample) => sample.trigger < sample.bottom)).toBe(true)
   })
@@ -234,7 +234,9 @@ async function readToolState(page: Page) {
     .evaluate(
       (element, textPartID) => ({
         expanded: (() => {
-          const trigger = element.querySelector('[data-slot="collapsible-trigger"]')
+          const trigger =
+            element.querySelector('[data-scope="apply-patch"] button') ??
+            element.querySelector('[data-slot="collapsible-trigger"]')
           const aria = trigger?.getAttribute("aria-expanded")
           if (aria === "true") return true
           if (aria === "false") return false
@@ -409,7 +411,9 @@ function eventValue<Type extends OpenCodeEvent["type"]>(
 }
 
 function readExpanded(element: Element) {
-  const trigger = element.querySelector('[data-slot="collapsible-trigger"]')
+  const trigger =
+    element.querySelector('[data-scope="apply-patch"] button') ??
+    element.querySelector('[data-slot="collapsible-trigger"]')
   const aria = trigger?.getAttribute("aria-expanded")
   if (aria === "true") return true
   if (aria === "false") return false

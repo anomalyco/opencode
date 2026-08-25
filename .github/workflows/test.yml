@@ -50,6 +50,14 @@ jobs:
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
 
+      - name: Test Effect simplification rules
+        if: runner.os == 'Linux'
+        run: bun run test:effect-simplification-rules
+
+      - name: Check Effect simplifications
+        if: runner.os == 'Linux'
+        run: bun run lint:effect-simplifications
+
       - name: Configure git identity
         run: |
           git config --global user.email "bot@opencode.ai"
@@ -75,6 +83,17 @@ jobs:
         run: GITHUB_ACTIONS=false bun turbo test
         env:
           OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: ${{ runner.os == 'Windows' && 'true' || 'false' }}
+
+      - name: Verify published codemode package
+        if: runner.os == 'Linux'
+        working-directory: packages/codemode
+        run: bun run script/publish.ts --dry-run
+
+      - name: Verify packed workerd SDK
+        if: runner.os == 'Linux'
+        timeout-minutes: 15
+        working-directory: packages/sdk
+        run: bun run verify:package
 
       - name: Verify compiled service lifecycle
         if: always()

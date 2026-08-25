@@ -95,7 +95,7 @@ export const cleanStages = Effect.fn("DesktopCli.cleanStages")(function* (binary
     Effect.fnUntraced(function* (entry) {
       const target = path.join(root, entry)
       if (target === current) return
-      const stat = yield* fs.stat(target).pipe(Effect.catch(() => Effect.succeed(undefined)))
+      const stat = yield* fs.stat(target).pipe(Effect.orElseSucceed(() => undefined))
       if (stat?.type !== "Directory") return
       yield* fs
         .remove(target, { recursive: true, force: true })

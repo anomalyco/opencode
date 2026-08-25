@@ -1,0 +1,457 @@
+---
+title: "CLI"
+---
+
+CLI plugins extend the terminal with commands, routes, slots, Markdown renderers, notifications, and local state.
+
+```ts title="src/tui.ts"
+import { Plugin } from "@opencode-ai/plugin/tui"
+
+export default Plugin.define({
+  id: "acme.cli",
+  setup(context) {
+    context.ui.toast.show({ message: "CLI plugin loaded", variant: "success" })
+  },
+})
+```
+
+Import `@opencode-ai/plugin/tui` directly. OpenCode resolves this import at runtime, so local CLI plugins do not need an
+absolute path to an OpenCode checkout.
+
+## Context
+
+`setup` receives configuration, app metadata, the current location, the OpenCode client, cached data, theme tokens, the
+OpenTUI renderer, and the UI APIs documented below.
+
+```ts
+setup(context) {
+  const compact = context.options.compact === true
+  const location = context.location ?? context.data.location.default()
+  const version = context.app.version
+  const channel = context.app.channel
+  const client = context.client
+  const renderer = context.renderer
+  const theme = context.theme
+}
+```
+
+Return a cleanup function for resources owned by the plugin.
+
+```ts
+setup(context) {
+  const stop = context.data.on("session.execution.succeeded", () => {})
+  return () => stop()
+}
+```
+
+## Client
+
+`context.client` is the generated OpenCode client and can call the connected server, including a remote server.
+
+```ts
+const response = await context.client.plugin.list({
+  location: context.location ?? context.data.location.default(),
+})
+const plugins = response.data
+```
+
+## Events
+
+Use `data.on` for one typed event or `data.listen` for every server event; both return an unsubscribe function.
+
+```ts
+const stopPermission = context.data.on("permission.asked", (event) => {
+  context.ui.toast.show({ message: `Permission ${event.data.id}` })
+})
+const stopAll = context.data.listen(({ details }) => console.log(details.type))
+
+return () => {
+  stopPermission()
+  stopAll()
+}
+```
+
+## Sessions
+
+Session data exposes list, lookup, hierarchy, cost, status, synchronization, and invalidation.
+
+```ts
+const sessions = context.data.session.list()
+const session = context.data.session.get(sessionID)
+const rootID = context.data.session.root(sessionID)
+const familyIDs = context.data.session.family(sessionID)
+const cost = context.data.session.cost(sessionID)
+const status = context.data.session.status(sessionID)
+await context.data.session.sync(sessionID)
+context.data.session.invalidate(sessionID)
+```
+
+Pending inbox items and messages have list, lookup, sync, and invalidate APIs.
+
+```ts
+await context.data.session.pending.sync(sessionID)
+const pending = context.data.session.pending.list(sessionID)
+context.data.session.pending.invalidate(sessionID)
+
+await context.data.session.message.sync(sessionID)
+const messages = context.data.session.message.list(sessionID)
+const message = context.data.session.message.get(sessionID, messageID)
+context.data.session.message.invalidate(sessionID)
+```
+
+Permission requests can be read and refreshed for a session.
+
+```ts
+await context.data.session.permission.sync(sessionID)
+const requests = context.data.session.permission.list(sessionID) ?? []
+context.data.session.permission.invalidate(sessionID)
+```
+
+Forms can be listed, refreshed, replied to, or cancelled at a location.
+
+```ts
+import type { FormCancelInput, FormReplyInput } from "@opencode-ai/client"
+
+async function handleForm(reply: FormReplyInput, cancel: FormCancelInput) {
+  const location = context.location
+  await context.data.session.form.sync(sessionID, location)
+  const forms = context.data.session.form.list(sessionID, location) ?? []
+  await context.data.session.form.reply(reply, location)
+  await context.data.session.form.cancel(cancel, location)
+  context.data.session.form.invalidate(sessionID, location)
+}
+```
+
+## Projects and shells
+
+Projects and saved permissions support list, lookup, sync, and invalidate operations.
+
+```ts
+await context.data.project.sync()
+const projects = context.data.project.list()
+const project = context.data.project.get(projectID)
+context.data.project.invalidate()
+
+await context.data.project.permission.sync(projectID)
+const saved = context.data.project.permission.list(projectID) ?? []
+context.data.project.permission.invalidate(projectID)
+```
+
+Shell data supports location-scoped list, lookup, sync, and invalidate operations.
+
+```ts
+await context.data.shell.sync(context.location)
+const shells = context.data.shell.list(context.location)
+const shell = context.data.shell.get(shellID)
+context.data.shell.invalidate(context.location)
+```
+
+## Location data
+
+Location state exposes the default location and refresh controls.
+
+```ts
+const location = context.data.location.default()
+await context.data.location.sync(location)
+context.data.location.invalidate(location)
+```
+
+Version-control state exposes repository information at a location.
+
+```ts
+await context.data.location.vcs.sync(context.location)
+const vcs = context.data.location.vcs.info(context.location)
+const branch = vcs?.branch.current
+context.data.location.vcs.invalidate(context.location)
+```
+
+Agents, commands, integrations, models, providers, references, skills, and MCP data share `list`, `sync`, and
+`invalidate` methods.
+
+```ts
+const location = context.location
+await Promise.all([
+  context.data.location.agent.sync(location),
+  context.data.location.command.sync(location),
+  context.data.location.integration.sync(location),
+  context.data.location.model.sync(location),
+  context.data.location.provider.sync(location),
+  context.data.location.reference.sync(location),
+  context.data.location.skill.sync(location),
+  context.data.location.mcp.server.sync(location),
+  context.data.location.mcp.resource.sync(location),
+])
+
+const agents = context.data.location.agent.list(location) ?? []
+const commands = context.data.location.command.list(location) ?? []
+const integrations = context.data.location.integration.list(location) ?? []
+const models = context.data.location.model.list(location) ?? []
+const providers = context.data.location.provider.list(location) ?? []
+const references = context.data.location.reference.list(location) ?? []
+const skills = context.data.location.skill.list(location) ?? []
+const servers = context.data.location.mcp.server.list(location) ?? []
+const resources = context.data.location.mcp.resource.list(location) ?? []
+
+context.data.location.model.invalidate(location)
+```
+
+## Attention
+
+Attention requests can show a system notification, play a configured sound, or do both based on terminal focus.
+
+```ts
+const result = await context.attention.notify({
+  title: "OpenCode",
+  message: "Session done",
+  notification: { when: "blurred" },
+  sound: { name: "done", volume: 0.5, when: "always" },
+})
+console.log(result.ok, result.notification, result.sound, result.skipped)
+```
+
+## Theme and renderer
+
+Use semantic theme tokens with OpenTUI elements and pass `context.renderer` to renderer-specific helpers.
+
+```tsx
+const Status = () => <text fg={context.theme.text.default}>Ready</text>
+const renderer = context.renderer
+```
+
+## Solid components
+
+Use `usePlugin` to access the current context inside JSX rendered by a route, dialog, or slot.
+
+```tsx
+import { usePlugin } from "@opencode-ai/plugin/tui"
+
+function Status() {
+  const context = usePlugin()
+  return <text fg={context.theme.text.default}>{context.app.version}</text>
+}
+```
+
+## Markdown
+
+Register a fenced-code renderer by language; the returned function unregisters it.
+
+```ts
+const unregister = context.markdown.registerCodeBlockRenderer(
+  "acme",
+  (_token, render) => render.defaultRender(),
+)
+return unregister
+```
+
+## Commands and keymaps
+
+Register palette, slash, and keyboard commands in a reactive keymap layer.
+
+```ts
+context.keymap.layer(() => ({
+  mode: "global",
+  priority: 10,
+  commands: [
+    {
+      id: "acme.status",
+      title: "Show Acme status",
+      group: "Acme",
+      bind: "ctrl+g",
+      palette: true,
+      slash: { name: "acme", aliases: ["status"], arguments: true },
+      enabled: () => true,
+      suggested: true,
+      run: async (input) => context.ui.toast.show({ message: input ?? "Ready" }),
+    },
+  ],
+  bindings: ["acme.status"],
+}))
+```
+
+A layer may target one OpenTUI renderable and can return `false` from a command to continue keyboard dispatch.
+
+```ts
+context.keymap.layer(() => ({
+  target: () => panel,
+  commands: [{ bind: "escape", run: (_input, event) => (event ? false : undefined) }],
+}))
+```
+
+Dispatch commands, inspect shortcuts and command state, or push a temporary input mode.
+
+```ts
+context.keymap.dispatch("acme.status", "verbose")
+const shortcuts = context.keymap.shortcuts("acme.status")
+const commands = context.keymap.commands()
+const pending = context.keymap.pending()
+const active = context.keymap.active()
+const currentMode = context.keymap.mode.current()
+const popMode = context.keymap.mode.push("acme-search")
+popMode()
+```
+
+## Storage
+
+Durable storage persists JSON across restarts and synchronizes across TUI instances.
+
+```ts
+const [settings, updateSettings] = context.storage.store("settings", {
+  initial: { compact: false },
+})
+await updateSettings((draft) => {
+  draft.compact = true
+})
+```
+
+Memory storage survives plugin reloads but is discarded when the TUI exits.
+
+```ts
+const [state, updateState] = context.storage.memory("state", {
+  initial: { count: 0 },
+})
+updateState((draft) => {
+  draft.count++
+})
+```
+
+## Dialogs and toasts
+
+Use promise-based dialogs for alerts, confirmations, text input, and selection.
+
+```ts
+await context.ui.dialog.alert({ title: "Acme", message: "Ready" })
+const confirmed = await context.ui.dialog.confirm({
+  title: "Continue?",
+  message: "Run the Acme action?",
+  label: { confirm: "Run", cancel: "Cancel" },
+})
+const name = await context.ui.dialog.prompt({ title: "Name", placeholder: "release" })
+const mode = await context.ui.dialog.select({
+  title: "Mode",
+  current: "safe",
+  options: [
+    { title: "Safe", value: "safe", description: "Ask before changes" },
+    { title: "Fast", value: "fast", disabled: false, category: "Advanced" },
+  ],
+})
+```
+
+Custom JSX dialogs can set their size and close themselves.
+
+```tsx
+context.ui.dialog.set({ size: "large", centered: true })
+context.ui.dialog.show(() => <box><text>Acme</text></box>, () => console.log("closed"))
+context.ui.dialog.clear()
+```
+
+Toasts support title, message, variant, and duration.
+
+```ts
+context.ui.toast.show({
+  title: "Acme",
+  message: "Saved",
+  variant: "success",
+  duration: 3000,
+})
+```
+
+## Routes and tabs
+
+Register a JSX route, inspect the current route, and navigate to home, a session, or the plugin page.
+
+```tsx
+const unregister = context.ui.router.register({
+  name: "dashboard",
+  render: ({ data }) => <text>{String(data?.title ?? "Acme")}</text>,
+})
+const current = context.ui.router.current()
+context.ui.router.navigate({ type: "plugin", name: "dashboard", data: { title: "Status" } })
+context.ui.router.navigate({ type: "session", sessionID })
+context.ui.router.navigate({ type: "home" })
+return unregister
+```
+
+Tabs can be listed, opened, focused, and closed when session tabs are enabled.
+
+```ts
+if (context.ui.tabs.enabled()) {
+  context.ui.tabs.open(sessionID)
+  const tabs = context.ui.tabs.list()
+  context.ui.tabs.focus(sessionID)
+  context.ui.tabs.close(sessionID)
+  context.ui.tabs.close()
+}
+```
+
+## Slots
+
+Slots insert or replace JSX at `app`, `home.footer`, `prompt.footer`, `prompt.footer.status`, `prompt.footer.file`,
+`session.composer.top`, `sidebar.content`, or `sidebar.footer`.
+
+```tsx
+return context.ui.slot({
+  append: "sidebar.content",
+  render: ({ sessionID }) => <text>{context.data.session.get(sessionID)?.title}</text>,
+})
+```
+
+Use `prepend`, `append`, `before`, `after`, or `replace` for placement.
+
+```tsx
+context.ui.slot({ prepend: "home.footer", render: () => <text>Before footer content</text> })
+context.ui.slot({ append: "home.footer", render: () => <text>After footer content</text> })
+context.ui.slot({ before: "home.footer", render: () => <text>Before footer slot</text> })
+context.ui.slot({ after: "home.footer", render: () => <text>After footer slot</text> })
+context.ui.slot({ replace: "home.footer", render: () => <text>New footer</text> })
+```
+
+## Formatting
+
+Format filesystem paths for display, including home-directory abbreviation.
+
+```ts
+const displayPath = context.ui.format.path(context.location?.directory ?? "/home/me/project")
+```
+
+## Publish and load
+
+Expose the CLI plugin through `./tui`; add OpenTUI peers when the plugin renders JSX.
+
+```json title="package.json"
+{
+  "name": "opencode-acme-plugin",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tui": "./src/tui.tsx"
+  },
+  "dependencies": {
+    "@opencode-ai/plugin": "beta"
+  },
+  "peerDependencies": {
+    "@opentui/core": ">=0.5.8",
+    "@opentui/solid": ">=0.5.8",
+    "solid-js": ">=1.9.0"
+  }
+}
+```
+
+Set `tui: true` on the [main plugin](/build/plugins) for automatic loading.
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode-ai/plugin"
+
+export default Plugin.define({
+  id: "acme.server",
+  tui: true,
+  setup() {},
+})
+```
+
+Configure a CLI-only package in [`cli.json`](/cli/plugins) so it remains active against remote servers.
+
+```json title="cli.json"
+{
+  "plugins": ["opencode-acme-plugin"]
+}
+```

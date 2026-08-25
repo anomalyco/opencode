@@ -11,14 +11,16 @@ import { useSettings } from "@/settings/model"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useTabs } from "@/shell/tabs/tabs"
 import type { SessionModel } from "@/session/model"
+import { removedSessionIDs } from "@/session/session-domain"
 import { useServerSDK } from "@/runtime/server/client"
 import { sessionHref } from "@/shell/routes/session"
 import { sessionTitle } from "@/session/title"
 import { downloadSessionExport, fetchSessionExport, sessionExportFilename } from "@/session/commands/export"
 import { showToast } from "@/shell/notifications/toast"
-import { timelineChildTitle, timelineRemovedSessionIDs, visibleTimelineMessages } from "./controller-projection"
+import { applyTimelineMessageHandoff, timelineChildTitle, visibleTimelineMessages } from "./controller-projection"
 import { createTimelineProjection } from "./projection"
 import { useServer } from "@/runtime/server/current"
+import { getSessionMessageHandoff } from "@/session/handoff"
 
 const emptyMessages: SessionMessageInfo[] = []
 const taskDescription = (message: SessionMessageInfo, sessionID: string): string | undefined => {
@@ -52,12 +54,26 @@ export function createTimelineController(input: { session: TimelineSessionSource
   const tabs = useTabs()
   const dialog = useDialog()
   const language = useLanguage()
+  const handedOffMessages = createMemo(() =>
+    applyTimelineMessageHandoff(
+      input.session.history.messages(),
+      getSessionMessageHandoff(input.session.identity.sessionKey()),
+    ),
+  )
   const projectedMessages = createMemo(() => {
     const id = input.session.identity.sessionID()
     return visibleTimelineMessages(
-      input.session.history.messages(),
+      handedOffMessages(),
       id ? data.session.pending.list(id) : [],
       input.session.data.info()?.revert?.messageID,
+    )
+  })
+  const pendingUserMessageIDs = createMemo(() => {
+    const id = input.session.identity.sessionID()
+    return new Set(
+      (id ? data.session.pending.list(id) : []).flatMap((item) =>
+        item.type === "user" && item.delivery === "steer" ? [item.id] : [],
+      ),
     )
   })
   const titleValue = createMemo(() => input.session.data.info()?.title)
@@ -89,6 +105,7 @@ export function createTimelineController(input: { session: TimelineSessionSource
     sessionMessages: projectedMessages,
     status: input.session.data.status,
     showReasoningSummaries: settings.general.showReasoningSummaries,
+    pendingUserMessageIDs,
   })
   const [pending, setPending] = createStore({ rename: false })
 
@@ -159,7 +176,7 @@ export function createTimelineController(input: { session: TimelineSessionSource
         return false
       })
     if (!success) return false
-    const removed = timelineRemovedSessionIDs(data.session.list(), id)
+    const removed = removedSessionIDs(data.session.list(), id)
     void navigateAfterRemoval(id, session.parentID, next?.id)
     notifySessionTabsRemoved({ server: server.key, directory: sdk().directory, sessionIDs: [...removed] })
     return true

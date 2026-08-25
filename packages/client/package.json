@@ -37,7 +37,7 @@
     "@opencode-ai/protocol": "workspace:*"
   },
   "peerDependencies": {
-    "effect": "4.0.0-rc.110",
+    "effect": "4.0.0-rc.111",
     "solid-js": ">=1.9.0"
   },
   "peerDependenciesMeta": {

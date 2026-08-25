@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test"
+import { createTwoFilesPatch } from "diff"
 import {
   defineVisualRegions,
   reportVisualStability,
@@ -13,9 +14,62 @@ import {
   setupTimeline,
   shell,
   textPart,
+  toolPart,
   userMessage,
   type TimelineMessage,
 } from "./fixture"
+
+test("follows an expanded patch that arrives as the user reaches the bottom", async ({ page }) => {
+  const toolID = "prt_bottom_follow_patch"
+  const input = { patchText: "Update src/edit.ts" }
+  const timeline = await setupTimeline(page, {
+    messages: [
+      ...history(20),
+      userMessage(),
+      assistantMessage([textPart("prt_bottom_follow_text", "Working")], { completed: false }),
+    ],
+    settings: { editToolPartsExpanded: true },
+    reducedMotion: true,
+  })
+  const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
+  await scroller.evaluate((element) => {
+    element.scrollTop = Math.max(0, element.scrollHeight - element.clientHeight - 300)
+    element.dispatchEvent(new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: 300 }))
+    element.scrollTop = element.scrollHeight
+  })
+  await expect
+    .poll(() => scroller.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop))
+    .toBeLessThanOrEqual(1)
+
+  await timeline.send(partUpdated(toolPart(toolID, "patch", "running", input)))
+  await timeline.send(
+    partUpdated(
+      toolPart(toolID, "patch", "completed", input, {
+        metadata: {
+          files: [
+            {
+              file: "src/edit.ts",
+              status: "modified",
+              patch: createTwoFilesPatch(
+                "a/src/edit.ts",
+                "b/src/edit.ts",
+                Array.from({ length: 40 }, (_, index) => `export const value${index} = ${index}\n`).join(""),
+                Array.from({ length: 40 }, (_, index) => `export const value${index} = ${index + 1}\n`).join(""),
+              ),
+              additions: 40,
+              deletions: 40,
+            },
+          ],
+        },
+      }),
+    ),
+  )
+
+  await timeline.waitForPart(toolID)
+  await expect
+    .poll(() => scroller.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop))
+    .toBeLessThanOrEqual(1)
+})
 
 test("does not reverse visible rows when the user wheels during shell remeasurement", async ({ page }, testInfo) => {
   const shellID = "prt_wheel_01_shell"

@@ -22,6 +22,7 @@ export type UpdaterAPI = {
 
 export type ElectronAPI = {
   awaitInitialization(): Promise<ServerReadyData>
+  reconnectService(): Promise<ServerReadyData>
   wslServers: WslServersAPI
   updater: UpdaterAPI
   consumeInitialDeepLinks(): Promise<string[]>
@@ -42,7 +43,7 @@ export type ElectronAPI = {
   draftDelete(key: string): Promise<void>
   draftBlobPut(data: ArrayBuffer): Promise<string>
   draftBlobGet(id: string): Promise<ArrayBuffer | null>
-  getWindowID(): Promise<string>
+  getWindowID(): string
   themeReady(): Promise<void>
   onMenuCommand(cb: (id: string) => void): () => void
   onDeepLink(cb: (urls: string[]) => void): () => void
@@ -57,6 +58,7 @@ export type ElectronAPI = {
   openPath(path: string, app?: string): Promise<string | undefined>
   revealPath(path: string): Promise<boolean>
   readClipboardImage(): Promise<ClipboardImage | null>
+  writeClipboardText(text: string): Promise<void>
   getWindowFocused(): Promise<boolean>
   getWindowFullscreen(): Promise<boolean>
   onWindowFullscreenChanged(cb: (fullscreen: boolean) => void): () => void

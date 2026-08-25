@@ -6,7 +6,7 @@ import { EOL } from "node:os"
 import { Commands } from "../commands"
 import { Runtime } from "../../framework/runtime"
 import { ServerConnection } from "../../services/server-connection"
-import { errorMessage } from "../../ui/prompt"
+import { errorMessage } from "../../util/error"
 
 export default Runtime.handler(
   Commands.commands.export,

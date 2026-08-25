@@ -52,6 +52,17 @@ describe("PluginSupervisor config", () => {
     ),
   )
 
+  it.live("allows the built-in Plan agent to be disabled", () =>
+    withLocation(
+      { agents: { plan: { disabled: true } } },
+      Effect.gen(function* () {
+        yield* ready()
+        const agents = yield* Agent.Service
+        expect(yield* agents.get(Agent.ID.make("plan"))).toBeUndefined()
+      }),
+    ),
+  )
+
   it.live("loads configured Promise plugins with options", () =>
     withLocation(
       {

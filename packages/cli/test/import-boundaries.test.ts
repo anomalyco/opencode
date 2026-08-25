@@ -35,7 +35,9 @@ describe("CLI frontend import boundaries", () => {
   test("keeps run and Mini on separate evaluation graphs", async () => {
     const run = await bundleInputs("packages/cli/src/commands/handlers/run.ts")
     expect(run).toContain("packages/cli/src/run/run.ts")
+    expect(run).toContain("packages/cli/src/util/error.ts")
     expect(run).toContain("packages/tui/src/mini/tool.ts")
+    expect(run).not.toContain("packages/cli/src/ui/prompt.ts")
     expect(run).not.toContain("packages/tui/src/mini/runtime.ts")
     expect(run).not.toContain("packages/tui/src/mini/runtime.lifecycle.ts")
     expect(run).not.toContain("packages/tui/src/mini/footer.ts")

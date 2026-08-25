@@ -83,6 +83,7 @@ describe("public event manifest", () => {
         "session.model.selected.1",
         "session.moved.1",
         "session.renamed.1",
+        "session.viewed.1",
         "session.usage.recorded.1",
         "session.forked.2",
         "session.inbox.delivered.1",

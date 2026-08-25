@@ -21,8 +21,7 @@ export function resolveNewSessionWorktree(input: {
 }) {
   if (!input.enabled) return "main"
   if (input.selected) return input.selected
-  if (input.projectWorktree && !sameDirectory(input.directory, input.projectWorktree)) return input.directory
-  return input.fallback ?? "main"
+  return normalizeNewSessionWorktree(input.fallback ?? "main", input.directory, input.projectWorktree)
 }
 
 export function normalizeNewSessionWorktree(value: string, directory: string, projectWorktree?: string) {
@@ -121,7 +120,6 @@ export function createNewSessionWorkspaceController(input: {
       remember,
       set: (worktree: string) => {
         input.setSelected(normalizeNewSessionWorktree(worktree, sdk().directory, currentProject()?.worktree))
-        remember(worktree)
       },
     },
     project: {

@@ -50,32 +50,7 @@ describe("tool schema projections", () => {
     })
   })
 
-  test("openai keeps one flat object top-level schema", () => {
-    expect(
-      ToolSchemaProjection.openAI({
-        anyOf: [
-          {
-            type: "object",
-            properties: {
-              path: { type: "string" },
-              maybe: { anyOf: [{ type: "string" }, { type: "null" }] },
-            },
-          },
-          { type: "object", properties: { resource: { type: "string" } } },
-        ],
-      }),
-    ).toEqual({
-      type: "object",
-      properties: {
-        path: { type: "string" },
-        maybe: { type: "string" },
-        resource: { type: "string" },
-      },
-      additionalProperties: false,
-    })
-  })
-
-  it.effect("applies model compatibility before protocol projection", () =>
+  it.effect("applies model compatibility without changing schema semantics", () =>
     Effect.gen(function* () {
       const model = OpenAIChat.route
         .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
@@ -107,11 +82,15 @@ describe("tool schema projections", () => {
 
       expect(prepared.body.tools?.[0]?.function.parameters).toEqual({
         type: "object",
-        properties: {
-          tuple: { type: "array", items: { anyOf: [{ type: "string" }, { type: "number" }] } },
-          linked: { $ref: "#/$defs/Linked" },
-        },
-        additionalProperties: false,
+        anyOf: [
+          {
+            type: "object",
+            properties: {
+              tuple: { type: "array", items: { anyOf: [{ type: "string" }, { type: "number" }] } },
+              linked: { $ref: "#/$defs/Linked" },
+            },
+          },
+        ],
       })
     }),
   )

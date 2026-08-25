@@ -18,6 +18,15 @@ const opus48 = AnthropicMessages.route
   .with({ endpoint: { baseURL: "https://api.anthropic.test/v1/" }, auth: Auth.header("x-api-key", "test") })
   .model({ id: "claude-opus-4-8" })
 
+const compileUnsignedReasoning = (model: LLMRequest["model"]) =>
+  compileRequest(
+    LLM.request({
+      model,
+      messages: [Message.assistant([{ type: "reasoning", text: "unsigned reasoning" }])],
+      cache: "none",
+    }),
+  )
+
 const request = LLM.request({
   id: "req_1",
   model,
@@ -564,6 +573,65 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
+  it.effect("demotes unsigned reasoning when signatures are required", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileUnsignedReasoning(model)
+
+      expect(prepared.body.messages).toEqual([
+        { role: "assistant", content: [{ type: "text", text: "unsigned reasoning" }] },
+      ])
+    }),
+  )
+
+  it.effect("infers empty-signature compatibility across Kimi providers", () =>
+    Effect.gen(function* () {
+      const coding = AnthropicMessages.route.with({
+        provider: "kimi-for-coding",
+        endpoint: { baseURL: "https://compatible.test/v1/" },
+        auth: Auth.header("x-api-key", "test"),
+      })
+      const moonshot = AnthropicMessages.route
+        .with({
+          provider: "moonshotai",
+          endpoint: { baseURL: "https://api.moonshot.ai/anthropic" },
+          auth: Auth.bearer("test"),
+        })
+        .model({ id: "kimi-k2.6" })
+      const codingPrepared = yield* compileUnsignedReasoning(coding.model({ id: "k3" }))
+      const moonshotPrepared = yield* compileUnsignedReasoning(moonshot)
+
+      expect(codingPrepared.body.messages).toEqual([
+        {
+          role: "assistant",
+          content: [{ type: "thinking", thinking: "unsigned reasoning", signature: "" }],
+        },
+      ])
+      expect(moonshotPrepared.body.messages).toEqual([
+        {
+          role: "assistant",
+          content: [{ type: "thinking", thinking: "unsigned reasoning", signature: "" }],
+        },
+      ])
+    }),
+  )
+
+  it.effect("lets an explicit signature requirement override inference", () =>
+    Effect.gen(function* () {
+      const compatible = AnthropicMessages.route
+        .with({
+          provider: "kimi-for-coding",
+          endpoint: { baseURL: "https://api.kimi.com/coding/v1/" },
+          auth: Auth.header("x-api-key", "test"),
+        })
+        .model({ id: "k3", compatibility: { requireSignature: true } })
+      const prepared = yield* compileUnsignedReasoning(compatible)
+
+      expect(prepared.body.messages).toEqual([
+        { role: "assistant", content: [{ type: "text", text: "unsigned reasoning" }] },
+      ])
+    }),
+  )
+
   it.effect("round-trips redacted thinking as redacted_thinking blocks", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
@@ -699,6 +767,108 @@ describe("Anthropic Messages route", () => {
 
       expect(response.message.content).toEqual([{ type: "text", text: "Hello" }])
       expect(response.finishReason).toEqual({ normalized: "stop", raw: "end_turn" })
+    }),
+  )
+
+  it.effect("ignores unknown content block and delta variants", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "message_start", message: { usage: { input_tokens: 5 } } },
+              { type: "future_event", content_block: 42, delta: 42 },
+              { type: "content_block_start", index: 0, content_block: { type: "future_block", text: 42 } },
+              { type: "content_block_delta", index: 0, delta: { text: "ignored" } },
+              { type: "content_block_delta", index: 0, delta: { type: "future_delta", text: 42 } },
+              { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "hidden" } },
+              { type: "content_block_delta", index: 0, delta: { type: "thinking_delta", thinking: "hidden" } },
+              { type: "content_block_delta", index: 0, delta: { type: "signature_delta", signature: "hidden" } },
+              { type: "content_block_stop", index: 0 },
+              { type: "content_block_start", index: 1, content_block: { type: "text", text: "" } },
+              { type: "content_block_delta", index: 1, delta: { type: "text_delta", text: "Hello" } },
+              { type: "content_block_stop", index: 1 },
+              { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 1 } },
+              { type: "message_stop" },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.message.content).toEqual([{ type: "text", text: "Hello" }])
+      expect(response.finishReason).toEqual({ normalized: "stop", raw: "end_turn" })
+    }),
+  )
+
+  it.effect("rejects malformed recognized content block variants", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "message_start", message: { usage: { input_tokens: 5 } } },
+              { type: "content_block_start", index: 0, content_block: { type: "text", text: 42 } },
+            ),
+          ),
+        ),
+        Effect.flip,
+      )
+
+      expect(error.reason).toMatchObject({
+        _tag: "InvalidProviderOutput",
+        message: "Invalid anthropic/anthropic-messages stream event",
+      })
+    }),
+  )
+
+  it.effect("rejects malformed recognized content delta variants", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "message_start", message: { usage: { input_tokens: 5 } } },
+              { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
+              { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: 42 } },
+            ),
+          ),
+        ),
+        Effect.flip,
+      )
+
+      expect(error.reason).toMatchObject({
+        _tag: "InvalidProviderOutput",
+        message: "Invalid anthropic/anthropic-messages stream event",
+      })
+    }),
+  )
+
+  it.effect("rejects malformed payloads on unrelated stream events", () =>
+    Effect.gen(function* () {
+      const events = [
+        { type: "message_start", message: { usage: { input_tokens: 1 } }, delta: 42 },
+        { type: "content_block_start", index: 0 },
+        { type: "content_block_delta", index: 0 },
+        { type: "content_block_stop", index: 0, content_block: { type: "text", text: 42 } },
+        { type: "message_delta" },
+        { type: "message_delta", delta: { stop_reason: 42 } },
+        { type: "message_stop", delta: { text: 42 } },
+        { type: "error", error: { type: "overloaded_error", message: "busy" }, content_block: 42 },
+      ]
+
+      yield* Effect.forEach(events, (event) =>
+        Effect.gen(function* () {
+          const error = yield* LLMClient.generate(request).pipe(
+            Effect.provide(fixedResponse(sseEvents(event))),
+            Effect.flip,
+          )
+
+          expect(error.reason).toMatchObject({
+            _tag: "InvalidProviderOutput",
+            message: "Invalid anthropic/anthropic-messages stream event",
+          })
+        }),
+      )
     }),
   )
 
@@ -1060,8 +1230,14 @@ describe("Anthropic Messages route", () => {
       expect(response.events).toEqual([
         { type: "step-start", index: 0 },
         { type: "tool-input-start", id: "call_1", name: "lookup" },
-        { type: "tool-input-delta", id: "call_1", name: "lookup", text: '{"query"' },
-        { type: "tool-input-delta", id: "call_1", name: "lookup", text: ':"weather"}' },
+        { type: "tool-input-delta", id: "call_1", name: "lookup", text: '{"query"', input: {} },
+        {
+          type: "tool-input-delta",
+          id: "call_1",
+          name: "lookup",
+          text: ':"weather"}',
+          input: { query: "weather" },
+        },
         { type: "tool-input-end", id: "call_1", name: "lookup", providerMetadata: undefined },
         {
           type: "tool-call",

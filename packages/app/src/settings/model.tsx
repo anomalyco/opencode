@@ -6,6 +6,8 @@ import { ScopedKey, type ServerScope } from "@/runtime/server/scope"
 
 export type WorkspaceDefaultDestination = "last-used" | "local" | "new"
 export type WorkspaceLastUsed = "local" | "workspace"
+export type TerminalPlacement = "side" | "bottom"
+export type FollowUpBehavior = "queue" | "steer"
 
 export interface NotificationSettings {
   agent: boolean
@@ -30,12 +32,15 @@ export interface Settings {
     showNavigation: boolean
     showSearch: boolean
     showStatus: boolean
+    showProjectIcon: boolean
     showTerminal: boolean
     showReasoningSummaries: boolean
     shellToolPartsExpanded: boolean
     editToolPartsExpanded: boolean
     showCustomAgents: boolean
     mobileTitlebarPosition: "top" | "bottom"
+    terminalPlacement: TerminalPlacement
+    followUpBehavior: FollowUpBehavior
   }
   appearance: {
     fontSize: number
@@ -55,12 +60,12 @@ export interface Settings {
   sounds: SoundSettings
 }
 
-export const monoDefault = "System Mono"
-export const sansDefault = "System Sans"
+export const monoDefault = "IBM Plex Mono"
+export const sansDefault = "Inter"
 export const terminalDefault = "JetBrainsMono Nerd Font Mono"
 const monoFallback =
-  'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
-const sansFallback = 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
+  '"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
+const sansFallback = '"Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
 const terminalFallback =
   '"JetBrainsMono Nerd Font Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
 
@@ -115,12 +120,15 @@ const defaultSettings: Settings = {
     showNavigation: false,
     showSearch: false,
     showStatus: false,
+    showProjectIcon: false,
     showTerminal: false,
     showReasoningSummaries: false,
     shellToolPartsExpanded: false,
     editToolPartsExpanded: false,
     showCustomAgents: false,
     mobileTitlebarPosition: "top",
+    terminalPlacement: "side",
+    followUpBehavior: "steer",
   },
   appearance: {
     fontSize: 14,
@@ -204,6 +212,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setShowStatus(value: boolean) {
           setStore("general", "showStatus", value)
         },
+        showProjectIcon: withFallback(() => store.general?.showProjectIcon, defaultSettings.general.showProjectIcon),
+        setShowProjectIcon(value: boolean) {
+          setStore("general", "showProjectIcon", value)
+        },
         showTerminal: withFallback(() => store.general?.showTerminal, defaultSettings.general.showTerminal),
         setShowTerminal(value: boolean) {
           setStore("general", "showTerminal", value)
@@ -239,6 +251,17 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         ),
         setMobileTitlebarPosition(value: "top" | "bottom") {
           setStore("general", "mobileTitlebarPosition", value)
+        },
+        terminalPlacement: withFallback(
+          () => store.general?.terminalPlacement,
+          defaultSettings.general.terminalPlacement,
+        ),
+        setTerminalPlacement(value: TerminalPlacement) {
+          setStore("general", "terminalPlacement", value)
+        },
+        followUpBehavior: withFallback(() => store.general?.followUpBehavior, defaultSettings.general.followUpBehavior),
+        setFollowUpBehavior(value: FollowUpBehavior) {
+          setStore("general", "followUpBehavior", value)
         },
       },
       visibility: {

@@ -15,6 +15,7 @@ import { displayName, projectForSession } from "@/shell/layout/helpers"
 import { createSessionTabs } from "@/session/helpers"
 import { useSessionLayout } from "@/session/session-layout"
 import { useServer } from "@/runtime/server/current"
+import { looksLikeSessionID } from "@/session/search"
 
 export type CommandPaletteEntry = {
   id: string
@@ -147,6 +148,7 @@ export function createCommandPaletteModel(props: { filesOnly?: () => boolean; on
     opened: serverCtx.projects.list,
     stored: () => serverCtx.sync.data.project,
     load: (search, signal) => serverSDK.api.session.list({ parentID: null, search, limit: 50 }, { signal }),
+    get: (sessionID, signal) => serverSDK.api.session.get({ sessionID }, { signal }),
     untitled: () => language.t("command.session.new"),
     category: () => language.t("command.category.session"),
   })
@@ -221,6 +223,7 @@ export function createServerSessionEntries(props: {
   opened: () => LocalProject[]
   stored: () => Project[]
   load: (search: string, signal: AbortSignal) => Promise<{ data: SessionInfo[] }>
+  get: (sessionID: string, signal: AbortSignal) => Promise<SessionInfo>
   untitled: () => string
   category: () => string
 }) {
@@ -253,28 +256,36 @@ export function createServerSessionEntries(props: {
     const openedByID = new Map(opened.flatMap((project) => (project.id ? [[project.id, project] as const] : [])))
     const stored = props.stored().map((project) => ({ ...project, expanded: false }))
     const storedByID = new Map(stored.map((project) => [project.id, project] as const))
-    return props
-      .load(search, current.signal)
-      .then((result) =>
-        result.data
-          .filter((session) => !session.time.archived)
-          .map((session) => {
-            const project =
-              projectForSession(session, opened, openedByID) ?? projectForSession(session, stored, storedByID)
-            return {
-              id: `session:${props.server}:${session.id}`,
-              type: "session" as const,
-              title: session.title || props.untitled(),
-              description: project ? displayName(project) : getFilename(session.location.directory),
-              category: props.category(),
-              directory: session.location.directory,
-              sessionID: session.id,
-              server: props.server,
-              project,
-              updated: session.time.updated,
-            }
-          }),
-      )
-      .catch(() => [] as CommandPaletteEntry[])
+    return Promise.all([
+      props.load(search, current.signal).then(
+        (result) => result.data,
+        () => [],
+      ),
+      looksLikeSessionID(search)
+        ? props.get(search, current.signal).then(
+            (result) => [result],
+            () => [],
+          )
+        : Promise.resolve([]),
+    ]).then(([listed, exact]) =>
+      [...new Map([...exact, ...listed].map((session) => [session.id, session] as const)).values()]
+        .filter((session) => !session.time.archived)
+        .map((session) => {
+          const project =
+            projectForSession(session, opened, openedByID) ?? projectForSession(session, stored, storedByID)
+          return {
+            id: `session:${props.server}:${session.id}`,
+            type: "session" as const,
+            title: session.title || props.untitled(),
+            description: project ? displayName(project) : getFilename(session.location.directory),
+            category: props.category(),
+            directory: session.location.directory,
+            sessionID: session.id,
+            server: props.server,
+            project,
+            updated: session.time.updated,
+          }
+        }),
+    )
   }
 }

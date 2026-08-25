@@ -11,6 +11,7 @@ import type { McpServer } from "@opencode-ai/client"
 import { useToast } from "../ui/toast"
 import { DialogErrorDetails } from "./dialog-error-details"
 import { DialogIntegration } from "./dialog-integration"
+import { useLocation } from "../context/location"
 
 function statusError(status: McpServer["status"]) {
   if (status.status === "failed") return status.error
@@ -33,14 +34,25 @@ function Status(props: { status: McpServer["status"]; loading: boolean }) {
   return <>Disabled ○</>
 }
 
-export function DialogMcp() {
+export function DialogMcp(props: { initialServer?: string; details?: boolean } = {}) {
   const data = useData()
   const dialog = useDialog()
   const client = useClient()
+  const location = useLocation()
   const toast = useToast()
   const theme = useTheme("elevated")
-  const [focused, setFocused] = createSignal<string>()
-  const [detail, setDetail] = createSignal<McpServer>()
+  const current = () => location.ref ?? data.location.default()
+  const servers = createMemo(() =>
+    pipe(
+      data.location.mcp.server.list(current()) ?? [],
+      sortBy((server) => server.name),
+    ),
+  )
+  const initial = props.initialServer ? servers().find((server) => server.name === props.initialServer) : undefined
+  const [focused, setFocused] = createSignal<string | undefined>(props.initialServer)
+  const [detail, setDetail] = createSignal<McpServer | undefined>(
+    props.details && initial?.status.status === "failed" ? initial : undefined,
+  )
   const [loading, setLoading] = createSignal<string | null>(null)
 
   const statusColor = (status: McpServer["status"]) => {
@@ -49,13 +61,6 @@ export function DialogMcp() {
     if (status.status === "needs_auth") return theme.text.feedback.warning.default
     return theme.text.subdued
   }
-
-  const servers = createMemo(() =>
-    pipe(
-      data.location.mcp.server.list() ?? [],
-      sortBy((server) => server.name),
-    ),
-  )
 
   createEffect(() => {
     if (focused()) return
@@ -113,8 +118,8 @@ export function DialogMcp() {
       return
     }
     setLoading(name)
-    const current = data.location.default()
-    const input = { server: name, location: { directory: current.directory, workspace: current.workspaceID } }
+    const target = current()
+    const input = { server: name, location: { directory: target.directory, workspace: target.workspaceID } }
     const call = server.status.status === "connected" ? client.api.mcp.disconnect(input) : client.api.mcp.connect(input)
     void call.catch(toast.error).finally(() => setLoading(null))
   }
@@ -153,7 +158,7 @@ export function DialogMcp() {
             title={`MCP server: ${server().name}`}
             error={statusError(server().status) ?? "Unknown MCP connection error"}
             onBack={() => {
-              setDetail()
+              setDetail(undefined)
               dialog.setSize("medium")
             }}
           />

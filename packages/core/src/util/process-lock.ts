@@ -54,9 +54,7 @@ export namespace ProcessLock {
         }),
       ),
     )
-    if (result.acquired) {
-      return fd
-    }
+    if (result.acquired) return fd
     closeSync(fd)
     return yield* result.held
       ? new HeldError({ file })

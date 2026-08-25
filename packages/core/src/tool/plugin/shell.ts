@@ -13,6 +13,7 @@ import { NonNegativeInt } from "../../schema.js"
 import { SessionSchema } from "../../session/schema.js"
 import { Shell } from "../../shell.js"
 import { ShellParse } from "../../shell/parse.js"
+import { ShellSelect } from "../../shell/select.js"
 import { ToolOutput } from "../../tool-output.js"
 
 export const name = "shell"
@@ -94,6 +95,13 @@ const toolResult = (output: Output) => {
   }
 }
 
+const backgroundResult = (shellID: string) => ({
+  output: BACKGROUND_STARTED,
+  shellID,
+  truncated: false,
+  status: "running" as const,
+})
+
 export const Plugin = {
   id: "opencode.tool.shell",
   effect: Effect.fn("ShellTool.Plugin")(function* (ctx: PluginContext) {
@@ -102,6 +110,8 @@ export const Plugin = {
     const environment = yield* Environment.Service
     const mutation = yield* LocationMutation.Service
     const shell = yield* Shell.Service
+    const shellSelect = yield* ShellSelect.Service
+    const compatibleShell = shellSelect.resolve({ priority: "compat" })
     const permission = yield* Permission.Service
     const config = yield* Config.Service
 
@@ -181,6 +191,7 @@ export const Plugin = {
                   command: input.command,
                   cwd: input.workdir,
                   timeout,
+                  shell: yield* compatibleShell,
                   metadata: { sessionID: context.sessionID },
                 },
                 (invocation) =>
@@ -308,12 +319,7 @@ export const Plugin = {
               if (input.background === true) {
                 yield* runtime.job.background(job.id)
                 yield* notifyWhenDone(context.sessionID, context.id, info.id, info.command, settled, job.id)
-                return {
-                  output: BACKGROUND_STARTED,
-                  shellID: info.id,
-                  truncated: false,
-                  status: "running" as const,
-                }
+                return backgroundResult(info.id)
               }
 
               const result = yield* runtime.job
@@ -322,12 +328,7 @@ export const Plugin = {
               if (result?.type === "backgrounded") {
                 yield* shell.timeout(info.id, 0)
                 yield* notifyWhenDone(context.sessionID, context.id, info.id, info.command, settled, job.id)
-                return {
-                  output: BACKGROUND_STARTED,
-                  shellID: info.id,
-                  truncated: false,
-                  status: "running" as const,
-                }
+                return backgroundResult(info.id)
               }
               if (result?.info.status === "error")
                 return yield* Effect.fail(new Error(result.info.error ?? "Command failed"))
@@ -348,7 +349,7 @@ export const Plugin = {
       Effect.gen(function* () {
         const tool = event.tools[name]
         if (!tool) return
-        tool.description = description(yield* shell.name())
+        tool.description = description(ShellSelect.name(yield* compatibleShell))
       }),
     )
   }),

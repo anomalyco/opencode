@@ -26,6 +26,9 @@ function fileApi(events: string[]) {
     openPath: async () => undefined,
     revealPath: async () => false,
     readClipboardImage: async () => null,
+    writeClipboardText: async (text: string) => {
+      events.push(`clipboard:${text}`)
+    },
   }
 }
 
@@ -57,5 +60,14 @@ describe("desktop attachment files", () => {
       }),
     ).rejects.toThrow("attachment rejected")
     expect(events.at(-1)).toBe("release:selection")
+  })
+
+  test("writes clipboard text through the native desktop API", async () => {
+    const events: string[] = []
+    const files = createDesktopFiles(fileApi(events), "windows", ["txt"])
+
+    await files.writeClipboardText("ses_123")
+
+    expect(events).toEqual(["clipboard:ses_123"])
   })
 })

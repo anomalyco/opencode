@@ -175,6 +175,39 @@ const Group = HttpApiGroup.make("mock")
     }),
   )
   .add(
+    HttpApiEndpoint.post("sessionPrompt", "/api/session/:sessionID/prompt", {
+      params: SessionParams,
+      payload: JsonPayload,
+      success: Json,
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("sessionSwitchAgent", "/api/session/:sessionID/agent", {
+      params: SessionParams,
+      payload: JsonPayload,
+      success: NoContent,
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("sessionSwitchModel", "/api/session/:sessionID/model", {
+      params: SessionParams,
+      payload: JsonPayload,
+      success: NoContent,
+    }),
+  )
+  .add(
+    HttpApiEndpoint.delete("sessionInboxCancel", "/api/session/:sessionID/inbox/:inboxID", {
+      params: { ...SessionParams, inboxID: Schema.String },
+      success: NoContent,
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("sessionInboxSteer", "/api/session/:sessionID/inbox/:inboxID/steer", {
+      params: { ...SessionParams, inboxID: Schema.String },
+      success: NoContent,
+    }),
+  )
+  .add(
     HttpApiEndpoint.get("sessionPermission", "/api/session/:sessionID/permission", {
       params: SessionParams,
       success: Json,

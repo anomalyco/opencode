@@ -45,21 +45,17 @@ test("opens the comment editor for a line number range", async ({ page }) => {
   await expect(review.locator('[data-slot="line-comment-editor-label"]')).toHaveText("Commenting on lines 1-3")
 })
 
-test("shows a comment button when a line number is hovered", async ({ page }) => {
+test("shows a comment button when a diff line is hovered", async ({ page }) => {
   const review = page.locator('[data-component="session-review"]')
-  const lineNumber = review.locator('[data-column-number="1"]').last()
-  await expectAppVisible(lineNumber)
+  const line = review.getByText("export const first = 1", { exact: true })
+  await expectAppVisible(line)
 
-  const comment = review.getByRole("button", { name: "Comment", exact: true })
-  await expect(async () => {
-    await lineNumber.hover()
-    await expect(lineNumber).toHaveAttribute("data-hovered", "")
-    await expect(comment).toHaveCount(1)
-    await expect(comment).toHaveCSS("pointer-events", "auto")
-    await comment.focus()
-    await expect(comment).toBeFocused()
-  }).toPass({ timeout: 10_000 })
-  await comment.press("Enter")
+  const comment = review.getByRole("button", { name: "Comment", exact: true, includeHidden: true })
+  await expect(comment).toHaveCount(1)
+  await line.dispatchEvent("pointermove", { pointerType: "mouse", bubbles: true, composed: true })
+  await expect(comment).toBeVisible()
+  await expect(comment).toHaveCSS("pointer-events", "auto")
+  await comment.dispatchEvent("click")
   await expect(review.getByRole("textbox")).toBeVisible()
   await expect(review.locator('[data-slot="line-comment-editor-label"]')).toHaveText("Commenting on line 1")
 })

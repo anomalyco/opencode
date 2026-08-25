@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
-import { ShellScan } from "@opencode-ai/shell-scan"
 import { Effect } from "effect"
 import { ShellParse } from "../src/shell/parse.js"
+import { ShellScan } from "../src/shell/scan.js"
 
 describe("ShellParse portable parity", () => {
   test("matches tree-sitter for generated supported syntax", async () => {

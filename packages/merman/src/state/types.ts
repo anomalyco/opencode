@@ -1,6 +1,6 @@
 import type { BorderStyle } from "@opentui/core"
 
-export type StateDiagramDirection = "TB" | "TD" | "LR" | "RL"
+export type StateDiagramDirection = "TB" | "TD" | "BT" | "LR" | "RL"
 export type StateDiagramArrowHeadStyle = "filled" | "line"
 
 export interface StateDiagramState {
@@ -41,6 +41,8 @@ export interface StateDiagramRenderOptions {
   borderStyle?: BorderStyle
   arrowHeadStyle?: StateDiagramArrowHeadStyle
   minStateGap?: number
+  /** Target rendered width. Oversized horizontal layouts fold vertically. */
+  layoutMaxWidth?: number
 }
 
 export type NoteConnectorRampStyle = `noteConnectorRamp${1 | 2 | 3}`

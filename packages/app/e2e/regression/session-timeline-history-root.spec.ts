@@ -17,7 +17,7 @@ import { mockOpenCodeServer } from "../utils/mock-server"
 import { installSseTransport } from "../utils/sse-transport"
 import { expectSessionTitle } from "../utils/waits"
 
-const messagePageSize = 200
+const messagePageSize = 20
 const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
 const messages = Array.from({ length: messagePageSize / 2 + 1 }, (_, index) => {
   const id = `msg_${String(index + 1001).padStart(4, "0")}_history_root_user`

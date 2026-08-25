@@ -78,7 +78,7 @@ export const Plugin = {
                   source,
                 })
               const current = yield* FileMutation.readText(environment.files, target.absolute).pipe(
-                Effect.catchTag("Environment.NotFound", () => Effect.succeed(undefined)),
+                Effect.catchTag("Environment.NotFound", () => Effect.undefined),
               )
               const next = Bom.split(input.content)
               const preview = fileDiff(target.resource, current?.text ?? "", next.text, current ? "modified" : "added")

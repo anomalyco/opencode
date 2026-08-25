@@ -95,7 +95,7 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
   return {
     plugins: [
       ...pre.filter((plugin) => enabled.has(plugin.id)),
-      ...Array.from(packages.values()).filter((plugin) => enabled.has(plugin.id)),
+      ...[...packages.values()].filter((plugin) => enabled.has(plugin.id)),
       ...post.filter((plugin) => enabled.has(plugin.id)),
     ],
     failures: [...failures.values()],

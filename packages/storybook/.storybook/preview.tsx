@@ -1,6 +1,4 @@
-import "@opencode-ai/ui/styles/tailwind"
-import "@opencode-ai/session-ui/styles"
-import "@opencode-ai/ui/styles/tokens"
+import "../../app/src/index.css"
 
 import { createEffect, onCleanup, onMount } from "solid-js"
 import addonA11y from "@storybook/addon-a11y"

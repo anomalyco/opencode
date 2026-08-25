@@ -2,13 +2,24 @@
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode-ai/server",
   "version": "1.18.4",
-  "private": true,
   "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anomalyco/opencode.git",
+    "directory": "packages/server"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist"
+  ],
   "exports": {
     "./*": "./src/*.ts"
   },
   "scripts": {
+    "build": "bun run script/build.ts",
     "test": "bun test --only-failures",
     "typecheck": "tsgo -b",
     "probe:workerd": "bun run script/workerd-probe.ts"

@@ -21,8 +21,18 @@ export interface Adapter {
   readonly appendMessage: (message: SessionMessage.Info) => Effect.Effect<void, never, never>
 }
 
+type DraftAssistant = WritableDraft<SessionMessage.Assistant>
+
+const projectTerminalSnapshot = (draft: DraftAssistant, event: SessionEvent.Step.Ended | SessionEvent.Step.Failed) => {
+  if (event.data.snapshot || event.data.files)
+    draft.snapshot = {
+      ...draft.snapshot,
+      end: event.data.snapshot,
+      files: event.data.files ? Array.from(event.data.files) : undefined,
+    }
+}
+
 export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
-  type DraftAssistant = WritableDraft<SessionMessage.Assistant>
   type DraftTool = WritableDraft<SessionMessage.AssistantTool>
   type DraftText = WritableDraft<SessionMessage.AssistantText>
   type DraftReasoning = WritableDraft<SessionMessage.AssistantReasoning>
@@ -60,6 +70,7 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
     Match.type<SessionEvent.DurableEvent>(),
     Match.discriminatorsExhaustive("type")({
       "session.created": () => Effect.void,
+      "session.viewed": () => Effect.void,
       "session.usage.recorded": () => Effect.void,
       "session.agent.selected": (event) =>
         Effect.gen(function* () {
@@ -229,12 +240,7 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
           draft.providerState = castDraft(event.data.providerState)
           draft.cost = event.data.cost
           draft.tokens = event.data.tokens
-          if (event.data.snapshot || event.data.files)
-            draft.snapshot = {
-              ...draft.snapshot,
-              end: event.data.snapshot,
-              files: event.data.files ? Array.from(event.data.files) : undefined,
-            }
+          projectTerminalSnapshot(draft, event)
         })
       },
       "session.step.failed": (event) => {
@@ -249,12 +255,7 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
             draft.cost = event.data.cost
             draft.tokens = castDraft(event.data.tokens)
           }
-          if (event.data.snapshot || event.data.files)
-            draft.snapshot = {
-              ...draft.snapshot,
-              end: event.data.snapshot,
-              files: event.data.files ? Array.from(event.data.files) : undefined,
-            }
+          projectTerminalSnapshot(draft, event)
         })
       },
       "session.text.started": (event) => {

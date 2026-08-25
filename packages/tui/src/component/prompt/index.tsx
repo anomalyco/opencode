@@ -58,7 +58,7 @@ import {
   MAX_LOCAL_ATTACHMENT_BYTES,
   type LocalAttachment,
 } from "./local-attachment"
-import { useData } from "../../context/data"
+import { locationKey, useData } from "../../context/data"
 import { useLocation } from "../../context/location"
 import { Keymap, type KeymapCommand } from "../../context/keymap"
 import { abbreviateHome } from "../../runtime"
@@ -262,6 +262,7 @@ export function Prompt(props: PromptProps) {
       (props.sessionID ? data.session.get(props.sessionID)?.projectID : undefined) ?? data.location.info()?.project.id,
     sessionID: () => props.sessionID,
   })
+  const [pendingDirectory, setPendingDirectory] = createSignal<string>()
   Keymap.createLayer(() => ({
     mode: "global",
     commands: [
@@ -285,13 +286,18 @@ export function Prompt(props: PromptProps) {
             expanded,
           )
           if (!sessionID) {
+            setPendingDirectory(directory)
             const location = await client.api.location.get({ location: { directory } }).catch((error) => {
               toast.show({ title: "Failed to change directory", message: errorMessage(error), variant: "error" })
               return undefined
             })
-            if (!location) return
+            if (!location) {
+              setPendingDirectory(undefined)
+              return
+            }
             if (sourceProjectID) directoryRecents.touch(sourceProjectID, location.directory)
             currentLocation.set(location)
+            setPendingDirectory(undefined)
             return
           }
           const error = await client.api.session.move({ sessionID, directory: input }).then(
@@ -308,7 +314,6 @@ export function Prompt(props: PromptProps) {
     ],
   }))
   const [cursorVersion, setCursorVersion] = createSignal(0)
-  const currentProviderLabel = createMemo(() => local.model.parsed().provider)
   const connected = useConnected()
   const hasRightContent = createMemo(() => Boolean(props.right))
 
@@ -1181,7 +1186,6 @@ export function Prompt(props: PromptProps) {
     // snapshot unless the user has started typing something new.
     const currentMode = store.mode
     const entry = { ...store.prompt, mode: currentMode }
-    history.append(entry)
     resetComposer()
     props.onSubmit?.()
     const restoreEntry = () => {
@@ -1256,6 +1260,7 @@ export function Prompt(props: PromptProps) {
     }
 
     const target = sessionID
+    history.append(entry)
     const dispatch = (send: () => Promise<unknown>) => {
       const setup = newSession
       if (setup) void setup.gate.then(send).catch(setup.recover)
@@ -1266,17 +1271,11 @@ export function Prompt(props: PromptProps) {
       dispatch(() => client.api.session.shell({ sessionID: target, command: inputText }))
       setStore("mode", "normal")
     } else if (slashHead && isCommand) {
-      move.startSubmit()
-      const model = { providerID: selection.providerID, id: selection.modelID, variant }
-      const cancelCommit = local.model.trackSessionCommit(target, model)
-
       const send = () =>
         client.api.session.command({
           sessionID: target,
           command: slashHead.name,
-          arguments: slashHead.arguments,
-          agent: agent.id,
-          model,
+          text: slashHead.arguments,
           files: entry.files,
           agents: entry.agents,
           skills: entry.skills?.length ? entry.skills : undefined,
@@ -1284,7 +1283,6 @@ export function Prompt(props: PromptProps) {
         })
       const setup = newSession
       void (setup ? setup.gate.then(send) : send()).catch((error) => {
-        cancelCommit()
         if (setup) return setup.recover(error)
         toast.show({ title: "Failed to run command", message: errorMessage(error), variant: "error" })
         restoreEntry()
@@ -1565,30 +1563,53 @@ export function Prompt(props: PromptProps) {
     resetComposer()
   }
 
+  // Keep the last resolved prompt display visible while destination catalogs load;
+  // availability and submission still use the live location-scoped catalog.
+  const promptDisplay = createMemo<{
+    agentLabel: string | undefined
+    agentColor: RGBA | undefined
+    modelLabel: string
+    providerLabel: string
+    variant: string | undefined
+  }>(
+    (previous) => {
+      const location = currentLocation.ref ?? data.location.default()
+      const sessionLocation = props.sessionID ? data.session.get(props.sessionID)?.location : location
+      if (!sessionLocation || locationKey(sessionLocation) !== locationKey(location)) return previous
+
+      const loading = data.location.agent.list(location) === undefined || !local.model.catalogReady
+      const error = currentLocation.error
+      const failed = error && locationKey(error.location) === locationKey(location)
+      if (loading && !failed) return previous
+
+      const agent = local.agent.current()
+      const model = local.model.parsed()
+      return {
+        agentLabel: agent ? Locale.titlecase(agent.id) : undefined,
+        agentColor: agent ? local.agent.color(agent.id) : undefined,
+        modelLabel: model.model,
+        providerLabel: model.provider,
+        variant: local.model.variant.current(),
+      }
+    },
+    {
+      agentLabel: undefined,
+      agentColor: undefined,
+      modelLabel: local.model.parsed().model,
+      providerLabel: local.model.parsed().provider,
+      variant: undefined,
+    },
+  )
   const highlight = createMemo(() => {
     if (leader()) return theme.border.default
     if (store.mode === "shell") return theme.text.action.primary.selected
-    const agent = local.agent.current()
-    if (!agent) return theme.border.default
-    return local.agent.color(agent.id)
+    return promptDisplay().agentColor ?? theme.border.default
   })
-  const agentLabel = createMemo(() => {
-    if (store.mode === "shell") return "Shell"
-    const agent = local.agent.current()
-    return agent ? Locale.titlecase(agent.id) : undefined
-  })
-
-  const showVariant = createMemo(() => {
-    const variants = local.model.variant.list()
-    if (variants.length === 0) return false
-    const current = local.model.variant.current()
-    return !!current
-  })
-
-  const agentMetaAlpha = createFadeIn(() => store.mode === "shell" || !!local.agent.current(), animationsEnabled)
-  const modelMetaAlpha = createFadeIn(() => !!local.agent.current() && store.mode === "normal", animationsEnabled)
+  const agentLabel = createMemo(() => (store.mode === "shell" ? "Shell" : promptDisplay().agentLabel))
+  const agentMetaAlpha = createFadeIn(() => !!agentLabel(), animationsEnabled)
+  const modelMetaAlpha = createFadeIn(() => !!promptDisplay().agentLabel && store.mode === "normal", animationsEnabled)
   const variantMetaAlpha = createFadeIn(
-    () => !!local.agent.current() && store.mode === "normal" && showVariant(),
+    () => !!promptDisplay().agentLabel && store.mode === "normal" && !!promptDisplay().variant,
     animationsEnabled,
   )
   const borderHighlight = createMemo(() => tint(theme.border.default, highlight(), agentMetaAlpha()))
@@ -1617,7 +1638,8 @@ export function Prompt(props: PromptProps) {
     return data.session.get(props.sessionID)?.location
   })
   const locationLabel = createMemo(() => {
-    const location = footerLocation()
+    const pending = pendingDirectory()
+    const location = pending ? { directory: pending } : footerLocation()
     if (!location) return
     const directory = abbreviateHome(location.directory, paths.home)
     const branch = data.location.vcs.info(location)?.branch.current
@@ -1635,8 +1657,7 @@ export function Prompt(props: PromptProps) {
   })
 
   const spinnerDef = createMemo(() => {
-    const agent = status() === "running" ? local.agent.current() : local.agent.current()
-    const color = agent ? local.agent.color(agent.id) : theme.border.default
+    const color = promptDisplay().agentColor ?? theme.border.default
     return {
       frames: createFrames({
         color,
@@ -1851,14 +1872,14 @@ export function Prompt(props: PromptProps) {
                             truncate
                             fg={fadeColor(leader() ? theme.text.subdued : theme.text.default, modelMetaAlpha())}
                           >
-                            {local.model.parsed().model}
+                            {promptDisplay().modelLabel}
                           </text>
                           <Show when={dimensions().width >= 50}>
                             <text flexShrink={0} fg={fadeColor(theme.text.subdued, modelMetaAlpha())}>
-                              {currentProviderLabel()}
+                              {promptDisplay().providerLabel}
                             </text>
                           </Show>
-                          <Show when={showVariant() && dimensions().width >= 70}>
+                          <Show when={promptDisplay().variant && dimensions().width >= 70}>
                             <text fg={fadeColor(theme.text.subdued, variantMetaAlpha())}>·</text>
                             <text>
                               <span
@@ -1867,7 +1888,7 @@ export function Prompt(props: PromptProps) {
                                   bold: true,
                                 }}
                               >
-                                {local.model.variant.current()}
+                                {promptDisplay().variant}
                               </span>
                             </text>
                           </Show>

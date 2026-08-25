@@ -8,6 +8,7 @@ const ServerReadyData = Schema.Struct({
 })
 
 export const AppAwaitInitialization = Rpc.make("AppAwaitInitialization", { success: ServerReadyData })
+export const AppReconnectService = Rpc.make("AppReconnectService", { success: ServerReadyData })
 export const AppConsumeInitialDeepLinks = Rpc.make("AppConsumeInitialDeepLinks", {
   success: Schema.Array(Schema.String),
 })
@@ -56,6 +57,7 @@ export const AppSetNativeTranslations = Rpc.make("AppSetNativeTranslations", {
 export const AppRelaunch = Rpc.make("AppRelaunch")
 export const AppRpcs = RpcGroup.make(
   AppAwaitInitialization,
+  AppReconnectService,
   AppConsumeInitialDeepLinks,
   AppGetDefaultServerUrl,
   AppSetDefaultServerUrl,

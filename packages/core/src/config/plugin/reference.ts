@@ -4,12 +4,13 @@ import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Document } from "@opencode-ai/schema/config"
 import { ConfigReference } from "@opencode-ai/schema/config/reference"
 import path from "path"
-import { Effect, Stream } from "effect"
+import { Effect } from "effect"
 import { Config } from "../../config.js"
 import { Reference } from "../../reference.js"
 import { AbsolutePath } from "../../schema.js"
 import { Global } from "@opencode-ai/util/global"
 import { Location } from "../../location.js"
+import { ConfigEntryObserver } from "./entry-observer.js"
 
 export const Plugin = define({
   id: "opencode.config.reference",
@@ -17,7 +18,7 @@ export const Plugin = define({
     const config = yield* Config.Service
     const location = yield* Location.Service
     const global = yield* Global.Service
-    const loaded = { entries: yield* config.entries() }
+    const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.reference.reload())
     yield* ctx.reference.transform((draft) => {
       const entries = new Map<string, Reference.Source>()
       for (const doc of loaded.entries.filter((entry): entry is Document => entry.type === "document")) {
@@ -49,16 +50,6 @@ export const Plugin = define({
       }
       for (const [name, source] of entries) draft.add(name, source)
     })
-    yield* ctx.event.subscribe().pipe(
-      Stream.filter((event) => event.type === "config.updated"),
-      Stream.runForEach(() =>
-        config.entries().pipe(
-          Effect.tap((entries) => Effect.sync(() => (loaded.entries = entries))),
-          Effect.andThen(ctx.reference.reload()),
-        ),
-      ),
-      Effect.forkScoped({ startImmediately: true }),
-    )
   }),
 })
 

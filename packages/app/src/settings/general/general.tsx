@@ -7,21 +7,22 @@ import { TextInput } from "@opencode-ai/ui/text-input"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useUpdaterAction } from "@/shell/updates/action"
-import { type WorkspaceDefaultDestination, useSettings } from "@/settings/model"
+import {
+  type FollowUpBehavior,
+  type TerminalPlacement,
+  type WorkspaceDefaultDestination,
+  useSettings,
+} from "@/settings/model"
+import { formatKeybind } from "@/shell/commands/command"
 import { ExternalLink } from "@/runtime/platform/external-link"
 import { SettingsList } from "@/settings/list"
 import { SettingsRow } from "@/settings/row"
 import {
   createAppearanceSettingsController,
-  createPermissionScopeController,
   createShellOptions,
   createShellSettingsController,
-  createSoundSettingsController,
-  soundOptions,
   type AppearanceSettingsController,
-  type PermissionScopeController,
   type ShellSettingsController,
-  type SoundSettingsController,
 } from "./controllers"
 import "@/settings/settings.css"
 import { ServerConnection } from "@/runtime/server/registry"
@@ -50,26 +51,9 @@ const fontSettings = {
     input: "setTerminal",
   },
 } as const
-const soundSettings = {
-  agent: {
-    action: "settings-sounds-agent",
-    title: "settings.general.sounds.agent.title",
-    description: "settings.general.sounds.agent.description",
-  },
-  permissions: {
-    action: "settings-sounds-permissions",
-    title: "settings.general.sounds.permissions.title",
-    description: "settings.general.sounds.permissions.description",
-  },
-  errors: {
-    action: "settings-sounds-errors",
-    title: "settings.general.sounds.errors.title",
-    description: "settings.general.sounds.errors.description",
-  },
-} as const
-
-const PermissionScopeSetting: Component<{ controller: PermissionScopeController }> = (props) => {
+const AutoApprovePermissionsSetting: Component = () => {
   const language = useLanguage()
+  const settings = useSettings()
   return (
     <SettingsRow
       title={language.t("command.permissions.autoaccept.enable")}
@@ -77,9 +61,8 @@ const PermissionScopeSetting: Component<{ controller: PermissionScopeController 
     >
       <div data-action="settings-auto-accept-permissions">
         <Switch
-          checked={props.controller.accepting()}
-          disabled={!props.controller.enabled()}
-          onChange={props.controller.set}
+          checked={settings.permissions.autoApprove()}
+          onChange={(checked) => settings.permissions.setAutoApprove(checked)}
         />
       </div>
     </SettingsRow>
@@ -139,6 +122,62 @@ const ShellSetting: Component<{ controller: ShellSettingsController }> = (props)
           return `${option.name} (${language.t("settings.general.row.shell.terminalOnly")})`
         }}
         onSelect={(option) => option && props.controller.select(option.value)}
+      />
+    </SettingsRow>
+  )
+}
+
+const TerminalPlacementSetting: Component = () => {
+  const language = useLanguage()
+  const settings = useSettings()
+  const options = createMemo((): { value: TerminalPlacement; label: string }[] => [
+    { value: "side", label: language.t("settings.general.row.terminalPlacement.side") },
+    { value: "bottom", label: language.t("settings.general.row.terminalPlacement.bottom") },
+  ])
+
+  return (
+    <SettingsRow
+      title={language.t("settings.general.row.terminalPlacement.title")}
+      description={language.t("settings.general.row.terminalPlacement.description")}
+    >
+      <Select
+        data-action="settings-terminal-placement"
+        options={options()}
+        current={options().find((option) => option.value === settings.general.terminalPlacement())}
+        value={(option) => option.value}
+        label={(option) => option.label}
+        placement="bottom-end"
+        gutter={6}
+        onSelect={(option) => option && settings.general.setTerminalPlacement(option.value)}
+      />
+    </SettingsRow>
+  )
+}
+
+const FollowUpBehaviorSetting: Component = () => {
+  const language = useLanguage()
+  const settings = useSettings()
+  const options = createMemo((): { value: FollowUpBehavior; label: string }[] => [
+    { value: "queue", label: language.t("settings.general.row.followUpBehavior.queue") },
+    { value: "steer", label: language.t("settings.general.row.followUpBehavior.steer") },
+  ])
+
+  return (
+    <SettingsRow
+      title={language.t("settings.general.row.followUpBehavior.title")}
+      description={language.t("settings.general.row.followUpBehavior.description", {
+        keybind: formatKeybind("mod+enter", language.t),
+      })}
+    >
+      <Select
+        data-action="settings-follow-up-behavior"
+        options={options()}
+        current={options().find((option) => option.value === settings.general.followUpBehavior())}
+        value={(option) => option.value}
+        label={(option) => option.label}
+        placement="bottom-end"
+        gutter={6}
+        onSelect={(option) => option && settings.general.setFollowUpBehavior(option.value)}
       />
     </SettingsRow>
   )
@@ -228,43 +267,6 @@ const FontSetting: Component<{
   )
 }
 
-const SoundsSection: Component<{ controller: SoundSettingsController }> = (props) => {
-  const language = useLanguage()
-  return (
-    <div class="settings-section">
-      <h3 class="settings-section-title">{language.t("settings.general.section.sounds")}</h3>
-      <SettingsList>
-        <SoundSetting kind="agent" channel={props.controller.agent} />
-        <SoundSetting kind="permissions" channel={props.controller.permissions} />
-        <SoundSetting kind="errors" channel={props.controller.errors} />
-      </SettingsList>
-    </div>
-  )
-}
-
-const SoundSetting: Component<{
-  kind: "agent" | "permissions" | "errors"
-  channel: SoundSettingsController["agent"]
-}> = (props) => {
-  const language = useLanguage()
-  const config = () => soundSettings[props.kind]
-  return (
-    <SettingsRow title={language.t(config().title)} description={language.t(config().description)}>
-      <Select
-        data-action={config().action}
-        options={soundOptions}
-        current={props.channel.current()}
-        value={(option) => option.id}
-        label={(option) => language.t(option.label)}
-        onHighlight={props.channel.highlight}
-        onSelect={props.channel.select}
-        placement="bottom-end"
-        gutter={6}
-      />
-    </SettingsRow>
-  )
-}
-
 const LanguageSetting = () => {
   const language = useLanguage()
   const options = createMemo(() =>
@@ -293,7 +295,6 @@ const LanguageSetting = () => {
 }
 
 export const SettingsGeneral: Component<{
-  sessionID?: string
   server?: ServerConnection.Any
 }> = (props) => {
   const language = useLanguage()
@@ -301,10 +302,6 @@ export const SettingsGeneral: Component<{
   const settings = useSettings()
   const mobile = createMediaQuery("(max-width: 767px)")
   const updater = useUpdaterAction()
-  const permissionScope = createPermissionScopeController(
-    () => props.server,
-    () => props.sessionID,
-  )
   const shell = createShellSettingsController(() => props.server)
   const desktop = createMemo(() => platform.platform === "desktop")
 
@@ -328,9 +325,11 @@ export const SettingsGeneral: Component<{
         <LanguageSetting />
 
         <WorkspaceDestinationSetting />
-        <PermissionScopeSetting controller={permissionScope} />
+        <AutoApprovePermissionsSetting />
 
         <ShellSetting controller={shell} />
+        <TerminalPlacementSetting />
+        <FollowUpBehaviorSetting />
 
         <SettingsRow
           title={language.t("settings.general.row.reasoningSummaries.title")}
@@ -367,6 +366,20 @@ export const SettingsGeneral: Component<{
             />
           </div>
         </SettingsRow>
+
+        <Show when={import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"}>
+          <SettingsRow
+            title={language.t("settings.general.row.showProjectIcon.title")}
+            description={language.t("settings.general.row.showProjectIcon.description")}
+          >
+            <div data-action="settings-show-project-icon">
+              <Switch
+                checked={settings.general.showProjectIcon()}
+                onChange={(checked) => settings.general.setShowProjectIcon(checked)}
+              />
+            </div>
+          </SettingsRow>
+        </Show>
 
         <Show when={mobile() && import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"}>
           <SettingsRow

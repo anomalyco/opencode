@@ -24,12 +24,12 @@ describe("ConfigShellPlugin.Plugin", () => {
       yield* ConfigShellPlugin.Plugin.effect(yield* PluginHost.make(plugins))
 
       const configured = process.platform === "win32" ? FSUtil.windowsPath(process.execPath) : process.execPath
-      expect(yield* shell.preferred()).toBe(configured)
+      expect(yield* shell.resolve({ priority: "config" })).toBe(configured)
 
       yield* config.setEntries([])
       yield* bus.publish(Event.Updated, {})
       for (let attempt = 0; attempt < 200; attempt++) {
-        if ((yield* shell.preferred()) !== configured) return
+        if ((yield* shell.resolve({ priority: "config" })) !== configured) return
         yield* Effect.sleep("10 millis")
       }
       yield* Effect.die(new Error("Timed out waiting for shell config reload"))

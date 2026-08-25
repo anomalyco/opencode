@@ -1,4 +1,5 @@
-import { Effect, Layer, LayerMap } from "effect"
+import { Duration, Effect, Layer, LayerMap } from "effect"
+import { existsSync } from "fs"
 import path from "path"
 import { Agent } from "./agent.js"
 import { AISDK } from "./aisdk.js"
@@ -146,7 +147,14 @@ export function buildLocationServiceMap(
             Layer.provide(LayerNode.compile(location.hoisted)),
           )
         },
-        { idleTimeToLive: "60 minutes" },
+        {
+          // Workspace-placed directories exist only inside the workspace, so a
+          // local stat consults the wrong filesystem. Workspace liveness is
+          // owned by placement; do not probe the sandbox here, which would
+          // provision lazily-idle workspaces.
+          idleTimeToLive: (ref) =>
+            ref.workspaceID !== undefined || existsSync(ref.directory) ? Duration.infinity : Duration.zero,
+        },
       ),
       (inner) => ({
         ...inner,

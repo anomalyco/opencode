@@ -49,13 +49,11 @@ const layer = Layer.effect(
     const sessions = yield* Session.Service
     const encodeMessage = Schema.encodeSync(SessionMessage.Info)
 
-    const persistProject = (project: Project.Resolved) => upsertProject(db, project).pipe(Effect.orDie)
-
     return Service.of({
       export: Effect.fn("SessionTransfer.export")(function* (input) {
         const data = {
           info: yield* sessions.get(input.sessionID),
-          messages: yield* sessions.messages({ sessionID: input.sessionID, order: "asc" }),
+          messages: (yield* sessions.messages({ sessionID: input.sessionID, order: "asc" })).filter(isSettled),
         }
         return input.sanitize ? sanitize(data) : data
       }),
@@ -69,8 +67,8 @@ const layer = Layer.effect(
           .pipe(Effect.orDie)
         if (recorded) return yield* new ImportConflictError({ sessionID })
         const project = yield* projects.resolve(input.location.directory)
-        yield* persistProject(project)
-        const messages = input.data.messages.map((message, index) => {
+        yield* upsertProject(db, project).pipe(Effect.orDie)
+        const messages = input.data.messages.filter(isSettled).map((message, index) => {
           const encoded = encodeMessage(message)
           const { id: _, type, ...data } = encoded
           return {
@@ -117,6 +115,15 @@ const layer = Layer.effect(
                       tokens_cache_write: input.data.info.tokens.cache.write,
                       time_created: DateTime.toEpochMillis(input.data.info.time.created),
                       time_updated: DateTime.toEpochMillis(input.data.info.time.updated),
+                      time_idle: input.data.info.time.idle ? DateTime.toEpochMillis(input.data.info.time.idle) : null,
+                      time_viewed:
+                        input.data.info.time.idle && input.data.info.time.viewed
+                          ? Math.min(
+                              DateTime.toEpochMillis(input.data.info.time.idle),
+                              DateTime.toEpochMillis(input.data.info.time.viewed),
+                            )
+                          : null,
+                      idle_outcome: input.data.info.time.idle ? (input.data.info.outcome ?? null) : null,
                       time_archived: input.data.info.time.archived
                         ? DateTime.toEpochMillis(input.data.info.time.archived)
                         : null,
@@ -145,6 +152,12 @@ export const node = makeGlobalNode({
   layer,
   deps: [App.node, Bus.node, Database.node, Project.node, Session.node],
 })
+
+function isSettled(message: SessionMessage.Info) {
+  if (message.type === "assistant") return message.time.completed !== undefined
+  if (message.type === "shell" || message.type === "compaction") return message.status !== "running"
+  return true
+}
 
 function redact(kind: string, id: string, value: string) {
   return value.trim() ? `[redacted:${kind}:${id}]` : value

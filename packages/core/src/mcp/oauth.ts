@@ -148,7 +148,8 @@ export const authorize = (input: {
     const oauth = input.config.oauth || undefined
     const store = memoryStore()
     const code = yield* Deferred.make<string, Error>()
-    const redirectPath = oauth?.redirect_uri ? new URL(oauth.redirect_uri).pathname : "/callback"
+    const redirect = oauth?.redirect_uri ? new URL(oauth.redirect_uri) : undefined
+    const redirectPath = redirect?.pathname ?? "/callback"
     const state = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url")
 
     // Lazy so runtimes without a loopback listener (workerd) never evaluate node:http.
@@ -179,7 +180,7 @@ export const authorize = (input: {
     // Bind the port the redirect will actually arrive on: an explicit callback_port wins, else the port
     // pinned by redirect_uri, else an ephemeral port. Binding ephemerally while redirect_uri names a fixed
     // port would send the browser somewhere nothing is listening, hanging the attempt until it expires.
-    const redirectPort = oauth?.redirect_uri ? Number(new URL(oauth.redirect_uri).port) || undefined : undefined
+    const redirectPort = Number(redirect?.port) || undefined
     const port = yield* Effect.callback<number, Error>((resume) => {
       server.once("error", (error) => resume(Effect.fail(error)))
       server.listen(oauth?.callback_port ?? redirectPort ?? 0, "127.0.0.1", () => {

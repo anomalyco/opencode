@@ -99,3 +99,111 @@ test("middle-click closes a session tab without selecting it", async () => {
     app.renderer.destroy()
   }
 })
+
+test("keeps consecutive close controls fixed across overflow window changes", async () => {
+  const [active, setActive] = createSignal("fifth")
+  const [items, setItems] = createSignal([
+    { sessionID: "first", title: "First" },
+    { sessionID: "second", title: "Second" },
+    { sessionID: "third", title: "Third" },
+    { sessionID: "fourth", title: "Fourth" },
+    { sessionID: "fifth", title: "Fifth" },
+  ])
+  const closed: string[] = []
+  const controller = {
+    tabs: items,
+    current: active,
+    select: setActive,
+    close: (sessionID?: string) => {
+      if (!sessionID) return
+      const current = items()
+      closed.push(sessionID)
+      setActive("first")
+      setItems(current.filter((tab) => tab.sessionID !== sessionID))
+    },
+    move() {},
+    status: () => EMPTY_SESSION_TAB_STATUS,
+  } satisfies SessionTabsController
+  const app = await testRender(
+    () => (
+      <TestTuiContexts>
+        <ConfigProvider config={createTuiResolvedConfig({ tabs: { enabled: true } })}>
+          <ThemeProvider mode="dark" source={emptyThemeSource}>
+            <SessionTabs controller={controller} animations={false} />
+          </ThemeProvider>
+        </ConfigProvider>
+      </TestTuiContexts>
+    ),
+    { width: 46, height: 2 },
+  )
+
+  try {
+    app.renderer.start()
+    await app.waitForFrame((frame) => frame.includes("Third"))
+    await app.mockMouse.moveTo(11, 0)
+    await app.waitForFrame((frame) => Array.from(frame.split("\n")[0] ?? "")[11] === "✕")
+
+    await app.mockMouse.click(11, 0)
+    await app.waitForFrame((frame) => items().length === 4 && Array.from(frame.split("\n")[0] ?? "")[11] === "✕")
+    await app.mockMouse.click(11, 0)
+
+    expect(closed).toEqual(["third", "fourth"])
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("reflows held tabs when the pointer leaves the strip", async () => {
+  const [active, setActive] = createSignal("first")
+  const [items, setItems] = createSignal([
+    { sessionID: "first", title: "First" },
+    { sessionID: "second", title: "Second" },
+    { sessionID: "third", title: "Third" },
+    { sessionID: "fourth", title: "Fourth" },
+  ])
+  const controller = {
+    tabs: items,
+    current: active,
+    select: setActive,
+    close: (sessionID?: string) => {
+      if (!sessionID) return
+      const current = items()
+      const index = current.findIndex((tab) => tab.sessionID === sessionID)
+      setActive((current[index + 1] ?? current[index - 1])?.sessionID)
+      setItems(current.filter((tab) => tab.sessionID !== sessionID))
+    },
+    move() {},
+    status: () => EMPTY_SESSION_TAB_STATUS,
+  } satisfies SessionTabsController
+  const app = await testRender(
+    () => (
+      <TestTuiContexts>
+        <ConfigProvider config={createTuiResolvedConfig({ tabs: { enabled: true } })}>
+          <ThemeProvider mode="dark" source={emptyThemeSource}>
+            <box flexDirection="column">
+              <SessionTabs controller={controller} animations={false} />
+              <text>outside</text>
+            </box>
+          </ThemeProvider>
+        </ConfigProvider>
+      </TestTuiContexts>
+    ),
+    { width: 60, height: 2 },
+  )
+
+  try {
+    app.renderer.start()
+    await app.waitForFrame((frame) => frame.includes("Fourth"))
+    await app.mockMouse.moveTo(22, 0)
+    await app.waitForFrame((frame) => Array.from(frame.split("\n")[0] ?? "")[22] === "✕")
+    await app.mockMouse.click(22, 0)
+    await app.waitForFrame((frame) => items().length === 3 && Array.from(frame.split("\n")[0] ?? "")[22] === "✕")
+
+    await app.mockMouse.moveTo(0, 1)
+    await app.mockMouse.moveTo(20, 0)
+    await app.waitForFrame((frame) => Array.from(frame.split("\n")[0] ?? "")[20] === "✕", { maxPasses: 100 })
+    expect(Array.from(app.captureCharFrame().split("\n")[0] ?? "")[22]).not.toBe("✕")
+  } finally {
+    app.renderer.destroy()
+  }
+})

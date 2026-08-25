@@ -28,7 +28,11 @@ export const ResponseIncludables = [
 export type ResponseIncludable = (typeof ResponseIncludables)[number] | (string & {})
 
 export const ServiceTiers = ["auto", "default", "flex", "priority"] as const
-export type ServiceTier = (typeof ServiceTiers)[number]
+export type ServiceTier = (typeof ServiceTiers)[number] | (string & {})
+export const ServiceTier = Schema.declare<ServiceTier>(
+  (value): value is ServiceTier => typeof value === "string",
+  { title: "ServiceTier" },
+)
 
 export const Truncations = ["auto", "disabled"] as const
 export type Truncation = (typeof Truncations)[number]
@@ -38,7 +42,7 @@ export const ResponseIncludableSchema = Schema.declare<ResponseIncludable>(
   (value): value is ResponseIncludable => typeof value === "string",
   { title: "ResponseIncludable" },
 )
-export const ServiceTierSchema = Schema.Literals(ServiceTiers)
+export const ServiceTierSchema = ServiceTier
 export const TruncationSchema = Schema.Literals(Truncations)
 
 export const AllowedTools = Schema.Struct({

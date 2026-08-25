@@ -65,6 +65,9 @@
   --leading-lg: var(--line-height-large);
   --leading-xl: var(--line-height-x-large);
   --leading-2xl: var(--line-height-2x-large);
+  --leading-text-tight: var(--line-height-tight);
+  --leading-text-compact: var(--line-height-compact);
+  --leading-text-base: var(--line-height-base);
 
   --tracking-normal: var(--letter-spacing-normal);
   --tracking-tight: var(--letter-spacing-tight);

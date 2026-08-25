@@ -2,7 +2,6 @@ export * as PluginHost from "./host.js"
 
 import { Plugin } from "@opencode-ai/plugin/effect"
 import type { IntegrationMethodRegistration } from "@opencode-ai/plugin/effect/integration"
-import type { CredentialOAuth } from "@opencode-ai/sdk/v2/types"
 import { EventManifest } from "@opencode-ai/schema/event-manifest"
 import { Mcp } from "@opencode-ai/schema/mcp"
 import { App } from "../app.js"
@@ -182,10 +181,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
     command: {
       list: () => response(commands.list()),
       reload: commands.reload,
-      transform: (callback) =>
-        commands.transform((draft) => {
-          callback(draft)
-        }),
+      transform: commands.transform,
     },
     event: {
       subscribe: () => bus.subscribe().pipe(Stream.filter(EventManifest.isServer)),
@@ -406,7 +402,10 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
       command: runtime.session.command,
       rename: runtime.session.rename,
       synthetic: runtime.session.synthetic,
-      interrupt: (input) => runtime.session.interrupt(input.sessionID),
+      interrupt: (input) =>
+        runtime.session
+          .interrupt(input.sessionID, { continue: input.continue })
+          .pipe(Effect.map((interrupted) => ({ interrupted }))),
       wait: (input) => runtime.session.wait(input.sessionID),
     },
   } satisfies Plugin.Context
@@ -484,6 +483,6 @@ function methodImplementation(input: IntegrationMethodRegistration): Integration
   }
 }
 
-function credential(value: CredentialOAuth) {
+function credential(value: Credential.OAuth) {
   return Credential.OAuth.make({ ...value, methodID: Integration.MethodID.make(value.methodID) })
 }

@@ -35,6 +35,9 @@ export interface MockServerConfig {
   fileContent?: (path: string) => unknown | Promise<unknown>
   findFiles?: (input: { query: string; dirs?: string; limit?: number }) => unknown
   sessionStatus?: Record<string, unknown> | (() => Record<string, unknown>)
+  inbox?: unknown[] | (() => unknown[])
+  onPrompt?: (input: { sessionID: string; body: Record<string, unknown> }) => void
+  onInboxChange?: (input: { sessionID: string; inboxID: string; action: "cancel" | "steer" }) => void
 }
 
 type MockStreamWindow = Window & {
@@ -397,7 +400,39 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
         sessionFormReply: () => noContent,
         sessionFormCancel: () => noContent,
         sessionBackground: () => noContent,
-        sessionInbox: () => Effect.succeed({ data: [] }),
+        sessionInbox: () =>
+          Effect.sync(() => ({ data: typeof config.inbox === "function" ? config.inbox() : (config.inbox ?? []) })),
+        sessionPrompt: (ctx) =>
+          Effect.sync(() => {
+            const body = record(ctx.payload) ? ctx.payload : {}
+            config.onPrompt?.({ sessionID: ctx.params.sessionID, body })
+            return {
+              data: {
+                id: typeof body.id === "string" ? body.id : `inb_mock_${Date.now()}`,
+                sessionID: ctx.params.sessionID,
+                timeCreated: Date.now(),
+                type: "user",
+                payload: {
+                  text: typeof body.text === "string" ? body.text : "",
+                  ...(body.files === undefined ? {} : { files: body.files }),
+                  ...(body.agents === undefined ? {} : { agents: body.agents }),
+                  ...(body.skills === undefined ? {} : { skills: body.skills }),
+                  ...(body.metadata === undefined ? {} : { metadata: body.metadata }),
+                },
+                delivery: body.delivery === "queue" ? "queue" : "steer",
+              },
+            }
+          }),
+        sessionInboxCancel: (ctx) =>
+          Effect.sync(() =>
+            config.onInboxChange?.({ sessionID: ctx.params.sessionID, inboxID: ctx.params.inboxID, action: "cancel" }),
+          ).pipe(Effect.andThen(noContent)),
+        sessionInboxSteer: (ctx) =>
+          Effect.sync(() =>
+            config.onInboxChange?.({ sessionID: ctx.params.sessionID, inboxID: ctx.params.inboxID, action: "steer" }),
+          ).pipe(Effect.andThen(noContent)),
+        sessionSwitchAgent: () => noContent,
+        sessionSwitchModel: () => noContent,
         sessionPermission: (ctx) => {
           const permissions =
             typeof config.permissions === "function" ? config.permissions() : (config.permissions ?? [])
@@ -501,7 +536,7 @@ function currentModels(value: unknown) {
         return [
           {
             id: model.id,
-            modelID: model.id,
+            modelID: record(model.api) && typeof model.api.id === "string" ? model.api.id : model.id,
             providerID: provider.id,
             name: model.name,
             capabilities: { tools: true, input: ["text"], output: ["text"] },

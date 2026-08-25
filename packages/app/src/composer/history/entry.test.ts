@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { Prompt } from "@/composer/state"
-import { clonePromptParts, prependHistoryEntry, promptLength, type PromptHistoryComment } from "./entry"
+import { prependHistoryEntry, type PromptHistoryComment } from "./entry"
 import { upgradeHistoryState } from "./store"
 
 const DEFAULT_PROMPT: Prompt = [{ type: "text", content: "", start: 0, end: 0 }]
@@ -34,31 +34,32 @@ describe("Composer history", () => {
     expect(dedupedComments).toBe(commentsOnly)
   })
 
-  test("upgrades stored prompt arrays once at the persistence boundary", () => {
-    expect(upgradeHistoryState({ entries: [text("stored")] })).toEqual({
-      entries: [{ prompt: text("stored"), comments: [] }],
-    })
-  })
-
-  test("helpers clone prompt and count text content length", () => {
-    const original: Prompt = [
-      { type: "text", content: "one", start: 0, end: 3 },
+  test("insertion isolates canonical entries from source mutations", () => {
+    const prompt: Prompt = [
       {
         type: "file",
         path: "src/a.ts",
         content: "@src/a.ts",
-        start: 3,
-        end: 12,
-        selection: { startLine: 1, startChar: 1, endLine: 2, endChar: 1 },
+        start: 0,
+        end: 9,
+        selection: { startLine: 1, startChar: 0, endLine: 2, endChar: 0 },
       },
-      { type: "image", id: "1", filename: "img.png", mime: "image/png", blob: { id: "blob", url: "blob:test" } },
     ]
-    const copy = clonePromptParts(original)
-    expect(copy).not.toBe(original)
-    expect(promptLength(copy)).toBe(12)
-    if (copy[1]?.type !== "file") throw new Error("expected file")
-    copy[1].selection!.startLine = 9
-    if (original[1]?.type !== "file") throw new Error("expected file")
-    expect(original[1].selection?.startLine).toBe(1)
+    const comments = [comment("c1")]
+    const entries = prependHistoryEntry([], prompt, comments)
+    const stored = entries[0]
+
+    if (prompt[0]?.type !== "file" || stored?.prompt[0]?.type !== "file") throw new Error("expected file")
+    prompt[0].selection!.startLine = 9
+    comments[0].selection.start = 9
+
+    expect(stored.prompt[0].selection?.startLine).toBe(1)
+    expect(stored.comments[0]?.selection.start).toBe(2)
+  })
+
+  test("upgrades stored prompt arrays once at the persistence boundary", () => {
+    expect(upgradeHistoryState({ entries: [text("stored")] })).toEqual({
+      entries: [{ prompt: text("stored"), comments: [] }],
+    })
   })
 })

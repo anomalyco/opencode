@@ -35,6 +35,7 @@
   },
   "devDependencies": {
     "@actions/artifact": "4.0.0",
+    "@brendonovich/vite-plugin-opencode": "0.1.1",
     "@lydell/node-pty": "catalog:",
     "@opencode-ai/app": "workspace:*",
     "@opencode-ai/client": "workspace:*",

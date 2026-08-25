@@ -29,7 +29,7 @@ export const latestCompaction = Effect.fnUntraced(function* (db: DatabaseService
     .pipe(Effect.orDie)
 })
 
-const decodeMessageRow = (row: typeof SessionMessageTable.$inferSelect) =>
+export const decodeMessageRow = (row: typeof SessionMessageTable.$inferSelect) =>
   decode({ ...row.data, id: row.id, type: row.type }).pipe(
     Effect.mapError(
       () =>
@@ -120,7 +120,7 @@ export const firstUserMessage = Effect.fn("SessionHistory.firstUserMessage")(fun
     .get()
     .pipe(Effect.orDie)
   if (!row) return undefined
-  const message = yield* decodeMessageRow(row).pipe(Effect.catch(() => Effect.succeed(undefined)))
+  const message = yield* decodeMessageRow(row).pipe(Effect.orElseSucceed(() => undefined))
   return message?.type === "user" ? message : undefined
 })
 

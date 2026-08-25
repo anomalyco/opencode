@@ -19,6 +19,8 @@ export type SessionTab = {
   type: "session"
   server: ServerConnection.Key
   sessionId: string
+  routeSessionId?: string
+  routeParentId?: string
 }
 
 export type DraftTab = {
@@ -43,12 +45,22 @@ type RecentTab = {
 export const draftHref = (draftID: string) => `/new-session?draftId=${encodeURIComponent(draftID)}`
 
 export const tabHref = (tab: Tab) =>
-  tab.type === "draft" ? draftHref(tab.draftID) : sessionHref(tab.server, tab.sessionId)
+  tab.type === "draft" ? draftHref(tab.draftID) : sessionHref(tab.server, tab.routeSessionId ?? tab.sessionId)
 
-export const tabKey = (tab: Tab) => (tab.type === "draft" ? `draft:${tab.draftID}` : `${tab.server}\n${tabHref(tab)}`)
+export const tabKey = (tab: Tab) =>
+  tab.type === "draft" ? `draft:${tab.draftID}` : `${tab.server}\n${sessionHref(tab.server, tab.sessionId)}`
 
 export function sessionHasOpenTab(tabs: Tab[], server: ServerConnection.Key, session: SessionInfo) {
-  return tabs.some((tab) => tab.type === "session" && tab.server === server && tab.sessionId === session.id)
+  return sessionIDHasOpenTab(tabs, server, session.id)
+}
+
+export function sessionIDHasOpenTab(tabs: Tab[], server: ServerConnection.Key, sessionID: string) {
+  return tabs.some(
+    (tab) =>
+      tab.type === "session" &&
+      tab.server === server &&
+      (tab.sessionId === sessionID || tab.routeSessionId === sessionID),
+  )
 }
 
 export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
@@ -65,7 +77,10 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       createStore<Tab[]>([]),
     )
     const [recent, setRecent, , recentReady] = persisted(Persist.window("tabs.recent"), createStore<RecentTab>({}))
-    const [info, setInfo] = persisted(Persist.window("tabs.info"), createStore<Record<string, TabInfo>>({}))
+    const [info, setInfo, , infoReady] = persisted(
+      Persist.window("tabs.info"),
+      createStore<Record<string, TabInfo>>({}),
+    )
     const [closed, setClosed, , closedReady] = persisted(Persist.window("tabs.closed"), createStore<ClosedTab[]>([]))
 
     const params = useParams()
@@ -281,7 +296,10 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       removeSessionTab(input: Omit<SessionTab, "type">) {
         updateClosed((stack) => removeClosedTabs(stack, input.server, [input.sessionId]))
         const index = store.findIndex(
-          (tab) => tab.type === "session" && tab.server === input.server && tab.sessionId === input.sessionId,
+          (tab) =>
+            tab.type === "session" &&
+            tab.server === input.server &&
+            (tab.sessionId === input.sessionId || tab.routeSessionId === input.sessionId),
         )
         if (index !== -1) removeTab(index)
       },
@@ -357,6 +375,18 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
         const key = tabKey(tab)
         if (recentKey() !== key) setRecentKey(key)
       },
+      rememberSessionRoute(tab: SessionTab, sessionId: string, parentId?: string) {
+        const index = store.findIndex((item) => tabKey(item) === tabKey(tab))
+        if (index === -1) return
+        setStore(
+          index,
+          produce((item) => {
+            if (item.type !== "session") return
+            item.routeSessionId = sessionId === item.sessionId ? undefined : sessionId
+            item.routeParentId = sessionId === item.sessionId ? undefined : parentId
+          }),
+        )
+      },
       toggleHome(input: { home: boolean; current?: Tab }) {
         if (input.home) {
           const tab = store.find((tab) => tabKey(tab) === recentKey())
@@ -378,6 +408,6 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       },
     }
 
-    return { ...actions, store, info, ready, recentReady }
+    return { ...actions, store, info, ready, infoReady, recentReady }
   },
 })

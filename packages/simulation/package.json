@@ -2,9 +2,19 @@
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode-ai/simulation",
   "version": "1.17.13",
-  "private": true,
   "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anomalyco/opencode.git",
+    "directory": "packages/simulation"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist"
+  ],
   "exports": {
     "./backend": "./src/backend/index.ts",
     "./backend/*": "./src/backend/*.ts",
@@ -14,6 +24,7 @@
     "./recording": "./src/recording.ts"
   },
   "scripts": {
+    "build": "bun run script/build.ts",
     "test": "bun test --timeout 30000 --only-failures",
     "typecheck": "tsgo -b"
   },

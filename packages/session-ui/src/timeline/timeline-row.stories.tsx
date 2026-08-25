@@ -3,11 +3,15 @@ import { CurrentSessionTimelineStory } from "../storybook/current-session-story"
 import {
   attachmentsAndCommentsDocument,
   attachmentsAndCommentsPresentation,
+  compactionCancelledDocument,
   compactionDocument,
+  compactionFailedDocument,
+  compactionRunningDocument,
+  instructionsUpdatedMultipleDocument,
+  instructionsUpdatedSingleDocument,
   requestHistoryDocument,
   retryDocument,
   revertDocument,
-  skillWorkflowDocument,
   streamingDocument,
   thinkingDocument,
 } from "../storybook/current-session-fixtures"
@@ -60,6 +64,17 @@ export const ProviderRetry = {
   ),
 }
 
+export const CompactionInProgress = {
+  render: () => (
+    <CurrentSessionTimelineStory
+      title="Compaction in progress"
+      description="The production divider remains stable while the context summary streams below it."
+      document={compactionRunningDocument}
+      width="600px"
+    />
+  ),
+}
+
 export const CompactionAndContinuation = {
   render: () => (
     <CurrentSessionTimelineStory
@@ -71,12 +86,23 @@ export const CompactionAndContinuation = {
   ),
 }
 
-export const AgentAndSkillContext = {
+export const CompactionFailed = {
   render: () => (
     <CurrentSessionTimelineStory
-      title="Agent and skill context"
-      description="A review agent and its loaded skill appear chronologically before the response."
-      document={skillWorkflowDocument}
+      title="Compaction failed"
+      description="A failed compaction keeps the production divider and shows the provider error."
+      document={compactionFailedDocument}
+      width="600px"
+    />
+  ),
+}
+
+export const CompactionCancelled = {
+  render: () => (
+    <CurrentSessionTimelineStory
+      title="Compaction cancelled"
+      description="An interrupted compaction keeps the production divider without an empty error block."
+      document={compactionCancelledDocument}
       width="600px"
     />
   ),
@@ -126,6 +152,28 @@ export const MixedDirectionRtl = {
       document={attachmentsAndCommentsDocument}
       presentation={attachmentsAndCommentsPresentation}
       width="480px"
+    />
+  ),
+}
+
+export const InstructionsUpdatedSingle = {
+  render: () => (
+    <CurrentSessionTimelineStory
+      title="Instructions updated (single)"
+      description="A system notice in the timeline showing a single updated instruction source."
+      document={instructionsUpdatedSingleDocument}
+      width="600px"
+    />
+  ),
+}
+
+export const InstructionsUpdatedMultiple = {
+  render: () => (
+    <CurrentSessionTimelineStory
+      title="Instructions updated (multiple)"
+      description="A system notice in the timeline showing multiple updated instruction sources."
+      document={instructionsUpdatedMultipleDocument}
+      width="600px"
     />
   ),
 }

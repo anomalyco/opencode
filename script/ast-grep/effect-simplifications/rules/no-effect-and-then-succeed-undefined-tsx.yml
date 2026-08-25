@@ -1,0 +1,9 @@
+id: no-effect-and-then-succeed-undefined-tsx
+language: Tsx
+message: Use Effect.as(undefined) to preserve the exact undefined success type.
+severity: error
+rule:
+  all:
+    - pattern: Effect.andThen($$$SELF, Effect.succeed(undefined))
+    - not:
+        pattern: Effect.andThen($_FIRST, $_SECOND, $$$REST)

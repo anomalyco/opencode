@@ -1,28 +1,17 @@
 export * as ConfigImagePlugin from "./image.js"
 
 import { define } from "@opencode-ai/plugin/effect/plugin"
-import { Effect, Stream } from "effect"
+import { Effect } from "effect"
 import { Config } from "../../config.js"
 import { Image } from "../../image.js"
+import { ConfigEntryObserver } from "./entry-observer.js"
 
 export const Plugin = define({
   id: "opencode.config.image",
   effect: Effect.fn(function* (ctx) {
     const config = yield* Config.Service
     const image = yield* Image.Service
-    const loaded = { entries: yield* config.entries() }
-    const reload = config.entries().pipe(
-      Effect.tap((entries) => Effect.sync(() => (loaded.entries = entries))),
-      Effect.andThen(image.reload()),
-    )
-    yield* ctx.event.subscribe().pipe(
-      Stream.filter((event) => event.type === "config.updated"),
-      Stream.runForEach(() => reload),
-      Effect.forkScoped({ startImmediately: true }),
-    )
-    // Refetch after subscribing so a config update between the first read and
-    // the live subscription cannot leave the transform on a stale snapshot.
-    loaded.entries = yield* config.entries()
+    const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, image.reload())
     yield* image.transform((draft) => {
       for (const entry of loaded.entries) {
         if (entry.type !== "document") continue

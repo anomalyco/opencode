@@ -2,13 +2,35 @@ import { describe, expect, test } from "bun:test"
 import type { ModelRef, SessionMessageInfo } from "@opencode-ai/client/promise"
 import { createTimelineProjection, reuseTimelineRows, TimelineRow, type PartGroup } from "./projection"
 
-const context = (key: string, partIDs: string[], userMessageID = "user-1") =>
+const context = (key: string, partIDs: string[], identity: { userMessageID?: string; messageID?: string } = {}) =>
+  new TimelineRow.AssistantPart({
+    userMessageID: identity.userMessageID ?? "user-1",
+    group: {
+      key,
+      type: "context",
+      refs: partIDs.map((partID) => ({ messageID: identity.messageID ?? "assistant-1", partID })),
+    } satisfies PartGroup,
+    previousAssistantPart: false,
+  })
+
+const patch = (key: string, partIDs: string[], userMessageID = "user-1") =>
   new TimelineRow.AssistantPart({
     userMessageID,
     group: {
       key,
-      type: "context",
+      type: "file",
       refs: partIDs.map((partID) => ({ messageID: "assistant-1", partID })),
+    } satisfies PartGroup,
+    previousAssistantPart: false,
+  })
+
+const part = (key: string, partID: string) =>
+  new TimelineRow.AssistantPart({
+    userMessageID: "user-1",
+    group: {
+      key,
+      type: "part",
+      ref: { messageID: "assistant-1", partID },
     } satisfies PartGroup,
     previousAssistantPart: false,
   })
@@ -22,49 +44,79 @@ describe("reuseTimelineRows", () => {
       name: "reuses an unchanged context group",
       previous: [context("context:a", ["a", "b"])],
       rows: [context("context:a", ["a", "b"])],
-      expected: ["assistant-part:user-1:context:a"],
+      expected: ["assistant-part:context:context:a"],
       reused: [[0, 0]],
     },
     {
       name: "preserves the group key when a member is appended",
       previous: [context("context:a", ["a"])],
       rows: [context("context:a", ["a", "b"])],
-      expected: ["assistant-part:user-1:context:a"],
+      expected: ["assistant-part:context:context:a"],
+      reused: [],
+    },
+    {
+      name: "preserves a patch group key when a member is appended",
+      previous: [patch("patch:a", ["a"])],
+      rows: [patch("patch:a", ["a", "b"])],
+      expected: ["assistant-part:file:patch:a"],
       reused: [],
     },
     {
       name: "preserves the group key when the first member is removed",
       previous: [context("context:a", ["a", "b"])],
       rows: [context("context:b", ["b"])],
-      expected: ["assistant-part:user-1:context:a"],
+      expected: ["assistant-part:context:context:a"],
       reused: [],
     },
     {
       name: "lets only the natural owner retain an old key after a split",
       previous: [context("context:a", ["a", "b"])],
       rows: [context("context:a", ["a"]), context("context:b", ["b"])],
-      expected: ["assistant-part:user-1:context:a", "assistant-part:user-1:context:b"],
+      expected: ["assistant-part:context:context:a", "assistant-part:context:context:b"],
+      reused: [],
+    },
+    {
+      name: "preserves the file group identity when its first member becomes standalone",
+      previous: [patch("part:a", ["a", "b"])],
+      rows: [part("part:a", "a"), patch("part:b", ["b"])],
+      expected: ["assistant-part:part:part:a", "assistant-part:file:part:a"],
+      reused: [],
+    },
+    {
+      name: "preserves the file group identity before a later standalone member",
+      previous: [patch("part:a", ["a", "b"])],
+      rows: [patch("part:b", ["b"]), part("part:a", "a")],
+      expected: ["assistant-part:file:part:a", "assistant-part:part:part:a"],
       reused: [],
     },
     {
       name: "chooses the earliest prior key when groups merge",
       previous: [context("context:a", ["a"]), context("context:b", ["b"])],
       rows: [context("context:b", ["b", "a"])],
-      expected: ["assistant-part:user-1:context:a"],
+      expected: ["assistant-part:context:context:a"],
       reused: [],
     },
     {
       name: "reserves an old key for its natural owner when two new groups compete",
       previous: [context("context:a", ["a", "b"])],
       rows: [context("context:b", ["b"]), context("context:a", ["a"])],
-      expected: ["assistant-part:user-1:context:b", "assistant-part:user-1:context:a"],
+      expected: ["assistant-part:context:context:b", "assistant-part:context:context:a"],
       reused: [],
     },
     {
-      name: "does not reuse context identity across user messages",
-      previous: [context("context:a", ["a", "b"], "user-1")],
-      rows: [context("context:b", ["b"], "user-2")],
-      expected: ["assistant-part:user-2:context:b"],
+      // A history prepend can regroup a page-boundary turn under its real user
+      // message; the same parts must keep their identity across that move.
+      name: "reuses context identity when the same parts move to another user message",
+      previous: [context("context:a", ["a", "b"], { userMessageID: "user-1" })],
+      rows: [context("context:b", ["b"], { userMessageID: "user-2" })],
+      expected: ["assistant-part:context:context:a"],
+      reused: [],
+    },
+    {
+      name: "does not reuse context identity across assistant messages",
+      previous: [context("context:assistant-1:a", ["a"], { messageID: "assistant-1" })],
+      rows: [context("context:assistant-2:a", ["a"], { messageID: "assistant-2" })],
+      expected: ["assistant-part:context:context:assistant-2:a"],
       reused: [],
     },
     {
@@ -78,11 +130,7 @@ describe("reuseTimelineRows", () => {
       name: "does not create accidental key collisions",
       previous: [context("context:a", ["a", "b", "c"])],
       rows: [context("context:b", ["b"]), context("context:a", ["a"]), context("context:c", ["c"])],
-      expected: [
-        "assistant-part:user-1:context:b",
-        "assistant-part:user-1:context:a",
-        "assistant-part:user-1:context:c",
-      ],
+      expected: ["assistant-part:context:context:b", "assistant-part:context:context:a", "assistant-part:context:context:c"],
       reused: [],
     },
   ])("$name", ({ previous, rows, expected, reused }) => {
@@ -171,5 +219,37 @@ describe("createTimelineProjection", () => {
     expect(second.rows).toBe(first.rows)
     expect(second.rows[0]).toBe(first.rows[0])
     expect(second.rows[1]).toBe(first.rows[1])
+  })
+
+  test("indexes a leading partial assistant turn under its projected turn ID", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        type: "assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+        content: [{ type: "text", text: "partial answer" }],
+        time: { created: 2, completed: 3 },
+      },
+      {
+        id: "assistant-2",
+        type: "assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+        content: [{ type: "text", text: "final answer" }],
+        time: { created: 4, completed: 5 },
+      },
+    ] satisfies SessionMessageInfo[]
+
+    const result = createTimelineProjection({
+      sessionMessages: messages,
+      status: { type: "idle" },
+      showReasoningSummaries: true,
+    })
+
+    expect(result.assistantMessagesByParent.get("assistant-1")?.map((message) => message.id)).toEqual([
+      "assistant-1",
+      "assistant-2",
+    ])
   })
 })

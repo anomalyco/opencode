@@ -1,15 +1,4 @@
-import {
-  createEffect,
-  createMemo,
-  createResource,
-  createSignal,
-  Match,
-  on,
-  onMount,
-  Show,
-  Switch,
-  untrack,
-} from "solid-js"
+import { createEffect, createMemo, createResource, Match, createSignal, Show, Switch, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLocation, useNavigate } from "@solidjs/router"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -34,6 +23,7 @@ import { tabKey, useTabs } from "@/shell/tabs/tabs"
 import type { ComposerState } from "@/composer/persistence"
 import "./titlebar.css"
 import { newTabTooltipKeybind } from "@/shell/commands/tooltip-keybind"
+import { TitlebarRightMount } from "@/shell/titlebar/right-slot"
 
 const titlebarHeight = 36
 const minTitlebarZoom = 0.25
@@ -44,15 +34,6 @@ export type TitlebarUpdate = {
   version: string | undefined
   installing: boolean
   install: () => void
-}
-
-export function useTitlebarRightMount() {
-  const language = useLanguage()
-  const [mount, setMount] = createSignal<HTMLElement | null>(null)
-  const sync = () => setMount(document.getElementById("opencode-titlebar-right"))
-  onMount(sync)
-  createEffect(on(language.direction, sync, { defer: true }))
-  return mount
 }
 
 export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visible: boolean; toggle: () => void } }) {
@@ -170,15 +151,24 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
             const tabs = useTabs()
             const tabsStore = tabs.store
             const tabsStoreActions = tabs
-            const [session] = createResource(
+            const [loadedSession] = createResource(
               () => {
                 const route = layout.route()
                 if (route.type !== "session") return undefined
                 const conn = global.servers.list().find((item) => ServerConnection.key(item) === route.server)
-                return conn ? { route, sdk: global.ensureServerCtx(conn).sdk } : undefined
+                return conn ? { route, ctx: global.ensureServerCtx(conn) } : undefined
               },
-              ({ route, sdk }) => sdk.api.session.get({ sessionID: route.sessionId }).catch(() => {}),
+              ({ route, ctx }) => ctx.sdk.api.session.get({ sessionID: route.sessionId }).catch(() => {}),
             )
+            const session = createMemo(() => {
+              const route = layout.route()
+              if (route.type !== "session") return
+              const conn = global.servers.list().find((item) => ServerConnection.key(item) === route.server)
+              const cached = conn ? global.ensureServerCtx(conn).data.session.get(route.sessionId) : undefined
+              if (cached) return cached
+              const loaded = loadedSession()
+              return loaded?.id === route.sessionId ? loaded : undefined
+            })
 
             const matchRoute = (route: LayoutRoute) => {
               if (route.type === "home") return
@@ -188,7 +178,9 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
               if (route.type === "session") {
                 const main = tabsStore.find(
                   (item) =>
-                    item.type === "session" && item.server === route.server && item.sessionId === route.sessionId,
+                    item.type === "session" &&
+                    item.server === route.server &&
+                    (item.sessionId === route.sessionId || item.routeSessionId === route.sessionId),
                 )
                 if (main) return main
                 const s = session()
@@ -209,6 +201,14 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
               if (!tabs.ready()) return
               const tab = currentTab()
               if (tab) {
+                const current = session()
+                if (
+                  route.type === "session" &&
+                  tab.type === "session" &&
+                  (route.sessionId === tab.sessionId || current?.id === route.sessionId)
+                ) {
+                  tabs.rememberSessionRoute(tab, route.sessionId, current?.parentID)
+                }
                 tabs.remember(tab)
                 return
               }
@@ -421,7 +421,7 @@ function TitlebarRight(props: { state: TitlebarRightState }) {
       <Show when={props.state.update.visible}>
         <TitlebarUpdateIconButton state={props.state.update} />
       </Show>
-      <div id="opencode-titlebar-right" class="flex shrink-0 items-center justify-end gap-0" />
+      <TitlebarRightMount />
     </div>
   )
 }

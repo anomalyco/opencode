@@ -38,6 +38,18 @@ test("defensively syncs advertised Copilot models", async () => {
           },
           {
             model_picker_enabled: true,
+            id: "claude-sonnet",
+            name: "Claude Sonnet",
+            version: "claude-sonnet-2026-06-01",
+            supported_endpoints: ["/v1/messages"],
+            capabilities: {
+              family: "claude",
+              limits: { max_output_tokens: 16384, max_prompt_tokens: 180000 },
+              supports: { tool_calls: true },
+            },
+          },
+          {
+            model_picker_enabled: true,
             id: "vision-only",
             name: "Vision only",
             version: "vision-only-2026-06-01",
@@ -85,6 +97,7 @@ test("defensively syncs advertised Copilot models", async () => {
     const model = models.get(Model.ID.make("gpt-5"))
 
     expect(model?.name).toBe("GPT-5 local")
+    expect(model?.package).toBe(Provider.aisdk("@ai-sdk/github-copilot"))
     expect(model?.settings).toMatchObject({ baseURL: server.url.origin, endpoint: "responses" })
     expect(model?.cost[0]).toMatchObject({ input: 0, output: 0, cache: { read: 0, write: 0 } })
     expect(model?.variants.map((variant) => variant.id)).toEqual([
@@ -92,6 +105,11 @@ test("defensively syncs advertised Copilot models", async () => {
       Model.VariantID.make("high"),
     ])
     expect(model?.capabilities.input).toEqual(["text", "image", "pdf"])
+    expect(models.get(Model.ID.make("claude-sonnet"))?.package).toBe(Provider.aisdk("@ai-sdk/anthropic"))
+    expect(models.get(Model.ID.make("claude-sonnet"))?.settings).toMatchObject({
+      baseURL: `${server.url.origin}/v1`,
+      endpoint: "messages",
+    })
     expect(models.get(Model.ID.make("vision-only"))?.capabilities.input).toEqual(["text", "image"])
     expect(models.get(Model.ID.make("utility"))?.enabled).toBe(false)
     expect(models.has(Model.ID.make("stale"))).toBe(false)

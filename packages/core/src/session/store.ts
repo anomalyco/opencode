@@ -1,7 +1,7 @@
 export * as SessionStore from "./store.js"
 
 import { and, eq, isNotNull, isNull, sql } from "drizzle-orm"
-import { Context, Effect, Layer, Schema } from "effect"
+import { Context, Effect, Layer } from "effect"
 import { Database } from "../database/database.js"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { SessionHistory } from "./history.js"
@@ -51,7 +51,6 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const { db } = yield* Database.Service
-    const decodeMessage = Schema.decodeUnknownEffect(SessionMessage.Info)
 
     return Service.of({
       get: Effect.fnUntraced(function* (sessionID) {
@@ -69,7 +68,7 @@ const layer = Layer.effect(
         return row
           ? {
               sessionID: Session.ID.make(row.session_id),
-              message: yield* decodeMessage({ ...row.data, id: row.id, type: row.type }).pipe(Effect.orDie),
+              message: yield* SessionHistory.decodeMessageRow(row).pipe(Effect.orDie),
             }
           : undefined
       }),

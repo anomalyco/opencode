@@ -1,6 +1,6 @@
 import { Switch } from "@opencode-ai/ui/switch"
 import { Tabs } from "@opencode-ai/ui/tabs"
-import { createMemo, createResource, For, type JSXElement, Show } from "solid-js"
+import { createMemo, createResource, For, Index, type JSXElement, Show } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useMcpToggle } from "@/providers/connect/mcp"
 import { useWorkspaceLocation } from "@/workspaces/location"
@@ -27,14 +27,12 @@ export function StatusPopoverBody(props: { shown: boolean }) {
   const language = useLanguage()
 
   const toggleMcp = useMcpToggle(() => sdk().directory)
-  const mcp = () => data.location.mcp.server.list({ directory: sdk().directory }) ?? []
-  const mcpNames = createMemo(() =>
-    mcp()
-      .map((server) => server.name)
-      .sort((a, b) => a.localeCompare(b)),
+  const mcpServers = createMemo(() =>
+    (data.location.mcp.server.list({ directory: sdk().directory }) ?? []).toSorted((a, b) =>
+      a.name.localeCompare(b.name),
+    ),
   )
-  const mcpStatus = (name: string) => mcp().find((server) => server.name === name)?.status.status
-  const mcpConnected = createMemo(() => mcpNames().filter((name) => mcpStatus(name) === "connected").length)
+  const mcpConnected = createMemo(() => mcpServers().filter((server) => server.status.status === "connected").length)
   const [pluginList] = createResource(
     () => (props.shown ? sdk().directory : undefined),
     (directory) => serverSDK.api.plugin.list({ location: { directory } }).then((result) => result.data),
@@ -58,26 +56,25 @@ export function StatusPopoverBody(props: { shown: boolean }) {
             {language.t("status.popover.tab.mcp")}
           </Tabs.Trigger>
           {/* TODO: Restore LSP status when V2 exposes it. */}
-          <Show when={true}>
-            <Tabs.Trigger value="plugins" data-slot="tab" class="text-12-regular">
-              {pluginCount() > 0 ? `${pluginCount()} ` : ""}
-              {language.t("status.popover.tab.plugins")}
-            </Tabs.Trigger>
-          </Show>
+          <Tabs.Trigger value="plugins" data-slot="tab" class="text-12-regular">
+            {pluginCount() > 0 ? `${pluginCount()} ` : ""}
+            {language.t("status.popover.tab.plugins")}
+          </Tabs.Trigger>
         </Tabs.List>
 
         <Tabs.Content value="mcp">
           <div class="flex flex-col px-2 pb-2">
             <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
               <Show
-                when={mcpNames().length > 0}
+                when={mcpServers().length > 0}
                 fallback={
                   <div class="text-14-regular text-text-base text-center my-auto">{language.t("dialog.mcp.empty")}</div>
                 }
               >
-                <For each={mcpNames()}>
-                  {(name) => {
-                    const status = () => mcpStatus(name)
+                <Index each={mcpServers()}>
+                  {(server) => {
+                    const name = () => server().name
+                    const status = () => server().status.status
                     const enabled = () => status() === "connected"
                     return (
                       <button
@@ -85,9 +82,9 @@ export function StatusPopoverBody(props: { shown: boolean }) {
                         class="flex items-center gap-2 w-full min-h-8 pl-3 pr-2 py-1 rounded-md hover:bg-surface-raised-base-hover transition-colors text-left"
                         onClick={() => {
                           if (toggleMcp.isPending) return
-                          toggleMcp.mutate(name)
+                          toggleMcp.mutate(name())
                         }}
-                        disabled={toggleMcp.isPending && toggleMcp.variables === name}
+                        disabled={toggleMcp.isPending && toggleMcp.variables === name()}
                       >
                         <div
                           classList={{
@@ -100,7 +97,7 @@ export function StatusPopoverBody(props: { shown: boolean }) {
                         />
                         <span class="flex flex-col min-w-0 flex-1">
                           <span class="flex items-center gap-2 min-w-0">
-                            <span class="text-14-regular text-text-base truncate">{name}</span>
+                            <span class="text-14-regular text-text-base truncate">{name()}</span>
                           </span>
                           <Show when={status() === "needs_auth"}>
                             <span class="text-11-regular text-text-weaker truncate">
@@ -112,43 +109,41 @@ export function StatusPopoverBody(props: { shown: boolean }) {
                           <Switch
                             appearance="standard"
                             checked={enabled()}
-                            disabled={toggleMcp.isPending && toggleMcp.variables === name}
+                            disabled={toggleMcp.isPending && toggleMcp.variables === name()}
                             onChange={() => {
                               if (toggleMcp.isPending) return
-                              toggleMcp.mutate(name)
+                              toggleMcp.mutate(name())
                             }}
                           />
                         </div>
                       </button>
                     )
                   }}
-                </For>
+                </Index>
               </Show>
             </div>
           </div>
         </Tabs.Content>
 
-        <Show when={true}>
-          <Tabs.Content value="plugins">
-            <div class="flex flex-col px-2 pb-2">
-              <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
-                <Show
-                  when={plugins().length > 0}
-                  fallback={<div class="text-14-regular text-text-base text-center my-auto">{pluginEmpty()}</div>}
-                >
-                  <For each={plugins()}>
-                    {(plugin) => (
-                      <div class="flex items-center gap-2 w-full px-2 py-1">
-                        <div class="size-1.5 rounded-full shrink-0 bg-icon-success-base" />
-                        <span class="text-14-regular text-text-base truncate">{plugin}</span>
-                      </div>
-                    )}
-                  </For>
-                </Show>
-              </div>
+        <Tabs.Content value="plugins">
+          <div class="flex flex-col px-2 pb-2">
+            <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
+              <Show
+                when={plugins().length > 0}
+                fallback={<div class="text-14-regular text-text-base text-center my-auto">{pluginEmpty()}</div>}
+              >
+                <For each={plugins()}>
+                  {(plugin) => (
+                    <div class="flex items-center gap-2 w-full px-2 py-1">
+                      <div class="size-1.5 rounded-full shrink-0 bg-icon-success-base" />
+                      <span class="text-14-regular text-text-base truncate">{plugin}</span>
+                    </div>
+                  )}
+                </For>
+              </Show>
             </div>
-          </Tabs.Content>
-        </Show>
+          </div>
+        </Tabs.Content>
       </Tabs>
     </div>
   )

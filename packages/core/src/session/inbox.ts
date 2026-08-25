@@ -459,13 +459,7 @@ export const promote = Effect.fn("SessionInbox.promote")(function* (
   return yield* serialized(
     sessionID,
     Effect.gen(function* () {
-      const steers = yield* db
-        .select()
-        .from(SessionInboxTable)
-        .where(and(eq(SessionInboxTable.session_id, sessionID), eq(SessionInboxTable.delivery, "steer")))
-        .orderBy(asc(SessionInboxTable.enqueued_seq))
-        .all()
-        .pipe(Effect.orDie)
+      const steers = yield* pendingSteers(db, sessionID)
       if (steers.length > 0 || scope === "steer") {
         const control = steers.findIndex((row) => row.type === "compaction" || row.type === "move")
         return yield* publish(db, bus, sessionID, control === -1 ? steers : steers.slice(0, control))
@@ -481,13 +475,7 @@ export const promote = Effect.fn("SessionInbox.promote")(function* (
         .pipe(Effect.orDie)
       if (!queued) return 0
       const promoted = yield* publish(db, bus, sessionID, [queued])
-      const arrivedSteers = yield* db
-        .select()
-        .from(SessionInboxTable)
-        .where(and(eq(SessionInboxTable.session_id, sessionID), eq(SessionInboxTable.delivery, "steer")))
-        .orderBy(asc(SessionInboxTable.enqueued_seq))
-        .all()
-        .pipe(Effect.orDie)
+      const arrivedSteers = yield* pendingSteers(db, sessionID)
       const control = arrivedSteers.findIndex((row) => row.type === "compaction" || row.type === "move")
       return (
         promoted +
@@ -496,3 +484,12 @@ export const promote = Effect.fn("SessionInbox.promote")(function* (
     }),
   )
 })
+
+const pendingSteers = (db: DatabaseService, sessionID: SessionSchema.ID) =>
+  db
+    .select()
+    .from(SessionInboxTable)
+    .where(and(eq(SessionInboxTable.session_id, sessionID), eq(SessionInboxTable.delivery, "steer")))
+    .orderBy(asc(SessionInboxTable.enqueued_seq))
+    .all()
+    .pipe(Effect.orDie)

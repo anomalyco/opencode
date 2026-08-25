@@ -19,7 +19,7 @@ export const cleanupStoreFiles = Effect.fn("Storage.cleanupStoreFiles")(function
 ) {
   const fs = yield* FileSystem.FileSystem
   const path = yield* Path.Path
-  const entries = yield* fs.readDirectory(userDataPath).pipe(Effect.catch(() => Effect.succeed([])))
+  const entries = yield* fs.readDirectory(userDataPath).pipe(Effect.orElseSucceed(() => []))
   const candidates = (yield* Effect.forEach(
     entries,
     Effect.fnUntraced(function* (entry) {
@@ -27,7 +27,7 @@ export const cleanupStoreFiles = Effect.fn("Storage.cleanupStoreFiles")(function
       if (!kind) return
 
       const file = path.join(userDataPath, entry)
-      const stats = yield* fs.stat(file).pipe(Effect.catch(() => Effect.succeed(undefined)))
+      const stats = yield* fs.stat(file).pipe(Effect.orElseSucceed(() => undefined))
       if (stats?.type !== "File") return
 
       return {
@@ -74,7 +74,7 @@ export const deleteStoreFileIfEmpty = Effect.fn("Storage.deleteStoreFileIfEmpty"
   const fs = yield* FileSystem.FileSystem
   const path = yield* Path.Path
   const file = path.join(userDataPath, name)
-  const stats = yield* fs.stat(file).pipe(Effect.catch(() => Effect.succeed(undefined)))
+  const stats = yield* fs.stat(file).pipe(Effect.orElseSucceed(() => undefined))
   if (stats?.type !== "File") return false
   if (!(yield* isEmptyStore(file, stats.size))) return false
 
@@ -91,7 +91,7 @@ const isEmptyStore = Effect.fn("Storage.isEmptyStore")(function* (file: string, 
   if (size > FileSystem.Size(EMPTY_STORE_MAX_BYTES)) return false
 
   const fs = yield* FileSystem.FileSystem
-  const raw = yield* fs.readFileString(file).pipe(Effect.catch(() => Effect.succeed(undefined)))
+  const raw = yield* fs.readFileString(file).pipe(Effect.orElseSucceed(() => undefined))
   if (raw === undefined) return false
   if (raw.trim() === "") return true
 
