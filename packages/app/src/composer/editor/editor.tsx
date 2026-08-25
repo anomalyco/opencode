@@ -717,21 +717,17 @@ function ComposerEditorAlternateDelivery(props: { controller: ComposerEditorMode
     if (queue.editing()) return "steer" as const
     return queue.alternate()
   })
-  const visibility = createMemo<{ show: boolean; animate: boolean; delivery: ReturnType<typeof action> }>(
-    (previous) => {
-      const delivery = action()
-      const show = delivery !== undefined
-      return { show, animate: previous.animate || previous.show !== show, delivery: delivery ?? previous.delivery }
-    },
-    { show: action() !== undefined, animate: false, delivery: action() },
-  )
+  const animation = createMemo<{ animate: boolean; delivery: ReturnType<typeof action> }>((previous) => ({
+    animate: previous !== undefined,
+    delivery: action() ?? previous?.delivery,
+  }))
   const [button, setButton] = createSignal<HTMLButtonElement>()
   const presence = createPresence({
-    show: () => visibility().show,
+    show: () => action() !== undefined,
     element: () => button() ?? null,
   })
   return (
-    <Show when={presence.present() && visibility().delivery} keyed>
+    <Show when={presence.present() && animation().delivery} keyed>
       {(delivery) => (
         <Tooltip placement="top" inactive={delivery !== "steer"} value={i18n.t("ui.promptInput.steerHint")}>
           <Button
@@ -742,8 +738,8 @@ function ComposerEditorAlternateDelivery(props: { controller: ComposerEditorMode
             size="small"
             class="me-3 gap-1.5 px-1.5 text-v2-text-text-muted ![font-weight:530] duration-150 motion-reduce:animate-none"
             classList={{
-              "animate-in fade-in": visibility().animate && visibility().show,
-              "animate-out fade-out fill-mode-forwards": visibility().animate && !visibility().show,
+              "animate-in fade-in": animation().animate && action() !== undefined,
+              "animate-out fade-out fill-mode-forwards": animation().animate && action() === undefined,
             }}
             onClick={() => props.controller.submit({ alternate: true })}
           >
