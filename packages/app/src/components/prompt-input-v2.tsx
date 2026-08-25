@@ -58,6 +58,11 @@ export function PromptInputV2Composer(props: PromptInputV2ComposerProps) {
         variantControlVisible={!props.controller.model.loading}
         attachKeybind={command.keybindParts("file.attach")}
         attachShortcut={command.keybind("file.attach")}
+        onCreateCustom={() => {
+          void import("@/components/dialog-custom-menu").then((module) => {
+            void dialog.show(() => <module.DialogCustomMenu />)
+          })
+        }}
         modelControl={
           <PromptInputV2ModelControl
             loading={props.controller.model.loading}

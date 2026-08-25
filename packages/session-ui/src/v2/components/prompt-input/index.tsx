@@ -44,6 +44,7 @@ export type PromptInputV2Props = {
   variantControlVisible?: boolean
   attachKeybind?: string[]
   attachShortcut?: string
+  onCreateCustom?: () => void
 }
 
 export function PromptInputV2(props: PromptInputV2Props) {
@@ -253,6 +254,11 @@ export function PromptInputV2(props: PromptInputV2Props) {
                 </Show>
               )}
             </Show>
+            <PromptInputV2CustomMenuButton
+              title={i18n.t("ui.promptInput.customMenu")}
+              keybind={["Shift", "Mod", "D"]}
+              onCreateCustom={props.onCreateCustom}
+            />
           </div>
           <PromptInputV2SubmitButton
             mode={state.mode}
@@ -545,6 +551,46 @@ function PromptInputV2ConfiguredSelect(props: {
       }
       onSelect={props.control.onSelect}
     />
+  )
+}
+
+function PromptInputV2CustomMenuButton(props: { title: string; keybind?: string[]; onCreateCustom?: () => void }) {
+  const i18n = useI18n()
+  return (
+    <TooltipV2
+      placement="top"
+      value={
+        <>
+          {props.title}
+          <KeybindV2 keys={props.keybind ?? []} variant="neutral" />
+        </>
+      }
+    >
+      <MenuV2 gutter={6} modal={false} placement="top-start">
+        <MenuV2.Trigger
+          as={ButtonV2}
+          variant="ghost-muted"
+          size="normal"
+          class="max-w-[220px] justify-start ![font-weight:440]"
+          aria-label={props.title}
+          data-action="custom_menu_button"
+        >
+          <span class="truncate capitalize leading-5">{i18n.t("ui.promptInput.customMenu")}</span>
+          <span class="-ms-0.5 -me-1 flex shrink-0">
+            <IconV2 name="chevron-down" />
+          </span>
+        </MenuV2.Trigger>
+        <MenuV2.Portal>
+          <MenuV2.Content>
+            <MenuV2.Item onSelect={props.onCreateCustom}>{i18n.t("ui.promptInput.createCustom")}</MenuV2.Item>
+            <MenuV2.Item>{" "}</MenuV2.Item>
+            <MenuV2.Item>{" "}</MenuV2.Item>
+            <MenuV2.Item>{" "}</MenuV2.Item>
+            <MenuV2.Item>{" "}</MenuV2.Item>
+          </MenuV2.Content>
+        </MenuV2.Portal>
+      </MenuV2>
+    </TooltipV2>
   )
 }
 
