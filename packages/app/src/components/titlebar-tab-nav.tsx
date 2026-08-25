@@ -25,6 +25,7 @@ export function TabNavItem(props: {
   fallbackTitle?: string
   onRename: (title: string) => Promise<void>
   onClose: () => void
+  onNew: () => void
   onNavigate: () => void
   active?: boolean
   forceTruncate?: boolean
@@ -39,6 +40,7 @@ export function TabNavItem(props: {
   let titleEl!: HTMLSpanElement
   let measureFrame: number | undefined
   const rename = createMutation(() => ({ mutationFn: props.onRename }))
+  const language = useLanguage()
 
   const closeTab = (event: MouseEvent) => {
     event.preventDefault()
@@ -178,6 +180,7 @@ export function TabNavItem(props: {
         forwardTabRef(props.ref, el)
       }}
       data-titlebar-tab
+      data-titlebar-tab-new
       data-slot="titlebar-tab-item"
       data-title-overflow={titleOverflowing()}
       data-editing={editing()}
@@ -277,6 +280,25 @@ export function TabNavItem(props: {
           }}
         />
       </a>
+
+      <div data-slot="tab-new">
+        <IconButtonV2
+          size="small"
+          variant="ghost-muted"
+          class="hover-reveal relative z-10 group-hover:opacity-100 group-data-[active=true]:opacity-100 group-data-[editing=true]:opacity-100"
+          onPointerDown={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+          }}
+          onClick={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            props.onNew()
+          }}
+          icon={<IconV2 name="plus" />}
+          aria-label={language.t("command.session.new")}
+        />
+      </div>
 
       <div data-slot="tab-close">
         <IconButtonV2

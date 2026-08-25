@@ -1,7 +1,7 @@
 import type { Ref } from "solid-js"
 
-export function isTabCloseTarget(target: EventTarget | null) {
-  return target instanceof Element && !!target.closest('[data-slot="tab-close"]')
+export function isTabActionTarget(target: EventTarget | null) {
+  return target instanceof Element && !!target.closest('[data-slot="tab-close"], [data-slot="tab-new"]')
 }
 
 export function canStartTabDrag(pointerType: string) {

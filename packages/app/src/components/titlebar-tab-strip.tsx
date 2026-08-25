@@ -14,10 +14,10 @@ import { useGlobal, type ServerCtx } from "@/context/global"
 import { useLanguage } from "@/context/language"
 import { useCommand } from "@/context/command"
 import { useTabs } from "@/context/tabs"
-import { createTabPromptState } from "@/context/prompt"
+import { createTabPromptState, type PromptSession } from "@/context/prompt"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { showToast } from "@/utils/toast"
-import { canStartTabDrag, isTabCloseTarget } from "./titlebar-tab-gesture"
+import { canStartTabDrag, isTabActionTarget } from "./titlebar-tab-gesture"
 import { adjacentTabKey, mergeVisibleTabOrder } from "./titlebar-tab-order"
 import type { Session } from "@opencode-ai/sdk/v2"
 
@@ -32,6 +32,7 @@ function SessionTabSlot(props: {
   onRename: (title: string) => Promise<void>
   onNavigate: (element: HTMLDivElement) => void
   onClose: () => void
+  onNew: () => void
 }) {
   const sortable = useSortable({
     get id() {
@@ -62,6 +63,7 @@ function SessionTabSlot(props: {
         onRename={props.onRename}
         onNavigate={() => props.onNavigate(ref)}
         onClose={props.onClose}
+        onNew={props.onNew}
         active={props.active()}
         forceTruncate={props.forceTruncate}
         dragging={sortable.isDragSource()}
@@ -117,6 +119,13 @@ function SessionTabEntry(props: {
     }
   }
 
+  const newInPlace = () => {
+    const value = session()
+    if (!value) return
+    const model = tabs.stateValue<PromptSession>(props.tab, "prompt")?.model.current()
+    void tabs.replaceWithDraft(props.tab, value.directory, "", model)
+  }
+
   createEffect(() => props.onVisibleChange(visible()))
 
   createEffect(() => {
@@ -162,6 +171,7 @@ function SessionTabEntry(props: {
         onRename={rename}
         onNavigate={props.onNavigate}
         onClose={props.onClose}
+        onNew={newInPlace}
       />
     </Show>
   )
@@ -297,7 +307,7 @@ export function TitlebarTabStrip(props: {
               activationConstraints: [new PointerActivationConstraints.Distance({ value: 4 })],
               preventActivation: (event) =>
                 !canStartTabDrag(event.pointerType) ||
-                isTabCloseTarget(event.target) ||
+                isTabActionTarget(event.target) ||
                 (event.target instanceof Element && !!event.target.closest('[contenteditable="true"]')),
             }),
           ]}

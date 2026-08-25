@@ -1,16 +1,19 @@
 import { describe, expect, test } from "bun:test"
-import { canOpenTabRename, canStartTabDrag, forwardTabRef, isTabCloseTarget } from "./titlebar-tab-gesture"
+import { canOpenTabRename, canStartTabDrag, forwardTabRef, isTabActionTarget } from "./titlebar-tab-gesture"
 
 describe("titlebar tab gestures", () => {
-  test("excludes close controls from tab gestures", () => {
+  test("excludes close and new controls from tab gestures", () => {
     const close = document.createElement("div")
     const button = document.createElement("button")
     const link = document.createElement("a")
+    const fresh = document.createElement("div")
     close.dataset.slot = "tab-close"
     close.append(button)
-    expect(isTabCloseTarget(close)).toBe(true)
-    expect(isTabCloseTarget(button)).toBe(true)
-    expect(isTabCloseTarget(link)).toBe(false)
+    fresh.dataset.slot = "tab-new"
+    expect(isTabActionTarget(close)).toBe(true)
+    expect(isTabActionTarget(button)).toBe(true)
+    expect(isTabActionTarget(fresh)).toBe(true)
+    expect(isTabActionTarget(link)).toBe(false)
   })
 
   test("forwards component refs", () => {

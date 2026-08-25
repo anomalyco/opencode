@@ -220,6 +220,28 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
         })
         return tab
       },
+      async replaceWithDraft(tab: SessionTab, directory: string, prompt?: string, model?: PromptModel) {
+        const index = store.findIndex((item) => tabKey(item) === tabKey(tab))
+        if (index === -1) return
+        const draftID = uuid()
+        const draft = { type: "draft" as const, draftID, server: tab.server, directory }
+        memory.ensure(tabKey(draft), "prompt", () => createDraftPromptSession(draftID, { prompt, model }))
+        await startTransition(() => {
+          setStore(
+            produce((tabs) => {
+              const current = tabs[index]
+              if (!current || tabKey(current) !== tabKey(tab)) return
+              tabs[index] = draft
+            }),
+          )
+          if (recent.key === tabKey(tab)) setRecentKey(tabKey(draft))
+          navigate(draftHref(draftID))
+        })
+        updateClosed((stack) => pushClosedTab(stack, tab, index))
+        memory.remove(tabKey(tab))
+        removeInfo(tabKey(tab))
+        return draft
+      },
       updateDraft(draftID: string, draft: Partial<Omit<DraftTab, "type" | "draftID">>) {
         void startTransition(() => {
           setStore(
