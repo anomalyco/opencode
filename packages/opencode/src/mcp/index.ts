@@ -31,6 +31,7 @@ import { TuiEvent } from "@/server/tui-event"
 import { Cause, Effect, Exit, Layer, Context, Schema, Stream } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
+import { ProjectKey } from "@/project/project-key"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { McpCatalog } from "./catalog"
@@ -414,14 +415,16 @@ const layer = Layer.effect(
     })
 
     const cfgSvc = yield* Config.Service
-    const fs = yield* FSUtil.Service
+    const fsUtil = yield* FSUtil.Service
 
-    // Approvals and local-scope storage must key on the canonical project root: the same project
-    // reached through a symlinked path must not produce a second identity (or a second approval).
+    // Approvals and local-scope storage must key on a canonical project identity: the same project
+    // reached through a symlinked or bind-mounted path must not produce a second identity (or a
+    // second approval). ProjectKey keys on the git directory's device+inode, which is identical
+    // across every path variant.
     const canonicalRoot = Effect.fn("MCP.canonicalRoot")(function* () {
       const ctx = yield* InstanceState.context
       const raw = ctx.worktree && ctx.worktree !== "/" ? ctx.worktree : ctx.directory
-      return yield* fs.resolve(raw).pipe(Effect.orElseSucceed(() => raw))
+      return yield* Effect.promise(() => ProjectKey.key(raw))
     })
 
     const create = Effect.fn("MCP.create")(
@@ -438,7 +441,7 @@ const layer = Layer.effect(
           const root = yield* canonicalRoot()
           const approvals = yield* readApprovals()
           if (approvals[root]?.[key] !== expected) {
-            yield* Effect.logWarning("project MCP server requires approval", { server: key })
+            yield* Effect.logWarning("project MCP server requires approval", { server: key, root })
             return { status: { status: "needs_approval" } } satisfies CreateResult
           }
         }

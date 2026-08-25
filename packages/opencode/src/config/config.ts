@@ -33,6 +33,7 @@ import { ConfigCommand } from "./command"
 import { ConfigManaged } from "./managed"
 import { ConfigParse } from "./parse"
 import { ConfigPaths } from "./paths"
+import { ProjectKey } from "@/project/project-key"
 import { ConfigPlugin } from "./plugin"
 import { ConfigVariable } from "./variable"
 import { Npm } from "@opencode-ai/core/npm"
@@ -542,10 +543,10 @@ const layer = Layer.effect(
         // Local-scope MCP entries replace same-named servers from project/user config wholesale,
         // matching Claude Code's scope semantics instead of field-level merging.
         // Non-git projects set worktree to "/", so fall back to the working directory for the key.
-        // The key is canonicalized (realpath) so reaching the project through a symlinked path
-        // resolves to the same local-scope entry.
+        // The key is the git directory's device+inode (ProjectKey) so reaching the project through
+        // a symlinked or bind-mounted path resolves to the same local-scope entry.
         const rawRoot = ctx.worktree && ctx.worktree !== "/" ? ctx.worktree : ctx.directory
-        const projectRoot = yield* fs.resolve(rawRoot).pipe(Effect.orElseSucceed(() => rawRoot))
+        const projectRoot = yield* Effect.promise(() => ProjectKey.key(rawRoot))
         const localMcp = yield* loadLocalMcp(projectRoot, authEnv).pipe(
           Effect.catch(() => Effect.succeed({})),
         )

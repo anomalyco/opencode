@@ -17,6 +17,7 @@ import { InstanceRef } from "@/effect/instance-ref"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import path from "path"
 import { Global } from "@opencode-ai/core/global"
+import { ProjectKey } from "@/project/project-key"
 import { modify, applyEdits } from "jsonc-parser"
 import { Filesystem } from "@/util/filesystem"
 import { Effect } from "effect"
@@ -493,10 +494,11 @@ async function addMcpToLocal(name: string, mcpConfig: ConfigMCPV1.Info, projectR
 type McpScope = "local" | "project" | "user" | "config"
 
 async function detectScope(name: string, projectRoot: string): Promise<McpScope> {
+  const key = await ProjectKey.key(projectRoot)
   const storePath = localMcpStorePath()
   if (await Filesystem.exists(storePath)) {
     const store = (await Filesystem.readJson(storePath)) as Record<string, Record<string, unknown>>
-    if (store[projectRoot]?.[name]) return "local"
+    if (store[key]?.[name]) return "local"
   }
   for (const [scope, base] of [
     ["project", projectRoot],
