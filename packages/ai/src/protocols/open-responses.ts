@@ -84,6 +84,11 @@ const OpenResponsesItemReference = Schema.Struct({
   id: Schema.String,
 })
 
+const OpenResponsesHostedToolItem = Schema.StructWithRest(
+  Schema.Struct({ type: Schema.String.check(Schema.isPattern(/^(?!function_call$).+_call$/)), id: Schema.String }),
+  [Schema.Record(Schema.String, Schema.Unknown)],
+)
+
 // `function_call_output.output` accepts either a plain string or an ordered
 // array of content items so tools can return images and files in addition to text.
 // https://www.openresponses.org/reference
@@ -124,6 +129,7 @@ export const InputItem = Schema.Union([
     call_id: Schema.String,
     output: OpenResponsesFunctionCallOutput,
   }),
+  OpenResponsesHostedToolItem,
 ])
 type OpenResponsesInputItem = Schema.Schema.Type<typeof InputItem>
 type LoweredInputItem =
@@ -619,8 +625,20 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
           if (store !== false && reference && !hostedToolReferences.has(reference))
             input.push({ type: "item_reference", id: reference })
           if (store === false) {
-            // The server is not storing this exchange, so the tool outcome has to
-            // travel in the input. Non-content results degrade to their text form.
+            if (
+              reference &&
+              part.result.type === "json" &&
+              ProviderShared.isRecord(part.result.value) &&
+              part.result.value.id === reference &&
+              typeof part.result.value.type === "string" &&
+              part.result.value.type !== "function_call" &&
+              part.result.value.type.endsWith("_call")
+            ) {
+              input.push({ ...part.result.value, id: reference, type: part.result.value.type })
+              hostedToolReferences.add(reference)
+              continue
+            }
+            // Foreign-provider items and image results cannot be replayed natively.
             const content: ReadonlyArray<Content> =
               part.result.type === "content"
                 ? part.result.value

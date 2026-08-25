@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMEvent } from "../../src/index.js"
+import { LLM, LLMEvent, Message } from "../../src/index.js"
 import { XAI } from "../../src/providers.js"
 import { OpenResponses } from "../../src/protocols/open-responses.js"
 import { OpenAIResponses } from "../../src/protocols/openai-responses.js"
@@ -103,6 +103,31 @@ describe("xAI Responses route", () => {
       expect(response.message.content.find((part) => part.type === "reasoning")).toMatchObject({
         providerMetadata: { xai: { itemId: "reasoning_1", reasoningEncryptedContent: "opaque" } },
       })
+    }),
+  )
+
+  it.effect("replays xAI hosted tool items when continuing with the same provider", () =>
+    Effect.gen(function* () {
+      const item = { type: "x_search_call", id: "x_search_1", status: "completed", action: { query: "news" } }
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([
+              {
+                type: "tool-result",
+                id: "x_search_1",
+                name: "x_search",
+                result: { type: "json", value: item },
+                providerExecuted: true,
+                providerMetadata: { xai: { itemId: "x_search_1" } },
+              },
+            ]),
+          ],
+        }),
+      )
+
+      expect(prepared.body.input).toEqual([item])
     }),
   )
 

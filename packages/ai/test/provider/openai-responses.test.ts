@@ -2949,7 +2949,7 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("continues stateless hosted tool results with their text form", () =>
+  it.effect("replays stateless hosted tool results as native provider items", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         LLM.request({
@@ -2981,11 +2981,75 @@ describe("OpenAI Responses route", () => {
 
       expect(prepared.body.input).toEqual([
         { role: "user", content: [{ type: "input_text", text: "Search." }] },
+        { type: "web_search_call", id: "ws_1", status: "completed" },
+        { role: "user", content: [{ type: "input_text", text: "Continue." }] },
+      ])
+    }),
+  )
+
+  it.effect("preserves foreign hosted tool results as portable message content", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: xaiModel,
+          messages: [
+            Message.assistant([
+              ToolCallPart.make({
+                id: "ws_1",
+                name: "web_search",
+                input: { query: "effect 4" },
+                providerExecuted: true,
+                providerMetadata: { openai: { itemId: "ws_1" } },
+              }),
+              {
+                type: "tool-result",
+                id: "ws_1",
+                name: "web_search",
+                result: { type: "json", value: { type: "web_search_call", id: "ws_1", status: "completed" } },
+                providerExecuted: true,
+                providerMetadata: { openai: { itemId: "ws_1" } },
+              },
+            ]),
+            Message.user("Continue."),
+          ],
+        }),
+      )
+
+      expect(prepared.body.input).toEqual([
         {
           role: "user",
           content: [{ type: "input_text", text: '{"type":"web_search_call","id":"ws_1","status":"completed"}' }],
         },
         { role: "user", content: [{ type: "input_text", text: "Continue." }] },
+      ])
+    }),
+  )
+
+  it.effect("does not replay hosted tool items whose result id differs from provider metadata", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([
+              {
+                type: "tool-result",
+                id: "ws_1",
+                name: "web_search",
+                result: { type: "json", value: { type: "web_search_call", id: "ws_other", status: "completed" } },
+                providerExecuted: true,
+                providerMetadata: { openai: { itemId: "ws_1" } },
+              },
+            ]),
+          ],
+        }),
+      )
+
+      expect(prepared.body.input).toEqual([
+        {
+          role: "user",
+          content: [{ type: "input_text", text: '{"type":"web_search_call","id":"ws_other","status":"completed"}' }],
+        },
       ])
     }),
   )
