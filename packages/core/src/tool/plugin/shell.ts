@@ -111,6 +111,7 @@ export const Plugin = {
     const mutation = yield* LocationMutation.Service
     const shell = yield* Shell.Service
     const shellSelect = yield* ShellSelect.Service
+    const compatibleShell = shellSelect.resolve({ priority: "compat" })
     const permission = yield* Permission.Service
     const config = yield* Config.Service
 
@@ -187,7 +188,7 @@ export const Plugin = {
                   command: input.command,
                   cwd: input.workdir,
                   timeout,
-                  shell: yield* shellSelect.resolve({ priority: "compat" }),
+                  shell: yield* compatibleShell,
                   metadata: { sessionID: context.sessionID },
                 },
                 (invocation) =>
@@ -343,8 +344,7 @@ export const Plugin = {
       Effect.gen(function* () {
         const tool = event.tools[name]
         if (!tool) return
-        const selected = yield* shellSelect.resolve({ priority: "compat" })
-        tool.description = description(ShellSelect.name(selected))
+        tool.description = description(ShellSelect.name(yield* compatibleShell))
       }),
     )
   }),
