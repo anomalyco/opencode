@@ -95,6 +95,8 @@ const unavailable = (what: string) => Effect.die(new Error(`${what} is unavailab
 const vcsLayer = Layer.succeed(
   Vcs.Service,
   Vcs.Service.of({
+    transform: () => Effect.succeed({ dispose: Effect.void }),
+    reload: () => Effect.void,
     info: () => Effect.succeed({ branch: {} }),
     status: () => Effect.succeed([]),
     diff: () => Effect.succeed([]),

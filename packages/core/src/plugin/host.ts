@@ -24,6 +24,7 @@ import { AbsolutePath, type DeepMutable } from "../schema.js"
 import { Skill } from "../skill.js"
 import { Tool } from "../tool.js"
 import { Workspace } from "../workspace.js"
+import { Vcs } from "../vcs.js"
 import { WebSearch } from "../websearch.js"
 import { PluginHooks } from "./hooks.js"
 import type { Interface } from "../plugin.js"
@@ -43,6 +44,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
   const reference = yield* Reference.Service
   const skill = yield* Skill.Service
   const tools = yield* Tool.Service
+  const vcs = yield* Vcs.Service
   const websearch = yield* WebSearch.Service
   const hooks = yield* PluginHooks.Service
   const runtime = yield* PluginRuntime.Service
@@ -353,6 +355,13 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
           )
           .pipe(Effect.orDie, Effect.as({ dispose: Effect.void })),
       hook: (name, callback) => hooks.register("tool", name, callback),
+    },
+    vcs: {
+      get: () => response(vcs.info()),
+      status: () => response(vcs.status()),
+      diff: (input) => response(vcs.diff(input.mode, { context: input.context })),
+      transform: vcs.transform,
+      reload: vcs.reload,
     },
     websearch: {
       providers: () => response(websearch.providers()),

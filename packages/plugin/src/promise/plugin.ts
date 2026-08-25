@@ -14,6 +14,7 @@ import type { ShellDomain } from "./shell.js"
 import type { SkillDomain } from "./skill.js"
 import type { StorageDomain } from "./storage.js"
 import type { ToolDomain } from "./tool.js"
+import type { VcsDomain } from "./vcs.js"
 import type { WebSearchDomain } from "./websearch.js"
 
 export interface Context {
@@ -33,6 +34,7 @@ export interface Context {
   readonly skill: SkillDomain
   readonly storage: StorageDomain
   readonly tool: ToolDomain
+  readonly vcs: VcsDomain
   readonly websearch: WebSearchDomain
 }
 

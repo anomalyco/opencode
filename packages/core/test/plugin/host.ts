@@ -107,6 +107,13 @@ export function host(overrides: Overrides = {}): Plugin.Context {
       transform: () => Effect.die("unused tool.transform"),
       hook: () => Effect.die("unused tool.hook"),
     },
+    vcs: overrides.vcs ?? {
+      get: () => Effect.die("unused vcs.get"),
+      status: () => Effect.die("unused vcs.status"),
+      diff: () => Effect.die("unused vcs.diff"),
+      transform: () => Effect.die("unused vcs.transform"),
+      reload: () => Effect.die("unused vcs.reload"),
+    },
     websearch: overrides.websearch ?? {
       providers: () => Effect.die("unused websearch.providers"),
       query: () => Effect.die("unused websearch.query"),

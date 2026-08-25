@@ -23,6 +23,7 @@ import { Skill } from "@opencode-ai/core/skill"
 import { SkillDiscovery } from "@opencode-ai/core/skill/discovery"
 import { Watcher } from "@opencode-ai/core/filesystem/watcher"
 import { Tool } from "@opencode-ai/core/tool"
+import { Vcs } from "@opencode-ai/core/vcs"
 import { WebSearch } from "@opencode-ai/core/websearch"
 import { Effect, Layer } from "effect"
 import { tempLocationLayer } from "../fixture/location"
@@ -62,6 +63,7 @@ export const PluginTestLayer = LayerNode.compile(
     SkillDiscovery.node,
     PluginHooks.node,
     Tool.node,
+    Vcs.node,
     Watcher.node,
     WebSearch.node,
   ]),

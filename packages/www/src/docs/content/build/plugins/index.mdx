@@ -797,6 +797,59 @@ interface ToolDraft {
 }
 ```
 
+### VCS
+
+Read repository information, working-copy status, or file diffs.
+
+```ts
+const info = await ctx.vcs.get()
+const changes = await ctx.vcs.status()
+const diff = await ctx.vcs.diff({ mode: "working", context: 3 })
+```
+
+Register a location-scoped VCS provider with a transform. A provider matching the detected repository type is selected
+automatically; use `draft.default.set` to select a different provider.
+
+```ts
+await ctx.vcs.transform((draft) => {
+  draft.add({
+    id: "custom",
+    name: "Custom VCS",
+    info: async () => ({ branch: { current: "feature", default: "main" } }),
+    status: async (scope, { signal }) => readStatus(scope.worktree, signal),
+    diff: async (input, { signal }) => readDiff(input, signal),
+  })
+  draft.default.set("custom")
+})
+```
+
+Provider callbacks receive the current location, working-copy root, canonical project root, and optional repository
+store. Diff callbacks also receive the selected mode, requested context, and output byte budget. Repository discovery
+continues to use OpenCode's built-in Git and Mercurial detectors.
+
+#### Reference
+
+Schemas: [`Vcs.Info`](/api#schema-Vcs.Info), [`Vcs.FileStatus`](/api#schema-Vcs.FileStatus),
+[`FileDiff.Info`](/api#schema-FileDiff.Info)
+
+```ts
+interface VcsContext {
+  get(input?: VcsGetInput, requestOptions?: RequestOptions): Promise<VcsGetOutput>
+  status(input?: VcsStatusInput, requestOptions?: RequestOptions): Promise<VcsStatusOutput>
+  diff(input: VcsDiffInput, requestOptions?: RequestOptions): Promise<VcsDiffOutput>
+  transform(callback: (draft: VcsDraft) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface VcsDraft {
+  add(definition: VcsDefinition): void
+  default: {
+    get(): string | undefined
+    set(providerID: string): void
+  }
+}
+```
+
 ### Websearch
 
 List websearch providers or run a query through the selected provider.

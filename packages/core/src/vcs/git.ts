@@ -5,7 +5,7 @@ import { ChildProcess } from "effect/unstable/process"
 import { FileDiff } from "@opencode-ai/schema/file-diff"
 import { FileStatus, Info, Mode } from "@opencode-ai/schema/vcs"
 import { AppProcess } from "@opencode-ai/util/process"
-import type { DiffOptions, Interface } from "../vcs.js"
+import type { Adapter, DiffOptions } from "../vcs.js"
 import { chunksByFile, emptyPatch, MAX_PATCH_BYTES, MAX_TOTAL_PATCH_BYTES, PATCH_CONTEXT_LINES } from "./patch.js"
 import type { Patch } from "./patch.js"
 
@@ -14,7 +14,7 @@ import type { Patch } from "./patch.js"
  * batched through one `git diff` invocation where possible and capped by
  * per-file and total byte budgets, falling back to empty patches when capped.
  */
-export function make(proc: AppProcess.Interface, input: { directory: string; worktree: string }): Interface {
+export function make(proc: AppProcess.Interface, input: { directory: string; worktree: string }): Adapter {
   // Listing commands scope pathspecs to the requested directory; per-file
   // commands run from the worktree root because git lists root-relative paths.
   const ctx: Ctx = { git: makeGit(proc), directory: input.directory, worktree: input.worktree }

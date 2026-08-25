@@ -14,6 +14,7 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { Tool } from "@opencode-ai/core/tool"
+import { Vcs } from "@opencode-ai/core/vcs"
 import { testEffect } from "./lib/effect"
 import { PluginTestLayer } from "./plugin/fixture"
 
@@ -90,6 +91,35 @@ describe("Plugin", () => {
       yield* host.mcp.disconnect({ location, server: "routed" }).pipe(Effect.orDie)
       expect((yield* host.mcp.list({ location }).pipe(Effect.orDie)).location.directory).toBe(target)
       expect(routed).toEqual(["add:/target", "remove:/target", "connect:/target", "disconnect:/target", "list:/target"])
+    }),
+  )
+
+  it.effect("registers and removes scoped VCS providers", () =>
+    Effect.gen(function* () {
+      const plugins = yield* Plugin.Service
+      const vcs = yield* Vcs.Service
+      const provider = EffectPlugin.define({
+        id: "custom-vcs",
+        effect: (ctx) =>
+          ctx.vcs
+            .transform((draft) => {
+              draft.add({
+                id: "custom",
+                name: "Custom VCS",
+                info: () => Effect.succeed({ branch: { current: "feature" } }),
+                status: () => Effect.succeed([]),
+                diff: () => Effect.succeed([]),
+              })
+              draft.default.set("custom")
+            })
+            .pipe(Effect.asVoid),
+      })
+
+      yield* plugins.activate([versioned(provider)])
+      expect(yield* vcs.info()).toEqual({ branch: { current: "feature" } })
+
+      yield* plugins.activate([])
+      expect(yield* vcs.info()).toEqual({ branch: {} })
     }),
   )
 

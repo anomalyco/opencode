@@ -84,6 +84,7 @@ export function fromPromise(plugin: Plugin) {
         const ReferenceEndpoints = ClientApi.groups["server.reference"].endpoints
         const SessionEndpoints = ClientApi.groups["server.session"].endpoints
         const SkillEndpoints = ClientApi.groups["server.skill"].endpoints
+        const VcsEndpoints = ClientApi.groups["server.vcs"].endpoints
         const WebSearchEndpoints = ClientApi.groups["server.websearch"].endpoints
         const context = yield* Effect.context<Scope.Scope>()
 
@@ -294,6 +295,28 @@ export function fromPromise(plugin: Plugin) {
               ),
             hook: (name, callback) =>
               register(host.tool.hook(name, (event) => Effect.promise(() => Promise.resolve(callback(event))))),
+          },
+          vcs: {
+            get: adaptApiMethod(VcsEndpoints["vcs.get"], host.vcs.get),
+            status: adaptApiMethod(VcsEndpoints["vcs.status"], host.vcs.status),
+            diff: adaptApiMethod(VcsEndpoints["vcs.diff"], host.vcs.diff),
+            reload: () => run(host.vcs.reload()),
+            transform: (callback) =>
+              register(
+                host.vcs.transform((draft) => {
+                  callback({
+                    add: (definition) =>
+                      draft.add({
+                        id: definition.id,
+                        name: definition.name,
+                        info: (input) => attempt((signal) => definition.info(input, { signal })),
+                        status: (input) => attempt((signal) => definition.status(input, { signal })),
+                        diff: (input) => attempt((signal) => definition.diff(input, { signal })),
+                      }),
+                    default: draft.default,
+                  })
+                }),
+              ),
           },
           websearch: {
             providers: adaptApiMethod(WebSearchEndpoints["websearch.providers"], host.websearch.providers),

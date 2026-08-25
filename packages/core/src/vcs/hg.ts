@@ -7,7 +7,7 @@ import { FileDiff } from "@opencode-ai/schema/file-diff"
 import { FileStatus, Info, Mode } from "@opencode-ai/schema/vcs"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { AppProcess } from "@opencode-ai/util/process"
-import type { DiffOptions, Interface } from "../vcs.js"
+import type { Adapter, DiffOptions } from "../vcs.js"
 import {
   addPatch,
   chunksByFile,
@@ -28,7 +28,7 @@ export function make(
   proc: AppProcess.Interface,
   fs: FSUtil.Interface,
   input: { directory: string; worktree: string },
-): Interface {
+): Adapter {
   const hg = makeHg(proc, input.worktree)
   // All commands run from the worktree root (hg prints root-relative paths);
   // this pathspec scopes them to the requested directory.

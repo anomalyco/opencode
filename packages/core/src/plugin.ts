@@ -22,6 +22,7 @@ import { Reference } from "./reference.js"
 import { Skill } from "./skill.js"
 import { State } from "./state.js"
 import { Tool } from "./tool.js"
+import { Vcs } from "./vcs.js"
 import { PluginHooks } from "./plugin/hooks.js"
 
 export interface Interface {
@@ -199,6 +200,7 @@ export const node = makeLocationNode({
     Reference.node,
     Skill.node,
     Tool.node,
+    Vcs.node,
     PluginHooks.node,
     PluginRuntime.node,
     WebSearch.node,

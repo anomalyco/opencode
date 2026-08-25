@@ -10,6 +10,7 @@ import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { PluginPromise } from "@opencode-ai/core/plugin/promise"
 import { WebSearch } from "@opencode-ai/core/websearch"
+import { Vcs } from "@opencode-ai/core/vcs"
 import { Session } from "@opencode-ai/core/session"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionInbox } from "@opencode-ai/core/session/inbox"
@@ -429,6 +430,50 @@ describe("fromPromise", () => {
       yield* adapted.effect(host)
 
       expect(yield* agents.get(Agent.ID.make("temp"))).toBeUndefined()
+    }),
+  )
+
+  it.effect("registers a Promise VCS provider and forwards client reads", () =>
+    Effect.gen(function* () {
+      const vcs = yield* Vcs.Service
+      const plugin = yield* Plugin.Service
+      const host = yield* PluginHost.make(plugin)
+      const signals: AbortSignal[] = []
+      const promisePlugin = define({
+        id: "promise-vcs",
+        setup: async (ctx) => {
+          await ctx.vcs.transform((draft) => {
+            draft.add({
+              id: "custom",
+              name: "Custom VCS",
+              info: async (_input, request) => {
+                signals.push(request.signal)
+                return { branch: { current: "feature", default: "main" } }
+              },
+              status: async (_input, request) => {
+                signals.push(request.signal)
+                return [{ file: "file.txt", additions: 1, deletions: 0, status: "added" }]
+              },
+              diff: async (input, request) => {
+                signals.push(request.signal)
+                expect(input.context).toBe(2)
+                expect(input.maxOutputBytes).toBe(10_000_000)
+                return [{ file: "file.txt", patch: "+hello", additions: 1, deletions: 0, status: "added" }]
+              },
+            })
+            draft.default.set("custom")
+          })
+
+          expect((await ctx.vcs.get()).data.branch.current).toBe("feature")
+          expect((await ctx.vcs.status()).data).toHaveLength(1)
+          expect((await ctx.vcs.diff({ mode: "working", context: 2 })).data[0].patch).toBe("+hello")
+        },
+      })
+
+      yield* PluginPromise.fromPromise(promisePlugin).effect(host)
+      expect((yield* vcs.info()).branch.current).toBe("feature")
+      expect(signals).toHaveLength(3)
+      expect(signals.every((signal) => signal instanceof AbortSignal)).toBeTrue()
     }),
   )
 
