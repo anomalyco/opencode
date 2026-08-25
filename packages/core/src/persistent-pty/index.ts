@@ -10,6 +10,7 @@ import { Session } from "@opencode-ai/schema/session"
 import { Bus } from "../bus.js"
 import { Database } from "../database/database.js"
 import { Pty } from "@opencode-ai/schema/pty"
+import { Global } from "@opencode-ai/util/global"
 import {
   makeDaemonTransport,
   type DaemonTransport,
@@ -18,6 +19,7 @@ import {
   type WireResponse,
   type WireTerminal,
 } from "./daemon.js"
+import { resolveBinary } from "#persistent-pty-binary"
 
 export type { Role, StreamEvent } from "./daemon.js"
 
@@ -120,9 +122,18 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const bus = yield* Bus.Service
     const database = yield* Database.Service
+    const global = yield* Global.Service
     const context = yield* Effect.context()
     const runFork = Effect.runForkWith(context)
-    const daemon = yield* makeDaemonTransport(runtimeDirectory(databasePath(database.db)))
+    let binary: Promise<string> | undefined
+    const daemon = yield* makeDaemonTransport(
+      runtimeDirectory(databasePath(database.db)),
+      () =>
+        (binary ??= resolveBinary(global.bin).catch((error) => {
+          binary = undefined
+          throw error
+        })),
+    )
     const removing = new Set<Pty.ID>()
 
     const list = Effect.fn("PersistentPty.list")(function* (sessionID?: Session.ID) {
@@ -317,7 +328,7 @@ export const layer = Layer.effect(
   }),
 )
 
-export const node = makeGlobalNode({ service: Service, layer, deps: [Bus.node, Database.node] })
+export const node = makeGlobalNode({ service: Service, layer, deps: [Bus.node, Database.node, Global.node] })
 
 const request = (daemon: DaemonTransport, value: object, start = false) =>
   daemon.request(value, start).pipe(Effect.mapError(unavailable))

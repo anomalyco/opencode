@@ -41,6 +41,12 @@
       "node": "./src/pty/pty.node.ts",
       "default": "./src/pty/pty.bun.ts"
     },
+    "#persistent-pty-binary": {
+      "workerd": "./src/persistent-pty/binary.workerd.ts",
+      "bun": "./src/persistent-pty/binary.bun.ts",
+      "node": "./src/persistent-pty/binary.node.ts",
+      "default": "./src/persistent-pty/binary.bun.ts"
+    },
     "#fff": {
       "workerd": "./src/filesystem/fff.workerd.ts",
       "bun": "./src/filesystem/fff.bun.ts",
