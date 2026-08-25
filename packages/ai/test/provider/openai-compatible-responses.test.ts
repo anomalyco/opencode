@@ -288,6 +288,43 @@ describe("Open Responses-compatible route", () => {
     }),
   )
 
+  it.effect("streams function calls without optional item ids through the shared baseline", () =>
+    Effect.gen(function* () {
+      const model = configure({
+        apiKey: "test-key",
+        baseURL: "https://responses.example.test/v1",
+        provider: "example",
+      }).model("example-model")
+      const item = { type: "function_call", call_id: "call_1", name: "lookup", arguments: "" }
+      const response = yield* LLMClient.generate(LLM.request({ model, prompt: "Look it up." })).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "response.output_item.added", output_index: 1, item },
+              {
+                type: "response.function_call_arguments.delta",
+                output_index: 1,
+                item_id: "opaque_item",
+                delta: '{"query":"shared"}',
+              },
+              {
+                type: "response.output_item.done",
+                output_index: 1,
+                item: { ...item, arguments: '{"query":"complete"}' },
+              },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.events.filter(LLMEvent.is.toolCall)).toEqual([
+        expect.objectContaining({ id: "call_1", name: "lookup", input: { query: "complete" } }),
+      ])
+      expect(response.events.find(LLMEvent.is.toolCall)?.providerMetadata).toBeUndefined()
+    }),
+  )
+
   it.effect("finalizes pending function calls from completed response output", () =>
     Effect.gen(function* () {
       const model = configure({

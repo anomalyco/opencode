@@ -945,25 +945,23 @@ const onOutputItemAdded = (state: ParserState, event: Event): StepResult => {
       events,
     ]
   }
-  if (item?.type !== "function_call" || !item.id) return [state, NO_EVENTS]
-  const metadata = providerMetadata(state, { itemId: item.id })
+  if (item?.type !== "function_call" || !item.call_id) return [state, NO_EVENTS]
+  const id = item.id ?? item.call_id
+  const metadata = item.id ? providerMetadata(state, { itemId: item.id }) : undefined
   const events: LLMEvent[] = []
   const lifecycle = Lifecycle.stepStart(state.lifecycle, events)
   return [
     {
       ...state,
       lifecycle,
-      tools: ToolStream.start(state.tools, item.id, {
-        id: item.call_id ?? item.id,
+      tools: ToolStream.start(state.tools, id, {
+        id: item.call_id,
         name: item.name ?? "",
         input: item.arguments ?? "",
         providerMetadata: metadata,
       }),
     },
-    [
-      ...events,
-      LLMEvent.toolInputStart({ id: item.call_id ?? item.id, name: item.name ?? "", providerMetadata: metadata }),
-    ],
+    [...events, LLMEvent.toolInputStart({ id: item.call_id, name: item.name ?? "", providerMetadata: metadata })],
   ]
 }
 
@@ -1095,18 +1093,19 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
   }
 
   if (item.type === "function_call") {
-    if (!item.id || !item.call_id || !item.name) return [state, NO_EVENTS] satisfies StepResult
-    const tools = state.tools[item.id]
+    if (!item.call_id || !item.name) return [state, NO_EVENTS] satisfies StepResult
+    const id = item.id ?? item.call_id
+    const tools = state.tools[id]
       ? state.tools
-      : ToolStream.start(state.tools, item.id, {
+      : ToolStream.start(state.tools, id, {
           id: item.call_id,
           name: item.name,
-          providerMetadata: providerMetadata(state, { itemId: item.id }),
+          providerMetadata: item.id ? providerMetadata(state, { itemId: item.id }) : undefined,
         })
     const result =
       item.arguments === undefined
-        ? yield* ToolStream.finish(state.id, tools, item.id)
-        : yield* ToolStream.finishWithInput(state.id, tools, item.id, item.arguments)
+        ? yield* ToolStream.finish(state.id, tools, id)
+        : yield* ToolStream.finishWithInput(state.id, tools, id, item.arguments)
     const events: LLMEvent[] = []
     const resultEvents = result.events ?? []
     const lifecycle = resultEvents.length ? Lifecycle.stepStart(state.lifecycle, events) : state.lifecycle
@@ -1160,10 +1159,11 @@ const onResponseFinish = Effect.fn("OpenResponses.onResponseFinish")(function* (
           event.response?.output ?? [],
           () => [state, NO_EVENTS] satisfies StepResult,
           ([current, events], item) => {
+            const id = item.id ?? (item.type === "function_call" ? item.call_id : undefined)
             if (
-              !item.id ||
-              ((item.type !== "function_call" || !current.tools[item.id]) &&
-                (item.type !== "reasoning" || !current.reasoningItems[item.id]))
+              !id ||
+              ((item.type !== "function_call" || !current.tools[id]) &&
+                (item.type !== "reasoning" || !current.reasoningItems[id]))
             )
               return Effect.succeed([current, events] satisfies StepResult)
             return onOutputItemDone(current, { type: "response.output_item.done", item }).pipe(
@@ -1289,10 +1289,11 @@ export const step = (state: ParserState, input: Event) => {
   if (event.type === "response.output_item.added") {
     if (event.item?.type === "message" && !event.item.id)
       return ProviderShared.eventError(state.id, `${event.type} message is missing id`)
+    const id = event.item?.id ?? (event.item?.type === "function_call" ? event.item.call_id : undefined)
     return Effect.succeed(
       onOutputItemAdded(
-        event.output_index !== undefined && event.item?.id
-          ? { ...state, outputItems: { ...state.outputItems, [event.output_index]: event.item.id } }
+        event.output_index !== undefined && id
+          ? { ...state, outputItems: { ...state.outputItems, [event.output_index]: id } }
           : state,
         event,
       ),

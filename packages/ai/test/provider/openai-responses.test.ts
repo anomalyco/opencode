@@ -469,7 +469,7 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("continues a tool call with only the new tool output", () =>
+  it.effect("continues an item-id-less tool call with only the new tool output", () =>
     Effect.gen(function* () {
       const firstRequest = {
         type: "response.create",
@@ -485,7 +485,6 @@ describe("OpenAI Responses route", () => {
           type: "response.output_item.done",
           item: {
             type: "function_call",
-            id: "fc_1",
             status: "completed",
             call_id: "call_1",
             name: "weather",
@@ -2120,6 +2119,47 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("routes item-id-less function arguments by output index and prefers item completion", () =>
+    Effect.gen(function* () {
+      const item = { type: "function_call", call_id: "call_1", name: "lookup", arguments: "" }
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "response.output_item.added", output_index: 2, item },
+              {
+                type: "response.function_call_arguments.delta",
+                output_index: 2,
+                item_id: "opaque_delta",
+                delta: '{"query":"streamed"}',
+              },
+              {
+                type: "response.function_call_arguments.done",
+                output_index: 2,
+                item_id: "opaque_done",
+                arguments: '{"query":"arguments-done"}',
+              },
+              {
+                type: "response.output_item.done",
+                output_index: 2,
+                item: { ...item, arguments: '{"query":"output-item-done"}' },
+              },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.events.filter((event) => event.type === "tool-input-delta")).toMatchObject([
+        { id: "call_1", text: '{"query":"streamed"}' },
+      ])
+      expect(response.events.filter(LLMEvent.is.toolCall)).toEqual([
+        expect.objectContaining({ id: "call_1", name: "lookup", input: { query: "output-item-done" } }),
+      ])
+      expect(response.events.find(LLMEvent.is.toolCall)?.providerMetadata).toBeUndefined()
+    }),
+  )
+
   it.effect("routes reasoning summary events by output index", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(request).pipe(
@@ -2298,13 +2338,25 @@ describe("OpenAI Responses route", () => {
   it.effect("rejects function argument events without the spec-required item id", () =>
     Effect.gen(function* () {
       const events = [
-        { type: "response.function_call_arguments.delta", delta: "{}" },
-        { type: "response.function_call_arguments.done", arguments: "{}" },
+        { type: "response.function_call_arguments.delta", output_index: 0, delta: "{}" },
+        { type: "response.function_call_arguments.done", output_index: 0, arguments: "{}" },
       ]
 
       for (const event of events) {
         const error = yield* LLMClient.generate(request).pipe(
-          Effect.provide(fixedResponse(sseEvents(event, { type: "response.completed", response: { id: "resp_1" } }))),
+          Effect.provide(
+            fixedResponse(
+              sseEvents(
+                {
+                  type: "response.output_item.added",
+                  output_index: 0,
+                  item: { type: "function_call", call_id: "call_1", name: "lookup", arguments: "" },
+                },
+                event,
+                { type: "response.completed", response: { id: "resp_1" } },
+              ),
+            ),
+          ),
           Effect.flip,
         )
 
@@ -3457,6 +3509,43 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("finalizes and replays a completed function call without an optional item id", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              {
+                type: "response.output_item.done",
+                item: { type: "function_call", call_id: "call_1", name: "lookup", arguments: '{"query":"weather"}' },
+              },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.events.filter(LLMEvent.is.toolCall)).toEqual([
+        expect.objectContaining({ id: "call_1", name: "lookup", input: { query: "weather" } }),
+      ])
+      expect(response.events.find(LLMEvent.is.toolCall)?.providerMetadata).toBeUndefined()
+
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            response.message,
+            Message.tool({ id: "call_1", name: "lookup", resultType: "json", result: { forecast: "sunny" } }),
+          ],
+        }),
+      )
+      expect(prepared.body.input).toEqual([
+        { type: "function_call", call_id: "call_1", name: "lookup", arguments: '{"query":"weather"}' },
+        { type: "function_call_output", call_id: "call_1", output: '{"forecast":"sunny"}' },
+      ])
+    }),
+  )
+
   it.effect("emits only missing function arguments from the arguments done event", () =>
     Effect.gen(function* () {
       const body = sseEvents(
@@ -3678,6 +3767,37 @@ describe("OpenAI Responses route", () => {
       expect(response.events.filter(LLMEvent.is.toolInputEnd)).toHaveLength(1)
       expect(response.events.filter(LLMEvent.is.toolCall)).toHaveLength(1)
       expect(response.finishReason.normalized).toBe("tool-calls")
+    }),
+  )
+
+  it.effect("reconciles an item-id-less pending function call from completed response output", () =>
+    Effect.gen(function* () {
+      const item = { type: "function_call", call_id: "call_1", name: "lookup", arguments: "" }
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "response.output_item.added", output_index: 0, item },
+              {
+                type: "response.function_call_arguments.delta",
+                output_index: 0,
+                item_id: "opaque_delta",
+                delta: '{"query":"partial',
+              },
+              {
+                type: "response.completed",
+                response: { id: "resp_1", output: [{ ...item, arguments: '{"query":"complete"}' }] },
+              },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.events.filter(LLMEvent.is.toolCall)).toEqual([
+        expect.objectContaining({ id: "call_1", name: "lookup", input: { query: "complete" } }),
+      ])
+      expect(response.events.find(LLMEvent.is.toolCall)?.providerMetadata).toBeUndefined()
+      expect(response.events.filter(LLMEvent.is.toolInputEnd)).toHaveLength(1)
     }),
   )
 
