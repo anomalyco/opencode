@@ -1312,7 +1312,7 @@ export type ModelCompatibility = {
   reasoningField?: ModelReasoningField
   maxTokensField?: ModelMaxTokensField
   requireFinishReason?: boolean
-  bridgeToolResults?: boolean
+  requireAssistantAfterTool?: boolean
 }
 
 export type ModelCost = {

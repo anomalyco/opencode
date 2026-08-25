@@ -478,13 +478,13 @@ const lowerMessages = Effect.fn("OpenAIChat.lowerMessages")(function* (request: 
           ]
         : [{ role: "system", content: ProviderShared.joinText(request.system) }]
   const messages = [...system]
-  const bridgeToolResults =
-    request.model.compatibility?.bridgeToolResults ??
+  const requireAssistantAfterTool =
+    request.model.compatibility?.requireAssistantAfterTool ??
     ["mistral", "devstral", "codestral", "pixtral", "mixtral"].some((family) =>
       request.model.id.toLowerCase().includes(family),
     )
   const bridgeTools = () => {
-    if (bridgeToolResults && messages.at(-1)?.role === "tool") messages.push({ role: "assistant", content: "Done." })
+    if (requireAssistantAfterTool && messages.at(-1)?.role === "tool") messages.push({ role: "assistant", content: "Done." })
   }
   const pendingImages: Array<Schema.Schema.Type<typeof OpenAIChatUserContent>> = []
   const flushImages = () => {

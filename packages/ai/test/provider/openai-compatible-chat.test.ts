@@ -257,7 +257,7 @@ describe("OpenAI-compatible Chat route", () => {
             .with({ provider: "custom", endpoint: { baseURL: "https://api.custom.test/v1" } })
             .model({
               id: item.id,
-              compatibility: "override" in item ? { bridgeToolResults: item.override } : undefined,
+              compatibility: "override" in item ? { requireAssistantAfterTool: item.override } : undefined,
             })
           const prepared = yield* compileRequest(
             LLM.request({

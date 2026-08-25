@@ -457,7 +457,7 @@ describe("OpenAI Chat route", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         LLM.request({
-          model: LanguageModel.update(model, { compatibility: { bridgeToolResults: true } }),
+          model: LanguageModel.update(model, { compatibility: { requireAssistantAfterTool: true } }),
           messages: [
             Message.assistant([ToolCallPart.make({ id: "call_image", name: "read", input: {} })]),
             Message.tool({

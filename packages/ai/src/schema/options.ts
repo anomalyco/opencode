@@ -155,7 +155,7 @@ export class LanguageModelCompatibility extends Schema.Class<LanguageModelCompat
   reasoningField: Schema.optional(Schema.String),
   maxTokensField: Schema.optional(LanguageModelMaxTokensFieldCompatibility),
   requireFinishReason: Schema.optional(Schema.Boolean),
-  bridgeToolResults: Schema.optional(Schema.Boolean),
+  requireAssistantAfterTool: Schema.optional(Schema.Boolean),
   supportsStore: Schema.optional(Schema.Boolean),
   supportsUsageInStreaming: Schema.optional(Schema.Boolean),
   supportsStrictMode: Schema.optional(Schema.Boolean),
