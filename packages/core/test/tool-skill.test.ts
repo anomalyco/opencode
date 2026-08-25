@@ -131,12 +131,25 @@ describe("SkillTool", () => {
               yield* executeTool(registry, {
                 sessionID,
                 ...toolIdentity,
+                userRequests: [{ action: "skill", resource: "other" }],
                 call: { type: "tool-call", id: "call-denied-skill", name: "skill", input: { id: "effect" } },
               }),
             ).toEqual({
               status: "error",
               error: { type: "permission.rejected", message: "Permission denied: skill" },
             })
+            expect(
+              yield* executeTool(registry, {
+                sessionID,
+                ...toolIdentity,
+                userRequests: [{ action: "skill", resource: "effect" }],
+                call: { type: "tool-call", id: "call-user-skill", name: "skill", input: { id: "effect" } },
+              }),
+            ).toMatchObject({
+              status: "completed",
+              content: [{ type: "text", text: Skill.toModelOutput(info, [reference]) }],
+            })
+            expect(assertions).toHaveLength(3)
             deny = false
             const flat = Skill.Info.make({
               id: Skill.ID.make("public"),

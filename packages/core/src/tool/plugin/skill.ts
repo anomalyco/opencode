@@ -51,14 +51,15 @@ export const Plugin = {
               const skill = current.find((skill) => skill.id === input.id)
               if (!skill) return yield* unableToLoad(input.id)
               return yield* Effect.gen(function* () {
-                yield* permission.assert({
-                  action: name,
-                  resources: [skill.id],
-                  save: [skill.id],
-                  sessionID: context.sessionID,
-                  agent: context.agent,
-                  source: { type: "tool", messageID: context.messageID, id: context.id },
-                })
+                if (!context.userRequests?.some((request) => request.action === name && request.resource === skill.id))
+                  yield* permission.assert({
+                    action: name,
+                    resources: [skill.id],
+                    save: [skill.id],
+                    sessionID: context.sessionID,
+                    agent: context.agent,
+                    source: { type: "tool", messageID: context.messageID, id: context.id },
+                  })
                 const directory = path.dirname(skill.location)
                 const files =
                   path.basename(skill.location) === "SKILL.md"

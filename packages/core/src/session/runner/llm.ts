@@ -371,6 +371,9 @@ const layer = Layer.effect(
         toolChoice: stepLimitReached ? "none" : undefined,
         webSocket: "session",
       })
+      const userRequests = loaded.messages
+        .findLast((message) => message.type === "user")
+        ?.skills?.map((skill) => ({ action: "skill", resource: skill.id }))
       yield* diagnosePromptCache(session.id, prepared.request)
       const executeTool = (input: Parameters<typeof prepared.executeTool>[0]) => {
         if (stepLimitReached) return new Tool.Error({ message: "Tools are disabled after the maximum agent steps" })
@@ -461,6 +464,7 @@ const layer = Layer.effect(
                     agent: agent.id,
                     messageID: assistantMessageID,
                     call: event,
+                    userRequests,
                     // Progress is ephemeral, not durable history: nothing to order.
                     progress: (update) => publisher.progress(event.id, update),
                   }),
