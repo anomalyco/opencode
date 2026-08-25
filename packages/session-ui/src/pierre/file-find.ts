@@ -104,6 +104,16 @@ function scrollParent(el: HTMLElement): HTMLElement | undefined {
   }
 }
 
+export function scrollTopForRange(input: {
+  scrollTop: number
+  viewportTop: number
+  viewportHeight: number
+  matchTop: number
+  matchHeight: number
+}) {
+  return input.scrollTop + input.matchTop - input.viewportTop - (input.viewportHeight - input.matchHeight) / 2
+}
+
 type CreateFileFindOptions = {
   wrapper: () => HTMLElement | undefined
   overlay: () => HTMLDivElement | undefined
@@ -294,6 +304,26 @@ export function createFileFind(opts: CreateFileFindOptions) {
   }
 
   const scrollToRange = (range: Range) => {
+    const wrapper = opts.wrapper()
+    if (wrapper) {
+      const style = getComputedStyle(wrapper)
+      const root = style.overflowY === "auto" || style.overflowY === "scroll" ? wrapper : scrollParent(wrapper)
+      const rect = range.getBoundingClientRect()
+      if (root && rect.height) {
+        const viewport = root.getBoundingClientRect()
+        root.scrollTo({
+          top: scrollTopForRange({
+            scrollTop: root.scrollTop,
+            viewportTop: viewport.top,
+            viewportHeight: root.clientHeight,
+            matchTop: rect.top,
+            matchHeight: rect.height,
+          }),
+          behavior: "auto",
+        })
+        return
+      }
+    }
     const start = range.startContainer
     const el = start instanceof Element ? start : start.parentElement
     el?.scrollIntoView({ block: "center", inline: "center" })
