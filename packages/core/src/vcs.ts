@@ -14,7 +14,6 @@ import { AppProcess } from "@opencode-ai/util/process"
 import { Bus } from "./bus.js"
 import { State } from "./state.js"
 import { VcsGit } from "./vcs/git.js"
-import { VcsHg } from "./vcs/hg.js"
 import { emptyPatch, MAX_TOTAL_PATCH_BYTES, PATCH_CONTEXT_LINES } from "./vcs/patch.js"
 
 export { BranchList, FileStatus, Info, Mode }
@@ -47,10 +46,9 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Vc
 // Adapter seam: one working-copy implementation per VCS type, selected by the
 // resolved location. Locations without a supported VCS degrade to empty
 // results so callers never need to special-case.
-const adapter = (proc: AppProcess.Interface, fs: FSUtil.Interface, location: Location.Interface) => {
+const adapter = (proc: AppProcess.Interface, location: Location.Interface) => {
   const scope = { directory: location.directory, worktree: location.project.directory }
   if (location.vcs?.type === "git") return VcsGit.make(proc, scope)
-  if (location.vcs?.type === "hg") return VcsHg.make(proc, fs, scope)
 }
 
 const layer = Layer.effect(
@@ -60,7 +58,7 @@ const layer = Layer.effect(
     const fs = yield* FSUtil.Service
     const location = yield* Location.Service
     const bus = yield* Bus.Service
-    const native = adapter(proc, fs, location)
+    const native = adapter(proc, location)
     const vcs = location.vcs
     const current = { info: native ? yield* native.info() : ({ branch: {} } satisfies Info) }
     const scope = {
@@ -112,7 +110,7 @@ const layer = Layer.effect(
       if (changed) yield* bus.publish(VcsEvent.BranchUpdated, { branch: next.branch.current })
     })
 
-    if (vcs && native) {
+    if (vcs) {
       const store = yield* fs.realPath(vcs.store).pipe(Effect.orElseSucceed(() => vcs.store))
       const isBranchMetadata =
         vcs.type === "git"
