@@ -771,6 +771,74 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
+  it.effect("ignores unknown content block and delta variants", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "message_start", message: { usage: { input_tokens: 5 } } },
+              { type: "content_block_start", index: 0, content_block: { type: "future_block", text: 42 } },
+              { type: "content_block_delta", index: 0, delta: { type: "future_delta", text: 42 } },
+              { type: "content_block_stop", index: 0 },
+              { type: "content_block_start", index: 1, content_block: { type: "text", text: "" } },
+              { type: "content_block_delta", index: 1, delta: { type: "text_delta", text: "Hello" } },
+              { type: "content_block_stop", index: 1 },
+              { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 1 } },
+              { type: "message_stop" },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.message.content).toEqual([{ type: "text", text: "Hello" }])
+      expect(response.finishReason).toEqual({ normalized: "stop", raw: "end_turn" })
+    }),
+  )
+
+  it.effect("rejects malformed recognized content block variants", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "message_start", message: { usage: { input_tokens: 5 } } },
+              { type: "content_block_start", index: 0, content_block: { type: "text", text: 42 } },
+            ),
+          ),
+        ),
+        Effect.flip,
+      )
+
+      expect(error.reason).toMatchObject({
+        _tag: "InvalidProviderOutput",
+        message: "Invalid anthropic/anthropic-messages stream event",
+      })
+    }),
+  )
+
+  it.effect("rejects malformed recognized content delta variants", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "message_start", message: { usage: { input_tokens: 5 } } },
+              { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
+              { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: 42 } },
+            ),
+          ),
+        ),
+        Effect.flip,
+      )
+
+      expect(error.reason).toMatchObject({
+        _tag: "InvalidProviderOutput",
+        message: "Invalid anthropic/anthropic-messages stream event",
+      })
+    }),
+  )
+
   it.effect("rejects malformed recognized SSE events", () =>
     Effect.gen(function* () {
       const error = yield* LLMClient.generate(request).pipe(

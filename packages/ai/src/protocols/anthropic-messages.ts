@@ -1,5 +1,5 @@
 import { Buffer } from "node:buffer"
-import { Effect, Schema } from "effect"
+import { Effect, Option, Schema } from "effect"
 import { Tool } from "@opencode-ai/schema/tool"
 import { Route } from "../route/client.js"
 import { Auth } from "../route/auth.js"
@@ -361,6 +361,8 @@ const AnthropicStreamBlock = Schema.Struct({
   tool_use_id: Schema.optional(Schema.String),
   content: Schema.optional(Schema.Unknown),
 })
+type AnthropicStreamBlock = Schema.Schema.Type<typeof AnthropicStreamBlock>
+const decodeAnthropicStreamBlock = Schema.decodeUnknownOption(AnthropicStreamBlock)
 
 const AnthropicStreamDelta = Schema.Struct({
   type: Schema.optional(Schema.String),
@@ -371,13 +373,15 @@ const AnthropicStreamDelta = Schema.Struct({
   stop_reason: optionalNull(Schema.String),
   stop_sequence: optionalNull(Schema.String),
 })
+type AnthropicStreamDelta = Schema.Schema.Type<typeof AnthropicStreamDelta>
+const decodeAnthropicStreamDelta = Schema.decodeUnknownOption(AnthropicStreamDelta)
 
 const AnthropicEvent = Schema.Struct({
   type: Schema.String,
   index: Schema.optional(Schema.Number),
   message: Schema.optional(Schema.Struct({ usage: Schema.optional(AnthropicUsage) })),
-  content_block: Schema.optional(AnthropicStreamBlock),
-  delta: Schema.optional(AnthropicStreamDelta),
+  content_block: Schema.optional(Schema.Unknown),
+  delta: Schema.optional(Schema.Unknown),
   usage: Schema.optional(AnthropicUsage),
   // `type` and `message` are both required per Anthropic's spec, but
   // OpenAI-compatible proxies and gateway translations occasionally drop one
@@ -1106,7 +1110,7 @@ const SERVER_TOOL_RESULT_NAMES: Record<AnthropicServerToolResultType, string> = 
 
 const isServerToolResultType = (type: string): type is AnthropicServerToolResultType => type in SERVER_TOOL_RESULT_NAMES
 
-const serverToolResultEvent = (block: NonNullable<AnthropicEvent["content_block"]>): LLMEvent | undefined => {
+const serverToolResultEvent = (block: AnthropicStreamBlock): LLMEvent | undefined => {
   if (!block.type || !isServerToolResultType(block.type)) return undefined
   const errorPayload =
     typeof block.content === "object" && block.content !== null && "type" in block.content
@@ -1133,7 +1137,10 @@ const onMessageStart = (state: ParserState, event: AnthropicEvent): StepResult =
   return [usage ? { ...state, usage: mergeUsage(state.usage, usage) } : state, NO_EVENTS]
 }
 
-const onContentBlockStart = (state: ParserState, event: AnthropicEvent): StepResult => {
+const onContentBlockStart = (
+  state: ParserState,
+  event: AnthropicEvent & { readonly content_block: AnthropicStreamBlock },
+): StepResult => {
   const block = event.content_block
   if (!block) return [state, NO_EVENTS]
 
@@ -1224,7 +1231,7 @@ const onContentBlockStart = (state: ParserState, event: AnthropicEvent): StepRes
 
 const onContentBlockDelta = Effect.fn("AnthropicMessages.onContentBlockDelta")(function* (
   state: ParserState,
-  event: AnthropicEvent,
+  event: AnthropicEvent & { readonly delta: AnthropicStreamDelta },
 ) {
   const delta = event.delta
 
@@ -1301,7 +1308,10 @@ const onContentBlockStop = Effect.fn("AnthropicMessages.onContentBlockStop")(fun
   return [{ ...state, lifecycle, tools: result.tools, reasoningSignatures }, events] satisfies StepResult
 })
 
-const onMessageDelta = (state: ParserState, event: AnthropicEvent): StepResult => {
+const onMessageDelta = (
+  state: ParserState,
+  event: AnthropicEvent & { readonly delta?: AnthropicStreamDelta },
+): StepResult => {
   const usage = mergeUsage(state.usage, mapUsage(event.usage))
   return [
     {
@@ -1356,11 +1366,36 @@ const onError = (event: AnthropicEvent) =>
     }),
   )
 
+const isKnownStreamBlockType = (type: string) =>
+  type === "text" ||
+  type === "thinking" ||
+  type === "redacted_thinking" ||
+  type === "tool_use" ||
+  type === "server_tool_use" ||
+  isServerToolResultType(type)
+
+const isKnownStreamDeltaType = (type: string) =>
+  type === "text_delta" || type === "thinking_delta" || type === "signature_delta" || type === "input_json_delta"
+
+const invalidStreamEvent = (event: AnthropicEvent) =>
+  Effect.fail(
+    ProviderShared.eventError(
+      ADAPTER,
+      "Invalid anthropic/anthropic-messages stream event",
+      ProviderShared.encodeJson(event),
+    ),
+  )
+
 const step = (state: ParserState, event: AnthropicEvent) => {
   if (event.type === "message_start") return Effect.succeed(onMessageStart(state, event))
   if (event.type === "content_block_start") {
-    const block = event.content_block
-    if (block && (block.type === "tool_use" || block.type === "server_tool_use")) {
+    if (!ProviderShared.isRecord(event.content_block) || typeof event.content_block.type !== "string")
+      return invalidStreamEvent(event)
+    if (!isKnownStreamBlockType(event.content_block.type)) return Effect.succeed<StepResult>([state, NO_EVENTS])
+    const decoded = decodeAnthropicStreamBlock(event.content_block)
+    if (Option.isNone(decoded)) return invalidStreamEvent(event)
+    const block = decoded.value
+    if (block.type === "tool_use" || block.type === "server_tool_use") {
       if (event.index === undefined)
         return Effect.fail(ProviderShared.eventError(ADAPTER, `Anthropic ${block.type} missing index`))
       if (!block.id)
@@ -1368,11 +1403,22 @@ const step = (state: ParserState, event: AnthropicEvent) => {
           ProviderShared.eventError(ADAPTER, `Anthropic tool_use missing id at index ${event.index}`),
         )
     }
-    return Effect.succeed(onContentBlockStart(state, event))
+    return Effect.succeed(onContentBlockStart(state, { ...event, content_block: block }))
   }
-  if (event.type === "content_block_delta") return onContentBlockDelta(state, event)
+  if (event.type === "content_block_delta") {
+    if (!ProviderShared.isRecord(event.delta) || typeof event.delta.type !== "string") return invalidStreamEvent(event)
+    if (!isKnownStreamDeltaType(event.delta.type)) return Effect.succeed<StepResult>([state, NO_EVENTS])
+    const decoded = decodeAnthropicStreamDelta(event.delta)
+    if (Option.isNone(decoded)) return invalidStreamEvent(event)
+    return onContentBlockDelta(state, { ...event, delta: decoded.value })
+  }
   if (event.type === "content_block_stop") return onContentBlockStop(state, event)
-  if (event.type === "message_delta") return Effect.succeed(onMessageDelta(state, event))
+  if (event.type === "message_delta") {
+    if (event.delta === undefined) return Effect.succeed(onMessageDelta(state, { ...event, delta: undefined }))
+    const decoded = decodeAnthropicStreamDelta(event.delta)
+    if (Option.isNone(decoded)) return invalidStreamEvent(event)
+    return Effect.succeed(onMessageDelta(state, { ...event, delta: decoded.value }))
+  }
   if (event.type === "message_stop") return onMessageStop(state)
   if (event.type === "error") return onError(event)
   return Effect.succeed<StepResult>([state, NO_EVENTS])
