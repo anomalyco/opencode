@@ -1132,7 +1132,7 @@ export function Session(props: {
       group: "Session",
       run: () => {
         if (composer.open || session()?.parentID) setComposer("open", false)
-        else setComposer("open", true)
+        else setComposer({ open: true, tab: "subagents" })
         dialog.clear()
       },
     },
