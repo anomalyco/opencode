@@ -778,11 +778,15 @@ describe("Anthropic Messages route", () => {
           fixedResponse(
             sseEvents(
               { type: "message_start", message: { usage: { input_tokens: 5 } } },
+              { type: "future_event", content_block: 42, delta: 42 },
               { type: "content_block_start", index: 0 },
               { type: "content_block_start", index: 0, content_block: { type: "future_block", text: 42 } },
               { type: "content_block_delta", index: 0 },
               { type: "content_block_delta", index: 0, delta: { text: "ignored" } },
               { type: "content_block_delta", index: 0, delta: { type: "future_delta", text: 42 } },
+              { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "hidden" } },
+              { type: "content_block_delta", index: 0, delta: { type: "thinking_delta", thinking: "hidden" } },
+              { type: "content_block_delta", index: 0, delta: { type: "signature_delta", signature: "hidden" } },
               { type: "content_block_stop", index: 0 },
               { type: "content_block_start", index: 1, content_block: { type: "text", text: "" } },
               { type: "content_block_delta", index: 1, delta: { type: "text_delta", text: "Hello" } },
@@ -839,6 +843,32 @@ describe("Anthropic Messages route", () => {
         _tag: "InvalidProviderOutput",
         message: "Invalid anthropic/anthropic-messages stream event",
       })
+    }),
+  )
+
+  it.effect("rejects malformed payloads on unrelated stream events", () =>
+    Effect.gen(function* () {
+      const events = [
+        { type: "message_start", message: { usage: { input_tokens: 1 } }, delta: 42 },
+        { type: "content_block_stop", index: 0, content_block: { type: "text", text: 42 } },
+        { type: "message_delta", delta: { stop_reason: 42 } },
+        { type: "message_stop", delta: { text: 42 } },
+        { type: "error", error: { type: "overloaded_error", message: "busy" }, content_block: 42 },
+      ]
+
+      yield* Effect.forEach(events, (event) =>
+        Effect.gen(function* () {
+          const error = yield* LLMClient.generate(request).pipe(
+            Effect.provide(fixedResponse(sseEvents(event))),
+            Effect.flip,
+          )
+
+          expect(error.reason).toMatchObject({
+            _tag: "InvalidProviderOutput",
+            message: "Invalid anthropic/anthropic-messages stream event",
+          })
+        }),
+      )
     }),
   )
 

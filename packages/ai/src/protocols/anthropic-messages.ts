@@ -1236,6 +1236,7 @@ const onContentBlockDelta = Effect.fn("AnthropicMessages.onContentBlockDelta")(f
   const delta = event.delta
 
   if (delta?.type === "text_delta" && delta.text) {
+    if (!state.lifecycle.text.has(`text-${event.index ?? 0}`)) return [state, NO_EVENTS] satisfies StepResult
     const events: LLMEvent[] = []
     return [
       { ...state, lifecycle: Lifecycle.textDelta(state.lifecycle, events, `text-${event.index ?? 0}`, delta.text) },
@@ -1244,6 +1245,7 @@ const onContentBlockDelta = Effect.fn("AnthropicMessages.onContentBlockDelta")(f
   }
 
   if (delta?.type === "thinking_delta" && delta.thinking) {
+    if (!state.lifecycle.reasoning.has(`reasoning-${event.index ?? 0}`)) return [state, NO_EVENTS] satisfies StepResult
     const events: LLMEvent[] = []
     return [
       {
@@ -1256,6 +1258,7 @@ const onContentBlockDelta = Effect.fn("AnthropicMessages.onContentBlockDelta")(f
 
   if (delta?.type === "signature_delta" && delta.signature) {
     const index = event.index ?? 0
+    if (!state.lifecycle.reasoning.has(`reasoning-${index}`)) return [state, NO_EVENTS] satisfies StepResult
     return [
       {
         ...state,
@@ -1387,6 +1390,19 @@ const invalidStreamEvent = (event: AnthropicEvent) =>
   )
 
 const step = (state: ParserState, event: AnthropicEvent) => {
+  if (!SSE_EVENTS.has(event.type)) return Effect.succeed<StepResult>([state, NO_EVENTS])
+  if (
+    event.type !== "content_block_start" &&
+    event.content_block !== undefined &&
+    Option.isNone(decodeAnthropicStreamBlock(event.content_block))
+  )
+    return invalidStreamEvent(event)
+  if (
+    event.type !== "content_block_delta" &&
+    event.delta !== undefined &&
+    Option.isNone(decodeAnthropicStreamDelta(event.delta))
+  )
+    return invalidStreamEvent(event)
   if (event.type === "message_start") return Effect.succeed(onMessageStart(state, event))
   if (event.type === "content_block_start") {
     if (event.content_block === undefined) return Effect.succeed<StepResult>([state, NO_EVENTS])
