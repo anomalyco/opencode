@@ -138,6 +138,55 @@ describe("plugin.azure", () => {
     expect(hooks.auth?.methods[1].prompts).toEqual(hooks.auth?.methods[0].prompts)
   })
 
+  test("lists Azure CLI resources and allows entering another resource", () => {
+    delete process.env.AZURE_RESOURCE_NAME
+    const hooks = createAzureAuthHooks(azureShell([]), fetch, [
+      { name: "first-resource", resourceGroup: "first-group" },
+      { name: "second-resource", resourceGroup: "second-group" },
+    ])
+
+    expect(oauthMethod(hooks).prompts).toEqual([
+      {
+        type: "select",
+        key: "resourceSelection",
+        message: "Select Azure resource",
+        options: [
+          { label: "first-resource", value: "first-resource", hint: "first-group" },
+          { label: "second-resource", value: "second-resource", hint: "second-group" },
+          { label: "Enter another resource name", value: "__manual__" },
+        ],
+      },
+      {
+        type: "text",
+        key: "resourceName",
+        message: "Enter Azure Resource Name",
+        placeholder: "e.g. my-models",
+        when: { key: "resourceSelection", op: "eq", value: "__manual__" },
+      },
+    ])
+  })
+
+  test("uses the selected Azure CLI resource", async () => {
+    const hooks = createAzureAuthHooks(azureShell([]), fetch, [
+      { name: "selected-resource", resourceGroup: "selected-group" },
+    ])
+    const authorization = await oauthMethod(hooks).authorize({ resourceSelection: "selected-resource" })
+    if (authorization.method !== "auto") throw new Error("Unexpected Azure authorization method")
+
+    expect(await authorization.callback()).toMatchObject({ type: "success", accountId: "selected-resource" })
+  })
+
+  test("uses a manually entered Azure resource that was not listed", async () => {
+    const hooks = createAzureAuthHooks(azureShell([]), fetch, [{ name: "listed-resource", resourceGroup: "group" }])
+    const authorization = await oauthMethod(hooks).authorize({
+      resourceSelection: "__manual__",
+      resourceName: "unlisted-resource",
+    })
+    if (authorization.method !== "auto") throw new Error("Unexpected Azure authorization method")
+
+    expect(await authorization.callback()).toMatchObject({ type: "success", accountId: "unlisted-resource" })
+  })
+
   test("checks Azure CLI and stores the resource name", async () => {
     const scopes: string[] = []
     const hooks = createAzureAuthHooks(azureShell(scopes))

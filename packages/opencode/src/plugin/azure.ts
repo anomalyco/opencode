@@ -44,14 +44,24 @@ type AzureCommand = {
 }
 
 type AzureShell = (strings: TemplateStringsArray, ...values: string[]) => AzureCommand
+type AzureAccount = { readonly name: string; readonly resourceGroup: string }
 
 export async function AzureAuthPlugin(input: PluginInput): Promise<Hooks> {
-  return createAzureAuthHooks(input.$)
+  const accounts =
+    !process.env.AZURE_RESOURCE_NAME && Bun.which("az", { PATH: process.env.PATH })
+      ? await input.$`az cognitiveservices account list --output json --only-show-errors`
+          .quiet()
+          .json()
+          .then(decodeAzureAccounts)
+          .catch(() => [])
+      : []
+  return createAzureAuthHooks(input.$, fetch, accounts)
 }
 
 export function createAzureAuthHooks(
   shell: AzureShell,
   request: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> = fetch,
+  accounts: readonly AzureAccount[] = [],
 ): Hooks {
   const tokens = new Map<string, { token: string; expires: number }>()
   async function token(scope: string) {
@@ -77,6 +87,31 @@ export function createAzureAuthHooks(
       placeholder: "e.g. my-models",
     })
   }
+  const oauthPrompts =
+    accounts.length > 0 && !process.env.AZURE_RESOURCE_NAME
+      ? [
+          {
+            type: "select" as const,
+            key: "resourceSelection",
+            message: "Select Azure resource",
+            options: [
+              ...accounts.map((account) => ({
+                label: account.name,
+                value: account.name,
+                hint: account.resourceGroup,
+              })),
+              { label: "Enter another resource name", value: "__manual__" },
+            ],
+          },
+          {
+            type: "text" as const,
+            key: "resourceName",
+            message: "Enter Azure Resource Name",
+            placeholder: "e.g. my-models",
+            when: { key: "resourceSelection", op: "eq" as const, value: "__manual__" },
+          },
+        ]
+      : prompts
 
   return {
     provider: {
@@ -123,14 +158,17 @@ export function createAzureAuthHooks(
         {
           type: "oauth",
           label: "Microsoft Entra ID (Azure CLI)",
-          prompts,
+          prompts: oauthPrompts,
           async authorize(inputs) {
             return {
               url: "",
               instructions: "Sign in with `az login` before continuing.",
               method: "auto",
               callback: async () => {
-                const resourceName = inputs?.resourceName ?? process.env.AZURE_RESOURCE_NAME
+                const resourceName =
+                  inputs?.resourceName ??
+                  (inputs?.resourceSelection === "__manual__" ? undefined : inputs?.resourceSelection) ??
+                  process.env.AZURE_RESOURCE_NAME
                 if (!resourceName) throw new Error("Azure Resource Name is required")
 
                 await token(AZURE_COGNITIVE_SERVICES_SCOPE)
