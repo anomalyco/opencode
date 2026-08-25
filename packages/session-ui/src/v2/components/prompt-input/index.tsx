@@ -171,12 +171,14 @@ export function PromptInputV2(props: PromptInputV2Props) {
             }}
             onKeyDown={(event) => {
               if (props.controller.onKeyDown(event)) return
-              if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+              if (event.key === "Enter" && !event.shiftKey && !props.controller.imeComposing(event)) {
                 event.preventDefault()
                 if (event.repeat) return
                 props.controller.submit()
               }
             }}
+            onCompositionStart={props.controller.onCompositionStart}
+            onCompositionEnd={props.controller.onCompositionEnd}
             onKeyUp={updateCursor}
             onPointerUp={updateCursor}
             onPaste={props.controller.onPaste}
