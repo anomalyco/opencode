@@ -117,7 +117,7 @@ describe("AzurePlugin", () => {
             {
               type: "string",
               key: "resourceName",
-              title: "Enter Azure Resource Name",
+              title: "API key · Resource name",
               placeholder: "e.g. my-models",
               required: true,
             },
@@ -140,7 +140,7 @@ describe("AzurePlugin", () => {
             {
               type: "string",
               key: "resourceName",
-              title: "Enter Azure Resource Name",
+              title: "Microsoft Entra ID (Azure CLI) · Resource name",
               placeholder: "e.g. my-models",
               required: true,
             },

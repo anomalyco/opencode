@@ -79,27 +79,33 @@ export const AzurePlugin = define({
       return refreshed
     })
 
-    const form = iife(() => {
-      if (resolveResourceName(configured) || typeof configured?.baseURL === "string") return
-      return Form.Fields.make([
-        {
-          type: "string",
-          key: "resourceName",
-          title: "Enter Azure Resource Name",
-          placeholder: "e.g. my-models",
-          required: true,
-        },
-      ])
-    })
+    const form = (label: string) =>
+      iife(() => {
+        if (resolveResourceName(configured) || typeof configured?.baseURL === "string") return
+        return Form.Fields.make([
+          {
+            type: "string",
+            key: "resourceName",
+            title: `${label} · Resource name`,
+            placeholder: "e.g. my-models",
+            required: true,
+          },
+        ])
+      })
 
     yield* ctx.integration.transform((draft) => {
       draft.method.update({
         integrationID: Provider.ID.azure,
-        method: { type: "key", label: "API key", form },
+        method: { type: "key", label: "API key", form: form("API key") },
       })
       draft.method.update({
         integrationID: Provider.ID.azure,
-        method: { id: methodID, type: "oauth", label: "Microsoft Entra ID (Azure CLI)", form },
+        method: {
+          id: methodID,
+          type: "oauth",
+          label: "Microsoft Entra ID (Azure CLI)",
+          form: form("Microsoft Entra ID (Azure CLI)"),
+        },
         authorize: (answer) =>
           Effect.succeed({
             mode: "auto" as const,
