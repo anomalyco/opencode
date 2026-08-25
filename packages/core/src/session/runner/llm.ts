@@ -333,7 +333,7 @@ const layer = Layer.effect(
       yield* InstructionState.prepare(db, bus, selected.instructions, selected.session.id)
       const promoted = promotable ? yield* SessionInbox.promote(db, bus, selected.session.id, promotable) : 0
       if (promoted > 0)
-        yield* FiberMap.run(titles, sessionID, title.generateForFirstPrompt(sessionID).pipe(Effect.ignore), {
+        yield* FiberMap.run(titles, sessionID, title.generate(sessionID).pipe(Effect.ignore), {
           onlyIfMissing: true,
         })
       // Promoted input opens a fresh step allowance.

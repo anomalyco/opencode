@@ -768,8 +768,13 @@ export function Session(props: { verticalTabsWidth: number }) {
       title: "Rename session",
       id: "session.rename",
       group: "Session",
-      slash: { name: "rename" },
-      run: () => DialogSessionRename.show(dialog, route.sessionID, session()?.title),
+      slash: { name: "rename", arguments: true as const },
+      run: (input?: string) => {
+        if (input === undefined) return DialogSessionRename.show(dialog, route.sessionID, session()?.title)
+        void client.api.session
+          .rename({ sessionID: route.sessionID, title: input.trim() })
+          .catch((error) => toast.error(error))
+      },
     },
     {
       title: "Jump to message",
