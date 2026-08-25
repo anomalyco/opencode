@@ -7,12 +7,14 @@ import { useClient } from "../../context/client"
 import { useToast } from "../../ui/toast"
 import { DialogMoveSession, type MoveSessionSelection } from "../dialog-move-session"
 import { useData } from "../../context/data"
+import { useLocation } from "../../context/location"
 
 export function usePromptMove(input: { projectID: () => string | undefined; sessionID: () => string | undefined }) {
   const dialog = useDialog()
   const client = useClient()
   const toast = useToast()
   const data = useData()
+  const location = useLocation()
   const paths = useTuiPaths()
   const [creating, setCreating] = createSignal(false)
   const [creatingDots, setCreatingDots] = createSignal(3)
@@ -80,6 +82,7 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
           const sessionID = input.sessionID()
           if (!sessionID) {
             setDestination(selection)
+            if (selection.type === "directory") location.set({ directory: selection.directory })
             dialog.clear()
             return
           }
