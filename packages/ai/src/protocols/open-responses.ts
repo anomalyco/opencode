@@ -79,10 +79,60 @@ const OpenResponsesReasoningItem = Schema.Struct({
   encrypted_content: optionalNull(Schema.String),
 })
 
-const OpenResponsesHostedToolItem = Schema.StructWithRest(
-  Schema.Struct({ type: Schema.String.check(Schema.isPattern(/^(?!function_call$).+_call$/)), id: Schema.String }),
-  [Schema.Record(Schema.String, Schema.Unknown)],
+const OpenResponsesWebSearchCall = Schema.StructWithRest(
+  Schema.Struct({
+    type: Schema.tag("web_search_call"),
+    id: Schema.String,
+    status: Schema.optional(Schema.String),
+    action: optionalNull(JsonObject),
+  }),
+  [JsonObject],
 )
+
+const OpenResponsesFileSearchCall = Schema.StructWithRest(
+  Schema.Struct({
+    type: Schema.tag("file_search_call"),
+    id: Schema.String,
+    status: Schema.optional(Schema.String),
+    queries: Schema.optional(Schema.Array(Schema.String)),
+    results: optionalNull(Schema.Array(JsonObject)),
+  }),
+  [JsonObject],
+)
+
+const OpenResponsesCodeInterpreterCall = Schema.StructWithRest(
+  Schema.Struct({
+    type: Schema.tag("code_interpreter_call"),
+    id: Schema.String,
+    status: Schema.optional(Schema.String),
+    code: optionalNull(Schema.String),
+    container_id: optionalNull(Schema.String),
+    outputs: optionalNull(Schema.Array(JsonObject)),
+  }),
+  [JsonObject],
+)
+
+const OpenResponsesMCPCall = Schema.StructWithRest(
+  Schema.Struct({
+    type: Schema.tag("mcp_call"),
+    id: Schema.String,
+    status: Schema.optional(Schema.String),
+    server_label: Schema.optional(Schema.String),
+    name: Schema.optional(Schema.String),
+    arguments: Schema.optional(Schema.String),
+    output: optionalNull(Schema.String),
+    error: Schema.optional(Schema.Unknown),
+  }),
+  [JsonObject],
+)
+
+export const HostedToolItem = Schema.Union([
+  OpenResponsesWebSearchCall,
+  OpenResponsesFileSearchCall,
+  OpenResponsesCodeInterpreterCall,
+  OpenResponsesMCPCall,
+])
+export type HostedToolItem = Schema.Schema.Type<typeof HostedToolItem>
 
 // `function_call_output.output` accepts either a plain string or an ordered
 // array of content items so tools can return images and files in addition to text.
@@ -123,11 +173,17 @@ export const InputItem = Schema.Union([
     call_id: Schema.String,
     output: OpenResponsesFunctionCallOutput,
   }),
-  OpenResponsesHostedToolItem,
+  HostedToolItem,
 ])
 type OpenResponsesInputItem = Schema.Schema.Type<typeof InputItem>
+export type ExtendedHostedToolItem = {
+  readonly type: string
+  readonly id: string
+  readonly [key: string]: unknown
+}
 type LoweredInputItem =
   | OpenResponsesInputItem
+  | ExtendedHostedToolItem
   | {
       readonly type: "message"
       readonly id?: string
@@ -317,7 +373,7 @@ export const Event = Schema.StructWithRest(
 export type Event = Schema.Schema.Type<typeof Event>
 
 // Which lowered input item a persisted item id is about to be attached to.
-export type ItemKind = "message" | "reasoning" | "function-call" | "reference"
+export type ItemKind = "message" | "reasoning" | "function-call" | "hosted-tool"
 
 export interface Extension {
   readonly id: string
@@ -327,6 +383,7 @@ export interface Extension {
     readonly media: ProviderShared.NormalizedMedia
     readonly request: LLMRequest
   }) => MediaInput | undefined
+  readonly lowerHostedToolItem?: (item: unknown) => ExtendedHostedToolItem | undefined
   // Optional grammar check applied before a persisted item id is resent as
   // part of replayed history. Returning false drops the id; every lowered
   // item treats a dropped id the same as an absent one.
@@ -607,17 +664,15 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
         if (part.type === "tool-result" && part.providerExecuted === true) {
           flushText()
           const id = itemID(part.providerMetadata, providerMetadataKey)
-          if (
-            acceptsItemID(extension, "reference", id) &&
-            part.result.type === "json" &&
-            ProviderShared.isRecord(part.result.value) &&
-            part.result.value.id === id &&
-            typeof part.result.value.type === "string" &&
-            part.result.value.type !== "function_call" &&
-            part.result.value.type.endsWith("_call")
-          ) {
+          const hosted =
+            part.result.type !== "json"
+              ? undefined
+              : Schema.is(HostedToolItem)(part.result.value)
+                ? part.result.value
+                : extension.lowerHostedToolItem?.(part.result.value)
+          if (acceptsItemID(extension, "hosted-tool", id) && hosted?.id === id) {
             if (!hostedToolItems.has(id)) {
-              input.push({ ...part.result.value, id, type: part.result.value.type })
+              input.push(hosted)
               hostedToolItems.add(id)
             }
             continue

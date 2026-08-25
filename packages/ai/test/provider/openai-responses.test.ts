@@ -3000,6 +3000,37 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("replays OpenAI hosted tool extensions but rejects foreign and unknown items", () =>
+    Effect.gen(function* () {
+      const items = [
+        { type: "computer_call", id: "computer_1", status: "completed", action: { type: "click", x: 1, y: 2 } },
+        { type: "x_search_call", id: "x_search_1", status: "completed" },
+        { type: "future_call", id: "future_1", status: "completed" },
+      ]
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: items.map((item) =>
+            Message.assistant({
+              type: "tool-result",
+              id: item.id,
+              name: item.type,
+              result: { type: "json", value: item },
+              providerExecuted: true,
+              providerMetadata: { openai: { itemId: item.id } },
+            }),
+          ),
+        }),
+      )
+
+      expect(prepared.body.input).toEqual([
+        items[0],
+        { role: "user", content: [{ type: "input_text", text: JSON.stringify(items[1]) }] },
+        { role: "user", content: [{ type: "input_text", text: JSON.stringify(items[2]) }] },
+      ])
+    }),
+  )
+
   it.effect("preserves foreign hosted tool results as portable message content when storage is enabled", () =>
     Effect.gen(function* () {
       const item = { type: "web_search_call", id: "ws_1", status: "completed" }

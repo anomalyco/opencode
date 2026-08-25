@@ -14,9 +14,9 @@ import { sseEvents } from "../lib/sse.js"
 const model = XAI.configure({ apiKey: "test", baseURL: "https://api.x.ai/v1" }).responses("grok-4.6")
 
 describe("xAI Responses route", () => {
-  it.effect("extends the Open Responses baseline directly", () =>
+  it.effect("composes the Open Responses baseline with xAI extensions", () =>
     Effect.gen(function* () {
-      expect(XAIResponses.protocol.body).toBe(OpenResponses.protocol.body)
+      expect(XAIResponses.protocol.body).not.toBe(OpenResponses.protocol.body)
       expect(XAIResponses.protocol.body).not.toBe(OpenAIResponses.protocol.body)
 
       const prepared = yield* compileRequest(LLM.request({ model, prompt: "Hello" }))
@@ -128,6 +128,37 @@ describe("xAI Responses route", () => {
       )
 
       expect(prepared.body.input).toEqual([item])
+    }),
+  )
+
+  it.effect("replays shared and xAI hosted tool items but rejects OpenAI extensions", () =>
+    Effect.gen(function* () {
+      const items = [
+        { type: "web_search_call", id: "ws_1", status: "completed" },
+        { type: "image_generation_call", id: "ig_1", status: "completed", result: "AQID" },
+        { type: "computer_call", id: "computer_1", status: "completed" },
+      ]
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: items.map((item) =>
+            Message.assistant({
+              type: "tool-result",
+              id: item.id,
+              name: item.type,
+              result: { type: "json", value: item },
+              providerExecuted: true,
+              providerMetadata: { xai: { itemId: item.id } },
+            }),
+          ),
+        }),
+      )
+
+      expect(prepared.body.input).toEqual([
+        items[0],
+        items[1],
+        { role: "user", content: [{ type: "input_text", text: JSON.stringify(items[2]) }] },
+      ])
     }),
   )
 
