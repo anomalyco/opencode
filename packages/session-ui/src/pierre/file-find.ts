@@ -31,6 +31,17 @@ function hostForNode(node: unknown) {
   }
 }
 
+export function findShortcut(
+  event: Pick<KeyboardEvent, "ctrlKey" | "metaKey" | "key">,
+  editable: boolean,
+): "find" | "next" | undefined {
+  if (!(event.metaKey || event.ctrlKey)) return undefined
+  const key = event.key.toLowerCase()
+  if (key === "f") return "find" as const
+  if (key === "g" && !editable) return "next" as const
+  return undefined
+}
+
 function installShortcuts() {
   if (installed) return
   if (typeof window === "undefined") return
@@ -40,13 +51,9 @@ function installShortcuts() {
     "keydown",
     (event) => {
       if (event.defaultPrevented) return
-      if (isEditable(event.target)) return
 
-      const mod = event.metaKey || event.ctrlKey
-      if (!mod) return
-
-      const key = event.key.toLowerCase()
-      if (key === "g") {
+      const shortcut = findShortcut(event, isEditable(event.target))
+      if (shortcut === "next") {
         const host = current
         if (!host || !host.isOpen()) return
         event.preventDefault()
@@ -55,7 +62,7 @@ function installShortcuts() {
         return
       }
 
-      if (key !== "f") return
+      if (shortcut !== "find") return
 
       const active = current
       if (active && active.isOpen()) {
@@ -100,7 +107,8 @@ function scrollParent(el: HTMLElement): HTMLElement | undefined {
 type CreateFileFindOptions = {
   wrapper: () => HTMLElement | undefined
   overlay: () => HTMLDivElement | undefined
-  getRoot: () => ShadowRoot | undefined
+  getRoot: () => ShadowRoot | HTMLElement | undefined
+  selector?: string
 }
 
 export function createFileFind(opts: CreateFileFindOptions) {
@@ -229,12 +237,12 @@ export function createFileFind(opts: CreateFileFindOptions) {
     })
   }
 
-  const scan = (root: ShadowRoot, value: string) => {
+  const scan = (root: ShadowRoot | HTMLElement, value: string) => {
     const needle = value.toLowerCase()
     const ranges: Range[] = []
-    const cols = Array.from(root.querySelectorAll("[data-content] [data-line], [data-column-content]")).filter(
-      (node): node is HTMLElement => node instanceof HTMLElement,
-    )
+    const cols = Array.from(
+      root.querySelectorAll(opts.selector ?? "[data-content] [data-line], [data-column-content]"),
+    ).filter((node): node is HTMLElement => node instanceof HTMLElement)
 
     for (const col of cols) {
       const text = col.textContent
