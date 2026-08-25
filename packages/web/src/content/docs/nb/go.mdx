@@ -7,7 +7,7 @@ import config from "../../../../config.mjs"
 export const console = config.console
 export const email = `mailto:${config.email}`
 
-OpenCode Go er et lavkostnadsabonnement — **$5 for din første måned**, deretter **$10/måned** — som gir deg pålitelig tilgang til populære åpne kodemodeller.
+OpenCode Go er et lavkostnadsabonnement til **$10/måned** som gir deg pålitelig tilgang til populære åpne kodemodeller.
 
 Go fungerer som enhver annen leverandør i OpenCode. Du abonnerer på OpenCode Go og
 får din API-nøkkel. Det er **helt valgfritt**, og du trenger ikke å bruke det for å
@@ -39,7 +39,7 @@ For å fikse dette, gjorde vi et par ting:
 3. Til slutt utførte vi ytelsestester på kombinasjonen av modell og leverandør, og kom frem
    til en liste som vi trygt kan anbefale.
 
-OpenCode Go gir deg tilgang til disse modellene for **$5 for din første måned**, deretter **$10/måned**.
+OpenCode Go gir deg tilgang til disse modellene for **$10/måned**.
 
 ---
 
@@ -67,6 +67,7 @@ Den nåværende listen over modeller inkluderer:
 - **Kimi K3**
 - **Kimi K2.7 Code**
 - **Kimi K2.6**
+- **LongCat-2.0**
 - **MiMo-V2.5**
 - **MiMo-V2.5-Pro**
 - **MiniMax M3**
@@ -108,6 +109,7 @@ Tabellen nedenfor gir et estimert antall forespørsler basert på typiske bruksm
 | Kimi K3                      | 110                      | 250                  | 490                    |
 | Kimi K2.7 Code               | 1,350                    | 3,380                | 6,750                  |
 | Kimi K2.6                    | 1,150                    | 2,880                | 5,750                  |
+| LongCat-2.0                  | 11,400                   | 28,600               | 57,200                 |
 | MiMo-V2.5                    | 30,100                   | 75,200               | 150,400                |
 | MiMo-V2.5-Pro                | 3,250                    | 8,150                | 16,300                 |
 | MiniMax M3                   | 3,200                    | 8,000                | 16,000                 |
@@ -130,6 +132,7 @@ Estimatene er basert på observerte forespørselsmønstre:
 - GPT 5.6 Luna — 1 000 input, 50 000 bufret, 220 output-tokens per forespørsel
 - Kimi K3 — 1 050 input, 76 500 bufret, 300 output-tokens per forespørsel
 - Kimi K2.7/K2.6 — 870 input, 55 000 bufret, 200 output-tokens per forespørsel
+- LongCat-2.0 — 920 input, 88 900 bufret, 200 output-tokens per forespørsel
 - DeepSeek V4 Pro — 750 input, 82 000 bufret, 290 output-tokens per forespørsel
 - DeepSeek V4 Flash — 410 input, 71 300 bufret, 310 output-tokens per forespørsel
 - DeepSeek V4 Flash Vision Exp — 410 input, 71 300 bufret, 310 output-tokens per forespørsel
@@ -157,6 +160,7 @@ Estimatene er også basert på følgende priser per 1M tokens og den månedlige 
 | Kimi K3                                 | $3.00  | $15.00 | $0.30       | -            | $15  |
 | Kimi K2.7 Code                          | $0.95  | $4.00  | $0.19       | -            | $60  |
 | Kimi K2.6                               | $0.95  | $4.00  | $0.16       | -            | $60  |
+| LongCat-2.0                             | $0.30  | $1.20  | $0.006      | -            | $60  |
 | MiMo V2.5                               | $0.14  | $0.28  | $0.0028     | -            | $60  |
 | MiMo V2.5 Pro                           | $0.435 | $0.87  | $0.003625   | -            | $15  |
 | MiniMax M3                              | $0.30  | $1.20  | $0.06       | -            | $60  |
@@ -178,7 +182,7 @@ Estimatene er også basert på følgende priser per 1M tokens og den månedlige 
 | Hy3                                     | $0.14  | $0.58  | $0.035      | -            | $60  |
 | Ox Alpha Free                           | -      | -      | -           | -            | -    |
 
-**DeepSeek V4 Flash / V4 Flash Vision Exp / V4 Pro:** Peak-tidene er 01:00-04:00 og 06:00-10:00 UTC; alle andre tider er Off-Peak. [Les mer](https://api-docs.deepseek.com/quick_start/pricing/).
+**DeepSeek V4 Flash / V4 Flash Vision Exp / V4 Pro:** Peak-tidene er 01:00-04:00 og 06:00-10:00 UTC fra mandag til fredag; alle andre tider, inkludert helger, er Off-Peak. [Les mer](https://api-docs.deepseek.com/quick_start/pricing/).
 
 **DeepSeek V4 Flash Vision Exp:** Bilder konverteres til tokens basert på dimensjonene og faktureres som input-tokens sammen med tekst-tokens. [Les mer](https://api-docs.deepseek.com/quick_start/pricing/).
 
@@ -228,6 +232,7 @@ Du kan også få tilgang til Go-modeller gjennom følgende API-endepunkter.
 | Kimi K3                      | kimi-k3                      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Kimi K2.7 Code               | kimi-k2.7-code               | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Kimi K2.6                    | kimi-k2.6                    | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| LongCat-2.0                  | longcat-2.0                  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Pro              | deepseek-v4-pro              | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Flash            | deepseek-v4-flash            | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Flash Vision Exp | deepseek-v4-flash-vision-exp | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
@@ -272,6 +277,7 @@ https://opencode.ai/zen/go/v1/models
 | Kimi K3                      | Brukes ikke   | 0 dager         |
 | Kimi K2.7 Code               | Brukes ikke   | 0 dager         |
 | Kimi K2.6                    | Brukes ikke   | 0 dager         |
+| LongCat-2.0                  | Brukes ikke   | 0 dager         |
 | MiMo-V2.5-Pro                | Brukes ikke   | 0 dager         |
 | MiMo-V2.5                    | Brukes ikke   | 0 dager         |
 | Qwen3.8 Max                  | Brukes ikke   | 0 dager         |
