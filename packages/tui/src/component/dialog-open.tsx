@@ -1,9 +1,10 @@
 import { createMemo, createResource, createSignal, onCleanup, Show } from "solid-js"
 import type { OpenCodeEvent, SessionInfo } from "@opencode-ai/client"
+import path from "path"
 import { useTerminalDimensions } from "@opentui/solid"
 import type { RGBA } from "@opentui/core"
 import { dialogWidth, useDialog } from "../ui/dialog"
-import { DialogSelect, dialogSelectContentWidth } from "../ui/dialog-select"
+import { DialogSelect, dialogSelectContentWidth, type DialogSelectRef } from "../ui/dialog-select"
 import { useRoute } from "../context/route"
 import { useData } from "../context/data"
 import { useClient } from "../context/client"
@@ -23,7 +24,10 @@ import { projectName } from "../util/project"
 const RECENT_LIMIT = 8
 export const DialogOpenKey = Symbol("DialogOpen")
 
-type OpenTarget = { type: "session"; sessionID: string } | { type: "project"; directory: string }
+type OpenTarget =
+  | { type: "session"; sessionID: string }
+  | { type: "project"; directory: string }
+  | { type: "browse"; directory: string }
 
 export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: SessionInfo[]) => void }) {
   const dialog = useDialog()
@@ -75,6 +79,19 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
       () => false,
     ),
   )
+  const [directory, setDirectory] = createSignal<string>()
+  let select: DialogSelectRef<OpenTarget> | undefined
+  function browse(next?: string) {
+    select?.clearFilter()
+    setSelectionMoved(false)
+    setDirectory(next)
+  }
+  const [entries] = createResource(directory, (directory) =>
+    client.api.file
+      .list({ location: { directory, workspace: location.ref?.workspaceID ?? data.location.default().workspaceID } })
+      .then((result) => result.data.filter((entry) => entry.type === "directory"))
+      .catch(() => undefined),
+  )
 
   const [matched] = createResource(
     () => {
@@ -119,15 +136,17 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
     const sessionOptions = recent.map((session) => {
       const project = data.project.get(session.projectID)
       const name = projectName(project)
+      const basename = path.basename(session.location.directory)
+      const label = name && name.toLowerCase() !== basename.toLowerCase() ? `${name} · ${basename}` : name || basename
       const running =
         data.session.status(session.id) === "running" ||
         data.session.family(session.id).some((id) => data.session.status(id) === "running")
       return {
         title: withTimestampedFallback(session),
-        searchText: session.id,
+        searchText: `${session.id} ${session.location.directory}`,
         value: { type: "session", sessionID: session.id } as OpenTarget,
         category: "Sessions",
-        footer: `${name ? `${Locale.truncate(name, 20)} · ` : ""}${timeAgo(session.time.updated)}`,
+        footer: `${label ? `${Locale.truncate(label, 30)} · ` : ""}${timeAgo(session.time.updated)}`,
         onSelect: () => location.set(session.location),
         gutter: running
           ? (color: RGBA) => <Spinner color={color} />
@@ -137,43 +156,107 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
       }
     })
 
-    const current = location.current?.project
+    const current = location.ref?.directory ?? location.current?.directory
     const seen = new Set<string>()
-    const projectOptions = data.project
-      .list()
-      .filter((project) => {
-        if (project.canonical === "/" || seen.has(project.canonical)) return false
-        seen.add(project.canonical)
+    const projectOptions = [
+      ...data.project
+        .list()
+        .flatMap((project) => [project.canonical, ...project.sandboxes].map((directory) => ({ directory, project }))),
+      ...sessions().map((session) => ({
+        directory: session.location.directory,
+        project: data.project.get(session.projectID),
+      })),
+    ]
+      .filter((item) => {
+        if (item.directory === "/" || seen.has(item.directory)) return false
+        seen.add(item.directory)
         return true
       })
-      .map((project) => {
-        const title = projectName(project) ?? project.canonical
-        const footer = abbreviateHome(project.canonical, paths.home)
+      .map((item) => {
+        const title =
+          item.directory === item.project?.canonical
+            ? (projectName(item.project) ?? path.basename(item.directory))
+            : path.basename(item.directory)
+        const footer = abbreviateHome(item.directory, paths.home)
         const width =
           dialogSelectContentWidth(Math.min(dialogWidth("large"), dimensions().width - 2)) - stringWidth(title)
         return {
           title,
           footer: truncateFilePath(footer, width),
-          searchText: footer,
-          value: { type: "project", directory: project.canonical } as OpenTarget,
+          searchText: `${footer} ${projectName(item.project) ?? ""}`,
+          value: { type: "project", directory: item.directory } as OpenTarget,
           category: "Projects",
           gutter:
-            project.canonical === current?.canonical
+            item.directory === current ||
+            (item.directory === location.current?.project.canonical && (!current || !seen.has(current)))
               ? () => <text fg={theme.text.formfield.selected}>●</text>
               : undefined,
         }
       })
 
-    return [...sessionOptions, ...projectOptions]
+    return [
+      ...sessionOptions,
+      ...projectOptions,
+      {
+        title: "Browse directories",
+        footer: truncateFilePath(
+          abbreviateHome(current ?? paths.cwd, paths.home),
+          dialogSelectContentWidth(Math.min(dialogWidth("large"), dimensions().width - 2)) -
+            stringWidth("Browse directories"),
+        ),
+        value: { type: "browse", directory: current ?? paths.cwd } as OpenTarget,
+        category: "Projects",
+      },
+    ]
+  })
+
+  const directoryOptions = createMemo(() => {
+    const current = directory()
+    if (!current) return []
+    return [
+      {
+        title: "Open this directory",
+        footer: truncateFilePath(
+          abbreviateHome(current, paths.home),
+          dialogSelectContentWidth(Math.min(dialogWidth("large"), dimensions().width - 2)) -
+            stringWidth("Open this directory"),
+        ),
+        value: { type: "project", directory: current } as OpenTarget,
+        category: "Current",
+      },
+      ...(path.dirname(current) !== current
+        ? [
+            {
+              title: "..",
+              value: { type: "browse", directory: path.dirname(current) } as OpenTarget,
+              category: "Current",
+            },
+          ]
+        : []),
+      ...(entries() ?? [])
+        .toSorted((a, b) => a.path.localeCompare(b.path))
+        .map((entry) => ({
+          title: path.basename(entry.path),
+          value: { type: "browse", directory: path.resolve(current, entry.path) } as OpenTarget,
+          category: "Directories",
+        })),
+    ]
   })
 
   return (
     <DialogSelect
+      ref={(value) => (select = value)}
       title="Open"
-      placeholder="Search sessions and projects…"
-      options={options()}
-      current={currentSessionID() ? ({ type: "session", sessionID: currentSessionID()! } as OpenTarget) : undefined}
-      focusCurrent={false}
+      placeholder={directory() ? abbreviateHome(directory()!, paths.home) : "Search sessions and projects…"}
+      options={directory() ? directoryOptions() : options()}
+      current={
+        directory()
+          ? ({ type: "project", directory: directory()! } as OpenTarget)
+          : currentSessionID()
+            ? ({ type: "session", sessionID: currentSessionID()! } as OpenTarget)
+            : undefined
+      }
+      focusCurrent={Boolean(directory())}
       sectionNavigation={true}
       preserveSelection={selectionMoved()}
       onMove={() => setSelectionMoved(true)}
@@ -198,24 +281,58 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
           </Show>
         </box>
       }
+      bindings={[
+        {
+          bind: "ctrl+o",
+          title: directory() ? "Return to projects" : "Browse directories",
+          group: "Dialog",
+          run: () =>
+            browse(directory() ? undefined : (location.ref?.directory ?? location.current?.directory ?? paths.cwd)),
+        },
+        ...(directory() && path.dirname(directory()!) !== directory()
+          ? [
+              {
+                bind: "ctrl+u",
+                title: "Browse parent directory",
+                group: "Dialog",
+                run: () => browse(path.dirname(directory()!)),
+              },
+            ]
+          : []),
+      ]}
+      footerHints={[
+        { title: directory() ? "back" : "browse", label: "ctrl+o" },
+        ...(directory() && path.dirname(directory()!) !== directory() ? [{ title: "parent", label: "ctrl+u" }] : []),
+      ]}
       noMatchView={
         <box paddingLeft={4} paddingRight={4}>
           <text fg={theme.text.subdued}>
-            {recent.loading || projects.loading || matched.loading
-              ? "Searching sessions and projects…"
-              : shortcuts.get("session.list")
+            {directory()
+              ? entries.loading
+                ? "Loading directories…"
+                : "No matching directories"
+              : recent.loading || projects.loading || matched.loading
+                ? "Searching sessions and projects…"
+                : shortcuts.get("session.list")
                 ? `No matches · search all sessions with ${shortcuts.get("session.list")}`
                 : "No matches"}
           </text>
         </box>
       }
       onSelect={(option) => {
+        if (option.value.type === "browse") {
+          browse(option.value.directory)
+          return
+        }
         dialog.clear()
         if (option.value.type === "session") {
           route.navigate({ type: "session", sessionID: option.value.sessionID })
           return
         }
-        const target = { directory: option.value.directory }
+        const target = {
+          directory: option.value.directory,
+          ...(directory() && location.ref?.workspaceID ? { workspaceID: location.ref.workspaceID } : {}),
+        }
         route.navigate({ type: "home", location: target })
         location.set(target)
       }}
