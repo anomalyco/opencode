@@ -15,7 +15,7 @@
         "headers": {
           "content-type": "application/json"
         },
-        "body": "{\"model\":\"openai.gpt-oss-120b\",\"input\":[{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Reply with exactly: hello\"}]}],\"store\":false,\"max_output_tokens\":256,\"temperature\":0,\"stream\":true}"
+        "body": "{\"model\":\"openai.gpt-oss-120b\",\"input\":[{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Reply with exactly: hello\"}]}],\"store\":false,\"include\":[\"reasoning.encrypted_content\"],\"max_output_tokens\":256,\"temperature\":0,\"stream\":true}"
       },
       "response": {
         "status": 200,

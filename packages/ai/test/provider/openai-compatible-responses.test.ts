@@ -52,7 +52,25 @@ describe("Open Responses-compatible route", () => {
           { role: "user", content: [{ type: "input_text", text: "Say hello." }] },
         ],
         stream: true,
+        store: false,
+        include: ["reasoning.encrypted_content"],
       })
+    }),
+  )
+
+  it.effect("allows callers to override stateless encrypted reasoning defaults", () =>
+    Effect.gen(function* () {
+      const model = configure({
+        apiKey: "test-key",
+        baseURL: "https://responses.example.test/v1",
+        provider: "example",
+      }).model("example-model")
+      const prepared = yield* compileRequest(
+        LLM.request({ model, prompt: "Say hello.", providerOptions: { store: true, include: [] } }),
+      )
+
+      expect(prepared.body.store).toBe(true)
+      expect(prepared.body.include).toBeUndefined()
     }),
   )
 

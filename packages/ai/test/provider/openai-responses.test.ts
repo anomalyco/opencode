@@ -117,6 +117,7 @@ describe("OpenAI Responses route", () => {
           { role: "user", content: [{ type: "input_text", text: "Say hello." }] },
         ],
         store: false,
+        include: ["reasoning.encrypted_content"],
         stream: true,
         max_output_tokens: 20,
         temperature: 0,
@@ -313,7 +314,12 @@ describe("OpenAI Responses route", () => {
       expect(prepared.route).toBe("openai-responses")
       expect(prepared.protocol).toBe("openai-responses")
       expect(prepared.metadata).toEqual({ transport: "http-json" })
-      expect(prepared.body).toMatchObject({ model: "gpt-4.1-mini", store: false, stream: true })
+      expect(prepared.body).toMatchObject({
+        model: "gpt-4.1-mini",
+        store: false,
+        include: ["reasoning.encrypted_content"],
+        stream: true,
+      })
     }),
   )
 
@@ -385,6 +391,7 @@ describe("OpenAI Responses route", () => {
         model: "gpt-4.1-mini",
         input: [{ role: "user", content: [{ type: "input_text", text: "Say hello." }] }],
         store: false,
+        include: ["reasoning.encrypted_content"],
       })
     }),
   )
@@ -1189,6 +1196,7 @@ describe("OpenAI Responses route", () => {
           { type: "function_call_output", call_id: "call_1", output: '{"forecast":"sunny"}' },
         ],
         store: false,
+        include: ["reasoning.encrypted_content"],
         stream: true,
         max_output_tokens: undefined,
         temperature: undefined,
@@ -1633,11 +1641,11 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("omits include when no include is set", () =>
+  it.effect("requests encrypted reasoning by default", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(LLM.request({ model, prompt: "hi", providerOptions: { store: false } }))
 
-      expect(prepared.body.include).toBeUndefined()
+      expect(prepared.body.include).toEqual(["reasoning.encrypted_content"])
     }),
   )
 

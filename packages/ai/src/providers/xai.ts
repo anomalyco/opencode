@@ -42,7 +42,7 @@ const responsesRoute = Route.make({
     name: "xAI Responses",
     rotateAfterMs: RESPONSES_WEBSOCKET_ROTATE_AFTER_MS,
   }),
-  defaults: { providerOptions: { store: false } },
+  defaults: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
 })
 
 const chatRoute = Route.make({
