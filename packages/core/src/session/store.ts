@@ -1,15 +1,32 @@
 export * as SessionStore from "./store.js"
 
-import { and, eq, isNotNull, isNull, sql } from "drizzle-orm"
-import { Context, Effect, Layer } from "effect"
+import { and, eq, gte, isNotNull, isNull, lt, sql } from "drizzle-orm"
+import { Context, Effect, Layer, Schema } from "effect"
 import { Database } from "../database/database.js"
+import { KVTable } from "../kv/sql.js"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { SessionHistory } from "./history.js"
 import { MessageDecodeError } from "./error.js"
 import { SessionMessage } from "./message.js"
 import { Session } from "@opencode-ai/schema/session"
-import { SessionMessageTable, SessionTable } from "./sql.js"
+import { SessionInboxTable, SessionMessageTable, SessionTable } from "./sql.js"
 import { fromRow } from "./info.js"
+
+export type Background =
+  | {
+      readonly type: "shell"
+      readonly sessionID: Session.ID
+      readonly id: string
+      readonly shellID: string
+      readonly description: string
+    }
+  | {
+      readonly type: "subagent"
+      readonly sessionID: Session.ID
+      readonly id: Session.ID
+      readonly agent: string
+      readonly description: string
+    }
 
 export interface Interface {
   readonly get: (sessionID: Session.ID) => Effect.Effect<Session.Info | undefined>
@@ -23,6 +40,7 @@ export interface Interface {
    * children, so resuming orphaned children would duplicate their work.
    */
   readonly listSuspended: () => Effect.Effect<ReadonlyArray<Session.ID>>
+  readonly listBackground: () => Effect.Effect<ReadonlyArray<Background>>
   /**
    * Records the execution claim: the durable write-ahead intent that a turn is
    * (or was) in flight. Set when execution starts; a claim that survives to the
@@ -46,6 +64,8 @@ export interface Interface {
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionStore") {}
+
+const isRecord = Schema.is(Schema.Record(Schema.String, Schema.Json))
 
 const layer = Layer.effect(
   Service,
@@ -82,6 +102,67 @@ const layer = Layer.effect(
             Effect.orDie,
             Effect.map((rows) => rows.map((row) => row.sessionID)),
           )
+      }),
+      listBackground: Effect.fn("SessionStore.listBackground")(function* () {
+        const rows = yield* db
+          .select({ value: KVTable.value })
+          .from(KVTable)
+          .innerJoin(SessionTable, sql`${SessionTable.id} = json_extract(${KVTable.value}, '$.sessionID')`)
+          .where(
+            and(
+              gte(KVTable.key, "session.background/"),
+              lt(KVTable.key, "session.background0"),
+              sql`NOT EXISTS (
+                SELECT 1 FROM ${SessionInboxTable}
+                WHERE ${SessionInboxTable.session_id} = ${SessionTable.id}
+                  AND ${SessionInboxTable.type} = 'synthetic'
+                  AND json_extract(${SessionInboxTable.payload}, '$.metadata.source')
+                    = json_extract(${KVTable.value}, '$.type')
+                  AND json_extract(${SessionInboxTable.payload}, '$.metadata.state')
+                    IN ('completed', 'error', 'cancelled')
+                  AND (
+                    (json_extract(${KVTable.value}, '$.type') = 'shell'
+                      AND json_extract(${SessionInboxTable.payload}, '$.metadata.shellID')
+                        = json_extract(${KVTable.value}, '$.shellID'))
+                    OR (json_extract(${KVTable.value}, '$.type') = 'subagent'
+                      AND json_extract(${SessionInboxTable.payload}, '$.metadata.childID')
+                        = json_extract(${KVTable.value}, '$.id'))
+                  )
+              )`,
+            ),
+          )
+          .all()
+          .pipe(Effect.orDie)
+        return rows.flatMap((row): Background[] => {
+          const value = row.value
+          if (!isRecord(value)) return []
+          if (
+            typeof value.sessionID !== "string" ||
+            typeof value.id !== "string" ||
+            typeof value.description !== "string"
+          )
+            return []
+          if (value.type === "shell" && typeof value.shellID === "string")
+            return [
+              {
+                type: "shell",
+                sessionID: Session.ID.make(value.sessionID),
+                id: value.id,
+                shellID: value.shellID,
+                description: value.description,
+              },
+            ]
+          if (value.type !== "subagent" || typeof value.agent !== "string") return []
+          return [
+            {
+              type: "subagent",
+              sessionID: Session.ID.make(value.sessionID),
+              id: Session.ID.make(value.id),
+              agent: value.agent,
+              description: value.description,
+            },
+          ]
+        })
       }),
       claim: Effect.fn("SessionStore.claim")(function* (sessionID) {
         // The null guard makes re-claiming a still-claimed Session a zero-row

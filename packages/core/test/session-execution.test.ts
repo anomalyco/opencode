@@ -1,13 +1,18 @@
 import { describe, expect, test } from "bun:test"
 import { AIError, TransportReason } from "@opencode-ai/ai"
+import { Money } from "@opencode-ai/schema/money"
+import { Agent } from "@opencode-ai/core/agent"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Bus } from "@opencode-ai/core/bus"
+import { Job } from "@opencode-ai/core/job"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
+import { Model } from "@opencode-ai/core/model"
 import type { LocationServices } from "@opencode-ai/core/location-services"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
+import { Provider } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
@@ -16,6 +21,7 @@ import { UserInterruptedError } from "@opencode-ai/core/session/error"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionInbox } from "@opencode-ai/core/session/inbox"
 import { SessionMessage } from "@opencode-ai/core/session/message"
+import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionRunner } from "@opencode-ai/core/session/runner/index"
 import { SessionInboxTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
@@ -23,7 +29,10 @@ import { Context, Deferred, Effect, Exit, Fiber, Layer, LayerMap, Scope } from "
 import { eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 
-const it = testEffect(AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SessionStore.node])))
+const it = testEffect(AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SessionStore.node, Job.node])))
+const projected = testEffect(
+  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SessionStore.node, SessionProjector.node, Job.node])),
+)
 
 describe("SessionExecution lifecycle", () => {
   test("classifies success and typed failure terminals", () => {
@@ -304,6 +313,331 @@ describe("SessionExecution lifecycle", () => {
   )
 })
 
+describe("SessionRestart background recovery", () => {
+  projected.effect("records orphaned background work without waking an idle parent", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+      const store = yield* SessionStore.Service
+      const parent = Session.ID.make("ses_background_recovery_parent")
+      const child = Session.ID.make("ses_background_recovery_child")
+      yield* seedSessions(database, [parent])
+      yield* seedSessions(database, [child], { parent_id: parent, time_suspended: Date.now() })
+      yield* seedBackground(bus, parent, [
+        { type: "shell", id: "call-background-shell", shellID: "sh_background_orphan", command: "sleep 60" },
+        {
+          type: "subagent",
+          id: "call-background-subagent",
+          childID: child,
+          agent: "reviewer",
+          description: "background review",
+        },
+      ])
+      yield* seedBackground(bus, child, [
+        { type: "shell", id: "call-child-shell", shellID: "sh_child_orphan", command: "sleep 30" },
+      ])
+
+      expect(yield* store.listSuspended()).toEqual([])
+      expect(yield* store.listBackground()).toHaveLength(3)
+
+      const drained: Session.ID[] = []
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(scope, ({ sessionID }) => Effect.sync(() => void drained.push(sessionID)))
+      const restart = Context.get(context, SessionRestart.Service)
+      yield* restart.resumeSuspendedSessions
+
+      const messages = yield* store.context(parent)
+      expect(messages.filter((message) => message.type === "synthetic")).toMatchObject([
+        {
+          description: "sleep 60",
+          text: expect.stringContaining("server restarted"),
+          metadata: {
+            source: "shell",
+            jobID: "call-background-shell",
+            shellID: "sh_background_orphan",
+            state: "cancelled",
+          },
+        },
+        {
+          description: "background review",
+          text: expect.stringContaining("server restarted"),
+          metadata: {
+            source: "subagent",
+            childID: child,
+            agent: "reviewer",
+            state: "cancelled",
+          },
+        },
+      ])
+      expect(yield* SessionInbox.list(database.db, parent)).toEqual([])
+      expect((yield* store.context(child)).filter((message) => message.type === "synthetic")).toMatchObject([
+        {
+          metadata: {
+            source: "shell",
+            jobID: "call-child-shell",
+            shellID: "sh_child_orphan",
+            state: "cancelled",
+          },
+        },
+      ])
+      expect(drained).toEqual([])
+      expect(yield* claims(database)).toEqual({ [parent]: false, [child]: false })
+
+      yield* restart.resumeSuspendedSessions
+      expect((yield* store.context(parent)).filter((message) => message.type === "synthetic")).toHaveLength(2)
+    }),
+  )
+
+  projected.effect("preserves delivered, pending, and locally running background work", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+      const store = yield* SessionStore.Service
+      const jobs = yield* Job.Service
+      const parent = Session.ID.make("ses_background_existing_parent")
+      const child = Session.ID.make("ses_background_existing_child")
+      yield* seedSessions(database, [parent])
+      yield* seedSessions(database, [child], { parent_id: parent })
+      yield* seedBackground(bus, parent, [
+        { type: "shell", id: "call-delivered-shell", shellID: "sh_delivered", command: "echo done" },
+        { type: "shell", id: "call-pending-shell", shellID: "sh_pending", command: "echo pending" },
+        {
+          type: "subagent",
+          id: "call-running-subagent",
+          childID: child,
+          agent: "reviewer",
+          description: "still running",
+        },
+      ])
+      yield* bus.publish(SessionEvent.Synthetic, {
+        sessionID: parent,
+        text: "already completed",
+        metadata: {
+          source: "shell",
+          jobID: "call-delivered-shell",
+          shellID: "sh_delivered",
+          state: "completed",
+        },
+      })
+      yield* SessionInbox.admit(database.db, bus, {
+        id: SessionMessage.ID.create(),
+        sessionID: parent,
+        item: SessionInbox.Item.make({
+          type: "synthetic",
+          delivery: "steer",
+          payload: {
+            text: "waiting for delivery",
+            metadata: {
+              source: "shell",
+              jobID: "call-pending-shell",
+              shellID: "sh_pending",
+              state: "completed",
+            },
+          },
+        }),
+      })
+      yield* jobs.start({ id: child, type: "subagent", run: Effect.never })
+      yield* jobs.background(child)
+
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(scope, () => Effect.void)
+      const restart = Context.get(context, SessionRestart.Service)
+      yield* restart.resumeSuspendedSessions
+
+      expect((yield* store.context(parent)).filter((message) => message.type === "synthetic")).toMatchObject([
+        { text: "already completed" },
+      ])
+      const pending = yield* SessionInbox.list(database.db, parent)
+      expect(pending).toHaveLength(1)
+      expect(yield* jobs.get(child)).toMatchObject({ status: "running" })
+      const notification = pending[0]
+      if (notification) yield* SessionInbox.cancel(bus, { id: notification.id, sessionID: parent })
+      yield* restart.resumeSuspendedSessions
+      expect((yield* store.context(parent)).filter((message) => message.type === "synthetic")).toMatchObject([
+        { text: "already completed" },
+        { metadata: { source: "shell", shellID: "sh_pending", state: "cancelled" } },
+      ])
+      expect(yield* jobs.get(child)).toMatchObject({ status: "running" })
+    }),
+  )
+
+  projected.effect("removes the parent's recovery marker when a background child is deleted", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+      const store = yield* SessionStore.Service
+      const parent = Session.ID.make("ses_background_deleted_parent")
+      const child = Session.ID.make("ses_background_deleted_child")
+      yield* seedSessions(database, [parent])
+      yield* seedSessions(database, [child], { parent_id: parent })
+      yield* seedBackground(bus, parent, [
+        {
+          type: "subagent",
+          id: "call-deleted-subagent",
+          childID: child,
+          agent: "reviewer",
+          description: "deleted child",
+        },
+      ])
+      expect(yield* store.listBackground()).toHaveLength(1)
+
+      yield* bus.publish(SessionEvent.Deleted, { sessionID: child })
+      expect(yield* store.listBackground()).toEqual([])
+    }),
+  )
+
+  projected.effect("restores recovery when a revert removes a background completion", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+      const store = yield* SessionStore.Service
+      const parent = Session.ID.make("ses_background_reverted_parent")
+      const child = Session.ID.make("ses_background_reverted_child")
+      yield* seedSessions(database, [parent])
+      yield* seedSessions(database, [child], { parent_id: parent })
+      yield* seedBackground(bus, parent, [
+        { type: "shell", id: "call-reverted-shell", shellID: "sh_reverted", command: "sleep 60" },
+        {
+          type: "subagent",
+          id: "call-reverted-subagent",
+          childID: child,
+          agent: "reviewer",
+          description: "completed child",
+        },
+      ])
+      yield* bus.publish(SessionEvent.Synthetic, {
+        sessionID: parent,
+        text: "completed before revert",
+        metadata: {
+          source: "shell",
+          jobID: "call-reverted-shell",
+          shellID: "sh_reverted",
+          state: "completed",
+        },
+      })
+      yield* bus.publish(SessionEvent.Synthetic, {
+        sessionID: parent,
+        text: "child completed before revert",
+        metadata: { source: "subagent", childID: child, agent: "reviewer", state: "completed" },
+      })
+      yield* bus.publish(SessionEvent.Deleted, { sessionID: child })
+      expect(yield* store.listBackground()).toEqual([])
+      const terminal = (yield* store.context(parent)).find((message) => message.type === "synthetic")
+      expect(terminal).toBeDefined()
+      if (terminal) yield* bus.publish(SessionEvent.RevertEvent.Committed, { sessionID: parent, to: terminal.id })
+
+      expect(yield* store.listBackground()).toMatchObject([{ type: "shell", shellID: "sh_reverted" }])
+    }),
+  )
+
+  projected.effect("does not resurrect a completion admitted before its background launch settles", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+      const store = yield* SessionStore.Service
+      const parent = Session.ID.make("ses_background_fast_completion")
+      const assistantMessageID = SessionMessage.ID.create()
+      yield* seedSessions(database, [parent])
+      yield* bus.publish(SessionEvent.Step.Started, {
+        sessionID: parent,
+        assistantMessageID,
+        agent: Agent.ID.make("build"),
+        model: { id: Model.ID.make("model"), providerID: Provider.ID.make("provider") },
+      })
+      yield* bus.publish(SessionEvent.Tool.Input.Started, {
+        sessionID: parent,
+        assistantMessageID,
+        id: "call-fast-shell",
+        name: "shell",
+      })
+      yield* bus.publish(SessionEvent.Tool.Called, {
+        sessionID: parent,
+        assistantMessageID,
+        id: "call-fast-shell",
+        input: { command: "true", background: true },
+        executed: false,
+      })
+      yield* SessionInbox.admit(database.db, bus, {
+        id: SessionMessage.ID.create(),
+        sessionID: parent,
+        item: SessionInbox.Item.make({
+          type: "synthetic",
+          delivery: "steer",
+          payload: {
+            text: "already finished",
+            metadata: {
+              source: "shell",
+              jobID: "call-fast-shell",
+              shellID: "sh_fast",
+              state: "completed",
+            },
+          },
+        }),
+      })
+      yield* bus.publish(SessionEvent.Tool.Success, {
+        sessionID: parent,
+        assistantMessageID,
+        id: "call-fast-shell",
+        content: [{ type: "text", text: "Working in the background." }],
+        metadata: { status: "running", shellID: "sh_fast" },
+        executed: false,
+      })
+
+      expect(yield* store.listBackground()).toEqual([])
+      const pending = yield* SessionInbox.list(database.db, parent)
+      expect(pending).toHaveLength(1)
+      const notification = pending[0]
+      if (notification) yield* SessionInbox.cancel(bus, { id: notification.id, sessionID: parent })
+      expect(yield* store.listBackground()).toMatchObject([{ type: "shell", shellID: "sh_fast" }])
+    }),
+  )
+
+  projected.effect("records cancellation before resuming an interrupted parent", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+      const store = yield* SessionStore.Service
+      const parent = Session.ID.make("ses_background_claimed_parent")
+      yield* seedSessions(database, [parent], { time_suspended: Date.now() })
+      yield* seedBackground(bus, parent, [
+        { type: "shell", id: "call-claimed-shell", shellID: "sh_claimed", command: "sleep 60" },
+      ])
+
+      const observed: string[] = []
+      const drained = yield* Deferred.make<void>()
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(scope, ({ sessionID }) =>
+        store.context(sessionID).pipe(
+          Effect.orDie,
+          Effect.tap((messages) =>
+            Effect.sync(() =>
+              observed.push(
+                ...messages.filter((message) => message.type === "synthetic").map((message) => message.text),
+              ),
+            ),
+          ),
+          Effect.andThen(Deferred.succeed(drained, undefined)),
+          Effect.asVoid,
+        ),
+      )
+      const execution = Context.get(context, SessionExecution.Service)
+      yield* Context.get(context, SessionRestart.Service).resumeSuspendedSessions
+      yield* Deferred.await(drained)
+      yield* execution.awaitIdle(parent)
+
+      expect(observed).toEqual([
+        expect.stringContaining("Command cancelled because the server restarted"),
+        "The server restarted while you were working. Continue from where you left off without repeating completed work.",
+      ])
+      expect(yield* SessionInbox.list(database.db, parent)).toEqual([])
+      expect((yield* claims(database))[parent]).toBe(false)
+    }),
+  )
+})
+
 describe("SessionExecution interrupt continuation", () => {
   it.effect("resumes only steering input after an interrupt with continue", () =>
     Effect.gen(function* () {
@@ -446,6 +780,72 @@ describe("SessionExecution interrupt continuation", () => {
   )
 })
 
+function seedBackground(
+  bus: Bus.Interface,
+  sessionID: Session.ID,
+  background: ReadonlyArray<
+    | { readonly type: "shell"; readonly id: string; readonly shellID: string; readonly command: string }
+    | {
+        readonly type: "subagent"
+        readonly id: string
+        readonly childID: Session.ID
+        readonly agent: string
+        readonly description: string
+      }
+  >,
+) {
+  return Effect.gen(function* () {
+    const assistantMessageID = SessionMessage.ID.create()
+    yield* bus.publish(SessionEvent.Step.Started, {
+      sessionID,
+      assistantMessageID,
+      agent: Agent.ID.make("build"),
+      model: { id: Model.ID.make("model"), providerID: Provider.ID.make("provider") },
+    })
+    yield* Effect.forEach(
+      background,
+      (job) =>
+        Effect.gen(function* () {
+          yield* bus.publish(SessionEvent.Tool.Input.Started, {
+            sessionID,
+            assistantMessageID,
+            id: job.id,
+            name: job.type,
+          })
+          yield* bus.publish(SessionEvent.Tool.Called, {
+            sessionID,
+            assistantMessageID,
+            id: job.id,
+            input:
+              job.type === "shell"
+                ? { command: job.command, background: true }
+                : { agent: job.agent, description: job.description, prompt: "review this" },
+            executed: false,
+          })
+          yield* bus.publish(SessionEvent.Tool.Success, {
+            sessionID,
+            assistantMessageID,
+            id: job.id,
+            content: [{ type: "text", text: "Working in the background." }],
+            metadata:
+              job.type === "shell"
+                ? { status: "running", shellID: job.shellID }
+                : { status: "running", sessionID: job.childID },
+            executed: false,
+          })
+        }),
+      { discard: true },
+    )
+    yield* bus.publish(SessionEvent.Step.Ended, {
+      sessionID,
+      assistantMessageID,
+      finish: "stop",
+      cost: Money.USD.zero,
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    })
+  })
+}
+
 /** Plain deliveries seed user prompts; objects seed control items. */
 function seedInbox(
   database: Database.Service["Service"],
@@ -536,6 +936,7 @@ function buildExecution(
     const database = yield* Database.Service
     const bus = yield* Bus.Service
     const store = yield* SessionStore.Service
+    const jobs = yield* Job.Service
     const runner = Layer.succeed(
       SessionRunner.Service,
       SessionRunner.Service.of({ drain: (input) => drain(input).pipe(Effect.as({ type: "complete" as const })) }),
@@ -555,6 +956,7 @@ function buildExecution(
         Layer.provide(Layer.succeed(Database.Service, database)),
         Layer.provide(Layer.succeed(Bus.Service, bus)),
         Layer.provide(Layer.succeed(SessionStore.Service, store)),
+        Layer.provide(Layer.succeed(Job.Service, jobs)),
         Layer.provide(locations),
       ),
       scope,

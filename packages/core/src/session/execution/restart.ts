@@ -3,6 +3,7 @@ export * as SessionRestart from "./restart.js"
 import { Context, Effect, Layer } from "effect"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { Bus } from "../../bus.js"
+import { Job } from "../../job.js"
 import { SessionEvent } from "../event.js"
 import { SessionExecution } from "../execution.js"
 import { SessionSchema } from "../schema.js"
@@ -62,6 +63,7 @@ export const layer = (options?: Options) =>
       const store = yield* SessionStore.Service
       const execution = yield* SessionExecution.Service
       const bus = yield* Bus.Service
+      const jobs = yield* Job.Service
       const scope = yield* Effect.scope
       const maxAttempts = options?.maxAttempts ?? DEFAULT_MAX_ATTEMPTS
 
@@ -102,6 +104,39 @@ export const layer = (options?: Options) =>
           // Sessions already draining in this process keep their claim; resuming
           // them would only inject a stray continuation into a live turn.
           const orphaned = (yield* store.listSuspended()).filter((sessionID) => !active.has(sessionID))
+          yield* Effect.forEach(
+            yield* store.listBackground(),
+            (background) =>
+              Effect.gen(function* () {
+                if ((yield* jobs.get(background.id))?.status === "running") return
+                if (background.type === "shell") {
+                  yield* bus.publish(SessionEvent.Synthetic, {
+                    sessionID: background.sessionID,
+                    text: `<shell id="${background.id}" state="cancelled" command="${background.description}">\nCommand cancelled because the server restarted\n</shell>`,
+                    description: background.description,
+                    metadata: {
+                      source: "shell",
+                      jobID: background.id,
+                      shellID: background.shellID,
+                      state: "cancelled",
+                    },
+                  })
+                  return
+                }
+                yield* bus.publish(SessionEvent.Synthetic, {
+                  sessionID: background.sessionID,
+                  text: `<subagent sessionID="${background.id}" state="cancelled" description="${background.description}">\nSubagent cancelled because the server restarted\n</subagent>`,
+                  description: background.description,
+                  metadata: {
+                    source: "subagent",
+                    childID: background.id,
+                    agent: background.agent,
+                    state: "cancelled",
+                  },
+                })
+              }),
+            { discard: true },
+          )
           yield* Effect.forEach(orphaned, resumeOne, { concurrency: "unbounded", discard: true })
         }),
       })
@@ -111,5 +146,5 @@ export const layer = (options?: Options) =>
 export const node = makeGlobalNode({
   service: Service,
   layer: layer(),
-  deps: [SessionStore.node, SessionExecution.node, Bus.node],
+  deps: [SessionStore.node, SessionExecution.node, Bus.node, Job.node],
 })
