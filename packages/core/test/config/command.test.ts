@@ -33,7 +33,7 @@ import { host } from "../plugin/host"
 const shellLayer = Layer.succeed(
   ShellSelect.Service,
   ShellSelect.Service.of({
-    preferred: () => Effect.succeed("sh"),
+    resolve: () => Effect.succeed("sh"),
     transform: () => Effect.die("unused shell.transform"),
     reload: () => Effect.die("unused shell.reload"),
   }),

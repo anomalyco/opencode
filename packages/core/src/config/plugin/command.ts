@@ -176,7 +176,7 @@ function evaluateTemplate(
         : withArguments.trim()
     const matches = Array.from(text.matchAll(shellRegex))
     if (matches.length === 0) return text
-    const shell = yield* services.shell.preferred()
+    const shell = yield* services.shell.resolve({ priority: "config" })
     const outputs = yield* Effect.forEach(
       matches,
       (match) => {
