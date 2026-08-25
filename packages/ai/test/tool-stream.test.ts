@@ -23,9 +23,11 @@ describe("ToolStream", () => {
 
       expect(first.events).toEqual([
         { type: "tool-input-start", id: "call_1", name: "lookup" },
-        { type: "tool-input-delta", id: "call_1", name: "lookup", text: '{"query"' },
+        { type: "tool-input-delta", id: "call_1", name: "lookup", text: '{"query"', input: {} },
       ])
-      expect(second.events).toEqual([{ type: "tool-input-delta", id: "call_1", name: "lookup", text: ':"weather"}' }])
+      expect(second.events).toEqual([
+        { type: "tool-input-delta", id: "call_1", name: "lookup", text: ':"weather"}', input: { query: "weather" } },
+      ])
       expect(finished).toEqual({
         tools: {},
         events: [
@@ -33,6 +35,45 @@ describe("ToolStream", () => {
           { type: "tool-call", id: "call_1", name: "lookup", input: { query: "weather" } },
         ],
       })
+    }),
+  )
+
+  it.effect("exposes cumulative partial string values", () =>
+    Effect.gen(function* () {
+      const result = ToolStream.appendOrStart(
+        ADAPTER,
+        ToolStream.empty<number>(),
+        0,
+        { id: "call_1", name: "lookup", text: '{"query":"wea' },
+        "missing tool",
+      )
+      if (ToolStream.isError(result)) return yield* result
+
+      expect(result.events.at(-1)).toEqual({
+        type: "tool-input-delta",
+        id: "call_1",
+        name: "lookup",
+        text: '{"query":"wea',
+        input: { query: "wea" },
+      })
+    }),
+  )
+
+  it.effect("omits partial input when the accumulated value cannot be parsed", () =>
+    Effect.gen(function* () {
+      const result = ToolStream.appendOrStart(
+        ADAPTER,
+        ToolStream.empty<number>(),
+        0,
+        { id: "call_1", name: "lookup", text: "x" },
+        "missing tool",
+      )
+      if (ToolStream.isError(result)) return yield* result
+
+      expect(result.events).toEqual([
+        { type: "tool-input-start", id: "call_1", name: "lookup" },
+        { type: "tool-input-delta", id: "call_1", name: "lookup", text: "x" },
+      ])
     }),
   )
 

@@ -1,8 +1,10 @@
-import { Effect } from "effect"
+import { Effect, Option } from "effect"
 import { AIError, LLMEvent, type ProviderMetadata, type ToolCall, type ToolInputError } from "../../schema/index.js"
 import { eventError, parseToolInput, type ToolAccumulator } from "../shared.js"
+import { parse } from "./partial-json.js"
 
 type StreamKey = string | number
+const parsePartialInput = Option.liftThrowable(parse)
 
 /**
  * One pending streamed tool call. Providers emit the tool identity and JSON
@@ -57,12 +59,15 @@ const inputStart = (tool: PendingTool) =>
     providerMetadata: tool.providerMetadata,
   })
 
-const inputDelta = (tool: PendingTool, text: string) =>
-  LLMEvent.toolInputDelta({
+const inputDelta = (tool: PendingTool, text: string) => {
+  const input = parsePartialInput(tool.input)
+  return LLMEvent.toolInputDelta({
     id: tool.id,
     name: tool.name,
     text,
+    ...(Option.isSome(input) ? { input: input.value } : {}),
   })
+}
 
 const toolCall = (route: string, tool: PendingTool, inputOverride?: string) => {
   const raw = inputOverride ?? tool.input

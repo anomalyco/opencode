@@ -152,6 +152,8 @@ export const ToolInputDelta = Schema.Struct({
   id: ToolCallID,
   name: Schema.String,
   text: Schema.String,
+  /** Best-effort parse of all input fragments received through this delta. */
+  input: Schema.optional(Schema.Unknown),
 }).annotate({ identifier: "LLM.Event.ToolInputDelta" })
 export type ToolInputDelta = Schema.Schema.Type<typeof ToolInputDelta>
 

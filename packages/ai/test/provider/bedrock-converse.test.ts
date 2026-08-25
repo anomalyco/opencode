@@ -475,8 +475,14 @@ describe("Bedrock Converse route", () => {
       ])
       const events = response.events.filter((event) => event.type === "tool-input-delta")
       expect(events).toEqual([
-        { type: "tool-input-delta", id: "tool_1", name: "lookup", text: '{"query"' },
-        { type: "tool-input-delta", id: "tool_1", name: "lookup", text: ':"weather"}' },
+        { type: "tool-input-delta", id: "tool_1", name: "lookup", text: '{"query"', input: {} },
+        {
+          type: "tool-input-delta",
+          id: "tool_1",
+          name: "lookup",
+          text: ':"weather"}',
+          input: { query: "weather" },
+        },
       ])
       expect(response.events.at(-1)).toMatchObject({
         type: "finish",

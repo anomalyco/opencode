@@ -2806,12 +2806,14 @@ describe("OpenAI Responses route", () => {
           id: "call_1",
           name: "lookup",
           text: '{"query"',
+          input: {},
         },
         {
           type: "tool-input-delta",
           id: "call_1",
           name: "lookup",
           text: ':"weather"}',
+          input: { query: "weather" },
         },
         {
           type: "tool-input-end",
