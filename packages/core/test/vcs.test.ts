@@ -4,20 +4,23 @@ import fs from "fs/promises"
 import path from "path"
 import { Cause, Effect, Exit, Fiber, Layer, Stream } from "effect"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { AppProcess } from "@opencode-ai/util/process"
 import { Bus } from "@opencode-ai/core/bus"
 import { Location } from "@opencode-ai/core/location"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Vcs } from "@opencode-ai/core/vcs"
+import { VcsGitPlugin } from "@opencode-ai/core/plugin/vcs/git"
 import type { VcsDefinition, VcsDiffInput } from "@opencode-ai/plugin/effect/vcs"
 import { FileSystem } from "@opencode-ai/schema/filesystem"
 import { VcsEvent } from "@opencode-ai/schema/vcs-event"
 import { location } from "./fixture/location"
 import { tmpdir } from "./fixture/tmpdir"
 import { it } from "./lib/effect"
+import { host } from "./plugin/host"
 
 const provide = (directory: string, input: { git?: boolean } = {}) =>
   Effect.provide(
-    LayerNode.compile(LayerNode.group([Vcs.node, Bus.node]), [
+    LayerNode.compile(LayerNode.group([Vcs.node, Bus.node, Location.node, AppProcess.node]), [
       [
         Location.node,
         Layer.succeed(
@@ -42,7 +45,17 @@ const withTmp = <A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>) =>
 const withGit = <A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>) =>
   withTmp((directory) =>
     Effect.promise(() => initRepo(directory)).pipe(
-      Effect.andThen(f(directory).pipe(provide(directory, { git: true }))),
+      Effect.andThen(
+        Effect.gen(function* () {
+          const vcs = yield* Vcs.Service
+          const context = host()
+          yield* VcsGitPlugin.Plugin.effect({
+            ...context,
+            vcs: { ...context.vcs, transform: vcs.transform, reload: vcs.reload },
+          })
+          return yield* f(directory)
+        }).pipe(provide(directory, { git: true })),
+      ),
     ),
   )
 

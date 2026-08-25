@@ -10,10 +10,8 @@ import { VcsEvent } from "@opencode-ai/schema/vcs-event"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Location } from "./location.js"
-import { AppProcess } from "@opencode-ai/util/process"
 import { Bus } from "./bus.js"
 import { State } from "./state.js"
-import { VcsGit } from "./vcs/git.js"
 import { emptyPatch, MAX_TOTAL_PATCH_BYTES, PATCH_CONTEXT_LINES } from "./vcs/patch.js"
 
 export { BranchList, FileStatus, Info, Mode }
@@ -43,31 +41,21 @@ interface Data {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Vcs") {}
 
-// Adapter seam: one working-copy implementation per VCS type, selected by the
-// resolved location. Locations without a supported VCS degrade to empty
-// results so callers never need to special-case.
-const adapter = (proc: AppProcess.Interface, location: Location.Interface) => {
-  const scope = { directory: location.directory, worktree: location.project.directory }
-  if (location.vcs?.type === "git") return VcsGit.make(proc, scope)
-}
-
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const proc = yield* AppProcess.Service
     const fs = yield* FSUtil.Service
     const location = yield* Location.Service
     const bus = yield* Bus.Service
-    const native = adapter(proc, location)
     const vcs = location.vcs
-    const current = { info: native ? yield* native.info() : ({ branch: {} } satisfies Info) }
+    const current: { info: Info } = { info: { branch: {} } }
     const scope = {
       directory: location.directory,
       worktree: location.project.directory,
       canonical: location.project.canonical,
       ...(vcs ? { store: vcs.store } : {}),
     }
-    const decodeInfo = Schema.decodeUnknownEffect(Info)
+    const decodeInfo = Schema.decodeUnknownEffect(Schema.toType(Info))
     const decodeBranches = Schema.decodeUnknownEffect(BranchList)
     const decodeStatus = Schema.decodeUnknownEffect(Schema.Array(FileStatus))
     const decodeDiff = Schema.decodeUnknownEffect(Schema.Array(FileDiff.Info))
@@ -102,9 +90,7 @@ const layer = Layer.effect(
       const provider = selected()
       const next: Info = provider
         ? yield* protect(provider, "info", provider.info(scope).pipe(Effect.flatMap(decodeInfo)), { branch: {} })
-        : native
-          ? yield* native.info()
-          : { branch: {} }
+        : { branch: {} }
       const changed = current.info.branch.current !== next.branch.current
       current.info = next
       if (changed) yield* bus.publish(VcsEvent.BranchUpdated, { branch: next.branch.current })
@@ -140,8 +126,7 @@ const layer = Layer.effect(
             provider.branches({ ...scope, ...options }).pipe(Effect.flatMap(decodeBranches)),
             [],
           )
-        if (!native) return []
-        return yield* native.branches(options)
+        return []
       }),
       status: Effect.fn("Vcs.status")(function* () {
         const provider = selected()
@@ -155,12 +140,11 @@ const layer = Layer.effect(
             ),
             [],
           )
-        if (!native) return []
-        return yield* native.status()
+        return []
       }),
       diff: Effect.fn("Vcs.diff")(function* (mode: Mode, options?: DiffOptions) {
         const provider = selected()
-        if (!provider) return native ? yield* native.diff(mode, options) : []
+        if (!provider) return []
         const rows = yield* protect(
           provider,
           "diff",
@@ -189,5 +173,5 @@ const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer: layer,
-  deps: [AppProcess.node, FSUtil.node, Location.node, Bus.node],
+  deps: [FSUtil.node, Location.node, Bus.node],
 })

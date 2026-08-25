@@ -296,6 +296,7 @@ export const Event = Schema.StructWithRest(
           id: Schema.optional(Schema.String),
           service_tier: optionalNull(Schema.String),
           incomplete_details: optionalNull(Schema.Struct({ reason: Schema.optional(Schema.String) })),
+          output: Schema.optional(Schema.Array(StreamItem)),
           usage: optionalNull(OpenResponsesUsage),
           error: optionalNull(OpenResponsesErrorPayload),
         }),
@@ -1111,30 +1112,45 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
 })
 
 const onResponseFinish = Effect.fn("OpenResponses.onResponseFinish")(function* (state: ParserState, event: Event) {
+  const reconciled =
+    event.type === "response.completed"
+      ? yield* Effect.reduce(
+          event.response?.output ?? [],
+          () => [state, NO_EVENTS] satisfies StepResult,
+          ([current, events], item) => {
+            if (item.type !== "function_call" || !item.id || !current.tools[item.id])
+              return Effect.succeed([current, events] satisfies StepResult)
+            return onOutputItemDone(current, { type: "response.output_item.done", item }).pipe(
+              Effect.map(([next, emitted]) => [next, [...events, ...emitted]] satisfies StepResult),
+            )
+          },
+        )
+      : ([state, NO_EVENTS] satisfies StepResult)
+  const current = reconciled[0]
   // Some compatible providers omit output_item.done even after completing the response.
   const pending =
     event.type === "response.completed"
-      ? yield* ToolStream.finishAll(state.id, state.tools)
-      : { tools: state.tools, events: NO_EVENTS }
-  const events: LLMEvent[] = [...pending.events]
+      ? yield* ToolStream.finishAll(current.id, current.tools)
+      : { tools: current.tools, events: NO_EVENTS }
+  const events: LLMEvent[] = [...reconciled[1], ...pending.events]
   const hasFunctionCall =
     pending.events.some((event) => LLMEvent.is.toolCall(event) || LLMEvent.is.toolInputError(event)) ||
-    state.hasFunctionCall
-  const lifecycle = Lifecycle.finish(state.lifecycle, events, {
+    current.hasFunctionCall
+  const lifecycle = Lifecycle.finish(current.lifecycle, events, {
     reason: {
       normalized: mapFinishReason(event, hasFunctionCall),
       raw: event.response?.incomplete_details?.reason,
     },
-    usage: mapUsage(event.response?.usage, state.providerMetadataKey),
+    usage: mapUsage(event.response?.usage, current.providerMetadataKey),
     providerMetadata:
       event.response?.id || event.response?.service_tier
-        ? providerMetadata(state, {
+        ? providerMetadata(current, {
             responseId: event.response.id,
             serviceTier: event.response.service_tier,
           })
         : undefined,
   })
-  return [{ ...state, lifecycle, hasFunctionCall, tools: pending.tools }, events] satisfies StepResult
+  return [{ ...current, lifecycle, hasFunctionCall, tools: pending.tools }, events] satisfies StepResult
 })
 
 // Build the prettiest summary available from whatever the provider supplied.

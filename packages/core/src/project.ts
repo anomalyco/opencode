@@ -29,6 +29,13 @@ export type Current = ProjectSchema.Current
 export const Info = ProjectSchema.Info
 export interface Info extends Schema.Schema.Type<typeof Info> {}
 
+export const UpdateInput = ProjectSchema.UpdateInput
+export type UpdateInput = ProjectSchema.UpdateInput
+
+export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Project.NotFoundError", {
+  projectID: ID,
+}) {}
+
 export interface Resolved {
   readonly previous?: ID
   readonly id: ID
@@ -47,6 +54,7 @@ export const root = Effect.fn("Project.root")(function* (fs: FSUtil.Interface, i
 
 export interface Interface {
   readonly list: () => Effect.Effect<ReadonlyArray<Info>>
+  readonly update: (input: UpdateInput) => Effect.Effect<Info, NotFoundError>
   readonly resolve: (input: AbsolutePath) => Effect.Effect<Resolved>
 }
 
@@ -143,6 +151,31 @@ const layer = Layer.effect(
         .all()
         .pipe(Effect.orDie)
       return rows.map(fromRow)
+    })
+
+    const update = Effect.fn("Project.update")(function* (input: UpdateInput) {
+      const row = yield* db
+        .update(ProjectTable)
+        .set({
+          name: input.name === undefined ? undefined : input.name || null,
+          icon_url_override: input.icon?.override === undefined ? undefined : input.icon.override || null,
+          icon_color: input.icon?.color === undefined ? undefined : input.icon.color || null,
+          commands:
+            input.commands?.start === undefined
+              ? undefined
+              : input.commands.start
+                ? { start: input.commands.start }
+                : null,
+          time_updated: Date.now(),
+        })
+        .where(eq(ProjectTable.id, input.projectID))
+        .returning()
+        .get()
+        .pipe(Effect.orDie)
+      if (!row) return yield* new NotFoundError({ projectID: input.projectID })
+      const project = fromRow(row)
+      yield* bus.publish(ProjectSchema.Event.Updated, project)
+      return project
     })
 
     const cached = Effect.fnUntraced(function* (dir: string) {
@@ -258,7 +291,7 @@ const layer = Layer.effect(
       return yield* persist({ id: ID.global, directory, canonical: directory, vcs: undefined })
     })
 
-    return Service.of({ list, resolve })
+    return Service.of({ list, update, resolve })
   }),
 )
 

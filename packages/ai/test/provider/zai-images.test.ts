@@ -78,6 +78,31 @@ describe("Z.ai Images", () => {
     ),
   )
 
+  it.effect("sanitizes unpaired surrogates in outbound image requests", () =>
+    Image.generate({
+      model: ZAI.configure({ apiKey: "test", http: { body: { metadata: { source: "default\uDC00" } } } }).image("model"),
+      prompt: "A red circle \uD800 on a white background \u{1F600}",
+    }).pipe(
+      Effect.provide(
+        ImageClient.layer.pipe(
+          Layer.provide(
+            dynamicResponse((input) => {
+              expect(JSON.parse(input.text)).toMatchObject({
+                prompt: "A red circle \uFFFD on a white background \u{1F600}",
+                metadata: { source: "default\uFFFD" },
+              })
+              return Effect.succeed(
+                input.respond(JSON.stringify({ data: [{ url: "https://example.test/image.jpg" }] }), {
+                  headers: { "content-type": "application/json" },
+                }),
+              )
+            }),
+          ),
+        ),
+      ),
+    ),
+  )
+
   it.effect("lets raw native options override aliases", () =>
     Image.generate({
       model: ZAI.configure({ apiKey: "test" }).image("model"),

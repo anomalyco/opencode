@@ -154,7 +154,12 @@ export const driver = (input: DriverInput): WebSocketChannelDriver => {
           ...observation,
           checkpoint: {
             protocol: PROTOCOL,
-            value: { version: VERSION, responseID, request, output: output.slice() } satisfies CheckpointValue,
+            value: {
+              version: VERSION,
+              responseID,
+              request,
+              output: event.response?.output ? [...event.response.output] : output.slice(),
+            } satisfies CheckpointValue,
           },
         }
       }),

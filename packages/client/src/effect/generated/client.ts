@@ -141,6 +141,8 @@ import type {
   CredentialRemoveInput,
   CredentialRemoveOutput,
   ProjectListOutput,
+  ProjectUpdateInput,
+  ProjectUpdateOutput,
   ProjectCurrentInput,
   ProjectCurrentOutput,
   FormRequestListInput,
@@ -934,6 +936,14 @@ const adaptGroupCredential = (raw: RawClient["server.credential"]) => ({
 const EndpointProjectList = (raw: RawClient["server.project"]) => () =>
   preserveEffect<ProjectListOutput>()(raw["project.list"]({}).pipe(Effect.mapError(mapClientError)))
 
+const EndpointProjectUpdate = (raw: RawClient["server.project"]) => (input: ProjectUpdateInput) =>
+  preserveEffect<ProjectUpdateOutput>()(
+    raw["project.update"]({
+      params: { projectID: input["projectID"] },
+      payload: { name: input["name"], icon: input["icon"], commands: input["commands"] },
+    }).pipe(Effect.mapError(mapClientError)),
+  )
+
 const EndpointProjectCurrent = (raw: RawClient["server.project"]) => (input?: ProjectCurrentInput) =>
   preserveEffect<ProjectCurrentOutput>()(
     raw["project.current"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
@@ -941,6 +951,7 @@ const EndpointProjectCurrent = (raw: RawClient["server.project"]) => (input?: Pr
 
 const adaptGroupProject = (raw: RawClient["server.project"]) => ({
   list: EndpointProjectList(raw),
+  update: EndpointProjectUpdate(raw),
   current: EndpointProjectCurrent(raw),
 })
 

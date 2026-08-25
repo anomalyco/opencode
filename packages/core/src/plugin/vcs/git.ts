@@ -1,20 +1,47 @@
-export * as VcsGit from "./git.js"
+export * as VcsGitPlugin from "./git.js"
 
+import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Effect } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { FileDiff } from "@opencode-ai/schema/file-diff"
 import { BranchList, FileStatus, Info, Mode } from "@opencode-ai/schema/vcs"
 import { AppProcess } from "@opencode-ai/util/process"
-import type { Adapter, BranchOptions, DiffOptions } from "../vcs.js"
-import { chunksByFile, emptyPatch, MAX_PATCH_BYTES, MAX_TOTAL_PATCH_BYTES, PATCH_CONTEXT_LINES } from "./patch.js"
-import type { Patch } from "./patch.js"
+import { Location } from "../../location.js"
+import type { Adapter, BranchOptions, DiffOptions } from "../../vcs.js"
+import { chunksByFile, emptyPatch, MAX_PATCH_BYTES, MAX_TOTAL_PATCH_BYTES, PATCH_CONTEXT_LINES } from "../../vcs/patch.js"
+import type { Patch } from "../../vcs/patch.js"
+
+export const Plugin = define({
+  id: "opencode.vcs.git",
+  effect: Effect.fn("VcsGitPlugin")(function* (ctx) {
+    const location = yield* Location.Service
+    if (location.vcs?.type !== "git") return
+
+    const processes = yield* AppProcess.Service
+    const adapter = make(processes, {
+      directory: location.directory,
+      worktree: location.project.directory,
+    })
+
+    yield* ctx.vcs.transform((draft) => {
+      draft.add({
+        id: "git",
+        name: "Git",
+        info: () => adapter.info(),
+        branches: (input) => adapter.branches({ search: input.search, limit: input.limit }),
+        status: () => adapter.status(),
+        diff: (input) => adapter.diff(input.mode, { context: input.context }),
+      })
+    })
+  }),
+})
 
 /**
  * Git adapter for the Vcs service. Ported from the V1 pipeline: patches are
  * batched through one `git diff` invocation where possible and capped by
  * per-file and total byte budgets, falling back to empty patches when capped.
  */
-export function make(proc: AppProcess.Interface, input: { directory: string; worktree: string }): Adapter {
+function make(proc: AppProcess.Interface, input: { directory: string; worktree: string }): Adapter {
   // Listing commands scope pathspecs to the requested directory; per-file
   // commands run from the worktree root because git lists root-relative paths.
   const ctx: Ctx = { git: makeGit(proc), directory: input.directory, worktree: input.worktree }

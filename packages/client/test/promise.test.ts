@@ -50,7 +50,7 @@ test("exposes every standard HTTP API group", () => {
   expect(Object.keys(client.pty)).toEqual(["list", "create", "get", "update", "remove", "connect"])
   expect(Object.keys(client.pty.connect)).toEqual(["token"])
   expect(Object.keys(client.shell)).toEqual(["list", "create", "get", "timeout", "output", "remove"])
-  expect(Object.keys(client.project)).toEqual(["list", "current"])
+  expect(Object.keys(client.project)).toEqual(["list", "update", "current"])
   expect(Object.keys(client.worktree)).toEqual(["list", "create", "remove", "refresh"])
 })
 
@@ -79,6 +79,29 @@ test("config.get returns ordered config entries for a location", async () => {
   expect(await client.config.get({ location: { directory: "/tmp/project" } })).toEqual(entries)
   expect(request?.method).toBe("GET")
   expect(request?.url).toBe("http://localhost:3000/api/config?location%5Bdirectory%5D=%2Ftmp%2Fproject")
+})
+
+test("project.update uses the global project contract", async () => {
+  let request: Request | undefined
+  const project = {
+    id: "proj_test",
+    canonical: "/tmp/project",
+    commands: { start: "bun install" },
+    time: { created: 1, updated: 2 },
+    sandboxes: [],
+  }
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async (input, init) => {
+      request = input instanceof Request ? input : new Request(input, init)
+      return Response.json(project)
+    },
+  })
+
+  expect(await client.project.update({ projectID: "proj_test", commands: { start: "bun install" } })).toEqual(project)
+  expect(request?.method).toBe("PATCH")
+  expect(request?.url).toBe("http://localhost:3000/api/project/proj_test")
+  expect(await request?.json()).toEqual({ commands: { start: "bun install" } })
 })
 
 test("generate.text uses the locationless public contract", async () => {

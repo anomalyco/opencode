@@ -86,6 +86,7 @@ import { SkillPlugin } from "./skill.js"
 import { VcsHgPlugin } from "./vcs/hg.js"
 import { SystemPromptPlugin } from "./system-prompt.js"
 import { VariantPlugin } from "./variant.js"
+import { VcsGitPlugin } from "./vcs/git.js"
 import { WarmingPlugin } from "./warming.js"
 import { WellKnownPlugin } from "../wellknown/plugin.js"
 
@@ -236,6 +237,7 @@ const pre = [
   ConfigMCPPlugin.Plugin,
   MCPCodeModeExclusionPlugin.Plugin,
   WellKnownPlugin.Plugin,
+  VcsGitPlugin.Plugin,
   AgentPlugin.Plugin,
   PlanPlugin.Plugin,
   CommandPlugin.Plugin,

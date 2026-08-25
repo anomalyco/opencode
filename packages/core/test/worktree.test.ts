@@ -192,6 +192,42 @@ describe("Worktree", () => {
     }),
   )
 
+  it.live("runs the project setup script with worktree paths", () =>
+    Effect.gen(function* () {
+      const input = yield* setup()
+      const worktree = yield* Worktree.Service
+      const temp = yield* Effect.promise(() => fs.realpath(path.dirname(input.root.path)))
+      const parent = abs(path.join(temp, path.basename(input.root.path) + "-worktree-setup"))
+      yield* Effect.addFinalizer(() =>
+        Effect.promise(() => fs.rm(parent, { recursive: true, force: true })).pipe(Effect.ignore),
+      )
+      yield* input.db
+        .update(ProjectTable)
+        .set({
+          commands: {
+            start:
+              "bun -e \"await Bun.write('setup.json', JSON.stringify([process.env.OPENCODE_WORKTREE_BASE, process.env.OPENCODE_WORKTREE_PATH, process.cwd()]))\"",
+          },
+        })
+        .where(eq(ProjectTable.id, input.projectID))
+        .run()
+        .pipe(Effect.orDie)
+      const created = yield* worktree.create({
+        projectID: input.projectID,
+        strategy: gitWorktree,
+        directory: parent,
+        name: "worktree",
+      })
+
+      expect(yield* Effect.promise(() => Bun.file(path.join(created.directory, "setup.json")).json())).toEqual([
+        input.sourceDirectory,
+        created.directory,
+        created.directory,
+      ])
+      yield* worktree.remove({ projectID: input.projectID, directory: created.directory, force: true })
+    }),
+  )
+
   it.live("creates a git worktree from a selected branch", () =>
     Effect.gen(function* () {
       const input = yield* setup()

@@ -1350,6 +1350,15 @@ export interface CredentialApi<E = never> {
 export type ProjectListOutput = ReadonlyArray<Project.Info>
 export type ProjectListOperation<E = never> = () => Effect.Effect<ProjectListOutput, E>
 
+export type ProjectUpdateInput = {
+  readonly projectID: Project.ID
+  readonly name?: string | undefined
+  readonly icon?: Project.Icon | undefined
+  readonly commands?: Project.Commands | undefined
+}
+export type ProjectUpdateOutput = Project.Info
+export type ProjectUpdateOperation<E = never> = (input: ProjectUpdateInput) => Effect.Effect<ProjectUpdateOutput, E>
+
 export type ProjectCurrentInput = {
   readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
 }
@@ -1358,6 +1367,7 @@ export type ProjectCurrentOperation<E = never> = (input?: ProjectCurrentInput) =
 
 export interface ProjectApi<E = never> {
   readonly list: ProjectListOperation<E>
+  readonly update: ProjectUpdateOperation<E>
   readonly current: ProjectCurrentOperation<E>
 }
 
