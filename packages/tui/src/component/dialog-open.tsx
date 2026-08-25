@@ -16,6 +16,8 @@ import { Locale } from "../util/locale"
 import { abbreviateHome } from "../runtime"
 import { useTuiPaths } from "../context/runtime"
 import { truncateFilePath } from "../ui/file-path"
+import { useToast } from "../ui/toast"
+import { errorMessage } from "../util/error"
 import { stringWidth } from "../util/string-width"
 import { withTimestampedFallback } from "@opencode-ai/util/session-title-fallback"
 import { Spinner } from "./spinner"
@@ -26,8 +28,9 @@ export const DialogOpenKey = Symbol("DialogOpen")
 
 type OpenTarget =
   | { type: "session"; sessionID: string }
-  | { type: "project"; directory: string }
+  | { type: "project"; directory: string; projectID?: string }
   | { type: "browse"; directory: string }
+  | { type: "new"; projectID: string }
 
 export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: SessionInfo[]) => void }) {
   const dialog = useDialog()
@@ -36,6 +39,7 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
   const client = useClient()
   const location = useLocation()
   const sessionTabs = useSessionTabs()
+  const toast = useToast()
   const themes = useThemes()
   const theme = useTheme("elevated")
   const mode = themes.mode
@@ -79,13 +83,23 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
       () => false,
     ),
   )
+  const [selected, setSelected] = createSignal<OpenTarget>()
   const [directory, setDirectory] = createSignal<string>()
+  const [projectID, setProjectID] = createSignal<string>()
   let select: DialogSelectRef<OpenTarget> | undefined
   function browse(next?: string) {
     select?.clearFilter()
     setSelectionMoved(false)
+    setSelected(undefined)
+    setProjectID(undefined)
     setDirectory(next)
   }
+  const [worktrees] = createResource(projectID, (projectID) =>
+    client.api.worktree.list({ projectID }).catch((error: unknown) => {
+      toast.show({ title: "Loading worktrees failed", message: errorMessage(error), variant: "error" })
+      return []
+    }),
+  )
   const [entries] = createResource(directory, (directory) =>
     client.api.file
       .list({ location: { directory, workspace: location.ref?.workspaceID ?? data.location.default().workspaceID } })
@@ -178,13 +192,20 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
             ? (projectName(item.project) ?? path.basename(item.directory))
             : path.basename(item.directory)
         const footer = abbreviateHome(item.directory, paths.home)
+        const git = item.project?.vcs === "git"
         const width =
-          dialogSelectContentWidth(Math.min(dialogWidth("large"), dimensions().width - 2)) - stringWidth(title)
+          dialogSelectContentWidth(Math.min(dialogWidth("large"), dimensions().width - 2)) -
+          stringWidth(title) -
+          (git ? 2 : 0)
         return {
           title,
-          footer: truncateFilePath(footer, width),
+          footer: `${truncateFilePath(footer, width)}${git ? " →" : ""}`,
           searchText: `${footer} ${projectName(item.project) ?? ""}`,
-          value: { type: "project", directory: item.directory } as OpenTarget,
+          value: {
+            type: "project",
+            directory: item.directory,
+            ...(git ? { projectID: item.project!.id } : {}),
+          } as OpenTarget,
           category: "Projects",
           gutter:
             item.directory === current ||
@@ -194,18 +215,46 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
         }
       })
 
+    return [...sessionOptions, ...projectOptions]
+  })
+
+  const worktreeOptions = createMemo(() => {
+    const id = projectID()
+    if (!id) return []
+    const project = data.project.get(id)
+    if (!project) return []
+    const current = location.ref?.directory ?? location.current?.directory
+    const directories = [project.canonical, ...(worktrees() ?? []).map((worktree) => worktree.directory)]
     return [
-      ...sessionOptions,
-      ...projectOptions,
+      ...directories
+        .filter((directory, index) => directories.indexOf(directory) === index)
+        .toSorted((a, b) => {
+          if (a === project.canonical) return -1
+          if (b === project.canonical) return 1
+          if (a === current) return -1
+          if (b === current) return 1
+          return 0
+        })
+        .map((directory) => {
+          const title =
+            directory === project.canonical
+              ? (projectName(project) ?? path.basename(directory))
+              : path.basename(directory)
+          return {
+            title,
+            footer: truncateFilePath(
+              abbreviateHome(directory, paths.home),
+              dialogSelectContentWidth(Math.min(dialogWidth("large"), dimensions().width - 2)) - stringWidth(title),
+            ),
+            value: { type: "project", directory } as OpenTarget,
+            category: "Worktrees",
+            gutter: directory === current ? () => <text fg={theme.text.formfield.selected}>●</text> : undefined,
+          }
+        }),
       {
-        title: "Browse directories",
-        footer: truncateFilePath(
-          abbreviateHome(current ?? paths.cwd, paths.home),
-          dialogSelectContentWidth(Math.min(dialogWidth("large"), dimensions().width - 2)) -
-            stringWidth("Browse directories"),
-        ),
-        value: { type: "browse", directory: current ?? paths.cwd } as OpenTarget,
-        category: "Projects",
+        title: "+ New worktree",
+        value: { type: "new", projectID: id } as OpenTarget,
+        category: "Worktrees",
       },
     ]
   })
@@ -246,20 +295,31 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
   return (
     <DialogSelect
       ref={(value) => (select = value)}
-      title="Open"
-      placeholder={directory() ? abbreviateHome(directory()!, paths.home) : "Search sessions and projects…"}
-      options={directory() ? directoryOptions() : options()}
+      title={projectID() ? "Worktrees" : "Open"}
+      placeholder={
+        directory()
+          ? abbreviateHome(directory()!, paths.home)
+          : projectID()
+            ? "Search worktrees…"
+            : "Search sessions and projects…"
+      }
+      options={directory() ? directoryOptions() : projectID() ? worktreeOptions() : options()}
       current={
         directory()
           ? ({ type: "project", directory: directory()! } as OpenTarget)
-          : currentSessionID()
-            ? ({ type: "session", sessionID: currentSessionID()! } as OpenTarget)
-            : undefined
+          : projectID() && (location.ref?.directory ?? location.current?.directory)
+            ? ({ type: "project", directory: (location.ref?.directory ?? location.current?.directory)! } as OpenTarget)
+            : currentSessionID()
+              ? ({ type: "session", sessionID: currentSessionID()! } as OpenTarget)
+              : undefined
       }
-      focusCurrent={Boolean(directory())}
+      focusCurrent={Boolean(directory() || projectID())}
       sectionNavigation={true}
       preserveSelection={selectionMoved()}
-      onMove={() => setSelectionMoved(true)}
+      onMove={(option) => {
+        setSelectionMoved(true)
+        setSelected(option.value)
+      }}
       onFilter={setFilter}
       emptyView={
         <Show when={!recent.loading && !projects.loading}>
@@ -289,6 +349,33 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
           run: () =>
             browse(directory() ? undefined : (location.ref?.directory ?? location.current?.directory ?? paths.cwd)),
         },
+        ...(!directory() && !projectID()
+          ? [
+              {
+                bind: "right",
+                title: "Show project worktrees",
+                group: "Dialog",
+                run: () => {
+                  const target = selected() ?? select?.filtered[0]?.value
+                  if (target?.type !== "project" || !target.projectID) return
+                  select?.clearFilter()
+                  setSelectionMoved(false)
+                  setSelected(undefined)
+                  setProjectID(target.projectID)
+                },
+              },
+            ]
+          : []),
+        ...(projectID()
+          ? [
+              {
+                bind: "left",
+                title: "Return to projects",
+                group: "Dialog",
+                run: () => browse(),
+              },
+            ]
+          : []),
         ...(directory() && path.dirname(directory()!) !== directory()
           ? [
               {
@@ -301,7 +388,8 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
           : []),
       ]}
       footerHints={[
-        { title: directory() ? "back" : "browse", label: "ctrl+o" },
+        ...(projectID() ? [{ title: "back", label: "←" }] : []),
+        { title: directory() ? "back" : "browse directories", label: "ctrl+o" },
         ...(directory() && path.dirname(directory()!) !== directory() ? [{ title: "parent", label: "ctrl+u" }] : []),
       ]}
       noMatchView={
@@ -324,6 +412,24 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
           browse(option.value.directory)
           return
         }
+        if (option.value.type === "new") {
+          const id = option.value.projectID
+          void client.api.worktree
+            .create({ projectID: id, strategy: "git", directory: path.join(paths.worktree, id.slice(0, 6)) })
+            .then((created) => {
+              const target = {
+                directory: created.directory,
+                ...(location.ref?.workspaceID ? { workspaceID: location.ref.workspaceID } : {}),
+              }
+              dialog.clear()
+              route.navigate({ type: "home", location: target })
+              location.set(target)
+            })
+            .catch((error: unknown) =>
+              toast.show({ title: "Creating worktree failed", message: errorMessage(error), variant: "error" }),
+            )
+          return
+        }
         dialog.clear()
         if (option.value.type === "session") {
           route.navigate({ type: "session", sessionID: option.value.sessionID })
@@ -331,7 +437,9 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
         }
         const target = {
           directory: option.value.directory,
-          ...(directory() && location.ref?.workspaceID ? { workspaceID: location.ref.workspaceID } : {}),
+          ...((directory() || projectID()) && location.ref?.workspaceID
+            ? { workspaceID: location.ref.workspaceID }
+            : {}),
         }
         route.navigate({ type: "home", location: target })
         location.set(target)
