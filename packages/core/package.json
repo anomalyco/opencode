@@ -22,7 +22,7 @@
     "benchmark:location": "bun run script/benchmark-location.ts",
     "build": "bun run script/build.ts",
     "update-models-snapshot": "bun run script/update-models-snapshot.ts",
-    "test": "bun test --only-failures",
+    "test": "bun run script/test.ts",
     "typecheck": "tsgo -b tsconfig.json tsconfig.tests.json"
   },
   "exports": {
