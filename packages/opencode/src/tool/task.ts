@@ -94,7 +94,7 @@ const OUTSTANDING_SYNC_NOTE =
 const supplementalAdmissionNote = (reason: string) =>
   `A supplemental prompt could not be admitted: ${reason}. The task's in-flight turn was not interrupted. The prompt may already be recorded in the task transcript.`
 const ASYNC_PARAMETER_DESCRIPTION =
-  "Start the subagent asynchronously; Task returns a running receipt instead of waiting for the subagent's result"
+  "Start the agent asynchronously; Task produces a running receipt without waiting for the agent's A2A return"
 const BACKGROUND_PARAMETER_DESCRIPTION =
   "Deprecated alias for `async`, still accepted so existing callers keep working. Use `async` instead."
 
@@ -104,7 +104,7 @@ const BaseParameterFields = {
   subagent_type: Schema.String.annotate({ description: "The type of specialized agent to use for this task" }),
   task_id: Schema.optional(Schema.String).annotate({
     description:
-      "Continue a previous Task session. If task_id names a running task, a prompt sent with it joins that task's conversation as a supplemental prompt; if the task has finished, it resumes the same subagent session in a new turn. An unrecognized task_id starts a fresh Task.",
+      "Continue a previous Task session. If task_id names a task this caller owns, a running task takes your prompt as a supplemental prompt in the same conversation, and a finished task resumes the same subagent session in a new turn. An unrecognized task_id starts a fresh Task; a task_id owned by another caller is rejected.",
   }),
   command: Schema.optional(Schema.String).annotate({ description: "The command that triggered this task" }),
 }

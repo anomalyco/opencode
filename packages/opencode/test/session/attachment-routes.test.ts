@@ -24,9 +24,9 @@ describe("attached async status observation", () => {
     // nothing but the literal, proving only that concatenation works. This also pins the guarantee
     // the status line is advisory to: the gate is runtime logic in the coordinator, and the text
     // still has to describe it independently of any signal.
-    expect(ASYNC_TASK_PROTOCOL).toContain("ending your turn is a wait")
+    expect(ASYNC_TASK_PROTOCOL).toContain("a turn-end response is a yield")
     expect(ASYNC_TASK_PROTOCOL).toContain(
-      "Your next turn-end response is then returned to your caller.",
+      "a called-agent's next turn-end response is relayed as the A2A-return to its caller-agent.",
     )
   })
 
