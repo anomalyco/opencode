@@ -17,6 +17,7 @@
 
 import { readFile } from "fs/promises"
 import type { ChildProcess } from "child_process"
+import { Parser } from "htmlparser2"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -51,10 +52,6 @@ export interface DynamicCrawlOptions {
   siteProfile?: "linkedin" | "whatsapp" | "instagram" | "generic"
   /** Validate auth cookies are valid. */
   validateAuth?: boolean
-  /** Use GodMode as fallback when CDP extraction is incomplete. */
-  godModeFallback?: boolean
-  /** Timeout for GodMode fallback in ms. */
-  godModeTimeout?: number
 }
 
 export interface DynamicCrawlResult {
@@ -81,6 +78,102 @@ export interface DynamicCrawlStats {
   authValid: boolean
   errors: Array<{ url: string; error: string }>
   siteProfile: string
+}
+
+// ---------------------------------------------------------------------------
+// Generic HTTP Fetcher (Scrapling-inspired)
+// ---------------------------------------------------------------------------
+
+const MAX_MARKDOWN_SIZE = 5 * 1024 // 5 KB limit for generated Markdown
+
+export interface FetchPageOptions {
+  /** Request timeout in ms. */
+  timeout?: number
+  /** Extra HTTP headers. */
+  headers?: Record<string, string>
+  /** Max redirects to follow. */
+  maxRedirects?: number
+}
+
+export interface FetchPageResult {
+  /** HTTP status code. */
+  status: number
+  /** Response headers. */
+  headers: Record<string, string>
+  /** Raw HTML content. */
+  html: string
+  /** Error message if request failed. */
+  error?: string
+}
+
+/**
+ * Generic HTTP fetcher for public/permitted pages.
+ * Inspired by Scrapling's Fetcher.get() approach.
+ * Does NOT bypass any protections, authentication, or anti-bot measures.
+ */
+export async function fetchPage(
+  url: string,
+  options: FetchPageOptions = {}
+): Promise<FetchPageResult> {
+  const { timeout = 30000, headers = {}, maxRedirects = 5 } = options
+
+  try {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), timeout)
+
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        ...headers,
+      },
+      redirect: maxRedirects > 0 ? "follow" : "manual",
+      signal: controller.signal,
+    })
+
+    clearTimeout(timeoutId)
+
+    const html = await response.text()
+    const responseHeaders: Record<string, string> = {}
+    response.headers.forEach((value, key) => {
+      responseHeaders[key] = value
+    })
+
+    return {
+      status: response.status,
+      headers: responseHeaders,
+      html,
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    if (message.includes("abort")) {
+      return { status: 0, headers: {}, html: "", error: `Request timed out after ${timeout}ms` }
+    }
+    return { status: 0, headers: {}, html: "", error: `Fetch failed: ${message}` }
+  }
+}
+
+/**
+ * Validate that markdown content is within size limits.
+ * Truncates cleanly without breaking Markdown structure if needed.
+ */
+export function validateMarkdownSize(markdown: string): { content: string; truncated: boolean } {
+  if (markdown.length <= MAX_MARKDOWN_SIZE) {
+    return { content: markdown, truncated: false }
+  }
+
+  // Truncate at last complete paragraph or heading before limit
+  const truncated = markdown.slice(0, MAX_MARKDOWN_SIZE)
+  const lastParagraph = truncated.lastIndexOf("\n\n")
+  const lastLine = truncated.lastIndexOf("\n")
+
+  // Use last paragraph break if it's more than 80% of limit
+  const cutoff = lastParagraph > MAX_MARKDOWN_SIZE * 0.8 ? lastParagraph : lastLine
+  const cleanTruncated = cutoff > 0 ? truncated.slice(0, cutoff) : truncated
+
+  return { content: cleanTruncated + "\n\n[Content truncated at 5KB]", truncated: true }
 }
 
 // ---------------------------------------------------------------------------
@@ -236,7 +329,11 @@ const SITE_PROFILES: Record<string, SiteProfile> = {
 }
 
 function getSiteProfile(url: string, explicit?: string): SiteProfile {
-  if (explicit && SITE_PROFILES[explicit]) return SITE_PROFILES[explicit]
+  // Treat "generic" as the absence of an explicit site override so the
+  // crawler can automatically select a site-specific profile from the URL.
+  if (explicit && explicit !== "generic" && SITE_PROFILES[explicit]) {
+    return SITE_PROFILES[explicit]
+  }
 
   const host = new URL(url).hostname.toLowerCase()
   if (host.includes("linkedin.com")) return SITE_PROFILES.linkedin
@@ -339,7 +436,7 @@ function decodeEntities(text: string): string {
     .replace(/&#x([0-9a-f]+);/gi, (_: string, hex: string) => String.fromCharCode(parseInt(hex, 16)))
 }
 
-function htmlToMarkdown(html: string): string {
+export function htmlToMarkdown(html: string): string {
   let c = html
     .replace(/<script[\s\S]*?<\/script>/gi, "")
     .replace(/<style[\s\S]*?<\/style>/gi, "")
@@ -435,7 +532,7 @@ function htmlToMarkdown(html: string): string {
   return sections.join("\n").trim() + "\n"
 }
 
-function sanitizeHtml(html: string): string {
+export function sanitizeHtml(html: string): string {
   let s = html
   s = s.replace(/<script[\s\S]*?<\/script>/gi, "")
   s = s.replace(/<noscript[\s\S]*?<\/noscript>/gi, "")
@@ -450,6 +547,534 @@ function sanitizeHtml(html: string): string {
   s = s.replace(/<base[\s\S]*?>/gi, "")
   s = s.replace(/<form[\s\S]*?<\/form>/gi, "")
   return s
+}
+
+// ---------------------------------------------------------------------------
+// Scrapling-inspired Content Extraction (Event-based parser)
+// ---------------------------------------------------------------------------
+
+/** Tags to skip during extraction (non-content elements) */
+const SKIP_TAGS = new Set([
+  "script", "style", "noscript", "iframe", "embed", "object", "svg", "path",
+  "link", "meta", "input", "textarea", "select", "button", "form",
+])
+
+/** Tags that are boilerplate */
+const BOILERPLATE_TAGS = new Set([
+  "nav", "footer", "header",
+])
+
+/** Text patterns to filter out (auth walls, login prompts, notifications, etc.) */
+const FILTER_PATTERNS = [
+  /^sign\s*in/i,
+  /^join\s*now/i,
+  /^join\s*to\s*view/i,
+  /^email\s*or\s*phone/i,
+  /^password/i,
+  /^forgot\s*password/i,
+  /^welcome\s*back/i,
+  /^continue\s*to\s*join/i,
+  /^by\s*clicking\s*continue/i,
+  /user\s*agreement/i,
+  /privacy\s*policy/i,
+  /cookie\s*policy/i,
+  /^browse\s*anonymously/i,
+  /^see\s*who\s*you\s*know/i,
+  /^get\s*introduced/i,
+  /^contact.*directly/i,
+  /^view\s*full\s*profile/i,
+  /^sign\s*in\s*with/i,
+  /^new\s*to\s*linkedin/i,
+  /^report\s*this\s*profile/i,
+  /^others\s*named/i,
+  /^see\s*others\s*named/i,
+  /^linkedin\s*©/i,
+  /^about\s*linkedin/i,
+  /^accessibility/i,
+  /^copyright\s*policy/i,
+  /^brand\s*policy/i,
+  /^guest\s*controls/i,
+  /^community\s*guidelines/i,
+  /^language/i,
+  /^agree\s*&\s*join/i,
+  /^curated\s*posts/i,
+  /^find\s*curated/i,
+  /^explore\s*top\s*content/i,
+  /^view\s*top\s*content/i,
+  /^mutual\s*connections/i,
+  /^show$/i,
+  /^see\s*more$/i,
+  /^see\s*less$/i,
+  /^\d+\s*others\s*named/i,
+  // Notification patterns - filter out all notification-related content
+  /^\d+\s*notifications?$/i,
+  /^notifications?$/i,
+  /^you\s*have\s*\d+/i,
+  /^\d+\s*new/i,
+  /^view\s*all\s*notifications/i,
+  /^mark\s*all\s*as\s*read/i,
+  /^no\s*new\s*notifications/i,
+  /^notifications?\s*off/i,
+  /^notifications?\s*on/i,
+  /^get\s*notified/i,
+  /^notification\s*settings/i,
+  /^activity\s*notifications?$/i,
+  /^network\s*notifications?$/i,
+  /^job\s*notifications?$/i,
+  /^message\s*notifications?$/i,
+  /^\d+\s*views?$/i,
+  /^\d+\s*impressions?$/i,
+  /^search\s*appearances?$/i,
+  /^who's\s*viewed/i,
+  /^profile\s*views?$/i,
+  /^post\s*views?$/i,
+  /^article\s*views?$/i,
+]
+
+interface ExtractedContent {
+  title: string
+  description: string
+  headings: string[]
+  paragraphs: string[]
+  tables: Array<{ headers: string[]; rows: string[][] }>
+  links: Array<{ text: string; href: string }>
+  cleanHtml: string
+  markdown: string
+}
+
+/**
+ * Main extraction function: Scrapling-inspired HTML content extraction.
+ * Takes raw HTML and returns structured, clean content.
+ */
+export function extractContentFromHtml(rawHtml: string): {
+  cleanHtml: string
+  markdown: string
+  title: string
+  description: string
+} {
+  try {
+    const content = extractUsingEventParser(rawHtml)
+    return {
+      cleanHtml: content.cleanHtml,
+      markdown: content.markdown,
+      title: content.title,
+      description: content.description,
+    }
+  } catch (err) {
+    debugLog(`Content extraction failed: ${err instanceof Error ? err.message : err}`)
+    // Fallback to existing htmlToMarkdown
+    return {
+      cleanHtml: rawHtml,
+      markdown: htmlToMarkdown(sanitizeHtml(rawHtml)),
+      title: "",
+      description: "",
+    }
+  }
+}
+
+/**
+ * Extract content using htmlparser2 event-based parser.
+ */
+function extractUsingEventParser(html: string): ExtractedContent {
+  let title = ""
+  let description = ""
+  const headings: string[] = []
+  const paragraphs: string[] = []
+  const tables: Array<{ headers: string[]; rows: string[][] }> = []
+  const links: Array<{ text: string; href: string }> = []
+  
+  let skipDepth = 0
+  let inTitle = false
+  let titleText = ""
+  let currentHref = ""
+  let linkText = ""
+  let inLink = false
+  let headingText = ""
+  let inHeading = false
+  let paragraphText = ""
+  let inParagraph = false
+  
+  // Table state
+  let inTable = false
+  let inRow = false
+  let inCell = false
+  let isHeader = false
+  let currentTable: { headers: string[]; rows: string[][] } = { headers: [], rows: [] }
+  let currentRow: string[] = []
+  let cellText = ""
+
+  const parser = new Parser({
+    onopentag(name, attribs) {
+      const tag = name.toLowerCase()
+
+      // Handle title tag (not inside skip check)
+      if (tag === "title") {
+        inTitle = true
+        titleText = ""
+        return
+      }
+
+      // Track meta description
+      if (tag === "meta" && attribs.name === "description" && attribs.content) {
+        description = attribs.content
+      }
+
+      // Skip non-content tags
+      if (SKIP_TAGS.has(tag) || BOILERPLATE_TAGS.has(tag)) {
+        skipDepth++
+        return
+      }
+
+      // Handle table
+      if (tag === "table") {
+        inTable = true
+        currentTable = { headers: [], rows: [] }
+        return
+      }
+
+      if (inTable && tag === "tr") {
+        inRow = true
+        currentRow = []
+        return
+      }
+
+      if (inRow && (tag === "th" || tag === "td")) {
+        inCell = true
+        isHeader = tag === "th"
+        cellText = ""
+        return
+      }
+
+      // Track headings
+      if (/^h[1-6]$/.test(tag)) {
+        inHeading = true
+        headingText = ""
+      }
+
+      // Track paragraphs
+      if (tag === "p") {
+        inParagraph = true
+        paragraphText = ""
+      }
+
+      // Track links
+      if (tag === "a") {
+        inLink = true
+        currentHref = attribs.href || ""
+        linkText = ""
+      }
+    },
+
+    ontext(text) {
+      if (skipDepth > 0) return
+
+      // Filter out boilerplate text patterns
+      const trimmedText = text.trim()
+      if (trimmedText && FILTER_PATTERNS.some((pattern) => pattern.test(trimmedText))) {
+        return
+      }
+
+      // Collect title
+      if (inTitle) {
+        titleText += text
+        return
+      }
+
+      // Collect cell text for tables
+      if (inCell) {
+        cellText += text
+        return
+      }
+
+      // Collect heading text (filter out boilerplate)
+      if (inHeading) {
+        // Don't collect text that matches filter patterns
+        if (!FILTER_PATTERNS.some((p) => p.test(text.trim()))) {
+          headingText += text
+        }
+        return
+      }
+
+      // Collect paragraph text (filter out boilerplate)
+      if (inParagraph) {
+        // Don't collect text that matches filter patterns
+        if (!FILTER_PATTERNS.some((p) => p.test(text.trim()))) {
+          paragraphText += text
+        }
+        return
+      }
+
+      // Collect link text (filter out boilerplate)
+      if (inLink) {
+        // Don't collect text that matches filter patterns
+        if (!FILTER_PATTERNS.some((p) => p.test(text.trim()))) {
+          linkText += text
+        }
+        return
+      }
+    },
+
+    onclosetag(tag) {
+      const lowerTag = tag.toLowerCase()
+
+      // Handle title close
+      if (lowerTag === "title" && inTitle) {
+        inTitle = false
+        title = titleText.trim()
+        return
+      }
+
+      if (SKIP_TAGS.has(lowerTag) || BOILERPLATE_TAGS.has(lowerTag)) {
+        if (skipDepth > 0) skipDepth--
+        return
+      }
+
+      // Handle table close
+      if (lowerTag === "table" && inTable) {
+        inTable = false
+        if (currentTable.headers.length > 0 || currentTable.rows.length > 0) {
+          tables.push(currentTable)
+        }
+        return
+      }
+
+      if (lowerTag === "tr" && inRow) {
+        inRow = false
+        if (isHeader) {
+          currentTable.headers = currentRow
+        } else {
+          currentTable.rows.push(currentRow)
+        }
+        currentRow = []
+        isHeader = false
+        return
+      }
+
+      if ((lowerTag === "th" || lowerTag === "td") && inCell) {
+        inCell = false
+        const text = cellText.trim()
+        // Filter out table cells that match boilerplate patterns
+        if (text && !FILTER_PATTERNS.some((p) => p.test(text))) {
+          currentRow.push(text)
+        } else {
+          currentRow.push("")
+        }
+        cellText = ""
+        return
+      }
+
+      // Finish heading
+      if (lowerTag === "h1" || lowerTag === "h2" || lowerTag === "h3" ||
+          lowerTag === "h4" || lowerTag === "h5" || lowerTag === "h6") {
+        inHeading = false
+        const text = headingText.trim()
+        // Filter out headings that match boilerplate patterns
+        if (text && text.length > 2 && !FILTER_PATTERNS.some((p) => p.test(text))) {
+          headings.push(text)
+        }
+        headingText = ""
+      }
+
+      // Finish paragraph
+      if (lowerTag === "p") {
+        inParagraph = false
+        const text = paragraphText.trim()
+        // Filter out paragraphs that match boilerplate patterns
+        if (text && text.length > 10 && !FILTER_PATTERNS.some((p) => p.test(text))) {
+          paragraphs.push(text)
+        }
+        paragraphText = ""
+      }
+
+      // Finish link
+      if (lowerTag === "a") {
+        inLink = false
+        const text = linkText.trim()
+        // Filter out links that match boilerplate patterns
+        if (text && currentHref && !currentHref.startsWith("#") && !currentHref.startsWith("javascript:") &&
+            !FILTER_PATTERNS.some((p) => p.test(text))) {
+          links.push({ text, href: currentHref })
+        }
+        linkText = ""
+        currentHref = ""
+      }
+    },
+  })
+
+  parser.write(html)
+  parser.end()
+
+  // Remove duplicates
+  const uniqueHeadings = removeDuplicates(headings)
+  const uniqueParagraphs = removeDuplicates(paragraphs)
+
+  // Build clean HTML
+  const cleanHtml = buildCleanHtml({
+    title,
+    description,
+    headings: uniqueHeadings,
+    paragraphs: uniqueParagraphs,
+    tables,
+    links,
+  })
+
+  // Convert to Markdown
+  const markdown = convertToMarkdown({
+    title,
+    description,
+    headings: uniqueHeadings,
+    paragraphs: uniqueParagraphs,
+    tables,
+    links,
+  })
+
+  return {
+    title,
+    description,
+    headings: uniqueHeadings,
+    paragraphs: uniqueParagraphs,
+    tables,
+    links,
+    cleanHtml,
+    markdown,
+  }
+}
+
+/**
+ * Remove duplicate strings while preserving order.
+ */
+function removeDuplicates(items: string[]): string[] {
+  const seen = new Set<string>()
+  const result: string[] = []
+  for (const item of items) {
+    const normalized = item.trim().toLowerCase()
+    if (normalized && !seen.has(normalized)) {
+      seen.add(normalized)
+      result.push(item.trim())
+    }
+  }
+  return result
+}
+
+/**
+ * Build normalized clean HTML from extracted content.
+ */
+function buildCleanHtml(content: {
+  title: string
+  description: string
+  headings: string[]
+  paragraphs: string[]
+  tables: Array<{ headers: string[]; rows: string[][] }>
+  links: Array<{ text: string; href: string }>
+}): string {
+  const parts: string[] = []
+  parts.push("<!DOCTYPE html>")
+  parts.push("<html>")
+  parts.push("<head>")
+  parts.push('<meta charset="utf-8">')
+  if (content.title) parts.push(`<title>${escapeHTML(content.title)}</title>`)
+  if (content.description) parts.push(`<meta name="description" content="${escapeHTML(content.description)}">`)
+  parts.push("</head>")
+  parts.push("<body>")
+
+  if (content.description) parts.push(`<p>${escapeHTML(content.description)}</p>`)
+
+  for (const h of content.headings) {
+    parts.push(`<h2>${escapeHTML(h)}</h2>`)
+  }
+
+  for (const p of content.paragraphs) {
+    parts.push(`<p>${escapeHTML(p)}</p>`)
+  }
+
+  for (const table of content.tables) {
+    parts.push("<table>")
+    if (table.headers.length > 0) {
+      parts.push("<tr>")
+      for (const h of table.headers) {
+        parts.push(`<th>${escapeHTML(h)}</th>`)
+      }
+      parts.push("</tr>")
+    }
+    for (const row of table.rows) {
+      parts.push("<tr>")
+      for (const cell of row) {
+        parts.push(`<td>${escapeHTML(cell)}</td>`)
+      }
+      parts.push("</tr>")
+    }
+    parts.push("</table>")
+  }
+
+  if (content.links.length > 0) {
+    parts.push("<ul>")
+    for (const link of content.links) {
+      parts.push(`<li><a href="${escapeHTML(link.href)}">${escapeHTML(link.text)}</a></li>`)
+    }
+    parts.push("</ul>")
+  }
+
+  parts.push("</body>")
+  parts.push("</html>")
+  return parts.join("\n")
+}
+
+/**
+ * Escape HTML special characters.
+ */
+function escapeHTML(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;")
+}
+
+/**
+ * Convert extracted content to Markdown.
+ */
+function convertToMarkdown(content: {
+  title: string
+  description: string
+  headings: string[]
+  paragraphs: string[]
+  tables: Array<{ headers: string[]; rows: string[][] }>
+  links: Array<{ text: string; href: string }>
+}): string {
+  const parts: string[] = []
+
+  if (content.title) parts.push(`# ${content.title}`)
+  if (content.description) parts.push(content.description)
+
+  for (const h of content.headings) {
+    parts.push(`## ${h}`)
+  }
+
+  for (const p of content.paragraphs) {
+    parts.push(p)
+  }
+
+  for (const table of content.tables) {
+    if (table.headers.length > 0) {
+      const header = `| ${table.headers.join(" | ")} |`
+      const separator = `| ${table.headers.map(() => "---").join(" | ")} |`
+      const rows = table.rows.map((r) => `| ${r.join(" | ")} |`).join("\n")
+      parts.push(`${header}\n${separator}${rows ? "\n" + rows : ""}`)
+    } else if (table.rows.length > 0) {
+      const rows = table.rows.map((r) => `| ${r.join(" | ")} |`).join("\n")
+      parts.push(rows)
+    }
+  }
+
+  if (content.links.length > 0) {
+    parts.push("## Links")
+    for (const link of content.links) {
+      parts.push(`- [${link.text}](${link.href})`)
+    }
+  }
+
+  return parts.join("\n\n")
 }
 
 // ---------------------------------------------------------------------------
@@ -587,6 +1212,7 @@ interface BrowserState {
   targetId: string
   userDataDir: string
   port: number
+  persistentProfile: boolean
 }
 
 let browserState: BrowserState | null = null
@@ -639,12 +1265,12 @@ function findChromiumPath(): string | undefined {
   return undefined
 }
 
-async function ensureBrowser(): Promise<BrowserState> {
+async function ensureBrowser(usePersistentProfile = false): Promise<BrowserState> {
   if (browserState) return browserState
 
   await killStaleProcesses()
   const { spawn } = await import("child_process")
-  const { existsSync } = await import("fs")
+  const { existsSync, mkdirSync } = await import("fs")
   const pathMod = await import("path")
 
   const launchStart = Date.now()
@@ -662,10 +1288,27 @@ async function ensureBrowser(): Promise<BrowserState> {
 
   debugLog(`Using browser: ${chromePath}`)
 
-  const userDataDir = pathMod.join(
-    process.env.TEMP || process.env.LOCALAPPDATA || ".",
-    `dynamic_crawler_${Date.now()}`
-  )
+  const linkedInProfileDir =
+    process.env.LINKEDIN_CRAWLER_PROFILE ||
+    pathMod.join(
+      process.env.LOCALAPPDATA || ".",
+      "linkedin-crawler-profile",
+    )
+
+  let userDataDir: string
+  let persistentProfile = false
+
+  if (usePersistentProfile) {
+    userDataDir = linkedInProfileDir
+    mkdirSync(userDataDir, { recursive: true })
+    persistentProfile = true
+    debugLog(`Using persistent LinkedIn browser profile: ${userDataDir}`)
+  } else {
+    userDataDir = pathMod.join(
+      process.env.TEMP || process.env.LOCALAPPDATA || ".",
+      `dynamic_crawler_${Date.now()}`,
+    )
+  }
 
   const chromeArgs = [
     "--remote-debugging-port=0",
@@ -799,6 +1442,7 @@ async function ensureBrowser(): Promise<BrowserState> {
     targetId,
     userDataDir,
     port,
+    persistentProfile,
   }
 
   return browserState
@@ -808,7 +1452,7 @@ export async function releaseBrowser(): Promise<void> {
   if (browserState) {
     try { browserState.client.close() } catch {}
     try { browserState.process.kill("SIGTERM") } catch {}
-    if (browserState.userDataDir) {
+    if (browserState.userDataDir && !browserState.persistentProfile) {
       try {
         const { rmSync } = await import("fs")
         rmSync(browserState.userDataDir, { recursive: true, force: true })
@@ -1469,8 +2113,6 @@ export async function scrapeDynamic(
     validateAuth = false,
     siteProfile,
     retries = 2,
-    godModeFallback = true,
-    godModeTimeout = 30000,
   } = options
 
   const profile = getSiteProfile(url, siteProfile)
@@ -1501,7 +2143,7 @@ export async function scrapeDynamic(
     let localTargetId = ""
 
     try {
-      const state = await ensureBrowser()
+      const state = await ensureBrowser(profile === SITE_PROFILES.linkedin)
 
       // Create a new target (tab) for this scrape
       const targetResult = (await state.client.send("Target.createTarget", {
@@ -1615,9 +2257,12 @@ export async function scrapeDynamic(
       const content = await extractPageContent(localSessionId, profile)
       const rawHtml = content.html
 
-      // Use the structured text directly as markdown (preserves sections from extraction)
-      // The htmlToMarkdown conversion loses LinkedIn's dynamic DOM content
-      const markdown = content.text || htmlToMarkdown(sanitizeHtml(rawHtml))
+      // Scrapling-inspired content extraction: process raw HTML
+      const extracted = extractContentFromHtml(rawHtml)
+      
+      // Use the new extraction if it produced content, fallback to browser-extracted text
+      const markdown = extracted.markdown || content.text || htmlToMarkdown(sanitizeHtml(rawHtml))
+      const cleanHtml = extracted.cleanHtml || content.html
 
       // Auth check
       let authValid = true
@@ -1629,7 +2274,7 @@ export async function scrapeDynamic(
         }
       }
 
-      debugLog(`Scrape complete: ${content.text.length} chars, ${content.links.length} links`)
+      debugLog(`Scrape complete: ${markdown.length} chars, ${content.links.length} links`)
 
       // Close the target
       try {
@@ -1637,76 +2282,19 @@ export async function scrapeDynamic(
         await state.client.send("Target.closeTarget", { targetId: localTargetId })
       } catch {}
 
-      // GodMode fallback: use when content is incomplete and fallback is enabled
-      const contentCheck = isContentComplete({
-        text: content.text,
-        html: content.html,
-        links: content.links,
-        images: content.images,
-      })
-
-      if (!contentCheck.isComplete && godModeFallback) {
-        debugLog(`Content incomplete (${contentCheck.reasons.join(", ")}), attempting GodMode fallback...`)
-
-        try {
-          const { godmodeAvailable, godmodeFetchRenderedContent } = await import("./godmode-client")
-
-          if (await godmodeAvailable()) {
-            const godModeResult = await godmodeFetchRenderedContent(url, {
-              timeout: godModeTimeout,
-              waitFor: waitFor,
-            })
-
-            if (!godModeResult.error && godModeResult.html) {
-              debugLog(`GodMode captured ${godModeResult.html.length} chars of rendered HTML`)
-
-              // Parse the GodMode HTML through existing extraction pipeline
-              const godModeMarkdown = htmlToMarkdown(sanitizeHtml(godModeResult.html))
-
-              // Use GodMode content if it's more complete
-              if (godModeMarkdown.length > markdown.length) {
-                debugLog(`GodMode content is richer (${godModeMarkdown.length} > ${markdown.length} chars)`)
-                return {
-                  url,
-                  markdown: godModeMarkdown,
-                  html: godModeResult.html,
-                  rawHtml: godModeResult.html,
-                  links: content.links,
-                  images: content.images,
-                  metadata: {
-                    ...content.metadata,
-                    title: content.title,
-                    description: content.description,
-                    sourceURL: url,
-                    scrapedAt: new Date().toISOString(),
-                    godModeUsed: true,
-                  },
-                  authValid,
-                  retries: attempt,
-                }
-              }
-            }
-          }
-        } catch (err) {
-          debugLog(`GodMode fallback failed: ${err instanceof Error ? err.message : err}`)
-          // Continue with existing content
-        }
-      }
-
       return {
         url,
         markdown,
-        html: content.html,
+        html: cleanHtml,
         rawHtml,
         links: content.links,
         images: content.images,
         metadata: {
           ...content.metadata,
-          title: content.title,
-          description: content.description,
+          title: extracted.title || content.title,
+          description: extracted.description || content.description,
           sourceURL: url,
           scrapedAt: new Date().toISOString(),
-          godModeUsed: false,
         },
         authValid,
         retries: attempt,
@@ -1766,7 +2354,7 @@ export async function crawlDynamic(
     }
   }
 
-  await ensureBrowser()
+  await ensureBrowser(profile === SITE_PROFILES.linkedin)
   const results: DynamicCrawlResult[] = []
   const errors: Array<{ url: string; error: string }> = []
   const visited = new Set<string>()

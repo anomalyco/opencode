@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Sample Page Title</title>
+    <meta name="description" content="A sample page for testing extraction.">
+    <meta name="keywords" content="test, sample, crawler">
+    <meta name="author" content="Test Author">
+    <meta name="robots" content="index, follow">
+    <link rel="canonical" href="https://example.test/sample">
+    <meta property="og:title" content="OG Sample Title">
+    <meta property="og:description" content="OG sample description.">
+    <meta property="og:image" content="/og-image.png">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Twitter Sample Title">
+</head>
+<body>
+    <nav><a href="/nav-link">Nav Link</a></nav>
+    <script>console.log("should be ignored");</script>
+    <style>.foo { color: red; }</style>
+    <h1>Main Heading</h1>
+    <p>This is the   first    paragraph with   extra whitespace.</p>
+    <h2>Sub Heading One</h2>
+    <p>This is the second paragraph.</p>
+    <p></p>
+    <p>   </p>
+    <p>This is the second paragraph.</p>
+    <h3>Sub Heading Two</h3>
+    <p>Third paragraph with a <a href="/relative/link">relative link</a> and an
+       <a href="https://external.test/page">external link</a>.</p>
+    <img src="/images/pic1.jpg" alt="Picture one">
+    <img src="https://cdn.example.test/pic2.jpg" alt="Picture two" title="Second picture">
+    <img src="" alt="Empty src should be skipped">
+    <a href="#section">Skip anchor-only link</a>
+    <a href="javascript:void(0)">Skip javascript link</a>
+</body>
+</html>
