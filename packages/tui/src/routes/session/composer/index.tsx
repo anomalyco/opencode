@@ -6,6 +6,8 @@ import { SplitBorder } from "../../../ui/border"
 import { Keymap } from "../../../context/keymap"
 import { SubagentsTab } from "./subagents-tab"
 import { ShellTab } from "./shell-tab"
+import { TerminalsTab } from "./terminals-tab"
+import type { useSessionTerminals } from "../../../context/session-terminals"
 
 export interface ComposerHint {
   label: string
@@ -36,6 +38,7 @@ export type ComposerProps = {
   open: boolean
   defaultTab?: string
   onClose?: () => void
+  terminals?: ReturnType<typeof useSessionTerminals>
 }
 
 export function Composer(props: ComposerProps) {
@@ -148,6 +151,9 @@ export function Composer(props: ComposerProps) {
             </box>
             <SubagentsTab sessionID={props.sessionID} />
             <ShellTab sessionID={props.sessionID} />
+            <Show when={props.terminals}>
+              {(terminals) => <TerminalsTab sessionID={props.sessionID} terminals={terminals()} />}
+            </Show>
             <box flexDirection="row" gap={2} paddingLeft={1} flexShrink={0}>
               <For each={footerHints()}>
                 {(hint) => (

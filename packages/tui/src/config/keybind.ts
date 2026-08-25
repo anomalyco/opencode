@@ -237,6 +237,9 @@ export const Definitions = {
   "composer.shell.up": keybind("up", "Previous shell"),
   "composer.shell.down": keybind("down", "Next shell"),
   "composer.shell.kill": keybind("ctrl+d", "Kill shell command"),
+  "composer.terminal.up": keybind("up,k", "Previous terminal"),
+  "composer.terminal.down": keybind("down,j", "Next terminal"),
+  "composer.terminal.select": keybind("return", "Select terminal"),
 
   "dialog.select.prev": keybind("up,ctrl+p", "Move to previous dialog item"),
   "dialog.select.next": keybind("down,ctrl+n", "Move to next dialog item"),
