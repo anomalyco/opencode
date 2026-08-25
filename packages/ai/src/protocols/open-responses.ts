@@ -1000,14 +1000,15 @@ const onFunctionCallArgumentsDelta = Effect.fn("OpenResponses.onFunctionCallArgu
   if (!event.item_id) return [state, NO_EVENTS] satisfies StepResult
   const tool = state.tools[event.item_id]
   if (!tool) return [state, NO_EVENTS] satisfies StepResult
-  if (event.type === "response.function_call_arguments.done" && event.arguments === undefined)
+  const final = event.type === "response.function_call_arguments.done" ? event.arguments : undefined
+  if (event.type === "response.function_call_arguments.done" && final === undefined)
     return [state, NO_EVENTS] satisfies StepResult
-  if (event.arguments !== undefined && !event.arguments.startsWith(tool.input))
+  if (final !== undefined && !final.startsWith(tool.input))
     return [
-      { ...state, tools: ToolStream.start(state.tools, event.item_id, { ...tool, input: event.arguments }) },
+      { ...state, tools: ToolStream.start(state.tools, event.item_id, { ...tool, input: final }) },
       NO_EVENTS,
     ] satisfies StepResult
-  const delta = event.arguments === undefined ? event.delta : event.arguments.slice(tool.input.length)
+  const delta = final === undefined ? event.delta : final.slice(tool.input.length)
   if (!delta) return [state, NO_EVENTS] satisfies StepResult
   const result = ToolStream.appendExisting(
     state.id,

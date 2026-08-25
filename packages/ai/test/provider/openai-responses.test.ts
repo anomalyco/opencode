@@ -2997,6 +2997,37 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("lets completed output item arguments override the arguments done event", () =>
+    Effect.gen(function* () {
+      const body = sseEvents(
+        {
+          type: "response.output_item.added",
+          item: { type: "function_call", id: "fc_item_1", call_id: "call_1", name: "lookup", arguments: "" },
+        },
+        {
+          type: "response.function_call_arguments.done",
+          item_id: "fc_item_1",
+          arguments: '{"query":"arguments-done"}',
+        },
+        {
+          type: "response.output_item.done",
+          item: {
+            type: "function_call",
+            id: "fc_item_1",
+            call_id: "call_1",
+            name: "lookup",
+            arguments: '{"query":"output-item-done"}',
+          },
+        },
+        { type: "response.completed", response: { id: "resp_1" } },
+      )
+      const response = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse(body)))
+
+      expect(response.events.find(LLMEvent.is.toolCall)).toMatchObject({ input: { query: "output-item-done" } })
+      expect(response.events.filter(LLMEvent.is.toolCall)).toHaveLength(1)
+    }),
+  )
+
   it.effect("finalizes a pending function call at response completion", () =>
     Effect.gen(function* () {
       const body = sseEvents(
