@@ -288,6 +288,7 @@ export const Event = Schema.StructWithRest(
     arguments: Schema.optional(Schema.String),
     text: Schema.optional(Schema.String),
     item_id: Schema.optional(Schema.String),
+    output_index: Schema.optional(Schema.Number),
     summary_index: Schema.optional(Schema.Number),
     item: Schema.optional(StreamItem),
     response: Schema.optional(
@@ -341,6 +342,7 @@ export interface ParserState {
   readonly tools: ToolStream.State<string>
   readonly hasFunctionCall: boolean
   readonly lifecycle: Lifecycle.State
+  readonly outputItems: Readonly<Record<number, string>>
   readonly messageItems: ReadonlySet<string>
   readonly messagePhases: Readonly<Record<string, MessagePhase | null>>
   readonly reasoningItems: Readonly<Record<string, ReasoningStreamItem>>
@@ -818,6 +820,9 @@ const onOutputTextDone = (state: ParserState, event: Event, id: string): StepRes
   return [{ ...state, lifecycle: Lifecycle.textEnd(state.lifecycle, events, id) }, events]
 }
 
+export const outputItemID = (state: ParserState, event: Event) =>
+  event.output_index === undefined ? event.item_id : (state.outputItems[event.output_index] ?? event.item_id)
+
 export const onReasoningDelta = (state: ParserState, event: Event, itemID: string): StepResult => {
   const item = state.reasoningItems[itemID]
   if (!event.delta || !item) return [state, NO_EVENTS]
@@ -1201,7 +1206,11 @@ export const providerFailure = (id: string, event: Event, fallback: string) => {
 
 const providerError = (state: ParserState, event: Event, fallback: string) => providerFailure(state.id, event, fallback)
 
-export const step = (state: ParserState, event: Event) => {
+export const step = (state: ParserState, input: Event) => {
+  const event =
+    input.item_id && outputItemID(state, input) !== input.item_id
+      ? { ...input, item_id: outputItemID(state, input) }
+      : input
   if (event.type === "response.output_text.delta" || event.type === "response.output_text.done") {
     if (!event.item_id) return ProviderShared.eventError(state.id, `${event.type} is missing item_id`)
     return Effect.succeed(
@@ -1243,7 +1252,14 @@ export const step = (state: ParserState, event: Event) => {
   if (event.type === "response.output_item.added") {
     if (event.item?.type === "message" && !event.item.id)
       return ProviderShared.eventError(state.id, `${event.type} message is missing id`)
-    return Effect.succeed(onOutputItemAdded(state, event))
+    return Effect.succeed(
+      onOutputItemAdded(
+        event.output_index !== undefined && event.item?.id
+          ? { ...state, outputItems: { ...state.outputItems, [event.output_index]: event.item.id } }
+          : state,
+        event,
+      ),
+    )
   }
   if (event.type === "response.function_call_arguments.delta" || event.type === "response.function_call_arguments.done")
     return event.item_id
@@ -1278,6 +1294,7 @@ export const initial = (request: LLMRequest, extension: Extension = BASE): Parse
   hasFunctionCall: false,
   tools: ToolStream.empty<string>(),
   lifecycle: Lifecycle.initial(),
+  outputItems: {},
   messageItems: new Set<string>(),
   messagePhases: {},
   reasoningItems: {},

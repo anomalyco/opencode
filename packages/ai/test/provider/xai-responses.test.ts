@@ -70,6 +70,42 @@ describe("xAI Responses route", () => {
     }),
   )
 
+  it.effect("routes xAI reasoning summaries by output index", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(LLM.request({ model, prompt: "Think" })).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              {
+                type: "response.output_item.added",
+                output_index: 3,
+                item: { type: "reasoning", id: "reasoning_1" },
+              },
+              {
+                type: "response.reasoning_summary_text.delta",
+                output_index: 3,
+                item_id: "wrong_reasoning",
+                summary_index: 0,
+                delta: "Considering.",
+              },
+              {
+                type: "response.output_item.done",
+                output_index: 3,
+                item: { type: "reasoning", id: "reasoning_1", encrypted_content: "opaque" },
+              },
+              { type: "response.completed", response: { id: "response_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.reasoning).toBe("Considering.")
+      expect(response.message.content.find((part) => part.type === "reasoning")).toMatchObject({
+        providerMetadata: { xai: { itemId: "reasoning_1", reasoningEncryptedContent: "opaque" } },
+      })
+    }),
+  )
+
   it.effect("parses xAI hosted tool items", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(LLM.request({ model, prompt: "Search X" })).pipe(

@@ -225,6 +225,31 @@ describe("Open Responses-compatible route", () => {
     }),
   )
 
+  it.effect("routes response deltas by output index", () =>
+    Effect.gen(function* () {
+      const model = configure({
+        apiKey: "test-key",
+        baseURL: "https://responses.example.test/v1",
+      }).model("example-model")
+      const response = yield* LLMClient.generate(LLM.request({ model, prompt: "Say hello." })).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "response.output_item.added", output_index: 2, item: { type: "message", id: "msg_1" } },
+              { type: "response.output_text.delta", output_index: 2, item_id: "wrong_message", delta: "Indexed" },
+              { type: "response.output_item.done", output_index: 2, item: { type: "message", id: "msg_1" } },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.message.content).toEqual([
+        { type: "text", text: "Indexed", providerMetadata: { openresponses: { itemId: "msg_1" } } },
+      ])
+    }),
+  )
+
   it.effect("finalizes pending function calls from completed response output", () =>
     Effect.gen(function* () {
       const model = configure({

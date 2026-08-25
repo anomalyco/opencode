@@ -830,7 +830,9 @@ describe("OpenAI Responses route", () => {
           webSocket: {
             execute: (exchange) =>
               Effect.gen(function* () {
-                yield* exchange.driver.create(undefined).pipe(Effect.flatMap((create) => Ref.set(message, create.message)))
+                yield* exchange.driver
+                  .create(undefined)
+                  .pipe(Effect.flatMap((create) => Ref.set(message, create.message)))
                 return { frames: exchange.fallback(), complete: Effect.void }
               }),
           },
@@ -2051,6 +2053,163 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("routes assistant text by output index when its item id disagrees", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "response.output_item.added", output_index: 2, item: { type: "message", id: "msg_1" } },
+              { type: "response.output_text.delta", output_index: 2, item_id: "wrong_message", delta: "Indexed" },
+              { type: "response.output_item.done", output_index: 2, item: { type: "message", id: "msg_1" } },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.text).toBe("Indexed")
+      expect(response.message.content).toEqual([
+        { type: "text", text: "Indexed", providerMetadata: { openai: { itemId: "msg_1" } } },
+      ])
+    }),
+  )
+
+  it.effect("routes interleaved function calls by output index", () =>
+    Effect.gen(function* () {
+      const first = { type: "function_call", id: "fc_1", call_id: "call_1", name: "first", arguments: "" }
+      const second = { type: "function_call", id: "fc_2", call_id: "call_2", name: "second", arguments: "" }
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "response.output_item.added", output_index: 1, item: first },
+              { type: "response.output_item.added", output_index: 3, item: second },
+              { type: "response.function_call_arguments.delta", output_index: 1, item_id: "fc_2", delta: '{"a":' },
+              { type: "response.function_call_arguments.delta", output_index: 3, item_id: "fc_1", delta: '{"b":' },
+              {
+                type: "response.function_call_arguments.done",
+                output_index: 3,
+                item_id: "fc_1",
+                arguments: '{"b":2}',
+              },
+              {
+                type: "response.function_call_arguments.done",
+                output_index: 1,
+                item_id: "fc_2",
+                arguments: '{"a":1}',
+              },
+              { type: "response.output_item.done", output_index: 1, item: { ...first, arguments: '{"a":1}' } },
+              { type: "response.output_item.done", output_index: 3, item: { ...second, arguments: '{"b":2}' } },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.events.filter((event) => event.type === "tool-input-delta")).toMatchObject([
+        { id: "call_1", text: '{"a":' },
+        { id: "call_2", text: '{"b":' },
+        { id: "call_2", text: "2}" },
+        { id: "call_1", text: "1}" },
+      ])
+      expect(response.events.filter(LLMEvent.is.toolCall)).toEqual([
+        expect.objectContaining({ id: "call_1", name: "first", input: { a: 1 } }),
+        expect.objectContaining({ id: "call_2", name: "second", input: { b: 2 } }),
+      ])
+    }),
+  )
+
+  it.effect("routes reasoning summary events by output index", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              {
+                type: "response.output_item.added",
+                output_index: 4,
+                item: { type: "reasoning", id: "rs_1" },
+              },
+              {
+                type: "response.reasoning_summary_part.added",
+                output_index: 4,
+                item_id: "wrong_reasoning",
+                summary_index: 0,
+              },
+              {
+                type: "response.reasoning_summary_text.delta",
+                output_index: 4,
+                item_id: "wrong_reasoning",
+                summary_index: 0,
+                delta: "Thinking",
+              },
+              {
+                type: "response.reasoning_summary_part.done",
+                output_index: 4,
+                item_id: "wrong_reasoning",
+                summary_index: 0,
+              },
+              {
+                type: "response.output_item.done",
+                output_index: 4,
+                item: { type: "reasoning", id: "rs_1", encrypted_content: "state" },
+              },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.reasoning).toBe("Thinking")
+      expect(response.message.content).toEqual([
+        {
+          type: "reasoning",
+          text: "Thinking",
+          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "state" } },
+        },
+      ])
+    }),
+  )
+
+  it.effect("routes native reasoning text deltas by output index", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "response.output_item.added", output_index: 1, item: { type: "reasoning", id: "rs_1" } },
+              { type: "response.reasoning_text.delta", output_index: 1, item_id: "wrong_reasoning", delta: "Raw" },
+              { type: "response.output_item.done", output_index: 1, item: { type: "reasoning", id: "rs_1" } },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.reasoning).toBe("Raw")
+    }),
+  )
+
+  it.effect("falls back to item ids when an output index was not registered", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "response.output_item.added", item: { type: "message", id: "msg_1" } },
+              { type: "response.output_text.delta", output_index: 9, item_id: "msg_1", delta: "Fallback" },
+              { type: "response.output_item.done", item: { type: "message", id: "msg_1" } },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.text).toBe("Fallback")
+    }),
+  )
+
   it.effect("rejects output text events without the spec-required item id", () =>
     Effect.gen(function* () {
       const error = yield* LLMClient.generate(request).pipe(
@@ -2059,6 +2218,25 @@ describe("OpenAI Responses route", () => {
             sseEvents(
               { type: "response.output_text.delta", delta: "orphaned" },
               { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+        Effect.flip,
+      )
+
+      expect(error.reason._tag).toBe("InvalidProviderOutput")
+      expect(error.message).toContain("response.output_text.delta is missing item_id")
+    }),
+  )
+
+  it.effect("requires item ids even when their output index is known", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "response.output_item.added", output_index: 0, item: { type: "message", id: "msg_1" } },
+              { type: "response.output_text.delta", output_index: 0, delta: "Missing item ID" },
             ),
           ),
         ),

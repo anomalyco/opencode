@@ -166,7 +166,9 @@ const HOSTED_TOOLS = {
 const step = (state: OpenResponses.ParserState, event: OpenResponses.Event) => {
   if (event.type === "response.reasoning_text.delta")
     return event.item_id
-      ? Effect.succeed(OpenResponses.onReasoningDelta(state, event, event.item_id))
+      ? Effect.succeed(
+          OpenResponses.onReasoningDelta(state, event, OpenResponses.outputItemID(state, event) ?? event.item_id),
+        )
       : ProviderShared.eventError(ADAPTER, `${event.type} is missing item_id`)
   if (event.type === "response.output_item.done" && event.item && ResponsesHostedTools.isItem(event.item, HOSTED_TOOLS))
     return ResponsesHostedTools.onDone(state, event.item, HOSTED_TOOLS)
