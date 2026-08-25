@@ -1,4 +1,4 @@
-import { EmbeddedTerminalRenderable, type RGBA } from "@opentui/core"
+import { CliRenderEvents, EmbeddedTerminalRenderable, type RGBA } from "@opentui/core"
 import type { ResolvedThemeTokens } from "@opencode-ai/theme/tui"
 import { extend, useRenderer } from "@opentui/solid"
 import { createEffect, createSignal, onCleanup, onMount, Show } from "solid-js"
@@ -26,10 +26,16 @@ export function PersistentTerminalPane(props: {
   autoFocus?: boolean
   onAutoFocus?: () => void
   onFocusRequest?: (focus: (() => void) | undefined) => void
+  onInfo?: (info: { cwd: string; title: string; foregroundProcess?: string }) => void
+  onTitleChange?: (title: string) => void
+  onForegroundProcessChange?: (process: string | undefined) => void
+  onDisconnect?: () => void
+  onFocusChange?: (focused: boolean) => void
 }) {
   const client = useClient()
   const keymap = Keymap.use()
-  const theme = useTheme()
+  const leader = Keymap.useLeaderActive()
+  const theme = useTheme("elevated")
   const themes = useThemes()
   const renderer = useRenderer()
   const [failure, setFailure] = createSignal<string>()
@@ -133,12 +139,15 @@ export function PersistentTerminalPane(props: {
     "key",
     ({ event }) => {
       if (!terminal?.focused) return
+      if (keymap.isLeader(event) || leader()) return
       event.preventDefault()
       event.stopPropagation()
       terminal.handleKeyPress(event)
     },
     { priority: 100 },
   )
+  const onFocused = () => props.onFocusChange?.(terminal?.focused === true)
+  renderer.on(CliRenderEvents.FOCUSED_RENDERABLE, onFocused)
   createEffect(() => {
     if (!props.autoFocus || !terminal) return
     terminal.focus()
@@ -146,7 +155,8 @@ export function PersistentTerminalPane(props: {
   })
 
   createEffect(() => {
-    terminalTheme = terminalPalette(themes.currentTokens(), themes.mode())
+    const tokens = themes.currentTokens().contextual.elevated
+    terminalTheme = terminalPalette(tokens, themes.mode(), tokens.background.default)
     applyTerminalTheme()
   })
 
@@ -159,6 +169,8 @@ export function PersistentTerminalPane(props: {
     waitingSize?.resolve()
     socket?.close()
     offKeys()
+    renderer.off(CliRenderEvents.FOCUSED_RENDERABLE, onFocused)
+    props.onFocusChange?.(false)
     props.onFocusRequest?.(undefined)
   })
 
@@ -167,6 +179,11 @@ export function PersistentTerminalPane(props: {
     if (!endpoint) throw new Error("Persistent terminal server endpoint is unavailable")
     const snapshot = await client.api["server.persistentPty"].snapshot({ ptyID: props.ptyID })
     if (disposed) return
+    props.onInfo?.({
+      cwd: snapshot.info.cwd,
+      title: snapshot.info.title,
+      foregroundProcess: snapshot.info.foregroundProcess ?? undefined,
+    })
     setCanonicalSize(snapshot.info.size)
     await waitForTerminalSize(snapshot.info.size)
     if (disposed) return
@@ -201,6 +218,18 @@ export function PersistentTerminalPane(props: {
       if (typeof event.data !== "string") return
       const message: unknown = JSON.parse(event.data)
       if (!message || typeof message !== "object" || !("type" in message)) return
+      if (message.type === "title_changed" && "title" in message && typeof message.title === "string") {
+        props.onTitleChange?.(message.title)
+        return
+      }
+      if (
+        message.type === "foreground_process_changed" &&
+        "process" in message &&
+        (typeof message.process === "string" || message.process === null)
+      ) {
+        props.onForegroundProcessChange?.(message.process ?? undefined)
+        return
+      }
       if (
         message.type === "resized" &&
         "cols" in message &&
@@ -254,10 +283,18 @@ export function PersistentTerminalPane(props: {
       attached = true
     })
     next.addEventListener("error", () => {
-      if (!disposed) setFailure("Terminal connection failed")
+      if (disposed) return
+      const focused = terminal?.focused
+      terminal = undefined
+      setFailure("Terminal connection failed")
+      if (focused) props.onDisconnect?.()
     })
     next.addEventListener("close", () => {
-      if (!disposed) setFailure("Terminal disconnected")
+      if (disposed) return
+      const focused = terminal?.focused
+      terminal = undefined
+      setFailure("Terminal disconnected")
+      if (focused) props.onDisconnect?.()
     })
     socket = next
   }
@@ -268,9 +305,9 @@ export function PersistentTerminalPane(props: {
       minWidth={0}
       minHeight={0}
       overflow="hidden"
-      backgroundColor={theme.background.default}
+      backgroundColor={themes.currentTokens().contextual.elevated.background.default}
       onSizeChange={function () {
-        size = { cols: this.width, rows: this.height }
+        size = { cols: Math.max(1, this.width - 2), rows: this.height }
         if (controller && restored) interact()
       }}
       // TODO: Revisit when embedded terminal mouse handlers can compose without replacing its internal focus handler.
@@ -279,12 +316,12 @@ export function PersistentTerminalPane(props: {
       <Show when={!failure()} fallback={<text fg={theme.text.feedback.error.default}>{failure()}</text>}>
         <>
           <embeddedTerminal
-          ref={(value) => {
-            terminal = value
-            props.onFocusRequest?.(() => {
-              value.focus()
-              interact()
-            })
+            ref={(value) => {
+              terminal = value
+              props.onFocusRequest?.(() => {
+                value.focus()
+                interact()
+              })
               terminalSize = { cols: 80, rows: 24 }
               if (canonicalSize) {
                 value.width = canonicalSize.cols
@@ -293,7 +330,7 @@ export function PersistentTerminalPane(props: {
               applyTerminalTheme()
             }}
             position="absolute"
-            left={0}
+            left={1}
             top={0}
             width={80}
             height={24}
@@ -319,11 +356,11 @@ function sameSize(first: TerminalSize | undefined, second: TerminalSize | undefi
   return !!first && !!second && first.cols === second.cols && first.rows === second.rows
 }
 
-function terminalPalette(theme: ResolvedThemeTokens, mode: "dark" | "light") {
+function terminalPalette(theme: ResolvedThemeTokens, mode: "dark" | "light", background: RGBA) {
   const base = mode === "dark" ? 500 : 700
   const bright = mode === "dark" ? 300 : 500
   const colors = [
-    theme.background.default,
+    background,
     theme.text.feedback.error.default,
     theme.text.feedback.success.default,
     theme.text.feedback.warning.default,
@@ -343,10 +380,7 @@ function terminalPalette(theme: ResolvedThemeTokens, mode: "dark" | "light") {
   return Buffer.from(
     colors
       .map((color, index) => `\x1b]4;${index};${hex(color)}\x1b\\`)
-      .concat(
-        `\x1b]10;${hex(theme.text.default)}\x1b\\`,
-        `\x1b]11;${hex(theme.background.default)}\x1b\\`,
-      )
+      .concat(`\x1b]10;${hex(theme.text.default)}\x1b\\`, `\x1b]11;${hex(background)}\x1b\\`)
       .join(""),
   )
 }

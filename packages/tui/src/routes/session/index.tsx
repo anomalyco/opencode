@@ -149,7 +149,7 @@ function use() {
   return ctx
 }
 
-export function Session(props: { verticalTabsWidth: number }) {
+export function Session(props: { verticalTabsWidth: number; promptMuted?: boolean }) {
   const setEpilogue = useEpilogue()
   const clipboard = useClipboard()
   const writeExport = async (file: string, content: string) => {
@@ -900,7 +900,7 @@ export function Session(props: { verticalTabsWidth: number }) {
       slash: { name: "terminal" },
       run: async () => {
         dialog.clear()
-        await panes.newTerminal(route.sessionID, { focus: false }).catch(toast.error)
+        await panes.newTerminal(route.sessionID).catch(toast.error)
       },
     },
     {
@@ -1341,6 +1341,7 @@ export function Session(props: { verticalTabsWidth: number }) {
                     visible={true}
                     ref={bind}
                     disabled={false}
+                    muted={props.promptMuted}
                     onSubmit={() => {
                       toBottom()
                     }}
