@@ -89,7 +89,7 @@ export const model = (input: ModelInput) => {
         nativeOptions(request.options),
         http?.body,
       ) as ZAIImageBody
-      const text = ProviderShared.encodeJson(requestBody)
+      const text = ProviderShared.encodeOutboundJson(requestBody)
       const url = applyQuery(`${(input.baseURL ?? DEFAULT_BASE_URL).replace(/\/$/, "")}${PATH}`, http?.query)
       const headers = yield* Auth.toEffect(input.auth)({
         request,

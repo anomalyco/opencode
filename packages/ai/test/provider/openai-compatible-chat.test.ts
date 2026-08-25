@@ -425,7 +425,7 @@ describe("OpenAI-compatible Chat route", () => {
           fixedResponse(
             sseEvents({
               id: "chatcmpl_error",
-              error: { code: 502, message: "Provider disconnected", details: { upstream: "vendor" } },
+              error: { code: 502, message: "Provider disconnected", details: { upstream: "vendor\uD800" } },
               trace_id: "trace_1",
             }),
           ),
@@ -436,7 +436,7 @@ describe("OpenAI-compatible Chat route", () => {
       expect(error.reason).toMatchObject({ _tag: "ProviderInternal", message: "Provider disconnected", status: 502 })
       expect(decodeJson(error.body ?? "")).toMatchObject({
         id: "chatcmpl_error",
-        error: { code: 502, message: "Provider disconnected", details: { upstream: "vendor" } },
+        error: { code: 502, message: "Provider disconnected", details: { upstream: "vendor\uD800" } },
         trace_id: "trace_1",
       })
     }),

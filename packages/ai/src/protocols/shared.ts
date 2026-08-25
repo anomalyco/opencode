@@ -18,7 +18,17 @@ export { isRecord }
 
 export const Json = Schema.fromJsonString(Schema.Unknown)
 export const decodeJson = Schema.decodeUnknownSync(Json)
+
+export const sanitizeJson = <T>(value: T): T => {
+  if (typeof value === "string") return value.toWellFormed() as T
+  if (Array.isArray(value)) return value.map(sanitizeJson) as T
+  if (isRecord(value))
+    return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key.toWellFormed(), sanitizeJson(entry)])) as T
+  return value
+}
+
 export const encodeJson = Schema.encodeSync(Json)
+export const encodeOutboundJson = (value: unknown) => encodeJson(sanitizeJson(value))
 const isJson = Schema.is(Schema.Json)
 export const JsonObject = Schema.Record(Schema.String, Schema.Unknown)
 export const optionalArray = <const S extends Schema.Top>(schema: S) => Schema.optional(Schema.Array(schema))
@@ -192,9 +202,9 @@ export const toolResultText = (part: ToolResultPart) => {
     const prototype =
       typeof value === "object" && value !== null && !Array.isArray(value) && Object.getPrototypeOf(value)
     const structured = Array.isArray(value) || prototype === Object.prototype || prototype === null
-    return structured && isJson(value) ? encodeJson(value) : String(value)
+    return structured && isJson(value) ? encodeOutboundJson(value) : String(value)
   }
-  return encodeJson(part.result.value)
+  return encodeOutboundJson(part.result.value)
 }
 
 export const errorText = (error: unknown) => {

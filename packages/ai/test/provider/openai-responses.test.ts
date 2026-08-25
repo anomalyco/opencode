@@ -701,11 +701,11 @@ describe("OpenAI Responses route", () => {
       const response = yield* LLMClient.generate(
         LLM.request({
           model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).responses("gpt-4.1-mini"),
-          prompt: "Say hello.",
+          prompt: "Say \uD800hello \u{1F600}.",
           http: {
             body: {
               model: "overlaid-model",
-              metadata: { source: "overlay" },
+              metadata: { source: "overlay\uDC00" },
               stream_options: { include_usage: true },
               background: true,
             },
@@ -751,7 +751,8 @@ describe("OpenAI Responses route", () => {
       expect(JSON.parse(yield* Ref.get(message))).toEqual({ type: "response.create", ...shared })
       expect(httpBody).toMatchObject({
         model: "overlaid-model",
-        metadata: { source: "overlay" },
+        input: [{ role: "user", content: [{ type: "input_text", text: "Say \uFFFDhello \u{1F600}." }] }],
+        metadata: { source: "overlay\uFFFD" },
         stream: true,
         stream_options: { include_usage: true },
         background: true,

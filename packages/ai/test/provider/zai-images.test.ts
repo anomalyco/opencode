@@ -16,7 +16,7 @@ describe("Z.ai Images", () => {
           headers: { "x-default": "yes" },
           http: { body: { configured: true, quality: "configured" }, query: { trace: "default" } },
         }).image("glm-image"),
-        prompt: "A red circle on a white background",
+        prompt: "A red circle \uD800 on a white background \u{1F600}",
         options: {
           quality: "hd",
           userID: "alias-user",
@@ -54,7 +54,7 @@ describe("Z.ai Images", () => {
                 expect(request.headers.get("x-request")).toBe("yes")
                 expect(JSON.parse(input.text)).toEqual({
                   model: "glm-image",
-                  prompt: "A red circle on a white background",
+                  prompt: "A red circle \uFFFD on a white background \u{1F600}",
                   quality: "final",
                   user_id: "final-user",
                   future_option: true,

@@ -416,7 +416,7 @@ const lowerToolCall = (
     ...(acceptsItemID(extension, "function-call", id) ? { id } : {}),
     call_id: part.id,
     name: part.name,
-    arguments: ProviderShared.encodeJson(part.input),
+    arguments: ProviderShared.encodeOutboundJson(part.input),
   }
 }
 

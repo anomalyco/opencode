@@ -151,7 +151,7 @@ export const model = (input: ModelInput) => {
         },
         http?.body,
       ) as GoogleImageBody
-      const text = ProviderShared.encodeJson(requestBody)
+      const text = ProviderShared.encodeOutboundJson(requestBody)
       const url = applyQuery(
         `${(input.baseURL ?? DEFAULT_BASE_URL).replace(/\/$/, "")}/models/${request.model.id}:generateContent`,
         http?.query,

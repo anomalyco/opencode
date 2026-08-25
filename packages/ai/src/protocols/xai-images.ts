@@ -131,7 +131,7 @@ export const model = (input: ModelInput) => {
         nativeOptions(request.options),
         http?.body,
       ) as XAIImageBody
-      const text = ProviderShared.encodeJson(requestBody)
+      const text = ProviderShared.encodeOutboundJson(requestBody)
       const url = applyQuery(
         `${(input.baseURL ?? DEFAULT_BASE_URL).replace(/\/$/, "")}${imageReferences.length === 0 ? PATH : EDIT_PATH}`,
         http?.query,
