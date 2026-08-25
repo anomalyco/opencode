@@ -20,6 +20,7 @@ import { clearSessionMessageHandoff, setSessionMessageHandoff } from "@/session/
 export function createNewSessionComposerAdapter(props: {
   draftID: string
   worktree: () => string
+  branch: () => string | undefined
   submitted: () => void
 }) {
   const route = useSessionKey()
@@ -48,6 +49,7 @@ export function createNewSessionComposerAdapter(props: {
       const sessionDirectory = await resolveSessionDirectory({
         projectDirectory,
         worktree,
+        branch: props.branch(),
         data,
         serverSDK,
         language,
@@ -73,7 +75,7 @@ export function createNewSessionComposerAdapter(props: {
           return { ok: false as const, error }
         },
       )
-      const afterCreation = async <T,>(run: () => Promise<T>) => {
+      const afterCreation = async <T>(run: () => Promise<T>) => {
         const result = await creation
         if (!result.ok) throw result.error
         return run()
@@ -83,7 +85,7 @@ export function createNewSessionComposerAdapter(props: {
         SessionRouteKey.fromRoute(base64Encode(sessionDirectory), created.id),
       )
       const cleanupReady = startTransition(() => {
-        tabs.updateDraft(props.draftID, { worktree: undefined })
+        tabs.updateDraft(props.draftID, { worktree: undefined, branch: undefined })
         local.session.promote(sessionDirectory, created.id, {
           agent: selection.agent,
           model: selection.model,
@@ -161,6 +163,7 @@ function createMessageHandoff(key: string, sessionID: string, event: ServerSDK["
 async function resolveSessionDirectory(input: {
   projectDirectory: string
   worktree: string
+  branch?: string
   data: ReturnType<typeof useData>
   serverSDK: ReturnType<typeof useServerSDK>
   language: ReturnType<typeof useLanguage>
@@ -172,6 +175,7 @@ async function resolveSessionDirectory(input: {
     .create({
       projectID: input.data.location.info({ directory: input.projectDirectory })?.project.id ?? "",
       strategy: "git",
+      branch: input.branch,
       directory: getDirectory(
         input.data.location.info({ directory: input.projectDirectory })?.project.directory ?? input.projectDirectory,
       ),

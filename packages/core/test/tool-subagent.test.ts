@@ -88,7 +88,7 @@ const executionNode = makeGlobalNode({
         active: Effect.succeed(new Set()),
         resume: complete,
         wake: () => Effect.void,
-        interrupt: () => Effect.void,
+        interrupt: () => Effect.succeed(false),
         awaitIdle: (sessionID) => complete(sessionID).pipe(Effect.exit, Effect.asVoid),
       })
     }),

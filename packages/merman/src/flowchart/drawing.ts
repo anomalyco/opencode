@@ -43,8 +43,9 @@ function mergeFlowchartCell(
   if (incoming.style !== "edge") return incoming
   if (existing.style === "label") return existing
   if (incoming.char === " ") return existing
-  if ((existing.style !== "edge" && existing.style !== "group") || existing.char === " ") return incoming
-  if (DIAGRAM_ARROW_HEADS.has(existing.char) || DIAGRAM_ARROW_HEADS.has(incoming.char)) return incoming
+  if (existing.style !== "edge" || existing.char === " ") return incoming
+  if (DIAGRAM_ARROW_HEADS.has(existing.char)) return existing
+  if (DIAGRAM_ARROW_HEADS.has(incoming.char)) return incoming
 
   return {
     ...incoming,
@@ -75,22 +76,23 @@ function drawNode(
 ): void {
   const chars = BorderChars[borderStyle]
   const style: FlowchartCellStyle = node.shape === "database" ? "database" : "node"
+  const border: FlowchartCellStyle = node.shape === "database" ? "databaseBorder" : "nodeBorder"
 
   if (node.shape === "decision") {
     drawDiagramDiamond(
       bounds,
-      (x, y, char) => grid.setCell(x, y, char, style),
+      (x, y, char) => grid.setCell(x, y, char, border),
       diagramDiamondCharactersFromBorder(chars),
     )
   } else if (node.shape === "subroutine") {
     fillDiagramFrameInterior(bounds, (x, y) => grid.setCell(x, y, " ", style))
-    drawSubroutineNode(grid, bounds, chars, style)
+    drawSubroutineNode(grid, bounds, chars, border)
   } else if (node.shape === "database") {
     fillDiagramFrameInterior(bounds, (x, y) => grid.setCell(x, y, " ", style))
-    drawDatabaseNode(grid, bounds, chars, style)
+    drawDatabaseNode(grid, bounds, chars, border)
   } else {
     fillDiagramFrameInterior(bounds, (x, y) => grid.setCell(x, y, " ", style))
-    drawDiagramFrame(bounds, chars, (x, y, char) => grid.setCell(x, y, char, style))
+    drawDiagramFrame(bounds, chars, (x, y, char) => grid.setCell(x, y, char, border))
   }
 
   const textTop =
@@ -270,7 +272,7 @@ function drawSourceConnectors(
     const connectorDirection = flowchartDirectionBetween(sourcePoint, connector)
     if (routeDirection && connectorDirection) {
       const cell = grid.getCell(sourcePoint.x, sourcePoint.y)
-      if (cell && cell.style !== "label") {
+      if (cell && cell.style !== "label" && !DIAGRAM_ARROW_HEADS.has(cell.char)) {
         grid.replaceCell(
           sourcePoint.x,
           sourcePoint.y,

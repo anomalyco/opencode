@@ -3248,6 +3248,7 @@ function Subagent(props: ToolProps) {
   const data = useData()
   const sessionID = createMemo(() => stringValue(props.metadata.sessionID) ?? stringValue(props.metadata.sessionId))
   const description = createMemo(() => stringValue(props.input.description))
+  const continuation = createMemo(() => Boolean(stringValue(props.input.sessionID)))
   const isRunning = createMemo(() => {
     const id = sessionID()
     return props.part.state.status === "running" || Boolean(id && data.session.status(id) === "running")
@@ -3255,8 +3256,8 @@ function Subagent(props: ToolProps) {
 
   return (
     <InlineTool
-      icon={isRunning() ? "│" : props.part.state.status === "completed" ? "✓" : "│"}
-      spinner={isRunning()}
+      icon={continuation() ? "↳" : isRunning() ? "│" : props.part.state.status === "completed" ? "✓" : "│"}
+      spinner={!continuation() && isRunning()}
       complete={description()}
       pending="Delegating..."
       part={props.part}
@@ -3270,7 +3271,9 @@ function Subagent(props: ToolProps) {
         ) : undefined
       }
     >
-      {`${Locale.titlecase(stringValue(props.input.agent) ?? stringValue(props.input.subagent_type) ?? "General")} Subagent — ${description() ?? "Subagent"}`}
+      {continuation()
+        ? `Continue subagent — ${description() ?? "Subagent"}`
+        : `${Locale.titlecase(stringValue(props.input.agent) ?? stringValue(props.input.subagent_type) ?? "General")} Subagent — ${description() ?? "Subagent"}`}
     </InlineTool>
   )
 }

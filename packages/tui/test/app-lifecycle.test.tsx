@@ -296,6 +296,73 @@ test("session startup prompt is submitted exactly once", async () => {
   }
 })
 
+test("new session inherits the active session model", async () => {
+  const setup = await createTestRenderer({ width: 80, height: 24, useThread: false, kittyKeyboard: true })
+  setup.renderer.start()
+  const events = createEventStream()
+  const cwd = process.cwd()
+  const location = { directory: cwd, project: { id: "project", directory: cwd } }
+  const session = {
+    id: "dummy",
+    title: "Demo session",
+    projectID: "project",
+    location: { directory: cwd },
+    agent: "build",
+    model: { providerID: "provider", id: "session-model" },
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    time: { created: 0, updated: 0 },
+  }
+  const calls = createFetch((url) => {
+    if (url.pathname === "/api/location") return json(location)
+    if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
+    if (url.pathname === "/api/session/dummy") return json({ data: session })
+    if (url.pathname === "/api/session/dummy/message") return json({ data: [], cursor: {} })
+    if (url.pathname === "/api/session/dummy/inbox") return json({ data: [] })
+    if (url.pathname === "/api/session/dummy/permission") return json({ data: [] })
+    if (url.pathname === "/api/agent")
+      return json({ location, data: [{ id: "build", mode: "primary", hidden: false, permissions: [] }] })
+    if (url.pathname === "/api/provider") return json({ location, data: [{ id: "provider", name: "Provider" }] })
+    if (url.pathname === "/api/model")
+      return json({
+        location,
+        data: [
+          { id: "home-model", providerID: "provider", name: "Home Model", variants: [] },
+          { id: "session-model", providerID: "provider", name: "Session Model", variants: [] },
+        ],
+      })
+  }, events)
+  const server = Bun.serve({ port: 0, fetch: (request) => calls.fetch(request) })
+
+  try {
+    const { run } = await import("../src/app")
+    const task = Effect.runPromise(
+      run({
+        app: { name: "test", version: "test", channel: "test" },
+        server: { endpoint: { url: server.url.toString() } },
+        config: { get: async () => ({ animations: false }), update: async () => ({}) },
+        packages: { resolve: async () => undefined },
+        terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
+        args: { sessionID: "dummy" },
+        log: () => {},
+      }).pipe(Effect.provide(AppNodeBuilder.build(Global.node)), Effect.provide(FileSystem.layerNoop({}))),
+    )
+
+    await setup.waitForFrame((frame) => frame.includes("Session Model"))
+    await setup.mockInput.typeText("/new")
+    setup.mockInput.pressEnter()
+    await Bun.sleep(50)
+    await setup.renderOnce()
+    const frame = setup.captureCharFrame()
+    expect(frame).toContain("Session Model")
+    setup.renderer.destroy()
+    await task
+  } finally {
+    if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+    await server.stop()
+  }
+})
+
 test("keeps the prompt display stable while a new location catalog loads", async () => {
   const setup = await createTestRenderer({ width: 100, height: 30, useThread: false, kittyKeyboard: true })
   setup.renderer.start()

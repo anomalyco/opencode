@@ -3,7 +3,7 @@ import stringWidth from "string-width"
 import { spatialPathClaim } from "../core/spatial.js"
 import { expectDiagram } from "../test/diagram.js"
 import { renderStateDiagram } from "./diagram.js"
-import { drawStateDiagramGrid } from "./drawing.js"
+import { createStateDiagramDrawing, drawStateDiagramGrid } from "./drawing.js"
 import { createStateDiagramLayout } from "./layout.js"
 import { parseMermaidStateDiagram } from "./parser.js"
 import { prepareVisibleStateDiagram } from "./visible-model.js"
@@ -58,6 +58,35 @@ function expectCompleteStateDiagram(source: string, output = renderStateDiagram(
       expect([...occupied].some((cell) => other.has(cell))).toBe(false)
     }
   }
+}
+
+type ResponsiveStateLabelProfile = "short" | "long" | "unicode"
+
+function responsiveStateChain(direction: "LR" | "RL", profile: ResponsiveStateLabelProfile): string {
+  const stateLabel = (id: string) => {
+    if (profile === "long") return `${id} deliberate state with a long descriptive label`
+    if (profile === "unicode") return `${id} 東京<br/>résumé 🚀`
+    return `${id} node`
+  }
+  const transitionLabel = (id: string) => {
+    if (profile === "long") return `${id} transition carrying detailed context`
+    if (profile === "unicode") return `${id} 東京<br/>✓ prêt`
+    return `${id} edge`
+  }
+  const ids = ["A", "B", "C", "D", "E"]
+  return [
+    "stateDiagram-v2",
+    `direction ${direction}`,
+    ...ids.map((id) => `state "${stateLabel(id)}" as ${id}`),
+    "[*] --> A",
+    ...ids.slice(0, -1).map((id, index) => `${id} --> ${ids[index + 1]}: ${transitionLabel(`E0${index + 1}`)}`),
+    "E --> [*]",
+  ].join("\n")
+}
+
+function renderedStateDimensions(output: string) {
+  const lines = output.split("\n")
+  return { width: Math.max(...lines.map((line) => stringWidth(line))), height: lines.length }
 }
 
 describe("StateDiagram", () => {
@@ -179,6 +208,95 @@ stateDiagram-v2
     expect(output).toContain("◀")
   })
 
+  test("renders reverse vertical direction from bottom to top", () => {
+    const source = `stateDiagram-v2
+  direction BT
+  A --> B`
+    const drawing = createStateDiagramDrawing(parseMermaidStateDiagram(source))
+
+    expect(drawing.layout.bounds.get("A")!.top).toBeGreaterThan(drawing.layout.bounds.get("B")!.top)
+    expect(drawing.grid.toString({ trimTop: true, trimBottom: true })).toContain("▲")
+  })
+
+  test.each(
+    (["LR", "RL"] as const).flatMap((direction) =>
+      (["short", "long", "unicode"] as const).flatMap((profile) =>
+        ([60, 80, 120] as const).map((layoutMaxWidth) => [direction, profile, layoutMaxWidth] as const),
+      ),
+    ),
+  )("folds responsive %s %s chains at %d columns", (direction, profile, layoutMaxWidth) => {
+    const source = responsiveStateChain(direction, profile)
+    const horizontal = renderStateDiagram(source)
+    const responsive = renderStateDiagram(source, { layoutMaxWidth })
+    const vertical = renderStateDiagram(source, { direction: direction === "RL" ? "BT" : "TB" })
+
+    expect(renderedStateDimensions(horizontal).width).toBeGreaterThan(layoutMaxWidth)
+    expect(responsive).toBe(vertical)
+    expect(renderedStateDimensions(responsive).width).toBeLessThan(renderedStateDimensions(horizontal).width)
+    for (const content of ["A", "B", "C", "D", "E", "E01", "E02", "E03", "E04"]) {
+      expect(responsive).toContain(content)
+    }
+  })
+
+  test.each(["LR", "RL"] as const)("keeps the narrower %s orientation for broad ranks", (direction) => {
+    const source = `stateDiagram-v2
+  direction ${direction}
+${Array.from({ length: 8 }, (_, index) => `  A --> B${index}`).join("\n")}`
+    const horizontal = renderStateDiagram(source)
+    const vertical = renderStateDiagram(source, { direction: direction === "RL" ? "BT" : "TB" })
+    const responsive = renderStateDiagram(source, { layoutMaxWidth: 60 })
+
+    expect(renderedStateDimensions(horizontal).width).toBeLessThan(renderedStateDimensions(vertical).width)
+    expect(responsive).toBe(horizontal)
+  })
+
+  test("falls back before allocating an oversized horizontal canvas", () => {
+    const ids = Array.from({ length: 301 }, (_, index) => `S${index}`)
+    const label = "transition label carrying enough context to make the horizontal canvas too large"
+    const source = `stateDiagram-v2
+  direction LR
+${ids
+  .slice(0, -1)
+  .map((id, index) => `  ${id} --> ${ids[index + 1]}: ${label}`)
+  .join("\n")}`
+    const output = renderStateDiagram(source, { layoutMaxWidth: 80 })
+
+    expect(output).toContain("S0")
+    expect(output).toContain("S300")
+    expect(renderedStateDimensions(output).width).toBeLessThanOrEqual(stringWidth(label) + 8)
+  })
+
+  test.each(["TB", "TD", "BT"] as const)("preserves explicit %s layouts under a narrow width target", (direction) => {
+    const source = `stateDiagram-v2
+  direction ${direction}
+  A --> B: next`
+
+    expect(renderStateDiagram(source, { layoutMaxWidth: 1 })).toBe(renderStateDiagram(source))
+  })
+
+  test("preserves horizontal layouts that fit or have no finite width target", () => {
+    const source = `stateDiagram-v2
+  direction LR
+  A --> B`
+    const output = renderStateDiagram(source)
+
+    expect(renderStateDiagram(source, { layoutMaxWidth: 120 })).toBe(output)
+    expect(renderStateDiagram(source, { layoutMaxWidth: Number.POSITIVE_INFINITY })).toBe(output)
+  })
+
+  test("treats a single irreducibly wide state as soft overflow", () => {
+    const label = "界".repeat(40)
+    const output = renderStateDiagram(
+      `stateDiagram-v2
+  direction LR
+  state "${label}" as Wide`,
+      { layoutMaxWidth: 60 },
+    )
+
+    expect(renderedStateDimensions(output).width).toBeGreaterThan(60)
+    expect(output).toContain(label)
+  })
+
   test("does not mutate a parsed diagram when rendering with a direction override", () => {
     const diagram = parseMermaidStateDiagram(`stateDiagram-v2
   direction LR
@@ -249,24 +367,21 @@ stateDiagram-v2
 
     for (const line of labelLines) expect(output.split(line)).toHaveLength(2)
     expect(output).toMatchInlineSnapshot(`
-      "
-        create from base image ╭─────────╮
+      "  create from base image ╭─────────╮
       ●───────────────────────▶│ Running │
-                               ╰──┬──────╯ 💥 sandbox dies BEFORE hook fires
-                                ▲ │   ▲    (crash, our bug, race)
-                       ╭────────┼─┴───┼───────╮
+                               ╰──┬──────╯
+                                ▲ │   ▲        💥 sandbox dies BEFORE hook fires
+                       ╭────────┼─┴───┼───────╮(crash, our bug, race)
                        ▼   ╭────┼─────╯       ▼
                     ╭──────┴──╮ │           ╭──────╮
                     │ Dormant │ │           │ Lost │
                     ╰─────────╯ │           ╰───┬──╯
                                 │               │
-       📸 suspend hook fires    │               │
-       (WE must call it on idle)│               │
+       📸 suspend hook fires    │               │ wake from LAST snapshot
+       (WE must call it on idle)│               │ ⚠ files since then GONE
                                 ╰───────────────╯
                             wake from snapshot image
-                            (apt installs restored!)
-                                  wake from LAST snapshot
-                                  ⚠ files since then GONE"
+                            (apt installs restored!)"
     `)
   })
 
@@ -505,6 +620,14 @@ stateDiagram-v2
     expect(output.split("\n").filter((line) => line.trim())).toHaveLength(3)
   })
 
+  test.each(["LR", "RL"] as const)("trims leading rows from standalone %s choices", (direction) => {
+    const output = renderStateDiagram(`stateDiagram-v2
+  direction ${direction}
+  state Decision <<choice>>`)
+
+    expect(output).toBe("◆")
+  })
+
   test("renders parallel transitions without losing labels", () => {
     const horizontal = renderStateDiagram(`stateDiagram-v2
   direction LR
@@ -681,6 +804,135 @@ stateDiagram-v2
     for (const label of ["one", "two", "three", "four"]) {
       expect(output.match(new RegExp(label, "g"))).toHaveLength(1)
     }
+  })
+
+  test("grows parallel vertical diagrams by the maximum label width rather than their sum", () => {
+    const render = (labels: readonly string[]) =>
+      renderStateDiagram(`stateDiagram-v2
+  direction TB
+${labels.map((label) => `  A --> B: ${label}`).join("\n")}`)
+    const shortLabels = ["one", "two", "three"]
+    const longLabels = [
+      "alpha route label that is deliberately long",
+      "beta route label that is deliberately long",
+      "gamma route label that is deliberately long",
+    ]
+    const width = (output: string) => Math.max(...output.split("\n").map((line) => stringWidth(line)))
+    const labelGrowth =
+      Math.max(...longLabels.map((label) => stringWidth(label))) -
+      Math.max(...shortLabels.map((label) => stringWidth(label)))
+
+    expect(width(render(longLabels)) - width(render(shortLabels))).toBeLessThanOrEqual(labelGrowth + 2)
+  })
+
+  test("keeps audited parallel labels clear of frames and rails", () => {
+    const output = renderStateDiagram(`stateDiagram-v2
+  direction TB
+  A --> B: alpha route label that is deliberately long
+  A --> B: beta route label that is deliberately long
+  A --> B: gamma route label that is deliberately long`)
+
+    expect(output).toMatchInlineSnapshot(`
+      "╭───╮ alpha route label that is deliberately long
+      │ A ├───┬──╮
+      ╰─┬─╯   │  │
+        │     │  │ gamma route label that is deliberately long
+        │     │  │ beta route label that is deliberately long
+        │     │  │
+        ▼     │  │
+      ╭───╮   │  │
+      │ B │◀──┴──╯
+      ╰───╯"
+    `)
+  })
+
+  test("keeps audited repeated self-transition lanes distinct and readable", () => {
+    const output = renderStateDiagram(`stateDiagram-v2
+  direction LR
+  A --> A: one
+  A --> A: two
+  A --> A: three`)
+
+    expect(output).toMatchInlineSnapshot(`
+      "╭───╮
+      │ A │
+      ╰─┬─╯
+        │  ▲   ▲   ▲
+        ├──╯   │   │
+        │      │   │
+        │ one  │   │
+        ├──────╯   │
+        │          │
+        │     two  │ three
+        ╰──────────╯"
+    `)
+  })
+
+  test("expands composites around self-transition labels without engulfing external states", () => {
+    const source = `stateDiagram-v2
+  direction LR
+  state Outer {
+    A --> A: loop-0
+    A --> A: loop-1
+    A --> A: loop-2
+  }
+  A --> C`
+    const drawing = createStateDiagramDrawing(parseMermaidStateDiagram(source))
+    const outer = drawing.layout.compositeBounds.get("Outer")!
+    const external = drawing.layout.bounds.get("C")!
+    const output = drawing.grid.toString({ trimTop: true, trimBottom: true })
+
+    expect(
+      external.left < outer.left + outer.width &&
+        external.left + external.width > outer.left &&
+        external.top < outer.top + outer.height &&
+        external.top + external.height > outer.top,
+    ).toBe(false)
+    for (const plan of drawing.transitionPlans.filter(
+      (plan) => plan.route.transition.from === plan.route.transition.to,
+    )) {
+      expect(plan.label).toBeDefined()
+      expect(plan.label!.x).toBeGreaterThan(outer.left)
+      expect(plan.label!.y).toBeGreaterThan(outer.top)
+      expect(plan.label!.x + Math.max(...plan.label!.lines.map((line) => stringWidth(line)))).toBeLessThan(
+        outer.left + outer.width,
+      )
+      expect(plan.label!.y + plan.label!.lines.length).toBeLessThan(outer.top + outer.height)
+    }
+    for (const label of ["loop-0", "loop-1", "loop-2"]) expect(output.match(new RegExp(label, "g"))).toHaveLength(1)
+  })
+
+  test("keeps audited nested note connectors direct and inside every frame", () => {
+    const output = renderStateDiagram(`stateDiagram-v2
+  direction TB
+  state Outer {
+    state Inner {
+      A --> B: down
+      B --> A: up
+      note right of B: note
+    }
+  }`)
+
+    expect(output).toMatchInlineSnapshot(`
+      "╭─ Outer ───────────────╮
+      │                       │
+      │ ╭─ Inner ───────────╮ │
+      │ │                   │ │
+      │ │ ╭───╮             │ │
+      │ │▶│ A │             │ │
+      │ ││╰─┬─╯             │ │
+      │ ││  │               │ │
+      │ ││  │ down          │ │
+      │ ││  │               │ │
+      │ ││  ▼               │ │
+      │ ││╭───╮    ╔══════╗ │ │
+      │ │╰┤ B │════╣ note ║ │ │
+      │ │ ╰───╯    ╚══════╝ │ │
+      │ │up                 │ │
+      │ ╰───────────────────╯ │
+      │                       │
+      ╰───────────────────────╯"
+    `)
   })
 
   test("keeps explicit choices visible in choice-only cycles", () => {

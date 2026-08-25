@@ -1,5 +1,5 @@
 import { Buffer } from "node:buffer"
-import { Effect, Schema } from "effect"
+import { Effect, Option, Schema } from "effect"
 import { Tool } from "@opencode-ai/schema/tool"
 import { Route } from "../route/client.js"
 import { Auth } from "../route/auth.js"
@@ -157,7 +157,7 @@ type AnthropicDocumentBlock = Schema.Schema.Type<typeof AnthropicDocumentBlock>
 const AnthropicThinkingBlock = Schema.Struct({
   type: Schema.tag("thinking"),
   thinking: Schema.String,
-  signature: Schema.optional(Schema.String),
+  signature: Schema.String,
   cache_control: Schema.optional(AnthropicCacheControl),
 })
 
@@ -361,6 +361,8 @@ const AnthropicStreamBlock = Schema.Struct({
   tool_use_id: Schema.optional(Schema.String),
   content: Schema.optional(Schema.Unknown),
 })
+type AnthropicStreamBlock = Schema.Schema.Type<typeof AnthropicStreamBlock>
+const decodeAnthropicStreamBlock = Schema.decodeUnknownOption(AnthropicStreamBlock)
 
 const AnthropicStreamDelta = Schema.Struct({
   type: Schema.optional(Schema.String),
@@ -371,13 +373,15 @@ const AnthropicStreamDelta = Schema.Struct({
   stop_reason: optionalNull(Schema.String),
   stop_sequence: optionalNull(Schema.String),
 })
+type AnthropicStreamDelta = Schema.Schema.Type<typeof AnthropicStreamDelta>
+const decodeAnthropicStreamDelta = Schema.decodeUnknownOption(AnthropicStreamDelta)
 
 const AnthropicEvent = Schema.Struct({
   type: Schema.String,
   index: Schema.optional(Schema.Number),
   message: Schema.optional(Schema.Struct({ usage: Schema.optional(AnthropicUsage) })),
-  content_block: Schema.optional(AnthropicStreamBlock),
-  delta: Schema.optional(AnthropicStreamDelta),
+  content_block: Schema.optional(Schema.Unknown),
+  delta: Schema.optional(Schema.Unknown),
   usage: Schema.optional(AnthropicUsage),
   // `type` and `message` are both required per Anthropic's spec, but
   // OpenAI-compatible proxies and gateway translations occasionally drop one
@@ -701,6 +705,26 @@ const lowerToolResultContent = Effect.fnUntraced(function* (part: ToolResultPart
   return yield* Effect.forEach(content, lowerToolResultContentItem)
 })
 
+const requireThinkingSignature = (request: LLMRequest) => {
+  if (request.model.compatibility?.requireSignature !== undefined)
+    return request.model.compatibility.requireSignature
+  const provider = request.model.provider.toLowerCase()
+  const model = request.model.id.toLowerCase()
+  const baseURL = (request.model.route.endpoint.baseURL ?? "").toLowerCase()
+  if (
+    provider === "kimi-for-coding" ||
+    provider === "moonshotai" ||
+    provider === "moonshotai-cn" ||
+    model.startsWith("kimi-") ||
+    baseURL.includes("api.kimi.com/coding") ||
+    baseURL.includes("api.moonshot.ai/anthropic") ||
+    baseURL.includes("api.moonshot.cn/anthropic")
+  )
+    return false
+  if (provider.includes("xiaomi") || model.includes("mimo") || baseURL.includes("xiaomimimo.com")) return false
+  return true
+}
+
 // Mid-conversation system messages became available with Opus 4.8 and version
 // 5 of the other supported Claude families. Treat later family versions as
 // compatible without assuming that every Anthropic Messages model is Claude.
@@ -807,13 +831,28 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
           continue
         }
         if (part.type === "reasoning") {
-          // Mirrors Vercel's @ai-sdk/anthropic: a signature marks visible
-          // thinking; only signature-less parts carrying redactedData
-          // round-trip as opaque redacted_thinking blocks.
+          // A signature marks visible thinking; only signature-less parts carrying
+          // redactedData round-trip as opaque redacted_thinking blocks.
           const signature = part.encrypted ?? signatureFromMetadata(part.providerMetadata)
           const redactedData = redactedDataFromMetadata(part.providerMetadata)
           if (signature === undefined && redactedData !== undefined) {
             content.push({ type: "redacted_thinking", data: redactedData })
+            continue
+          }
+          if (typeof signature !== "string" || signature.trim().length === 0) {
+            if (part.text.trim().length === 0) continue
+            if (!requireThinkingSignature(request)) {
+              content.push({ type: "thinking", thinking: part.text, signature: "" })
+              continue
+            }
+            // Without a signature this cannot be a valid thinking block per
+            // the SDK ThinkingBlockParam:3217 — demote to text so the
+            // conversation remains sendable.
+            content.push({
+              type: "text",
+              text: part.text,
+              cache_control: cacheControl(breakpoints, part.cache),
+            })
             continue
           }
           content.push({ type: "thinking", thinking: part.text, signature })
@@ -1071,7 +1110,7 @@ const SERVER_TOOL_RESULT_NAMES: Record<AnthropicServerToolResultType, string> = 
 
 const isServerToolResultType = (type: string): type is AnthropicServerToolResultType => type in SERVER_TOOL_RESULT_NAMES
 
-const serverToolResultEvent = (block: NonNullable<AnthropicEvent["content_block"]>): LLMEvent | undefined => {
+const serverToolResultEvent = (block: AnthropicStreamBlock): LLMEvent | undefined => {
   if (!block.type || !isServerToolResultType(block.type)) return undefined
   const errorPayload =
     typeof block.content === "object" && block.content !== null && "type" in block.content
@@ -1098,7 +1137,10 @@ const onMessageStart = (state: ParserState, event: AnthropicEvent): StepResult =
   return [usage ? { ...state, usage: mergeUsage(state.usage, usage) } : state, NO_EVENTS]
 }
 
-const onContentBlockStart = (state: ParserState, event: AnthropicEvent): StepResult => {
+const onContentBlockStart = (
+  state: ParserState,
+  event: AnthropicEvent & { readonly content_block: AnthropicStreamBlock },
+): StepResult => {
   const block = event.content_block
   if (!block) return [state, NO_EVENTS]
 
@@ -1189,11 +1231,12 @@ const onContentBlockStart = (state: ParserState, event: AnthropicEvent): StepRes
 
 const onContentBlockDelta = Effect.fn("AnthropicMessages.onContentBlockDelta")(function* (
   state: ParserState,
-  event: AnthropicEvent,
+  event: AnthropicEvent & { readonly delta: AnthropicStreamDelta },
 ) {
   const delta = event.delta
 
   if (delta?.type === "text_delta" && delta.text) {
+    if (!state.lifecycle.text.has(`text-${event.index ?? 0}`)) return [state, NO_EVENTS] satisfies StepResult
     const events: LLMEvent[] = []
     return [
       { ...state, lifecycle: Lifecycle.textDelta(state.lifecycle, events, `text-${event.index ?? 0}`, delta.text) },
@@ -1202,6 +1245,7 @@ const onContentBlockDelta = Effect.fn("AnthropicMessages.onContentBlockDelta")(f
   }
 
   if (delta?.type === "thinking_delta" && delta.thinking) {
+    if (!state.lifecycle.reasoning.has(`reasoning-${event.index ?? 0}`)) return [state, NO_EVENTS] satisfies StepResult
     const events: LLMEvent[] = []
     return [
       {
@@ -1214,6 +1258,7 @@ const onContentBlockDelta = Effect.fn("AnthropicMessages.onContentBlockDelta")(f
 
   if (delta?.type === "signature_delta" && delta.signature) {
     const index = event.index ?? 0
+    if (!state.lifecycle.reasoning.has(`reasoning-${index}`)) return [state, NO_EVENTS] satisfies StepResult
     return [
       {
         ...state,
@@ -1266,7 +1311,10 @@ const onContentBlockStop = Effect.fn("AnthropicMessages.onContentBlockStop")(fun
   return [{ ...state, lifecycle, tools: result.tools, reasoningSignatures }, events] satisfies StepResult
 })
 
-const onMessageDelta = (state: ParserState, event: AnthropicEvent): StepResult => {
+const onMessageDelta = (
+  state: ParserState,
+  event: AnthropicEvent & { readonly delta?: AnthropicStreamDelta },
+): StepResult => {
   const usage = mergeUsage(state.usage, mapUsage(event.usage))
   return [
     {
@@ -1321,11 +1369,49 @@ const onError = (event: AnthropicEvent) =>
     }),
   )
 
+const isKnownStreamBlockType = (type: string) =>
+  type === "text" ||
+  type === "thinking" ||
+  type === "redacted_thinking" ||
+  type === "tool_use" ||
+  type === "server_tool_use" ||
+  isServerToolResultType(type)
+
+const isKnownStreamDeltaType = (type: string) =>
+  type === "text_delta" || type === "thinking_delta" || type === "signature_delta" || type === "input_json_delta"
+
+const invalidStreamEvent = (event: AnthropicEvent) =>
+  Effect.fail(
+    ProviderShared.eventError(
+      ADAPTER,
+      "Invalid anthropic/anthropic-messages stream event",
+      ProviderShared.encodeJson(event),
+    ),
+  )
+
 const step = (state: ParserState, event: AnthropicEvent) => {
+  if (!SSE_EVENTS.has(event.type)) return Effect.succeed<StepResult>([state, NO_EVENTS])
+  if (
+    event.type !== "content_block_start" &&
+    event.content_block !== undefined &&
+    Option.isNone(decodeAnthropicStreamBlock(event.content_block))
+  )
+    return invalidStreamEvent(event)
+  if (
+    event.type !== "content_block_delta" &&
+    event.delta !== undefined &&
+    Option.isNone(decodeAnthropicStreamDelta(event.delta))
+  )
+    return invalidStreamEvent(event)
   if (event.type === "message_start") return Effect.succeed(onMessageStart(state, event))
   if (event.type === "content_block_start") {
-    const block = event.content_block
-    if (block && (block.type === "tool_use" || block.type === "server_tool_use")) {
+    if (!ProviderShared.isRecord(event.content_block) || typeof event.content_block.type !== "string")
+      return invalidStreamEvent(event)
+    if (!isKnownStreamBlockType(event.content_block.type)) return Effect.succeed<StepResult>([state, NO_EVENTS])
+    const decoded = decodeAnthropicStreamBlock(event.content_block)
+    if (Option.isNone(decoded)) return invalidStreamEvent(event)
+    const block = decoded.value
+    if (block.type === "tool_use" || block.type === "server_tool_use") {
       if (event.index === undefined)
         return Effect.fail(ProviderShared.eventError(ADAPTER, `Anthropic ${block.type} missing index`))
       if (!block.id)
@@ -1333,11 +1419,22 @@ const step = (state: ParserState, event: AnthropicEvent) => {
           ProviderShared.eventError(ADAPTER, `Anthropic tool_use missing id at index ${event.index}`),
         )
     }
-    return Effect.succeed(onContentBlockStart(state, event))
+    return Effect.succeed(onContentBlockStart(state, { ...event, content_block: block }))
   }
-  if (event.type === "content_block_delta") return onContentBlockDelta(state, event)
+  if (event.type === "content_block_delta") {
+    if (!ProviderShared.isRecord(event.delta)) return invalidStreamEvent(event)
+    if (typeof event.delta.type === "string" && !isKnownStreamDeltaType(event.delta.type))
+      return Effect.succeed<StepResult>([state, NO_EVENTS])
+    const decoded = decodeAnthropicStreamDelta(event.delta)
+    if (Option.isNone(decoded)) return invalidStreamEvent(event)
+    return onContentBlockDelta(state, { ...event, delta: decoded.value })
+  }
   if (event.type === "content_block_stop") return onContentBlockStop(state, event)
-  if (event.type === "message_delta") return Effect.succeed(onMessageDelta(state, event))
+  if (event.type === "message_delta") {
+    const decoded = decodeAnthropicStreamDelta(event.delta)
+    if (Option.isNone(decoded)) return invalidStreamEvent(event)
+    return Effect.succeed(onMessageDelta(state, { ...event, delta: decoded.value }))
+  }
   if (event.type === "message_stop") return onMessageStop(state)
   if (event.type === "error") return onError(event)
   return Effect.succeed<StepResult>([state, NO_EVENTS])

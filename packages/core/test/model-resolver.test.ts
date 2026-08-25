@@ -1080,7 +1080,11 @@ describe("ModelResolver", () => {
       expect(openrouter.route.id).toBe("openrouter")
       expect(openrouter.route.defaults.providerOptions).toEqual({ reasoning: { effort: "high" } })
       expect(xai.route.id).toBe("openai-responses")
-      expect(xai.route.defaults.providerOptions).toEqual({ reasoningEffort: "high", store: false })
+      expect(xai.route.defaults.providerOptions).toEqual({
+        reasoningEffort: "high",
+        store: false,
+        include: ["reasoning.encrypted_content"],
+      })
       expect(bedrock.route.id).toBe("bedrock-converse")
       expect(bedrock.route.defaults.generation).toEqual({ topP: 0.8 })
       expect(bedrock.route.defaults.http?.body).toEqual({ serviceTier: { type: "priority" } })

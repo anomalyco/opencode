@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test"
 import { parseColor, TextAttributes } from "@opentui/core"
 import stringWidth from "string-width"
+import { diagramArrowHeadBetween } from "../core/drawing.js"
+import { orthogonalPathPoints } from "../core/geometry.js"
 import { expectDiagram } from "../test/diagram.js"
+import { deploymentArchitectureSource } from "../test/layout-audit/fixtures.js"
 import { drawFlowchartDiagramGrid as drawParsedFlowchartDiagramGrid } from "./drawing.js"
 import {
   DEFAULT_MIN_RANK_GAP,
@@ -35,7 +38,7 @@ function routeRunsAlongHorizontalBorder(
     const from = route.points[index - 1]!
     const to = route.points[index]!
     if (from.y !== to.y || !borderYs.has(from.y)) continue
-    if (Math.max(from.x, to.x) >= left && Math.min(from.x, to.x) <= right) return true
+    if (Math.min(Math.max(from.x, to.x), right) > Math.max(Math.min(from.x, to.x), left)) return true
   }
   return false
 }
@@ -52,7 +55,7 @@ function routeRunsAlongVerticalBorder(
     const from = route.points[index - 1]!
     const to = route.points[index]!
     if (from.x !== to.x || !borderXs.has(from.x)) continue
-    if (Math.max(from.y, to.y) >= top && Math.min(from.y, to.y) <= bottom) return true
+    if (Math.min(Math.max(from.y, to.y), bottom) > Math.max(Math.min(from.y, to.y), top)) return true
   }
   return false
 }
@@ -112,6 +115,111 @@ function boundsIntersect(
     left.top <= right.top + right.height - 1 &&
     left.top + left.height - 1 >= right.top
   )
+}
+
+function boundsContains(
+  outer: { left: number; top: number; width: number; height: number },
+  inner: { left: number; top: number; width: number; height: number },
+): boolean {
+  return (
+    inner.left >= outer.left &&
+    inner.top >= outer.top &&
+    inner.left + inner.width <= outer.left + outer.width &&
+    inner.top + inner.height <= outer.top + outer.height
+  )
+}
+
+function routesIntersect(
+  left: { points: readonly { x: number; y: number }[] },
+  right: { points: readonly { x: number; y: number }[] },
+): boolean {
+  const occupied = new Set(orthogonalPathPoints(left.points).map((point) => `${point.x}:${point.y}`))
+  return orthogonalPathPoints(right.points).some((point) => occupied.has(`${point.x}:${point.y}`))
+}
+
+function renderedDimensions(output: string): { width: number; height: number } {
+  const lines = output.split("\n")
+  return { width: Math.max(...lines.map((line) => stringWidth(line))), height: lines.length }
+}
+
+function expectResponsiveFlowchartValid(content: string, layoutMaxWidth: number) {
+  const diagram = parseMermaidFlowchartDiagram(content)
+  const options = { compact: true, layoutMaxWidth }
+  const layout = layoutParsedFlowchartDiagram(diagram, options)
+  const grid = drawParsedFlowchartDiagramGrid(diagram, options)
+  const output = renderFlowchartDiagram(content, options)
+  const nodes = [...layout.bounds.values()]
+
+  expect(layout.diagram.direction).toBe("TD")
+  for (let left = 0; left < nodes.length; left++) {
+    for (let right = left + 1; right < nodes.length; right++) {
+      expect(boundsIntersect(nodes[left]!, nodes[right]!)).toBe(false)
+    }
+  }
+  for (const route of layout.routes) {
+    expect(route.points.length).toBeGreaterThanOrEqual(2)
+    for (let index = 1; index < route.points.length; index++) {
+      const from = route.points[index - 1]!
+      const to = route.points[index]!
+      expect(from.x === to.x || from.y === to.y).toBe(true)
+    }
+    expect(terminalPointsTowardBounds(route, layout.bounds.get(route.edge.to)!)).toBe(true)
+    const end = route.points.at(-1)!
+    expect(grid.getCell(end.x, end.y)?.char).toBe(diagramArrowHeadBetween(route.points.at(-2)!, end))
+    if (route.edge.label) expect(output).toContain(route.edge.label)
+  }
+  expectFlowchartRoutesAvoidUnrelatedNodes(layout)
+
+  for (const subgraph of diagram.subgraphs ?? []) {
+    const frame = layout.subgraphBounds.get(subgraph.id)!
+    for (const nodeId of subgraph.nodeIds) expect(boundsContains(frame, layout.bounds.get(nodeId)!)).toBe(true)
+    expect(output).toContain(subgraph.label)
+  }
+  for (const node of layout.bounds.values()) {
+    for (const line of node.lines) expect(output).toContain(line)
+  }
+
+  const widestContent = Math.max(
+    ...nodes.map((node) => node.width),
+    ...layout.routes.flatMap((route) =>
+      route.edge.label ? [flowchartRouteLabelLayout(route, visualLength).width] : [],
+    ),
+  )
+  const dimensions = renderedDimensions(output)
+  expect(Math.max(...output.split("\n").map((line) => stringWidth(line)))).toBeLessThanOrEqual(
+    layoutMaxWidth + widestContent + 4,
+  )
+  return { dimensions, layout, output }
+}
+
+function generatedWideRankFlowchart(count: number): string {
+  const labels = [
+    "地域 gateway Ω",
+    "界面 worker λ",
+    "Long-running synchronization service",
+    "Cache café 🚀",
+    "Audit and observability pipeline",
+    "Provider μ endpoint",
+    "Fallback Ж service",
+    "Archive 数据 lake",
+    "Terminal résumé queue",
+  ]
+  const branches = labels
+    .slice(0, count)
+    .flatMap((label, index) => [
+      `    Hub ${index === 0 ? "-->|dispatch across regions and providers|" : "-->"} N${index}[${label}]`,
+      `    N${index} --> Join`,
+    ])
+  return [
+    "flowchart LR",
+    "  Start[Client α] --> Hub",
+    "  subgraph Services [地域 services Ω]",
+    "    Hub[Dispatch hub]",
+    ...branches,
+    "    Join[Join results]",
+    "  end",
+    "  Join --> Done[Complete ✓]",
+  ].join("\n")
 }
 
 function expectFlowchartRoutesAvoidUnrelatedNodes(layout: ReturnType<typeof layoutFlowchartDiagram>): void {
@@ -325,6 +433,52 @@ describe("FlowchartDiagram", () => {
       │ A ├──────▶│ B │
       ╰───╯       ╰───╯
     `)
+  })
+
+  test.each(
+    (["LR", "RL", "TD", "TB", "BT"] as const).flatMap((direction) =>
+      [false, true].map((compact) => ({ direction, compact })),
+    ),
+  )(
+    "preserves every target arrowhead after painting $direction routes with compact=$compact",
+    ({ direction, compact }) => {
+      const content = `flowchart ${direction}
+  A[A]
+  B[B]
+  C[C]
+  D[D]
+  A --> A
+  A --> C
+  C --> B`
+      const diagram = parseMermaidFlowchartDiagram(content)
+      const layout = layoutParsedFlowchartDiagram(diagram, { compact })
+      const grid = drawParsedFlowchartDiagramGrid(diagram, { compact })
+
+      for (const route of layout.routes) {
+        const end = route.points.at(-1)!
+        expect(grid.getCell(end.x, end.y)?.char).toBe(diagramArrowHeadBetween(route.points.at(-2)!, end))
+      }
+    },
+  )
+
+  test.each(
+    (["LR", "RL", "TD", "TB", "BT"] as const).flatMap((direction) =>
+      [false, true].map((compact) => ({ direction, compact })),
+    ),
+  )("keeps crossed endpoint-disjoint $direction routes separate with compact=$compact", ({ direction, compact }) => {
+    const layout = layoutFlowchartDiagram(
+      `flowchart ${direction}
+  A[A]
+  B[B]
+  C[C]
+  D[D]
+  A --> C
+  D --> B`,
+      { compact },
+    )
+
+    expect(layout.routes).toHaveLength(2)
+    expect(routesIntersect(layout.routes[0]!, layout.routes[1]!)).toBe(false)
   })
 
   test("keeps vertical feedback labels clear of unrelated nodes", () => {
@@ -613,6 +767,7 @@ describe("FlowchartDiagram", () => {
       const loops = layout.routes.filter((route) => route.edge.from === "B" && route.edge.to === "B")
 
       expect(loops).toHaveLength(3)
+      expect(new Set(loops.map((route) => JSON.stringify(route.points))).size).toBe(3)
     },
   )
 
@@ -809,6 +964,119 @@ describe("FlowchartDiagram", () => {
                                        │ Discord │
                                        ╰─────────╯
     `)
+  })
+
+  test("wraps the real deployment chart responsively without losing content or geometry", () => {
+    const expected = new Map([
+      [60, { width: 82, height: 108 }],
+      [80, { width: 97, height: 85 }],
+      [120, { width: 143, height: 77 }],
+      [160, { width: 163, height: 69 }],
+    ])
+    const results = [...expected].map(([budget, dimensions]) => {
+      const result = expectResponsiveFlowchartValid(deploymentArchitectureSource, budget)
+      expect(result.dimensions).toEqual(dimensions)
+      for (const frame of result.layout.subgraphBounds.values()) {
+        for (const other of result.layout.subgraphBounds.values()) {
+          if (frame !== other) expect(boundsIntersect(frame, other)).toBe(false)
+        }
+      }
+      return result.dimensions
+    })
+
+    for (let index = 1; index < results.length; index++) {
+      expect(results[index - 1]!.width).toBeLessThan(results[index]!.width)
+    }
+  })
+
+  test.each([7, 9])("wraps generated %s-node Unicode subgraph ranks across width targets", (count) => {
+    const results = [60, 80, 120].map(
+      (budget) => expectResponsiveFlowchartValid(generatedWideRankFlowchart(count), budget).dimensions,
+    )
+
+    for (let index = 1; index < results.length; index++) {
+      expect(results[index - 1]!.width).toBeLessThan(results[index]!.width)
+      expect(results[index - 1]!.height).toBeGreaterThanOrEqual(results[index]!.height)
+    }
+  })
+
+  test("keeps responsive local-direction subgraphs clear of sibling nodes", () => {
+    const layout = layoutFlowchartDiagram(
+      `flowchart BT
+  N0[Outside zero]
+  subgraph Outer
+    N2[Two]
+    subgraph Inner
+      direction LR
+      N3[Three]
+      N4[Four]
+    end
+    N5[X]
+  end
+  N7[Outside seven]
+  N7 --> N2
+  N2 -->|label 6| N5
+  N5 --> N4
+  N0 --> N7`,
+      { compact: true, layoutMaxWidth: 35 },
+    )
+    const nodes = [...layout.bounds.values()]
+
+    for (let left = 0; left < nodes.length; left++) {
+      for (let right = left + 1; right < nodes.length; right++) {
+        expect(boundsIntersect(nodes[left]!, nodes[right]!)).toBe(false)
+      }
+    }
+  })
+
+  test("keeps responsive sibling subgraph frames and long titles disjoint", () => {
+    const layout = layoutFlowchartDiagram(
+      `flowchart TD
+  subgraph Parent
+    direction LR
+    subgraph Left [A deliberately long left group title]
+      direction LR
+      A1[One] --> A2[Two]
+    end
+    subgraph Right [A deliberately long right group title]
+      direction LR
+      B1[Three] --> B2[Four]
+    end
+    A2 --> B1
+  end`,
+      { compact: true, layoutMaxWidth: 35 },
+    )
+
+    expect(boundsIntersect(layout.subgraphBounds.get("Left")!, layout.subgraphBounds.get("Right")!)).toBe(false)
+  })
+
+  test("does not change parallel routes for a non-binding width target", () => {
+    const diagram = parseMermaidFlowchartDiagram(`flowchart TD
+  A[A] -->|one| B[B]
+  A -->|two| B`)
+    const unconstrained = layoutParsedFlowchartDiagram(diagram, { compact: true })
+    const nonBinding = layoutParsedFlowchartDiagram(diagram, { compact: true, layoutMaxWidth: 1_000 })
+
+    expect(nonBinding.routes.map((route) => route.points)).toEqual(unconstrained.routes.map((route) => route.points))
+  })
+
+  test("keeps responsive fan-out labels inside the width target", () => {
+    const content = `flowchart TD
+  subgraph Group
+    S[Source]
+    S -->|route 0 detail| N0[Node 0]
+    S -->|route 1 detail| N1[Node 1]
+    S -->|route 2 detail| N2[Node 2]
+    S -->|route 3 detail| N3[Node 3]
+  end`
+    const layout = layoutFlowchartDiagram(content, { compact: true, layoutMaxWidth: 30 })
+    const output = renderFlowchartDiagram(content, { compact: true, layoutMaxWidth: 30 })
+
+    for (const route of layout.routes) {
+      const label = flowchartRouteLabelLayout(route, visualLength)
+      expect(label.point.x + label.width).toBeLessThanOrEqual(30)
+    }
+    expect(Math.max(...output.split("\n").map((line) => stringWidth(line)))).toBeLessThanOrEqual(34)
   })
 
   test("parses Mermaid flowchart nodes and standard arrows", () => {
@@ -1349,6 +1617,22 @@ flowchart LR
     expect(output).not.toContain("<br")
   })
 
+  test.each(
+    (["TD", "BT"] as const).flatMap((direction) =>
+      [false, true].flatMap((compact) => [2, 4].map((lines) => ({ direction, compact, lines }))),
+    ),
+  )(
+    "keeps $lines-line $direction labels off both terminal rows with compact=$compact",
+    ({ direction, compact, lines }) => {
+      const label = Array.from({ length: lines }, (_, index) => `line ${index + 1}`).join("<br/>")
+      const route = layoutFlowchartDiagram(`flowchart ${direction}\n  A[A] -->|${label}| B[B]`, { compact }).routes[0]!
+      const layout = flowchartRouteLabelLayout(route, visualLength)
+      const terminals = new Set([route.points[0]!.y, route.points.at(-1)!.y])
+
+      for (let y = layout.point.y; y < layout.point.y + layout.height; y++) expect(terminals.has(y)).toBe(false)
+    },
+  )
+
   test("expands canvas for multiline back-edge labels", () => {
     const output = renderFlowchartDiagram(`flowchart TD
   A --> B
@@ -1393,10 +1677,10 @@ graph LR
     expect(output).toContain("API")
     expect(output).toContain("DB")
     expect(output).toContain("╭─ Web App ")
-    expect(output.split("\n").find((line) => line.includes("API") && line.includes("DB"))).toContain("┼")
+    expect(output.split("\n").find((line) => line.includes("API") && line.includes("DB"))).not.toContain("┼")
   })
 
-  test("merges horizontal routes through vertical subgraph borders", () => {
+  test("breaks vertical subgraph borders where horizontal routes pass through", () => {
     const content = `flowchart LR
   Outside[Outside] --> Inside
   subgraph Group
@@ -1408,13 +1692,14 @@ graph LR
     const group = layout.subgraphBounds.get("Group")!
     const crossing = { x: group.left, y: layout.routes[0]!.points.at(-1)!.y }
 
-    expect(grid.getCell(crossing.x, crossing.y)?.char).toBe("┼")
+    expect(grid.getCell(crossing.x, crossing.y)?.char).toBe("─")
+    expect(grid.getCell(crossing.x, crossing.y)?.style).not.toBe("group")
     expect(grid.getCell(crossing.x - 1, crossing.y)?.char).toBe("─")
     expect(grid.getCell(crossing.x, crossing.y - 1)?.char).toBe("│")
     expect(grid.getCell(crossing.x, crossing.y + 1)?.char).toBe("│")
   })
 
-  test("merges vertical routes through horizontal subgraph borders", () => {
+  test("breaks horizontal subgraph borders where vertical routes pass through", () => {
     const content = `flowchart TD
   Outside[Outside] --> Inside
   subgraph Outer [O]
@@ -1428,7 +1713,8 @@ graph LR
     const outer = layout.subgraphBounds.get("Outer")!
     const crossing = { x: layout.routes[0]!.points[0]!.x, y: outer.top }
 
-    expect(grid.getCell(crossing.x, crossing.y)?.char).toBe("┼")
+    expect(grid.getCell(crossing.x, crossing.y)?.char).toBe("│")
+    expect(grid.getCell(crossing.x, crossing.y)?.style).not.toBe("group")
     expect(grid.getCell(crossing.x - 1, crossing.y)?.char).toBe("─")
     expect(grid.getCell(crossing.x + 1, crossing.y)?.char).toBe("─")
     expect(grid.getCell(crossing.x, crossing.y - 1)?.char).toBe("│")
@@ -1466,21 +1752,20 @@ graph LR
     expect(output).not.toContain("<br")
   })
 
-  test("merges transition lines through subgraph frame borders", () => {
-    const output = renderFlowchartDiagram(`
-flowchart TD
-  subgraph Verse [verse]
-    direction LR
-    A[A] --> B[B]
-    C[C] --> D[D]
+  test("keeps long Unicode subgraph titles from replacing entering arrowheads", () => {
+    const content = `flowchart TD
+  U[Up] --> A
+  subgraph G [界界界界界界]
+    A[A]
   end
-  B --> Join
-  D --> Join
-`)
-    const crossingLines = output.split("\n").filter((line) => line.includes("Join") || line.includes("├"))
+  A --> D[Down]`
+    const diagram = parseMermaidFlowchartDiagram(content)
+    const layout = layoutParsedFlowchartDiagram(diagram, { compact: true })
+    const grid = drawParsedFlowchartDiagramGrid(diagram, { compact: true })
+    const entry = layout.routes.find((route) => route.edge.from === "U")!
+    const end = entry.points.at(-1)!
 
-    expect(output).toContain(" verse ")
-    expect(crossingLines.join("\n").match(/┼/g)).toHaveLength(2)
+    expect(grid.getCell(end.x, end.y)?.char).toBe(diagramArrowHeadBetween(entry.points.at(-2)!, end))
   })
 
   test("lays out subgraph-local directions independently from the outer flow", () => {
@@ -1609,6 +1894,65 @@ flowchart TD
     for (const route of layout.routes.filter((route) => ["A", "B", "C"].includes(route.edge.from))) {
       if (route.edge.to === "D") continue
       expect(routeIntersectsBounds(route, layout.bounds.get("D")!)).toBe(false)
+    }
+  })
+
+  test("keeps nested local-direction layouts rigid across direction and compact matrices", () => {
+    const directions = ["LR", "RL", "TD", "BT"] as const
+    for (const global of directions) {
+      for (const outer of directions) {
+        for (const inner of directions) {
+          for (const compact of [false, true]) {
+            const layout = layoutFlowchartDiagram(
+              `flowchart ${global}
+  X[X] --> A
+  subgraph Outer [Outer]
+    direction ${outer}
+    subgraph Inner [Inner]
+      direction ${inner}
+      A[A] --> B[B]
+    end
+    B --> C[C]
+  end
+  C --> Y[Y]`,
+              { compact },
+            )
+            const nodes = [...layout.bounds.values()]
+            const innerFrame = layout.subgraphBounds.get("Inner")!
+            const outerFrame = layout.subgraphBounds.get("Outer")!
+            const a = layout.bounds.get("A")!
+            const b = layout.bounds.get("B")!
+            const c = layout.bounds.get("C")!
+
+            for (let left = 0; left < nodes.length; left++) {
+              for (let right = left + 1; right < nodes.length; right++) {
+                expect(boundsIntersect(nodes[left]!, nodes[right]!)).toBe(false)
+              }
+            }
+            expect(boundsContains(innerFrame, a)).toBe(true)
+            expect(boundsContains(innerFrame, b)).toBe(true)
+            expect(boundsContains(outerFrame, innerFrame)).toBe(true)
+            expect(boundsContains(outerFrame, c)).toBe(true)
+            expect(layout.routes.every((route) => route.points.length >= 2)).toBe(true)
+            expectFlowchartRoutesAvoidUnrelatedNodes(layout)
+            for (const frame of layout.subgraphBounds.values()) {
+              for (const route of layout.routes) {
+                expect(routeRunsAlongHorizontalBorder(route, frame)).toBe(false)
+                expect(routeRunsAlongVerticalBorder(route, frame)).toBe(false)
+              }
+            }
+
+            if (inner === "LR") expect(b.left).toBeGreaterThan(a.left)
+            if (inner === "RL") expect(b.left).toBeLessThan(a.left)
+            if (inner === "TD") expect(b.top).toBeGreaterThan(a.top)
+            if (inner === "BT") expect(b.top).toBeLessThan(a.top)
+            if (outer === "LR") expect(c.centerX).toBeGreaterThan(b.centerX)
+            if (outer === "RL") expect(c.centerX).toBeLessThan(b.centerX)
+            if (outer === "TD") expect(c.centerY).toBeGreaterThan(b.centerY)
+            if (outer === "BT") expect(c.centerY).toBeLessThan(b.centerY)
+          }
+        }
+      }
     }
   })
 
@@ -2037,8 +2381,10 @@ flowchart LR
   test("applies the global flowchart StyledText theme", () => {
     const grid = drawFlowchartDiagramGrid("flowchart LR\n  A[Alpha] --> B[Beta]")
     const node = parseColor("#ff0000")
-    const styled = renderGridStyledText(grid, resolveFlowchartStyleColors({ node }))
+    const nodeBorder = parseColor("#0000ff")
+    const styled = renderGridStyledText(grid, resolveFlowchartStyleColors({ node, nodeBorder }))
 
     expect(styled.chunks.some((chunk) => chunk.text.includes("Alpha") && chunk.fg?.equals(node))).toBe(true)
+    expect(styled.chunks.some((chunk) => chunk.text.includes("╭") && chunk.fg?.equals(nodeBorder))).toBe(true)
   })
 })

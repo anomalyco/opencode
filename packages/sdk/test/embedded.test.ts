@@ -11,10 +11,10 @@ import { WorkspaceDriver } from "@opencode-ai/core/workspace/driver"
 import { Deferred, Effect, Fiber, Latch, Layer, Option, Ref, Schema, Stream } from "effect"
 import { testEffect } from "../../core/test/lib/effect"
 import { tmpdir } from "../../core/test/fixture/tmpdir"
-import type { OpenCodeEvent } from "../src"
+import type { OpenCodeEvent } from "../src/effect"
 
 const it = testEffect(Layer.empty)
-type Sdk = typeof import("../src")
+type Sdk = typeof import("../src/effect")
 type Fixture = { readonly directory: string; readonly sdk: Sdk }
 
 const withEmbedded = <A, E, R>(prefix: string, f: (fixture: Fixture) => Effect.Effect<A, E, R>) =>
@@ -23,7 +23,9 @@ const withEmbedded = <A, E, R>(prefix: string, f: (fixture: Fixture) => Effect.E
     (directory) => Effect.promise(() => directory[Symbol.asyncDispose]()),
   ).pipe(
     Effect.flatMap((directory) =>
-      Effect.promise(() => import("../src")).pipe(Effect.flatMap((sdk) => f({ directory: directory.path, sdk }))),
+      Effect.promise(() => import("../src/effect")).pipe(
+        Effect.flatMap((sdk) => f({ directory: directory.path, sdk })),
+      ),
     ),
   )
 
@@ -460,8 +462,11 @@ it.live("configures workspace providers through the SDK facade", () =>
         },
       })
       const opencode = yield* fixture.sdk.OpenCode.create({ workspaceProviders: { fake: driver } })
-      const workspaceID = yield* opencode.workspace.create({ provider: "fake" })
+      const requestedID = fixture.sdk.Workspace.ID.create()
+      const workspaceID = yield* opencode.workspace.create({ id: requestedID, provider: "fake" })
 
+      expect(workspaceID).toBe(requestedID)
+      expect(yield* opencode.workspace.create({ id: requestedID, provider: "fake" })).toBe(requestedID)
       expect(calls).toEqual([])
 
       const workspace = yield* opencode.workspace.provision({ workspaceID })
@@ -477,11 +482,10 @@ it.live("configures workspace providers through the SDK facade", () =>
       const session = yield* opencode.sessions.create({ location: workspaceLocation })
       expect(session.location.workspaceID).toBe(workspace.id)
 
-      yield* opencode.workspace.destroy({ workspaceID: workspace.id })
+      expect(yield* opencode.workspace.destroy({ workspaceID: workspace.id })).toEqual({ destroyed: true })
       expect(calls.map((call) => call.operation)).toEqual(["create", "destroy"])
-      expect((yield* opencode.workspace.destroy({ workspaceID: workspace.id }).pipe(Effect.flip))._tag).toBe(
-        "Workspace.NotFound",
-      )
+      expect(yield* opencode.workspace.destroy({ workspaceID: workspace.id })).toEqual({ destroyed: false })
+      expect(calls.map((call) => call.operation)).toEqual(["create", "destroy"])
     }),
   ),
 )

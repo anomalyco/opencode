@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { spatialPathClaim } from "../core/spatial.js"
 import { diagramTextWidth } from "../core/text.js"
 import type { StateDiagram } from "./types.js"
-import { createStateDiagramLayout } from "./layout.js"
+import { createStateDiagramLayout, expandCompositeBoundsForInternalTransitions } from "./layout.js"
 import { stateDiagramNoteConnector } from "./note.js"
 import { parseMermaidStateDiagram } from "./parser.js"
 import { createStateTransitionRenderPlans } from "./routing.js"
@@ -192,4 +192,75 @@ describe("StateDiagramLayout", () => {
     )
     expect(plans.every((plan) => plan.path.every(([x, y]) => !noteCells.has(`${x}:${y}`)))).toBe(true)
   })
+
+  test.each([
+    ["LR", -1],
+    ["RL", 1],
+  ] as const)("keeps a reciprocal pair on the %s axis", (direction, expectedSign) => {
+    const diagram = prepareVisibleStateDiagram(
+      parseMermaidStateDiagram(`stateDiagram-v2
+  direction ${direction}
+  A --> B: forward
+  B --> A: backward`),
+    )
+    const layout = createStateDiagramLayout(diagram, { minStateGap: 5 })
+    const a = layout.bounds.get("A")!
+    const b = layout.bounds.get("B")!
+
+    expect(a.centerY).toBe(b.centerY)
+    expect(Math.sign(a.centerX - b.centerX)).toBe(expectedSign)
+  })
+
+  test.each(["TB", "TD"] as const)(
+    "contains nested internal feedback with strict margins in %s diagrams",
+    (direction) => {
+      const diagram = prepareVisibleStateDiagram(
+        parseMermaidStateDiagram(`stateDiagram-v2
+  direction ${direction}
+  state Outer {
+    state Inner {
+      A --> B: down
+      B --> A: up
+      note right of B: nested note
+    }
+  }`),
+      )
+      const layout = createStateDiagramLayout(diagram, { minStateGap: 5 })
+      const plans = createStateTransitionRenderPlans(diagram, layout.bounds, 30, { noteBounds: layout.noteBounds })
+      expandCompositeBoundsForInternalTransitions(diagram, layout.compositeBounds, plans)
+      const inner = layout.compositeBounds.get("Inner")!
+      const outer = layout.compositeBounds.get("Outer")!
+      const note = layout.noteBounds[0]!
+
+      for (const composite of [inner, outer]) {
+        for (const plan of plans) {
+          expect(
+            plan.path.every(
+              ([x, y]) =>
+                x > composite.left &&
+                x < composite.left + composite.width - 1 &&
+                y > composite.top &&
+                y < composite.top + composite.height - 1,
+            ),
+          ).toBe(true)
+        }
+        expect(
+          note.connector!.points.every(
+            (point) =>
+              point.x > composite.left &&
+              point.x < composite.left + composite.width - 1 &&
+              point.y > composite.top &&
+              point.y < composite.top + composite.height - 1,
+          ),
+        ).toBe(true)
+      }
+      expect(new Set(note.connector!.points.map((point) => point.y))).toEqual(
+        new Set([layout.bounds.get("B")!.centerY]),
+      )
+      expect(inner.left - outer.left).toBeGreaterThanOrEqual(2)
+      expect(inner.top - outer.top).toBeGreaterThanOrEqual(2)
+      expect(outer.left + outer.width - (inner.left + inner.width)).toBeGreaterThanOrEqual(2)
+      expect(outer.top + outer.height - (inner.top + inner.height)).toBeGreaterThanOrEqual(2)
+    },
+  )
 })

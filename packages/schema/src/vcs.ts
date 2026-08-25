@@ -14,6 +14,9 @@ export const Info = Schema.Struct({
 }).annotate({ identifier: "Vcs.Info" })
 export interface Info extends Schema.Schema.Type<typeof Info> {}
 
+export const BranchList = Schema.Array(Schema.String).annotate({ identifier: "Vcs.BranchList" })
+export type BranchList = typeof BranchList.Type
+
 export const Mode = Schema.Literals(["working", "branch"]).annotate({ identifier: "Vcs.Mode" })
 export type Mode = typeof Mode.Type
 

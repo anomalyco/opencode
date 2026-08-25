@@ -27,9 +27,9 @@ test("exposes every standard HTTP API group", () => {
     "event",
     "pty",
     "shell",
-    "question",
     "reference",
     "worktree",
+    "workspace",
     "vcs",
     "debug",
     "migration",
@@ -46,7 +46,7 @@ test("exposes every standard HTTP API group", () => {
   expect(Object.keys(client.integration.command)).toEqual(["connect", "status", "cancel"])
   expect(Object.keys(client.websearch)).toEqual(["providers", "query"])
   expect(Object.keys(client.file)).toEqual(["read", "list", "find"])
-  expect(Object.keys(client.vcs)).toEqual(["get", "status", "diff"])
+  expect(Object.keys(client.vcs)).toEqual(["get", "status", "branches", "diff"])
   expect(Object.keys(client.pty)).toEqual(["list", "create", "get", "update", "remove", "connect"])
   expect(Object.keys(client.pty.connect)).toEqual(["token"])
   expect(Object.keys(client.shell)).toEqual(["list", "create", "get", "timeout", "output", "remove"])
@@ -79,6 +79,21 @@ test("config.get returns ordered config entries for a location", async () => {
   expect(await client.config.get({ location: { directory: "/tmp/project" } })).toEqual(entries)
   expect(request?.method).toBe("GET")
   expect(request?.url).toBe("http://localhost:3000/api/config?location%5Bdirectory%5D=%2Ftmp%2Fproject")
+})
+
+test("generate.text uses the locationless public contract", async () => {
+  let request: Request | undefined
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async (input, init) => {
+      request = input instanceof Request ? input : new Request(input, init)
+      return Response.json({ data: { text: "pong" } })
+    },
+  })
+
+  expect(await client.generate.text({ prompt: "ping" })).toEqual({ text: "pong" })
+  expect(request?.url).toBe("http://localhost:3000/api/generate")
+  expect(await request?.json()).toEqual({ prompt: "ping" })
 })
 
 test("websearch.query uses the public HTTP contract", async () => {
@@ -278,6 +293,21 @@ test("worktree methods use the global project contract", async () => {
     name: "api",
   })
   expect(await requests[2]?.json()).toEqual({ directory: "/tmp/worktrees/api", force: false })
+})
+
+test("workspace.destroy returns the transition result", async () => {
+  let request: Request | undefined
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async (input, init) => {
+      request = input instanceof Request ? input : new Request(input, init)
+      return Response.json({ destroyed: false })
+    },
+  })
+
+  expect(await client.workspace.destroy({ workspaceID: "wrk_missing" })).toEqual({ destroyed: false })
+  expect(request?.method).toBe("DELETE")
+  expect(request?.url).toBe("http://localhost:3000/api/workspace/wrk_missing")
 })
 
 test("shell list and remove use the public HTTP contract", async () => {
@@ -516,6 +546,7 @@ test("session methods use the public HTTP contract", async () => {
       if (url.includes("/message/")) return Response.json({ data: modelSwitchedMessage })
       if (url.endsWith("/api/session/active")) return Response.json({ data: { ses_test: { type: "running" } } })
       if (init?.method === "POST" && url.endsWith("/api/session")) return Response.json(session)
+      if (url.includes("/interrupt")) return Response.json({ interrupted: true })
       if (init?.method === "POST") return new Response(null, { status: 204 })
       return Response.json({ data: [session.data], cursor: { next: "next" } })
     },
@@ -547,7 +578,7 @@ test("session methods use the public HTTP contract", async () => {
   const context = await client.session.context({ sessionID: "ses_test" })
   const log = []
   for await (const item of client.session.log({ sessionID: "ses_test", after: 0 })) log.push(item)
-  await client.session.interrupt({ sessionID: "ses_test", continue: true })
+  const interrupted = await client.session.interrupt({ sessionID: "ses_test", continue: true })
   const message = await client.session.message({ sessionID: "ses_test", messageID: "msg_model" })
 
   expect(page.cursor.next).toBe("next")
@@ -556,6 +587,7 @@ test("session methods use the public HTTP contract", async () => {
   expect(created.id).toBe("ses_test")
   expect(admitted.id).toBe("msg_test")
   expect(generated.text).toBe("A transient answer")
+  expect(interrupted).toEqual({ interrupted: true })
   expect(synthetic).toMatchObject({ type: "synthetic", data: { text: "Completed" }, delivery: "queue" })
   expect(context).toEqual([])
   expect(log).toEqual([modelSwitchedEvent, synced])

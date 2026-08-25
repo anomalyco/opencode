@@ -906,6 +906,54 @@ describe("Gemini route", () => {
     }),
   )
 
+  it.effect("ignores unknown response parts", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents({
+              candidates: [
+                {
+                  content: {
+                    role: "model",
+                    parts: [
+                      { text: "Hello " },
+                      { executableCode: { language: "PYTHON", code: "print('ignored')" } },
+                      { text: "world" },
+                    ],
+                  },
+                  finishReason: "STOP",
+                },
+              ],
+            }),
+          ),
+        ),
+      )
+
+      expect(response.text).toBe("Hello world")
+      expect(response.finishReason).toEqual({ normalized: "stop", raw: "STOP" })
+    }),
+  )
+
+  it.effect("rejects malformed recognized response parts", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents({
+              candidates: [{ content: { role: "model", parts: [{ text: 42 }] } }],
+            }),
+          ),
+        ),
+        Effect.flip,
+      )
+
+      expect(error).toBeInstanceOf(AIError)
+      expect(error.reason).toMatchObject({ _tag: "InvalidProviderOutput" })
+      expect(error.message).toContain("Invalid google/gemini stream event")
+    }),
+  )
+
   it.effect("preserves thoughtSignature for reasoning and tool-call continuation", () =>
     Effect.gen(function* () {
       const body = sseEvents({

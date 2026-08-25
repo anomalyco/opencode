@@ -234,6 +234,31 @@ describe("ModelsDev Service", () => {
     }),
   )
 
+  it.live("normalizes provider and model AI SDK packages from models.dev", () =>
+    Effect.gen(function* () {
+      const cache = makeCache()
+      writeCache(cache, {
+        acme: {
+          ...fixture.acme,
+          models: {
+            "acme-1": {
+              ...fixture.acme.models["acme-1"],
+              provider: { npm: "@ai-sdk/openai" },
+            },
+          },
+        },
+      })
+      const state = yield* Ref.make(initialState)
+      const result = yield* provided(
+        state,
+        cache,
+        ModelsDev.Service.use((service) => service.get()),
+      )
+      expect(result[0]?.info.package).toBe(Provider.aisdk("@ai-sdk/openai-compatible"))
+      expect(result[0]?.models[0]?.package).toBe(Provider.aisdk("@ai-sdk/openai"))
+    }),
+  )
+
   it.live("get() returns empty catalog when KV is empty, fetch disabled, and the bundled snapshot is disabled", () =>
     Effect.gen(function* () {
       const cache = makeCache()

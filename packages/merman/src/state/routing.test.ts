@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { diagramTextWidth } from "../core/text.js"
 import type { StateDiagramBoxBounds } from "./layout.js"
 import { createStateDiagramLayout } from "./layout.js"
 import { parseMermaidStateDiagram } from "./parser.js"
@@ -286,10 +287,7 @@ describe("createStateTransitionRenderPlans", () => {
     expect(
       plan.path.some(
         ([x, y]) =>
-          x >= sibling.left &&
-          x < sibling.left + sibling.width &&
-          y >= sibling.top &&
-          y < sibling.top + sibling.height,
+          x >= sibling.left && x < sibling.left + sibling.width && y >= sibling.top && y < sibling.top + sibling.height,
       ),
     ).toBe(false)
   })
@@ -347,6 +345,158 @@ describe("createStateTransitionRenderPlans", () => {
         return Math.abs(x - previous[0]) + Math.abs(y - previous[1]) === 1
       }),
     ).toBe(true)
+  })
+
+  test.each(["LR", "RL", "TB", "TD"] as const)(
+    "keeps endpoint-disjoint %s transitions on separate cells when a detour exists",
+    (direction) => {
+      const diagram = prepareVisibleStateDiagram(
+        parseMermaidStateDiagram(`stateDiagram-v2
+  direction ${direction}
+  state "A" as A
+  state "B" as B
+  state "C" as C
+  state "D" as D
+  B --> D: e0
+  C --> A: e1`),
+      )
+      const layout = createStateDiagramLayout(diagram, { minStateGap: 5 })
+      const plans = createStateTransitionRenderPlans(diagram, layout.bounds, 30)
+      const first = new Set(plans[0]!.path.map(([x, y]) => `${x}:${y}`))
+
+      expect(plans[1]!.path.every(([x, y]) => !first.has(`${x}:${y}`))).toBe(true)
+    },
+  )
+
+  test("anchors labels to final repaired transition geometry", () => {
+    const diagram = prepareVisibleStateDiagram(
+      parseMermaidStateDiagram(`stateDiagram-v2
+  direction TB
+  state "A" as A
+  state "B" as B
+  state "C" as C
+  A --> B: e0
+  A --> C: e1
+  B --> A: e2`),
+    )
+    const layout = createStateDiagramLayout(diagram, { minStateGap: 5 })
+    const plan = createStateTransitionRenderPlans(diagram, layout.bounds, 30).find(
+      (candidate) => candidate.route.transition.label === "e2",
+    )!
+    const width = Math.max(...plan.label!.lines.map(diagramTextWidth))
+    const distance = Math.min(
+      ...plan.path.map(([pathX, pathY]) => {
+        const dx =
+          pathX < plan.label!.x
+            ? plan.label!.x - pathX
+            : pathX >= plan.label!.x + width
+              ? pathX - (plan.label!.x + width - 1)
+              : 0
+        const dy =
+          pathY < plan.label!.y
+            ? plan.label!.y - pathY
+            : pathY >= plan.label!.y + plan.label!.lines.length
+              ? pathY - (plan.label!.y + plan.label!.lines.length - 1)
+              : 0
+        return dx + dy
+      }),
+    )
+
+    expect(plan.pathRepaired).toBe(true)
+    expect(distance).toBeLessThanOrEqual(4)
+  })
+
+  test.each(["LR", "RL", "TB", "TD"] as const)(
+    "allocates distinct connected self-transition lanes in %s diagrams",
+    (direction) => {
+      for (const count of [2, 3, 4]) {
+        const diagram = prepareVisibleStateDiagram(
+          parseMermaidStateDiagram(`stateDiagram-v2
+  direction ${direction}
+${Array.from({ length: count }, (_, index) => `  A --> A: loop-${index}`).join("\n")}`),
+        )
+        const layout = createStateDiagramLayout(diagram, { minStateGap: 5 })
+        const plans = createStateTransitionRenderPlans(diagram, layout.bounds, 30)
+
+        expect(new Set(plans.map((plan) => plan.path.map(([x, y]) => `${x}:${y}`).join("|"))).size).toBe(count)
+        for (const plan of plans) {
+          expect(
+            plan.path.slice(1).every(([x, y], index) => {
+              const previous = plan.path[index]!
+              return Math.abs(x - previous[0]) + Math.abs(y - previous[1]) === 1
+            }),
+          ).toBe(true)
+        }
+      }
+    },
+  )
+
+  test("uses fixed-width side lanes for long parallel vertical labels", () => {
+    const diagram = prepareVisibleStateDiagram(
+      parseMermaidStateDiagram(`stateDiagram-v2
+  direction TB
+  A --> B: alpha route label that is deliberately long
+  A --> B: beta route label that is deliberately long
+  A --> B: gamma route label that is deliberately long`),
+    )
+    const layout = createStateDiagramLayout(diagram, { minStateGap: 5 })
+    const rails = createStateTransitionRoutePlans(diagram, layout.bounds, 30)
+      .filter((plan) => plan.kind === "side-parallel")
+      .map((plan) => plan.railX)
+
+    expect(rails).toHaveLength(2)
+    expect(rails[1]! - rails[0]!).toBe(3)
+  })
+
+  test.each([
+    [
+      "parallel",
+      `stateDiagram-v2
+  direction TB
+  A --> B: alpha route label that is deliberately long
+  A --> B: beta route label that is deliberately long
+  A --> B: gamma route label that is deliberately long`,
+      3,
+    ],
+    [
+      "self",
+      `stateDiagram-v2
+  direction LR
+  A --> A: one
+  A --> A: two
+  A --> A: three`,
+      3,
+    ],
+  ] as const)("keeps %s labels one column clear of frames and route rails", (_, source, count) => {
+    const diagram = prepareVisibleStateDiagram(parseMermaidStateDiagram(source))
+    const layout = createStateDiagramLayout(diagram, { minStateGap: 5 })
+    const plans = createStateTransitionRenderPlans(diagram, layout.bounds, 30)
+    const routeCells = plans.flatMap((plan) => plan.path)
+
+    expect(plans).toHaveLength(count)
+    for (const plan of plans) {
+      const width = Math.max(...plan.label!.lines.map(diagramTextWidth))
+      for (const [row, line] of plan.label!.lines.entries()) {
+        const lineWidth = diagramTextWidth(line)
+        const y = plan.label!.y + row
+        expect(
+          routeCells
+            .filter(([, routeY]) => routeY === y)
+            .every(([routeX]) => routeX < plan.label!.x - 1 || routeX > plan.label!.x + lineWidth),
+        ).toBe(true)
+        for (const bound of layout.bounds.values()) {
+          if (y < bound.top || y >= bound.top + bound.height) continue
+          expect(bound.left + bound.width <= plan.label!.x - 1 || bound.left >= plan.label!.x + width + 1).toBe(true)
+        }
+      }
+    }
+
+    if (source.includes("A --> A")) {
+      const arrowXs = plans
+        .flatMap((plan) => plan.cells.filter((cell) => cell.arrowDirection).map((cell) => cell.x))
+        .sort((left, right) => left - right)
+      expect(arrowXs.slice(1).every((x, index) => x - arrowXs[index]! >= 4)).toBe(true)
+    }
   })
 })
 

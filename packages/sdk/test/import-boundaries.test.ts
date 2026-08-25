@@ -7,20 +7,22 @@ const client = resolve(import.meta.dir, "../../client")
 const core = resolve(import.meta.dir, "../../core")
 const server = resolve(import.meta.dir, "../../server")
 
-test("bundles the client and in-memory host", async () => {
-  const inputs = await bundleInputs()
+test("bundles the Promise and Effect clients with the in-memory host", async () => {
+  const bundles = await Promise.all([bundleInputs("@opencode-ai/sdk"), bundleInputs("@opencode-ai/sdk/effect")])
 
-  expect(within(inputs, client).length).toBeGreaterThan(0)
-  expect(within(inputs, core).length).toBeGreaterThan(0)
-  expect(within(inputs, server).length).toBeGreaterThan(0)
+  for (const inputs of bundles) {
+    expect(within(inputs, client).length).toBeGreaterThan(0)
+    expect(within(inputs, core).length).toBeGreaterThan(0)
+    expect(within(inputs, server).length).toBeGreaterThan(0)
+  }
 })
 
-async function bundleInputs() {
+async function bundleInputs(specifier: string) {
   const temporary = await mkdtemp(join(import.meta.dir, ".import-boundary-"))
   const entrypoint = join(temporary, "index.ts")
   const metafile = join(temporary, "meta.json")
   try {
-    await Bun.write(entrypoint, 'export * from "@opencode-ai/sdk"')
+    await Bun.write(entrypoint, `export * from ${JSON.stringify(specifier)}`)
     const child = Bun.spawn(
       [
         process.execPath,

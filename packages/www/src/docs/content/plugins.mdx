@@ -1,0 +1,107 @@
+---
+title: "Plugins"
+---
+
+Load published packages, versioned packages, scoped packages, local files, or configured plugins from `opencode.json(c)`.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": [
+    "opencode-acme-plugin",
+    "opencode-acme-plugin@1.2.0",
+    "@acme/opencode-plugin",
+    "./plugins/local.ts",
+    "../shared/plugin.ts",
+    "/absolute/path/plugin.ts",
+    "file:///home/me/plugins/local.ts",
+    {
+      "package": "@acme/opencode-plugin",
+      "options": {
+        "agent": "reviewer",
+        "strict": true,
+      },
+    },
+  ],
+}
+```
+
+Relative paths resolve from the config file containing the entry. Plugin arrays from applicable config files are applied
+from lowest to highest precedence instead of replacing one another.
+
+```text
+~/.config/opencode/opencode.jsonc
+./opencode.jsonc
+./.opencode/opencode.jsonc
+```
+
+OpenCode also loads direct `.ts` and `.js` files and immediate plugin package directories from every discovered
+`.opencode/plugins/` directory.
+
+```text
+.opencode/
+└── plugins/
+    ├── concise.ts
+    ├── reviewer.js
+    └── acme-package/
+```
+
+Global plugins use the same discovery layout under the OpenCode config directory.
+
+```text
+~/.config/opencode/plugins/
+```
+
+A `plugins/` directory beside a project-root `opencode.json(c)` is not discovered automatically; configure its files
+explicitly or move it under `.opencode/`.
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": ["./plugins/local.ts"]
+}
+```
+
+Plugin entries are processed in order. Prefix an ID or wildcard with `-` to disable it, use `*` for every plugin, and
+use `.*` to match an ID prefix. A later ID re-enables a plugin.
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": ["*", "-opencode.provider.*", "opencode.provider.openai", "-acme.reviewer"]
+}
+```
+
+Install, inspect, list, or remove global package plugins with the CLI.
+
+```sh
+opencode2 plugin add opencode-acme-plugin@1.2.0
+opencode2 plugin list
+opencode2 plugin list --builtin
+opencode2 plugin remove opencode-acme-plugin@1.2.0
+```
+
+Package installation accepts npm names with versions, tags, or ranges. Configure local paths directly instead of using
+Git, tarball, or npm alias targets with `plugin add`.
+
+```sh
+opencode2 plugin add @acme/opencode-plugin@beta
+```
+
+Changes under watched config directories reload automatically. Restart OpenCode after changing an installed package
+version or an unwatched dependency.
+
+```sh
+touch .opencode/plugins/concise.ts
+opencode2 service restart
+```
+
+CLI-only plugins are configured separately and remain active when connected to a remote server.
+
+```json title="cli.json"
+{
+  "plugins": ["opencode-acme-cli"]
+}
+```
+
+<Card title="Build a plugin" href="/build/plugins">
+  Create plugins that add tools, hooks, integrations, commands, agents, and other behavior.
+</Card>

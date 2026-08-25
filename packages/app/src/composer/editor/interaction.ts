@@ -19,6 +19,7 @@ import {
   type ComposerInteractionEvent,
 } from "../suggestions/machine"
 import { clonePrompt, promptLength } from "../prompt-parts"
+import type { ComposerQueue } from "../adapter"
 
 export type ComposerSelectControl = {
   options: Accessor<ComposerOption[]>
@@ -37,7 +38,8 @@ export type ComposerEditorView = {
   submit: {
     stopping: Accessor<boolean>
     working?: Accessor<boolean>
-    onSubmit: () => void
+    queue?: ComposerQueue
+    onSubmit: (options?: { alternate?: boolean }) => void
     onStop: () => void
   }
   shell?: {
@@ -212,6 +214,11 @@ export function createComposerEditor(input: {
       )
     }
     if (handled) return true
+    if (event.key === "Escape" && input.view.submit.queue?.editing()) {
+      event.preventDefault()
+      input.view.submit.queue.cancelEdit()
+      return true
+    }
     const stop =
       input.view.submit.working?.() &&
       ((event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "g") ||
@@ -354,8 +361,8 @@ export function createComposerEditor(input: {
     openShell() {
       dispatch({ type: "mode.shell" })
     },
-    submit() {
-      input.view.submit.onSubmit()
+    submit(options?: { alternate?: boolean }) {
+      input.view.submit.onSubmit(options)
       dispatch({ type: "popover.close" })
     },
     stop() {

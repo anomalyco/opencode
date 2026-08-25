@@ -5,7 +5,6 @@ import { DialogFooter, DialogHeader, DialogTitleGroup, Dialog } from "@opencode-
 import { skipToken, useQuery, useQueryClient } from "@tanstack/solid-query"
 import { DateTime } from "luxon"
 import { type Accessor, createEffect, createMemo, type JSX, startTransition, untrack } from "solid-js"
-import { createStore } from "solid-js/store"
 import { notifySessionTabsRemoved } from "@/shell/titlebar/session-events"
 import { useCommand } from "@/shell/commands/command"
 import { loadHomeSessionIndex, mergeHomeSessionIndex, retainHomeSessions } from "@/home/sessions/index"
@@ -43,7 +42,6 @@ export function createHomeSessionsController(home: HomeController) {
   const dialog = useDialog()
   const language = useLanguage()
   const queryClient = useQueryClient()
-  const [removed, setRemoved] = createStore({ keys: [] as string[] })
   const projectDirectories = createMemo(() => {
     const selected = home.selection.value().directory
     if (!selected) return
@@ -70,10 +68,9 @@ export function createHomeSessionsController(home: HomeController) {
     const ctx = home.server.focusedContext()
     const conn = home.server.focused()
     if (!ctx || !conn) return []
-    const server = ServerConnection.key(conn)
     return retainHomeSessions(
-      mergeHomeSessionIndex(sessionLoad.data?.() ?? [], ctx.data.session.list()).filter(
-        (session) => !removed.keys.includes(`${server}\0${session.id}`),
+      ctx.data.session.apply(
+        mergeHomeSessionIndex(sessionLoad.isPending ? [] : (sessionLoad.data?.() ?? []), ctx.data.session.list()),
       ),
       HOME_SESSION_LIMIT,
       Date.now(),
@@ -192,15 +189,9 @@ export function createHomeSessionsController(home: HomeController) {
     const ctx = conn ? home.server.context(conn) : undefined
     if (!conn || !ctx) return false
     const ids = [...removedSessionIDs(ctx.data.session.list(), session.id)]
-    await queryClient.cancelQueries({ queryKey: ["home-sessions", conn], exact: true })
-    return ctx.sdk.api.session
-      .remove({ sessionID: session.id })
+    return ctx.data.session
+      .remove(session.id)
       .then(() => {
-        const removedIDs = new Set(ids)
-        setRemoved("keys", (current) => [...new Set([...current, ...ids.map((id) => `${server}\0${id}`)])])
-        queryClient.setQueryData<SessionInfo[]>(["home-sessions", conn], (current) =>
-          current?.filter((item) => !removedIDs.has(item.id)),
-        )
         notifySessionTabsRemoved({
           server: ServerConnection.key(conn),
           directory: session.location.directory,
@@ -216,9 +207,6 @@ export function createHomeSessionsController(home: HomeController) {
         return false
       })
       .finally(() => {
-        // Always refetch: the pre-mutation cancel may have aborted an
-        // in-flight index fetch, and a failed delete must not leave the
-        // index unloaded either.
         void queryClient.invalidateQueries({ queryKey: ["home-sessions", conn], exact: true })
       })
   }
@@ -256,7 +244,7 @@ export function createHomeSessionsController(home: HomeController) {
     data: {
       records,
       groups,
-      loading: () => sessionLoad.isLoading,
+      loading: () => sessionLoad.isPending,
       searchRecords: allRecords,
     },
     session: {

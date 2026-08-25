@@ -329,7 +329,13 @@ export function FormPrompt(props: { form: FormWithLocation }) {
 
   usePaste((event) => {
     if (keymap.mode.current() !== FORM_MODE) return
-    if (!pasteCustom(stripAnsiSequences(decodePasteBytes(event.bytes)).replace(/\r\n?/g, "\n"))) return
+    const value = stripAnsiSequences(decodePasteBytes(event.bytes)).replace(/\r\n?/g, "\n")
+    if (store.editing && renderer.currentFocusedEditor === textarea) {
+      textarea.insertText(value)
+      event.preventDefault()
+      return
+    }
+    if (!pasteCustom(value)) return
     event.preventDefault()
   })
 

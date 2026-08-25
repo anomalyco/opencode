@@ -10,7 +10,7 @@ import {
   type DiagramRgb,
 } from "../core/color/style.js"
 
-export type FlowchartBaseCellStyle = "node" | "database" | "edge" | "label" | "group"
+export type FlowchartBaseCellStyle = "node" | "nodeBorder" | "database" | "databaseBorder" | "edge" | "label" | "group"
 export type FlowchartNodeEdgeFadeStyle = `nodeEdgeFade${DiagramFadeStep}`
 export type FlowchartDatabaseEdgeFadeStyle = `databaseEdgeFade${DiagramFadeStep}`
 export type FlowchartEdgeFadeStyle = FlowchartNodeEdgeFadeStyle | FlowchartDatabaseEdgeFadeStyle
@@ -22,7 +22,9 @@ export type FlowchartGrid = DiagramCanvas<FlowchartCellStyle, FlowchartCellMetad
 export type FlowchartStyleColors = Required<Record<FlowchartCellStyle, RGBA>>
 export const DEFAULT_THEME_RGB = {
   node: [228, 239, 232],
+  nodeBorder: [141, 163, 151],
   database: [228, 239, 232],
+  databaseBorder: [141, 163, 151],
   edge: [134, 225, 200],
   label: [134, 225, 200],
   group: [76, 99, 89],
@@ -35,16 +37,20 @@ export function resolveFlowchartStyleColors(
   colors: Partial<Record<FlowchartCellStyle, RGBA | undefined>> = {},
 ): FlowchartStyleColors {
   const node = colors.node ?? rgba(DEFAULT_THEME_RGB.node)
+  const nodeBorder = colors.nodeBorder ?? rgba(DEFAULT_THEME_RGB.nodeBorder)
   const database = colors.database ?? rgba(DEFAULT_THEME_RGB.database)
+  const databaseBorder = colors.databaseBorder ?? rgba(DEFAULT_THEME_RGB.databaseBorder)
   const edge = colors.edge ?? rgba(DEFAULT_THEME_RGB.edge)
   return {
     node,
+    nodeBorder,
     database,
+    databaseBorder,
     edge,
     label: colors.label ?? rgba(DEFAULT_THEME_RGB.label),
     group: colors.group ?? rgba(DEFAULT_THEME_RGB.group),
-    ...createColorRampTheme(NODE_EDGE_FADE_STYLES, node, edge),
-    ...createColorRampTheme(DATABASE_EDGE_FADE_STYLES, database, edge),
+    ...createColorRampTheme(NODE_EDGE_FADE_STYLES, nodeBorder, edge),
+    ...createColorRampTheme(DATABASE_EDGE_FADE_STYLES, databaseBorder, edge),
   }
 }
 

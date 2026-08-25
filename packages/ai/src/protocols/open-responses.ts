@@ -285,6 +285,7 @@ export const Event = Schema.StructWithRest(
   Schema.Struct({
     type: Schema.String,
     delta: Schema.optional(Schema.String),
+    arguments: Schema.optional(Schema.String),
     text: Schema.optional(Schema.String),
     item_id: Schema.optional(Schema.String),
     summary_index: Schema.optional(Schema.Number),
@@ -665,7 +666,8 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
 
 const lowerOptions = (request: LLMRequest) => {
   const options = OpenResponsesOptions.resolve(request)
-  const cacheKey = ProviderShared.clampPromptCacheKey(request.promptCacheKey)
+  const cacheKey = ProviderShared.promptCacheKey(request)
+  const parallelToolCalls = resolveParallelToolCalls(request)
   return {
     ...(options.instructions ? { instructions: options.instructions } : {}),
     ...(options.store !== undefined ? { store: options.store } : {}),
@@ -683,9 +685,16 @@ const lowerOptions = (request: LLMRequest) => {
     ...(options.textVerbosity ? { text: { verbosity: options.textVerbosity } } : {}),
     ...(options.serviceTier ? { service_tier: options.serviceTier } : {}),
     ...(options.maxToolCalls !== undefined ? { max_tool_calls: options.maxToolCalls } : {}),
-    ...(options.parallelToolCalls !== undefined ? { parallel_tool_calls: options.parallelToolCalls } : {}),
+    ...(parallelToolCalls !== undefined ? { parallel_tool_calls: parallelToolCalls } : {}),
     ...(options.truncation ? { truncation: options.truncation } : {}),
   }
+}
+
+export const resolveParallelToolCalls = (request: LLMRequest) => {
+  const configured = OpenResponsesOptions.resolve(request).parallelToolCalls
+  if (configured !== undefined) return configured
+  const disabled = request.toolChoice?.disableParallelToolUse
+  return disabled === undefined ? undefined : !disabled
 }
 
 const allowedToolChoice = (request: LLMRequest) => {
@@ -988,12 +997,24 @@ const onFunctionCallArgumentsDelta = Effect.fn("OpenResponses.onFunctionCallArgu
   state: ParserState,
   event: Event,
 ) {
-  if (!event.item_id || !event.delta || !state.tools[event.item_id]) return [state, NO_EVENTS] satisfies StepResult
+  if (!event.item_id) return [state, NO_EVENTS] satisfies StepResult
+  const tool = state.tools[event.item_id]
+  if (!tool) return [state, NO_EVENTS] satisfies StepResult
+  const final = event.type === "response.function_call_arguments.done" ? event.arguments : undefined
+  if (event.type === "response.function_call_arguments.done" && final === undefined)
+    return [state, NO_EVENTS] satisfies StepResult
+  if (final !== undefined && !final.startsWith(tool.input))
+    return [
+      { ...state, tools: ToolStream.start(state.tools, event.item_id, { ...tool, input: final }) },
+      NO_EVENTS,
+    ] satisfies StepResult
+  const delta = final === undefined ? event.delta : final.slice(tool.input.length)
+  if (!delta) return [state, NO_EVENTS] satisfies StepResult
   const result = ToolStream.appendExisting(
     state.id,
     state.tools,
     event.item_id,
-    event.delta,
+    delta,
     `${state.name} tool argument delta is missing its tool call`,
   )
   if (ToolStream.isError(result)) return yield* result
@@ -1186,7 +1207,6 @@ export const step = (state: ParserState, event: Event) => {
   if (
     event.type === "response.reasoning.done" ||
     event.type === "response.reasoning_summary_text.done" ||
-    event.type === "response.reasoning_summary.done" ||
     event.type === "response.reasoning_text.done"
   ) {
     if (!event.item_id) return ProviderShared.eventError(state.id, `${event.type} is missing item_id`)
@@ -1205,7 +1225,7 @@ export const step = (state: ParserState, event: Event) => {
       return ProviderShared.eventError(state.id, `${event.type} message is missing id`)
     return Effect.succeed(onOutputItemAdded(state, event))
   }
-  if (event.type === "response.function_call_arguments.delta")
+  if (event.type === "response.function_call_arguments.delta" || event.type === "response.function_call_arguments.done")
     return event.item_id
       ? onFunctionCallArgumentsDelta(state, event)
       : ProviderShared.eventError(state.id, `${event.type} is missing item_id`)

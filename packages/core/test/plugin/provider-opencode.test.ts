@@ -247,6 +247,10 @@ describe("OpencodePlugin", () => {
                           cost: { input: 1, output: 2, cache_read: 0.1 },
                           limit: { context: 1000, output: 100 },
                         },
+                        override: {
+                          name: "Override",
+                          provider: { npm: "@ai-sdk/anthropic", api: `${origin}/anthropic` },
+                        },
                         disabled: { name: "Disabled", status: "deprecated" },
                       },
                     },
@@ -308,6 +312,9 @@ describe("OpencodePlugin", () => {
             settings: { baseURL: `${server.url.origin}/v1`, custom: "value", temperature: 0.5 },
             headers: { "x-org-id": "org" },
           })
+          const override = required(yield* catalog.model.get(Provider.ID.make("remote"), Model.ID.make("override")))
+          expect(override.package).toBe(Provider.aisdk("@ai-sdk/anthropic"))
+          expect(override.settings?.baseURL).toBe(`${server.url.origin}/anthropic`)
           expect(model.variants).toEqual([
             {
               id: Model.VariantID.make("custom"),

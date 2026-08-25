@@ -255,18 +255,14 @@ export type SessionPromptOperation<E = never> = (input: SessionPromptInput) => E
 
 export type SessionCommandInput = {
   readonly sessionID: Session.ID
-  readonly id?: SessionMessage.ID | undefined
   readonly command: string
-  readonly arguments?: string | undefined
-  readonly agent?: Agent.ID | undefined
-  readonly model?: Model.Ref | undefined
+  readonly text: string
   readonly files?: ReadonlyArray<PromptInput.FileAttachment> | undefined
   readonly agents?: ReadonlyArray<AgentAttachment> | undefined
   readonly skills?: ReadonlyArray<PromptInput.SkillAttachment> | undefined
   readonly delivery?: SessionInbox.Delivery | undefined
-  readonly resume?: boolean | undefined
 }
-export type SessionCommandOutput = SessionInbox.User
+export type SessionCommandOutput = void
 export type SessionCommandOperation<E = never> = (input: SessionCommandInput) => Effect.Effect<SessionCommandOutput, E>
 
 export type SessionSkillInput = {
@@ -1002,7 +998,7 @@ export type SessionLogOutput =
 export type SessionLogOperation<E = never> = (input: SessionLogInput) => Stream.Stream<SessionLogOutput, E>
 
 export type SessionInterruptInput = { readonly sessionID: Session.ID; readonly continue?: boolean | undefined }
-export type SessionInterruptOutput = void
+export type SessionInterruptOutput = { readonly interrupted: boolean }
 export type SessionInterruptOperation<E = never> = (
   input: SessionInterruptInput,
 ) => Effect.Effect<SessionInterruptOutput, E>
@@ -1112,11 +1108,7 @@ export interface ModelApi<E = never> {
   readonly default: ModelDefaultOperation<E>
 }
 
-export type GenerateTextInput = {
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-  readonly prompt: string
-  readonly model?: Model.Ref | undefined
-}
+export type GenerateTextInput = { readonly prompt: string; readonly model?: Model.Ref | undefined }
 export type GenerateTextOutput = { readonly text: string }
 export type GenerateTextOperation<E = never> = (input: GenerateTextInput) => Effect.Effect<GenerateTextOutput, E>
 
@@ -1672,6 +1664,7 @@ export type WorktreeCreateInput = {
   readonly projectID: Project.ID
   readonly strategy: Worktree.StrategyID
   readonly from?: AbsolutePath | undefined
+  readonly branch?: string | undefined
   readonly directory: AbsolutePath
   readonly name?: string | undefined
 }
@@ -1699,6 +1692,23 @@ export interface WorktreeApi<E = never> {
   readonly refresh: WorktreeRefreshOperation<E>
 }
 
+export type WorkspaceCreateInput = { readonly id?: Workspace.ID | undefined; readonly provider: string }
+export type WorkspaceCreateOutput = Workspace.ID
+export type WorkspaceCreateOperation<E = never> = (
+  input: WorkspaceCreateInput,
+) => Effect.Effect<WorkspaceCreateOutput, E>
+
+export type WorkspaceDestroyInput = { readonly workspaceID: Workspace.ID }
+export type WorkspaceDestroyOutput = Workspace.DestroyResult
+export type WorkspaceDestroyOperation<E = never> = (
+  input: WorkspaceDestroyInput,
+) => Effect.Effect<WorkspaceDestroyOutput, E>
+
+export interface WorkspaceApi<E = never> {
+  readonly create: WorkspaceCreateOperation<E>
+  readonly destroy: WorkspaceDestroyOperation<E>
+}
+
 export type VcsGetInput = {
   readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
 }
@@ -1711,6 +1721,14 @@ export type VcsStatusInput = {
 export type VcsStatusOutput = { readonly location: Location.Info; readonly data: ReadonlyArray<Vcs.FileStatus> }
 export type VcsStatusOperation<E = never> = (input?: VcsStatusInput) => Effect.Effect<VcsStatusOutput, E>
 
+export type VcsBranchesInput = {
+  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  readonly search?: string | undefined
+  readonly limit?: number | undefined
+}
+export type VcsBranchesOutput = { readonly location: Location.Info; readonly data: Vcs.BranchList }
+export type VcsBranchesOperation<E = never> = (input?: VcsBranchesInput) => Effect.Effect<VcsBranchesOutput, E>
+
 export type VcsDiffInput = {
   readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   readonly mode: Vcs.Mode
@@ -1722,6 +1740,7 @@ export type VcsDiffOperation<E = never> = (input: VcsDiffInput) => Effect.Effect
 export interface VcsApi<E = never> {
   readonly get: VcsGetOperation<E>
   readonly status: VcsStatusOperation<E>
+  readonly branches: VcsBranchesOperation<E>
   readonly diff: VcsDiffOperation<E>
 }
 
@@ -1816,6 +1835,7 @@ export interface AppApi<E = never> {
   readonly shell: ShellApi<E>
   readonly reference: ReferenceApi<E>
   readonly worktree: WorktreeApi<E>
+  readonly workspace: WorkspaceApi<E>
   readonly vcs: VcsApi<E>
   readonly debug: DebugApi<E>
   readonly migration: MigrationApi<E>

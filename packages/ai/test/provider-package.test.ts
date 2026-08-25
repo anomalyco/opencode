@@ -95,7 +95,11 @@ describe("provider package entrypoints", () => {
     })
     expect(selected.route.defaults.headers).toEqual({ "x-application": "opencode" })
     expect(selected.route.defaults.http?.body).toEqual({ service_tier: "priority" })
-    expect(selected.route.defaults.providerOptions).toEqual({ reasoningEffort: "low", store: true })
+    expect(selected.route.defaults.providerOptions).toEqual({
+      reasoningEffort: "low",
+      store: true,
+      include: ["reasoning.encrypted_content"],
+    })
   })
 
   test("maps Anthropic-compatible settings onto the executable model", async () => {
@@ -285,7 +289,10 @@ describe("provider package entrypoints", () => {
       baseURL: "https://aiplatform.googleapis.com/v1/projects/vertex-project/locations/global/endpoints/openapi",
       path: "/responses",
     })
-    expect(responses.route.defaults.providerOptions).toEqual({ store: false })
+    expect(responses.route.defaults.providerOptions).toEqual({
+      store: false,
+      include: ["reasoning.encrypted_content"],
+    })
   })
 
   test("rejects conflicting Vertex auth settings at runtime", async () => {

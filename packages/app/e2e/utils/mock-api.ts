@@ -100,6 +100,7 @@ const Group = HttpApiGroup.make("mock")
   .add(HttpApiEndpoint.get("formRequests", "/api/form/request", { success: Json }))
   .add(HttpApiEndpoint.get("vcs", "/api/vcs", { success: Json }))
   .add(HttpApiEndpoint.get("vcsStatus", "/api/vcs/status", { success: Json }))
+  .add(HttpApiEndpoint.get("vcsBranches", "/api/vcs/branches", { success: Json }))
   .add(HttpApiEndpoint.get("vcsDiff", "/api/vcs/diff", { success: Json }))
   .add(HttpApiEndpoint.get("fsList", "/api/fs/list", { query: Query, success: Json }))
   .add(
@@ -172,6 +173,39 @@ const Group = HttpApiGroup.make("mock")
     HttpApiEndpoint.get("sessionInbox", "/api/session/:sessionID/inbox", {
       params: SessionParams,
       success: Json,
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("sessionPrompt", "/api/session/:sessionID/prompt", {
+      params: SessionParams,
+      payload: JsonPayload,
+      success: Json,
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("sessionSwitchAgent", "/api/session/:sessionID/agent", {
+      params: SessionParams,
+      payload: JsonPayload,
+      success: NoContent,
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("sessionSwitchModel", "/api/session/:sessionID/model", {
+      params: SessionParams,
+      payload: JsonPayload,
+      success: NoContent,
+    }),
+  )
+  .add(
+    HttpApiEndpoint.delete("sessionInboxCancel", "/api/session/:sessionID/inbox/:inboxID", {
+      params: { ...SessionParams, inboxID: Schema.String },
+      success: NoContent,
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("sessionInboxSteer", "/api/session/:sessionID/inbox/:inboxID/steer", {
+      params: { ...SessionParams, inboxID: Schema.String },
+      success: NoContent,
     }),
   )
   .add(

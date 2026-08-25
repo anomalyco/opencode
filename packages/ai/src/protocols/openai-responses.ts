@@ -111,8 +111,10 @@ const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request:
     extension,
   )
   const toolSchemaCompatibility = request.model.compatibility?.toolSchema
+  const parallelToolCalls = OpenResponses.resolveParallelToolCalls(request)
   return {
     ...body,
+    ...(parallelToolCalls === undefined ? {} : { parallel_tool_calls: parallelToolCalls }),
     tools:
       request.tools.length === 0
         ? undefined
@@ -162,7 +164,7 @@ const HOSTED_TOOLS = {
 } as const satisfies ResponsesHostedTools.Definitions
 
 const step = (state: OpenResponses.ParserState, event: OpenResponses.Event) => {
-  if (event.type === "response.reasoning_text.delta" || event.type === "response.reasoning_summary.delta")
+  if (event.type === "response.reasoning_text.delta")
     return event.item_id
       ? Effect.succeed(OpenResponses.onReasoningDelta(state, event, event.item_id))
       : ProviderShared.eventError(ADAPTER, `${event.type} is missing item_id`)
@@ -205,7 +207,7 @@ export const route = Route.make({
   endpoint,
   auth,
   transport,
-  defaults: { providerOptions: { store: false } },
+  defaults: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
 })
 
 export * as OpenAIResponses from "./openai-responses.js"

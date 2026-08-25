@@ -16,7 +16,7 @@ import { createSessionTabs } from "@/session/helpers"
 import { showToast } from "@/shell/notifications/toast"
 import { formatServerError } from "@/runtime/server/errors"
 import { Skill } from "@opencode-ai/schema/skill"
-import type { ComposerAdapter, ComposerControls } from "./adapter"
+import type { ComposerAdapter, ComposerControls, ComposerQueue } from "./adapter"
 import type { ImageAttachmentPart } from "./state"
 import type { PromptHistoryComment } from "./history/entry"
 import { createComposerHistory } from "./history/store"
@@ -27,7 +27,7 @@ export type ComposerModel = ComposerEditorModel & {
   readonly model: ComposerControls["model"]
 }
 
-export function createComposerModel(adapter: ComposerAdapter): ComposerModel {
+export function createComposerModel(adapter: ComposerAdapter, options?: { queue?: ComposerQueue }): ComposerModel {
   const sdk = useWorkspaceLocation()
   const data = useData()
   const files = useFile()
@@ -80,7 +80,11 @@ export function createComposerModel(adapter: ComposerAdapter): ComposerModel {
   })
   const stopping = createMemo(() => adapter.working() && blank())
   const placeholder = () =>
-    composerPlaceholder(mode(), (key, params) => language.t(key as Parameters<typeof language.t>[0], params as never))
+    composerPlaceholder(
+      mode(),
+      (key, params) => language.t(key as Parameters<typeof language.t>[0], params as never),
+      adapter.working() || (options?.queue?.count() ?? 0) > 0,
+    )
 
   const historyComments = () => {
     const byID = new Map(comments.all().map((item) => [`${item.file}\n${item.id}`, item] as const))
@@ -253,6 +257,11 @@ export function createComposerModel(adapter: ComposerAdapter): ComposerModel {
     resetHistory: () => controller.resetHistory(),
     setMode: (next) => controller.dispatch({ type: next === "shell" ? "mode.shell" : "mode.normal" }),
     closePopover: () => controller.dispatch({ type: "popover.close" }),
+    delivery: (alternate) => {
+      const queue = options?.queue
+      if (!queue) return "steer"
+      return (alternate ? queue.alternate() : queue.delivery()) ?? "steer"
+    },
     notify: {
       missingSelection: () =>
         showToast({
@@ -360,7 +369,18 @@ export function createComposerModel(adapter: ComposerAdapter): ComposerModel {
       submit: {
         stopping,
         working: adapter.working,
-        onSubmit: () => void submission.submit(new Event("submit")),
+        queue: options?.queue,
+        onSubmit: (submitOptions) => {
+          const queue = options?.queue
+          // Confirming an edit re-admits the queued prompt instead of sending
+          // the composer value as a new prompt. Enter keeps it queued in
+          // place; the alternate action sends it as a steer.
+          if (queue?.editing()) {
+            queue.confirmEdit(submitOptions?.alternate ? "steer" : "queue")
+            return
+          }
+          void submission.submit(new Event("submit"), submitOptions)
+        },
         onStop: () => void submission.stop(),
       },
     },

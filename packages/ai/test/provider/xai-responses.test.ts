@@ -21,6 +21,17 @@ describe("xAI Responses route", () => {
 
       const prepared = yield* compileRequest(LLM.request({ model, prompt: "Hello" }))
       expect(prepared.protocol).toBe("xai-responses")
+      expect(prepared.body.store).toBe(false)
+      expect(prepared.body.include).toEqual(["reasoning.encrypted_content"])
+    }),
+  )
+
+  it.effect("allows callers to opt out of encrypted reasoning", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(LLM.request({ model, prompt: "Hello", providerOptions: { include: [] } }))
+
+      expect(prepared.body.store).toBe(false)
+      expect(prepared.body.include).toBeUndefined()
     }),
   )
 

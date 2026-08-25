@@ -193,9 +193,9 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   }
 
   const openTerminal = () => {
+    actions.session.layout.view().terminal.open()
     if (terminal.all().length > 0) terminal.new({ focus: true })
     if (terminal.all().length === 0) terminal.requestFocus()
-    actions.session.layout.view().terminal.open()
   }
 
   const closeTerminal = () => {
@@ -361,8 +361,8 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
           actions.session.layout.view().terminal.close()
           return
         }
-        terminal.requestFocus(terminal.active())
         actions.session.layout.view().terminal.open()
+        terminal.requestFocus(terminal.active())
       },
     }),
     viewCommand({

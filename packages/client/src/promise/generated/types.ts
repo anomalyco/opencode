@@ -176,6 +176,8 @@ export type ToolFileContent1 = { type: "file"; uri: string; mime: string; name?:
 
 export type EventLogSynced = { type: "log.synced"; aggregateID: string; seq?: number }
 
+export type SessionInterruptResponse = { interrupted: boolean }
+
 export type ModelReasoningField = "reasoning" | "reasoning_content" | "reasoning_text" | (string & {})
 
 export type ModelMaxTokensField = "max_completion_tokens" | "max_tokens"
@@ -311,6 +313,8 @@ export type PermissionSavedInfo = { id: string; projectID: string; action: strin
 
 export type FileSystemEntry = { path: string; type: "file" | "directory" }
 
+export type CommandInfo = { name: string; description?: string }
+
 export type SkillInfo = {
   id: string
   name: string
@@ -378,6 +382,8 @@ export type WorktreeDirectory = { directory: string; strategy?: string }
 
 export type WorktreeInfo = { directory: string }
 
+export type WorkspaceDestroyResult = { destroyed: boolean }
+
 export type VcsBranch = { current?: string; default?: string }
 
 export type VcsFileStatus = {
@@ -387,18 +393,11 @@ export type VcsFileStatus = {
   status: "added" | "deleted" | "modified"
 }
 
+export type VcsBranchList = Array<string>
+
 export type WebSearchProvider = { id: string; name: string }
 
 export type WebSearchResult = { url: string; title?: string; content?: string; time: { published?: number } }
-
-export type CommandInfo = {
-  name: string
-  template: string
-  description?: string
-  agent?: string
-  model?: ModelRef
-  subtask?: boolean
-}
 
 export type ProviderRequest = {
   settings: ProviderSettings
@@ -2220,13 +2219,13 @@ export type CommandNotFoundError = {
 export const isCommandNotFoundError = (value: unknown): value is CommandNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "CommandNotFoundError"
 
-export type CommandEvaluationError = {
-  readonly _tag: "CommandEvaluationError"
+export type CommandExecutionError = {
+  readonly _tag: "CommandExecutionError"
   readonly command: string
   readonly message: string
 }
-export const isCommandEvaluationError = (value: unknown): value is CommandEvaluationError =>
-  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "CommandEvaluationError"
+export const isCommandExecutionError = (value: unknown): value is CommandExecutionError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "CommandExecutionError"
 
 export type SkillNotFoundError = {
   readonly _tag: "SkillNotFoundError"
@@ -3637,35 +3636,9 @@ export type SessionPromptOutput = { data: SessionInboxUser }["data"]
 
 export type SessionCommandInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]
-  readonly id?: {
-    readonly id?: string | null
-    readonly command: string
-    readonly arguments?: string | null
-    readonly agent?: string | null
-    readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
-    readonly files?: ReadonlyArray<{
-      readonly uri: string
-      readonly name?: string
-      readonly description?: string
-      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
-    }>
-    readonly agents?: ReadonlyArray<{
-      readonly name: string
-      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
-    }>
-    readonly skills?: ReadonlyArray<{
-      readonly id: string
-      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
-    }>
-    readonly delivery?: ("steer" | "queue") | null
-    readonly resume?: boolean | null
-  }["id"]
   readonly command: {
-    readonly id?: string | null
     readonly command: string
-    readonly arguments?: string | null
-    readonly agent?: string | null
-    readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
+    readonly text: string
     readonly files?: ReadonlyArray<{
       readonly uri: string
       readonly name?: string
@@ -3681,14 +3654,10 @@ export type SessionCommandInput = {
       readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
     }>
     readonly delivery?: ("steer" | "queue") | null
-    readonly resume?: boolean | null
   }["command"]
-  readonly arguments?: {
-    readonly id?: string | null
+  readonly text: {
     readonly command: string
-    readonly arguments?: string | null
-    readonly agent?: string | null
-    readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
+    readonly text: string
     readonly files?: ReadonlyArray<{
       readonly uri: string
       readonly name?: string
@@ -3704,60 +3673,10 @@ export type SessionCommandInput = {
       readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
     }>
     readonly delivery?: ("steer" | "queue") | null
-    readonly resume?: boolean | null
-  }["arguments"]
-  readonly agent?: {
-    readonly id?: string | null
-    readonly command: string
-    readonly arguments?: string | null
-    readonly agent?: string | null
-    readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
-    readonly files?: ReadonlyArray<{
-      readonly uri: string
-      readonly name?: string
-      readonly description?: string
-      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
-    }>
-    readonly agents?: ReadonlyArray<{
-      readonly name: string
-      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
-    }>
-    readonly skills?: ReadonlyArray<{
-      readonly id: string
-      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
-    }>
-    readonly delivery?: ("steer" | "queue") | null
-    readonly resume?: boolean | null
-  }["agent"]
-  readonly model?: {
-    readonly id?: string | null
-    readonly command: string
-    readonly arguments?: string | null
-    readonly agent?: string | null
-    readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
-    readonly files?: ReadonlyArray<{
-      readonly uri: string
-      readonly name?: string
-      readonly description?: string
-      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
-    }>
-    readonly agents?: ReadonlyArray<{
-      readonly name: string
-      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
-    }>
-    readonly skills?: ReadonlyArray<{
-      readonly id: string
-      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
-    }>
-    readonly delivery?: ("steer" | "queue") | null
-    readonly resume?: boolean | null
-  }["model"]
+  }["text"]
   readonly files?: {
-    readonly id?: string | null
     readonly command: string
-    readonly arguments?: string | null
-    readonly agent?: string | null
-    readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
+    readonly text: string
     readonly files?: ReadonlyArray<{
       readonly uri: string
       readonly name?: string
@@ -3773,14 +3692,10 @@ export type SessionCommandInput = {
       readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
     }>
     readonly delivery?: ("steer" | "queue") | null
-    readonly resume?: boolean | null
   }["files"]
   readonly agents?: {
-    readonly id?: string | null
     readonly command: string
-    readonly arguments?: string | null
-    readonly agent?: string | null
-    readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
+    readonly text: string
     readonly files?: ReadonlyArray<{
       readonly uri: string
       readonly name?: string
@@ -3796,14 +3711,10 @@ export type SessionCommandInput = {
       readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
     }>
     readonly delivery?: ("steer" | "queue") | null
-    readonly resume?: boolean | null
   }["agents"]
   readonly skills?: {
-    readonly id?: string | null
     readonly command: string
-    readonly arguments?: string | null
-    readonly agent?: string | null
-    readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
+    readonly text: string
     readonly files?: ReadonlyArray<{
       readonly uri: string
       readonly name?: string
@@ -3819,14 +3730,10 @@ export type SessionCommandInput = {
       readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
     }>
     readonly delivery?: ("steer" | "queue") | null
-    readonly resume?: boolean | null
   }["skills"]
   readonly delivery?: {
-    readonly id?: string | null
     readonly command: string
-    readonly arguments?: string | null
-    readonly agent?: string | null
-    readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
+    readonly text: string
     readonly files?: ReadonlyArray<{
       readonly uri: string
       readonly name?: string
@@ -3842,34 +3749,10 @@ export type SessionCommandInput = {
       readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
     }>
     readonly delivery?: ("steer" | "queue") | null
-    readonly resume?: boolean | null
   }["delivery"]
-  readonly resume?: {
-    readonly id?: string | null
-    readonly command: string
-    readonly arguments?: string | null
-    readonly agent?: string | null
-    readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
-    readonly files?: ReadonlyArray<{
-      readonly uri: string
-      readonly name?: string
-      readonly description?: string
-      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
-    }>
-    readonly agents?: ReadonlyArray<{
-      readonly name: string
-      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
-    }>
-    readonly skills?: ReadonlyArray<{
-      readonly id: string
-      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
-    }>
-    readonly delivery?: ("steer" | "queue") | null
-    readonly resume?: boolean | null
-  }["resume"]
 }
 
-export type SessionCommandOutput = { data: SessionInboxUser }["data"]
+export type SessionCommandOutput = void
 
 export type SessionSkillInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]
@@ -4053,7 +3936,7 @@ export type SessionInterruptInput = {
   readonly continue?: { readonly continue?: boolean | undefined }["continue"]
 }
 
-export type SessionInterruptOutput = void
+export type SessionInterruptOutput = SessionInterruptResponse
 
 export type SessionBackgroundInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
 
@@ -4124,9 +4007,6 @@ export type ModelDefaultOutput = {
 }
 
 export type GenerateTextInput = {
-  readonly location?: {
-    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-  }["location"]
   readonly prompt: {
     readonly prompt: string
     readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
@@ -5715,24 +5595,35 @@ export type WorktreeCreateInput = {
   readonly strategy: {
     readonly strategy: string
     readonly from?: string
+    readonly branch?: string
     readonly directory: string
     readonly name?: string
   }["strategy"]
   readonly from?: {
     readonly strategy: string
     readonly from?: string
+    readonly branch?: string
     readonly directory: string
     readonly name?: string
   }["from"]
+  readonly branch?: {
+    readonly strategy: string
+    readonly from?: string
+    readonly branch?: string
+    readonly directory: string
+    readonly name?: string
+  }["branch"]
   readonly directory: {
     readonly strategy: string
     readonly from?: string
+    readonly branch?: string
     readonly directory: string
     readonly name?: string
   }["directory"]
   readonly name?: {
     readonly strategy: string
     readonly from?: string
+    readonly branch?: string
     readonly directory: string
     readonly name?: string
   }["name"]
@@ -5751,6 +5642,17 @@ export type WorktreeRemoveOutput = void
 export type WorktreeRefreshInput = { readonly projectID: { readonly projectID: string }["projectID"] }
 
 export type WorktreeRefreshOutput = void
+
+export type WorkspaceCreateInput = {
+  readonly id?: { readonly id?: string | undefined; readonly provider: string }["id"]
+  readonly provider: { readonly id?: string | undefined; readonly provider: string }["provider"]
+}
+
+export type WorkspaceCreateOutput = { data: string }["data"]
+
+export type WorkspaceDestroyInput = { readonly workspaceID: { readonly workspaceID: string }["workspaceID"] }
+
+export type WorkspaceDestroyOutput = WorkspaceDestroyResult
 
 export type VcsGetInput = {
   readonly location?: {
@@ -5772,6 +5674,29 @@ export type VcsStatusInput = {
 export type VcsStatusOutput = {
   location: { directory: string; workspaceID?: string; project: { id: string; directory: string; canonical: string } }
   data: Array<VcsFileStatus>
+}
+
+export type VcsBranchesInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+    readonly search?: string | undefined
+    readonly limit?: number | undefined
+  }["location"]
+  readonly search?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+    readonly search?: string | undefined
+    readonly limit?: number | undefined
+  }["search"]
+  readonly limit?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+    readonly search?: string | undefined
+    readonly limit?: number | undefined
+  }["limit"]
+}
+
+export type VcsBranchesOutput = {
+  location: { directory: string; workspaceID?: string; project: { id: string; directory: string; canonical: string } }
+  data: VcsBranchList
 }
 
 export type VcsDiffInput = {

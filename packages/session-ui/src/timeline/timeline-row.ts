@@ -92,7 +92,7 @@ export namespace TimelineRow {
       // and its rows regroup under the real user message once older history loads.
       // The group key already carries the owning message and part IDs.
       case "AssistantPart":
-        return `assistant-part:${row.group.key}`
+        return `assistant-part:${row.group.type}:${row.group.key}`
       case "Thinking":
         return `thinking:${row.userMessageID}`
       case "Error":
