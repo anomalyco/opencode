@@ -45,6 +45,35 @@ describe("ToolStream", () => {
     }),
   )
 
+  it.effect("starts a tool whose stream key is an Object.prototype member", () =>
+    Effect.gen(function* () {
+      const first = ToolStream.appendOrStart(
+        ADAPTER,
+        ToolStream.empty<string>(),
+        "toString",
+        { id: "call_1", name: "lookup", text: "{}" },
+        "missing tool",
+      )
+      if (ToolStream.isError(first)) return yield* first
+
+      expect(first.events).toEqual([
+        { type: "tool-input-start", id: "call_1", name: "lookup" },
+        { type: "tool-input-delta", id: "call_1", name: "lookup", text: "{}" },
+      ])
+    }),
+  )
+
+  it.effect("ignores inherited Object.prototype members when no tool was started", () =>
+    Effect.gen(function* () {
+      const error = ToolStream.appendExisting(ADAPTER, ToolStream.empty<string>(), "toString", "{}", "missing tool")
+      const finished = yield* ToolStream.finish(ADAPTER, ToolStream.empty<string>(), "constructor")
+
+      expect(error).toBeInstanceOf(LLMError)
+      if (ToolStream.isError(error)) expect(error.reason.message).toBe("missing tool")
+      expect(finished).toEqual({ tools: {} })
+    }),
+  )
+
   it.effect("uses final input override without losing accumulated deltas", () =>
     Effect.gen(function* () {
       const tools = ToolStream.start(ToolStream.empty<string>(), "item_1", {
