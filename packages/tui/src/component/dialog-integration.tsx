@@ -261,30 +261,13 @@ function selectMethod(
   dialog.replace(() => (
     <DialogSelect
       title={`Connect ${integration.name}`}
-      options={methods
-        .map((method) => {
-          const title = method.type === "key" ? (method.label ?? "API key") : method.label
-          const unavailable = method.type === "oauth" && method.disabled === true
-          return {
-            title,
-            value: method.type === "key" ? "key" : method.id,
-            unavailable,
-            ...(unavailable
-              ? {
-                  titleView: <UnavailableMethod title={title} />,
-                  description: method.description,
-                }
-              : { onSelect: () => openMethod(integration, method, dialog, onConnected) }),
-          }
-        })
-        .toSorted((left, right) => Number(left.unavailable) - Number(right.unavailable))}
+      options={methods.map((method) => ({
+        title: method.type === "key" ? (method.label ?? "API key") : method.label,
+        value: method.type === "key" ? "key" : method.id,
+        onSelect: () => openMethod(integration, method, dialog, onConnected),
+      }))}
     />
   ))
-}
-
-function UnavailableMethod(props: { title: string }) {
-  const theme = useTheme("elevated")
-  return <span style={{ fg: theme.text.action.primary.disabled }}>{props.title}</span>
 }
 
 function openMethod(
@@ -545,7 +528,6 @@ function OAuthStarting(props: {
           <OAuthAuto
             integration={props.integration}
             title={props.method.label}
-            pending={props.method.pending}
             attempt={result.data}
             onConnected={props.onConnected}
           />
@@ -563,7 +545,6 @@ function OAuthStarting(props: {
 function OAuthAuto(props: {
   integration: IntegrationInfo
   title: string
-  pending?: string
   attempt: IntegrationAttempt
   onConnected?: OnIntegrationConnected
 }) {
@@ -646,7 +627,7 @@ function OAuthAuto(props: {
       title={props.title}
       url={props.attempt.url}
       instructions={props.attempt.instructions}
-      message={props.pending ?? "Waiting for authorization..."}
+      message="Waiting for authorization..."
       copy
       open
     />

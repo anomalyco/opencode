@@ -61,6 +61,10 @@ function withAzureCommands<A, E, R>(
 ) {
   return Effect.gen(function* () {
     const processes = yield* AppProcess.Service
+    const directory = (yield* Location.Service).directory
+    const executable = `${directory}/az`
+    yield* Effect.promise(() => Bun.write(executable, "#!/bin/sh\nexit 0\n"))
+    yield* Effect.promise(() => chmod(executable, 0o755))
     const fake = AppProcess.Service.of({
       ...processes,
       run: (command) => {
@@ -83,7 +87,9 @@ function withAzureCommands<A, E, R>(
         return result
       },
     })
-    return yield* fx().pipe(Effect.provideService(AppProcess.Service, fake))
+    return yield* withEnv({ PATH: `${directory}:${process.env.PATH}` }, () =>
+      fx().pipe(Effect.provideService(AppProcess.Service, fake)),
+    )
   })
 }
 
@@ -127,7 +133,7 @@ describe("AzurePlugin", () => {
             {
               type: "string",
               key: "resourceName",
-              title: "API key · Resource name",
+              title: "Enter Azure Resource Name",
               placeholder: "e.g. my-models",
               required: true,
             },
@@ -137,69 +143,66 @@ describe("AzurePlugin", () => {
     ),
   )
 
-  it.effect("registers Azure CLI authentication alongside API keys", () =>
-    withEnv(
-      { PATH: "/nonexistent", AZURE_RESOURCE_NAME: undefined, AZURE_COGNITIVE_SERVICES_RESOURCE_NAME: undefined },
-      () =>
-        Effect.gen(function* () {
-          yield* addPlugin()
-          const integration = yield* (yield* Integration.Service).get(Integration.ID.make("azure"))
-          expect(integration?.methods).toContainEqual({
-            id: Integration.MethodID.make("azure-cli"),
-            type: "oauth",
-            label: "Microsoft Entra ID (Azure CLI)",
-            pending: "Discovering Azure models...",
-            disabled: true,
-            description: "requires Azure CLI",
-            form: [
-              {
-                type: "string",
-                key: "resourceName",
-                title: "Microsoft Entra ID (Azure CLI) · Resource name",
-                placeholder: "e.g. my-models",
-                required: true,
-              },
-            ],
-          })
-        }),
+  it.effect("hides Azure CLI authentication when the Azure CLI is not installed", () =>
+    withEnv({ PATH: "/nonexistent" }, () =>
+      Effect.gen(function* () {
+        yield* addPlugin()
+        const integration = yield* (yield* Integration.Service).get(Integration.ID.make("azure"))
+        expect(integration?.methods.some((method) => method.type === "oauth")).toBe(false)
+      }),
+    ),
+  )
+
+  it.live("registers Azure CLI authentication alongside API keys", () =>
+    withEnv({ AZURE_RESOURCE_NAME: undefined, AZURE_COGNITIVE_SERVICES_RESOURCE_NAME: undefined }, () =>
+      withAzureCommands(
+        () => [],
+        () =>
+          Effect.gen(function* () {
+            yield* addPlugin()
+            const integration = yield* (yield* Integration.Service).get(Integration.ID.make("azure"))
+            expect(integration?.methods).toContainEqual({
+              id: Integration.MethodID.make("azure-cli"),
+              type: "oauth",
+              label: "Microsoft Entra ID (Azure CLI)",
+              form: [
+                {
+                  type: "string",
+                  key: "resourceName",
+                  title: "Enter Azure Resource Name",
+                  placeholder: "e.g. my-models",
+                  required: true,
+                },
+              ],
+            })
+          }),
+      ),
     ),
   )
 
   it.live("lists Azure CLI resources and keeps manual resource entry available", () =>
-    Effect.gen(function* () {
-      const directory = (yield* Location.Service).directory
-      const executable = `${directory}/az`
-      yield* Effect.promise(() => Bun.write(executable, "#!/bin/sh\nexit 0\n"))
-      yield* Effect.promise(() => chmod(executable, 0o755))
-      return yield* withEnv(
-        {
-          PATH: `${directory}:${process.env.PATH}`,
-          AZURE_RESOURCE_NAME: undefined,
-          AZURE_COGNITIVE_SERVICES_RESOURCE_NAME: undefined,
-        },
+    withEnv({ AZURE_RESOURCE_NAME: undefined, AZURE_COGNITIVE_SERVICES_RESOURCE_NAME: undefined }, () =>
+      withAzureCommands(
+        () => [
+          { name: "first-resource", resourceGroup: "first-group" },
+          { name: "second-resource", resourceGroup: "second-group" },
+        ],
         () =>
-          withAzureCommands(
-            () => [
-              { name: "first-resource", resourceGroup: "first-group" },
-              { name: "second-resource", resourceGroup: "second-group" },
-            ],
-            () =>
-              Effect.gen(function* () {
-                yield* addPlugin()
-                const integration = yield* (yield* Integration.Service).get(Integration.ID.make("azure"))
-                const method = integration?.methods.find((item) => item.type === "oauth")
-                expect(method?.form?.[0]).toMatchObject({
-                  title: "Microsoft Entra ID (Azure CLI) · Resource name",
-                  options: [
-                    { value: "first-resource", label: "first-resource", description: "first-group" },
-                    { value: "second-resource", label: "second-resource", description: "second-group" },
-                  ],
-                  custom: true,
-                })
-              }),
-          ),
-      )
-    }),
+          Effect.gen(function* () {
+            yield* addPlugin()
+            const integration = yield* (yield* Integration.Service).get(Integration.ID.make("azure"))
+            const method = integration?.methods.find((item) => item.type === "oauth")
+            expect(method?.form?.[0]).toMatchObject({
+              title: "Enter Azure Resource Name",
+              options: [
+                { value: "first-resource", label: "first-resource", description: "first-group" },
+                { value: "second-resource", label: "second-resource", description: "second-group" },
+              ],
+              custom: true,
+            })
+          }),
+      ),
+    ),
   )
 
   it.live("connects with the Azure CLI and accepts legacy token expiration", () =>

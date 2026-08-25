@@ -81,21 +81,24 @@ export const AzurePlugin = define({
 
     const available = Boolean(Bun.which("az", { PATH: process.env.PATH }))
     const accounts =
-      !resolveResourceName(configured) && typeof configured?.baseURL !== "string" && available
+      !resolveResourceName(configured) &&
+      typeof configured?.baseURL !== "string" &&
+      !process.env.AZURE_RESOURCE_GROUP &&
+      available
         ? yield* command(["cognitiveservices", "account", "list", "--output", "json", "--only-show-errors"]).pipe(
             Effect.flatMap(decodeAccounts),
             Effect.catch(() => Effect.succeed([])),
           )
         : []
 
-    const form = (label: string, select = false) =>
+    const form = (select = false) =>
       iife(() => {
         if (resolveResourceName(configured) || typeof configured?.baseURL === "string") return
         return Form.Fields.make([
           {
             type: "string",
             key: "resourceName",
-            title: `${label} · Resource name`,
+            title: "Enter Azure Resource Name",
             placeholder: "e.g. my-models",
             required: true,
             ...(select && accounts.length > 0
@@ -115,17 +118,16 @@ export const AzurePlugin = define({
     yield* ctx.integration.transform((draft) => {
       draft.method.update({
         integrationID: Provider.ID.azure,
-        method: { type: "key", label: "API key", form: form("API key") },
+        method: { type: "key", label: "API key", form: form() },
       })
+      if (!available) return
       draft.method.update({
         integrationID: Provider.ID.azure,
         method: {
           id: methodID,
           type: "oauth",
           label: "Microsoft Entra ID (Azure CLI)",
-          form: form("Microsoft Entra ID (Azure CLI)", true),
-          pending: "Discovering Azure models...",
-          ...(!available ? { disabled: true, description: "requires Azure CLI" } : {}),
+          form: form(true),
         },
         authorize: (answer) =>
           Effect.succeed({
