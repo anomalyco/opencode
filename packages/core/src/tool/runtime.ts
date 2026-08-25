@@ -55,7 +55,38 @@ export const execute = (tool: Tool.Info<any, any>, input: unknown, context: Tool
     }
   })
 
-const decodeInput = (schema: Tool.ValueSchema<any>, value: unknown) => {
+const decodeInput = (schema: Tool.ValueSchema<any>, value: unknown) =>
+  attemptDecodeInput(schema, value).pipe(
+    Effect.catchTag("Tool.Error", (error) => {
+      // JSON Schema derived from Effect schemas advertises `X | null` for optional
+      // fields because JSON cannot express undefined, so callers legitimately send
+      // null to mean "omitted". Retry with null properties removed: schemas that
+      // genuinely accept null succeed on the first attempt, and the original error
+      // is reported when the retry cannot help.
+      const stripped = withoutNullProperties(value)
+      if (stripped === value) return error
+      return attemptDecodeInput(schema, stripped).pipe(Effect.catchTag("Tool.Error", () => error))
+    }),
+  )
+
+// Removes null-valued object properties recursively. Null array elements remain
+// positional while object properties inside arrays are still normalized.
+const withoutNullProperties = (value: unknown): unknown => {
+  if (Array.isArray(value)) {
+    const items = value.map(withoutNullProperties)
+    return items.some((item, index) => item !== value[index]) ? items : value
+  }
+  if (typeof value !== "object" || value === null) return value
+  const entries = Object.entries(value).flatMap(([key, item]) =>
+    item === null ? [] : [[key, withoutNullProperties(item)] as const],
+  )
+  const changed =
+    entries.length !== Object.keys(value).length ||
+    entries.some(([key, item]) => (value as Record<string, unknown>)[key] !== item)
+  return changed ? Object.fromEntries(entries) : value
+}
+
+const attemptDecodeInput = (schema: Tool.ValueSchema<any>, value: unknown) => {
   if (Schema.isSchema(schema))
     return Schema.decodeUnknownEffect(schema)(value).pipe(
       Effect.mapError((error) => new Tool.Error({ message: `Invalid tool input: ${error.message}` })),
