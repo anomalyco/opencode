@@ -513,7 +513,7 @@ export interface Interface {
     messageID: MessageID
     partID: PartID
   }) => Effect.Effect<SessionV1.Part | undefined>
-  readonly updatePart: <T extends SessionV1.Part>(part: T) => Effect.Effect<T>
+  readonly updatePart: <T extends SessionV1.Part>(part: T) => Effect.Effect<T, ReservedMetadataError>
   readonly replacePart: <T extends SessionV1.Part>(
     part: T,
   ) => Effect.Effect<T, SessionMutation.MutationRefused | ReservedMetadataError>
@@ -734,7 +734,7 @@ const layer: Layer.Layer<
         return msg
       }).pipe(Effect.withSpan("Session.updateMessage"))
 
-    const updatePart = <T extends SessionV1.Part>(part: T): Effect.Effect<T> =>
+    const persistPart = <T extends SessionV1.Part>(part: T): Effect.Effect<T> =>
       Effect.gen(function* () {
         yield* events.publish(SessionV1.Event.PartUpdated, {
           sessionID: part.sessionID,
@@ -742,37 +742,32 @@ const layer: Layer.Layer<
           time: Date.now(),
         })
         return part
-      }).pipe(Effect.withSpan("Session.updatePart"))
+      })
 
-    /**
-     * Replace an already-persisted part at a coordinate this caller did not create.
-     *
-     * Separate from `updatePart` because the two are different operations that shared one entry
-     * point. `updatePart` is the writer a live execution uses for parts it is producing — the shell
-     * stream calls it per chunk and the processor calls it at every part boundary — so reserving it
-     * wholesale would take a reservation per chunk. Replacement is the destructive one, and it is
-     * what has to be ordered against cancellation.
-     *
-     * Naming them apart is what keeps the guard off the route. While the only reservation lived in
-     * the HTTP handler, a second external caller reaching `Session` directly would have had to
-     * remember to take one. Now the method that names the operation carries it.
-     *
-     * This does not make `updatePart` safe to call blind, and it stays unreserved by design.
-     *
-     * It is also where the reserved closure key is refused, for the same reason the reservation is
-     * here. This is the seam caller-supplied part bytes arrive through; `updatePart` is the writer a
-     * live execution uses for parts it is producing, called once per streamed token, and a guard
-     * there would run thousands of times a turn against a condition only a caller payload can
-     * create. The check runs ahead of the reservation because a payload claiming reserved
-     * provenance is malformed whatever the branch is doing.
-     */
+    const updatePart = <T extends SessionV1.Part>(part: T): Effect.Effect<T, ReservedMetadataError> =>
+      rejectReservedPartMetadata(part).pipe(Effect.andThen(persistPart(part)), Effect.withSpan("Session.updatePart"))
+
+    // WHY THIS IS A SEPARATE METHOD RATHER THAN A GUARD ON `updatePart`. The two are different
+    // operations that happened to share one entry point. `updatePart` is the writer a live execution
+    // uses for parts it is producing: `prompt.ts::shellImpl` calls it per streamed shell chunk,
+    // and `processor.ts` calls it at every part boundary. Leasing it wholesale would reserve a
+    // mutation lease per chunk. `replacePart` is the destructive replacement of an ALREADY PERSISTED
+    // part at a coordinate its caller did not create — today only the HTTP PATCH route — and that is
+    // the operation named `replace_part`.
+    //
+    // Naming them apart is what moves the guard off the handler. Before this split the only lease
+    // lived in `handlers/session.ts`, so a second external caller — a V2 route, an SDK path, a
+    // plugin domain call — reaching `Session` directly would have had to remember to wrap itself.
+    // The method that names the operation now carries the lease.
+    //
+    // What this does NOT claim is that `updatePart` became safe to call blind. It did not, and the
+    // generic writer stays unleased by design. Its callers are governed by the source-derived
+    // inventory, which fails the build on any caller nobody has classified — that, not this method,
+    // is the control on the streaming writer.
     const replacePart = <T extends SessionV1.Part>(
       part: T,
     ): Effect.Effect<T, SessionMutation.MutationRefused | ReservedMetadataError> =>
-      rejectReservedPartMetadata(part).pipe(
-        Effect.andThen(
-          SessionMutation.leased(closure, { sessions: [part.sessionID], kind: "replace_part" }, updatePart(part)),
-        ),
+      SessionMutation.leased(closure, { sessions: [part.sessionID], kind: "replace_part" }, updatePart(part)).pipe(
         Effect.withSpan("Session.replacePart"),
       )
 
@@ -837,6 +832,24 @@ const layer: Layer.Layer<
       const idMap = new Map<string, MessageID>()
       const target = input.messageID ? msgs.findIndex((msg) => msg.info.id === input.messageID) : msgs.length
 
+      // This exemption is lexically private to the fork copy loop: it accepts an already-persisted
+      // source Part, copies its bytes, and can change only freshly minted row coordinates plus the
+      // pre-existing compaction-tail coordinate remap. It accepts no caller-supplied metadata and
+      // mints no closure metadata of its own. Fresh target coordinates keep any copied closure
+      // payload bound to its source facts, so it cannot become a valid record for the forked Session.
+      const replicatePart = <T extends SessionV1.Part>(source: T, messageID: MessageID) => {
+        const copied: SessionV1.Part = {
+          ...source,
+          id: PartID.ascending(),
+          messageID,
+          sessionID: session.id,
+        }
+        if (copied.type === "compaction" && copied.tail_start_id) {
+          copied.tail_start_id = idMap.get(copied.tail_start_id)
+        }
+        return persistPart(copied)
+      }
+
       for (const msg of msgs.slice(0, target < 0 ? msgs.length : target)) {
         const newID = MessageID.ascending()
         idMap.set(msg.info.id, newID)
@@ -850,16 +863,7 @@ const layer: Layer.Layer<
         })
 
         for (const part of msg.parts) {
-          const p: SessionV1.Part = {
-            ...part,
-            id: PartID.ascending(),
-            messageID: cloned.id,
-            sessionID: session.id,
-          }
-          if (p.type === "compaction" && p.tail_start_id) {
-            p.tail_start_id = idMap.get(p.tail_start_id)
-          }
-          yield* updatePart(p)
+          yield* replicatePart(part, cloned.id)
         }
       }
       return session

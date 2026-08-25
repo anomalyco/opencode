@@ -17,7 +17,7 @@ export const require_ = (aggregates: readonly string[]) =>
       const covered = Option.isSome(found) ? [...found.value.aggregates].join(", ") : "<none>"
       return Effect.die(
         new Error(
-          `Unguarded EventV2 Session replay for aggregate(s) [${aggregates.join(", ")}] — ` +
+          `unguarded EventV2 Session replay for aggregate(s) [${aggregates.join(", ")}] — ` +
             `permit covers [${covered}]. Route this replay through SessionMutation.replayLeased so a ` +
             `closing branch can refuse it before projector SQL runs.`,
         ),

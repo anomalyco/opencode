@@ -168,7 +168,7 @@ function withContext<A, E>(
                 modules.Session.Service.use((svc) =>
                   Effect.gen(function* () {
                     yield* svc.updateMessage(info)
-                    yield* svc.updatePart(part)
+                    yield* svc.updatePart(part).pipe(Effect.orDie)
                   }),
                 ),
               )

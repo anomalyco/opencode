@@ -12,6 +12,7 @@ import { SessionAdmission } from "./closure/admission"
 import { AttachmentCoordinator } from "./attachment/coordinator"
 import { AttachmentStatus } from "./attachment/status"
 import { SessionPhysical } from "./physical-interrupt"
+import { SessionToolPart } from "./toolpart-closure"
 import { hasUnconsumedLocalTool } from "./task-return"
 import type { SessionMutation } from "./closure/mutation"
 import { Agent } from "../agent/agent"
@@ -331,15 +332,16 @@ const layer = Layer.effect(
         .pipe(Effect.catchCause((cause) => Effect.logError("failed to generate title", { error: Cause.squash(cause) })))
     })
 
-    const handleSubtask = Effect.fn("SessionPrompt.handleSubtask")(function* (input: {
+    const handleSubtaskAdmitted = Effect.fn("SessionPrompt.handleSubtaskAdmitted")(function* (input: {
       task: SessionV1.SubtaskPart
       model: Provider.Model
       lastUser: SessionV1.User
       sessionID: SessionID
       session: Session.Info
       msgs: SessionV1.WithParts[]
+      attachment?: AttachmentCoordinator.Scope
     }) {
-      const { task, model, lastUser, sessionID, session, msgs } = input
+      const { task, model, lastUser, sessionID, session, msgs, attachment } = input
       const ctx = yield* InstanceState.context
       const promptOps = yield* ops()
       const { task: taskTool } = yield* registry.named()
@@ -407,7 +409,7 @@ const layer = Layer.effect(
           sessionID,
           abort: taskAbort.signal,
           callID: part.callID,
-          extra: { bypassAgentCheck: true, promptOps },
+          extra: { bypassAgentCheck: true, promptOps, attachment },
           messages: msgs,
           metadata: (val: { title?: string; metadata?: Record<string, any> }) =>
             Effect.gen(function* () {
@@ -416,7 +418,7 @@ const layer = Layer.effect(
                 type: "tool",
                 state: { ...part.state, ...val },
               } satisfies SessionV1.ToolPart)
-            }),
+            }).pipe(Effect.catchTag("SessionReservedMetadataError", Effect.die)),
           ask: (req: any) =>
             permission
               .ask({
@@ -442,18 +444,20 @@ const layer = Layer.effect(
               assistantMessage.finish = "tool-calls"
               assistantMessage.time.completed = Date.now()
               yield* sessions.updateMessage(assistantMessage)
-              if (part.state.status === "running") {
-                yield* sessions.updatePart({
-                  ...part,
-                  state: {
-                    status: "error",
-                    error: "Cancelled",
-                    time: { start: part.state.time.start, end: Date.now() },
-                    metadata: part.state.metadata,
-                    input: part.state.input,
+              yield* SessionToolPart.terminalizeExact({
+                session: sessions,
+                target: { session: part.sessionID, message: part.messageID, part: part.id },
+                terminal: (observed) => ({
+                  status: "error",
+                  error: "Cancelled",
+                  time: {
+                    start: observed.status === "running" ? observed.time.start : Date.now(),
+                    end: Date.now(),
                   },
-                } satisfies SessionV1.ToolPart)
-              }
+                  metadata: observed.status === "running" ? observed.metadata : undefined,
+                  input: observed.input,
+                }),
+              })
             }),
           ),
         )
@@ -517,6 +521,7 @@ const layer = Layer.effect(
         model: lastUser.model,
       }
       yield* sessions.updateMessage(summaryUserMsg)
+      if (attachment) yield* attachment.own(summaryUserMsg.id)
       yield* sessions.updatePart({
         id: PartID.ascending(),
         messageID: summaryUserMsg.id,
@@ -526,6 +531,21 @@ const layer = Layer.effect(
         synthetic: true,
       } satisfies SessionV1.TextPart)
     })
+
+    // This runs inside `runLoop`, already under the loop's lease, but an internal Task start still
+    // requires a fresh decision. A fence raised mid-loop must stop the next subtask before it writes
+    // an Assistant, ToolPart or plugin effect, so ambient admission is deliberately not reused.
+    const handleSubtask = (input: Parameters<typeof handleSubtaskAdmitted>[0]) =>
+      SessionAdmission.admitted(
+        closure,
+        {
+          session: input.sessionID,
+          origin: "internal",
+          source: "SessionPrompt.handleSubtask",
+          reuseAmbient: false,
+        },
+        () => handleSubtaskAdmitted(input),
+      )
 
     const shellImpl = Effect.fn("SessionPrompt.shellImpl")(function* (input: ShellInput, ready?: Latch.Latch) {
       return yield* Effect.uninterruptibleMask((restore) =>
@@ -1134,56 +1154,67 @@ const layer = Layer.effect(
       return { info, parts }
     }, Effect.scoped)
 
+    const promptAdmitted = Effect.fn("SessionPrompt.promptAdmitted")(function* (input: TaskPromptInput) {
+      // An attachment scope is a private capability handed to one delegated call, never resolved
+      // from a registry here. Generic ingress is unaffected: only a caller that was given a scope
+      // can pass one, and it must be the scope for this very session.
+      const claimed = input.attachmentScope
+      if (claimed && claimed.sessionID !== input.sessionID) {
+        yield* claimed.degrade()
+        return yield* Effect.die(new Error(`Attachment scope does not belong to session ${input.sessionID}`))
+      }
+      const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
+      yield* revert.cleanup(session)
+      const message = yield* createUserMessage(input)
+      // Claiming a resolved scope is the one prompt-internal boundary a supplemental prompt may
+      // report as an admission failure, so exactly this site's defect becomes the typed refusal.
+      // Interrupts pass through untouched, and every other prompt-internal defect keeps its cause.
+      if (claimed)
+        yield* claimed.own(message.info.id).pipe(
+          Effect.catchCause((cause) => {
+            if (Cause.hasInterrupts(cause)) return Effect.failCause(cause)
+            const squashed = Cause.squash(cause)
+            return Effect.fail(
+              new ScopeOwnRefused({
+                sessionID: input.sessionID,
+                reason: squashed instanceof Error ? squashed.message : String(squashed),
+              }),
+            )
+          }),
+        )
+      // Admission has happened: the user message and its parts are persisted and the conditional
+      // claim succeeded. This runs before the runner is entered.
+      if (input.onAdmitted) yield* input.onAdmitted
+      yield* sessions.touch(input.sessionID)
+
+      const permissions: PermissionV1.Rule[] = []
+      for (const [t, enabled] of Object.entries(input.tools ?? {})) {
+        permissions.push({ permission: t, action: enabled ? "allow" : "deny", pattern: "*" })
+      }
+      if (permissions.length > 0) {
+        session.permission = permissions
+        yield* sessions.setPermission({ sessionID: session.id, permission: permissions })
+      }
+
+      if (input.noReply === true) return message
+      return yield* loopWithAttachment({ sessionID: input.sessionID }, claimed)
+    })
+
     const prompt: (
       input: TaskPromptInput,
     ) => Effect.Effect<
       SessionV1.WithParts,
       Image.Error | AdmissionError | Session.ReservedMetadataError | ScopeOwnRefused
     > = Effect.fn("SessionPrompt.prompt")(function* (input: TaskPromptInput) {
-        // An attachment scope is a private capability handed to one delegated call, never resolved
-        // from a registry here. Generic ingress is unaffected: only a caller that was given a scope
-        // can pass one, and it must be the scope for this very session.
-        const claimed = input.attachmentScope
-        if (claimed && claimed.sessionID !== input.sessionID) {
-          yield* claimed.degrade()
-          return yield* Effect.die(new Error(`Attachment scope does not belong to session ${input.sessionID}`))
-        }
-        const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
-        yield* revert.cleanup(session)
-        const message = yield* createUserMessage(input)
-        // Claiming a resolved scope is the one prompt-internal boundary a supplemental prompt may
-        // report as an admission failure, so exactly this site's defect becomes the typed refusal.
-        // Interrupts pass through untouched, and every other prompt-internal defect keeps its cause.
-        if (claimed)
-          yield* claimed.own(message.info.id).pipe(
-            Effect.catchCause((cause) => {
-              if (Cause.hasInterrupts(cause)) return Effect.failCause(cause)
-              const squashed = Cause.squash(cause)
-              return Effect.fail(
-                new ScopeOwnRefused({
-                  sessionID: input.sessionID,
-                  reason: squashed instanceof Error ? squashed.message : String(squashed),
-                }),
-              )
-            }),
-          )
-        // Admission has happened: the user message and its parts are persisted and the conditional
-        // claim succeeded. This runs before the runner is entered.
-        if (input.onAdmitted) yield* input.onAdmitted
-        yield* sessions.touch(input.sessionID)
-
-        const permissions: PermissionV1.Rule[] = []
-        for (const [t, enabled] of Object.entries(input.tools ?? {})) {
-          permissions.push({ permission: t, action: enabled ? "allow" : "deny", pattern: "*" })
-        }
-        if (permissions.length > 0) {
-          session.permission = permissions
-          yield* sessions.setPermission({ sessionID: session.id, permission: permissions })
-        }
-
-        if (input.noReply === true) return message
-        return yield* loopWithAttachment({ sessionID: input.sessionID }, claimed)
-      })
+      // Acquire at function entry, before the private attachment-scope mismatch check and well
+      // before revert cleanup. `admitted` retires in a finalizer, so even a wrong-session defect
+      // releases its lease rather than stranding it.
+      return yield* SessionAdmission.admitted(
+        closure,
+        { session: input.sessionID, origin: "external", source: "SessionPrompt.prompt" },
+        () => promptAdmitted(input),
+      )
+    })
 
     const lastAssistant = Effect.fnUntraced(function* (sessionID: SessionID) {
       const match = yield* sessions.findMessage(sessionID, (m) => m.info.role !== "user").pipe(Effect.orDie)
@@ -1212,8 +1243,8 @@ const layer = Layer.effect(
     const runLoop: (
       sessionID: SessionID,
       attachment?: AttachmentCoordinator.Scope,
-    ) => Effect.Effect<SessionV1.WithParts, SessionClosure.AdmissionRefused> = Effect.fn("SessionPrompt.run")(
-      function* (sessionID: SessionID, attachment?: AttachmentCoordinator.Scope) {
+    ) => Effect.Effect<SessionV1.WithParts, SessionClosure.AdmissionRefused | Session.ReservedMetadataError> =
+      Effect.fn("SessionPrompt.run")(function* (sessionID: SessionID, attachment?: AttachmentCoordinator.Scope) {
         const ctx = yield* InstanceState.context
         let structured: unknown
         let step = 0
@@ -1281,7 +1312,7 @@ const layer = Layer.effect(
           const task = tasks.pop()
 
           if (task?.type === "subtask") {
-            yield* handleSubtask({ task, model, lastUser, sessionID, session, msgs })
+            yield* handleSubtask({ task, model, lastUser, sessionID, session, msgs, attachment: turnAttachment })
             continue
           }
 
@@ -1516,8 +1547,7 @@ const layer = Layer.effect(
 
         yield* compaction.prune({ sessionID }).pipe(Effect.ignore, Effect.forkIn(scope))
         return yield* lastAssistant(sessionID)
-      },
-    )
+      })
 
     const loopWithAttachment: (
       input: LoopInput,
@@ -1530,7 +1560,7 @@ const layer = Layer.effect(
       return yield* state.ensureRunning(
         input.sessionID,
         lastAssistant(input.sessionID),
-        runLoop(input.sessionID, attachment),
+        runLoop(input.sessionID, attachment).pipe(Effect.catchTag("SessionReservedMetadataError", Effect.die)),
       )
     })
 
@@ -1545,7 +1575,12 @@ const layer = Layer.effect(
     const shell: (input: ShellInput) => Effect.Effect<SessionV1.WithParts, Session.BusyError | AdmissionError> =
       Effect.fn("SessionPrompt.shell")(function* (input: ShellInput) {
         const ready = yield* Latch.make()
-        return yield* state.startShell(input.sessionID, lastAssistant(input.sessionID), shellImpl(input, ready), ready)
+        return yield* state.startShell(
+          input.sessionID,
+          lastAssistant(input.sessionID),
+          shellImpl(input, ready).pipe(Effect.catchTag("SessionReservedMetadataError", Effect.die)),
+          ready,
+        )
       })
 
     const command = Effect.fn("SessionPrompt.command")(function* (input: CommandInput) {
@@ -1562,6 +1597,26 @@ const layer = Layer.effect(
         yield* events.publish(Session.Event.Error, { sessionID: input.sessionID, error: error.toObject() })
         throw error
       }
+
+      // Acquire at command entry before plugin, model, template or `Process.text` expansion.
+      // The registry lookup stays AHEAD of admission for the same reason Permission's unknown-request
+      // check and `Session.remove`'s `get` do: it is a read-only precondition, so deciding it first
+      // keeps the existing "Command not found" error exact without opening a window for executable
+      // work. Nothing above this point is plugin, model or template work.
+      //
+      // The inner `prompt` call finds this ambient context for the same session and takes no second
+      // lease, so a command stays one logical admission rather than two.
+      return yield* SessionAdmission.admitted(
+        closure,
+        { session: input.sessionID, origin: "external", source: "SessionPrompt.command" },
+        () => commandAdmitted(input, cmd),
+      )
+    })
+
+    const commandAdmitted = Effect.fn("SessionPrompt.commandAdmitted")(function* (
+      input: CommandInput,
+      cmd: Command.Info,
+    ) {
       const agentName = cmd.agent ?? input.agent
 
       const raw = input.arguments.match(argsRegex) ?? []

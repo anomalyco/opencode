@@ -413,9 +413,7 @@ describe("SessionClosure LayerNode graph", () => {
         // `Session` and the published `SessionClosure` resolve the same coordinator. The discriminator
         // above verifies that the resulting published services observe that one coordinator.
         Effect.provide(
-          LayerNode.compile(
-            LayerNode.group([SessionClosureRunState.node, Session.node, SessionClosure.node]),
-          ),
+          LayerNode.compile(LayerNode.group([SessionClosureRunState.node, Session.node, SessionClosure.node])),
         ),
         provideInstanceEffect(directory),
       )
@@ -644,10 +642,10 @@ describe("the production closure graph drives request-borne capabilities", () =>
 //
 // WHY THE SPIKE MISSED IT — established by reproduction, not inferred. `Layer` memoization is keyed
 // on layer OBJECT IDENTITY, and `packages/core/src/effect/memo-map.ts` exports ONE process-wide
-// `MemoMap` shared by `server.ts:114,320`, `app-runtime.ts:52,114`, `bootstrap-runtime.ts:11` and
-// `run-service.ts:7`. `Session.layer` and `SessionClosure.layer` are module-level constants reused
-// by every composition, and `server.ts:315` builds `createRoutes()` at module load. So by the time a
-// spike-time recompile carrying `replacements` is built through that shared map, `Session.layer` is
+// `MemoMap` shared by `server.ts:115,340`, `app-runtime.ts:52,114`, `bootstrap-runtime.ts:11` and
+// `run-service.ts:7`. `Session.node` and `SessionClosure.node` are module-level constants reused
+// by every composition, and `server.ts:335` builds `createRoutes()` at module load. So by the time a
+// spike-time recompile carrying `replacements` is built through that shared map, `Session.node` is
 // already memoized WITH THE ORIGINAL COORDINATOR; the substituted layer is a different object, so it
 // publishes fresh at the top level while every already-memoized consumer keeps the original.
 // Building the same graph twice through one `Layer.makeMemoMapUnsafe()` — plain first, substituted

@@ -275,7 +275,7 @@ describe("K107 exact_closure_capability — both narrow writers are held and exe
     // merely unexplained. Both now route their ToolPart write through the capability, so the gap is
     // closed and the deferral has to go with it: a resolved entry that still named a future gate
     // would report finished work as outstanding, which is the same failure in the other direction.
-    const owners = ["session/prompt.ts::handleSubtask", "session/processor.ts::cleanup"]
+    const owners = ["session/prompt.ts::handleSubtaskAdmitted", "session/processor.ts::cleanup"]
     for (const owner of owners) {
       const entry = REGISTRY.find((item) => registryKey(item) === owner)
       expect(entry).toBeDefined()
@@ -1598,7 +1598,7 @@ describe("§7.5 exact_closure_capability — the permit is the authority, and it
       // created. They require no permit and must not: demanding one would make an ordinary interrupt
       // depend on a canonical closure operation that does not exist on that path.
       "session/processor.ts::cleanup::terminalizeExact",
-      "session/prompt.ts::handleSubtask::terminalizeExact",
+      "session/prompt.ts::handleSubtaskAdmitted::terminalizeExact",
     ])
     expect(inventory.unresolved).toEqual([])
   })

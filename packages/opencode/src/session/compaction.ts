@@ -652,11 +652,16 @@ const layer = Layer.effect(
       })
     })
 
+    // Compaction only reshapes service-owned or already-persisted Parts. A reserved-key failure here
+    // is an invariant defect (and still occurs before persistence), not a caller-facing typed refusal.
+    const internal = <A, R>(effect: Effect.Effect<A, Session.ReservedMetadataError, R>) =>
+      effect.pipe(Effect.catchTag("SessionReservedMetadataError", Effect.die))
+
     return Service.of({
       isOverflow,
-      prune,
-      process: processCompaction,
-      create,
+      prune: (input) => internal(prune(input)),
+      process: (input) => internal(processCompaction(input)),
+      create: (input) => internal(create(input)),
     })
   }),
 )

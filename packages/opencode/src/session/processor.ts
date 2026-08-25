@@ -686,7 +686,7 @@ const layer = Layer.effect(
               }),
             ),
             Effect.catch(halt),
-            Effect.ensuring(cleanup()),
+            Effect.ensuring(cleanup().pipe(Effect.catchTag("SessionReservedMetadataError", Effect.die))),
           )
 
           if (ctx.needsCompaction) return "compact"
@@ -699,8 +699,10 @@ const layer = Layer.effect(
         get message() {
           return ctx.assistantMessage
         },
-        updateToolCall,
-        completeToolCall,
+        updateToolCall: (toolCallID, update) =>
+          updateToolCall(toolCallID, update).pipe(Effect.catchTag("SessionReservedMetadataError", Effect.die)),
+        completeToolCall: (toolCallID, output) =>
+          completeToolCall(toolCallID, output).pipe(Effect.catchTag("SessionReservedMetadataError", Effect.die)),
         process,
       } satisfies Handle
     })

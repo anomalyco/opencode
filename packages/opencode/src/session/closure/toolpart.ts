@@ -58,6 +58,7 @@ export const layer = Layer.effect(
             terminal: cancelled,
           }).pipe(
             Effect.provideService(SessionToolPartPermit.Service, permits),
+            Effect.catchTag("SessionReservedMetadataError", Effect.die),
           )
 
           if (observation.type === "unavailable") return { outcome: "unknown" as const }

@@ -247,6 +247,13 @@ export const app = LayerNode.group([
   // coordinator directly.
   SessionClosure.node,
   SessionClosureRunState.node,
+  // THE SERVED GRAPH IS THE PRODUCTION PROMPT PATH — `AppRuntime` serves the TUI worker bootstrap,
+  // CLI, upgrade and worktree adapters, not Session prompts. Its absence here left `SessionPrompt`
+  // resolving `None` and building a private, process-wide coordinator, so the declared node surface
+  // was dead on the path that actually runs. List it alongside its dependents rather than leaving it
+  // implicit in `SessionPrompt.node.dependencies`, matching how
+  // `SessionClosure` and `SessionRunState` are carried. `AppNodeBuilderV1.build` memoizes by node
+  // identity, so appearing in both places still yields one instance and one per-Instance registry.
   AttachmentCoordinator.node,
   SessionProcessor.node,
   SessionCompaction.node,
@@ -321,9 +328,7 @@ export function createRoutes(
     // dangerous shape of failure. `Layer.fresh` attaches that guarantee to the layer itself, so it
     // holds whichever builder or memo map the caller uses, rather than relying on each caller to
     // remember. The unsubstituted production path is deliberately left untouched: it SHOULD share.
-    Layer.provide(
-      replacements ? Layer.fresh(AppNodeBuilderV1.build(app, replacements)) : AppNodeBuilderV1.build(app),
-    ),
+    Layer.provide(replacements ? Layer.fresh(AppNodeBuilderV1.build(app, replacements)) : AppNodeBuilderV1.build(app)),
     // Must stay last: layers provided later in this pipe build beneath earlier ones,
     // so Observability must come after every service graph. Otherwise eagerly forked
     // fibers (e.g. the ModelsDev background refresh) capture Effect's default stdout
