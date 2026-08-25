@@ -200,7 +200,6 @@ export function PromptWorkspaceSelector(props: {
                         <For each={branches()}>
                           {(branch) => (
                             <Menu.Item onSelect={() => (pending = { type: "create", branch })}>
-                              <Icon name="branch" />
                               <span class="min-w-0 flex-1 truncate">{branch}</span>
                               <Show when={selected() === "create" && props.branch === branch}>
                                 <Icon name="check" size="small" class="shrink-0" />
