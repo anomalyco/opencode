@@ -38,11 +38,6 @@ type PersistedState = {
   cwd: Record<string, TabsState>
 }
 
-type PreviewState = {
-  global?: string
-  cwd: Record<string, string>
-}
-
 type ScrollAnchor = {
   messageID: string
   screenY: number
@@ -79,8 +74,8 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       },
       key: "sessionID",
     })
-    const [preview, updatePreview] = storage.memory<PreviewState>("session-tab-preview", {
-      initial: { cwd: {} },
+    const [preview, updatePreview] = storage.memory<{ global?: string; cwd?: string }>("session-tab-preview", {
+      initial: {},
     })
     const fallback = empty()
     const [promptPulses, setPromptPulses] = createSignal<Record<string, number>>({})
@@ -112,23 +107,15 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       return store.global
     }
 
-    const previewID = () => (config.tabs.scope === "cwd" ? preview.cwd[paths.cwd] : preview.global)
+    const previewID = () => preview[config.tabs.scope]
     const setPreview = (sessionID: string | undefined) => {
       const scope = config.tabs.scope
       updatePreview((draft) => {
-        if (scope === "global") {
-          if (sessionID === undefined) {
-            delete draft.global
-            return
-          }
-          draft.global = sessionID
-          return
-        }
         if (sessionID === undefined) {
-          delete draft.cwd[paths.cwd]
+          delete draft[scope]
           return
         }
-        draft.cwd[paths.cwd] = sessionID
+        draft[scope] = sessionID
       })
     }
 
@@ -157,8 +144,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     const normalize = (value: TabsState) => ({
       tabs: value.tabs.reduce<SessionTab[]>((tabs, tab) => {
         const sessionID = root(tab.sessionID)
-        const label = title(sessionID, tab.title)
-        return openSessionTab(tabs, { sessionID, ...(label === undefined ? {} : { title: label }) })
+        return openSessionTab(tabs, { sessionID, title: title(sessionID, tab.title) })
       }, []),
       unread: {},
     })
@@ -191,9 +177,10 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     createEffect(() => {
       if (enabled() && previews()) return
       promotedSession = undefined
+      if (!preview.global && !preview.cwd) return
       updatePreview((draft) => {
         delete draft.global
-        draft.cwd = {}
+        delete draft.cwd
       })
     })
 

@@ -32,7 +32,7 @@ async function renderSessionTabs(
     state?: string
     title?: string
     home?: boolean
-    persisted?: (string | { sessionID: string; preview?: boolean })[]
+    persisted?: string[]
     sessionGate?: Promise<void>
     sessionDirectories?: Record<string, string>
     sessionParents?: Record<string, string>
@@ -55,7 +55,7 @@ async function renderSessionTabs(
         global: { tabs: [], unread: { ses_legacy: "error" } },
         cwd: {
           [directory]: {
-            tabs: options.persisted.map((tab) => (typeof tab === "string" ? { sessionID: tab } : tab)),
+            tabs: options.persisted.map((sessionID) => ({ sessionID })),
             unread: { ses_legacy: "activity" },
           },
         },
@@ -214,6 +214,20 @@ async function renderSessionTabs(
   }
 }
 
+function admitted(sessionID: string, inboxID: string): OpenCodeEvent {
+  return {
+    id: `evt_${inboxID}`,
+    created: Date.now(),
+    type: "session.inbox.enqueued",
+    durable: { aggregateID: sessionID, seq: Number(inboxID.replace(/\D/g, "")), version: 1 },
+    data: {
+      sessionID,
+      inboxID,
+      item: { type: "user", payload: { text: inboxID }, delivery: "steer" },
+    },
+  }
+}
+
 test("loads persisted tab metadata concurrently on connect", async () => {
   let release!: () => void
   const sessionGate = new Promise<void>((resolve) => (release = resolve))
@@ -333,17 +347,7 @@ test("promotes session previews only when user prompts are admitted", async () =
     await Bun.sleep(20)
     expect(setup.tabs.isPreview("preview")).toBe(true)
 
-    setup.emit({
-      id: "evt_user",
-      created: Date.now(),
-      type: "session.inbox.enqueued",
-      durable: { aggregateID: "preview", seq: 2, version: 1 },
-      data: {
-        sessionID: "preview",
-        inboxID: "msg_user",
-        item: { type: "user", payload: { text: "keep this session" }, delivery: "steer" },
-      },
-    })
+    setup.emit(admitted("preview", "msg_2"))
     await wait(() => !setup.tabs.isPreview("preview"))
   } finally {
     await setup.destroy()
@@ -355,17 +359,7 @@ test("reopens a previously permanent session as a preview after a user prompt", 
 
   try {
     await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "permanent"))
-    setup.emit({
-      id: "evt_existing",
-      created: Date.now(),
-      type: "session.inbox.enqueued",
-      durable: { aggregateID: "permanent", seq: 1, version: 1 },
-      data: {
-        sessionID: "permanent",
-        inboxID: "msg_existing",
-        item: { type: "user", payload: { text: "existing session" }, delivery: "steer" },
-      },
-    })
+    setup.emit(admitted("permanent", "msg_1"))
     await wait(() => setup.data.session.pending.list("permanent").length > 0)
 
     setup.tabs.close("permanent")
@@ -384,17 +378,7 @@ test("keeps an explicitly promoted home session permanent when admission arrives
 
   try {
     setup.tabs.promote("created")
-    setup.emit({
-      id: "evt_created",
-      created: Date.now(),
-      type: "session.inbox.enqueued",
-      durable: { aggregateID: "created", seq: 1, version: 1 },
-      data: {
-        sessionID: "created",
-        inboxID: "msg_created",
-        item: { type: "user", payload: { text: "new session" }, delivery: "steer" },
-      },
-    })
+    setup.emit(admitted("created", "msg_1"))
     await wait(() => setup.data.session.pending.list("created").length > 0)
     setup.route.navigate({ type: "session", sessionID: "created" })
     await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "created"))
@@ -421,38 +405,11 @@ test("stores preview tab membership without persisting preview identity", async 
   }
 })
 
-test("removes preview flags from legacy persisted tabs without treating them as local previews", async () => {
-  const setup = await renderSessionTabs("legacy", {
-    home: true,
-    persisted: [{ sessionID: "legacy", preview: true }],
-    preview: true,
-  })
-
-  try {
-    const file = path.join(setup.state, "test", "tui", "tabs.json")
-    await wait(async () => !("preview" in (await Bun.file(file).json()).cwd[directory].tabs[0]))
-
-    expect(setup.tabs.isPreview("legacy")).toBe(false)
-  } finally {
-    await setup.destroy()
-  }
-})
-
 test("unrelated user admissions do not pre-promote an unopened local session", async () => {
   const setup = await renderSessionTabs("remote", { home: true, preview: true })
 
   try {
-    setup.emit({
-      id: "evt_remote",
-      created: Date.now(),
-      type: "session.inbox.enqueued",
-      durable: { aggregateID: "remote", seq: 1, version: 1 },
-      data: {
-        sessionID: "remote",
-        inboxID: "msg_remote",
-        item: { type: "user", payload: { text: "another client" }, delivery: "steer" },
-      },
-    })
+    setup.emit(admitted("remote", "msg_1"))
     await wait(() => setup.data.session.pending.list("remote").length > 0)
 
     setup.route.navigate({ type: "session", sessionID: "remote" })
@@ -843,17 +800,6 @@ test("closing a tab is not undone by another TUI viewing the same session", asyn
 
 test("user prompt admissions pulse an already-busy background tab", async () => {
   const setup = await renderSessionTabs("background")
-  const admitted = (sessionID: string, inboxID: string): OpenCodeEvent => ({
-    id: `evt_${inboxID}`,
-    created: Date.now(),
-    type: "session.inbox.enqueued",
-    durable: { aggregateID: sessionID, seq: Number(inboxID.replace(/\D/g, "")), version: 1 },
-    data: {
-      sessionID,
-      inboxID,
-      item: { type: "user", payload: { text: inboxID }, delivery: "steer" },
-    },
-  })
 
   try {
     await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "background"))

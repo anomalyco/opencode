@@ -155,8 +155,7 @@ test("double-clicking a preview tab keeps it open without promoting permanent ta
     app.renderer.start()
     await app.waitForFrame((frame) => frame.includes("Second"))
 
-    await app.mockMouse.click(5, 0)
-    await app.mockMouse.click(5, 0)
+    await app.mockMouse.doubleClick(5, 0)
     expect(promoted).toEqual([])
 
     await app.mockMouse.click(40, 0)

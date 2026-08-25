@@ -1260,7 +1260,6 @@ export function Prompt(props: PromptProps) {
     }
 
     const target = sessionID
-    sessionTabs.promote(target)
     history.append(entry)
     const dispatch = (send: () => Promise<unknown>) => {
       const setup = newSession
@@ -1380,6 +1379,8 @@ export function Prompt(props: PromptProps) {
         })
       if (pendingEditorSelection) editor.markSelectionSent()
     }
+
+    if (!props.sessionID || currentMode === "shell" || isSkill || isCommand) sessionTabs.promote(target)
 
     // Optimistic admission puts the message in the store synchronously, so
     // the session view renders it on arrival.
