@@ -69,7 +69,7 @@ const layer = Layer.effect(
       canonical: location.project.canonical,
       ...(vcs ? { store: vcs.store } : {}),
     }
-    const decodeInfo = Schema.decodeUnknownEffect(Info)
+    const decodeInfo = Schema.decodeUnknownEffect(Schema.toType(Info))
     const decodeBranches = Schema.decodeUnknownEffect(BranchList)
     const decodeStatus = Schema.decodeUnknownEffect(Schema.Array(FileStatus))
     const decodeDiff = Schema.decodeUnknownEffect(Schema.Array(FileDiff.Info))
