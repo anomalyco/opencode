@@ -32,6 +32,21 @@ describe("Zen request body streaming", () => {
     })
   })
 
+  test("ignores model fields nested before the root model", async () => {
+    const body = new Blob([
+      '{"metadata":{"model":"ox-alpha-free"},"model":"glm-5.3","messages":[],"stream":false}',
+    ]).stream()
+    const request = await prepareRequestBody(body)
+
+    expect(request.model).toBe("glm-5.3")
+    expect(JSON.parse(await new Response(request.stream("provider-model", false)).text())).toEqual({
+      metadata: { model: "ox-alpha-free" },
+      model: "provider-model",
+      messages: [],
+      stream: false,
+    })
+  })
+
   test("appends stream usage options at the end of the request", async () => {
     const body = new Blob(['{"model":"client-model","stream":true,"messages":[]}   ']).stream()
     const request = await prepareRequestBody(body)

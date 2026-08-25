@@ -222,6 +222,7 @@ export async function handler(
             if (v === "$session") return headers.set(k, sessionId)
             if (v === "$model") return headers.set(k, model)
             if (v === "$request") return headers.set(k, requestId)
+            if (v === "$client") return headers.set(k, ocClient)
             if (v === "$project") return headers.set(k, projectId)
             if (v === "$workspace") {
               if (authInfo?.workspaceID) headers.set(k, authInfo.workspaceID)
