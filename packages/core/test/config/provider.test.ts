@@ -9,16 +9,18 @@ import { Integration } from "@opencode-ai/core/integration"
 import { Model } from "@opencode-ai/core/model"
 import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
+import { VariantPlugin } from "@opencode-ai/core/plugin/variant"
 import { Provider } from "@opencode-ai/core/provider"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "../plugin/fixture"
 
 const it = testEffect(PluginTestLayer)
 
-const addPlugin = Effect.fn(function* (entries: Entry[]) {
+const addPlugin = Effect.fn(function* (entries: Entry[], variants = false) {
   const plugin = yield* Plugin.Service
   const host = yield* PluginHost.make(plugin)
   yield* ConfigProviderPlugin.Plugin.effect(host).pipe(Effect.provide(Config.testLayer(entries)))
+  if (variants) yield* VariantPlugin.Plugin.effect(host).pipe(Effect.provide(Config.testLayer(entries)))
 })
 
 function required<T>(value: T | undefined): T {
@@ -101,6 +103,179 @@ describe("ConfigProviderPlugin.Plugin", () => {
       const model = required(yield* catalog.model.get(providerID, modelID))
       expect(model.capabilities).toEqual({ tools: true, input: ["text", "image"], output: ["text"] })
       expect(model.limit).toEqual({ context: 200_000, output: 32_000 })
+    }),
+  )
+
+  it.effect("adds fallback variants to new configured models when variants are omitted", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const providerID = Provider.ID.make("custom")
+      const modelID = Model.ID.make("gpt-next")
+      const entries = [
+        new Document({
+          type: "document",
+          info: decode({
+            providers: {
+              custom: {
+                package: "aisdk:@ai-sdk/openai",
+                models: { "gpt-next": {} },
+              },
+            },
+          }),
+        }),
+      ]
+
+      yield* addPlugin(entries, true)
+
+      const variants = required(yield* catalog.model.get(providerID, modelID)).variants
+      expect(variants.map((variant) => String(variant.id))).toEqual(["none", "low", "medium", "high", "xhigh", "max"])
+      expect(variants[3]?.settings).toEqual({
+        reasoningEffort: "high",
+        reasoningSummary: "auto",
+        include: ["reasoning.encrypted_content"],
+      })
+    }),
+  )
+
+  it.effect("keeps explicit empty and custom configured variants", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const providerID = Provider.ID.make("custom")
+      const entries = [
+        new Document({
+          type: "document",
+          info: decode({
+            providers: {
+              custom: {
+                package: "aisdk:@ai-sdk/openai",
+                models: {
+                  disabled: { variants: [] },
+                  explicit: { variants: [{ id: "deep", settings: { reasoningEffort: "max" } }] },
+                },
+              },
+            },
+          }),
+        }),
+      ]
+
+      yield* addPlugin(entries, true)
+
+      expect((yield* catalog.model.get(providerID, Model.ID.make("disabled")))?.variants).toEqual([])
+      expect(
+        (yield* catalog.model.get(providerID, Model.ID.make("explicit")))?.variants.map((variant) => ({
+          ...variant,
+          id: String(variant.id),
+        })),
+      ).toEqual([{ id: "deep", settings: { reasoningEffort: "max" } }])
+    }),
+  )
+
+  it.effect("preserves authoritative catalog variants", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const providerID = Provider.ID.make("custom")
+      const modelID = Model.ID.make("known")
+      yield* catalog.transform((draft) => {
+        draft.model.update(providerID, modelID, (model) => {
+          model.variants = [{ id: Model.VariantID.make("custom"), settings: { reasoningEffort: "high" } }]
+        })
+      })
+      const entries = [
+        new Document({
+          type: "document",
+          info: decode({
+            providers: {
+              custom: {
+                package: "aisdk:@ai-sdk/openai",
+                models: { known: { name: "Known" } },
+              },
+            },
+          }),
+        }),
+      ]
+
+      yield* addPlugin(entries, true)
+
+      expect((yield* catalog.model.get(providerID, modelID))?.variants).toEqual([
+        { id: Model.VariantID.make("custom"), settings: { reasoningEffort: "high" } },
+      ])
+    }),
+  )
+
+  it.effect("lets an explicit empty array clear inherited variants", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const providerID = Provider.ID.make("custom")
+      const modelID = Model.ID.make("known")
+      yield* catalog.transform((draft) => {
+        draft.model.update(providerID, modelID, (model) => {
+          model.variants = [{ id: Model.VariantID.make("high"), settings: { reasoningEffort: "high" } }]
+        })
+      })
+      const entries = [
+        new Document({
+          type: "document",
+          info: decode({
+            providers: {
+              custom: {
+                package: "aisdk:@ai-sdk/openai",
+                models: { known: { variants: [] } },
+              },
+            },
+          }),
+        }),
+      ]
+
+      yield* addPlugin(entries, true)
+
+      expect((yield* catalog.model.get(providerID, modelID))?.variants).toEqual([])
+    }),
+  )
+
+  it.effect("respects layered variant intent and the final package flavor", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const providerID = Provider.ID.make("custom")
+      const entries = [
+        new Document({
+          type: "document",
+          info: decode({
+            providers: {
+              custom: {
+                package: "aisdk:@ai-sdk/openai-compatible",
+                models: {
+                  cleared: {},
+                  disabled: { variants: [] },
+                  flavor: {},
+                },
+              },
+            },
+          }),
+        }),
+        new Document({
+          type: "document",
+          info: decode({
+            providers: {
+              custom: {
+                package: "aisdk:@ai-sdk/openai",
+                models: {
+                  cleared: { variants: [] },
+                  disabled: { name: "Disabled" },
+                  flavor: { name: "OpenAI" },
+                },
+              },
+            },
+          }),
+        }),
+      ]
+
+      yield* addPlugin(entries, true)
+
+      expect((yield* catalog.model.get(providerID, Model.ID.make("cleared")))?.variants).toEqual([])
+      expect((yield* catalog.model.get(providerID, Model.ID.make("disabled")))?.variants).toEqual([])
+      expect(
+        (yield* catalog.model.get(providerID, Model.ID.make("flavor")))?.variants.map((variant) => String(variant.id)),
+      ).toEqual(["none", "low", "medium", "high", "xhigh", "max"])
     }),
   )
 

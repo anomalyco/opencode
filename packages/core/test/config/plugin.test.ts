@@ -410,10 +410,38 @@ describe("PluginSupervisor config", () => {
     }),
   )
 
+  it.live("lets an explicit empty config array clear generated variants", () =>
+    withLocation(
+      {
+        plugins: [path.join(import.meta.dir, "../plugin/fixtures/variant-source-plugin.ts")],
+        providers: {
+          configured: {
+            models: {
+              "glm-5.2": { variants: [] },
+            },
+          },
+        },
+      },
+      Effect.gen(function* () {
+        yield* ready()
+        const catalog = yield* Catalog.Service
+        expect((yield* catalog.model.get(Provider.ID.make("configured"), Model.ID.make("glm-5.2")))?.variants).toEqual(
+          [],
+        )
+      }),
+    ),
+  )
+
   it.live("allows variant generation to be disabled", () =>
     withLocation(
       {
         plugins: [path.join(import.meta.dir, "../plugin/fixtures/variant-source-plugin.ts"), "-opencode.variant"],
+        providers: {
+          custom: {
+            package: "aisdk:@ai-sdk/openai",
+            models: { reasoner: {} },
+          },
+        },
       },
       Effect.gen(function* () {
         yield* ready()
@@ -424,6 +452,7 @@ describe("PluginSupervisor config", () => {
         expect((yield* catalog.model.get(Provider.ID.make("configured"), Model.ID.make("glm-5.2")))?.variants).toEqual([
           expect.objectContaining({ id: "high", headers: { custom: "true" } }),
         ])
+        expect((yield* catalog.model.get(Provider.ID.make("custom"), Model.ID.make("reasoner")))?.variants).toEqual([])
       }),
     ),
   )

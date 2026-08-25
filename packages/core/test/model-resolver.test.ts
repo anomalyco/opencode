@@ -9,6 +9,7 @@ import { Integration } from "@opencode-ai/core/integration"
 import { Compatibility, ID, Info, VariantID } from "@opencode-ai/core/model"
 import { Provider } from "@opencode-ai/core/provider"
 import { ModelResolver } from "@opencode-ai/core/model-resolver"
+import { VariantPlugin } from "@opencode-ai/core/plugin/variant"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { AISDK } from "@opencode-ai/core/aisdk"
 import { Npm } from "@opencode-ai/util/npm"
@@ -508,6 +509,34 @@ describe("ModelResolver", () => {
     }),
   )
 
+  it.effect("applies native OpenAI fallback settings to Responses requests", () =>
+    Effect.gen(function* () {
+      const packageName = "@opencode-ai/ai/providers/openai"
+      const base = model(packageName, { modelID: "gpt-next", limit: { context: 100, output: 32_000 } })
+      const catalog = model(packageName, {
+        modelID: "gpt-next",
+        limit: { context: 100, output: 32_000 },
+        variants: VariantPlugin.fallback(base),
+      })
+      const resolved = yield* ModelResolver.resolveModel(
+        catalog,
+        VariantID.make("high"),
+        Credential.Key.make({ type: "key", key: "secret" }),
+      )
+
+      expect(resolved.route.defaults.providerOptions).toMatchObject({
+        reasoningEffort: "high",
+        reasoningSummary: "auto",
+        include: ["reasoning.encrypted_content"],
+      })
+      const prepared = yield* compileRequest(LLM.request({ model: resolved, prompt: "Hello" }))
+      expect(prepared.body).toMatchObject({
+        include: ["reasoning.encrypted_content"],
+        reasoning: { effort: "high", summary: "auto" },
+      })
+    }),
+  )
+
   it.effect("overlays selected OpenAI-compatible variant bodies", () =>
     Effect.gen(function* () {
       const catalog = model(Provider.aisdk("@ai-sdk/openai-compatible"), {
@@ -883,12 +912,7 @@ describe("ModelResolver", () => {
           { reasoning: { effort: "high" } },
           { reasoning: { effort: "high" } },
         ],
-        [
-          "@ai-sdk/xai",
-          "@opencode-ai/ai/providers/xai",
-          { reasoningEffort: "high" },
-          { reasoningEffort: "high" },
-        ],
+        ["@ai-sdk/xai", "@opencode-ai/ai/providers/xai", { reasoningEffort: "high" }, { reasoningEffort: "high" }],
       ] as const
 
       yield* Effect.forEach(packages, ([catalogPackage, nativePackage, sourceOptions, providerOptions]) =>
@@ -937,11 +961,7 @@ describe("ModelResolver", () => {
         ["@ai-sdk/azure", "@opencode-ai/ai/providers/azure/responses", "api-model"],
         ["@ai-sdk/google", "@opencode-ai/ai/providers/google", "api-model"],
         ["@ai-sdk/google-vertex", "@opencode-ai/ai/providers/google-vertex", "api-model"],
-        [
-          "@ai-sdk/google-vertex/anthropic",
-          "@opencode-ai/ai/providers/google-vertex/messages",
-          "claude-sonnet-4-6",
-        ],
+        ["@ai-sdk/google-vertex/anthropic", "@opencode-ai/ai/providers/google-vertex/messages", "claude-sonnet-4-6"],
         ["@ai-sdk/openai", "@opencode-ai/ai/providers/openai", "api-model"],
         ["@ai-sdk/openai-compatible", "@opencode-ai/ai/providers/openai-compatible", "api-model"],
         ["@openrouter/ai-sdk-provider", "@opencode-ai/ai/providers/openrouter", "api-model"],
