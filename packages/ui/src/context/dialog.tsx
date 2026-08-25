@@ -81,6 +81,18 @@ function init() {
     let dispose: (() => void) | undefined
     let setClosing: ((closing: boolean) => void) | undefined
 
+    // Only the topmost dialog may be modal. Kobalte ties its focus trap to `modal`, so a stacked
+    // dialog left modal underneath keeps trapping focus and pulls it straight back to its own last
+    // focused control: clicks reach a text input in the dialog above, but `focus` never lands on it
+    // and typing is impossible. An entry not yet in the stack is the one being mounted, so it counts
+    // as topmost. Scroll locking stays on every layer so stacking does not change page scrolling.
+    const topMost = () => {
+      const items = stack()
+      const index = items.findIndex((item) => item.id === id)
+      if (index === -1) return true
+      return index === items.length - 1
+    }
+
     const node = runWithOwner(owner, () =>
       createRoot((d: () => void) => {
         dispose = d
@@ -88,10 +100,14 @@ function init() {
         setClosing = setClosingSignal
         return (
           <Kobalte
-            modal
+            modal={topMost()}
+            preventScroll
             open={!closing()}
             onOpenChange={(open: boolean) => {
               if (open) return
+              // A covered dialog is non-modal, so Kobalte would dismiss it on the first interaction
+              // with the dialog above. Only the topmost layer may close itself.
+              if (!topMost()) return
               close(id)
             }}
           >
