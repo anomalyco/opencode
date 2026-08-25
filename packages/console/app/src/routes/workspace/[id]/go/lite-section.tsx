@@ -640,7 +640,7 @@ export function LiteSection(props: { lite: LiteSubscription | undefined }) {
           </p>
           <h3 data-slot="promo-models-title">{i18n.t("workspace.lite.promo.modelsTitle")}</h3>
           <ul data-slot="promo-models">
-            <li>Grok 4.5</li>
+            <li>Grok 4.6</li>
             <li>GPT 5.6 Luna</li>
             <li>GLM-5.3</li>
             <li>GLM-5.2</li>
