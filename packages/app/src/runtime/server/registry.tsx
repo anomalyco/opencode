@@ -210,7 +210,7 @@ export namespace ServerConnection {
     http: HttpBase
   } & (
     | // Regular desktop server
-    { variant: "base" }
+    { variant: "base"; reconnect?: (signal: AbortSignal) => Promise<HttpBase> }
     // WSL server (windows only)
     | {
         variant: "wsl"
@@ -264,11 +264,13 @@ export const { use: useServers, provider: ServersProvider } = createSimpleContex
     const [store, setStore, _] = persisted(
       {
         ...Persist.global("server"),
+        sync: true,
         previousKey: "server.v3",
         migrate: (value) => migrateCanonicalLocalServerState(value, props.canonicalLocalServer),
       },
       createStore({
         list: [] as StoredServer[],
+        hidden: {} as Record<string, boolean>,
         projects: {} as Record<string, StoredProject[]>,
         lastProject: {} as Record<string, string>,
         recentlyClosed: {} as Record<string, string[]>,
@@ -280,6 +282,7 @@ export const { use: useServers, provider: ServersProvider } = createSimpleContex
     const allServers = createMemo((): Array<ServerConnection.Any> => {
       return resolveServerList({ stored: store.list, props: props.servers })
     })
+    const visibleServers = createMemo(() => allServers().filter((conn) => !store.hidden[ServerConnection.key(conn)]))
 
     function add(input: ServerConnection.Http) {
       const url_ = normalizeServerUrl(input.http.url)
@@ -320,6 +323,15 @@ export const { use: useServers, provider: ServersProvider } = createSimpleContex
     return {
       get list() {
         return allServers()
+      },
+      get visible() {
+        return visibleServers()
+      },
+      isHidden(key: ServerConnection.Key) {
+        return store.hidden[key] ?? false
+      },
+      setHidden(key: ServerConnection.Key, hidden: boolean) {
+        setStore("hidden", key, hidden)
       },
       add,
       remove,

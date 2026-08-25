@@ -143,6 +143,10 @@
     display: none;
   }
 
+  [data-titlebar-tab]:not([data-active="true"]) [data-slot="tab-close"] {
+    display: none;
+  }
+
   [data-slot="tab-close"] {
     right: auto;
     left: 50%;

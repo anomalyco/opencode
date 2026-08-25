@@ -179,6 +179,7 @@ async function expectMountedTree(page: Page, total: number) {
 }
 
 async function expectSideGeometry(page: Page) {
+  await expectPanelGap(page, 8)
   const geometry = await page.evaluate(() => {
     const review = document.querySelector<HTMLElement>("#review-panel")!.getBoundingClientRect()
     const terminal = document.querySelector<HTMLElement>("#terminal-panel")!.getBoundingClientRect()
@@ -188,15 +189,20 @@ async function expectSideGeometry(page: Page) {
       terminalLeft: terminal.left,
       terminalRight: terminal.right,
       terminalTop: terminal.top,
+      terminalBottom: terminal.bottom,
       reviewTop: review.top,
+      reviewBottom: review.bottom,
     }
   })
   expect(Math.abs(geometry.terminalLeft - geometry.reviewLeft)).toBeLessThanOrEqual(1)
   expect(Math.abs(geometry.terminalRight - geometry.reviewRight)).toBeLessThanOrEqual(1)
   expect(geometry.terminalTop).toBeGreaterThan(geometry.reviewTop)
+  expect(geometry.terminalTop - geometry.reviewBottom).toBeGreaterThanOrEqual(7)
+  expect(geometry.terminalTop - geometry.reviewBottom).toBeLessThanOrEqual(9)
 }
 
 async function expectBottomGeometry(page: Page) {
+  await expectPanelGap(page, 8)
   const geometry = await page.evaluate(() => {
     const review = document.querySelector<HTMLElement>("#review-panel")!
     const terminal = document.querySelector<HTMLElement>("#terminal-panel")!
@@ -224,6 +230,30 @@ async function expectBottomGeometry(page: Page) {
   expect(geometry.terminalLeft).toBeLessThanOrEqual(9)
   expect(geometry.terminalRight).toBeGreaterThanOrEqual(geometry.viewport - 9)
   expect(geometry.sidebar).toBeGreaterThanOrEqual(240)
+}
+
+async function expectPanelGap(page: Page, expected: number) {
+  await expect
+    .poll(() => {
+      return page.evaluate(() => {
+        const review = document.querySelector<HTMLElement>("#review-panel")?.getBoundingClientRect()
+        const terminal = document.querySelector<HTMLElement>("#terminal-panel")?.getBoundingClientRect()
+        if (!review || !terminal) return Number.NEGATIVE_INFINITY
+        const gap = terminal.top - review.bottom
+        return gap
+      })
+    })
+    .toBeGreaterThanOrEqual(expected - 1)
+  await expect
+    .poll(() => {
+      return page.evaluate(() => {
+        const review = document.querySelector<HTMLElement>("#review-panel")?.getBoundingClientRect()
+        const terminal = document.querySelector<HTMLElement>("#terminal-panel")?.getBoundingClientRect()
+        if (!review || !terminal) return Number.POSITIVE_INFINITY
+        return terminal.top - review.bottom
+      })
+    })
+    .toBeLessThanOrEqual(expected + 1)
 }
 
 function base64Encode(value: string) {

@@ -1,19 +1,18 @@
 import { useGlobal, useServerCtx } from "@/runtime/server/runtime"
 import { type HomeProjectSelection, useLayout } from "@/shell/state/layout"
-import { ServerConnection } from "@/runtime/server/registry"
+import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { useTabs } from "@/shell/tabs/tabs"
 import { toggleHomeProjectSelection } from "@/shell/layout/helpers"
-import { createEffect, createMemo, startTransition } from "solid-js"
+import { createEffect, createMemo } from "solid-js"
 
 export function createHomeController() {
   const layout = useLayout()
   const global = useGlobal()
+  const servers = useServers()
   const tabs = useTabs()
   const selection = layout.home.selection
   const focusedServer = createMemo<ServerConnection.Any | undefined>(
-    () =>
-      global.servers.list().find((conn) => ServerConnection.key(conn) === selection().server) ??
-      global.servers.list()[0],
+    () => servers.visible.find((conn) => ServerConnection.key(conn) === selection().server) ?? servers.visible[0],
   )
   const focusedServerCtx = useServerCtx(focusedServer)
   const focusedSync = () => focusedServerCtx()?.sync
@@ -29,7 +28,7 @@ export function createHomeController() {
   )
 
   createEffect(() => {
-    const list = global.servers.list()
+    const list = servers.visible
     if (list.some((conn) => ServerConnection.key(conn) === selection().server)) return
     const conn = list[0]
     if (conn) setSelection({ server: ServerConnection.key(conn) })
@@ -50,11 +49,10 @@ export function createHomeController() {
     selection: {
       value: selection,
       set: setSelection,
-      focusServer: (conn: ServerConnection.Any) =>
-        void startTransition(() => setSelection({ server: ServerConnection.key(conn) })),
+      focusServer: (conn: ServerConnection.Any) => setSelection({ server: ServerConnection.key(conn) }),
     },
     server: {
-      list: global.servers.list,
+      list: () => servers.visible,
       health: (conn: ServerConnection.Any) => global.servers.health[ServerConnection.key(conn)],
       context: (conn: ServerConnection.Any) => global.ensureServerCtx(conn),
       focused: focusedServer,

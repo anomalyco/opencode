@@ -146,8 +146,10 @@ bug.
 
 For questions about creating, configuring, loading, publishing, or migrating
 plugins, fetch the full [plugins guide](https://opencode.ai/v2/docs/build/plugins)
-before answering. This includes questions about the Effect plugin API, hooks,
-transforms, tools, plugin context capabilities, and package entrypoints.
+before answering. Refer to this guide when the user wants to build a plugin. It
+covers hooks, transforms, tools, plugin context capabilities, and package
+entrypoints. Plugins can also extend the TUI; for those, fetch the
+[CLI plugin guide](https://opencode.ai/v2/docs/build/plugins/cli).
 
 ## [Service](https://opencode.ai/v2/docs/troubleshooting#check-the-background-service)
 

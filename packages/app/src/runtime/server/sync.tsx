@@ -36,10 +36,10 @@ export const loadLspQuery = (scope: ServerScope, directory: string) =>
     queryFn: async () => [],
   })
 
-function makeQueryOptionsApi(scope: ServerScope, serverAPI: ServerApi) {
+function makeQueryOptionsApi(scope: ServerScope, serverAPI: () => ServerApi) {
   return {
     globalConfig: () => loadGlobalConfigQuery(scope),
-    path: () => loadPathQuery(scope, null, serverAPI.location),
+    path: () => loadPathQuery(scope, null, serverAPI().location),
     lsp: (directory: PathKey) => loadLspQuery(scope, directory),
   }
 }
@@ -52,7 +52,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
   if (!owner) throw new Error("ServerSync must be created within owner")
 
   const booting = new Map<string, Promise<void>>()
-  const queryOptionsApi = makeQueryOptionsApi(serverSDK.scope, serverSDK.api)
+  const queryOptionsApi = makeQueryOptionsApi(serverSDK.scope, () => serverSDK.api)
   const connected = () => serverSDK.connection.status() === "connected"
 
   const [configQuery, pathQuery] = useQueries(() => ({
@@ -66,11 +66,11 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
     provider_auth: {},
     get path() {
       const EMPTY = { state: "", config: "", worktree: "", directory: "", home: "" }
-      if (pathQuery.isLoading) return EMPTY
+      if (pathQuery.isPending) return EMPTY
       return pathQuery.data ?? EMPTY
     },
     get config() {
-      if (configQuery.isLoading) return {}
+      if (configQuery.isPending) return {}
       return configQuery.data ?? {}
     },
     get reload() {

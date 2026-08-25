@@ -11,6 +11,7 @@ import type { McpServer } from "@opencode-ai/client"
 import { useToast } from "../ui/toast"
 import { DialogErrorDetails } from "./dialog-error-details"
 import { DialogIntegration } from "./dialog-integration"
+import { useLocation } from "../context/location"
 
 function statusError(status: McpServer["status"]) {
   if (status.status === "failed") return status.error
@@ -37,11 +38,13 @@ export function DialogMcp(props: { initialServer?: string; details?: boolean } =
   const data = useData()
   const dialog = useDialog()
   const client = useClient()
+  const location = useLocation()
   const toast = useToast()
   const theme = useTheme("elevated")
+  const current = () => location.ref ?? data.location.default()
   const servers = createMemo(() =>
     pipe(
-      data.location.mcp.server.list() ?? [],
+      data.location.mcp.server.list(current()) ?? [],
       sortBy((server) => server.name),
     ),
   )
@@ -115,8 +118,8 @@ export function DialogMcp(props: { initialServer?: string; details?: boolean } =
       return
     }
     setLoading(name)
-    const current = data.location.default()
-    const input = { server: name, location: { directory: current.directory, workspace: current.workspaceID } }
+    const target = current()
+    const input = { server: name, location: { directory: target.directory, workspace: target.workspaceID } }
     const call = server.status.status === "connected" ? client.api.mcp.disconnect(input) : client.api.mcp.connect(input)
     void call.catch(toast.error).finally(() => setLoading(null))
   }

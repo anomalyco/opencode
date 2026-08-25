@@ -129,9 +129,9 @@
     --v2-illustration-illustration-layer-02: var(--v2-grey-400);
     --v2-illustration-illustration-layer-03: var(--v2-grey-500);
 
-    --font-family-text: "Inter", sans-serif;
-    --v2-font-family-sans: "Inter", sans-serif;
-    --v2-font-family-code: "IBM Plex Mono", var(--font-family-mono);
+    --font-family-text: var(--font-family-sans);
+    --v2-font-family-sans: var(--font-family-sans);
+    --v2-font-family-code: var(--font-family-mono);
     --line-height-tight: 12px;
     --line-height-compact: 16px;
     --line-height-base: 20px;

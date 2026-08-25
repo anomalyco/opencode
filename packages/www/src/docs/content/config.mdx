@@ -128,9 +128,9 @@ agents.
 ### Autoupdate
 
 Control automatic updates from the global config. Set this to `false` to
-disable updates. The current beta treats `true` and `"notify"` identically and
-automatically installs compatible non-major updates; project-level values are
-ignored.
+disable updates, or `"notify"` to report available updates without installing
+them. Set this to `true` to automatically install compatible non-major updates.
+Project-level values are ignored.
 
 ```jsonc
 {
@@ -434,7 +434,7 @@ accepts options.
 }
 ```
 
-See the [plugins guide](/build/plugins) for plugin development and configuration.
+See the [plugins guide](/plugins) for plugin loading and configuration.
 
 ### Providers
 

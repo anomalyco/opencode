@@ -48,6 +48,9 @@ export function host(overrides: Overrides = {}): Plugin.Context {
     event: overrides.event ?? {
       subscribe: () => Stream.empty,
     },
+    generate: overrides.generate ?? {
+      text: () => Effect.die("unused generate.text"),
+    },
     integration: overrides.integration ?? {
       list: () => Effect.die("unused integration.list"),
       get: () => Effect.die("unused integration.get"),
@@ -81,6 +84,12 @@ export function host(overrides: Overrides = {}): Plugin.Context {
       transform: () => Effect.die("unused mcp.transform"),
       reload: () => Effect.die("unused mcp.reload"),
     },
+    permission: overrides.permission ?? {
+      hook: () => Effect.die("unused permission.hook"),
+      list: () => Effect.die("unused permission.list"),
+      get: () => Effect.die("unused permission.get"),
+      reply: () => Effect.die("unused permission.reply"),
+    },
     plugin: overrides.plugin ?? {
       list: () => Effect.die("unused plugin.list"),
     },
@@ -107,6 +116,14 @@ export function host(overrides: Overrides = {}): Plugin.Context {
       transform: () => Effect.die("unused tool.transform"),
       hook: () => Effect.die("unused tool.hook"),
     },
+    vcs: overrides.vcs ?? {
+      get: () => Effect.die("unused vcs.get"),
+      branches: () => Effect.die("unused vcs.branches"),
+      status: () => Effect.die("unused vcs.status"),
+      diff: () => Effect.die("unused vcs.diff"),
+      transform: () => Effect.die("unused vcs.transform"),
+      reload: () => Effect.die("unused vcs.reload"),
+    },
     websearch: overrides.websearch ?? {
       providers: () => Effect.die("unused websearch.providers"),
       query: () => Effect.die("unused websearch.query"),
@@ -126,6 +143,7 @@ export function host(overrides: Overrides = {}): Plugin.Context {
       synthetic: overrides.session?.synthetic ?? (() => Effect.die("unused session.synthetic")),
       interrupt: overrides.session?.interrupt ?? (() => Effect.die("unused session.interrupt")),
       wait: overrides.session?.wait ?? (() => Effect.die("unused session.wait")),
+      context: overrides.session?.context ?? (() => Effect.die("unused session.context")),
     },
   }
 }

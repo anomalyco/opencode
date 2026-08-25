@@ -5,6 +5,7 @@ export const globalProjectLayer = Layer.succeed(
   Project.Service,
   Project.Service.of({
     list: () => Effect.succeed([]),
+    update: () => Effect.die("not implemented"),
     resolve: (directory) => Effect.succeed({ id: Project.ID.global, directory, canonical: directory }),
   }),
 )

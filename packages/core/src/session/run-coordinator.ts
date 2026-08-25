@@ -14,9 +14,10 @@ export interface Coordinator<Key, E, Reason = never> {
   /**
    * Stops the active execution and clears its doorbell. No-op when idle. Resolves once the
    * interruption is accepted, not when cleanup settles: the execution fiber finishes its
-   * finalizers and settled hook on its own time. Compose with `awaitIdle` for settlement.
+   * finalizers and settled hook on its own time. Returns whether an active execution was
+   * interrupted. Compose with `awaitIdle` for settlement.
    */
-  readonly interrupt: (key: Key, reason?: Reason) => Effect.Effect<void>
+  readonly interrupt: (key: Key, reason?: Reason) => Effect.Effect<boolean>
   /** Resolves once no execution is active for the key. Returns immediately when already idle and never starts work. */
   readonly awaitIdle: (key: Key) => Effect.Effect<void>
 }
@@ -30,13 +31,7 @@ export interface Coordinator<Key, E, Reason = never> {
  * with this execution's exit.
  */
 type Execution<E, Reason> = {
-  /**
-   * Resolves with the execution's exit as a success value. Success-valued on purpose:
-   * completing a Deferred with an interrupted exit interrupts suspended waiters as it
-   * resumes them, and can starve later waiters of their resume entirely
-   * (Effect-TS/effect#7364). Joiners flatten the exit; idleness waiters just await.
-   */
-  readonly done: Deferred.Deferred<Exit.Exit<void, E>>
+  readonly done: Deferred.Deferred<void, E>
   owner?: Fiber.Fiber<void>
   scope: Promotable
   pendingWake?: Promotable
@@ -84,7 +79,7 @@ export const make = <Key, E, Reason = never>(options: {
 
     const start = (key: Key, force: boolean, scope: Promotable) => {
       const execution: Execution<E, Reason> = {
-        done: Deferred.makeUnsafe<Exit.Exit<void, E>>(),
+        done: Deferred.makeUnsafe<void, E>(),
         scope,
         stopping: false,
       }
@@ -114,7 +109,7 @@ export const make = <Key, E, Reason = never>(options: {
     const settle = (key: Key, execution: Execution<E, Reason>, exit: Exit.Exit<void, E>) => {
       if (execution.pendingWake) start(key, false, execution.pendingWake)
       else executions.delete(key)
-      Deferred.doneUnsafe(execution.done, Exit.succeed(exit))
+      Deferred.doneUnsafe(execution.done, exit)
     }
 
     const run = (key: Key): Effect.Effect<void, E> =>
@@ -122,10 +117,11 @@ export const make = <Key, E, Reason = never>(options: {
         const execution = executions.get(key)
         if (execution !== undefined) {
           // A stopping execution refuses joiners: wait out its cleanup, then run fresh.
-          if (execution.stopping) return Deferred.await(execution.done).pipe(Effect.andThen(run(key)))
-          return Deferred.await(execution.done).pipe(Effect.flatten)
+          if (execution.stopping)
+            return Deferred.await(execution.done).pipe(Effect.ignoreCause, Effect.andThen(run(key)))
+          return Deferred.await(execution.done)
         }
-        return Deferred.await(start(key, true, "input").done).pipe(Effect.flatten)
+        return Deferred.await(start(key, true, "input").done)
       })
 
     const wake = (key: Key, scope: Promotable = "input") =>
@@ -139,16 +135,16 @@ export const make = <Key, E, Reason = never>(options: {
         start(key, false, scope)
       })
 
-    const interrupt = (key: Key, reason?: Reason): Effect.Effect<void> =>
-      Effect.suspend(() => {
+    const interrupt = (key: Key, reason?: Reason): Effect.Effect<boolean> =>
+      Effect.sync(() => {
         const execution = executions.get(key)
-        if (execution === undefined || execution.stopping) return Effect.void
+        if (execution === undefined || execution.stopping) return false
         if (execution.owner === undefined) {
           // Settlement window: the owner exited but the settled hook has not finished. The
           // terminal outcome is already decided, so no reason attaches — but the interrupt
           // still claims the recorded wakes so settle does not start a dead-intent successor.
           execution.pendingWake = undefined
-          return Effect.void
+          return false
         }
         execution.stopping = true
         // Wakes recorded so far belong to the interrupted intent; the interrupt claims them.
@@ -158,7 +154,7 @@ export const make = <Key, E, Reason = never>(options: {
         // Fire and forget: nobody benefits from waiting out cleanup here, and callers like
         // the interrupt endpoint must acknowledge immediately even when finalizers are slow.
         fork(Fiber.interrupt(execution.owner))
-        return Effect.void
+        return true
       })
 
     // One execution's `done` already spans coalesced continuations; re-check after it
@@ -167,7 +163,7 @@ export const make = <Key, E, Reason = never>(options: {
       Effect.suspend(() => {
         const execution = executions.get(key)
         if (execution === undefined) return Effect.void
-        return Deferred.await(execution.done).pipe(Effect.andThen(awaitIdle(key)))
+        return Deferred.await(execution.done).pipe(Effect.ignoreCause, Effect.andThen(awaitIdle(key)))
       })
 
     return { active: Effect.sync(() => new Set(executions.keys())), run, wake, interrupt, awaitIdle }

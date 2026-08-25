@@ -18,13 +18,23 @@ describe("new session workspace selection", () => {
     ).toBe("main")
   })
 
-  test("derives an existing worktree from the current directory", () => {
+  test("uses the saved destination instead of the current worktree", () => {
     expect(
-      resolveNewSessionWorktree({ enabled: true, directory: "/project/feature", projectWorktree: "/project" }),
-    ).toBe("/project/feature")
-    expect(resolveNewSessionWorktree({ enabled: true, directory: "/project", projectWorktree: "/project" })).toBe(
-      "main",
-    )
+      resolveNewSessionWorktree({
+        enabled: true,
+        directory: "/project/feature",
+        projectWorktree: "/project",
+        fallback: "create",
+      }),
+    ).toBe("create")
+    expect(
+      resolveNewSessionWorktree({
+        enabled: true,
+        directory: "/project/feature",
+        projectWorktree: "/project",
+        fallback: "main",
+      }),
+    ).toBe("/project")
   })
 
   test("normalizes main to the project root outside the main worktree", () => {
@@ -33,9 +43,9 @@ describe("new session workspace selection", () => {
   })
 
   test("treats equivalent Windows roots as the main worktree", () => {
-    expect(resolveNewSessionWorktree({ enabled: true, directory: "C:\\Repo\\", projectWorktree: "c:/repo" })).toBe(
-      "main",
-    )
+    expect(
+      resolveNewSessionWorktree({ enabled: true, directory: "C:\\Repo\\", projectWorktree: "c:/repo" }),
+    ).toBe("main")
     expect(normalizeNewSessionWorktree("main", "C:\\Repo\\", "c:/repo")).toBe("main")
   })
 
@@ -53,6 +63,17 @@ describe("new session workspace selection", () => {
     expect(
       resolveNewSessionBranch({ worktree: "/missing", directory: "/project/feature", worktreeBranch: branch }),
     ).toBe(undefined)
+  })
+
+  test("uses a selected branch for a new workspace", () => {
+    expect(
+      resolveNewSessionBranch({
+        worktree: "create",
+        directory: "/project/feature",
+        createBranch: "release",
+        worktreeBranch: () => "feature",
+      }),
+    ).toBe("release")
   })
 
   test("uses location VCS state when the project inventory is stale", () => {

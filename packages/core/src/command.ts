@@ -1,26 +1,32 @@
 export * as Command from "./command.js"
 
-import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { Context, Effect, Layer, Schema, Types } from "effect"
 import { Command } from "@opencode-ai/schema/command"
-import { State } from "./state.js"
-import { MCP } from "./mcp/index.js"
+import type { PromptInput } from "@opencode-ai/schema/prompt-input"
+import type { Session } from "@opencode-ai/schema/session"
+import type { SessionInbox } from "@opencode-ai/schema/session-inbox"
+import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { Context, Effect, Layer, Schema } from "effect"
 import { Bus } from "./bus.js"
-import { AppProcess } from "@opencode-ai/util/process"
-import { ChildProcess } from "effect/unstable/process"
-import { Location } from "./location.js"
-import { ShellSelect } from "./shell/select.js"
+import { State } from "./state.js"
 
 export const Info = Command.Info
 export type Info = Command.Info
 export { Event } from "@opencode-ai/schema/command"
 
-export type Evaluation = {
-  readonly text: string
+export interface Invocation {
+  readonly sessionID: Session.ID
+  readonly prompt: PromptInput.Prompt
+  readonly delivery: SessionInbox.Delivery
 }
 
-export type Data = {
-  commands: Map<string, Types.DeepMutable<Info>>
+export interface Definition {
+  readonly name: string
+  readonly description?: string
+  readonly execute: (input: Invocation) => Effect.Effect<void, unknown>
+}
+
+export type Draft = {
+  add: (definition: Definition) => void
 }
 
 export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Command.NotFoundError", {
@@ -28,234 +34,73 @@ export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Command.
   message: Schema.String,
 }) {}
 
-export class EvaluationError extends Schema.TaggedError<EvaluationError>()("Command.EvaluationError", {
+export class ExecutionError extends Schema.TaggedError<ExecutionError>()("Command.ExecutionError", {
   command: Schema.String,
   message: Schema.String,
 }) {}
 
-export type Draft = {
-  list: () => readonly Info[]
-  get: (name: string) => Info | undefined
-  update: (name: string, update: (command: Types.DeepMutable<Info>) => void) => void
-  remove: (name: string) => void
-}
-
 export interface Interface extends State.Transformable<Draft> {
   readonly get: (name: string) => Effect.Effect<Info | undefined>
   readonly list: () => Effect.Effect<Info[]>
-  readonly evaluate: (input: {
+  readonly execute: (input: {
     readonly name: string
-    readonly arguments?: string
-  }) => Effect.Effect<Evaluation, NotFoundError | EvaluationError>
+    readonly invocation: Invocation
+  }) => Effect.Effect<void, NotFoundError | ExecutionError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Command") {}
 
-const layer = () =>
-  Layer.effect(
-    Service,
-    Effect.gen(function* () {
-      const mcp = yield* MCP.Service
-      const bus = yield* Bus.Service
-      const processes = yield* AppProcess.Service
-      const location = yield* Location.Service
-      const shell = yield* ShellSelect.Service
-      const state = State.create<Data, Draft>({
-        name: "command",
-        initial: () => ({ commands: new Map() }),
-        draft: (draft) => ({
-          list: () => Array.from(draft.commands.values()) as Info[],
-          get: (name) => draft.commands.get(name),
-          update: (name, update) => {
-            const current = draft.commands.get(name) ?? ({ name, template: "" } as Types.DeepMutable<Info>)
-            if (!draft.commands.has(name)) draft.commands.set(name, current)
-            update(current)
-            current.name = name
-          },
-          remove: (name) => {
-            draft.commands.delete(name)
-          },
-        }),
-        finalize: () => bus.publish(Command.Event.Updated, {}).pipe(Effect.asVoid),
-      })
-      const staticCommand = (name: string) => state.get().commands.get(name) as Info | undefined
-      const mcpCommands = Effect.fnUntraced(function* () {
-        return (yield* mcp.prompts()).map((prompt) =>
-          Info.make({
-            name: mcpCommandName(prompt.server, prompt.name),
-            template: "",
-            description: prompt.description,
-          }),
-        )
+export const layer = Layer.effect(
+  Service,
+  Effect.gen(function* () {
+    const bus = yield* Bus.Service
+    const state = State.create<Map<string, Definition>, Draft>({
+      name: "command",
+      initial: () => new Map(),
+      draft: (draft) => ({
+        add: (definition) => draft.set(definition.name, definition),
+      }),
+      finalize: () => bus.publish(Command.Event.Updated, {}).pipe(Effect.asVoid),
+    })
+    const info = (definition: Definition) =>
+      Info.make({
+        name: definition.name,
+        description: definition.description,
       })
 
-      return Service.of({
-        reload: state.reload,
-        transform: state.transform,
-        get: Effect.fn("Command.get")(function* (name) {
-          const command = staticCommand(name)
-          if (command) return command
-          return (yield* mcpCommands()).find((command) => command.name === name)
+    return Service.of({
+      reload: state.reload,
+      transform: state.transform,
+      get: Effect.fn("Command.get")((name) =>
+        Effect.sync(() => {
+          const definition = state.get().get(name)
+          return definition ? info(definition) : undefined
         }),
-        list: Effect.fn("Command.list")(function* () {
-          const commands = Array.from(state.get().commands.values()) as Info[]
-          const names = new Set(commands.map((command) => command.name))
-          return [...commands, ...(yield* mcpCommands()).filter((command) => !names.has(command.name))]
-        }),
-        evaluate: Effect.fn("Command.evaluate")(function* (input) {
-          const command = staticCommand(input.name)
-          if (command)
-            return yield* evaluateTemplate(input.name, command.template, input.arguments ?? "", {
-              location,
-              processes,
-              shell,
-            })
-
-          const prompt = (yield* mcp.prompts()).find(
-            (prompt) => mcpCommandName(prompt.server, prompt.name) === input.name,
-          )
-          if (!prompt)
-            return yield* new NotFoundError({ command: input.name, message: `Command not found: ${input.name}` })
-          const result = yield* mcp
-            .prompt({
-              server: prompt.server,
-              name: prompt.name,
-              args: Object.fromEntries(
-                (prompt.arguments ?? []).map((argument, index) => [
-                  argument.name,
-                  parseArguments(input.arguments ?? "")[index] ?? "",
-                ]),
-              ),
-            })
-            .pipe(
-              Effect.catchTag("MCP.NotFoundError", () =>
-                Effect.fail(
-                  new EvaluationError({
-                    command: input.name,
-                    message: `MCP server could not be found while evaluating prompt: ${prompt.server}`,
-                  }),
-                ),
-              ),
-            )
-          if (!result)
-            return yield* new EvaluationError({
-              command: input.name,
-              message: `MCP prompt could not be evaluated: ${prompt.server}:${prompt.name}`,
-            })
-          return {
-            text: result.messages
-              .map((message) => promptMessageText(message.content))
-              .join("\n")
-              .trim(),
-          }
-        }),
-      })
-    }),
-  )
-
-function evaluateTemplate(
-  command: string,
-  template: string,
-  input: string,
-  services: {
-    readonly location: Location.Info
-    readonly processes: AppProcess.Interface
-    readonly shell: ShellSelect.Interface
-  },
-) {
-  return Effect.gen(function* () {
-    const expanded = evaluateArguments(template, input)
-    return { text: yield* evaluateShell(command, expanded, services) }
-  })
-}
-
-function evaluateArguments(template: string, input: string) {
-  const args = parseArguments(input)
-  const placeholders = template.match(placeholderRegex) ?? []
-  const last = Math.max(0, ...placeholders.map((item) => Number(item.slice(1))))
-  const expanded = template.replaceAll(placeholderRegex, (_, index) => {
-    const position = Number(index)
-    const argIndex = position - 1
-    if (argIndex >= args.length) return ""
-    if (position === last) return args.slice(argIndex).join(" ")
-    return args[argIndex]
-  })
-  const withArguments = expanded.replaceAll("$ARGUMENTS", input)
-  if (placeholders.length === 0 && !template.includes("$ARGUMENTS") && input.trim())
-    return `${withArguments}\n\n${input}`.trim()
-  return withArguments.trim()
-}
-
-const evaluateShell = Effect.fnUntraced(function* (
-  command: string,
-  text: string,
-  services: {
-    readonly location: Location.Info
-    readonly processes: AppProcess.Interface
-    readonly shell: ShellSelect.Interface
-  },
-) {
-  const matches = Array.from(text.matchAll(shellRegex))
-  if (matches.length === 0) return text
-  const shell = yield* services.shell.preferred()
-  const outputs = yield* Effect.forEach(
-    matches,
-    (match) => {
-      const source = match[1] ?? ""
-      return services.processes
-        .run(
-          ChildProcess.make(shell, ShellSelect.args(shell, source), {
-            cwd: services.location.directory,
-            stdin: "ignore",
-          }),
-          {
-            combineOutput: true,
-          },
+      ),
+      list: Effect.fn("Command.list")(() => Effect.sync(() => Array.from(state.get().values(), info))),
+      execute: Effect.fn("Command.execute")(function* (input) {
+        const definition = state.get().get(input.name)
+        if (!definition)
+          return yield* new NotFoundError({ command: input.name, message: `Command not found: ${input.name}` })
+        return yield* definition.execute(input.invocation).pipe(
+          Effect.tapError((error) => Effect.logError("command execution failed", { command: input.name, error })),
+          Effect.mapError((error) => new ExecutionError({ command: input.name, message: errorMessage(error) })),
         )
-        .pipe(
-          Effect.map((result) => (result.output ?? Buffer.concat([result.stdout, result.stderr])).toString("utf8")),
-          Effect.mapError(
-            (error) =>
-              new EvaluationError({
-                command,
-                message: `Shell interpolation failed for ${JSON.stringify(source)}: ${error.message}`,
-              }),
-          ),
-        )
-    },
-    { concurrency: 2 },
-  )
-  const iterator = outputs[Symbol.iterator]()
-  return text.replace(shellRegex, () => iterator.next().value ?? "")
-})
-
-function parseArguments(input: string) {
-  return (input.match(argsRegex) ?? []).map((arg) => arg.replace(quoteTrimRegex, ""))
-}
-
-function promptMessageText(content: unknown) {
-  if (typeof content === "string") return content
-  if (!content || typeof content !== "object") return ""
-  if (!("type" in content) || content.type !== "text") return ""
-  if (!("text" in content) || typeof content.text !== "string") return ""
-  return content.text
-}
-
-function mcpCommandName(server: string, prompt: string) {
-  return `${sanitize(server)}:${sanitize(prompt)}`
-}
-
-function sanitize(value: string) {
-  return value.replace(/[^a-zA-Z0-9_-]/g, "_")
-}
-
-const argsRegex = /(?:\[Image\s+\d+\]|"[^"]*"|'[^']*'|[^\s"']+)/gi
-const placeholderRegex = /\$(\d+)/g
-const quoteTrimRegex = /^["']|["']$/g
-const shellRegex = /!`([^`]+)`/g
+      }),
+    })
+  }),
+)
 
 export const node = makeLocationNode({
   service: Service,
-  layer: layer(),
-  deps: [MCP.node, Bus.node, AppProcess.node, Location.node, ShellSelect.node],
+  layer,
+  deps: [Bus.node],
 })
+
+function errorMessage(error: unknown) {
+  if (error instanceof Error) return error.message
+  if (typeof error === "string") return error
+  if (error && typeof error === "object" && "message" in error && typeof error.message === "string")
+    return error.message
+  return "Command execution failed"
+}

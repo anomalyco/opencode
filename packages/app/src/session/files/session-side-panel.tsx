@@ -62,7 +62,7 @@ export function SessionSidePanel(props: {
   fileBrowserState: SessionFileBrowserState
   activeDiff?: string
   focusReviewDiff: (path: string) => void
-  reviewSnap: boolean
+  reviewPresent?: boolean
   size: Sizing
   stacked?: boolean
 }) {
@@ -79,6 +79,7 @@ export function SessionSidePanel(props: {
   const shown = settings.visibility.fileTree
 
   const reviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened())
+  const reviewVisible = createMemo(() => reviewOpen() || !!props.reviewPresent)
   const fileOpen = createMemo(
     () =>
       isDesktop() &&
@@ -88,11 +89,12 @@ export function SessionSidePanel(props: {
       }),
   )
   const open = createMemo(() => reviewOpen() || fileOpen())
+  const visible = createMemo(() => reviewVisible() || fileOpen())
   const fileTreeWidth = createMemo(() => Math.max(FILE_TREE_WIDTH_MIN, layout.fileTree.width()))
   const reviewTab = createMemo(() => isDesktop())
   const panelWidth = createMemo(() => {
-    if (!open()) return "0px"
-    if (reviewOpen()) return "auto"
+    if (!visible()) return "0px"
+    if (reviewVisible()) return "auto"
     return `${fileTreeWidth()}px`
   })
   const treeWidth = createMemo(() => (fileOpen() ? `${fileTreeWidth()}px` : "0px"))
@@ -252,14 +254,14 @@ export function SessionSidePanel(props: {
           "h-full min-h-0": props.stacked,
           "pointer-events-none": !open(),
           "transition-[width] duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
-            !props.size.active() && !props.reviewSnap,
-          "flex-1": reviewOpen(),
+            !props.size.active(),
+          "flex-1": reviewVisible(),
         }}
         style={{ width: panelWidth() }}
       >
-        <Show when={open()}>
+        <Show when={visible()}>
           <div class="size-full flex">
-            <Show when={reviewOpen()}>
+            <Show when={reviewVisible()}>
               <div class="relative min-w-0 h-full flex-1 overflow-hidden bg-v2-background-bg-base">
                 <div class="size-full min-w-0 h-full bg-v2-background-bg-base">
                   <DragDropProvider

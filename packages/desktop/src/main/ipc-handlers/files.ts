@@ -37,6 +37,7 @@ export const fileHandlers = FileRpcs.toLayer(
           const image = files.readClipboardImage()
           return image ? { ...image, buffer: new Uint8Array(image.buffer) } : null
         }),
+      FilesWriteClipboardText: ({ text }) => Effect.sync(() => files.writeClipboardText(text)),
     })
   }),
 )

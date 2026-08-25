@@ -13,9 +13,14 @@ const sessionB = session("ses_server_b", directoryB, "Server B session")
 
 test("session settings use the remote server context", async ({ page }) => {
   const permissionRequests: string[] = []
+  const permissionResponses: PermissionResponse[] = []
   await installSseTransport(page, { server: serverA })
   await installSseTransport(page, { server: serverB })
-  await mockServers(page, permissionRequests)
+  // Server A has no tab and is never visited: a pending request there proves
+  // one toggle sweeps every connected server, not just the focused one.
+  await mockServers(page, permissionRequests, permissionResponses, {
+    pending: { [serverA]: [pendingPermission("permission-pending-a", sessionA.id)] },
+  })
   await configureServers(page)
 
   await page.goto(`/server/${base64Encode(serverB)}/session/${sessionB.id}`)
@@ -38,7 +43,17 @@ test("session settings use the remote server context", async ({ page }) => {
       }),
     )
     .toBe(true)
-  expect(permissionRequests.every((request) => new URL(request).origin === serverB)).toBe(true)
+  await expect
+    .poll(() => permissionResponses)
+    .toEqual([
+      {
+        origin: serverA,
+        directory: undefined,
+        sessionID: sessionA.id,
+        permissionID: "permission-pending-a",
+        body: { reply: "once" },
+      },
+    ])
 
   await dialog.getByRole("tab", { name: "Models" }).click()
   await expect(dialog.getByRole("switch", { name: "Server B Model" })).toBeEnabled()
@@ -143,12 +158,118 @@ test("auto-accept responds for an unfocused server session", async ({ page }) =>
     ])
 })
 
+test("auto-accept sweeps again after a reconnect", async ({ page }) => {
+  const permissionRequests: string[] = []
+  const permissionResponses: PermissionResponse[] = []
+  const pendingA: MockPermission[] = []
+  const listFailures: Record<string, number> = {}
+  const sessionGets: string[] = []
+  await installSseTransport(page, { server: serverB })
+  const transport = await installSseTransport(page, { server: serverA, retry: 20 })
+  await mockServers(page, permissionRequests, permissionResponses, {
+    pending: { [serverA]: pendingA },
+    listFailures,
+    sessionGets,
+  })
+  await configureServers(page, [{ type: "session", server: serverA, sessionId: sessionA.id }])
+
+  await page.goto(`/server/${base64Encode(serverA)}/session/${sessionA.id}`)
+  await expect(page.getByRole("heading", { name: sessionA.title, exact: true })).toBeVisible()
+  const first = await transport.waitForConnection()
+
+  await page.keyboard.press("Control+,")
+  const autoAccept = page.locator(".settings-dialog").locator('[data-action="settings-auto-accept-permissions"]')
+  await autoAccept.locator('[data-slot="switch-control"]').click()
+  await expect(autoAccept.getByRole("switch")).toBeChecked()
+  await expect
+    .poll(() =>
+      permissionRequests.some((request) => {
+        const url = new URL(request)
+        return url.origin === serverA && url.searchParams.get("location[directory]") === directoryA
+      }),
+    )
+    .toBe(true)
+  await page.keyboard.press("Escape")
+
+  // This request is asked while the client is disconnected, so it is never
+  // delivered as an event and only a reconnect sweep can find it. The first
+  // listing after the reconnect fails, so only the bounded sweep retry can
+  // deliver the reply.
+  pendingA.push(pendingPermission("permission-offline-a", sessionA.id))
+  listFailures[serverA] = 1
+  const syncsBeforeReconnect = sessionGets.length
+  await transport.disconnect()
+  await transport.waitForConnection({ after: first.id })
+
+  await expect
+    .poll(() => permissionResponses)
+    .toEqual([
+      {
+        origin: serverA,
+        directory: undefined,
+        sessionID: sessionA.id,
+        permissionID: "permission-offline-a",
+        body: { reply: "once" },
+      },
+    ])
+  // The reconnect sweep must resync active sessions instead of trusting
+  // cached locations, since another client may have moved them meanwhile.
+  expect(sessionGets.slice(syncsBeforeReconnect)).toContain(sessionA.id)
+})
+
+test("auto-accept approves a request discovered by opening a session", async ({ page }) => {
+  const permissionRequests: string[] = []
+  const permissionResponses: PermissionResponse[] = []
+  await installSseTransport(page, { server: serverA })
+  await installSseTransport(page, { server: serverB })
+  // The request is only served from the per-session permission list, so it
+  // reaches the client through the store sync when the session view opens,
+  // never through a location sweep or an event.
+  await mockServers(page, permissionRequests, permissionResponses, {
+    sessionPending: { [sessionA.id]: [pendingPermission("permission-synced-a", sessionA.id)] },
+  })
+  await configureServers(page, [{ type: "session", server: serverA, sessionId: sessionA.id }])
+
+  await page.goto(`/server/${base64Encode(serverA)}/session/${sessionA.id}`)
+  await expect(page.getByRole("heading", { name: sessionA.title, exact: true })).toBeVisible()
+
+  await page.keyboard.press("Control+,")
+  const autoAccept = page.locator(".settings-dialog").locator('[data-action="settings-auto-accept-permissions"]')
+  await autoAccept.locator('[data-slot="switch-control"]').click()
+  await expect(autoAccept.getByRole("switch")).toBeChecked()
+
+  await expect
+    .poll(() => permissionResponses)
+    .toEqual([
+      {
+        origin: serverA,
+        directory: undefined,
+        sessionID: sessionA.id,
+        permissionID: "permission-synced-a",
+        body: { reply: "once" },
+      },
+    ])
+})
+
 type PermissionResponse = {
   origin: string
   directory?: string
   sessionID: string
   permissionID: string
   body: unknown
+}
+
+type MockPermission = {
+  id: string
+  sessionID: string
+  action: string
+  resources: string[]
+  metadata: Record<string, unknown>
+  save: unknown[]
+}
+
+function pendingPermission(id: string, sessionID: string): MockPermission {
+  return { id, sessionID, action: "shell", resources: ["git status"], metadata: {}, save: [] }
 }
 
 async function configureServers(page: Page, tabs: { type: "session"; server: string; sessionId: string }[] = []) {
@@ -161,7 +282,23 @@ async function configureServers(page: Page, tabs: { type: "session"; server: str
   )
 }
 
-async function mockServers(page: Page, permissionRequests: string[], permissionResponses: PermissionResponse[] = []) {
+type MockServerOptions = {
+  // Pending requests served from /api/permission/request, keyed by origin.
+  pending?: Record<string, MockPermission[]>
+  // Pending requests served from /api/session/:id/permission, keyed by session ID.
+  sessionPending?: Record<string, MockPermission[]>
+  // Counts of /api/permission/request calls to fail with a 500, keyed by origin.
+  listFailures?: Record<string, number>
+  // Records /api/session/:id GETs so tests can assert session resyncs.
+  sessionGets?: string[]
+}
+
+async function mockServers(
+  page: Page,
+  permissionRequests: string[],
+  permissionResponses: PermissionResponse[] = [],
+  options: MockServerOptions = {},
+) {
   await page.route("**/*", async (route) => {
     const url = new URL(route.request().url())
     if (url.origin !== serverA && url.origin !== serverB) return route.fallback()
@@ -178,8 +315,12 @@ async function mockServers(page: Page, permissionRequests: string[], permissionR
         permissionID: response[2]!,
         body: route.request().postDataJSON(),
       })
-      return json(route, true)
+      // The generated client requires exactly 204 for a successful reply.
+      return route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } })
     }
+    const sessionPermission = url.pathname.match(/^\/api\/session\/([^/]+)\/permission$/)
+    if (route.request().method() === "GET" && sessionPermission)
+      return json(route, { data: options.sessionPending?.[sessionPermission[1]!] ?? [] })
     if (requestDirectory && requestDirectory !== directory) return json(route, { name: "InvalidDirectory" }, 500)
     if (url.pathname === "/api/provider")
       return json(route, {
@@ -197,7 +338,12 @@ async function mockServers(page: Page, permissionRequests: string[], permissionR
     if (url.pathname === "/api/agent") return json(route, { location: { directory }, data: [] })
     if (url.pathname === "/api/permission/request") {
       permissionRequests.push(url.toString())
-      return json(route, { location: { directory }, data: [] })
+      const failures = options.listFailures?.[url.origin] ?? 0
+      if (failures > 0) {
+        options.listFailures![url.origin] = failures - 1
+        return json(route, { name: "Internal" }, 500)
+      }
+      return json(route, { location: { directory }, data: options.pending?.[url.origin] ?? [] })
     }
     if (["/api/command", "/api/reference", "/api/question/request"].includes(url.pathname))
       return json(route, { location: { directory }, data: [] })
@@ -219,9 +365,13 @@ async function mockServers(page: Page, permissionRequests: string[], permissionR
       return json(route, { id: remote ? sessionB.projectID : "project-server-a", directory, canonical: directory })
     if (url.pathname === "/api/session")
       return json(route, { data: sessions.map((session) => currentSession(session)), cursor: {} })
-    if (url.pathname === "/api/session/active") return json(route, { data: {} })
+    if (url.pathname === "/api/session/active")
+      return json(route, { data: Object.fromEntries(sessions.map((session) => [session.id, { type: "running" }])) })
     const currentSessionInfo = sessions.find((session) => url.pathname === `/api/session/${session.id}`)
-    if (currentSessionInfo) return json(route, { data: currentSession(currentSessionInfo) })
+    if (currentSessionInfo) {
+      options.sessionGets?.push(currentSessionInfo.id)
+      return json(route, { data: currentSession(currentSessionInfo) })
+    }
     if (sessions.some((session) => url.pathname === `/api/session/${session.id}/message`))
       return json(route, { data: [], cursor: {} })
     if (sessions.some((session) => url.pathname === `/api/session/${session.id}/inbox`))

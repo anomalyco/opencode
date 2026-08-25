@@ -30,6 +30,9 @@ export const RETENTION = Duration.days(7)
 export const DIRECTORY = "shell"
 
 type Info = Shell.Info
+type CreateInput = Shell.CreateInput & {
+  shell?: string
+}
 
 type Active = {
   // Immutable snapshot; lifecycle updates replace it via immer `produce`.
@@ -52,9 +55,8 @@ type Active = {
  * here; callers (e.g. `ShellTool`) own that association and store the shell ID.
  */
 export interface Interface {
-  readonly name: () => Effect.Effect<string>
   readonly create: <E = never, R = never>(
-    input: Shell.CreateInput,
+    input: CreateInput,
     before?: (input: ShellCreateBefore) => Effect.Effect<void, E, R>,
   ) => Effect.Effect<Shell.Info, E | AppProcess.AppProcessError, R>
   // Currently running commands only; exited shells are retained for get/output but excluded here.
@@ -185,8 +187,6 @@ const layer = () =>
         return session.info
       })
 
-      const name = () => shell.preferred().pipe(Effect.map(ShellSelect.name))
-
       const output = Effect.fnUntraced(function* (id: Shell.ID, input?: Shell.OutputInput) {
         const session = yield* require(id)
         const cursor = input?.cursor ?? 0
@@ -218,7 +218,7 @@ const layer = () =>
       })
 
       const create = Effect.fn("Shell.create")(function* <E = never, R = never>(
-        input: Shell.CreateInput,
+        input: CreateInput,
         before?: (input: ShellCreateBefore) => Effect.Effect<void, E, R>,
       ) {
         const sessionID = input.metadata?.sessionID
@@ -230,7 +230,7 @@ const layer = () =>
           command: input.command,
           cwd: input.cwd ?? location.directory,
           timeout: input.timeout,
-          shell: yield* shell.preferred(),
+          shell: input.shell ?? (yield* shell.resolve({ priority: "config" })),
           env: {
             ...(sessionEnvironment ?? process.env),
             TERM: "xterm-256color",
@@ -383,7 +383,7 @@ const layer = () =>
         return session.info
       })
 
-      return Service.of({ name, create, list, get, wait, timeout, output, remove })
+      return Service.of({ create, list, get, wait, timeout, output, remove })
     }),
   )
 

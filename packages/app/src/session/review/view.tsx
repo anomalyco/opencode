@@ -58,7 +58,7 @@ export function SessionMobileReview(props: { review: SessionReviewModel }) {
   )
 }
 
-export function SessionDesktopReview(props: { review: SessionReviewModel }) {
+export function SessionDesktopReview(props: { review: SessionReviewModel; present?: boolean }) {
   return (
     <Suspense>
       <SessionSidePanel
@@ -79,7 +79,7 @@ export function SessionDesktopReview(props: { review: SessionReviewModel }) {
         fileBrowserState={props.review.panelState}
         activeDiff={props.review.activeFile()}
         focusReviewDiff={props.review.focusFile}
-        reviewSnap={props.review.screen.review.snap()}
+        reviewPresent={props.present}
         size={props.review.screen.size}
         stacked={props.review.screen.side.layout().stacked}
       />

@@ -475,8 +475,14 @@ describe("Bedrock Converse route", () => {
       ])
       const events = response.events.filter((event) => event.type === "tool-input-delta")
       expect(events).toEqual([
-        { type: "tool-input-delta", id: "tool_1", name: "lookup", text: '{"query"' },
-        { type: "tool-input-delta", id: "tool_1", name: "lookup", text: ':"weather"}' },
+        { type: "tool-input-delta", id: "tool_1", name: "lookup", text: '{"query"', input: {} },
+        {
+          type: "tool-input-delta",
+          id: "tool_1",
+          name: "lookup",
+          text: ':"weather"}',
+          input: { query: "weather" },
+        },
       ])
       expect(response.events.at(-1)).toMatchObject({
         type: "finish",
@@ -485,7 +491,7 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
-  it.effect("emits malformed tool input as an unexecuted tool error", () =>
+  it.effect("recovers incomplete tool input at finalization", () =>
     Effect.gen(function* () {
       const body = eventStreamBody(
         ["messageStart", { role: "assistant" }],
@@ -502,10 +508,10 @@ describe("Bedrock Converse route", () => {
       )
       const response = yield* LLMClient.generate(baseRequest).pipe(Effect.provide(fixedBytes(body)))
 
-      expect(response.events.find((event) => event.type === "tool-input-error")).toMatchObject({
+      expect(response.events.find((event) => event.type === "tool-call")).toMatchObject({
         id: "tool_1",
         name: "lookup",
-        raw: '{"query":"partial',
+        input: { query: "partial" },
       })
       expect(response.finishReason).toEqual({ normalized: "tool-calls", raw: "end_turn" })
     }),
@@ -707,6 +713,32 @@ describe("Bedrock Converse route", () => {
           content: [{ toolResult: { toolUseId: "tool_1", content: [{ text: "sunny" }], status: "success" } }],
         },
       ])
+    }),
+  )
+
+  it.effect("ignores unknown normal stream events", () =>
+    Effect.gen(function* () {
+      const body = concat([
+        eventFrame("messageStart", { role: "assistant" }),
+        eventFrame("futureEvent", { message: "Ignore this" }),
+        eventFrame("messageStop", { stopReason: "end_turn" }),
+      ])
+      const response = yield* LLMClient.generate(baseRequest).pipe(Effect.provide(fixedBytes(body)))
+
+      expect(response.finishReason).toEqual({ normalized: "stop", raw: "end_turn" })
+    }),
+  )
+
+  it.effect("fails unknown stream exceptions after message stop", () =>
+    Effect.gen(function* () {
+      const body = concat([
+        eventFrame("messageStart", { role: "assistant" }),
+        eventFrame("messageStop", { stopReason: "end_turn" }),
+        exceptionFrame("futureException", { message: "A future provider failure" }),
+      ])
+      const error = yield* LLMClient.generate(baseRequest).pipe(Effect.provide(fixedBytes(body)), Effect.flip)
+
+      expect(error.reason).toMatchObject({ _tag: "UnknownProvider", message: "A future provider failure" })
     }),
   )
 

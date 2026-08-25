@@ -147,7 +147,14 @@ export function buildLocationServiceMap(
             Layer.provide(LayerNode.compile(location.hoisted)),
           )
         },
-        { idleTimeToLive: (ref) => (existsSync(ref.directory) ? Duration.infinity : Duration.zero) },
+        {
+          // Workspace-placed directories exist only inside the workspace, so a
+          // local stat consults the wrong filesystem. Workspace liveness is
+          // owned by placement; do not probe the sandbox here, which would
+          // provision lazily-idle workspaces.
+          idleTimeToLive: (ref) =>
+            ref.workspaceID !== undefined || existsSync(ref.directory) ? Duration.infinity : Duration.zero,
+        },
       ),
       (inner) => ({
         ...inner,

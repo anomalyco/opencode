@@ -2,21 +2,25 @@ import { $ } from "bun"
 import { describe, expect } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { Effect, Fiber, Layer, Stream } from "effect"
+import { Cause, Effect, Exit, Fiber, Layer, Stream } from "effect"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { AppProcess } from "@opencode-ai/util/process"
 import { Bus } from "@opencode-ai/core/bus"
 import { Location } from "@opencode-ai/core/location"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Vcs } from "@opencode-ai/core/vcs"
+import { VcsGitPlugin } from "@opencode-ai/core/plugin/vcs/git"
+import type { VcsDefinition, VcsDiffInput } from "@opencode-ai/plugin/effect/vcs"
 import { FileSystem } from "@opencode-ai/schema/filesystem"
 import { VcsEvent } from "@opencode-ai/schema/vcs-event"
 import { location } from "./fixture/location"
 import { tmpdir } from "./fixture/tmpdir"
 import { it } from "./lib/effect"
+import { host } from "./plugin/host"
 
 const provide = (directory: string, input: { git?: boolean } = {}) =>
   Effect.provide(
-    LayerNode.compile(LayerNode.group([Vcs.node, Bus.node]), [
+    LayerNode.compile(LayerNode.group([Vcs.node, Bus.node, Location.node, AppProcess.node]), [
       [
         Location.node,
         Layer.succeed(
@@ -41,7 +45,17 @@ const withTmp = <A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>) =>
 const withGit = <A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>) =>
   withTmp((directory) =>
     Effect.promise(() => initRepo(directory)).pipe(
-      Effect.andThen(f(directory).pipe(provide(directory, { git: true }))),
+      Effect.andThen(
+        Effect.gen(function* () {
+          const vcs = yield* Vcs.Service
+          const context = host()
+          yield* VcsGitPlugin.Plugin.effect({
+            ...context,
+            vcs: { ...context.vcs, transform: vcs.transform, reload: vcs.reload },
+          })
+          return yield* f(directory)
+        }).pipe(provide(directory, { git: true })),
+      ),
     ),
   )
 
@@ -58,16 +72,167 @@ async function commitAll(directory: string, message: string) {
   await $`git commit -m ${message}`.cwd(directory).quiet()
 }
 
+const provider = (input: Partial<VcsDefinition> = {}) =>
+  ({
+    id: "custom",
+    name: "Custom VCS",
+    info: () => Effect.succeed({ branch: { current: "feature", default: "main" } }),
+    branches: () => Effect.succeed(["feature", "main"]),
+    status: () => Effect.succeed([{ file: "file.txt", additions: 1, deletions: 0, status: "added" }]),
+    diff: () => Effect.succeed([{ file: "file.txt", patch: "+hello", additions: 1, deletions: 0, status: "added" }]),
+    ...input,
+  }) satisfies VcsDefinition
+
 describe("Vcs", () => {
   it.live("returns empty results outside version control", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
         const vcs = yield* Vcs.Service
         expect(yield* vcs.info()).toEqual({ branch: {} })
+        expect(yield* vcs.branches()).toEqual([])
         expect(yield* vcs.status()).toEqual([])
         expect(yield* vcs.diff("working")).toEqual([])
         expect(yield* vcs.diff("branch")).toEqual([])
       }).pipe(provide(directory)),
+    ),
+  )
+
+  it.live("serves scoped providers and restores the fallback after disposal", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const vcs = yield* Vcs.Service
+        const registration = yield* vcs.transform((draft) => {
+          draft.add(provider())
+          draft.default.set("custom")
+        })
+
+        expect(yield* vcs.info()).toEqual({ branch: { current: "feature", default: "main" } })
+        expect(yield* vcs.branches()).toEqual(["feature", "main"])
+        expect(yield* vcs.status()).toEqual([{ file: "file.txt", additions: 1, deletions: 0, status: "added" }])
+        expect(yield* vcs.diff("working")).toEqual([
+          { file: "file.txt", patch: "+hello", additions: 1, deletions: 0, status: "added" },
+        ])
+
+        yield* registration.dispose
+        expect(yield* vcs.info()).toEqual({ branch: {} })
+        expect(yield* vcs.status()).toEqual([])
+      }).pipe(provide(directory)),
+    ),
+  )
+
+  it.live("automatically selects a provider matching the resolved repository", () =>
+    withGit(() =>
+      Effect.gen(function* () {
+        const vcs = yield* Vcs.Service
+        const registration = yield* vcs.transform((draft) => draft.add(provider({ id: "git" })))
+        expect(yield* vcs.info()).toEqual({ branch: { current: "feature", default: "main" } })
+
+        yield* registration.dispose
+        expect(yield* vcs.info()).toEqual({ branch: { current: "main", default: undefined } })
+      }),
+    ),
+  )
+
+  it.live("passes location scope and bounded diff options to providers", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const observed: VcsDiffInput[] = []
+        const vcs = yield* Vcs.Service
+        yield* vcs.transform((draft) => {
+          draft.add(
+            provider({
+              diff: (input) =>
+                Effect.sync(() => {
+                  observed.push(input)
+                  return [{ file: "file.txt", patch: "+hello", additions: 1, deletions: 0, status: "added" }]
+                }),
+            }),
+          )
+          draft.default.set("custom")
+        })
+
+        yield* vcs.diff("branch", { context: 3 })
+        expect(observed).toEqual([
+          {
+            directory,
+            worktree: directory,
+            canonical: directory,
+            mode: "branch",
+            context: 3,
+            maxOutputBytes: 10_000_000,
+          },
+        ])
+      }).pipe(provide(directory)),
+    ),
+  )
+
+  it.live("validates provider results and bounds oversized patches", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const vcs = yield* Vcs.Service
+        yield* vcs.transform((draft) => {
+          draft.add(
+            provider({
+              status: () => Effect.succeed([{ file: "file.txt", additions: -1, deletions: 0, status: "added" }]),
+              diff: () =>
+                Effect.succeed([
+                  { file: "file.txt", patch: "x".repeat(10_000_001), additions: 1, deletions: 0, status: "added" },
+                ]),
+            }),
+          )
+          draft.default.set("custom")
+        })
+
+        expect(yield* vcs.status()).toEqual([])
+        const rows = yield* vcs.diff("working")
+        expect(rows).toHaveLength(1)
+        expect(Buffer.byteLength(rows[0].patch)).toBeLessThan(1000)
+        expect(rows[0].additions).toBe(1)
+      }).pipe(provide(directory)),
+    ),
+  )
+
+  it.live("preserves provider interruption", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const vcs = yield* Vcs.Service
+        yield* vcs.transform((draft) => {
+          draft.add(provider({ status: () => Effect.never }))
+          draft.default.set("custom")
+        })
+
+        const fiber = yield* Effect.forkChild(vcs.status())
+        yield* Fiber.interrupt(fiber)
+        const exit = yield* Fiber.await(fiber)
+        expect(Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)).toBeTrue()
+      }).pipe(provide(directory)),
+    ),
+  )
+
+  it.live("lists local branches by recent activity", () =>
+    withGit((directory) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(async () => {
+          await fs.writeFile(path.join(directory, "file.txt"), "one\n")
+          await commitAll(directory, "initial")
+          await $`git checkout -b z-recent`.cwd(directory).quiet()
+          await fs.writeFile(path.join(directory, "file.txt"), "two\n")
+          await $`git add -A`.cwd(directory).quiet()
+          await $`git commit -m recent`
+            .cwd(directory)
+            .env({
+              ...process.env,
+              GIT_AUTHOR_DATE: "2030-01-01T00:00:00Z",
+              GIT_COMMITTER_DATE: "2030-01-01T00:00:00Z",
+            })
+            .quiet()
+        })
+        const vcs = yield* Vcs.Service
+        expect(yield* vcs.branches()).toEqual(["z-recent", "main"])
+        expect(yield* vcs.branches({ limit: 1 })).toEqual(["z-recent"])
+        expect(yield* vcs.branches({ search: "MAIN", limit: 1 })).toEqual(["main"])
+        expect(yield* vcs.branches({ search: "*" })).toEqual([])
+      }),
     ),
   )
 

@@ -30,6 +30,7 @@ export const appHandlers = AppRpcs.toLayer(
     const runFork = Effect.runForkWith(yield* Effect.context())
     return AppRpcs.of({
       AppAwaitInitialization: () => background.connection,
+      AppReconnectService: () => background.reconnect,
       AppConsumeInitialDeepLinks: () => Effect.sync(lifecycle.consumeInitialDeepLinks),
       AppGetDefaultServerUrl: () => Effect.sync(getDefaultServerUrl),
       AppSetDefaultServerUrl: ({ url }) => Effect.sync(() => setDefaultServerUrl(url)),

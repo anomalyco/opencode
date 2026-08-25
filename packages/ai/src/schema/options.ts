@@ -153,8 +153,16 @@ export class LanguageModelCompatibility extends Schema.Class<LanguageModelCompat
 )({
   toolSchema: Schema.optional(LanguageModelToolSchemaCompatibility),
   reasoningField: Schema.optional(Schema.String),
+  /** Require every assistant message to include its reasoning field, even when empty. */
+  requireReasoning: Schema.optional(Schema.Boolean),
   maxTokensField: Schema.optional(LanguageModelMaxTokensFieldCompatibility),
   requireFinishReason: Schema.optional(Schema.Boolean),
+  requireAssistantAfterTool: Schema.optional(Schema.Boolean),
+  supportsStore: Schema.optional(Schema.Boolean),
+  supportsUsageInStreaming: Schema.optional(Schema.Boolean),
+  supportsStrictMode: Schema.optional(Schema.Boolean),
+  zaiToolStream: Schema.optional(Schema.Boolean),
+  requireSignature: Schema.optional(Schema.Boolean),
 }) {}
 
 export namespace LanguageModelCompatibility {

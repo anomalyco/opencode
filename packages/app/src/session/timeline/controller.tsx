@@ -11,17 +11,13 @@ import { useSettings } from "@/settings/model"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useTabs } from "@/shell/tabs/tabs"
 import type { SessionModel } from "@/session/model"
+import { removedSessionIDs } from "@/session/session-domain"
 import { useServerSDK } from "@/runtime/server/client"
 import { sessionHref } from "@/shell/routes/session"
 import { sessionTitle } from "@/session/title"
 import { downloadSessionExport, fetchSessionExport, sessionExportFilename } from "@/session/commands/export"
 import { showToast } from "@/shell/notifications/toast"
-import {
-  applyTimelineMessageHandoff,
-  timelineChildTitle,
-  timelineRemovedSessionIDs,
-  visibleTimelineMessages,
-} from "./controller-projection"
+import { applyTimelineMessageHandoff, timelineChildTitle, visibleTimelineMessages } from "./controller-projection"
 import { createTimelineProjection } from "./projection"
 import { useServer } from "@/runtime/server/current"
 import { getSessionMessageHandoff } from "@/session/handoff"
@@ -72,6 +68,14 @@ export function createTimelineController(input: { session: TimelineSessionSource
       input.session.data.info()?.revert?.messageID,
     )
   })
+  const pendingUserMessageIDs = createMemo(() => {
+    const id = input.session.identity.sessionID()
+    return new Set(
+      (id ? data.session.pending.list(id) : []).flatMap((item) =>
+        item.type === "user" && item.delivery === "steer" ? [item.id] : [],
+      ),
+    )
+  })
   const titleValue = createMemo(() => input.session.data.info()?.title)
   const titleLabel = createMemo(() => sessionTitle(titleValue()) ?? language.t("command.session.new"))
   const parentMessages = createMemo(() => {
@@ -101,6 +105,7 @@ export function createTimelineController(input: { session: TimelineSessionSource
     sessionMessages: projectedMessages,
     status: input.session.data.status,
     showReasoningSummaries: settings.general.showReasoningSummaries,
+    pendingUserMessageIDs,
   })
   const [pending, setPending] = createStore({ rename: false })
 
@@ -163,15 +168,15 @@ export function createTimelineController(input: { session: TimelineSessionSource
     const sessions = data.session.list().filter((item) => !item.parentID && !item.time?.archived)
     const index = sessions.findIndex((item) => item.id === id)
     const next = index === -1 ? undefined : (sessions[index + 1] ?? sessions[index - 1])
-    const success = await serverSDK.api.session
-      .remove({ sessionID: id })
+    const removed = removedSessionIDs(data.session.list(), id)
+    const success = await data.session
+      .remove(id)
       .then(() => true)
       .catch((error) => {
         showToast({ title: language.t("session.delete.failed.title"), description: errorMessage(error) })
         return false
       })
     if (!success) return false
-    const removed = timelineRemovedSessionIDs(data.session.list(), id)
     void navigateAfterRemoval(id, session.parentID, next?.id)
     notifySessionTabsRemoved({ server: server.key, directory: sdk().directory, sessionIDs: [...removed] })
     return true

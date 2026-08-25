@@ -7,7 +7,7 @@ import { Protocol } from "../route/protocol.js"
 import { HttpTransport } from "../route/transport/index.js"
 import { LLMRequest, type JsonSchema, type ToolDefinition } from "../schema/index.js"
 import { OpenResponses } from "./open-responses.js"
-import { optionalArray, ProviderShared } from "./shared.js"
+import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
 import { OpenAIImage } from "./utils/openai-image.js"
 import { ResponsesHostedTools } from "./utils/responses-hosted-tools.js"
 import { ToolSchemaProjection } from "./utils/tool-schema.js"
@@ -32,6 +32,40 @@ const OpenAIResponsesImageGenerationTool = Schema.Struct({
   size: Schema.optional(OpenAIImage.Size),
 })
 
+const OpenAIResponsesHostedToolItem = Schema.Union([
+  Schema.StructWithRest(
+    Schema.Struct({
+      type: Schema.tag("computer_call"),
+      id: Schema.String,
+      status: Schema.optional(Schema.String),
+      call_id: Schema.optional(Schema.String),
+      action: optionalNull(JsonObject),
+      pending_safety_checks: Schema.optional(Schema.Array(JsonObject)),
+    }),
+    [JsonObject],
+  ),
+  Schema.StructWithRest(
+    Schema.Struct({
+      type: Schema.tag("web_search_preview_call"),
+      id: Schema.String,
+      status: Schema.optional(Schema.String),
+      action: optionalNull(JsonObject),
+    }),
+    [JsonObject],
+  ),
+  Schema.StructWithRest(
+    Schema.Struct({
+      type: Schema.tag("image_generation_call"),
+      id: Schema.String,
+      status: Schema.optional(Schema.String),
+      result: optionalNull(Schema.String),
+      output_format: Schema.optional(Schema.Literals(["png", "jpeg", "webp"])),
+      revised_prompt: optionalNull(Schema.String),
+    }),
+    [JsonObject],
+  ),
+])
+
 const OpenAIResponsesTools = Schema.Union([OpenResponses.Tool, OpenAIResponsesImageGenerationTool])
 
 const OpenAIResponsesToolChoice = Schema.Union([
@@ -41,6 +75,7 @@ const OpenAIResponsesToolChoice = Schema.Union([
 
 const OpenAIResponsesCoreFields = {
   ...OpenResponses.coreFields,
+  input: Schema.Array(Schema.Union([OpenResponses.InputItem, OpenAIResponsesHostedToolItem])),
   tools: optionalArray(OpenAIResponsesTools),
   tool_choice: Schema.optional(OpenAIResponsesToolChoice),
 }
@@ -51,9 +86,28 @@ const OpenAIResponsesBody = Schema.Struct({
 })
 export type OpenAIResponsesBody = Schema.Schema.Type<typeof OpenAIResponsesBody>
 
+// Replayed items are paired with stored server state by id, so a foreign or
+// synthetic token can fail request validation even when `call_id` pairing is
+// intact. Only resend ids in each item kind's own grammar; hosted tool
+// items keep generic validation because every hosted tool mints its own
+// prefix. The same allowlist approach codex uses before resending history
+// (codex-rs core/src/client.rs, `prepare_response_items_for_request`).
+const ITEM_ID_PREFIXES: Record<OpenResponses.ItemKind, ReadonlyArray<string>> = {
+  message: ["msg_"],
+  reasoning: ["rs_"],
+  "function-call": ["fc_"],
+  // Every hosted tool mints its own id prefix, so items keep generic validation.
+  "hosted-tool": [],
+}
+
 const extension = {
   id: ADAPTER,
   name: NAME,
+  lowerHostedToolItem: (item: unknown) => (Schema.is(OpenAIResponsesHostedToolItem)(item) ? item : undefined),
+  acceptsItemID: (kind: OpenResponses.ItemKind, id: string) => {
+    const prefixes = ITEM_ID_PREFIXES[kind]
+    return prefixes.length === 0 || prefixes.some((prefix) => id.startsWith(prefix))
+  },
 } satisfies OpenResponses.Extension
 
 const nativeImageToolInput = (tool: ToolDefinition) => {
@@ -86,14 +140,18 @@ const lowerToolChoice = (toolChoice: NonNullable<LLMRequest["toolChoice"]>, tool
         : { type: "function" as const, name },
   })
 
+const decodeBody = ProviderShared.validateWith(Schema.decodeUnknownEffect(OpenAIResponsesBody))
+
 const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request: LLMRequest) {
   const body = yield* OpenResponses.fromRequestWithExtension(
     LLMRequest.update(request, { tools: [], toolChoice: undefined }),
     extension,
   )
   const toolSchemaCompatibility = request.model.compatibility?.toolSchema
-  return {
+  const parallelToolCalls = OpenResponses.resolveParallelToolCalls(request)
+  return yield* decodeBody({
     ...body,
+    ...(parallelToolCalls === undefined ? {} : { parallel_tool_calls: parallelToolCalls }),
     tools:
       request.tools.length === 0
         ? undefined
@@ -102,7 +160,7 @@ const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request:
           ),
     tool_choice:
       body.tool_choice ?? (request.toolChoice ? yield* lowerToolChoice(request.toolChoice, request.tools) : undefined),
-  } satisfies OpenAIResponsesBody
+  })
 })
 
 const hostedToolResult = Effect.fn("OpenAIResponses.hostedToolResult")(function* (item: ResponsesHostedTools.Item) {
@@ -134,23 +192,20 @@ const HOSTED_TOOLS = {
     name: "code_interpreter",
     input: (item) => ({ code: item.code, container_id: item.container_id }),
   },
-  computer_use_call: { name: "computer_use", input: (item) => item.action ?? {} },
+  computer_call: { name: "computer_use", input: (item) => item.action ?? {} },
   image_generation_call: { name: "image_generation", input: () => ({}), result: hostedToolResult },
   mcp_call: {
     name: "mcp",
     input: (item) => ({ server_label: item.server_label, name: item.name, arguments: item.arguments }),
   },
-  local_shell_call: { name: "local_shell", input: (item) => item.action ?? {} },
 } as const satisfies ResponsesHostedTools.Definitions
 
 const step = (state: OpenResponses.ParserState, event: OpenResponses.Event) => {
-  if (event.type === "response.reasoning_text.delta" || event.type === "response.reasoning_summary.delta")
+  if (event.type === "response.reasoning_text.delta")
     return event.item_id
-      ? Effect.succeed(OpenResponses.onReasoningDelta(state, event, event.item_id))
-      : ProviderShared.eventError(ADAPTER, `${event.type} is missing item_id`)
-  if (event.type === "response.reasoning_text.done" || event.type === "response.reasoning_summary.done")
-    return event.item_id
-      ? Effect.succeed(OpenResponses.onReasoningDone(state, event))
+      ? Effect.succeed(
+          OpenResponses.onReasoningDelta(state, event, OpenResponses.outputItemID(state, event) ?? event.item_id),
+        )
       : ProviderShared.eventError(ADAPTER, `${event.type} is missing item_id`)
   if (event.type === "response.output_item.done" && event.item && ResponsesHostedTools.isItem(event.item, HOSTED_TOOLS))
     return ResponsesHostedTools.onDone(state, event.item, HOSTED_TOOLS)
@@ -191,7 +246,7 @@ export const route = Route.make({
   endpoint,
   auth,
   transport,
-  defaults: { providerOptions: { store: false } },
+  defaults: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
 })
 
 export * as OpenAIResponses from "./openai-responses.js"

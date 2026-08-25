@@ -1,7 +1,7 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { Flock } from "@opencode-ai/util/flock"
 import { Global } from "@opencode-ai/util/global"
-import { Effect, FileSystem, Option } from "effect"
+import { Effect, FileSystem, Option, Schema } from "effect"
 import { expect, test } from "bun:test"
 import { parse } from "jsonc-parser"
 import path from "path"
@@ -16,6 +16,67 @@ function run<A, E>(directory: string, effect: Effect.Effect<A, E, Config.Service
     ),
   )
 }
+
+test("generates reusable keybind schemas and preserves descriptions and numeric constraints", () => {
+  const document = Schema.toJsonSchemaDocument(Config.Info)
+  expect(document).toHaveProperty(["definitions", "TuiKeybind.BindingValue"])
+  expect(document).toHaveProperty(["schema", "properties", "keybinds", "anyOf", 0, "properties", "app.exit"], {
+    anyOf: [{ $ref: "#/$defs/TuiKeybind.BindingValue" }, { type: "null" }],
+    description: "Exit the application",
+  })
+  expect(document).toHaveProperty(["schema", "properties", "scroll", "anyOf", 0, "properties", "speed", "anyOf", 0], {
+    type: "number",
+    minimum: 0.001,
+  })
+  expect(document).toHaveProperty(
+    ["schema", "properties", "attention", "anyOf", 0, "properties", "volume", "anyOf", 0],
+    { type: "number", minimum: 0, maximum: 1 },
+  )
+})
+
+test("includes the published schema when creating cli.json", async () => {
+  const directory = await Bun.$`mktemp -d`.text().then((value) => value.trim())
+
+  try {
+    const config = await run(
+      directory,
+      Effect.gen(function* () {
+        const service = yield* Config.Service
+        return yield* service.update((draft) => {
+          draft.animations = false
+        })
+      }),
+    )
+
+    expect(config).toEqual({ $schema: "https://opencode.ai/v2/cli.json", animations: false })
+    expect(await Bun.file(path.join(directory, "cli.json")).json()).toEqual(config)
+  } finally {
+    await Bun.$`rm -rf ${directory}`
+  }
+})
+
+test("preserves the schema in an existing cli.json", async () => {
+  const directory = await Bun.$`mktemp -d`.text().then((value) => value.trim())
+  const file = path.join(directory, "cli.json")
+  await Bun.write(file, JSON.stringify({ $schema: "https://opencode.ai/v2/cli.json", animations: true }))
+
+  try {
+    const config = await run(
+      directory,
+      Effect.gen(function* () {
+        const service = yield* Config.Service
+        return yield* service.update((draft) => {
+          draft.animations = false
+        })
+      }),
+    )
+
+    expect(config).toEqual({ $schema: "https://opencode.ai/v2/cli.json", animations: false })
+    expect(await Bun.file(file).json()).toEqual(config)
+  } finally {
+    await Bun.$`rm -rf ${directory}`
+  }
+})
 
 test("migrates tui and kv config into cli.json", async () => {
   const directory = await Bun.$`mktemp -d`.text().then((value) => value.trim())
@@ -73,6 +134,7 @@ test("migrates tui and kv config into cli.json", async () => {
     )
 
     expect(config).toMatchObject({
+      $schema: "https://opencode.ai/v2/cli.json",
       theme: { name: "legacy", mode: "light" },
       keybinds: {
         leader: "ctrl+o",
@@ -128,8 +190,14 @@ test("migrates before the first update and does not remigrate afterward", async 
       }),
     )
 
-    expect(config).toEqual({ theme: { name: "legacy" }, animations: false, mouse: false })
+    expect(config).toEqual({
+      $schema: "https://opencode.ai/v2/cli.json",
+      theme: { name: "legacy" },
+      animations: false,
+      mouse: false,
+    })
     expect(await Bun.file(path.join(directory, "cli.json")).json()).toEqual({
+      $schema: "https://opencode.ai/v2/cli.json",
       theme: { name: "legacy" },
       animations: false,
       mouse: false,

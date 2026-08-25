@@ -263,33 +263,6 @@
   }
 }
 
-[data-component="compaction-part"] {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-
-  [data-slot="compaction-part-divider"] {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 10px 0;
-    width: 100%;
-  }
-
-  [data-slot="compaction-part-line"] {
-    flex: 1 1 auto;
-    height: 1px;
-    background: var(--v2-border-border-base);
-  }
-
-  [data-slot="compaction-part-label"] {
-    flex: 0 0 auto;
-    white-space: nowrap;
-    text-align: center;
-  }
-}
-
 [data-component="reasoning-part"] {
   width: 100%;
   color: var(--v2-text-text-muted);
@@ -701,14 +674,59 @@
 }
 
 [data-component="context-tool-group-list"] {
-  padding: 0;
+  /* The 28px compact trigger centers a 16px line box, already leaving 6px above this list. */
+  padding: 4px 0 0 12px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  /* 16px line boxes with 13px gaps reproduce the design's 29px row pitch for 13px solid rows. */
+  gap: 13px;
 
   [data-slot="context-tool-group-item"] {
     min-width: 0;
     padding: 0;
+    opacity: 0.8;
+
+    [data-slot="basic-tool-tool-info-structured"] {
+      gap: 6px;
+    }
+
+    [data-slot="basic-tool-tool-title"],
+    [data-slot="basic-tool-tool-subtitle"],
+    [data-slot="basic-tool-tool-arg"],
+    [data-slot="context-tool-group-matches"] {
+      font-family: var(--v2-font-family-sans);
+      font-size: 13px;
+      font-weight: 440;
+      line-height: var(--line-height-compact);
+      letter-spacing: -0.04px;
+    }
+
+    [data-slot="basic-tool-tool-subtitle"] {
+      color: var(--v2-text-text-faint);
+    }
+
+    [data-slot="context-tool-group-dot"] {
+      flex-shrink: 0;
+      width: 6px;
+      height: 6px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+
+      &::before {
+        content: "";
+        width: 2.25px;
+        height: 2.25px;
+        border-radius: 50%;
+        background-color: var(--v2-icon-icon-muted);
+      }
+    }
+
+    [data-slot="context-tool-group-matches"] {
+      flex-shrink: 0;
+      white-space: nowrap;
+      color: var(--v2-text-text-faint);
+    }
   }
 }
 

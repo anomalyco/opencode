@@ -33,6 +33,7 @@ import { Session } from "@opencode-ai/core/session"
 import { Snapshot } from "@opencode-ai/core/snapshot"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionContext } from "@opencode-ai/core/session/context"
+import { SessionCompaction } from "@opencode-ai/core/session/compaction"
 import { SessionInbox } from "@opencode-ai/core/session/inbox"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionModelRequest } from "@opencode-ai/core/session/model-request"
@@ -458,6 +459,7 @@ const it = testEffect(
       Config.node,
       Snapshot.node,
       SessionContext.node,
+      SessionCompaction.node,
       SessionModelRequest.node,
       SessionRunnerLLM.node,
       SessionExecution.node,
@@ -897,30 +899,38 @@ const verifyPartialFlushOnInterruption = (kind: FragmentKind) =>
     ])
   })
 
+const prepareTitleGeneration = Effect.gen(function* () {
+  const agents = yield* Agent.Service
+  const { db } = yield* Database.Service
+  yield* db.update(SessionTable).set({ title: null }).where(eq(SessionTable.id, sessionID)).run().pipe(Effect.orDie)
+  yield* agents.transform((draft) =>
+    draft.update(Agent.ID.make("title"), (agent) => {
+      agent.mode = "primary"
+      agent.hidden = true
+      agent.system = "Generate a title."
+    }),
+  )
+})
+
+const watchRename = Effect.fnUntraced(function* (sessionID: Session.ID) {
+  const bus = yield* Bus.Service
+  return yield* bus.subscribe(SessionEvent.Renamed).pipe(
+    Stream.filter((event) => event.data.sessionID === sessionID),
+    Stream.take(1),
+    Stream.runDrain,
+    Effect.forkScoped({ startImmediately: true }),
+  )
+})
+
 describe("SessionRunnerLLM", () => {
   it.effect("generates the title while the first model step is still running", () =>
     Effect.gen(function* () {
       const session = yield* setup
-      const agents = yield* Agent.Service
-      const { db } = yield* Database.Service
-      yield* db.update(SessionTable).set({ title: null }).where(eq(SessionTable.id, sessionID)).run().pipe(Effect.orDie)
-      yield* agents.transform((draft) =>
-        draft.update(Agent.ID.make("title"), (agent) => {
-          agent.mode = "primary"
-          agent.hidden = true
-          agent.system = "Generate a title."
-        }),
-      )
+      yield* prepareTitleGeneration
 
       yield* admit(session, "First prompt")
       yield* TestLLM.push(TestLLM.text("Generated title", "text-title"), Stream.never)
-      const bus = yield* Bus.Service
-      const renamed = yield* bus.subscribe(SessionEvent.Renamed).pipe(
-        Stream.filter((event) => event.data.sessionID === sessionID),
-        Stream.take(1),
-        Stream.runDrain,
-        Effect.forkScoped({ startImmediately: true }),
-      )
+      const renamed = yield* watchRename(sessionID)
       const runner = yield* SessionRunner.Service
       const fiber = yield* runner.drain({ sessionID, force: true }).pipe(Effect.forkChild)
       yield* Fiber.join(renamed)
@@ -930,19 +940,61 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("does not automatically replace an existing session title", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      yield* prepareTitleGeneration
+      yield* session.rename({ sessionID, title: "Manual title" })
+      yield* admit(session, "Follow-up prompt")
+      yield* TestLLM.push(TestLLM.text("Assistant response", "text-response"))
+
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(1)
+      expect((yield* session.get(sessionID)).title).toBe("Manual title")
+    }),
+  )
+
+  it.effect("coalesces title generation while a request is active", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      yield* prepareTitleGeneration
+
+      const titleStarted = yield* Deferred.make<void>()
+      const releaseTitle = yield* Deferred.make<void>()
+      yield* Effect.gen(function* () {
+        yield* admit(session, "First prompt")
+        yield* TestLLM.push(
+          Stream.unwrap(
+            Deferred.succeed(titleStarted, undefined).pipe(
+              Effect.andThen(Deferred.await(releaseTitle)),
+              Effect.as(Stream.fromIterable(TestLLM.text("Generated title", "text-title"))),
+            ),
+          ),
+          TestLLM.text("First response", "text-first"),
+          TestLLM.text("Second response", "text-second"),
+        )
+
+        const first = yield* session.resume(sessionID).pipe(Effect.forkChild)
+        yield* Deferred.await(titleStarted).pipe(Effect.timeout("5 seconds"))
+        expect(requests[0]?.system.map((part) => part.text)).toContain("Generate a title.")
+        yield* Fiber.join(first)
+        yield* admit(session, "Second prompt")
+        yield* session.resume(sessionID)
+
+        expect(requests).toHaveLength(3)
+        const renamed = yield* watchRename(sessionID)
+        yield* Deferred.succeed(releaseTitle, undefined)
+        yield* Fiber.join(renamed)
+        expect((yield* session.get(sessionID)).title).toBe("Generated title")
+      }).pipe(Effect.ensuring(Deferred.succeed(releaseTitle, undefined)))
+    }),
+  )
+
   it.effect("retries title generation from the first prompt after title and execution failures", () =>
     Effect.gen(function* () {
       const session = yield* setup
-      const agents = yield* Agent.Service
-      const { db } = yield* Database.Service
-      yield* db.update(SessionTable).set({ title: null }).where(eq(SessionTable.id, sessionID)).run().pipe(Effect.orDie)
-      yield* agents.transform((draft) =>
-        draft.update(Agent.ID.make("title"), (agent) => {
-          agent.mode = "primary"
-          agent.hidden = true
-          agent.system = "Generate a title."
-        }),
-      )
+      yield* prepareTitleGeneration
 
       yield* admit(session, "First prompt")
       yield* TestLLM.push(Stream.fail(invalidRequest()), Stream.fail(invalidRequest()))
@@ -961,13 +1013,7 @@ describe("SessionRunnerLLM", () => {
       yield* Effect.yieldNow
       expect((yield* session.get(sessionID)).title).toBeUndefined()
 
-      const bus = yield* Bus.Service
-      const renamed = yield* bus.subscribe(SessionEvent.Renamed).pipe(
-        Stream.filter((event) => event.data.sessionID === sessionID),
-        Stream.take(1),
-        Stream.runCollect,
-        Effect.forkScoped({ startImmediately: true }),
-      )
+      const renamed = yield* watchRename(sessionID)
       yield* admit(session, "Third prompt")
       yield* TestLLM.push(
         TestLLM.text("Generated title", "text-title"),
@@ -2513,6 +2559,34 @@ describe("SessionRunnerLLM", () => {
         { type: "compaction" },
         { type: "assistant", finish: "stop" },
       ])
+    }),
+  )
+
+  it.effect("does not recover provider context overflow when automatic compaction is disabled", () =>
+    Effect.gen(function* () {
+      const session = yield* setupOverflowRecovery
+      const compaction = yield* SessionCompaction.Service
+      yield* compaction.transform((draft) => draft.configure({ auto: false }))
+      yield* TestLLM.push(
+        [LLMEvent.providerError({ message: "prompt too long", classification: "context-overflow" })],
+        TestLLM.text("Must not compact", "text-unexpected-summary"),
+        TestLLM.text("Must not retry", "text-unexpected-retry"),
+      )
+      yield* admit(session, "Continue")
+      expect((yield* session.resume(sessionID).pipe(Effect.flip)).message).toBe("prompt too long")
+
+      expect(requests).toHaveLength(1)
+      expect(yield* session.context(sessionID)).toContainEqual(
+        expect.objectContaining({
+          type: "assistant",
+          finish: "error",
+          error: expect.objectContaining({ message: "prompt too long" }),
+        }),
+      )
+      expect(yield* session.context(sessionID)).not.toContainEqual(expect.objectContaining({ type: "compaction" }))
+      expect(yield* recordedEventTypes(sessionID)).not.toContain(
+        Bus.versionedType(SessionEvent.Compaction.Started.type, 1),
+      )
     }),
   )
 

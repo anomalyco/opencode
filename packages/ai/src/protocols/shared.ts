@@ -24,6 +24,17 @@ export const JsonObject = Schema.Record(Schema.String, Schema.Unknown)
 export const optionalArray = <const S extends Schema.Top>(schema: S) => Schema.optional(Schema.Array(schema))
 export const optionalNull = <const S extends Schema.Top>(schema: S) => Schema.optional(Schema.NullOr(schema))
 
+export const OPENAI_PROMPT_CACHE_KEY_MAX_LENGTH = 64
+
+// OpenAI limits `prompt_cache_key` to 64 chars; DeepSeek and Zai inherit the same
+// limit via their OpenAI-compatible APIs. Clamp with unicode-aware slicing.
+export const promptCacheKey = (request: LLMRequest): string | undefined => {
+  if (request.cache === "none" || request.promptCacheKey === undefined) return undefined
+  const chars = Array.from(request.promptCacheKey)
+  if (chars.length <= OPENAI_PROMPT_CACHE_KEY_MAX_LENGTH) return request.promptCacheKey
+  return chars.slice(0, OPENAI_PROMPT_CACHE_KEY_MAX_LENGTH).join("")
+}
+
 /**
  * Streaming tool-call accumulator. Adapters that build a tool call across
  * multiple `tool-input-delta` chunks store the partial JSON input string here

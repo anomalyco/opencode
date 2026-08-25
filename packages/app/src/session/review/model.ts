@@ -124,11 +124,12 @@ export function createSessionReview(input: {
       queryKey: [server.scope, "session-details", input.session.workspace.directory()],
     })
   }, 100)
-  onCleanup(
-    location().event.listen((event) => {
+  createEffect(() => {
+    const stop = location().event.listen((event) => {
       if (event.type === "filesystem.changed") refresh()
-    }),
-  )
+    })
+    onCleanup(stop)
+  })
   createEffect(
     on(
       () => input.screen.review.open() || mobileChanges(),

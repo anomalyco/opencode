@@ -24,7 +24,10 @@ import { AbsolutePath, type DeepMutable } from "../schema.js"
 import { Skill } from "../skill.js"
 import { Tool } from "../tool.js"
 import { Workspace } from "../workspace.js"
+import { Vcs } from "../vcs.js"
 import { WebSearch } from "../websearch.js"
+import { Generate } from "../generate.js"
+import { Permission } from "../permission.js"
 import { PluginHooks } from "./hooks.js"
 import type { Interface } from "../plugin.js"
 
@@ -43,7 +46,10 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
   const reference = yield* Reference.Service
   const skill = yield* Skill.Service
   const tools = yield* Tool.Service
+  const vcs = yield* Vcs.Service
   const websearch = yield* WebSearch.Service
+  const generate = yield* Generate.Service
+  const permission = yield* Permission.Service
   const hooks = yield* PluginHooks.Service
   const runtime = yield* PluginRuntime.Service
   const locationInfo = () =>
@@ -186,6 +192,9 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
     event: {
       subscribe: () => bus.subscribe().pipe(Stream.filter(EventManifest.isServer)),
     },
+    generate: {
+      text: (input) => generate.text(input).pipe(Effect.map((text) => ({ text }))),
+    },
     integration: {
       list: () => response(integration.list()),
       get: (input) => response(integration.get(Integration.ID.make(input.integrationID))),
@@ -311,6 +320,30 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
           })
         }),
     },
+    permission: {
+      hook: (name, callback) => hooks.register("permission", name, callback),
+      list: (input) => permission.forSession(input.sessionID),
+      get: (input) =>
+        permission
+          .get(input.requestID)
+          .pipe(
+            Effect.flatMap((request) =>
+              request?.sessionID === input.sessionID
+                ? Effect.succeed(request)
+                : Effect.fail(new Error(`Permission request not found: ${input.requestID}`)),
+            ),
+          ),
+      reply: (input) =>
+        permission
+          .get(input.requestID)
+          .pipe(
+            Effect.flatMap((request) =>
+              request?.sessionID === input.sessionID
+                ? permission.reply({ requestID: input.requestID, reply: input.reply, message: input.message })
+                : Effect.fail(new Error(`Permission request not found: ${input.requestID}`)),
+            ),
+          ),
+    },
     plugin: {
       list: () => response(plugin.list()),
     },
@@ -353,6 +386,14 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
           )
           .pipe(Effect.orDie, Effect.as({ dispose: Effect.void })),
       hook: (name, callback) => hooks.register("tool", name, callback),
+    },
+    vcs: {
+      get: () => response(vcs.info()),
+      branches: (input) => response(vcs.branches({ search: input?.search, limit: input?.limit })),
+      status: () => response(vcs.status()),
+      diff: (input) => response(vcs.diff(input.mode, { context: input.context })),
+      transform: vcs.transform,
+      reload: vcs.reload,
     },
     websearch: {
       providers: () => response(websearch.providers()),
@@ -402,8 +443,12 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
       command: runtime.session.command,
       rename: runtime.session.rename,
       synthetic: runtime.session.synthetic,
-      interrupt: (input) => runtime.session.interrupt(input.sessionID),
+      interrupt: (input) =>
+        runtime.session
+          .interrupt(input.sessionID, { continue: input.continue })
+          .pipe(Effect.map((interrupted) => ({ interrupted }))),
       wait: (input) => runtime.session.wait(input.sessionID),
+      context: (input) => runtime.session.context(input.sessionID),
     },
   } satisfies Plugin.Context
 })

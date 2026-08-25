@@ -1,0 +1,1242 @@
+---
+title: "Effect"
+---
+
+`@opencode-ai/plugin/effect` is the Effect-native version of the OpenCode plugin API. Its context operations return
+Effects or Streams, callbacks return Effects, and plugin lifetime is represented by `Scope`. Install `effect` with the
+plugin package.
+
+```sh
+bun add @opencode-ai/plugin@beta effect
+```
+
+Export an Effect plugin from `.opencode/plugins/` to load it automatically.
+
+```ts title=".opencode/plugins/concise.ts"
+import { Plugin } from "@opencode-ai/plugin/effect"
+import { Effect } from "effect"
+
+export default Plugin.define({
+  id: "example",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      const storage = ctx.storage
+      yield* storage.set("loaded", true)
+    }),
+})
+```
+
+Published packages and files outside `.opencode/plugins/` use the same `plugins` configuration as other server
+plugins.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": [
+    "opencode-acme-effect-plugin",
+    "opencode-acme-effect-plugin@1.2.0",
+    "@acme/opencode-effect-plugin",
+    "./plugins/local-effect.ts",
+    {
+      "package": "@acme/opencode-effect-plugin",
+      "options": { "agent": "reviewer", "strict": true }
+    }
+  ]
+}
+```
+
+See [Configure plugins](/plugins) for enablement, package resolution, and configuration precedence.
+
+```ts title="plugins/local-effect.ts"
+import { Plugin } from "@opencode-ai/plugin/effect"
+import { Effect } from "effect"
+
+export default Plugin.define({
+  id: "local-effect",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      yield* Effect.logInfo("Effect plugin loaded", { version: ctx.app.version })
+    }),
+})
+```
+
+## Lifecycle
+
+The `effect` runs when the plugin loads. Its scope closes when the plugin reloads or unloads, so registrations, scoped
+fibers, and finalizers are released together.
+
+```ts
+import { Plugin } from "@opencode-ai/plugin/effect"
+import { Effect } from "effect"
+
+export default Plugin.define({
+  id: "lifecycle",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      yield* Effect.logInfo("loaded", { version: ctx.app.version })
+      yield* Effect.addFinalizer(() => Effect.logInfo("unloaded"))
+    }),
+})
+```
+
+Use scoped fibers for background work. The plugin scope interrupts the fiber during cleanup.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const storage = ctx.storage
+    yield* Effect.repeat(
+      storage.set("heartbeat", { time: Date.now() }),
+      { schedule: Schedule.spaced("1 minute") },
+    ).pipe(Effect.forkScoped)
+  }),
+```
+
+### Context
+
+The context exposes the Effect client for the connected OpenCode server plus plugin-only transforms, hooks, storage,
+reloads, and options. It does not expose OpenCode's private Core services.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const plugins = ctx.plugin
+    const active = yield* plugins.list().pipe(Effect.orDie)
+    yield* Effect.logInfo("active plugins", { count: active.data.length })
+  }),
+```
+
+The plugin definition and complete context are declared as follows.
+
+```ts
+interface Context {
+  readonly app: App
+  readonly options: PluginOptions
+  readonly agent: AgentDomain
+  readonly catalog: CatalogDomain
+  readonly command: CommandDomain
+  readonly event: EventDomain
+  readonly integration: IntegrationDomain
+  readonly mcp: MCPDomain
+  readonly plugin: PluginApi<unknown>
+  readonly reference: ReferenceDomain
+  readonly session: SessionDomain
+  readonly shell: ShellDomain
+  readonly skill: SkillDomain
+  readonly storage: StorageDomain
+  readonly tool: ToolDomain
+  readonly vcs: VcsDomain
+  readonly websearch: WebSearchDomain
+}
+
+interface Plugin<R = Scope.Scope> {
+  readonly id: string
+  readonly tui?: boolean
+  readonly effect: (context: Context) => Effect.Effect<void, never, R>
+}
+```
+
+### Options
+
+Pass options with the object form in `opencode.json(c)`.
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": [
+    {
+      "package": "./plugins/company-effect.ts",
+      "options": { "strict": true }
+    }
+  ]
+}
+```
+
+Read options from `ctx.options`. Narrow unknown values before use.
+
+```ts title="plugins/company-effect.ts"
+import { Plugin } from "@opencode-ai/plugin/effect"
+import { Effect } from "effect"
+
+export default Plugin.define({
+  id: "company",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      const strict = ctx.options.strict === true
+      yield* Effect.logInfo("company plugin configured", { strict })
+    }),
+})
+```
+
+## Transforms
+
+Transforms synchronously edit a mutable draft. OpenCode applies transforms in plugin order, so later transforms see
+earlier changes. Yielding the registration keeps it in the plugin scope.
+
+```ts title="plugins/models-effect.ts"
+import { Plugin } from "@opencode-ai/plugin/effect"
+import { Effect } from "effect"
+
+export default Plugin.define({
+  id: "company.models",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      const catalog = ctx.catalog
+      yield* catalog.transform((draft) => {
+        draft.model.update("acme", "reasoner", (model) => {
+          model.name = "Acme Reasoner"
+          model.cost = [{ input: 2, output: 12, cache: { read: 0.2, write: 2 } }]
+        })
+      })
+    }),
+})
+```
+
+A later transform can enforce policy across the composed catalog.
+
+```ts title="plugins/model-budget-effect.ts"
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const catalog = ctx.catalog
+    yield* catalog.transform((draft) => {
+      for (const provider of draft.provider.list()) {
+        for (const model of provider.models.values()) {
+          if (model.cost.some((tier) => tier.output > 20)) {
+            draft.model.remove(model.providerID, model.id)
+          }
+        }
+      }
+    })
+  }),
+```
+
+Call `reload` when external state used by a transform changes. Reload replays every transform in order.
+
+```ts title="plugins/models-effect.ts"
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const catalog = ctx.catalog
+    const state = { models: yield* loadFromSource() }
+
+    yield* catalog.transform((draft) => {
+      for (const item of state.models) {
+        draft.model.update(item.providerID, item.id, (model) => {
+          model.name = item.name
+        })
+      }
+    })
+
+    yield* Effect.repeat(
+      Effect.gen(function* () {
+        state.models = yield* loadFromSource()
+        yield* catalog.reload()
+      }),
+      { schedule: Schedule.spaced("1 minute") },
+    ).pipe(Effect.forkScoped)
+  }),
+```
+
+## API
+
+### Agent
+
+Read all agents or fetch one by ID. Client responses include the resolved location and schema data.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const agent = ctx.agent
+    const agents = yield* agent.list().pipe(Effect.orDie)
+    const build = yield* agent.get({ agentID: Agent.ID.make("build") }).pipe(Effect.orDie)
+    yield* Effect.logInfo("agents", { count: agents.data.length, build: build.data.name })
+  }),
+```
+
+Transform or reload agents.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const agent = ctx.agent
+    yield* agent.transform((draft) => {
+      draft.default("build")
+      draft.update("build", (item) => (item.description = "Builds features and fixes bugs"))
+      draft.remove("legacy")
+    })
+    yield* agent.reload()
+  }),
+```
+
+Schema: [`Agent.Info`](/api#schema-Agent.Info).
+
+```ts
+interface AgentDraft {
+  list(): readonly Types.DeepMutable<Agent.Info>[]
+  get(id: string): Types.DeepMutable<Agent.Info> | undefined
+  default(id: string | undefined): void
+  update(id: string, update: (agent: Types.DeepMutable<Agent.Info>) => void): void
+  remove(id: string): void
+}
+
+interface AgentDomain extends AgentApi<unknown> {
+  readonly transform: Transform<AgentDraft>
+  readonly reload: () => Effect.Effect<void>
+}
+```
+
+### Catalog
+
+Read providers, models, and the default model.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const catalog = ctx.catalog
+    const providers = yield* catalog.provider.list().pipe(Effect.orDie)
+    const anthropic = yield* catalog.provider.get({ providerID: Provider.ID.make("anthropic") }).pipe(Effect.orDie)
+    const models = yield* catalog.model.list().pipe(Effect.orDie)
+    const selected = yield* catalog.model.default().pipe(Effect.orDie)
+    yield* Effect.logInfo("catalog", {
+      providers: providers.data.length,
+      models: models.data.length,
+      anthropic: anthropic.data.name,
+      selected: selected.data?.name,
+    })
+  }),
+```
+
+Transform providers and models, then reload after source data changes.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const catalog = ctx.catalog
+    yield* catalog.transform((draft) => {
+      draft.provider.update("anthropic", (provider) => (provider.name = "Anthropic"))
+      draft.model.update("anthropic", "claude-sonnet-4-5", (model) => (model.name = "Claude Sonnet 4.5"))
+      draft.model.default.set("anthropic", "claude-sonnet-4-5")
+      draft.model.remove("anthropic", "legacy-model")
+      draft.provider.remove("legacy-provider")
+    })
+    yield* catalog.reload()
+  }),
+```
+
+Schemas: [`Provider.Info`](/api#schema-Provider.Info), [`Model.Info`](/api#schema-Model.Info).
+
+```ts
+interface CatalogProviderRecord {
+  readonly provider: Types.DeepMutable<Provider.Info>
+  readonly models: ReadonlyMap<string, Types.DeepMutable<Model.Info>>
+}
+
+interface CatalogDraft {
+  readonly provider: {
+    list(): readonly CatalogProviderRecord[]
+    get(providerID: string): CatalogProviderRecord | undefined
+    update(providerID: string, update: (provider: Types.DeepMutable<Provider.Info>) => void): void
+    remove(providerID: string): void
+  }
+  readonly model: {
+    get(providerID: string, modelID: string): Types.DeepMutable<Model.Info> | undefined
+    update(providerID: string, modelID: string, update: (model: Types.DeepMutable<Model.Info>) => void): void
+    remove(providerID: string, modelID: string): void
+    readonly default: {
+      get(): { providerID: string; modelID: string } | undefined
+      set(providerID: string, modelID: string): void
+    }
+  }
+}
+
+interface CatalogDomain extends CatalogApi<unknown> {
+  readonly transform: Transform<CatalogDraft>
+  readonly reload: () => Effect.Effect<void>
+}
+```
+
+### Commands
+
+Read commands available at the current location.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const command = ctx.command
+    const commands = yield* command.list().pipe(Effect.orDie)
+    yield* Effect.logInfo("commands", { names: commands.data.map((item) => item.name) })
+  }),
+```
+
+The current command transform is add-only. An executor receives the session, prompt attachments, and delivery mode.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const command = ctx.command
+    const session = ctx.session
+    yield* command.transform((draft) => {
+      draft.add({
+        name: "security-review",
+        description: "Review changes for security issues",
+        execute: (input) =>
+          session.prompt({
+            ...input.prompt,
+            sessionID: input.sessionID,
+            text: `Review these changes for security issues.\n\n${input.prompt.text}`,
+            delivery: input.delivery,
+          }).pipe(Effect.asVoid),
+      })
+    })
+    yield* command.reload()
+  }),
+```
+
+Schemas: [`Command.Info`](/api#schema-Command.Info),
+[`Session.Inbox.Delivery`](/api#schema-Session.Inbox.Delivery).
+
+```ts
+interface CommandInvocation {
+  readonly sessionID: Session.ID
+  readonly prompt: PromptInput.Prompt
+  readonly delivery: SessionInbox.Delivery
+}
+
+interface CommandDefinition {
+  readonly name: string
+  readonly description?: string
+  readonly execute: (input: CommandInvocation) => Effect.Effect<void, unknown>
+}
+
+interface CommandDraft {
+  add(definition: CommandDefinition): void
+}
+
+interface CommandDomain extends Pick<CommandApi<unknown>, "list"> {
+  readonly transform: Transform<CommandDraft>
+  readonly reload: () => Effect.Effect<void>
+}
+```
+
+### Integrations
+
+Read integrations and resolve the active credential when one exists.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const integration = ctx.integration
+    const integrations = yield* integration.list().pipe(Effect.orDie)
+    const github = yield* integration.get({ integrationID: Integration.ID.make("github") }).pipe(Effect.orDie)
+    const connection = yield* integration.connection.active("github")
+    const credential = connection ? yield* integration.connection.resolve(connection).pipe(Effect.orDie) : undefined
+    yield* Effect.logInfo("integration", {
+      count: integrations.data.length,
+      github: github.data.name,
+      credential: credential?.type,
+    })
+  }),
+```
+
+Connect with a key or drive an OAuth attempt through the connected API.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const integration = ctx.integration
+    const token = yield* Config.redacted("GITHUB_TOKEN").pipe(Effect.orDie)
+    yield* integration.connect
+      .key({ integrationID: Integration.ID.make("github"), key: Redacted.value(token) })
+      .pipe(Effect.orDie)
+
+    const attempt = yield* integration.oauth
+      .connect({
+        integrationID: Integration.ID.make("acme"),
+        methodID: Integration.MethodID.make("oauth"),
+      })
+      .pipe(Effect.orDie)
+    const status = yield* integration.oauth
+      .status({
+        integrationID: Integration.ID.make("acme"),
+        attemptID: attempt.data.attemptID,
+      })
+      .pipe(Effect.orDie)
+    yield* Effect.logInfo("OAuth status", { status: status.data })
+  }),
+```
+
+Transform integrations and authentication methods. OAuth method callbacks are Effects and may acquire scoped
+resources.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const integration = ctx.integration
+    yield* integration.transform((draft) => {
+      draft.update("acme", (item) => (item.name = "Acme"))
+      draft.method.update({
+        integrationID: "acme",
+        method: { id: "device", type: "oauth", label: "Sign in with Acme" },
+        authorize: () =>
+          Effect.succeed({
+            mode: "code",
+            url: "https://acme.example/device",
+            instructions: "Enter the displayed code",
+            callback: (code) => exchangeCode(code),
+          }),
+      })
+    })
+    yield* integration.reload()
+  }),
+```
+
+Schemas: [`Integration.Info`](/api#schema-Integration.Info), [`Integration.Method`](/api#schema-Integration.Method),
+[`Connection.Info`](/api#schema-Connection.Info), [`Form.Answer`](/api#schema-Form.Answer).
+
+```ts
+type IntegrationOAuthAuthorization = {
+  readonly url: string
+  readonly instructions: string
+  readonly expiresAt?: number
+} & (
+  | { readonly mode: "auto"; readonly callback: Effect.Effect<Credential.OAuth, unknown> }
+  | { readonly mode: "code"; readonly callback: (code: string) => Effect.Effect<Credential.OAuth, unknown> }
+)
+
+type IntegrationOAuthMethodRegistration = {
+  readonly integrationID: string
+  readonly method: IntegrationOAuthMethod
+  readonly authorize: (answer: Form.Answer) => Effect.Effect<IntegrationOAuthAuthorization, unknown, Scope.Scope>
+  readonly refresh?: (credential: Credential.OAuth) => Effect.Effect<Credential.OAuth, unknown>
+  readonly label?: (credential: Credential.OAuth) => string | undefined
+}
+
+interface IntegrationDraft {
+  list(): readonly IntegrationRef[]
+  get(id: string): IntegrationRef | undefined
+  update(id: string, update: (integration: IntegrationRef) => void): void
+  remove(id: string): void
+  readonly method: {
+    list(integrationID: string): readonly IntegrationMethod[]
+    update(input: IntegrationMethodRegistration): void
+    remove(integrationID: string, method: IntegrationMethod): void
+  }
+}
+
+interface IntegrationDomain extends Omit<IntegrationApi<unknown>, "wellknown"> {
+  readonly transform: Transform<IntegrationDraft>
+  readonly reload: () => Effect.Effect<void>
+  readonly connection: {
+    readonly active: (integrationID: string) => Effect.Effect<ConnectionInfo | undefined>
+    readonly resolve: (connection: ConnectionInfo) => Effect.Effect<Credential.Value | undefined, unknown>
+  }
+}
+```
+
+### MCP
+
+List servers and change connection state.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const mcp = ctx.mcp
+    const servers = yield* mcp.list().pipe(Effect.orDie)
+    yield* mcp.connect({ server: "docs" }).pipe(Effect.orDie)
+    yield* mcp.disconnect({ server: "docs" }).pipe(Effect.orDie)
+    yield* Effect.logInfo("MCP servers", { count: servers.data.length })
+  }),
+```
+
+Add servers through the API, or transform and reload their configuration.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const mcp = ctx.mcp
+    yield* mcp
+      .add({ server: "docs", config: { type: "remote", url: "https://mcp.example.com" } })
+      .pipe(Effect.orDie)
+    yield* mcp.transform((draft) => {
+      draft.update("docs", (server) => (server.disabled = false))
+      draft.remove("legacy")
+    })
+    yield* mcp.reload()
+  }),
+```
+
+Schemas: [`Mcp.Server`](/api#schema-Mcp.Server), [`Mcp.LocalConfigEncoded`](/api#schema-Mcp.LocalConfigEncoded),
+[`Mcp.RemoteConfigEncoded`](/api#schema-Mcp.RemoteConfigEncoded).
+
+```ts
+interface MCPDraft {
+  list(): readonly [string, Types.DeepMutable<Mcp.ServerConfig>][]
+  get(name: string): Types.DeepMutable<Mcp.ServerConfig> | undefined
+  set(name: string, config: Mcp.ServerConfig): void
+  update(name: string, update: (config: Types.DeepMutable<Mcp.ServerConfig>) => void): void
+  remove(name: string): void
+}
+
+interface MCPDomain extends Omit<McpApi<unknown>, "resource"> {
+  readonly transform: Transform<MCPDraft>
+  readonly reload: () => Effect.Effect<void>
+}
+```
+
+### Plugins
+
+List active, failed, and resolved plugins at the current location.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const plugin = ctx.plugin
+    const plugins = yield* plugin.list().pipe(Effect.orDie)
+    yield* Effect.forEach(plugins.data, (item) => Effect.logInfo("plugin", item), { discard: true })
+  }),
+```
+
+Filter the schema values in an Effect pipeline when only active plugins matter.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const plugin = ctx.plugin
+    const active = yield* plugin.list().pipe(
+      Effect.orDie,
+      Effect.map((result) => result.data.filter((item) => item.status === "active")),
+    )
+    yield* Effect.logInfo("active plugin count", { count: active.length })
+  }),
+```
+
+Schemas: [`Plugin.Info`](/api#schema-Plugin.Info), [`Plugin.Source`](/api#schema-Plugin.Source).
+
+```ts
+interface PluginApi<E = never> {
+  readonly list: PluginListOperation<E>
+}
+
+interface Context {
+  readonly plugin: PluginApi<unknown>
+}
+```
+
+### References
+
+Read references available at the current location.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const reference = ctx.reference
+    const references = yield* reference.list().pipe(Effect.orDie)
+    yield* Effect.logInfo("references", { count: references.data.length })
+  }),
+```
+
+Add or remove local and Git references, then reload after external state changes.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const reference = ctx.reference
+    yield* reference.transform((draft) => {
+      draft.add("handbook", { type: "local", path: "/workspace/docs/handbook" })
+      draft.add("standards", { type: "git", repository: "https://github.com/acme/standards", branch: "main" })
+      draft.remove("legacy")
+    })
+    yield* reference.reload()
+  }),
+```
+
+Schemas: [`Reference.Info`](/api#schema-Reference.Info), [`Reference.LocalSource`](/api#schema-Reference.LocalSource),
+[`Reference.GitSource`](/api#schema-Reference.GitSource).
+
+```ts
+interface ReferenceDraft {
+  add(name: string, source: ReferenceLocalSource | ReferenceGitSource): void
+  remove(name: string): void
+  list(): readonly (readonly [string, ReferenceLocalSource | ReferenceGitSource])[]
+}
+
+interface ReferenceDomain extends ReferenceApi<unknown> {
+  readonly transform: Transform<ReferenceDraft>
+  readonly reload: () => Effect.Effect<void>
+}
+```
+
+### Sessions
+
+Create or read a session, then select the agent and model used by later work.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const session = ctx.session
+    const created = yield* session.create({ title: "Review" }).pipe(Effect.orDie)
+    const current = yield* session.get({ sessionID: created.id }).pipe(Effect.orDie)
+    yield* session.switchAgent({ sessionID: current.id, agent: Agent.ID.make("build") }).pipe(Effect.orDie)
+    yield* session
+      .switchModel({
+        sessionID: current.id,
+        model: { providerID: Provider.ID.make("anthropic"), id: Model.ID.make("claude-sonnet-4-5") },
+      })
+      .pipe(Effect.orDie)
+  }),
+```
+
+Send prompts, transient generation requests, commands, or synthetic messages.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const session = ctx.session
+    const created = yield* session.create({ title: "Automation" }).pipe(Effect.orDie)
+    yield* session.prompt({ sessionID: created.id, text: "Review the current changes" }).pipe(Effect.orDie)
+    const summary = yield* session
+      .generate({ sessionID: created.id, prompt: "Summarize this project" })
+      .pipe(Effect.orDie)
+    yield* session.command({ sessionID: created.id, command: "review", arguments: "--staged" }).pipe(Effect.orDie)
+    yield* session
+      .synthetic({ sessionID: created.id, text: `Summary generated: ${summary.text}`, resume: false })
+      .pipe(Effect.orDie)
+  }),
+```
+
+Schemas: [`Session.Info`](/api#schema-Session.Info), [`Model.Ref`](/api#schema-Model.Ref),
+[`Session.Inbox.User`](/api#schema-Session.Inbox.User),
+[`Session.Inbox.Synthetic`](/api#schema-Session.Inbox.Synthetic).
+
+```ts
+type SessionDomain = Pick<
+  SessionApi<unknown>,
+  | "create"
+  | "get"
+  | "switchAgent"
+  | "switchModel"
+  | "prompt"
+  | "generate"
+  | "command"
+  | "synthetic"
+  | "interrupt"
+  | "rename"
+  | "wait"
+>
+```
+
+### Skills
+
+Read skills at the current location.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const skill = ctx.skill
+    const skills = yield* skill.list()
+    yield* Effect.logInfo("skills", { ids: skills.data.map((item) => item.id) })
+  }),
+```
+
+Transform and reload skills. Use the re-exported Effect schema constructors for branded values.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const skill = ctx.skill
+    yield* skill.transform((draft) => {
+      draft.add(Skill.Info.make({
+        id: Skill.ID.make("review"),
+        name: Skill.Name.make("Review"),
+        description: "Review the current changes",
+        location: "/workspace/.opencode/skills/review.md",
+        content: "Review the current changes for correctness and missing tests.",
+      }))
+      draft.update("review", (item) => (item.autoinvoke = true))
+      draft.remove("legacy")
+    })
+    yield* skill.reload()
+  }),
+```
+
+Schema: [`Skill.Info`](/api#schema-Skill.Info).
+
+```ts
+interface SkillDraft {
+  list(): readonly Types.DeepMutable<Skill.Info>[]
+  add(skill: Skill.Info): void
+  update(id: string, update: (skill: Types.DeepMutable<Skill.Info>) => void): void
+  remove(id: string): void
+}
+
+interface SkillDomain extends SkillApi<unknown> {
+  readonly transform: Transform<SkillDraft>
+  readonly reload: () => Effect.Effect<void>
+}
+```
+
+### Storage
+
+Store, read, and remove durable JSON values scoped to the plugin ID.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const storage = ctx.storage
+    yield* storage.set("settings", { strict: true })
+    const settings = yield* storage.get("settings")
+    yield* Effect.logInfo("settings", { settings })
+    yield* storage.remove("settings")
+  }),
+```
+
+Scan keys by prefix with cursor pagination.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const storage = ctx.storage
+    const first = yield* storage.scan({ prefix: "cache/", limit: 100 })
+    const second = first.next
+      ? yield* storage.scan({ prefix: "cache/", after: first.next, limit: 100 })
+      : { entries: [] }
+    yield* Effect.logInfo("cache entries", { count: first.entries.length + second.entries.length })
+  }),
+```
+
+Storage accepts Effect's JSON type and returns Effects directly.
+
+```ts
+interface StorageDomain {
+  readonly get: (key: string) => Effect.Effect<Schema.Json | undefined>
+  readonly set: (key: string, value: Schema.Json) => Effect.Effect<void>
+  readonly remove: (key: string) => Effect.Effect<void>
+  readonly scan: (options: StorageScanOptions) => Effect.Effect<StorageScanResult>
+}
+```
+
+### Tools
+
+Register typed tools with Effect `Schema`. The executor receives decoded input and returns an Effect containing typed
+output, display content, or metadata.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const tool = ctx.tool
+    yield* tool.transform((draft) => {
+      draft.add({
+        name: "greeting",
+        description: "Create a greeting",
+        input: Schema.Struct({ name: Schema.String }),
+        output: Schema.Struct({ greeting: Schema.String }),
+        options: { namespace: "acme", codemode: true },
+        execute: ({ name }, context) =>
+          Effect.gen(function* () {
+            yield* context.progress({ status: "greeting" })
+            return { output: { greeting: `Hello ${name}!` } }
+          }),
+      })
+    })
+  }),
+```
+
+Schemas: [`Tool.Content`](/api#schema-Tool.Content), [`Tool.TextContent`](/api#schema-Tool.TextContent),
+[`Tool.FileContent`](/api#schema-Tool.FileContent).
+
+```ts
+interface ToolDraft {
+  add<Input extends Tool.ValueSchema<any>, Output extends Tool.ValueSchema<any> | undefined>(
+    tool: Tool.Info<Input, Output>,
+  ): void
+}
+
+interface ToolDomain {
+  readonly transform: Transform<ToolDraft>
+}
+```
+
+### VCS
+
+Read repository information, working-copy status, or file diffs.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const vcs = ctx.vcs
+    const info = yield* vcs.get().pipe(Effect.orDie)
+    const branches = yield* vcs.branches({ search: "feature", limit: 10 }).pipe(Effect.orDie)
+    const changes = yield* vcs.status().pipe(Effect.orDie)
+    const diff = yield* vcs.diff({ mode: "working", context: 3 }).pipe(Effect.orDie)
+    yield* Effect.logInfo("vcs", { branch: info.data.branch.current, files: changes.data.length })
+  }),
+```
+
+Register a location-scoped provider through a scoped transform. Providers matching the detected repository type are
+selected automatically; use `draft.default.set` to select a different provider.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const vcs = ctx.vcs
+    yield* vcs.transform((draft) => {
+      draft.add({
+        id: "custom",
+        name: "Custom VCS",
+        info: () => Effect.succeed({ branch: { current: "feature", default: "main" } }),
+        branches: (input) => readBranches(input),
+        status: (scope) => readStatus(scope.worktree),
+        diff: (input) => readDiff(input),
+      })
+      draft.default.set("custom")
+    })
+  }),
+```
+
+Provider callbacks receive the current location, working-copy root, canonical project root, and optional repository
+store. Diff callbacks also receive the selected mode, requested context, and output byte budget. Repository discovery
+continues to use OpenCode's built-in Git and Mercurial detectors.
+
+Schemas: [`Vcs.Info`](/api#schema-Vcs.Info), [`Vcs.FileStatus`](/api#schema-Vcs.FileStatus),
+[`FileDiff.Info`](/api#schema-FileDiff.Info).
+
+```ts
+interface VcsDraft {
+  add(definition: VcsDefinition): void
+  readonly default: {
+    get(): string | undefined
+    set(selection: string): void
+  }
+}
+
+interface VcsDomain extends VcsApi<unknown> {
+  readonly transform: Transform<VcsDraft>
+  readonly reload: () => Effect.Effect<void>
+}
+```
+
+### Websearch
+
+List providers or run a query through the selected provider.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const websearch = ctx.websearch
+    const providers = yield* websearch.providers().pipe(Effect.orDie)
+    const results = yield* websearch
+      .query({ query: "OpenCode plugins", providerID: WebSearch.ID.make("internal") })
+      .pipe(Effect.orDie)
+    yield* Effect.logInfo("websearch", { providers: providers.data.length, results: results.data.results.length })
+  }),
+```
+
+Register an Effect executor and select the default provider. Set the default to `false` to disable websearch.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const websearch = ctx.websearch
+    yield* websearch.transform((draft) => {
+      draft.add({
+        id: "internal",
+        name: "Internal search",
+        execute: ({ query }) => searchInternal(query),
+      })
+      draft.default.set("internal")
+    })
+    yield* websearch.reload()
+  }),
+```
+
+Schemas: [`WebSearch.Provider`](/api#schema-WebSearch.Provider),
+[`WebSearch.Result`](/api#schema-WebSearch.Result).
+
+```ts
+interface WebSearchDefinition {
+  readonly id: string
+  readonly name: string
+  readonly execute: (input: WebSearch.ProviderInput) => Effect.Effect<readonly WebSearch.Result[], unknown>
+}
+
+interface WebSearchDraft {
+  add(definition: WebSearchDefinition): void
+  readonly default: {
+    get(): string | false | undefined
+    set(selection: string | false): void
+  }
+}
+
+interface WebSearchDomain extends WebsearchApi<unknown> {
+  readonly transform: Transform<WebSearchDraft>
+  readonly reload: () => Effect.Effect<void>
+}
+```
+
+### Events
+
+The public server event subscription is an Effect `Stream`. Fork its consumer in the plugin scope for automatic
+interruption.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const event = ctx.event
+    yield* event.subscribe().pipe(
+      Stream.tap((item) => Effect.logDebug("OpenCode event", { type: item.type })),
+      Stream.runDrain,
+      Effect.forkScoped,
+    )
+  }),
+```
+
+Use Stream operators to select and process event types.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const event = ctx.event
+    yield* event.subscribe().pipe(
+      Stream.filter((item) => item.type === "config.updated"),
+      Stream.runForEach(() => Effect.logInfo("configuration changed")),
+      Effect.forkScoped,
+    )
+  }),
+```
+
+Schema: [`V2EventEncoded`](/api#schema-V2EventEncoded).
+
+```ts
+type EventSubscribeOutput = OpenCodeEvent
+type EventSubscribeOperation<E = never> = () => Stream.Stream<EventSubscribeOutput, E>
+
+interface EventApi<E = never> {
+  readonly subscribe: EventSubscribeOperation<E>
+}
+
+interface EventDomain extends Pick<EventApi<unknown>, "subscribe"> {}
+```
+
+## Hooks
+
+Hooks intercept live operations. Multiple plugins can register the same hook; OpenCode runs them in plugin order so
+later hooks see earlier changes. Registrations remain active for the plugin scope.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const session = ctx.session
+    yield* session.hook("context", () => Effect.void)
+  }),
+```
+
+### Sessions
+
+Modify assembled system instructions, messages, or tools immediately before model dispatch.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const session = ctx.session
+    yield* session.hook("context", (event) =>
+      Effect.sync(() => {
+        event.system.push({ text: "Keep the review focused on correctness." })
+        delete event.tools.write
+      }),
+    )
+  }),
+```
+
+Modify model request settings and optionally scope the hook to one provider.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const session = ctx.session
+    yield* session.hook(
+      "model.request",
+      (event) => Effect.sync(() => (event.headers["x-plugin"] = "review")),
+      { providerID: "anthropic" },
+    )
+  }),
+```
+
+Modify native provider requests or responses. Their bodies are one-shot streams; clone or replace a body before reading
+it.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const session = ctx.session
+    yield* session.hook("http.request", (event) =>
+      Effect.sync(() => event.request.headers.set("x-session-id", event.sessionID)),
+    )
+    yield* session.hook("http.response", (event) =>
+      Effect.sync(() => {
+        event.response = new Response(event.response.body, {
+          status: event.response.status,
+          headers: { ...Object.fromEntries(event.response.headers), "x-plugin": "review" },
+        })
+      }),
+    )
+  }),
+```
+
+#### Reference
+
+```ts
+interface SessionHooks {
+  readonly context: SessionContext
+  readonly "model.request": SessionModelRequest
+  readonly "http.request": SessionHttpRequest
+  readonly "http.response": SessionHttpResponse
+}
+
+interface SessionHookDomain {
+  readonly hook: ModelHooks<SessionHooks>
+}
+```
+
+### Shell
+
+Modify shell commands, working directories, timeouts, executables, or environment variables before execution.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const shell = ctx.shell
+    yield* shell.hook("create.before", (event) =>
+      Effect.sync(() => {
+        if (event.command === "npm") event.command = "bun"
+        event.timeout = Math.min(event.timeout, 60_000)
+        event.env.COMPANY_ENV = "development"
+      }),
+    )
+  }),
+```
+
+#### Reference
+
+```ts
+interface ShellCreateBefore {
+  command: string
+  cwd: string
+  timeout: number
+  shell: string
+  env: Record<string, string | undefined>
+}
+
+interface ShellHooks {
+  readonly "create.before": ShellCreateBefore
+}
+
+interface ShellHookDomain {
+  readonly hook: Hooks<ShellHooks>
+}
+```
+
+### Tools
+
+Before hooks may replace input or fail with `Tool.Error`.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const tool = ctx.tool
+    yield* tool.hook("execute.before", (event) =>
+      event.tool === "write"
+        ? Effect.fail(new Tool.Error({ message: "Writes are disabled" }))
+        : Effect.logDebug("tool input", { tool: event.tool, input: event.input }),
+    )
+  }),
+```
+
+After hooks may inspect or replace successful results and failures.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const tool = ctx.tool
+    yield* tool.hook("execute.after", (event) => {
+      if (event.status === "error") return Effect.logWarning("tool failed", { message: event.error.message })
+      return Effect.sync(() => {
+        event.result = { ...event.result, metadata: { observed: true } }
+      })
+    })
+  }),
+```
+
+#### Reference
+
+```ts
+interface ToolHooks {
+  readonly "execute.before": ToolExecuteBefore
+  readonly "execute.after": ToolExecuteAfter
+}
+
+interface ToolFailures extends Record<keyof ToolHooks, unknown> {
+  readonly "execute.before": Tool.Error
+  readonly "execute.after": never
+}
+
+interface ToolHookDomain {
+  readonly hook: Hooks<ToolHooks, ToolFailures>
+}
+```
+
+The shared registration types show which operations require the plugin scope.
+
+```ts
+interface Registration {
+  readonly dispose: Effect.Effect<void>
+}
+
+type Hooks<Spec, Failures extends Record<keyof Spec, unknown> = Record<keyof Spec, never>> = <Name extends keyof Spec>(
+  name: Name,
+  callback: (input: Spec[Name]) => Effect.Effect<void, Failures[Name]>,
+) => Effect.Effect<Registration, never, Scope.Scope>
+
+type Transform<Input> = (callback: (input: Input) => void) => Effect.Effect<Registration, never, Scope.Scope>
+```
+
+## Publish
+
+A package plugin uses the same default export as a local Effect plugin. Export the Effect implementation from the main
+entrypoint and declare both runtime dependencies.
+
+```json title="package.json"
+{
+  "name": "opencode-acme-effect-plugin",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@opencode-ai/plugin": "beta",
+    "effect": "4.0.0-rc.111"
+  }
+}
+```
+
+The package entrypoint exports `Plugin.define` with an `effect` function.
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode-ai/plugin/effect"
+import { Effect } from "effect"
+
+export default Plugin.define({
+  id: "acme.published",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      const storage = ctx.storage
+      yield* storage.set("installed", true)
+    }),
+})
+```
+
+Use versions compatible with the OpenCode release you target and test the installed package rather than only a
+workspace-linked copy.
+
+```sh
+bun pm pack
+bun add ./opencode-acme-effect-plugin-1.0.0.tgz
+```

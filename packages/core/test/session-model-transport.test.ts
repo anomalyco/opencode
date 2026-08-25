@@ -8,7 +8,7 @@ import type {
 } from "@opencode-ai/ai/route"
 import { SessionModelTransport } from "@opencode-ai/core/session/model-transport"
 import { Session } from "@opencode-ai/schema/session"
-import { Deferred, Effect, Fiber, Metric, Queue, Stream } from "effect"
+import { Cause, Deferred, Effect, Fiber, Metric, Queue, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { Headers } from "effect/unstable/http"
 
@@ -542,6 +542,63 @@ describe("SessionModelTransport", () => {
         )
         expect(result).toEqual(["http"])
         expect(fallbacks).toBe(1)
+      }),
+    )
+  })
+
+  test("falls back to HTTP after close code 1009 and keeps the Session on HTTP", async () => {
+    const messages = queue<string | Uint8Array, AIError>()
+    let opened = 0
+    let fallbacks = 0
+    let closed = 0
+    const connector: WebSocketConnector = {
+      open: () =>
+        Effect.sync(() => {
+          opened++
+          return {
+            sendText: () =>
+              Effect.sync(() => {
+                Queue.failCauseUnsafe(
+                  messages,
+                  Cause.fail(
+                    new AIError({
+                      module: "test",
+                      method: "websocket",
+                      reason: new TransportReason({
+                        message: "message too big",
+                        transport: "websocket",
+                        operation: "read",
+                        code: "1009",
+                        phase: "close",
+                      }),
+                    }),
+                  ),
+                )
+              }),
+            messages: Stream.fromQueue(messages),
+            close: Effect.sync(() => closed++).pipe(Effect.andThen(Queue.shutdown(messages)), Effect.asVoid),
+          }
+        }),
+    }
+    const item = (id: string) =>
+      exchange(id, {
+        fallback: () => {
+          fallbacks++
+          return Stream.make(`http:${id}`)
+        },
+      })
+
+    await run(
+      connector,
+      Effect.gen(function* () {
+        const transport = yield* SessionModelTransport.Service
+        const executor = transport.bind(session)
+
+        expect(yield* collect(executor, item("first"))).toEqual(["http:first"])
+        expect(yield* collect(executor, item("second"))).toEqual(["http:second"])
+        expect(opened).toBe(1)
+        expect(fallbacks).toBe(2)
+        expect(closed).toBe(1)
       }),
     )
   })

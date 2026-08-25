@@ -8,6 +8,7 @@ import { ImagePreview } from "@opencode-ai/ui/image-preview"
 import { getFilename } from "@opencode-ai/util/path"
 import { AttachmentCard } from "./attachment-card"
 import { CommentCard } from "./comment-card"
+import { TimelineSeparator } from "../components/timeline-separator"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -371,20 +372,6 @@ function CurrentHighlightedText(props: {
 
 type HighlightSegment = { text: string; type?: "file" | "agent" }
 
-export function MessageDivider(props: { label: string }) {
-  return (
-    <div data-component="compaction-part">
-      <div data-slot="compaction-part-divider">
-        <span data-slot="compaction-part-line" />
-        <span data-slot="compaction-part-label" class="text-12-regular text-text-weak">
-          {props.label}
-        </span>
-        <span data-slot="compaction-part-line" />
-      </div>
-    </div>
-  )
-}
-
 export function SessionCompactionMessage(props: { message: SessionMessageCompaction; error: string }) {
   const i18n = useI18n()
   const summary = () => (props.message.status === "failed" ? "" : props.message.summary)
@@ -395,7 +382,9 @@ export function SessionCompactionMessage(props: { message: SessionMessageCompact
 
   return (
     <div data-component="session-compaction-message">
-      <MessageDivider label={i18n.t("ui.messagePart.compaction")} />
+      <div class="py-2">
+        <TimelineSeparator label={i18n.t("ui.messagePart.compaction")} />
+      </div>
       <Show when={summary().trim()}>
         <div data-component="text-part" data-timeline-part-id={props.message.id}>
           <div data-slot="text-part-body">

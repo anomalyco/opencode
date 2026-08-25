@@ -246,26 +246,14 @@ export interface Interface {
     prompt: string
   }) => Effect.Effect<string, NotFoundError | SessionGenerate.Error>
   readonly command: (input: {
-    id?: SessionMessage.ID
     sessionID: SessionSchema.ID
     command: string
-    arguments?: string
-    agent?: Agent.ID
-    model?: Model.Ref
+    text: string
     files?: PromptInput.Prompt["files"]
     agents?: PromptInput.Prompt["agents"]
     skills?: PromptInput.Prompt["skills"]
     delivery?: SessionInbox.Delivery
-    resume?: boolean
-  }) => Effect.Effect<
-    SessionInbox.User,
-    | NotFoundError
-    | PromptConflictError
-    | AttachmentError
-    | SkillNotFoundError
-    | Command.NotFoundError
-    | Command.EvaluationError
-  >
+  }) => Effect.Effect<void, NotFoundError | Command.NotFoundError | Command.ExecutionError>
   readonly shell: (input: {
     id?: Event.ID
     sessionID: SessionSchema.ID
@@ -284,7 +272,7 @@ export interface Interface {
   readonly active: Effect.Effect<ReadonlySet<SessionSchema.ID>>
   readonly background: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError>
   readonly resume: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError | SessionRunner.RunError>
-  readonly interrupt: (sessionID: SessionSchema.ID, options?: { readonly continue?: boolean }) => Effect.Effect<void>
+  readonly interrupt: (sessionID: SessionSchema.ID, options?: { readonly continue?: boolean }) => Effect.Effect<boolean>
   readonly synthetic: (input: {
     id?: SessionMessage.ID
     sessionID: SessionSchema.ID
@@ -655,35 +643,19 @@ const layer = Layer.effect(
           yield* plugins.flush
           return yield* Command.Service
         }).pipe(Effect.provide(locations.get(session.location)))
-        const command = yield* commands.get(input.command)
-        if (!command)
-          return yield* new Command.NotFoundError({
-            command: input.command,
-            message: `Command not found: ${input.command}`,
-          })
-        const evaluated = yield* commands.evaluate({ name: input.command, arguments: input.arguments })
-
-        // TODO(v2 commands): decide whether command-level subtask/background execution belongs in v2 commands.
-        const agent = command.agent ?? input.agent
-        const commandAgent = yield* Effect.gen(function* () {
-          if (!command.agent) return undefined
-          const agents = yield* Agent.Service.pipe(Effect.provide(locations.get(session.location)))
-          return yield* agents.get(Agent.ID.make(command.agent))
-        })
-        const model = command.model ?? commandAgent?.model ?? input.model
-        if (agent !== undefined && session.agent !== Agent.ID.make(agent))
-          yield* result.switchAgent({ sessionID: input.sessionID, agent: Agent.ID.make(agent) })
-        if (model !== undefined) yield* result.switchModel({ sessionID: input.sessionID, model })
-
-        return yield* result.prompt({
-          id: input.id,
-          sessionID: input.sessionID,
-          text: evaluated.text,
-          files: input.files,
-          agents: input.agents,
-          skills: input.skills,
-          delivery: input.delivery,
-          resume: input.resume,
+        const delivery = input.delivery ?? "steer"
+        yield* commands.execute({
+          name: input.command,
+          invocation: {
+            sessionID: input.sessionID,
+            prompt: {
+              text: input.text,
+              files: input.files,
+              agents: input.agents,
+              skills: input.skills,
+            },
+            delivery,
+          },
         })
       }),
       shell: Effect.fn("Session.shell")(function* (input) {

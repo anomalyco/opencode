@@ -365,6 +365,7 @@ function messageIDFromEvent(id: string) {
 const catalogEvents = new Set([
   "catalog.updated",
   "integration.updated",
+  "credential.switched",
   "agent.updated",
   "command.updated",
   "skill.updated",
@@ -1657,17 +1658,12 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       )
     }
 
-    const selected = await resolveSelectedModel(input, client, next)
-    if (next.variant && !selected) throw new Error("Cannot select a variant before selecting a model")
     input.trace?.write("send.command", { sessionID: input.sessionID, messageID, command: command.name, delivery })
     return client.session.command(
       {
         sessionID: input.sessionID,
-        id: messageID,
         command: command.name,
-        arguments: command.arguments,
-        agent: next.agent,
-        model: selected,
+        text: command.arguments,
         files: attachments.files.length ? attachments.files : undefined,
         agents: agents.length ? agents : undefined,
         skills: skills.length ? skills : undefined,
@@ -1708,7 +1704,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         throw new Error("This prompt cannot be queued")
       if (!state.connected) throw new Error("Event stream is reconnecting")
       const client = sdk
-      if (next.agent)
+      if (!next.prompt.command && next.agent)
         await client.session.switchAgent({ sessionID: input.sessionID, agent: next.agent }, { signal: next.signal })
       if (!next.prompt.command) {
         const selected = await resolveSelectedModel(input, client, next)
@@ -1716,7 +1712,8 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         if (selected)
           await client.session.switchModel({ sessionID: input.sessionID, model: selected }, { signal: next.signal })
       }
-      mergePending(await admitPrompt(next, client, delivery))
+      const admitted = await admitPrompt(next, client, delivery)
+      if (admitted) mergePending(admitted)
       settlementClient = client
     },
     async waitForIdle() {
@@ -1754,13 +1751,8 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         return
       }
       if (command) {
-        await runTurnWait(
-          next,
-          messageID,
-          client,
-          () => admitPrompt(next, client, next.prompt.delivery ?? "steer"),
-          admitted,
-        )
+        await admitPrompt(next, client, next.prompt.delivery ?? "steer")
+        admitted?.()
         return
       }
 

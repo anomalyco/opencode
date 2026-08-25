@@ -10,7 +10,7 @@ import {
   type ProviderErrorEvent,
   type ToolCall,
 } from "@opencode-ai/ai"
-import { Cause, Config, Data, Effect, Exit, Fiber, FiberSet, Layer, Option, Pull, Schedule, Stream } from "effect"
+import { Cause, Config, Data, Effect, Exit, Fiber, FiberMap, Layer, Option, Pull, Schedule, Stream } from "effect"
 import { Database } from "../../database/database.js"
 import { Bus } from "../../bus.js"
 import { Permission } from "../../permission.js"
@@ -165,9 +165,7 @@ const layer = Layer.effect(
       )
     })
     // Title generation starts once input is visible and must not delay model execution.
-    // The in-flight set coalesces overlapping prompts while title presence records success durably.
-    const titlesRunning = new Set<SessionSchema.ID>()
-    const forkTitle = yield* FiberSet.makeRuntime<never, void, never>()
+    const titles = yield* FiberMap.make<SessionSchema.ID, void, never>()
     /**
      * Drains eligible manual compaction and user input until the Session becomes idle.
      * Execution lifecycle is published per busy period by SessionExecution, not here.
@@ -334,7 +332,10 @@ const layer = Layer.effect(
       // a blocked first step leaves pending inputs untouched.
       yield* InstructionState.prepare(db, bus, selected.instructions, selected.session.id)
       const promoted = promotable ? yield* SessionInbox.promote(db, bus, selected.session.id, promotable) : 0
-      if (promoted > 0) yield* startTitle(sessionID)
+      if (promoted > 0 && !selected.session.parentID && SessionTitle.isUntitled(selected.session))
+        yield* FiberMap.run(titles, sessionID, title.generate(sessionID).pipe(Effect.ignore), {
+          onlyIfMissing: true,
+        })
       // Promoted input opens a fresh step allowance.
       const currentStep = promoted > 0 ? 1 : step
       const loaded = yield* context.load(selected)
@@ -507,6 +508,7 @@ const layer = Layer.effect(
           // restart the step instead of surfacing the provider error.
           if (
             recoverOverflow &&
+            compaction.enabled() &&
             !publisher.record().outputStarted &&
             isContextOverflowFailure(overflowFailure ?? streamFailure) &&
             (yield* restore(compaction.compact(compactionInput))).status === "completed"
@@ -713,22 +715,6 @@ const layer = Layer.effect(
           })
         }
       }
-    })
-
-    /** Starts one title request at a time after a successful step makes user input visible. */
-    const startTitle = Effect.fnUntraced(function* (sessionID: SessionSchema.ID) {
-      if (titlesRunning.has(sessionID)) return
-      titlesRunning.add(sessionID)
-      forkTitle(
-        title.generateForFirstPrompt(sessionID).pipe(
-          Effect.ignore,
-          Effect.ensuring(
-            Effect.sync(() => {
-              titlesRunning.delete(sessionID)
-            }),
-          ),
-        ),
-      )
     })
 
     const getSession = Effect.fn("SessionRunner.getSession")(function* (sessionID: SessionSchema.ID) {

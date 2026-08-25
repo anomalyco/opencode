@@ -1,5 +1,5 @@
 export type Policy = boolean | "notify"
-export type Action = "none" | "upgrade"
+export type Action = "none" | "notify" | "upgrade"
 
 const maximumComponent = "9007199254740991"
 const versionPattern =
@@ -12,7 +12,7 @@ export function action(current: string, latest: string, policy: Policy): Action 
   if (!currentVersion || !latestVersion || sameRelease(currentVersion, latestVersion)) return "none"
   // Major upgrades are never installed automatically.
   if (currentVersion.major !== latestVersion.major) return "none"
-  return "upgrade"
+  return policy === "notify" ? "notify" : "upgrade"
 }
 
 function parseReleaseVersion(input: string) {

@@ -6,7 +6,7 @@ import { EffectCache } from "drizzle-orm/cache/core/cache-effect"
 import { EffectLogger } from "drizzle-orm/effect-core"
 import { entityKind } from "drizzle-orm/entity"
 import type { AnyRelations, EmptyRelations } from "drizzle-orm/relations"
-import { SQLiteAsyncDialect } from "drizzle-orm/sqlite-core/dialect"
+import { SQLiteDialect } from "drizzle-orm/sqlite-core/dialect"
 import { SQLiteEffectDatabase } from "../sqlite-core/effect/db.js"
 import type { DrizzleConfig } from "drizzle-orm/utils"
 import { jitCompatCheck } from "../internal/drizzle-utils.js"
@@ -53,12 +53,13 @@ export const make = Effect.fn("SQLiteDrizzle.make")(function* <TRelations extend
   const cache = yield* EffectCache
   const logger = yield* EffectLogger
 
-  const dialect = new SQLiteAsyncDialect()
+  const useJitMappers = jitCompatCheck(config.jit)
+  const dialect = new SQLiteDialect({ useJitMappers })
   const relations = config.relations ?? ({} as TRelations)
   const session = new EffectSQLiteSession(client, dialect, relations, {
     logger,
     cache,
-    useJitMappers: jitCompatCheck(config.jit),
+    useJitMappers,
   })
   const db = new EffectSQLiteDatabase(dialect, session, relations) as EffectSQLiteDatabase<TRelations> & {
     $client: SqlClient

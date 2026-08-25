@@ -190,6 +190,21 @@ describe("OpenRouter", () => {
     }),
   )
 
+  it.effect("omits the prompt cache key when caching is disabled", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: OpenRouter.configure({ apiKey: "test-key" }).model("openai/gpt-4o-mini"),
+          prompt: "Hello",
+          promptCacheKey: "session_123",
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body).not.toHaveProperty("prompt_cache_key")
+    }),
+  )
+
   it.effect("filters invalid known OpenRouter options while preserving extensions", () =>
     Effect.gen(function* () {
       const invalid: Record<string, unknown> = {

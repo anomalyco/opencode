@@ -6,6 +6,7 @@ import { AmazonBedrockMantle } from "../../src/providers.js"
 import { compileRequest, LLMClient } from "../../src/route/client.js"
 import { it } from "../lib/effect.js"
 import { dynamicResponse } from "../lib/http.js"
+import { sseEvents } from "../lib/sse.js"
 import { recordedTests } from "../recorded-test.js"
 
 const credentials = {
@@ -71,7 +72,9 @@ describe("Amazon Bedrock Mantle provider", () => {
             Effect.gen(function* () {
               const request = yield* HttpClientRequest.toWeb(input.request)
               seen.push({ url: request.url, authorization: request.headers.get("authorization") ?? undefined })
-              return input.respond("", { headers: { "content-type": "text/event-stream" } })
+              return input.respond(sseEvents({ choices: [{ delta: {}, finish_reason: "stop" }] }), {
+                headers: { "content-type": "text/event-stream" },
+              })
             }),
           ),
         ),

@@ -55,14 +55,16 @@ export const groupNames = {
   "server.skill": "skill",
   "server.event": "event",
   "server.pty": "pty",
+  "server.experimental": "experimental",
   "server.shell": "shell",
   "server.mcp": "mcp",
   "server.reference": "reference",
   "server.project": "project",
   "server.worktree": "worktree",
+  "server.workspace": "workspace",
   "server.vcs": "vcs",
   "server.config": "config",
 } as const
 
-export const promiseOmitEndpoints = new Set(["pty.connect"])
-export const effectOmitEndpoints = new Set(["fs.read", "pty.connect"])
+export const promiseOmitEndpoints = new Set(["pty.connect", "persistentPty.connect"])
+export const effectOmitEndpoints = new Set(["fs.read", "pty.connect", "persistentPty.connect"])

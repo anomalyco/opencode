@@ -22,7 +22,10 @@ import { Reference } from "./reference.js"
 import { Skill } from "./skill.js"
 import { State } from "./state.js"
 import { Tool } from "./tool.js"
+import { Vcs } from "./vcs.js"
 import { PluginHooks } from "./plugin/hooks.js"
+import { Generate } from "./generate.js"
+import { Permission } from "./permission.js"
 
 export interface Interface {
   readonly activate: (
@@ -199,8 +202,11 @@ export const node = makeLocationNode({
     Reference.node,
     Skill.node,
     Tool.node,
+    Vcs.node,
     PluginHooks.node,
     PluginRuntime.node,
     WebSearch.node,
+    Generate.node,
+    Permission.node,
   ],
 })

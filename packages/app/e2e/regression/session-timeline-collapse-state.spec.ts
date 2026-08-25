@@ -139,7 +139,7 @@ test.describe("regression: session timeline local row state", () => {
     expect(siblingProbe).toEqual({
       fileMarker: "before",
       frameMarker: "before",
-      rowKey: `assistant-part:part:${assistantMessageID}:${editPartID}`,
+      rowKey: `assistant-part:file:part:${assistantMessageID}:${editPartID}`,
       rowMarker: "before",
       shadowRoots: 0,
       toolMarker: "before",

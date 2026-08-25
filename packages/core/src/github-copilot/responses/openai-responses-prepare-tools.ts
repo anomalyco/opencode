@@ -70,12 +70,6 @@ export function prepareResponsesTools({
 
             break
           }
-          case "openai.local_shell": {
-            openaiTools.push({
-              type: "local_shell",
-            })
-            break
-          }
           case "openai.web_search_preview": {
             const args = webSearchPreviewArgsSchema.parse(tool.args)
             openaiTools.push({

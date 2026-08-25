@@ -197,7 +197,8 @@ export class DiagramCanvas<Style extends string, Metadata extends object = objec
 
     for (let rowIndex = rows.start; rowIndex < rows.end; rowIndex++) {
       const row = this.cells[rowIndex]!
-      const rowEnd = this.rowEnds[rowIndex]!
+      let rowEnd = this.rowEnds[rowIndex]!
+      while (rowEnd < row.length && row[rowEnd]?.style !== undefined) rowEnd += 1
 
       let currentCell: DiagramCanvasCell<Style, Metadata> | undefined
       let currentKey: readonly unknown[] | undefined

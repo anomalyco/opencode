@@ -6,7 +6,7 @@ import { makeEventListener } from "@solid-primitives/event-listener"
 import { useNavigate } from "@solidjs/router"
 import { createEffect, on, onMount } from "solid-js"
 import { Composer } from "@/composer/composer"
-import { createComposerModel } from "@/composer/model"
+import { createComposerModel, type ComposerModel } from "@/composer/model"
 import { useComposerState } from "@/composer/persistence"
 import { createComposerControls } from "@/composer/selection"
 import { setCursorPosition } from "@/composer/editor/dom"
@@ -27,8 +27,11 @@ import { createSessionRevert } from "../revert"
 import { SessionComposerRegion } from "./session-composer-region"
 import { createSessionComposerRegionController } from "./session-composer-region-controller"
 import { createActiveComposerAdapter } from "./adapter"
+import { createSessionQueue } from "./queue"
+import { SessionQueuePanel } from "./queue-panel"
 import { resolveSessionComposerSelection } from "./selection"
 import { createSessionRequestModel } from "../requests/model"
+import { useSettings } from "@/settings/model"
 
 export function createActiveSessionRegion(input: {
   session: SessionModel
@@ -101,6 +104,10 @@ export function createActiveSessionRegion(input: {
   const focus = () => {
     if (!input.session.data.isChild()) promptRef?.focus()
   }
+  const openParent = () => {
+    const id = input.session.data.parentID()
+    if (id) navigate(sessionHref(requireServerKey(input.session.identity.params.serverKey), id))
+  }
   const editable = (target: EventTarget | null | undefined) => {
     if (!(target instanceof HTMLElement)) return false
     return /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(target.tagName) || target.isContentEditable
@@ -113,6 +120,7 @@ export function createActiveSessionRegion(input: {
     return current instanceof HTMLElement ? current : undefined
   }
   const handleKeyDown = (event: KeyboardEvent) => {
+    if (event.defaultPrevented) return
     const path = event.composedPath()
     const target = path.find((item): item is HTMLElement => item instanceof HTMLElement)
     const active = activeElement()
@@ -122,6 +130,11 @@ export function createActiveSessionRegion(input: {
       (active && (active.closest("[data-prevent-autofocus]") || editable(active))) ||
       dialog.active
     ) {
+      return
+    }
+    if (event.key === "Escape" && input.session.data.isChild()) {
+      event.preventDefault()
+      openParent()
       return
     }
     if (active === promptRef) {
@@ -146,6 +159,7 @@ export function createActiveSessionRegion(input: {
     session: input.session,
     setActiveMessage: input.timeline.actions.setActiveMessage,
   })
+  const revertMessage: NonNullable<SessionUserActions["revert"]> = ({ messageID }) => revert.to(messageID)
   useComposerCommands()
   useSessionCommands({
     session: input.session,
@@ -168,14 +182,17 @@ export function createActiveSessionRegion(input: {
 
   return {
     actions: {
-      timeline: { revert: ({ messageID }) => revert.to(messageID), openAttachment } satisfies SessionUserActions,
+      timeline: {
+        get revert() {
+          if (input.session.data.isChild()) return
+          return revertMessage
+        },
+        openAttachment,
+      } satisfies SessionUserActions,
     },
     region: {
       centered: input.screen.centered,
-      openParent: () => {
-        const id = input.session.data.parentID()
-        if (id) navigate(sessionHref(requireServerKey(input.session.identity.params.serverKey), id))
-      },
+      openParent,
       prompt,
       setDockRef: input.timeline.view.setDockRef,
       setPromptRef: (element: HTMLDivElement) => {
@@ -202,6 +219,7 @@ export function ActiveSessionComposerRegion(props: {
   accentSubmit: boolean
   onResponseSubmit: () => void
 }) {
+  const settings = useSettings()
   const region = createSessionComposerRegionController({
     state: props.model.region.state,
     parentID: props.session.data.parentID,
@@ -217,11 +235,32 @@ export function ActiveSessionComposerRegion(props: {
     submitted: props.model.submitted,
     setEditor: props.model.input.setPromptRef,
   })
-  const composer = createComposerModel(adapter)
+  let composer: ComposerModel | undefined
+  const queue = createSessionQueue({
+    sessionID: requireSessionID(props.session),
+    draft: adapter.state,
+    working: adapter.working,
+    behavior: settings.general.followUpBehavior,
+    composer: () => composer,
+  })
+  composer = createComposerModel(adapter, { queue })
   return (
     <SessionComposerRegion
       controller={region}
-      composer={<Composer model={composer} borderUnderlay accentSubmit={props.accentSubmit} />}
+      composer={
+        <div class="relative">
+          <SessionQueuePanel queue={queue} />
+          <div class="relative z-10">
+            <Composer model={composer} borderUnderlay accentSubmit={props.accentSubmit} />
+          </div>
+        </div>
+      }
     />
   )
+}
+
+function requireSessionID(session: SessionModel) {
+  const id = session.identity.params.id
+  if (!id) throw new Error("Active Composer requires a Session ID")
+  return id
 }

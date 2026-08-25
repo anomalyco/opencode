@@ -82,7 +82,7 @@ const consumeFrames = (route: string) => (state: FrameBufferState, chunk: Uint8A
         "Failed to parse Bedrock Converse event-stream payload",
       )) as Record<string, unknown>
       delete parsed.p
-      out.push({ [eventType]: parsed })
+      out.push(messageType === "exception" ? { exception: { type: eventType, details: parsed } } : { [eventType]: parsed })
     }
     return [cursor, out] as const
   })

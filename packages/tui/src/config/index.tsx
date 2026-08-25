@@ -66,7 +66,7 @@ export const Info = Schema.Struct({
   ).annotate({ description: "Leader key behavior" }),
   scroll: Schema.optional(
     Schema.Struct({
-      speed: Schema.optional(Schema.Number.check(Schema.isGreaterThanOrEqualTo(0.001))).annotate({
+      speed: Schema.optional(Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0.001))).annotate({
         description: "Distance scrolled per input tick",
       }),
       acceleration: Schema.optional(Schema.Boolean).annotate({
@@ -80,7 +80,7 @@ export const Info = Schema.Struct({
       notifications: Schema.optional(Schema.Boolean).annotate({ description: "Show system notifications" }),
       sound: Schema.optional(Schema.Boolean).annotate({ description: "Play attention sounds" }),
       volume: Schema.optional(
-        Schema.Number.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(1)),
+        Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(1)),
       ).annotate({ description: "Attention sound volume from 0 to 1" }),
       sound_pack: Schema.optional(Schema.String).annotate({ description: "Active attention sound pack ID" }),
       sounds: Schema.optional(Schema.Record(AttentionSoundName, Schema.optionalKey(Schema.String))).annotate({

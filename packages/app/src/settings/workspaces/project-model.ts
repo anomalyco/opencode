@@ -1,7 +1,6 @@
 import { getFilename } from "@opencode-ai/util/path"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useMutation } from "@tanstack/solid-query"
-import { normalizeProjectInfo } from "@/runtime/server/global-sync/utils"
 import { createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useGlobal } from "@/runtime/server/runtime"
@@ -9,7 +8,6 @@ import { type LocalProject } from "@/shell/state/layout"
 import { ServerConnection } from "@/runtime/server/registry"
 
 export function createEditProjectModel(props: { project: LocalProject; server: ServerConnection.Any }) {
-  const supported = !props.project.id || props.project.id === "global"
   const dialog = useDialog()
   const global = useGlobal()
   const serverCtx = createMemo(() => global.ensureServerCtx(props.server))
@@ -72,9 +70,14 @@ export function createEditProjectModel(props: { project: LocalProject; server: S
       const start = store.startup.trim()
 
       if (props.project.id && props.project.id !== "global") {
-        // TODO: Restore project edits when the V2 client exposes a project update API.
-        // await serverCtx().sdk.api.project.update({ projectID: props.project.id, name, icon, commands })
-        throw new Error(`Project ${props.project.id} cannot be updated`)
+        await serverCtx().sdk.api.project.update({
+          projectID: props.project.id,
+          name,
+          icon: { color: store.color ?? "", override: store.iconOverride ?? "" },
+          commands: { start },
+        })
+        dialog.close()
+        return
       }
 
       serverCtx().sync.project.meta(props.project.worktree, {
@@ -88,7 +91,7 @@ export function createEditProjectModel(props: { project: LocalProject; server: S
 
   function submit(event: SubmitEvent) {
     event.preventDefault()
-    if (!supported || save.isPending) return
+    if (save.isPending) return
     save.mutate()
   }
 
@@ -98,7 +101,6 @@ export function createEditProjectModel(props: { project: LocalProject; server: S
     folderName,
     defaultName,
     save,
-    supported,
     submit,
     drop,
     dragOver,

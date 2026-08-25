@@ -312,6 +312,7 @@ describe("ModelResolver", () => {
         active: () => Effect.undefined,
         resolve: () => Effect.die("unused"),
         key: () => Effect.die("unused"),
+        activate: () => Effect.die("unused"),
         update: () => Effect.die("unused"),
         remove: () => Effect.die("unused"),
       },
@@ -390,8 +391,10 @@ describe("ModelResolver", () => {
         model(Provider.aisdk("@ai-sdk/openai-compatible"), {
           compatibility: {
             reasoningField: "vendor_reasoning",
+            requireReasoning: true,
             maxTokensField: "max_completion_tokens",
             requireFinishReason: false,
+            requireAssistantAfterTool: true,
           },
           settings: {
             apiKey: "settings-secret",
@@ -415,8 +418,10 @@ describe("ModelResolver", () => {
       expect(headers.authorization).toBe("Bearer settings-secret")
       expect(resolved.route.id).toBe("openai-compatible-chat")
       expect(resolved.compatibility?.reasoningField).toBe("vendor_reasoning")
+      expect(resolved.compatibility?.requireReasoning).toBe(true)
       expect(resolved.compatibility?.maxTokensField).toBe("max_completion_tokens")
       expect(resolved.compatibility?.requireFinishReason).toBe(false)
+      expect(resolved.compatibility?.requireAssistantAfterTool).toBe(true)
       expect(prepared.body).toMatchObject({ max_completion_tokens: 10 })
       expect(prepared.body).not.toHaveProperty("max_tokens")
       expect(resolved.route.endpoint.baseURL).toBe("https://compatible.example/v1")
@@ -883,12 +888,7 @@ describe("ModelResolver", () => {
           { reasoning: { effort: "high" } },
           { reasoning: { effort: "high" } },
         ],
-        [
-          "@ai-sdk/xai",
-          "@opencode-ai/ai/providers/xai",
-          { reasoningEffort: "high" },
-          { reasoningEffort: "high" },
-        ],
+        ["@ai-sdk/xai", "@opencode-ai/ai/providers/xai", { reasoningEffort: "high" }, { reasoningEffort: "high" }],
       ] as const
 
       yield* Effect.forEach(packages, ([catalogPackage, nativePackage, sourceOptions, providerOptions]) =>
@@ -937,11 +937,7 @@ describe("ModelResolver", () => {
         ["@ai-sdk/azure", "@opencode-ai/ai/providers/azure/responses", "api-model"],
         ["@ai-sdk/google", "@opencode-ai/ai/providers/google", "api-model"],
         ["@ai-sdk/google-vertex", "@opencode-ai/ai/providers/google-vertex", "api-model"],
-        [
-          "@ai-sdk/google-vertex/anthropic",
-          "@opencode-ai/ai/providers/google-vertex/messages",
-          "claude-sonnet-4-6",
-        ],
+        ["@ai-sdk/google-vertex/anthropic", "@opencode-ai/ai/providers/google-vertex/messages", "claude-sonnet-4-6"],
         ["@ai-sdk/openai", "@opencode-ai/ai/providers/openai", "api-model"],
         ["@ai-sdk/openai-compatible", "@opencode-ai/ai/providers/openai-compatible", "api-model"],
         ["@openrouter/ai-sdk-provider", "@opencode-ai/ai/providers/openrouter", "api-model"],
@@ -1080,7 +1076,11 @@ describe("ModelResolver", () => {
       expect(openrouter.route.id).toBe("openrouter")
       expect(openrouter.route.defaults.providerOptions).toEqual({ reasoning: { effort: "high" } })
       expect(xai.route.id).toBe("openai-responses")
-      expect(xai.route.defaults.providerOptions).toEqual({ reasoningEffort: "high", store: false })
+      expect(xai.route.defaults.providerOptions).toEqual({
+        reasoningEffort: "high",
+        store: false,
+        include: ["reasoning.encrypted_content"],
+      })
       expect(bedrock.route.id).toBe("bedrock-converse")
       expect(bedrock.route.defaults.generation).toEqual({ topP: 0.8 })
       expect(bedrock.route.defaults.http?.body).toEqual({ serviceTier: { type: "priority" } })

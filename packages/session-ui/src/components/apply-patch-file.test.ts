@@ -30,6 +30,15 @@ describe("apply patch files", () => {
     ])
   })
 
+  test("removes files without diff changes", () => {
+    expect(
+      patchFiles([
+        { file: "src/changed.ts", patch: "@@ -1 +1 @@\n-old\n+new", additions: 1, deletions: 1, status: "modified" },
+        { file: "src/unchanged.ts", patch: "", additions: 0, deletions: 0, status: "modified" },
+      ]).map((file) => file.path),
+    ).toEqual(["src/changed.ts"])
+  })
+
   test("composes sequential complete patches for the same file", () => {
     const before = "const a = 1\nconst b = 2\n"
     const middle = "const a = 2\nconst b = 2\n"

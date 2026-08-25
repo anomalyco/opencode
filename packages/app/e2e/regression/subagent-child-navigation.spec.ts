@@ -26,6 +26,16 @@ test("navigates to a subagent child session missing from the session list", asyn
   await expect(titlebarRight.getByRole("button", { name: "Toggle review" })).toHaveCount(1)
 })
 
+test("returns to the parent session with Escape", async ({ page }) => {
+  await setup(page)
+  await openChildFromParent(page)
+  await expectSessionTitle(page, taskDescription)
+
+  await page.keyboard.press("Escape")
+
+  await Promise.all([expect(page).toHaveURL(sessionHref(parentID)), expectSessionTitle(page, parentTitle)])
+})
+
 test("shows parent lineage while the child timeline loads", async ({ page }) => {
   await setup(page)
   const requested = Promise.withResolvers<void>()

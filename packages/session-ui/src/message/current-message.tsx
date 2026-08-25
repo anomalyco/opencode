@@ -10,7 +10,6 @@ import { CurrentContextToolGroup, CurrentFileToolGroup, ToolDisplay } from "../t
 import { currentToolError, currentToolInput, currentToolMetadata, currentToolOutput } from "./current-tool-state"
 
 export type { SessionUserActions, SessionUserComment } from "../actions"
-export { MessageDivider } from "./message-content"
 export { SessionShellMessage } from "../tools/tool-renderer"
 export { currentContentDefaultOpen } from "./current-tool-state"
 

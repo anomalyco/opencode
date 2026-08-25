@@ -121,6 +121,9 @@ export function createPluginContext(input: {
     get theme() {
       return host.themes.currentTokens()
     },
+    get themeMode() {
+      return host.themes.mode()
+    },
     markdown: {
       registerCodeBlockRenderer(language, render) {
         const name = infoStringToFiletype(language)

@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "metadata": {
+    "tags": [
+      "prefix:azure",
+      "provider:azure"
+    ],
+    "name": "azure/chat-streams-text",
+    "recordedAt": "2026-08-23T17:21:53.198Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://aiden-azury-group.openai.azure.com/openai/v1/chat/completions?api-version=v1",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"gpt-5.6-luna\",\"messages\":[{\"role\":\"user\",\"content\":\"Reply with exactly one word: hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"reasoning_effort\":\"medium\"}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream; charset=utf-8"
+        },
+        "body": "data: {\"choices\":[],\"created\":0,\"id\":\"\",\"model\":\"\",\"object\":\"\",\"prompt_filter_results\":[{\"prompt_index\":0,\"content_filter_results\":{}}]}\n\ndata: {\"choices\":[{\"content_filter_results\":{},\"delta\":{\"content\":\"\",\"refusal\":null,\"role\":\"assistant\"},\"finish_reason\":null,\"index\":0,\"logprobs\":null}],\"created\":1787505712,\"id\":\"chatcmpl-EG6BEiYSfrcTSI2WX8PqNzERZDcPc\",\"model\":\"gpt-5.6-luna-2026-07-09\",\"obfuscation\":\"Mxr\",\"object\":\"chat.completion.chunk\",\"service_tier\":\"default\",\"system_fingerprint\":null,\"usage\":null}\n\ndata: {\"choices\":[{\"content_filter_results\":{},\"delta\":{\"content\":\"hello\"},\"finish_reason\":null,\"index\":0,\"logprobs\":null}],\"created\":1787505712,\"id\":\"chatcmpl-EG6BEiYSfrcTSI2WX8PqNzERZDcPc\",\"model\":\"gpt-5.6-luna-2026-07-09\",\"obfuscation\":\"\",\"object\":\"chat.completion.chunk\",\"service_tier\":\"default\",\"system_fingerprint\":null,\"usage\":null}\n\ndata: {\"choices\":[{\"content_filter_results\":{},\"delta\":{},\"finish_reason\":\"stop\",\"index\":0,\"logprobs\":null}],\"created\":1787505712,\"id\":\"chatcmpl-EG6BEiYSfrcTSI2WX8PqNzERZDcPc\",\"model\":\"gpt-5.6-luna-2026-07-09\",\"obfuscation\":\"WyZa5AY1CaCeFdS\",\"object\":\"chat.completion.chunk\",\"service_tier\":\"default\",\"system_fingerprint\":null,\"usage\":null}\n\ndata: {\"choices\":[],\"created\":1787505712,\"id\":\"chatcmpl-EG6BEiYSfrcTSI2WX8PqNzERZDcPc\",\"latency_checkpoint\":{\"engine_tbt_ms\":20,\"engine_ttft_ms\":106,\"engine_ttlt_ms\":206,\"pre_inference_ms\":89,\"service_tbt_ms\":20,\"service_ttft_ms\":480,\"service_ttlt_ms\":576,\"total_duration_ms\":491,\"user_visible_ttft_ms\":391},\"model\":\"gpt-5.6-luna-2026-07-09\",\"obfuscation\":\"6\",\"object\":\"chat.completion.chunk\",\"service_tier\":\"default\",\"system_fingerprint\":null,\"usage\":{\"completion_tokens\":5,\"completion_tokens_details\":{\"accepted_prediction_tokens\":0,\"audio_tokens\":0,\"reasoning_tokens\":0,\"rejected_prediction_tokens\":0},\"prompt_tokens\":13,\"prompt_tokens_details\":{\"audio_tokens\":0,\"cache_write_tokens\":0,\"cached_tokens\":0},\"total_tokens\":18}}\n\ndata: [DONE]\n\n"
+      }
+    }
+  ]
+}

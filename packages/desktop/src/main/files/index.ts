@@ -96,6 +96,9 @@ function make(fs: FileSystem.FileSystem, path: Path.Path) {
       const size = image.getSize()
       return { buffer: new Uint8Array(image.toPNG()).buffer, width: size.width, height: size.height }
     },
+    writeClipboardText(text: string) {
+      clipboard.writeText(text)
+    },
   }
 }
 

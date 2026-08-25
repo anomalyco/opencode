@@ -70,7 +70,7 @@ describe("OpenAI-compatible Chat route", () => {
         baseURL: "https://api.deepseek.test/v1/",
         query: { "api-version": "2026-01-01" },
       })
-      expect(prepared.body).toEqual({
+      expect(prepared.body).toMatchObject({
         model: "deepseek-chat",
         messages: [
           { role: "system", content: "You are concise." },
@@ -79,7 +79,7 @@ describe("OpenAI-compatible Chat route", () => {
         tools: [
           {
             type: "function",
-            function: { name: "lookup", description: "Lookup data", parameters: { type: "object" } },
+            function: { name: "lookup", description: "Lookup data", parameters: { type: "object" }, strict: false },
           },
         ],
         tool_choice: "required",
@@ -130,7 +130,7 @@ describe("OpenAI-compatible Chat route", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(request)
 
-      expect(prepared.body).toEqual({
+      expect(prepared.body).toMatchObject({
         model: "deepseek-chat",
         messages: [
           { role: "system", content: "You are concise." },
@@ -158,6 +158,29 @@ describe("OpenAI-compatible Chat route", () => {
     }),
   )
 
+  it.effect("enables ZAI tool streaming except for GLM 4.5 models", () =>
+    Effect.gen(function* () {
+      const prepare = (provider: string, baseURL: string, id: string) =>
+        compileRequest(
+          LLM.request({
+            model: OpenAICompatibleChat.route.with({ provider, endpoint: { baseURL } }).model({ id }),
+            prompt: "Use a tool.",
+            tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: {} })],
+          }),
+        )
+
+      const current = yield* prepare("zai", "https://api.z.ai/api/paas/v4", "glm-4.7")
+      expect(current.body).toMatchObject({ tool_stream: true })
+
+      const legacy = yield* Effect.all(
+        ["glm-4.5", "glm-4.5-air", "glm-4.5-flash", "glm-4.5v"].map((id) =>
+          prepare("zhipuai", "https://open.bigmodel.cn/api/paas/v4", id),
+        ),
+      )
+      legacy.forEach((item) => expect(item.body).not.toHaveProperty("tool_stream"))
+    }),
+  )
+
   it.effect("matches AI SDK compatible tool request body fixture", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
@@ -180,7 +203,7 @@ describe("OpenAI-compatible Chat route", () => {
         }),
       )
 
-      expect(prepared.body).toEqual({
+      expect(prepared.body).toMatchObject({
         model: "deepseek-chat",
         messages: [
           { role: "user", content: "What is the weather?" },
@@ -204,6 +227,7 @@ describe("OpenAI-compatible Chat route", () => {
               name: "lookup",
               description: "Lookup data",
               parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] },
+              strict: false,
             },
           },
         ],
@@ -211,6 +235,135 @@ describe("OpenAI-compatible Chat route", () => {
         stream: true,
         stream_options: { include_usage: true },
       })
+    }),
+  )
+
+  it.effect("normalizes tool call IDs for the selected model family", () =>
+    Effect.gen(function* () {
+      const longID = `call_${"a".repeat(48)}`
+      const cases = [
+        { provider: "custom", model: "mistral-small", id: "toolu_01CBhTTz95qkd9LJMdC9sf8t", expected: "toolu01CB" },
+        { provider: "custom", model: "devstral-small", id: "abc", expected: "abc000000" },
+        { provider: "custom", model: "codestral-latest", id: "toolu_01CBhTTz95", expected: "toolu01CB" },
+        { provider: "custom", model: "pixtral-large", id: "toolu_01CBhTTz95", expected: "toolu01CB" },
+        { provider: "custom", model: "open-mixtral-8x22b", id: "toolu_01CBhTTz95", expected: "toolu01CB" },
+        { provider: "gateway", model: "anthropic/claude-sonnet-4", id: "call|item/+", expected: "call_item__" },
+        { provider: "gateway", model: "openai/gpt-4o", id: longID, expected: longID.slice(0, 40) },
+        { provider: "custom", model: "ordinary-model", id: "call|item/+", expected: "call|item/+" },
+        { provider: "mistral", model: "zai-glm-5-2", id: "call_long_identifier", expected: "call_long_identifier" },
+      ]
+
+      yield* Effect.forEach(cases, (item) =>
+        Effect.gen(function* () {
+          const prepared = yield* compileRequest(
+            LLM.request({
+              model: OpenAICompatibleChat.route
+                .with({ provider: item.provider, endpoint: { baseURL: "https://api.custom.test/v1" } })
+                .model({ id: item.model }),
+              messages: [
+                Message.assistant([ToolCallPart.make({ id: item.id, name: "lookup", input: {} })]),
+                Message.tool({ id: item.id, name: "lookup", result: { type: "content", value: [] } }),
+              ],
+            }),
+          )
+
+          expect(prepared.body.messages).toMatchObject([
+            { role: "assistant", tool_calls: [{ id: item.expected }] },
+            { role: "tool", tool_call_id: item.expected },
+          ])
+        }),
+      )
+    }),
+  )
+
+  it.effect("bridges tool results for Mistral-family models and honors compatibility overrides", () =>
+    Effect.gen(function* () {
+      const cases = [
+        { id: "mistral-small", bridge: true },
+        { id: "devstral-small", bridge: true },
+        { id: "codestral-latest", bridge: true },
+        { id: "pixtral-large", bridge: true },
+        { id: "open-mixtral-8x22b", bridge: true },
+        { id: "ordinary-model", bridge: false },
+        { id: "ordinary-model", override: true, bridge: true },
+        { id: "mistral-small", override: false, bridge: false },
+      ] as const
+
+      yield* Effect.forEach(cases, (item) =>
+        Effect.gen(function* () {
+          const selected = OpenAICompatibleChat.route
+            .with({ provider: "custom", endpoint: { baseURL: "https://api.custom.test/v1" } })
+            .model({
+              id: item.id,
+              compatibility: "override" in item ? { requireAssistantAfterTool: item.override } : undefined,
+            })
+          const prepared = yield* compileRequest(
+            LLM.request({
+              model: selected,
+              messages: [
+                Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: {} })]),
+                Message.tool({ id: "call_1", name: "lookup", result: "Sunny" }),
+                Message.user("What next?"),
+              ],
+            }),
+          )
+
+          expect(prepared.body.messages.map((message) => message.role)).toEqual(
+            item.bridge ? ["assistant", "tool", "assistant", "user"] : ["assistant", "tool", "user"],
+          )
+          if (item.bridge) expect(prepared.body.messages[2]).toEqual({ role: "assistant", content: "Done." })
+        }),
+      )
+    }),
+  )
+
+  it.effect("requires reasoning for DeepSeek models, providers, and endpoints unless explicitly overridden", () =>
+    Effect.gen(function* () {
+      const cases = [
+        { id: "DeepSeek-V3", provider: "custom", baseURL: "https://api.custom.test/v1", required: true },
+        { id: "custom-model", provider: "deepseek", baseURL: "https://api.custom.test/v1", required: true },
+        { id: "custom-model", provider: "custom", baseURL: "https://API.DeepSeek.COM/v1", required: true },
+        { id: "ordinary-model", provider: "custom", baseURL: "https://api.custom.test/v1", required: false },
+        {
+          id: "ordinary-model",
+          provider: "custom",
+          baseURL: "https://api.custom.test/v1",
+          compatibility: { requireReasoning: true, reasoningField: "reasoning" },
+          required: true,
+          field: "reasoning",
+        },
+        {
+          id: "deepseek-chat",
+          provider: "deepseek",
+          baseURL: "https://api.deepseek.com/v1",
+          compatibility: { requireReasoning: false },
+          required: false,
+        },
+      ] as const
+
+      yield* Effect.forEach(cases, (item) =>
+        Effect.gen(function* () {
+          const selected = OpenAICompatibleChat.route
+            .with({ provider: item.provider, endpoint: { baseURL: item.baseURL } })
+            .model({ id: item.id, compatibility: "compatibility" in item ? item.compatibility : undefined })
+          const prepared = yield* compileRequest(
+            LLM.request({
+              model: selected,
+              messages: [
+                Message.assistant("Hello"),
+                Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: {} })]),
+                Message.tool({ id: "call_1", name: "lookup", result: "Sunny" }),
+              ],
+            }),
+          )
+          const field = "field" in item ? item.field : "reasoning_content"
+
+          for (const message of prepared.body.messages.filter((message) => message.role === "assistant")) {
+            if (item.required) expect(message).toHaveProperty(field, "")
+            else expect(message).not.toHaveProperty(field)
+          }
+        }),
+      )
     }),
   )
 
@@ -329,13 +482,106 @@ describe("OpenAI-compatible Chat route", () => {
     }),
   )
 
-  it.effect("treats an empty finish reason as terminal", () =>
+  it.effect("rejects a stream without a required finish reason", () =>
     Effect.gen(function* () {
-      const response = yield* LLMClient.generate(request).pipe(
+      const error = yield* LLMClient.generate(request).pipe(
+        Effect.provide(fixedResponse(sseEvents(deltaChunk({ content: "Hello" }), deltaChunk({}, "")))),
+        Effect.flip,
+      )
+
+      expect(error.reason).toMatchObject({
+        _tag: "InvalidProviderOutput",
+        classification: "incomplete-stream",
+        message: "OpenAI Chat stream ended without finish_reason",
+      })
+    }),
+  )
+
+  it.effect("infers stop when finish reasons are optional", () =>
+    Effect.gen(function* () {
+      const compatible = OpenAICompatibleChat.route
+        .with({ provider: "custom", endpoint: { baseURL: "https://api.custom.test/v1" } })
+        .model({ id: "custom-model", compatibility: { requireFinishReason: false } })
+      const response = yield* LLMClient.generate(LLMRequest.update(request, { model: compatible })).pipe(
         Effect.provide(fixedResponse(sseEvents(deltaChunk({ content: "Hello" }), deltaChunk({}, "")))),
       )
 
-      expect(response.finishReason).toEqual({ normalized: "unknown", raw: "" })
+      expect(response.finishReason).toEqual({ normalized: "stop" })
+    }),
+  )
+
+  it.effect("normalizes the end finish reason to stop", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(fixedResponse(sseEvents(deltaChunk({ content: "Hello" }), deltaChunk({}, "end")))),
+      )
+
+      expect(response.finishReason).toEqual({ normalized: "stop", raw: "end" })
+    }),
+  )
+
+  it.effect("classifies provider error finish reasons", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.generate(request).pipe(
+        Effect.provide(fixedResponse(sseEvents(deltaChunk({}, "network_error")))),
+        Effect.flip,
+      )
+
+      expect(error.reason).toMatchObject({
+        _tag: "ProviderInternal",
+        message: "Provider reported a network error (finish_reason: network_error)",
+      })
+      expect(decodeJson(error.body ?? "")).toMatchObject({
+        id: "chatcmpl_fixture",
+        choices: [{ finish_reason: "network_error" }],
+      })
+
+      const generic = yield* LLMClient.generate(request).pipe(
+        Effect.provide(fixedResponse(sseEvents(deltaChunk({}, "error")))),
+        Effect.flip,
+      )
+      expect(generic.reason).toMatchObject({
+        _tag: "UnknownProvider",
+        message: "Provider reported an error (finish_reason: error)",
+      })
+    }),
+  )
+
+  it.effect("preserves explicit provider error events", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents({
+              id: "chatcmpl_error",
+              error: { code: 502, message: "Provider disconnected", details: { upstream: "vendor" } },
+              trace_id: "trace_1",
+            }),
+          ),
+        ),
+        Effect.flip,
+      )
+
+      expect(error.reason).toMatchObject({ _tag: "ProviderInternal", message: "Provider disconnected", status: 502 })
+      expect(decodeJson(error.body ?? "")).toMatchObject({
+        id: "chatcmpl_error",
+        error: { code: 502, message: "Provider disconnected", details: { upstream: "vendor" } },
+        trace_id: "trace_1",
+      })
+    }),
+  )
+
+  it.effect("preserves provider finish outcomes in the common reason algebra", () =>
+    Effect.gen(function* () {
+      const filtered = yield* LLMClient.generate(request).pipe(
+        Effect.provide(fixedResponse(sseEvents(deltaChunk({}, "content_filter")))),
+      )
+      const future = yield* LLMClient.generate(request).pipe(
+        Effect.provide(fixedResponse(sseEvents(deltaChunk({}, "future_reason")))),
+      )
+
+      expect(filtered.finishReason).toEqual({ normalized: "content-filter", raw: "content_filter" })
+      expect(future.finishReason).toEqual({ normalized: "unknown", raw: "future_reason" })
     }),
   )
 
@@ -355,6 +601,11 @@ describe("OpenAI-compatible Chat route", () => {
       )
 
       expect(error.message).toContain("OpenAI Chat received content after the finish reason")
+      expect(error.reason._tag).toBe("InvalidProviderOutput")
+      if (error.reason._tag !== "InvalidProviderOutput") return
+      expect(decodeJson(error.reason.raw ?? "")).toMatchObject({
+        choices: [{ delta: { tool_calls: [{ id: "call_1" }] } }],
+      })
     }),
   )
 })

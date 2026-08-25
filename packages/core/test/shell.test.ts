@@ -8,15 +8,13 @@ const withShell = async (shell: string | undefined, fn: () => void | Promise<voi
   const prev = process.env.SHELL
   if (shell === undefined) delete process.env.SHELL
   else process.env.SHELL = shell
-  ShellSelect.acceptable.reset()
-  ShellSelect.preferred.reset()
+  ShellSelect.resolve.reset()
   try {
     await fn()
   } finally {
     if (prev === undefined) delete process.env.SHELL
     else process.env.SHELL = prev
-    ShellSelect.acceptable.reset()
-    ShellSelect.preferred.reset()
+    ShellSelect.resolve.reset()
   }
 }
 
@@ -36,16 +34,16 @@ describe("shell", () => {
 
   test("falls back when configured shell cannot be resolved", async () => {
     await withShell(undefined, async () => {
-      const preferred = ShellSelect.preferred()
-      const acceptable = ShellSelect.acceptable()
-      expect(ShellSelect.preferred("opencode-missing-shell")).toBe(preferred)
-      expect(ShellSelect.acceptable("opencode-missing-shell")).toBe(acceptable)
+      const configured = ShellSelect.resolve({ priority: "config" })
+      const compatible = ShellSelect.resolve({ priority: "compat" })
+      expect(ShellSelect.resolve({ priority: "config" }, "opencode-missing-shell")).toBe(configured)
+      expect(ShellSelect.resolve({ priority: "compat" }, "opencode-missing-shell")).toBe(compatible)
     })
   })
 
-  test("falls back for terminal-only acceptable shells", () => {
-    expect(ShellSelect.name(ShellSelect.acceptable("fish"))).not.toBe("fish")
-    expect(ShellSelect.name(ShellSelect.acceptable("nu"))).not.toBe("nu")
+  test("falls back for terminal-only shells when compatibility is required", () => {
+    expect(ShellSelect.name(ShellSelect.resolve({ priority: "compat" }, "fish"))).not.toBe("fish")
+    expect(ShellSelect.name(ShellSelect.resolve({ priority: "compat" }, "nu"))).not.toBe("nu")
   })
 
   test("builds command args per shell family", () => {
@@ -65,14 +63,14 @@ describe("shell", () => {
   if (process.platform === "win32") {
     test("rejects blacklisted shells case-insensitively", async () => {
       await withShell("NU.EXE", async () => {
-        expect(ShellSelect.name(ShellSelect.acceptable())).not.toBe("nu")
+        expect(ShellSelect.name(ShellSelect.resolve({ priority: "compat" }))).not.toBe("nu")
       })
     })
 
     test("normalizes Git Bash shell paths from env", async () => {
       const shell = "/cygdrive/c/Program Files/Git/bin/bash.exe"
       await withShell(shell, async () => {
-        expect(ShellSelect.preferred()).toBe(FSUtil.windowsPath(shell))
+        expect(ShellSelect.resolve({ priority: "config" })).toBe(FSUtil.windowsPath(shell))
       })
     })
 
@@ -80,19 +78,19 @@ describe("shell", () => {
       const bash = ShellSelect.gitbash()
       if (!bash) return
       await withShell("/usr/bin/bash", async () => {
-        expect(ShellSelect.acceptable()).toBe(bash)
-        expect(ShellSelect.preferred()).toBe(bash)
+        expect(ShellSelect.resolve({ priority: "compat" })).toBe(bash)
+        expect(ShellSelect.resolve({ priority: "config" })).toBe(bash)
       })
     })
 
     test("resolves bare bash to Git Bash before PATH", async () => {
       const bash = ShellSelect.gitbash()
       if (!bash) return
-      expect(ShellSelect.acceptable("bash")).toBe(bash)
-      expect(ShellSelect.preferred("bash")).toBe(bash)
+      expect(ShellSelect.resolve({ priority: "compat" }, "bash")).toBe(bash)
+      expect(ShellSelect.resolve({ priority: "config" }, "bash")).toBe(bash)
       await withShell("bash", async () => {
-        expect(ShellSelect.acceptable()).toBe(bash)
-        expect(ShellSelect.preferred()).toBe(bash)
+        expect(ShellSelect.resolve({ priority: "compat" })).toBe(bash)
+        expect(ShellSelect.resolve({ priority: "config" })).toBe(bash)
       })
     })
 
@@ -100,7 +98,7 @@ describe("shell", () => {
       const shell = which("pwsh") || which("powershell")
       if (!shell) return
       await withShell(path.win32.basename(shell), async () => {
-        expect(ShellSelect.preferred()).toBe(shell)
+        expect(ShellSelect.resolve({ priority: "config" })).toBe(shell)
       })
     })
   }

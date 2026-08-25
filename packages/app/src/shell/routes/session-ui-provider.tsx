@@ -1,6 +1,7 @@
 import { DataProvider } from "@opencode-ai/session-ui/context"
 import { useNavigate, useParams } from "@solidjs/router"
 import { createMemo, type ParentProps } from "solid-js"
+import { useProviders } from "@/providers/catalog/providers"
 import { LocalProvider } from "@/providers/models/selection"
 import type { ServerConnection } from "@/runtime/server/registry"
 import { sessionHref } from "@/shell/routes/session"
@@ -30,7 +31,11 @@ export function SessionUIProvider(
     await data.session.sync(sessionID).catch(() => undefined)
     navigate(href(sessionID))
   }
+  const providers = useProviders(directory)
   const sessionUIData = createMemo(() => ({
+    provider: providers.ready()
+      ? { all: providers.all(), default: providers.default(), connected: providers.connected().map((item) => item.id) }
+      : undefined,
     session: data.session.list(),
     session_status: Object.fromEntries(
       data.session

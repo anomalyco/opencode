@@ -156,14 +156,13 @@ describe("Gemini route", () => {
       expect(prepared.body.contents).toEqual([
         {
           role: "model",
-          parts: [{ functionCall: { id: undefined, name: "lookup", args: { query: "weather" } } }],
+          parts: [{ functionCall: { name: "lookup", args: { query: "weather" } } }],
         },
         {
           role: "user",
           parts: [
             {
               functionResponse: {
-                id: undefined,
                 name: "lookup",
                 response: { name: "lookup", content: "done" },
               },
@@ -201,8 +200,8 @@ describe("Gemini route", () => {
         {
           role: "model",
           parts: [
-            { functionCall: { id: undefined, name: "lookup", args: { query: "weather" } } },
-            { functionCall: { id: undefined, name: "lookup", args: { query: "time" } } },
+            { functionCall: { name: "lookup", args: { query: "weather" } } },
+            { functionCall: { name: "lookup", args: { query: "time" } } },
           ],
         },
         {
@@ -210,18 +209,114 @@ describe("Gemini route", () => {
           parts: [
             {
               functionResponse: {
-                id: undefined,
                 name: "lookup",
                 response: { name: "lookup", content: "sunny" },
               },
             },
             {
               functionResponse: {
-                id: undefined,
                 name: "lookup",
                 response: { name: "lookup", content: "noon" },
               },
             },
+          ],
+        },
+      ])
+    }),
+  )
+
+  it.effect("lowers function call ids for gemini 3 models", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: gemini3,
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: { query: "weather" } })]),
+            Message.tool({ id: "call_1", name: "lookup", result: "done", resultType: "text" }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.contents).toEqual([
+        {
+          role: "model",
+          parts: [
+            {
+              functionCall: { id: "call_1", name: "lookup", args: { query: "weather" } },
+              thoughtSignature: "skip_thought_signature_validator",
+            },
+          ],
+        },
+        {
+          role: "user",
+          parts: [
+            {
+              functionResponse: {
+                id: "call_1",
+                name: "lookup",
+                response: { name: "lookup", content: "done" },
+              },
+            },
+          ],
+        },
+      ])
+    }),
+  )
+
+  it.effect("omits function call ids entirely for pre-gemini-3 models", () =>
+    Effect.gen(function* () {
+      const messages = [
+        Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: { query: "weather" } })]),
+        Message.tool({ id: "call_1", name: "lookup", result: "done", resultType: "text" }),
+      ]
+      const legacy = yield* compileRequest(LLM.request({ model, messages }))
+      const older = yield* compileRequest(
+        LLM.request({
+          model: Gemini.route
+            .with({
+              endpoint: { baseURL: "https://generativelanguage.test/v1beta/" },
+              auth: Auth.header("x-goog-api-key", "test"),
+            })
+            .model({ id: "gemini-1.5-flash" }),
+          messages,
+        }),
+      )
+
+      expect(legacy.body.contents).toEqual([
+        { role: "model", parts: [{ functionCall: { name: "lookup", args: { query: "weather" } } }] },
+        {
+          role: "user",
+          parts: [{ functionResponse: { name: "lookup", response: { name: "lookup", content: "done" } } }],
+        },
+      ])
+      expect(JSON.stringify(legacy.body.contents)).not.toContain('"id"')
+      expect(JSON.stringify(older.body.contents)).not.toContain('"id"')
+    }),
+  )
+
+  it.effect("includes function call ids for non-gemini model ids", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: Gemini.route
+            .with({
+              endpoint: { baseURL: "https://generativelanguage.test/v1beta/" },
+              auth: Auth.header("x-goog-api-key", "test"),
+            })
+            .model({ id: "gemma-3-27b-it" }),
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: { query: "weather" } })]),
+            Message.tool({ id: "call_1", name: "lookup", result: "done", resultType: "text" }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.contents).toEqual([
+        { role: "model", parts: [{ functionCall: { id: "call_1", name: "lookup", args: { query: "weather" } } }] },
+        {
+          role: "user",
+          parts: [
+            { functionResponse: { id: "call_1", name: "lookup", response: { name: "lookup", content: "done" } } },
           ],
         },
       ])
@@ -419,13 +514,16 @@ describe("Gemini route", () => {
       expect(prepared.body.contents).toEqual([
         {
           role: "model",
-          parts: [{ functionCall: { name: "read", args: { path: "pixel.png" } }, thoughtSignature: "sig_1" }],
+          parts: [
+            { functionCall: { id: "call_image", name: "read", args: { path: "pixel.png" } }, thoughtSignature: "sig_1" },
+          ],
         },
         {
           role: "user",
           parts: [
             {
               functionResponse: {
+                id: "call_image",
                 name: "read",
                 response: { name: "read", content: "Image read successfully" },
                 parts: [{ inlineData: { mimeType: "image/png", data: "AAECAw==" } }],
@@ -808,6 +906,54 @@ describe("Gemini route", () => {
     }),
   )
 
+  it.effect("ignores unknown response parts", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents({
+              candidates: [
+                {
+                  content: {
+                    role: "model",
+                    parts: [
+                      { text: "Hello " },
+                      { executableCode: { language: "PYTHON", code: "print('ignored')" } },
+                      { text: "world" },
+                    ],
+                  },
+                  finishReason: "STOP",
+                },
+              ],
+            }),
+          ),
+        ),
+      )
+
+      expect(response.text).toBe("Hello world")
+      expect(response.finishReason).toEqual({ normalized: "stop", raw: "STOP" })
+    }),
+  )
+
+  it.effect("rejects malformed recognized response parts", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents({
+              candidates: [{ content: { role: "model", parts: [{ text: 42 }] } }],
+            }),
+          ),
+        ),
+        Effect.flip,
+      )
+
+      expect(error).toBeInstanceOf(AIError)
+      expect(error.reason).toMatchObject({ _tag: "InvalidProviderOutput" })
+      expect(error.message).toContain("Invalid google/gemini stream event")
+    }),
+  )
+
   it.effect("preserves thoughtSignature for reasoning and tool-call continuation", () =>
     Effect.gen(function* () {
       const body = sseEvents({
@@ -849,7 +995,7 @@ describe("Gemini route", () => {
       })
       expect(toolCall).toMatchObject({
         id: "provider_call",
-        providerMetadata: { google: { functionCallId: "provider_call", thoughtSignature: "tool_sig" } },
+        providerMetadata: { google: { thoughtSignature: "tool_sig" } },
       })
       expect(response.events.findIndex((event) => event.type === "reasoning-end")).toBeLessThan(
         response.events.findIndex((event) => event.type === "tool-call"),
@@ -857,7 +1003,7 @@ describe("Gemini route", () => {
 
       const prepared = yield* compileRequest(
         LLM.request({
-          model,
+          model: gemini3,
           messages: [
             Message.assistant([
               { type: "reasoning", text: "thinking", providerMetadata: reasoningEnd?.providerMetadata },
@@ -873,7 +1019,6 @@ describe("Gemini route", () => {
               name: "lookup",
               result: "done",
               resultType: "text",
-              providerMetadata: toolCall?.providerMetadata,
             }),
           ],
         }),
@@ -977,7 +1122,7 @@ describe("Gemini route", () => {
           role: "model",
           parts: [
             {
-              functionCall: { id: undefined, name: "lookup", args: { query: "weather" } },
+              functionCall: { id: "tool_0", name: "lookup", args: { query: "weather" } },
               thoughtSignature: "skip_thought_signature_validator",
             },
           ],
@@ -987,7 +1132,7 @@ describe("Gemini route", () => {
           parts: [
             {
               functionResponse: {
-                id: undefined,
+                id: "tool_0",
                 name: "lookup",
                 response: { name: "lookup", content: "done" },
               },
@@ -1023,15 +1168,15 @@ describe("Gemini route", () => {
           role: "model",
           parts: [
             {
-              functionCall: { id: undefined, name: "lookup", args: { query: "weather" } },
+              functionCall: { id: "tool_0", name: "lookup", args: { query: "weather" } },
               thoughtSignature: "parallel_signature",
             },
             {
-              functionCall: { id: undefined, name: "lookup", args: { query: "news" } },
+              functionCall: { id: "tool_1", name: "lookup", args: { query: "news" } },
               thoughtSignature: undefined,
             },
             {
-              functionCall: { id: undefined, name: "lookup", args: { query: "sports" } },
+              functionCall: { id: "tool_2", name: "lookup", args: { query: "sports" } },
               thoughtSignature: undefined,
             },
           ],
@@ -1059,11 +1204,11 @@ describe("Gemini route", () => {
           role: "model",
           parts: [
             {
-              functionCall: { id: undefined, name: "lookup", args: { query: "weather" } },
+              functionCall: { id: "tool_0", name: "lookup", args: { query: "weather" } },
               thoughtSignature: "skip_thought_signature_validator",
             },
             {
-              functionCall: { id: undefined, name: "lookup", args: { query: "news" } },
+              functionCall: { id: "tool_1", name: "lookup", args: { query: "news" } },
               thoughtSignature: "skip_thought_signature_validator",
             },
           ],
@@ -1214,7 +1359,6 @@ describe("Gemini route", () => {
         id: "call_0",
         name: "lookup",
         input: { query: "weather" },
-        providerMetadata: { google: { functionCallId: "call_0" } },
       })
       expect(response.toolCalls[1]).toMatchObject({
         type: "tool-call",
@@ -1227,6 +1371,37 @@ describe("Gemini route", () => {
         type: "finish",
         reason: { normalized: "tool-calls", raw: "STOP" },
       })
+    }),
+  )
+
+  it.effect("replaces repeated supplier ids with fresh fallback ids", () =>
+    Effect.gen(function* () {
+      const body = sseEvents({
+        candidates: [
+          {
+            content: {
+              role: "model",
+              parts: [
+                { functionCall: { id: "dup_call", name: "lookup", args: { query: "weather" } } },
+                { functionCall: { id: "dup_call", name: "lookup", args: { query: "news" } } },
+              ],
+            },
+            finishReason: "STOP",
+          },
+        ],
+      })
+      const response = yield* LLMClient.generate(
+        LLMRequest.update(request, {
+          tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
+        }),
+      ).pipe(Effect.provide(fixedResponse(body)))
+
+      expect(response.toolCalls[0]).toMatchObject({
+        id: "dup_call",
+        providerMetadata: undefined,
+      })
+      expect(response.toolCalls[1].id).toMatch(/^tool_[0-9a-zA-Z]+$/)
+      expect(response.toolCalls[1].id).not.toBe(response.toolCalls[0].id)
     }),
   )
 
@@ -1362,6 +1537,73 @@ describe("Gemini route", () => {
 
       expect(response.usage).toMatchObject({ reasoningTokens: 1 })
       expect(response.usage?.totalTokens).toBeUndefined()
+    }),
+  )
+
+  it.effect("survives explicit null usage counts", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { candidates: [{ content: { role: "model", parts: [{ text: "Hi" }] } }] },
+              { usageMetadata: { promptTokenCount: null, candidatesTokenCount: 5 } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.text).toBe("Hi")
+      expect(response.usage).toMatchObject({ outputTokens: 5, totalTokens: 5 })
+      expect(response.usage?.inputTokens).toBeUndefined()
+      expect(response.usage?.nonCachedInputTokens).toBeUndefined()
+      expect(response.usage?.cacheReadInputTokens).toBeUndefined()
+      expect(response.usage?.reasoningTokens).toBeUndefined()
+    }),
+  )
+
+  it.effect("survives null candidates, content, parts, and finish reason", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { candidates: null },
+              { candidates: [{ content: { role: "model", parts: null } }] },
+              { candidates: [{ content: null, finishReason: null }] },
+              {
+                candidates: [
+                  { content: { role: "model", parts: [{ text: "Hello" }] }, finishReason: "STOP" as const },
+                ],
+              },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.text).toBe("Hello")
+      expect(response.finishReason).toEqual({ normalized: "stop", raw: "STOP" })
+    }),
+  )
+
+  it.effect("treats a null thought flag on a text part as visible output", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents({
+              candidates: [
+                { content: { role: "model", parts: [{ text: "Visible", thought: null }] }, finishReason: "STOP" },
+              ],
+            }),
+          ),
+        ),
+      )
+      const reasoningStart = response.events.find((event) => event.type === "reasoning-start")
+
+      expect(reasoningStart).toBeUndefined()
+      expect(response.reasoning ?? "").toBe("")
+      expect(response.text).toBe("Visible")
     }),
   )
 
