@@ -21,9 +21,9 @@ export default function NewSessionPage(props: { draftId: string }) {
     tabs.store.find((tab): tab is DraftTab => tab.type === "draft" && tab.draftID === search.draftId),
   )
   const workspace = createNewSessionWorkspaceController({
-    selected: () => draftTab()?.worktree,
+    selectedWorktree: () => draftTab()?.worktree,
     selectedBranch: () => draftTab()?.branch,
-    setSelected: (worktree) => {
+    setSelectedWorktree: (worktree) => {
       if (search.draftId) tabs.updateDraft(search.draftId, { worktree })
     },
     setSelectedBranch: (branch) => {
