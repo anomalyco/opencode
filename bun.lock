@@ -686,6 +686,7 @@
       "version": "1.18.4",
       "dependencies": {
         "@effect/platform-node": "catalog:",
+        "@effect/platform-node-shared": "catalog:",
         "@opencode-ai/core": "workspace:*",
         "@opencode-ai/protocol": "workspace:*",
         "@opencode-ai/schema": "workspace:*",
