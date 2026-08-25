@@ -318,7 +318,9 @@ function AutoMethod(props: AutoMethodProps) {
         <Link href={props.authorization.url} fg={theme.primary} />
         <text fg={theme.textMuted}>{props.authorization.instructions}</text>
       </box>
-      <text fg={theme.textMuted}>Waiting for authorization...</text>
+      <text fg={theme.textMuted}>
+        {props.providerID === "azure" ? "Discovering Azure models..." : "Waiting for authorization..."}
+      </text>
       <text fg={theme.text}>
         c <span style={{ fg: theme.textMuted }}>copy</span>
       </text>
