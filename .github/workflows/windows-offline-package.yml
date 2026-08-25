@@ -1,0 +1,83 @@
+name: windows-offline-package
+
+on:
+  workflow_dispatch:
+
+jobs:
+  package:
+    name: Windows x64 offline package
+    runs-on: windows-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Install Windows dependencies
+        uses: ./.github/actions/setup-bun
+        with:
+          install-flags: --frozen-lockfile
+
+      - name: Verify offline dependencies
+        shell: pwsh
+        run: |
+          $required = @(
+            "node_modules\@opentui\solid\scripts\preload.js",
+            "node_modules\@tsconfig\bun\tsconfig.json",
+            "node_modules\@sentry\vite-plugin"
+          )
+
+          foreach ($path in $required) {
+            if (-not (Test-Path $path)) {
+              throw "Missing dependency: $path"
+            }
+          }
+
+          bun --version
+          bun --cwd packages/opencode --conditions=browser src/index.ts --help
+          bun --cwd packages/app x vite --version
+
+      - name: Include Bun and launchers
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force offline-tools | Out-Null
+          Copy-Item (Get-Command bun).Source offline-tools\bun.exe
+
+          @'
+          @echo off
+          set "PATH=%~dp0offline-tools;%PATH%"
+          bun dev serve
+          '@ | Set-Content -Encoding ascii start-api.cmd
+
+          @'
+          @echo off
+          set "PATH=%~dp0offline-tools;%PATH%"
+          bun run dev:web
+          '@ | Set-Content -Encoding ascii start-web.cmd
+
+          @'
+          @echo off
+          set "PATH=%~dp0offline-tools;%PATH%"
+          bun dev .
+          '@ | Set-Content -Encoding ascii start-tui.cmd
+
+      - name: Create offline archive
+        shell: pwsh
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP "opencode-windows-x64-offline.7z"
+          7z a -t7z -mx=3 $archive . "-xr!.git" "-xr!.opencode-dev"
+
+          if (-not (Test-Path $archive)) {
+            throw "Offline archive was not created"
+          }
+
+          Get-Item $archive | Format-List Name, Length, FullName
+
+      - name: Upload offline package
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: opencode-windows-x64-offline
+          path: ${{ runner.temp }}/opencode-windows-x64-offline.7z
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
