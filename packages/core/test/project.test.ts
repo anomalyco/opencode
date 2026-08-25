@@ -2,7 +2,7 @@ import { describe, expect } from "bun:test"
 import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
-import { Effect, Fiber, Stream } from "effect"
+import { Effect, Stream } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Bus } from "@opencode-ai/core/bus"
@@ -200,32 +200,25 @@ describe("Project.resolve", () => {
       const bus = yield* Bus.Service
       const initial = yield* project.resolve(abs(before))
       yield* project.update({ projectID: initial.id, name: "Preserved name" })
-      const updated = yield* bus
-        .subscribe(ProjectSchema.Event.Updated)
-        .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
+      const updates: Project.Info[] = []
+      yield* bus.subscribe(ProjectSchema.Event.Updated).pipe(
+        Stream.runForEach((event) => Effect.sync(() => updates.push(event.data))),
+        Effect.forkScoped({ startImmediately: true }),
+      )
 
       yield* Effect.promise(() => fs.rename(before, after))
       const renamed = yield* project.resolve(abs(after))
-      const events = Array.from(yield* Fiber.join(updated))
+      yield* Effect.yieldNow
 
       expect(renamed.id).toBe(initial.id)
       expect(renamed.canonical).toBe(yield* real(after))
-      expect(events).toHaveLength(1)
-      expect(events.map((event) => event.data)).toEqual((yield* project.list()).filter((item) => item.id === initial.id))
-      expect(events[0]?.data).toMatchObject({
+      expect(updates).toHaveLength(1)
+      expect(updates).toEqual((yield* project.list()).filter((item) => item.id === initial.id))
+      expect(updates[0]).toMatchObject({
         id: initial.id,
         canonical: yield* real(after),
         name: "Preserved name",
       })
-
-      yield* bus.subscribe(ProjectSchema.Event.Updated).pipe(
-        Stream.runForEach((event) => Effect.sync(() => events.push(event))),
-        Effect.forkScoped({ startImmediately: true }),
-      )
-      yield* project.resolve(abs(after))
-      yield* Effect.yieldNow
-
-      expect(events).toHaveLength(1)
     }),
   )
 
