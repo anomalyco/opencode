@@ -1,7 +1,8 @@
 import { Context, Effect, Layer } from "effect"
 import { RequestExecutor } from "./route/executor.js"
+import { mergeHttpOptions, type AIError } from "./schema/index.js"
+import { sanitizeSurrogates } from "./utils/sanitize.js"
 import type { ImageOptions, ImageRequest, ImageRequestFor, ImageResponse } from "./image.js"
-import type { AIError } from "./schema/index.js"
 
 export type Execute = RequestExecutor.Interface["execute"]
 
@@ -26,7 +27,18 @@ export const layer: Layer.Layer<Service, never, RequestExecutor.Service> = Layer
   Effect.gen(function* () {
     const executor = yield* RequestExecutor.Service
     return Service.of({
-      generate: (request) => request.model.route.generate(request, executor.execute),
+      generate: (request) =>
+        request.model.route.generate(
+          {
+            ...sanitizeSurrogates({
+              ...request,
+              model: undefined,
+              http: mergeHttpOptions(request.model.http, request.http),
+            }),
+            model: request.model,
+          },
+          executor.execute,
+        ),
     })
   }),
 )

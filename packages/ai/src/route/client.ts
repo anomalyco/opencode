@@ -7,6 +7,7 @@ import { HttpTransport } from "./transport/index.js"
 import type { HttpMiddleware, Transport, TransportRuntime, WebSocketChannelExecutor } from "./transport/index.js"
 import type { Protocol } from "./protocol.js"
 import { applyCachePolicy } from "../cache-policy.js"
+import { sanitizeSurrogates } from "../utils/sanitize.js"
 import * as ProviderShared from "../protocols/shared.js"
 import type { ProtocolID, ProviderOptions } from "../schema/index.js"
 import {
@@ -400,7 +401,8 @@ export function make<Body, Prepared, Frame, Event, State>(
 }
 
 const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest, options?: StreamOptions) {
-  const resolved = applyCachePolicy(resolveRequestOptions(request))
+  const original = applyCachePolicy(resolveRequestOptions(request))
+  const resolved = LLMRequest.update(original, sanitizeSurrogates({ ...LLMRequest.input(original), model: undefined }))
   const route = resolved.model.route
 
   const body = yield* route.body

@@ -309,7 +309,7 @@ const lowerToolCall = (part: ToolCallPart): OpenAIChatAssistantToolCall => ({
   type: "function",
   function: {
     name: part.name,
-    arguments: ProviderShared.encodeOutboundJson(part.input),
+    arguments: ProviderShared.encodeJson(part.input),
   },
 })
 

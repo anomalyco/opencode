@@ -32,12 +32,9 @@ const applyQuery = (url: string, query: Record<string, string> | undefined) => {
 
 const bodyWithOverlay = <Body>(body: Body, request: LLMRequest, encodeBody: (body: Body) => string) =>
   Effect.gen(function* () {
-    if (request.http?.body === undefined) {
-      const sanitized = ProviderShared.sanitizeJson(body)
-      return { jsonBody: sanitized, bodyText: encodeBody(sanitized) }
-    }
+    if (request.http?.body === undefined) return { jsonBody: body, bodyText: encodeBody(body) }
     if (ProviderShared.isRecord(body)) {
-      const overlaid = ProviderShared.sanitizeJson(mergeJsonRecords(body, request.http.body) ?? {})
+      const overlaid = mergeJsonRecords(body, request.http.body) ?? {}
       return { jsonBody: overlaid, bodyText: ProviderShared.encodeJson(overlaid) }
     }
     return yield* ProviderShared.invalidRequest("http.body can only overlay JSON object request bodies")

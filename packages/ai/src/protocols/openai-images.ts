@@ -184,7 +184,7 @@ export const model = (input: ModelInput) => {
         nativeOptions(request.options),
         http?.body,
       ) as OpenAIImageBody
-      const text = ProviderShared.encodeOutboundJson(requestBody)
+      const text = ProviderShared.encodeJson(requestBody)
       const headers = yield* Auth.toEffect(input.auth)({
         request,
         method: "POST",
