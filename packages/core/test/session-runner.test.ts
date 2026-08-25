@@ -938,6 +938,21 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("does not automatically replace an existing session title", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      yield* prepareTitleGeneration
+      yield* session.rename({ sessionID, title: "Manual title" })
+      yield* admit(session, "Follow-up prompt")
+      yield* TestLLM.push(TestLLM.text("Assistant response", "text-response"))
+
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(1)
+      expect((yield* session.get(sessionID)).title).toBe("Manual title")
+    }),
+  )
+
   it.effect("coalesces title generation while a request is active", () =>
     Effect.gen(function* () {
       const session = yield* setup

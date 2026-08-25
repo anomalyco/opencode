@@ -255,7 +255,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
             return HttpApiSchema.NoContent.make()
           }
           const title = yield* SessionTitle.Service
-          yield* title.generate(ctx.params.sessionID, { overwrite: true })
+          yield* title.generate(ctx.params.sessionID)
           return HttpApiSchema.NoContent.make()
         }),
       )

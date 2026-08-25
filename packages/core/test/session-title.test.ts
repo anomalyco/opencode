@@ -362,7 +362,7 @@ it.effect("retries a legacy persisted fallback title", () =>
   }),
 )
 
-it.effect("only generates for a child session when explicitly requested", () =>
+it.effect("generates a title for an explicitly requested child session", () =>
   Effect.gen(function* () {
     requests = []
     titleStream = successfulTitle
@@ -399,9 +399,6 @@ it.effect("only generates for a child session when explicitly requested", () =>
 
     const title = yield* SessionTitle.Service
     yield* title.generate(sessionID)
-    expect(requests).toHaveLength(0)
-
-    yield* title.generate(sessionID, { overwrite: true })
     const store = yield* SessionStore.Service
     expect(requests).toHaveLength(1)
     expect((yield* store.get(sessionID))?.title).toBe("Generated Title")
@@ -423,25 +420,6 @@ it.effect("does not generate when the title agent is removed", () =>
     expect(requests).toHaveLength(0)
     const untouched = yield* store.get(sessionID)
     expect(untouched?.title).toBeUndefined()
-  }),
-)
-
-it.effect("does not overwrite an explicit title", () =>
-  Effect.gen(function* () {
-    requests = []
-    titleStream = successfulTitle
-    const sessionID = Session.ID.make("ses_title_explicit")
-    yield* insertSession(sessionID)
-    yield* prompt(sessionID, "Help me debug the failing build")
-    const events = yield* Bus.Service
-    yield* events.publish(SessionEvent.Renamed, { sessionID, title: "New session - 2099-01-01T00:00:00.000Z" })
-
-    const title = yield* SessionTitle.Service
-    yield* title.generate(sessionID)
-
-    const store = yield* SessionStore.Service
-    expect(requests).toHaveLength(0)
-    expect((yield* store.get(sessionID))?.title).toBe("New session - 2099-01-01T00:00:00.000Z")
   }),
 )
 
@@ -483,7 +461,7 @@ it.effect("regenerates an existing title using the title agent", () =>
     yield* prompt(sessionID, "Switch to fixing OAuth token refresh")
 
     const title = yield* SessionTitle.Service
-    yield* title.generate(sessionID, { overwrite: true })
+    yield* title.generate(sessionID)
 
     const store = yield* SessionStore.Service
     expect(requests).toHaveLength(1)
@@ -512,7 +490,7 @@ it.effect("bounds regeneration context while preserving the original request and
     yield* prompt(sessionID, `OMITTED_OLD_CONTEXT ${"b".repeat(9_000)} RECENT_GOAL`)
 
     const title = yield* SessionTitle.Service
-    yield* title.generate(sessionID, { overwrite: true })
+    yield* title.generate(sessionID)
 
     const content = requests[0]?.messages[0]?.content[0]
     expect(content?.type).toBe("text")
@@ -541,7 +519,7 @@ it.effect("preserves the existing title when regeneration fails", () =>
     titleStream = () => Stream.make(LLMEvent.providerError({ message: "Provider unavailable" }))
 
     const title = yield* SessionTitle.Service
-    yield* title.generate(sessionID, { overwrite: true })
+    yield* title.generate(sessionID)
 
     const store = yield* SessionStore.Service
     expect(requests).toHaveLength(1)

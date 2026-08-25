@@ -38,14 +38,14 @@ type Dependencies = {
 }
 
 export interface Interface {
-  /** Generates an initial title or regenerates one from bounded conversation history when overwriting. */
-  readonly generate: (sessionID: SessionSchema.ID, options?: { readonly overwrite?: boolean }) => Effect.Effect<void>
+  /** Generates an initial title or regenerates one from bounded conversation history. */
+  readonly generate: (sessionID: SessionSchema.ID) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionTitle") {}
 
 const truncate = (value: string) => (value.length <= MAX_LENGTH ? value : `${value.slice(0, MAX_LENGTH - 3)}...`)
-const isUntitled = (session: SessionSchema.Info) =>
+export const isUntitled = (session: SessionSchema.Info) =>
   isExactRootFallback({
     title: session.title,
     time: { created: DateTime.toEpochMillis(session.time.created) },
@@ -113,15 +113,12 @@ const make = (dependencies: Dependencies) => {
   const generate = Effect.fn("SessionTitle.generate")(function* (
     db: Database.Interface["db"],
     sessionID: SessionSchema.ID,
-    options?: { readonly overwrite?: boolean },
   ) {
     const session = yield* dependencies.store.get(sessionID)
     if (!session) return
-    if (session.parentID && !options?.overwrite) return
-    if (!options?.overwrite && !isUntitled(session)) return
     const firstUser = yield* SessionHistory.firstUserMessage(db, session.id)
     if (!firstUser) return
-    const text = options?.overwrite
+    const text = !isUntitled(session)
       ? yield* dependencies.store.context(session.id).pipe(
           Effect.map((messages) => {
             const original = `Original request:\n${firstUser.text.slice(0, MAX_FIRST_MESSAGE_LENGTH)}`
@@ -203,7 +200,7 @@ export const layer = Layer.effect(
     const database = yield* Database.Service
     const title = make({ bus, llm, agents, catalog, models, modelRequests, store })
     return Service.of({
-      generate: (sessionID, options) => title.generate(database.db, sessionID, options),
+      generate: (sessionID) => title.generate(database.db, sessionID),
     })
   }),
 )
