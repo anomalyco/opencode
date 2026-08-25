@@ -390,6 +390,18 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
+        title: "Paste primary selection",
+        name: "prompt.paste.primary",
+        category: "Prompt",
+        hidden: true,
+        enabled: process.platform === "linux",
+        run: async () => {
+          const text = await clipboard.readPrimary?.()
+          if (!text) return
+          await pasteInputText(text)
+        },
+      },
+      {
         title: "Interrupt session",
         name: "session.interrupt",
         category: "Session",

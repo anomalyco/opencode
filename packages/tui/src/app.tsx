@@ -1091,6 +1091,12 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       flexDirection="column"
       backgroundColor={theme.background}
       onMouseDown={(evt) => {
+        if (evt.button === MouseButton.MIDDLE && process.platform === "linux") {
+          evt.preventDefault()
+          evt.stopPropagation()
+          keymap.dispatchCommand("prompt.paste.primary")
+          return
+        }
         if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
         if (evt.button !== MouseButton.RIGHT) return
 
@@ -1100,7 +1106,10 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       }}
       onMouseUp={
         !Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT
-          ? () => Selection.copy(renderer, toast, clipboard)
+          ? (evt) => {
+              if (evt.button === MouseButton.MIDDLE) return
+              Selection.copy(renderer, toast, clipboard)
+            }
           : undefined
       }
     >

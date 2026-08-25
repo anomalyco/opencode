@@ -94,6 +94,38 @@ export function copyCommand(
   }
 }
 
+export function readPrimaryCommand(
+  os: NodeJS.Platform,
+  wayland: boolean,
+  has: (name: string) => boolean,
+): string[] | undefined {
+  if (os !== "linux") return
+  if (wayland && has("wl-paste")) return ["wl-paste", "--primary", "--no-newline"]
+  if (has("xclip")) return ["xclip", "-selection", "primary", "-o"]
+  if (has("xsel")) return ["xsel", "--primary", "--output"]
+}
+
+let readPrimaryMethod: Promise<(() => Promise<string | undefined>) | undefined> | undefined
+
+function getReadPrimaryMethod() {
+  return (readPrimaryMethod ??= (async () => {
+    const { which } = await import("@opencode-ai/core/util/which")
+    const native = readPrimaryCommand(platform(), Boolean(process.env.WAYLAND_DISPLAY), (name) => Boolean(which(name)))
+    if (!native) return
+    return async () => {
+      const output = await command(native[0], native.slice(1)).catch(() => Buffer.alloc(0))
+      if (!output.length) return
+      return output.toString("utf8")
+    }
+  })())
+}
+
+// X11/Wayland primary selection: the buffer that middle click traditionally pastes.
+export async function readPrimary() {
+  const method = await getReadPrimaryMethod()
+  return method?.()
+}
+
 let copyMethod: Promise<(text: string) => Promise<void>> | undefined
 
 function getCopyMethod() {
