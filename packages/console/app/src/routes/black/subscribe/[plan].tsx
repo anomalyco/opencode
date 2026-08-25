@@ -87,24 +87,7 @@ const createSetupIntent = async (input: { plan: string; workspaceID: string }) =
       return { error: formError.alreadySubscribed }
     }
 
-    let customerID = customer?.customerID
-    if (!customerID) {
-      const customer = await Billing.stripe().customers.create({
-        email,
-        metadata: {
-          workspaceID,
-        },
-      })
-      customerID = customer.id
-      await Database.use((tx) =>
-        tx
-          .update(BillingTable)
-          .set({
-            customerID,
-          })
-          .where(eq(BillingTable.workspaceID, workspaceID)),
-      )
-    }
+    const customerID = await Billing.ensureCustomer(email)
 
     const intent = await Billing.stripe().setupIntents.create({
       customer: customerID,
