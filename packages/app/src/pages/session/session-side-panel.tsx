@@ -693,7 +693,7 @@ export function SessionSidePanel(props: {
                             <TooltipV2
                               value={
                                 <>
-                                  {language.t("command.review.toggle")}
+                                  {language.t("common.close")}
                                   <Show when={reviewToggleKeybind().length > 0}>
                                     <KeybindV2 keys={reviewToggleKeybind()} variant="neutral" />
                                   </Show>
@@ -708,8 +708,7 @@ export function SessionSidePanel(props: {
                                 size="large"
                                 icon={<Icon name="close-small" />}
                                 onClick={() => view().reviewPanel.close()}
-                                aria-label={language.t("command.review.toggle")}
-                                aria-expanded={view().reviewPanel.opened()}
+                                aria-label={language.t("common.close")}
                                 aria-controls="review-panel"
                               />
                             </TooltipV2>
