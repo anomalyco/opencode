@@ -1,5 +1,6 @@
-import { Show, createMemo } from "solid-js"
+import { Show } from "solid-js"
 import { Button } from "@opencode-ai/ui/button"
+import { createAnimatedPresenceState } from "@opencode-ai/ui/hooks"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Keybind } from "@opencode-ai/ui/keybind"
@@ -62,7 +63,7 @@ function ComposerModelControl(props: {
   onClose: () => void
   onUnpaidClick: () => void
 }) {
-  const shouldAnimate = createMemo<boolean>((previous) => previous ?? props.loading)
+  const animation = createAnimatedPresenceState(() => (props.loading ? undefined : true))
   const content = () => (
     <>
       <Show when={props.providerID}>
@@ -101,7 +102,7 @@ function ComposerModelControl(props: {
               variant="ghost-muted"
               size="normal"
               class="min-w-0 max-w-[220px] justify-start ![font-weight:440] group"
-              classList={{ "animate-in fade-in": shouldAnimate() }}
+              classList={{ "animate-in fade-in": animation().animate }}
               style={{ height: "28px" }}
               onClick={props.onUnpaidClick}
             >
@@ -118,7 +119,7 @@ function ComposerModelControl(props: {
                 size="normal"
                 style={{ height: "28px" }}
                 class="min-w-0 max-w-[220px] justify-start ![font-weight:440] group"
-                classList={{ "animate-in fade-in": shouldAnimate() }}
+                classList={{ "animate-in fade-in": animation().animate }}
                 data-action="composer-model"
                 data-control-type="popover"
               >

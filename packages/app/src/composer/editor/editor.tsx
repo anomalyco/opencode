@@ -3,6 +3,7 @@ import createPresence from "solid-presence"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
+import { createAnimatedPresenceState } from "@opencode-ai/ui/hooks"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { useI18n } from "@opencode-ai/ui/context/i18n"
 import { Button } from "@opencode-ai/ui/button"
@@ -717,17 +718,14 @@ function ComposerEditorAlternateDelivery(props: { controller: ComposerEditorMode
     if (queue.editing()) return "steer" as const
     return queue.alternate()
   })
-  const animation = createMemo<{ animate: boolean; delivery: ReturnType<typeof action> }>((previous) => ({
-    animate: previous !== undefined,
-    delivery: action() ?? previous?.delivery,
-  }))
+  const animation = createAnimatedPresenceState(action)
   const [button, setButton] = createSignal<HTMLButtonElement>()
   const presence = createPresence({
-    show: () => action() !== undefined,
+    show: () => animation().show,
     element: () => button() ?? null,
   })
   return (
-    <Show when={presence.present() && animation().delivery} keyed>
+    <Show when={presence.present() && animation().value} keyed>
       {(delivery) => (
         <Tooltip placement="top" inactive={delivery !== "steer"} value={i18n.t("ui.promptInput.steerHint")}>
           <Button
@@ -738,8 +736,8 @@ function ComposerEditorAlternateDelivery(props: { controller: ComposerEditorMode
             size="small"
             class="me-3 gap-1.5 px-1.5 text-v2-text-text-muted ![font-weight:530] duration-150 motion-reduce:animate-none"
             classList={{
-              "animate-in fade-in": animation().animate && action() !== undefined,
-              "animate-out fade-out fill-mode-forwards": animation().animate && action() === undefined,
+              "animate-in fade-in": animation().animate && animation().show,
+              "animate-out fade-out fill-mode-forwards": animation().animate && !animation().show,
             }}
             onClick={() => props.controller.submit({ alternate: true })}
           >
