@@ -1,4 +1,5 @@
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
+import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import type { Auth } from "@/auth"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import type { RuntimeFlags } from "@/effect/runtime-flags"
@@ -8,6 +9,8 @@ import type { Agent } from "@/agent/agent"
 import type { MessageV2 } from "../message-v2"
 import type { Provider } from "@/provider/provider"
 import { ProviderTransform } from "@/provider/transform"
+import { usable } from "../overflow"
+import { Token } from "@/util/token"
 import { SystemPrompt } from "../system"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { Effect, Record } from "effect"
@@ -32,6 +35,7 @@ type PrepareInput = {
   readonly auth: Auth.Info | undefined
   readonly plugin: Plugin.Interface
   readonly flags: RuntimeFlags.Info
+  readonly cfg: ConfigV1.Info
   readonly isWorkflow: boolean
 }
 
@@ -172,6 +176,33 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
       }),
       execute: async () => ({ output: "", title: "", metadata: {} }),
     })
+  }
+
+  // Window-aware output clamp: never request more output than the usable
+  // window leaves after the estimated input. This seam is where the fully
+  // composed request (system + messages + resolved tools) first exists, so
+  // the input estimate lives here rather than in the prompt loop.
+  const usableWindow = usable({
+    cfg: input.cfg,
+    model: input.model,
+    outputTokenMax: input.flags.outputTokenMax,
+    sessionID: input.sessionID,
+  })
+  if (usableWindow > 0 && params.maxOutputTokens !== undefined) {
+    const estimated = Token.estimate(
+      JSON.stringify([system, input.messages, Object.entries(tools).map(([name, item]) => [name, item.description, item.inputSchema])]),
+    )
+    const granted = Math.min(params.maxOutputTokens, Math.max(256, usableWindow - estimated))
+    if (granted < params.maxOutputTokens) {
+      yield* Effect.logWarning("clamped output budget to remaining window", {
+        "session.id": input.sessionID,
+        requested: params.maxOutputTokens,
+        granted,
+        estimated,
+        usable: usableWindow,
+      })
+      params.maxOutputTokens = granted
+    }
   }
 
   const opencodeProjectID = input.model.providerID.startsWith("opencode")

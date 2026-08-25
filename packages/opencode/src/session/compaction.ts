@@ -14,7 +14,7 @@ import { NotFoundError } from "@/storage/storage"
 
 import { Effect, Layer, Context } from "effect"
 import { InstanceState } from "@/effect/instance-state"
-import { isOverflow as overflow, usable } from "./overflow"
+import { isOverflow as overflow, usable, shouldWarnUnsetLimit, DEFAULT_USABLE_CONTEXT } from "./overflow"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
@@ -166,6 +166,7 @@ export interface Interface {
   readonly isOverflow: (input: {
     tokens: SessionV1.Assistant["tokens"]
     model: Provider.Model
+    sessionID?: SessionID
   }) => Effect.Effect<boolean>
   readonly prune: (input: { sessionID: SessionID }) => Effect.Effect<void>
   readonly process: (input: {
@@ -203,12 +204,22 @@ const layer = Layer.effect(
     const isOverflow = Effect.fn("SessionCompaction.isOverflow")(function* (input: {
       tokens: SessionV1.Assistant["tokens"]
       model: Provider.Model
+      sessionID?: SessionID
     }) {
+      const cfg = yield* config.get()
+      if (input.sessionID && shouldWarnUnsetLimit({ cfg, model: input.model, sessionID: input.sessionID })) {
+        yield* Effect.logWarning("model reports no context limit; assuming conservative usable window", {
+          providerID: input.model.providerID,
+          modelID: input.model.id,
+          usable: DEFAULT_USABLE_CONTEXT,
+        })
+      }
       return overflow({
-        cfg: yield* config.get(),
+        cfg,
         tokens: input.tokens,
         model: input.model,
         outputTokenMax: flags.outputTokenMax,
+        sessionID: input.sessionID,
       })
     })
 
