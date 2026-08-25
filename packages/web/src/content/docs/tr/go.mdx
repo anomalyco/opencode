@@ -49,7 +49,7 @@ Her çalışma alanından yalnızca bir üye OpenCode Go'ya abone olabilir.
 
 Mevcut model listesi şunları içerir:
 
-- **Grok 4.5**
+- **Grok 4.6**
 - **GLM-5.3**
 - **GLM-5.2**
 - **GLM-5.1**
@@ -91,7 +91,7 @@ Aşağıdaki tablo, tipik Go kullanım modellerine dayalı tahmini bir istek say
 
 | Model                        | 5 saatte bir istek | haftalık istek | aylık istek |
 | ---------------------------- | ------------------ | -------------- | ----------- |
-| Grok 4.5                     | 120                | 300            | 600         |
+| Grok 4.6                     | 169                | 423            | 845         |
 | GPT 5.6 Luna                 | 2,050              | 5,100          | 10,250      |
 | GLM-5.3                      | 220                | 540            | 1,080       |
 | GLM-5.2                      | 880                | 2,150          | 4,300       |
@@ -117,7 +117,7 @@ Aşağıdaki tablo, tipik Go kullanım modellerine dayalı tahmini bir istek say
 
 Tahminler, gözlemlenen istek modellerine dayanır:
 
-- Grok 4.5 — İstek başına 1.100 girdi, 71.500 önbelleğe alınmış, 220 çıktı token'ı
+- Grok 4.6 — İstek başına 390 girdi, 32.500 önbelleğe alınmış, 120 çıktı token'ı
 - GLM-5.3/5.2/5.1 — İstek başına 700 girdi, 52.000 önbelleğe alınmış, 150 çıktı token'ı
 - GPT 5.6 Luna — İstek başına 1.000 girdi, 50.000 önbelleğe alınmış, 220 çıktı token'ı
 - Kimi K3 — İstek başına 1.050 girdi, 76.500 önbelleğe alınmış, 300 çıktı token'ı
@@ -141,7 +141,8 @@ Tahminler ayrıca 1M token başına aşağıdaki fiyatlara ve her modelle birlik
 
 | Model                                   | Input  | Output | Cached Read | Cached Write | Kullanım |
 | --------------------------------------- | ------ | ------ | ----------- | ------------ | -------- |
-| Grok 4.5                                | $2.00  | $6.00  | $0.30       | -            | $15      |
+| Grok 4.6 (≤ 200K tokens)                | $2.00  | $6.00  | $0.50       | -            | $15      |
+| Grok 4.6 (> 200K tokens)                | $4.00  | $12.00 | $1.00       | -            | $15      |
 | GPT 5.6 Luna (≤ 272K tokens)            | $0.20  | $1.20  | $0.02       | $0.25        | $15      |
 | GPT 5.6 Luna (> 272K tokens)            | $0.40  | $1.80  | $0.04       | $0.50        | $15      |
 | GLM-5.3                                 | $1.40  | $4.40  | $0.26       | -            | $15      |
@@ -212,7 +213,7 @@ Go modellerine aşağıdaki API uç noktaları aracılığıyla da erişebilirsi
 
 | Model                        | Model ID                     | Uç Nokta                                         | AI SDK Paketi               |
 | ---------------------------- | ---------------------------- | ------------------------------------------------ | --------------------------- |
-| Grok 4.5                     | grok-4.5                     | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
+| Grok 4.6                     | grok-4.6                     | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | GPT 5.6 Luna                 | gpt-5.6-luna                 | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | GLM-5.3                      | glm-5.3                      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5.2                      | glm-5.2                      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
@@ -255,7 +256,7 @@ https://opencode.ai/zen/go/v1/models
 
 | Model                        | Model eğitimi | Veri saklama |
 | ---------------------------- | ------------- | ------------ |
-| Grok 4.5                     | Kullanılmaz   | 30 gün       |
+| Grok 4.6                     | Kullanılmaz   | 30 gün       |
 | GPT 5.6 Luna                 | Kullanılmaz   | 30 gün       |
 | GLM-5.3                      | Kullanılmaz   | 0 gün        |
 | GLM-5.2                      | Kullanılmaz   | 0 gün        |
@@ -279,7 +280,7 @@ https://opencode.ai/zen/go/v1/models
 | Hy3                          | Kullanılmaz   | 0 gün        |
 | Ox Alpha Free                | Kullanılmaz   | 0 gün        |
 
-- **Grok 4.5:** ZDR, durum bilgisi tutan Responses API, Files and Collections ve Batch API dahil olmak üzere saklanan verilere bağlı önemli API özelliklerini devre dışı bırakır. [Daha fazla bilgi](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
+- **Grok 4.6:** ZDR, durum bilgisi tutan Responses API, Files and Collections ve Batch API dahil olmak üzere saklanan verilere bağlı önemli API özelliklerini devre dışı bırakır. [Daha fazla bilgi](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
 - **GPT 5.6 Luna:** Tüm API özelliklerinin kullanımı için kötüye kullanım izleme günlükleri oluşturulur ve 30 güne kadar saklanır. [Daha fazla bilgi](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).
 - **Muse Spark 1.2 Contributor:** İstemlerinizi ve tamamlamalarınızı gelecekteki Meta modellerini eğitmek için kullanma izni karşılığında büyük ölçüde indirimli token fiyatları. Kullanılabilirlik, Meta'nın [Coğrafi Kullanım Politikası](https://ai.developer.meta.com/legal/geographic-use-policy) kapsamında izin verilen bölgelerle sınırlıdır. [Daha fazla bilgi](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
 - **DeepSeek V4 Flash:** ZDR anlaşması aylık olarak yenilenir. Mevcut anlaşma 31 Ağustos 2026 tarihine kadar geçerlidir.
