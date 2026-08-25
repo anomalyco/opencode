@@ -581,9 +581,15 @@ body {
             right: 0;
             left: auto;
             transform: translateY(-50%);
-            max-width: none;
+            max-width: 100%;
             padding-left: 16px;
             background: linear-gradient(90deg, transparent, var(--color-background-weak) 12px);
+
+            [data-name] {
+              min-width: 0;
+              overflow: hidden;
+              text-overflow: ellipsis;
+            }
           }
         }
 
