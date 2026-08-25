@@ -605,33 +605,28 @@ describe("SessionRestart background recovery", () => {
         { type: "shell", id: "call-claimed-shell", shellID: "sh_claimed", command: "sleep 60" },
       ])
 
-      const observed: string[] = []
-      const drained = yield* Deferred.make<void>()
+      const observed = yield* Deferred.make<string[]>()
       const scope = yield* Scope.make()
       yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
       const context = yield* buildExecution(scope, ({ sessionID }) =>
         store.context(sessionID).pipe(
           Effect.orDie,
-          Effect.tap((messages) =>
-            Effect.sync(() =>
-              observed.push(
-                ...messages.filter((message) => message.type === "synthetic").map((message) => message.text),
-              ),
+          Effect.flatMap((messages) =>
+            Deferred.succeed(
+              observed,
+              messages.filter((message) => message.type === "synthetic").map((message) => message.text),
             ),
           ),
-          Effect.andThen(Deferred.succeed(drained, undefined)),
           Effect.asVoid,
         ),
       )
       const execution = Context.get(context, SessionExecution.Service)
       yield* Context.get(context, SessionRestart.Service).resumeSuspendedSessions
-      yield* Deferred.await(drained)
-      yield* execution.awaitIdle(parent)
-
-      expect(observed).toEqual([
+      expect(yield* Deferred.await(observed)).toEqual([
         expect.stringContaining("Command cancelled because the server restarted"),
         "The server restarted while you were working. Continue from where you left off without repeating completed work.",
       ])
+      yield* execution.awaitIdle(parent)
       expect(yield* SessionInbox.list(database.db, parent)).toEqual([])
       expect((yield* claims(database))[parent]).toBe(false)
     }),

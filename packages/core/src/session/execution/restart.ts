@@ -109,30 +109,28 @@ export const layer = (options?: Options) =>
             (background) =>
               Effect.gen(function* () {
                 if ((yield* jobs.get(background.id))?.status === "running") return
-                if (background.type === "shell") {
-                  yield* bus.publish(SessionEvent.Synthetic, {
-                    sessionID: background.sessionID,
-                    text: `<shell id="${background.id}" state="cancelled" command="${background.description}">\nCommand cancelled because the server restarted\n</shell>`,
-                    description: background.description,
-                    metadata: {
-                      source: "shell",
-                      jobID: background.id,
-                      shellID: background.shellID,
-                      state: "cancelled",
-                    },
-                  })
-                  return
-                }
                 yield* bus.publish(SessionEvent.Synthetic, {
                   sessionID: background.sessionID,
-                  text: `<subagent sessionID="${background.id}" state="cancelled" description="${background.description}">\nSubagent cancelled because the server restarted\n</subagent>`,
                   description: background.description,
-                  metadata: {
-                    source: "subagent",
-                    childID: background.id,
-                    agent: background.agent,
-                    state: "cancelled",
-                  },
+                  ...(background.type === "shell"
+                    ? {
+                        text: `<shell id="${background.id}" state="cancelled" command="${background.description}">\nCommand cancelled because the server restarted\n</shell>`,
+                        metadata: {
+                          source: "shell",
+                          jobID: background.id,
+                          shellID: background.shellID,
+                          state: "cancelled",
+                        },
+                      }
+                    : {
+                        text: `<subagent sessionID="${background.id}" state="cancelled" description="${background.description}">\nSubagent cancelled because the server restarted\n</subagent>`,
+                        metadata: {
+                          source: "subagent",
+                          childID: background.id,
+                          agent: background.agent,
+                          state: "cancelled",
+                        },
+                      }),
                 })
               }),
             { discard: true },

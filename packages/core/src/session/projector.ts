@@ -13,7 +13,7 @@ import { SessionEvent } from "./event.js"
 import { SessionMessage } from "./message.js"
 import { SessionMessageUpdater } from "./message-updater.js"
 import { SessionInbox } from "./inbox.js"
-import { SessionStore } from "./store.js"
+import type { SessionStore } from "./store.js"
 import { Workspace } from "../workspace.js"
 import { InstructionState } from "./instruction-state.js"
 import { SessionInboxTable, SessionMessageTable, SessionTable } from "./sql.js"
@@ -404,19 +404,14 @@ function backgroundKey(sessionID: SessionSchema.ID, type: "shell" | "subagent", 
 function settleBackground(db: DatabaseService, sessionID: SessionSchema.ID, metadata?: Record<string, unknown>) {
   if (metadata?.state !== "completed" && metadata?.state !== "error" && metadata?.state !== "cancelled")
     return Effect.void
-  if (metadata.source === "shell" && typeof metadata.shellID === "string")
-    return db
-      .delete(KVTable)
-      .where(eq(KVTable.key, backgroundKey(sessionID, "shell", metadata.shellID)))
-      .run()
-      .pipe(Effect.orDie, Effect.asVoid)
-  if (metadata.source === "subagent" && typeof metadata.childID === "string")
-    return db
-      .delete(KVTable)
-      .where(eq(KVTable.key, backgroundKey(sessionID, "subagent", metadata.childID)))
-      .run()
-      .pipe(Effect.orDie, Effect.asVoid)
-  return Effect.void
+  if (metadata.source !== "shell" && metadata.source !== "subagent") return Effect.void
+  const id = metadata.source === "shell" ? metadata.shellID : metadata.childID
+  if (typeof id !== "string") return Effect.void
+  return db
+    .delete(KVTable)
+    .where(eq(KVTable.key, backgroundKey(sessionID, metadata.source, id)))
+    .run()
+    .pipe(Effect.orDie, Effect.asVoid)
 }
 
 const projectBackground = Effect.fn("SessionProjector.projectBackground")(function* (
@@ -628,10 +623,10 @@ const layer = Layer.effectDiscard(
     )
     yield* bus.project(SessionEvent.Deleted, (event) =>
       Effect.gen(function* () {
-        const parent = yield* db
-          .select({ id: SessionTable.parent_id })
-          .from(SessionTable)
+        const deleted = yield* db
+          .delete(SessionTable)
           .where(eq(SessionTable.id, event.data.sessionID))
+          .returning({ parentID: SessionTable.parent_id })
           .get()
           .pipe(Effect.orDie)
         const prefix = `session.background/${event.data.sessionID}/`
@@ -640,13 +635,12 @@ const layer = Layer.effectDiscard(
           .where(and(gte(KVTable.key, prefix), lt(KVTable.key, `${prefix}\uffff`)))
           .run()
           .pipe(Effect.orDie)
-        if (parent?.id)
+        if (deleted?.parentID)
           yield* db
             .delete(KVTable)
-            .where(eq(KVTable.key, backgroundKey(parent.id, "subagent", event.data.sessionID)))
+            .where(eq(KVTable.key, backgroundKey(deleted.parentID, "subagent", event.data.sessionID)))
             .run()
             .pipe(Effect.orDie)
-        yield* db.delete(SessionTable).where(eq(SessionTable.id, event.data.sessionID)).run().pipe(Effect.orDie)
       }),
     )
     yield* bus.project(SessionEvent.AgentSelected, (event) =>

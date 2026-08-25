@@ -1,7 +1,7 @@
 export * as SessionStore from "./store.js"
 
 import { and, eq, gte, isNotNull, isNull, lt, sql } from "drizzle-orm"
-import { Context, Effect, Layer, Schema } from "effect"
+import { Context, Effect, Layer, Option, Schema } from "effect"
 import { Database } from "../database/database.js"
 import { KVTable } from "../kv/sql.js"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
@@ -12,21 +12,23 @@ import { Session } from "@opencode-ai/schema/session"
 import { SessionInboxTable, SessionMessageTable, SessionTable } from "./sql.js"
 import { fromRow } from "./info.js"
 
-export type Background =
-  | {
-      readonly type: "shell"
-      readonly sessionID: Session.ID
-      readonly id: string
-      readonly shellID: string
-      readonly description: string
-    }
-  | {
-      readonly type: "subagent"
-      readonly sessionID: Session.ID
-      readonly id: Session.ID
-      readonly agent: string
-      readonly description: string
-    }
+const Background = Schema.Union([
+  Schema.Struct({
+    type: Schema.tag("shell"),
+    sessionID: Session.ID,
+    id: Schema.String,
+    shellID: Schema.String,
+    description: Schema.String,
+  }),
+  Schema.Struct({
+    type: Schema.tag("subagent"),
+    sessionID: Session.ID,
+    id: Session.ID,
+    agent: Schema.String,
+    description: Schema.String,
+  }),
+])
+export type Background = typeof Background.Type
 
 export interface Interface {
   readonly get: (sessionID: Session.ID) => Effect.Effect<Session.Info | undefined>
@@ -65,7 +67,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionStore") {}
 
-const isRecord = Schema.is(Schema.Record(Schema.String, Schema.Json))
+const decodeBackground = Schema.decodeUnknownOption(Background)
 
 const layer = Layer.effect(
   Service,
@@ -133,36 +135,7 @@ const layer = Layer.effect(
           )
           .all()
           .pipe(Effect.orDie)
-        return rows.flatMap((row): Background[] => {
-          const value = row.value
-          if (!isRecord(value)) return []
-          if (
-            typeof value.sessionID !== "string" ||
-            typeof value.id !== "string" ||
-            typeof value.description !== "string"
-          )
-            return []
-          if (value.type === "shell" && typeof value.shellID === "string")
-            return [
-              {
-                type: "shell",
-                sessionID: Session.ID.make(value.sessionID),
-                id: value.id,
-                shellID: value.shellID,
-                description: value.description,
-              },
-            ]
-          if (value.type !== "subagent" || typeof value.agent !== "string") return []
-          return [
-            {
-              type: "subagent",
-              sessionID: Session.ID.make(value.sessionID),
-              id: Session.ID.make(value.id),
-              agent: value.agent,
-              description: value.description,
-            },
-          ]
-        })
+        return rows.flatMap((row) => Option.toArray(decodeBackground(row.value)))
       }),
       claim: Effect.fn("SessionStore.claim")(function* (sessionID) {
         // The null guard makes re-claiming a still-claimed Session a zero-row
