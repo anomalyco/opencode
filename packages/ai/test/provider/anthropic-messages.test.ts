@@ -778,7 +778,10 @@ describe("Anthropic Messages route", () => {
           fixedResponse(
             sseEvents(
               { type: "message_start", message: { usage: { input_tokens: 5 } } },
+              { type: "content_block_start", index: 0 },
               { type: "content_block_start", index: 0, content_block: { type: "future_block", text: 42 } },
+              { type: "content_block_delta", index: 0 },
+              { type: "content_block_delta", index: 0, delta: { text: "ignored" } },
               { type: "content_block_delta", index: 0, delta: { type: "future_delta", text: 42 } },
               { type: "content_block_stop", index: 0 },
               { type: "content_block_start", index: 1, content_block: { type: "text", text: "" } },

@@ -1389,6 +1389,7 @@ const invalidStreamEvent = (event: AnthropicEvent) =>
 const step = (state: ParserState, event: AnthropicEvent) => {
   if (event.type === "message_start") return Effect.succeed(onMessageStart(state, event))
   if (event.type === "content_block_start") {
+    if (event.content_block === undefined) return Effect.succeed<StepResult>([state, NO_EVENTS])
     if (!ProviderShared.isRecord(event.content_block) || typeof event.content_block.type !== "string")
       return invalidStreamEvent(event)
     if (!isKnownStreamBlockType(event.content_block.type)) return Effect.succeed<StepResult>([state, NO_EVENTS])
@@ -1406,8 +1407,10 @@ const step = (state: ParserState, event: AnthropicEvent) => {
     return Effect.succeed(onContentBlockStart(state, { ...event, content_block: block }))
   }
   if (event.type === "content_block_delta") {
-    if (!ProviderShared.isRecord(event.delta) || typeof event.delta.type !== "string") return invalidStreamEvent(event)
-    if (!isKnownStreamDeltaType(event.delta.type)) return Effect.succeed<StepResult>([state, NO_EVENTS])
+    if (event.delta === undefined) return Effect.succeed<StepResult>([state, NO_EVENTS])
+    if (!ProviderShared.isRecord(event.delta)) return invalidStreamEvent(event)
+    if (typeof event.delta.type === "string" && !isKnownStreamDeltaType(event.delta.type))
+      return Effect.succeed<StepResult>([state, NO_EVENTS])
     const decoded = decodeAnthropicStreamDelta(event.delta)
     if (Option.isNone(decoded)) return invalidStreamEvent(event)
     return onContentBlockDelta(state, { ...event, delta: decoded.value })
