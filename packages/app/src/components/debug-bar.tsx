@@ -60,7 +60,7 @@ function Cell(props: {
   label: string
   tip: string
   value: string
-  wide?: boolean
+  span?: 2 | 3
 }) {
   const content = () => (
     <div
@@ -69,7 +69,8 @@ function Cell(props: {
         "min-h-[20px] w-fit justify-start px-1.5 py-0.5 text-left": !!props.inline,
         "justify-center text-center": !props.inline,
         "min-h-[42px] w-full flex-col rounded-[8px] px-0.5 py-1": !props.inline,
-        "col-span-2": !!props.wide && !props.inline,
+        "col-span-2": props.span === 2 && !props.inline,
+        "col-span-3": props.span === 3 && !props.inline,
       }}
     >
       <div
@@ -116,11 +117,18 @@ function Cell(props: {
   )
 }
 
-function FocusCell(props: { active: boolean; inline?: boolean; onClick: () => void }) {
+function ToggleCell(props: {
+  active: boolean
+  inline?: boolean
+  label: string
+  onClick: () => void
+  tip: string
+  value: string
+}) {
   const content = () => (
     <button
       type="button"
-      aria-label="Force focus styles on all interactive elements"
+      aria-label={`${props.label}: ${props.value}`}
       aria-pressed={props.active}
       classList={{
         "flex min-w-0 items-center font-mono uppercase hover:bg-surface-raised-base focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-border-focus": true,
@@ -137,26 +145,22 @@ function FocusCell(props: { active: boolean; inline?: boolean; onClick: () => vo
           "flex-col items-center": !props.inline,
         }}
       >
-        <span class="text-[10px] leading-none font-black tracking-[0.04em] opacity-70">FOCUS</span>
-        <span
-          classList={{ "leading-none font-bold": true, "text-[11px]": !!props.inline, "text-[13px]": !props.inline }}
-        >
-          {props.active ? "ON" : "OFF"}
-        </span>
+        <span class="text-[10px] leading-none font-black tracking-[0.04em] opacity-70">{props.label}</span>
+        <span class="text-[11px] leading-none font-bold">{props.value}</span>
       </span>
     </button>
   )
 
   if (props.inline) {
     return (
-      <TooltipV2 value="Force focus styles on all interactive elements" placement="top">
+      <TooltipV2 value={props.tip} placement="top">
         {content()}
       </TooltipV2>
     )
   }
 
   return (
-    <Tooltip value="Force focus styles on all interactive elements" placement="top">
+    <Tooltip value={props.tip} placement="top">
       {content()}
     </Tooltip>
   )
@@ -475,7 +479,7 @@ export function DebugBar(props: { inline?: boolean } = {}) {
           "gap-[9px]": !!props.inline,
           "gap-px": !props.inline,
           "flex w-full flex-nowrap items-center justify-start": !!props.inline,
-          "grid-cols-5": !props.inline,
+          "grid-cols-4": !props.inline,
           grid: !props.inline,
         }}
       >
@@ -557,10 +561,25 @@ export function DebugBar(props: { inline?: boolean } = {}) {
           bad={bad(heap(), 0.8)}
           dim={state.heap.used === undefined}
           inline={props.inline}
-          wide={!platform.setForceFocus}
+          span={platform.setForceFocus ? 2 : 3}
+        />
+        <ToggleCell
+          active={language.direction() === "rtl"}
+          inline={props.inline}
+          label={language.t("debugBar.direction.label")}
+          tip={language.t("debugBar.direction.tip")}
+          value={language.t(`debugBar.direction.${language.direction()}`)}
+          onClick={() => language.setDirection(language.direction() === "rtl" ? "ltr" : "rtl")}
         />
         {platform.setForceFocus && (
-          <FocusCell active={state.focus} inline={props.inline} onClick={() => void toggleFocus()} />
+          <ToggleCell
+            active={state.focus}
+            inline={props.inline}
+            label={language.t("debugBar.focus.label")}
+            tip={language.t("debugBar.focus.tip")}
+            value={language.t(state.focus ? "debugBar.focus.on" : "debugBar.focus.off")}
+            onClick={() => void toggleFocus()}
+          />
         )}
       </div>
     </aside>

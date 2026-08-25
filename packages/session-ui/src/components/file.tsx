@@ -700,6 +700,7 @@ function ViewerShell(props: {
     <div
       data-component="file"
       data-mode={props.mode}
+      dir="ltr"
       style={styleVariables}
       class="relative outline-none"
       classList={{

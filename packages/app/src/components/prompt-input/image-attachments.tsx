@@ -16,6 +16,7 @@ type PromptImageAttachmentsProps = {
   onOpen: (attachment: ImageAttachmentPart) => void
   onRemove: (id: string) => void
   removeLabel: string
+  fileLabel: string
   newLayoutDesigns: boolean
   comments?: PromptCommentItem[]
   commentActive?: (item: PromptCommentItem) => boolean
@@ -94,7 +95,7 @@ export const PromptImageAttachments: Component<PromptImageAttachmentsProps> = (p
                       }
                     >
                       <AttachmentCardV2 title={attachment.filename}>
-                        {typeLabel(attachment.filename, attachment.mime)}
+                        {typeLabel(attachment.filename, attachment.mime, props.fileLabel)}
                       </AttachmentCardV2>
                     </Show>
                   }

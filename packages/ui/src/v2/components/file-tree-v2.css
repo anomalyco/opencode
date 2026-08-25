@@ -13,13 +13,13 @@
   align-items: center;
   justify-content: flex-start;
   gap: 6px;
-  padding-right: 8px;
+  padding-inline-end: 8px;
   overflow: visible;
   border: none;
   border-radius: 6px;
   background-color: transparent;
   color: var(--v2-text-text-muted);
-  text-align: left;
+  text-align: start;
   cursor: pointer;
   scroll-margin-block: 8px;
   transition:
@@ -85,6 +85,10 @@
 
 [data-component="file-tree-v2"] [data-slot="file-tree-v2-chevron"]:not([data-expanded]) svg {
   transform: rotate(-90deg);
+}
+
+[data-component="file-tree-v2"]:dir(rtl) [data-slot="file-tree-v2-chevron"]:not([data-expanded]) svg {
+  transform: rotate(90deg);
 }
 
 [data-component="file-tree-v2"] [data-slot="file-tree-v2-row"][data-selected] [data-slot="file-tree-v2-chevron"] {
