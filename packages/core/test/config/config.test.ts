@@ -604,6 +604,7 @@ describe("Config", () => {
         provider: {
           bedrock: {
             npm: "@ai-sdk/amazon-bedrock",
+            models: { claude: { provider: { npm: "@ai-sdk/anthropic" } } },
             options: {
               headers: { "x-test": "1" },
               body: { trace: true },
@@ -616,6 +617,7 @@ describe("Config", () => {
 
       expect(migrated.providers?.bedrock).toMatchObject({
         package: Provider.aisdk("@ai-sdk/amazon-bedrock"),
+        models: { claude: { package: Provider.aisdk("@ai-sdk/anthropic") } },
         settings: { region: "us-east-1", profile: "dev" },
         headers: { "x-test": "1" },
         body: { trace: true },
