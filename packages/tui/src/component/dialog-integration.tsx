@@ -648,7 +648,7 @@ function OAuthAuto(props: {
       title={props.title}
       url={props.attempt.url}
       instructions={props.attempt.instructions}
-      message="Waiting for authorization..."
+      message={props.integration.id === "azure" ? "Discovering Azure models..." : "Waiting for authorization..."}
       copy
       open
     />

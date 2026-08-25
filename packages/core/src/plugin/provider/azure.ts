@@ -136,6 +136,9 @@ export const AzurePlugin = define({
                 typeof answer.resourceName === "string" ? answer.resourceName : resolveResourceName(configured)
               if (!resourceName) return yield* Effect.fail(new Error("Azure resource name is required"))
               const current = yield* token(cognitiveScope)
+              loaded.resource = resourceName
+              loaded.models = yield* discover(resourceName)
+              yield* ctx.catalog.reload()
               return Credential.OAuth.make({
                 type: "oauth",
                 methodID,
@@ -155,24 +158,9 @@ export const AzurePlugin = define({
       })
     })
 
-    const load = Effect.fn("AzurePlugin.load")(function* () {
-      const connection = yield* ctx.integration.connection.active(Provider.ID.azure)
-      const credential = connection
-        ? yield* ctx.integration.connection.resolve(connection).pipe(Effect.orElseSucceed(() => undefined))
-        : undefined
-      if (credential?.type !== "oauth" || credential.methodID !== methodID) {
-        loaded.resource = undefined
-        loaded.models = undefined
-        return
-      }
-      const resource =
-        typeof credential.metadata?.resourceName === "string" ? credential.metadata.resourceName : undefined
-      loaded.resource = resource
-      loaded.models = undefined
-      if (!resource) return
-
+    const discover = Effect.fn("AzurePlugin.discover")(function* (resource: string) {
       const existing = (yield* catalog.model.all()).filter((model) => model.providerID === Provider.ID.azure)
-      loaded.models = yield* Effect.gen(function* () {
+      return yield* Effect.gen(function* () {
         const group = process.env.AZURE_RESOURCE_GROUP
         const account = group
           ? { name: resource, resourceGroup: group }
@@ -221,6 +209,22 @@ export const AzurePlugin = define({
           }).pipe(Effect.as(undefined)),
         ),
       )
+    })
+
+    const load = Effect.fn("AzurePlugin.load")(function* () {
+      const connection = yield* ctx.integration.connection.active(Provider.ID.azure)
+      const credential = connection
+        ? yield* ctx.integration.connection.resolve(connection).pipe(Effect.orElseSucceed(() => undefined))
+        : undefined
+      if (credential?.type !== "oauth" || credential.methodID !== methodID) {
+        loaded.resource = undefined
+        loaded.models = undefined
+        return
+      }
+      const resource =
+        typeof credential.metadata?.resourceName === "string" ? credential.metadata.resourceName : undefined
+      loaded.resource = resource
+      loaded.models = resource ? yield* discover(resource) : undefined
     })
 
     yield* load()

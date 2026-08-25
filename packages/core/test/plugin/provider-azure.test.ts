@@ -54,7 +54,11 @@ function withEnv<A, E, R>(vars: Record<string, string | undefined>, fx: () => Ef
   )
 }
 
-function withAzureCommands<A, E, R>(run: (args: readonly string[]) => unknown, fx: () => Effect.Effect<A, E, R>) {
+function withAzureCommands<A, E, R>(
+  run: (args: readonly string[]) => unknown,
+  fx: () => Effect.Effect<A, E, R>,
+  deploymentDelay = 0,
+) {
   return Effect.gen(function* () {
     const processes = yield* AppProcess.Service
     const fake = AppProcess.Service.of({
@@ -65,7 +69,7 @@ function withAzureCommands<A, E, R>(run: (args: readonly string[]) => unknown, f
         if (value instanceof Error) {
           return Effect.fail(new AppProcess.AppProcessError({ command: "az", cause: value }))
         }
-        return Effect.succeed({
+        const result = Effect.succeed({
           command: `az ${command.args.join(" ")}`,
           exitCode: 0,
           stdout: Buffer.from(JSON.stringify(value)),
@@ -73,6 +77,10 @@ function withAzureCommands<A, E, R>(run: (args: readonly string[]) => unknown, f
           stdoutTruncated: false,
           stderrTruncated: false,
         })
+        if (deploymentDelay > 0 && command.args.includes("deployment")) {
+          return Effect.sleep(`${deploymentDelay} millis`).pipe(Effect.andThen(result))
+        }
+        return result
       },
     })
     return yield* fx().pipe(Effect.provideService(AppProcess.Service, fake))
@@ -214,7 +222,7 @@ describe("AzurePlugin", () => {
             yield* Effect.gen(function* () {
               const status = yield* integrations.oauth.status({ integrationID, attemptID: attempt.attemptID })
               if (status.status !== "complete") return yield* Effect.fail(new Error("Azure CLI authorization pending"))
-            }).pipe(Effect.retry({ times: 100, schedule: Schedule.spaced("1 millis") }))
+            }).pipe(Effect.retry({ times: 1500, schedule: Schedule.spaced("1 millis") }))
 
             const credential = (yield* (yield* Credential.Service).list(integrationID))[0]?.value
             expect(credential).toMatchObject({
@@ -223,6 +231,65 @@ describe("AzurePlugin", () => {
               metadata: { resourceName: "test-resource" },
             })
           }),
+      ),
+    ),
+  )
+
+  it.live("finishes deployment discovery before Azure authorization completes", () =>
+    withEnv({ AZURE_RESOURCE_NAME: undefined, AZURE_COGNITIVE_SERVICES_RESOURCE_NAME: undefined }, () =>
+      withAzureCommands(
+        (args) => {
+          if (args.includes("get-access-token")) {
+            return {
+              accessToken: "azure-token",
+              expires_on: Math.floor((Date.now() + 60 * 60 * 1000) / 1000),
+            }
+          }
+          if (args.includes("deployment")) {
+            return [
+              {
+                name: "gpt-production",
+                properties: { model: { name: "gpt-5-mini" }, provisioningState: "Succeeded" },
+              },
+            ]
+          }
+          return [{ name: "test-resource", resourceGroup: "test-group" }]
+        },
+        () =>
+          Effect.gen(function* () {
+            const catalog = yield* Catalog.Service
+            yield* catalog.transform((draft) => {
+              draft.provider.update(Provider.ID.azure, (provider) => {
+                provider.package = Provider.aisdk("@ai-sdk/azure")
+              })
+              draft.model.update(Provider.ID.azure, Model.ID.make("gpt-5-mini"), () => {})
+              draft.model.update(Provider.ID.azure, Model.ID.make("gpt-5-nano"), () => {})
+            })
+            yield* addPlugin()
+            const integrations = yield* Integration.Service
+            const integrationID = Integration.ID.make("azure")
+            const attempt = yield* integrations.oauth.connect({
+              integrationID,
+              methodID: Integration.MethodID.make("azure-cli"),
+              answer: { resourceName: "test-resource" },
+            })
+            yield* Effect.gen(function* () {
+              const status = yield* integrations.oauth.status({ integrationID, attemptID: attempt.attemptID })
+              if (status.status !== "complete") {
+                return yield* Effect.fail(
+                  new Error(
+                    `Azure CLI authorization ${status.status}${"message" in status ? `: ${status.message}` : ""}`,
+                  ),
+                )
+              }
+            }).pipe(Effect.retry({ times: 1500, schedule: Schedule.spaced("1 millis") }))
+
+            expect(yield* catalog.model.get(Provider.ID.azure, Model.ID.make("gpt-5-nano"))).toBeUndefined()
+            expect((yield* catalog.model.get(Provider.ID.azure, Model.ID.make("gpt-5-mini")))?.modelID).toBe(
+              Model.ID.make("gpt-production"),
+            )
+          }),
+        50,
       ),
     ),
   )
