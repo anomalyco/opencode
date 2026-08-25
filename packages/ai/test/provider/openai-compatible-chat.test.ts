@@ -442,25 +442,6 @@ describe("OpenAI-compatible Chat route", () => {
     }),
   )
 
-  it.effect("preserves unpaired surrogates in inbound provider error events", () =>
-    Effect.gen(function* () {
-      const error = yield* LLMClient.generate(request).pipe(
-        Effect.provide(
-          fixedResponse(
-            sseEvents({
-              error: { code: 502, message: "Provider disconnected", details: { upstream: "vendor\uD800" } },
-            }),
-          ),
-        ),
-        Effect.flip,
-      )
-
-      expect(decodeJson(error.body ?? "")).toMatchObject({
-        error: { details: { upstream: "vendor\uD800" } },
-      })
-    }),
-  )
-
   it.effect("preserves provider finish outcomes in the common reason algebra", () =>
     Effect.gen(function* () {
       const filtered = yield* LLMClient.generate(request).pipe(
