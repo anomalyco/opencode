@@ -2042,7 +2042,15 @@ export type SessionMessageAssistant = {
   retry?: SessionMessageAssistantRetry
 }
 
-export type IntegrationOAuthMethod = { id: string; type: "oauth"; label: string; form?: FormFields }
+export type IntegrationOAuthMethod = {
+  id: string
+  type: "oauth"
+  label: string
+  form?: FormFields
+  disabled?: boolean
+  description?: string
+  pending?: string
+}
 
 export type IntegrationKeyMethod = { type: "key"; label?: string; form?: FormFields }
 

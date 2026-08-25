@@ -21,6 +21,9 @@ export const OAuthMethod = Schema.Struct({
   type: Schema.Literal("oauth"),
   label: Schema.String,
   form: optional(Form.Fields),
+  disabled: optional(Schema.Boolean),
+  description: optional(Schema.String),
+  pending: optional(Schema.String),
 }).annotate({ identifier: "Integration.OAuthMethod" })
 
 export interface CommandMethod extends Schema.Schema.Type<typeof CommandMethod> {}

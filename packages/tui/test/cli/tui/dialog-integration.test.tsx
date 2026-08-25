@@ -35,9 +35,7 @@ test("renders account management with an uncategorized add row and marks the act
   }
 })
 
-test("shows Azure CLI authentication as unavailable when the CLI is missing", async () => {
-  const previous = process.env.PATH
-  process.env.PATH = "/nonexistent"
+test("shows disabled authentication methods with their unavailable reason", async () => {
   const fixture = await renderIntegration({ azure: true })
 
   try {
@@ -53,8 +51,6 @@ test("shows Azure CLI authentication as unavailable when the CLI is missing", as
     expect(fixture.requests).toEqual([])
   } finally {
     fixture.app.renderer.destroy()
-    if (previous === undefined) delete process.env.PATH
-    else process.env.PATH = previous
   }
 })
 
@@ -254,7 +250,13 @@ async function renderIntegration(options: { azure?: boolean } = {}) {
             methods: options.azure
               ? [
                   { type: "key", label: "API key" },
-                  { id: "azure-cli", type: "oauth", label: "Microsoft Entra ID (Azure CLI)" },
+                  {
+                    id: "azure-cli",
+                    type: "oauth",
+                    label: "Microsoft Entra ID (Azure CLI)",
+                    disabled: true,
+                    description: "requires Azure CLI",
+                  },
                 ]
               : [{ type: "key", label: "API key" }],
             connections: options.azure ? [] : [...accounts, { type: "env", name: "OPENAI_API_KEY" }],

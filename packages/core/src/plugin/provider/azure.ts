@@ -79,10 +79,9 @@ export const AzurePlugin = define({
       return refreshed
     })
 
+    const available = Boolean(Bun.which("az", { PATH: process.env.PATH }))
     const accounts =
-      !resolveResourceName(configured) &&
-      typeof configured?.baseURL !== "string" &&
-      Bun.which("az", { PATH: process.env.PATH })
+      !resolveResourceName(configured) && typeof configured?.baseURL !== "string" && available
         ? yield* command(["cognitiveservices", "account", "list", "--output", "json", "--only-show-errors"]).pipe(
             Effect.flatMap(decodeAccounts),
             Effect.catch(() => Effect.succeed([])),
@@ -125,6 +124,8 @@ export const AzurePlugin = define({
           type: "oauth",
           label: "Microsoft Entra ID (Azure CLI)",
           form: form("Microsoft Entra ID (Azure CLI)", true),
+          pending: "Discovering Azure models...",
+          ...(!available ? { disabled: true, description: "requires Azure CLI" } : {}),
         },
         authorize: (answer) =>
           Effect.succeed({

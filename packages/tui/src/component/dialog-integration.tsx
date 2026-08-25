@@ -264,11 +264,7 @@ function selectMethod(
       options={methods
         .map((method) => {
           const title = method.type === "key" ? (method.label ?? "API key") : method.label
-          const unavailable =
-            integration.id === "azure" &&
-            method.type === "oauth" &&
-            method.id === "azure-cli" &&
-            !Bun.which("az", { PATH: process.env.PATH })
+          const unavailable = method.type === "oauth" && method.disabled === true
           return {
             title,
             value: method.type === "key" ? "key" : method.id,
@@ -276,7 +272,7 @@ function selectMethod(
             ...(unavailable
               ? {
                   titleView: <UnavailableMethod title={title} />,
-                  description: "requires Azure CLI",
+                  description: method.description,
                 }
               : { onSelect: () => openMethod(integration, method, dialog, onConnected) }),
           }
@@ -549,6 +545,7 @@ function OAuthStarting(props: {
           <OAuthAuto
             integration={props.integration}
             title={props.method.label}
+            pending={props.method.pending}
             attempt={result.data}
             onConnected={props.onConnected}
           />
@@ -566,6 +563,7 @@ function OAuthStarting(props: {
 function OAuthAuto(props: {
   integration: IntegrationInfo
   title: string
+  pending?: string
   attempt: IntegrationAttempt
   onConnected?: OnIntegrationConnected
 }) {
@@ -648,7 +646,7 @@ function OAuthAuto(props: {
       title={props.title}
       url={props.attempt.url}
       instructions={props.attempt.instructions}
-      message={props.integration.id === "azure" ? "Discovering Azure models..." : "Waiting for authorization..."}
+      message={props.pending ?? "Waiting for authorization..."}
       copy
       open
     />

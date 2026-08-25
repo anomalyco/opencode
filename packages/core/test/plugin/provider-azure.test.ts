@@ -138,25 +138,30 @@ describe("AzurePlugin", () => {
   )
 
   it.effect("registers Azure CLI authentication alongside API keys", () =>
-    withEnv({ AZURE_RESOURCE_NAME: undefined, AZURE_COGNITIVE_SERVICES_RESOURCE_NAME: undefined }, () =>
-      Effect.gen(function* () {
-        yield* addPlugin()
-        const integration = yield* (yield* Integration.Service).get(Integration.ID.make("azure"))
-        expect(integration?.methods).toContainEqual({
-          id: Integration.MethodID.make("azure-cli"),
-          type: "oauth",
-          label: "Microsoft Entra ID (Azure CLI)",
-          form: [
-            {
-              type: "string",
-              key: "resourceName",
-              title: "Microsoft Entra ID (Azure CLI) · Resource name",
-              placeholder: "e.g. my-models",
-              required: true,
-            },
-          ],
-        })
-      }),
+    withEnv(
+      { PATH: "/nonexistent", AZURE_RESOURCE_NAME: undefined, AZURE_COGNITIVE_SERVICES_RESOURCE_NAME: undefined },
+      () =>
+        Effect.gen(function* () {
+          yield* addPlugin()
+          const integration = yield* (yield* Integration.Service).get(Integration.ID.make("azure"))
+          expect(integration?.methods).toContainEqual({
+            id: Integration.MethodID.make("azure-cli"),
+            type: "oauth",
+            label: "Microsoft Entra ID (Azure CLI)",
+            pending: "Discovering Azure models...",
+            disabled: true,
+            description: "requires Azure CLI",
+            form: [
+              {
+                type: "string",
+                key: "resourceName",
+                title: "Microsoft Entra ID (Azure CLI) · Resource name",
+                placeholder: "e.g. my-models",
+                required: true,
+              },
+            ],
+          })
+        }),
     ),
   )
 

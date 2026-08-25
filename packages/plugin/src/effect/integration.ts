@@ -12,6 +12,9 @@ export interface IntegrationOAuthMethod {
   readonly type: "oauth"
   readonly label: string
   readonly form?: Form.Fields
+  readonly disabled?: boolean
+  readonly description?: string
+  readonly pending?: string
 }
 
 export interface IntegrationCommandMethod {
