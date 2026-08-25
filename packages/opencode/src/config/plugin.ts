@@ -18,12 +18,16 @@ export type Origin = {
 export async function load(dir: string) {
   const plugins: ConfigPluginV1.Spec[] = []
 
-  for (const item of await Glob.scan("{plugin,plugins}/*.{ts,js}", {
-    cwd: dir,
-    absolute: true,
-    dot: true,
-    symlink: true,
-  })) {
+  // B2: Glob.scan order is filesystem-dependent; sort so numeric prefixes
+  // (00_, 05_, 10_) give a deterministic load order.
+  for (const item of (
+    await Glob.scan("{plugin,plugins}/*.{ts,js}", {
+      cwd: dir,
+      absolute: true,
+      dot: true,
+      symlink: true,
+    })
+  ).toSorted()) {
     plugins.push(pathToFileURL(item).href)
   }
   return plugins

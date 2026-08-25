@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Effect } from "effect"
+import { Effect, Exit } from "effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Npm } from "@opencode-ai/core/npm"
 import path from "path"
@@ -56,6 +56,33 @@ function withProject<A, E, R>(source: string, self: Effect.Effect<A, E, R>) {
   })
 }
 
+function withPlugins<A, E, R>(sources: string[], self: Effect.Effect<A, E, R>) {
+  return Effect.gen(function* () {
+    const test = yield* TestInstance
+    const files = sources.map((_, index) => path.join(test.directory, `plugin${index}.ts`))
+    yield* Effect.all(
+      [
+        ...sources.map((source, index) => Effect.promise(() => Bun.write(files[index], source))),
+        Effect.promise(() =>
+          Bun.write(
+            path.join(test.directory, "opencode.json"),
+            JSON.stringify(
+              {
+                $schema: "https://opencode.ai/config.json",
+                plugin: files.map((file) => pathToFileURL(file).href),
+              },
+              null,
+              2,
+            ),
+          ),
+        ),
+      ],
+      { discard: true, concurrency: "unbounded" },
+    )
+    return yield* self
+  })
+}
+
 const triggerSystemTransform = Effect.fn("PluginTriggerTest.triggerSystemTransform")(function* () {
   const plugin = yield* Plugin.Service
   const out = { system: [] as string[] }
@@ -85,6 +112,63 @@ describe("plugin.trigger", () => {
       ].join("\n"),
       Effect.gen(function* () {
         expect(yield* triggerSystemTransform()).toEqual(["sync"])
+      }),
+    ),
+  )
+
+  it.instance("isolates a throwing accumulating hook from later plugins", () =>
+    withPlugins(
+      [
+        [
+          "export default async () => ({",
+          '  "chat.params": async () => {',
+          '    throw new Error("boom")',
+          "  },",
+          "})",
+          "",
+        ].join("\n"),
+        [
+          "export default async () => ({",
+          '  "chat.params": async (_input, output) => {',
+          '    output.options.marker = "second"',
+          "  },",
+          "})",
+          "",
+        ].join("\n"),
+      ],
+      Effect.gen(function* () {
+        const plugin = yield* Plugin.Service
+        const out = {
+          temperature: 0,
+          topP: 0,
+          topK: 0,
+          maxOutputTokens: undefined as number | undefined,
+          options: {} as Record<string, any>,
+        }
+        yield* plugin.trigger("chat.params", {}, out)
+        expect(out.options.marker).toBe("second")
+      }),
+    ),
+  )
+
+  it.instance("propagates a throwing tool.execute.before hook", () =>
+    withPlugins(
+      [
+        [
+          "export default async () => ({",
+          '  "tool.execute.before": async () => {',
+          '    throw new Error("blocked")',
+          "  },",
+          "})",
+          "",
+        ].join("\n"),
+      ],
+      Effect.gen(function* () {
+        const plugin = yield* Plugin.Service
+        const exit = yield* plugin
+          .trigger("tool.execute.before", { tool: "bash", sessionID: "ses_test", callID: "call_test" }, { args: {} })
+          .pipe(Effect.exit)
+        expect(Exit.isFailure(exit)).toBe(true)
       }),
     ),
   )
