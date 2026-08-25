@@ -310,6 +310,35 @@ test("pasting on a custom choice opens its editor without submitting", async () 
   }
 })
 
+test("pasting in an active custom editor inserts at the cursor", async () => {
+  await using tmp = await tmpdir()
+  const prompt = await mountForm(tmp.path, 80, [
+    {
+      key: "target",
+      type: "string",
+      options: [{ value: "staging", label: "Staging" }],
+      custom: true,
+    },
+  ])
+  try {
+    prompt.app.mockInput.pressArrow("down")
+    prompt.app.mockInput.pressEnter()
+    await prompt.app.waitFor(() => prompt.app.renderer.currentFocusedEditor !== null)
+    await prompt.app.mockInput.typeText("prodwest")
+    const editor = prompt.app.renderer.currentFocusedEditor
+    if (editor) editor.cursorOffset = 4
+
+    await prompt.app.mockInput.pasteBracketedText("uction ")
+    await prompt.app.waitFor(() => prompt.app.renderer.currentFocusedEditor?.plainText === "production west")
+    await prompt.app.mockInput.typeText("!")
+
+    expect(prompt.app.renderer.currentFocusedEditor?.plainText).toBe("production !west")
+    expect(prompt.replies).toEqual([])
+  } finally {
+    prompt.app.renderer.destroy()
+  }
+})
+
 test("clipboard shortcut opens a custom choice editor without submitting", async () => {
   await using tmp = await tmpdir()
   const prompt = await mountForm(

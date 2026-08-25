@@ -5,7 +5,7 @@ import { Cause, Context, Effect, Layer, Schema, Stream } from "effect"
 import type { VcsDefinition, VcsDraft } from "@opencode-ai/plugin/effect/vcs"
 import { FileDiff } from "@opencode-ai/schema/file-diff"
 import { FileSystem } from "@opencode-ai/schema/filesystem"
-import { FileStatus, Info, Mode } from "@opencode-ai/schema/vcs"
+import { BranchList, FileStatus, Info, Mode } from "@opencode-ai/schema/vcs"
 import { VcsEvent } from "@opencode-ai/schema/vcs-event"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { FSUtil } from "@opencode-ai/util/fs-util"
@@ -17,14 +17,20 @@ import { VcsGit } from "./vcs/git.js"
 import { VcsHg } from "./vcs/hg.js"
 import { emptyPatch, MAX_TOTAL_PATCH_BYTES, PATCH_CONTEXT_LINES } from "./vcs/patch.js"
 
-export { FileStatus, Info, Mode }
+export { BranchList, FileStatus, Info, Mode }
 
 export interface DiffOptions {
   readonly context?: number
 }
 
+export interface BranchOptions {
+  readonly search?: string
+  readonly limit?: number
+}
+
 export interface Adapter {
   readonly info: () => Effect.Effect<Info>
+  readonly branches: (options?: BranchOptions) => Effect.Effect<BranchList>
   readonly status: () => Effect.Effect<FileStatus[]>
   readonly diff: (mode: Mode, options?: DiffOptions) => Effect.Effect<FileDiff.Info[]>
 }
@@ -64,6 +70,7 @@ const layer = Layer.effect(
       ...(vcs ? { store: vcs.store } : {}),
     }
     const decodeInfo = Schema.decodeUnknownEffect(Info)
+    const decodeBranches = Schema.decodeUnknownEffect(BranchList)
     const decodeStatus = Schema.decodeUnknownEffect(Schema.Array(FileStatus))
     const decodeDiff = Schema.decodeUnknownEffect(Schema.Array(FileDiff.Info))
     const state: State.Interface<Data, VcsDraft> = State.create<Data, VcsDraft>({
@@ -125,6 +132,18 @@ const layer = Layer.effect(
       reload: state.reload,
       info: Effect.fn("Vcs.info")(function* () {
         return current.info
+      }),
+      branches: Effect.fn("Vcs.branches")(function* (options?: BranchOptions) {
+        const provider = selected()
+        if (provider)
+          return yield* protect(
+            provider,
+            "branches",
+            provider.branches({ ...scope, ...options }).pipe(Effect.flatMap(decodeBranches)),
+            [],
+          )
+        if (!native) return []
+        return yield* native.branches(options)
       }),
       status: Effect.fn("Vcs.status")(function* () {
         const provider = selected()

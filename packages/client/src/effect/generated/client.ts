@@ -222,6 +222,8 @@ import type {
   VcsGetOutput,
   VcsStatusInput,
   VcsStatusOutput,
+  VcsBranchesInput,
+  VcsBranchesOutput,
   VcsDiffInput,
   VcsDiffOutput,
   DebugLocationListOutput,
@@ -1248,7 +1250,13 @@ const EndpointWorktreeCreate = (raw: RawClient["server.worktree"]) => (input: Wo
   preserveEffect<WorktreeCreateOutput>()(
     raw["worktree.create"]({
       params: { projectID: input["projectID"] },
-      payload: { strategy: input["strategy"], from: input["from"], directory: input["directory"], name: input["name"] },
+      payload: {
+        strategy: input["strategy"],
+        from: input["from"],
+        branch: input["branch"],
+        directory: input["directory"],
+        name: input["name"],
+      },
     }).pipe(Effect.mapError(mapClientError)),
   )
 
@@ -1300,6 +1308,13 @@ const EndpointVcsStatus = (raw: RawClient["server.vcs"]) => (input?: VcsStatusIn
     raw["vcs.status"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
+const EndpointVcsBranches = (raw: RawClient["server.vcs"]) => (input?: VcsBranchesInput) =>
+  preserveEffect<VcsBranchesOutput>()(
+    raw["vcs.branches"]({
+      query: { location: input?.["location"], search: input?.["search"], limit: input?.["limit"] },
+    }).pipe(Effect.mapError(mapClientError)),
+  )
+
 const EndpointVcsDiff = (raw: RawClient["server.vcs"]) => (input: VcsDiffInput) =>
   preserveEffect<VcsDiffOutput>()(
     raw["vcs.diff"]({ query: { location: input["location"], mode: input["mode"], context: input["context"] } }).pipe(
@@ -1310,6 +1325,7 @@ const EndpointVcsDiff = (raw: RawClient["server.vcs"]) => (input: VcsDiffInput) 
 const adaptGroupVcs = (raw: RawClient["server.vcs"]) => ({
   get: EndpointVcsGet(raw),
   status: EndpointVcsStatus(raw),
+  branches: EndpointVcsBranches(raw),
   diff: EndpointVcsDiff(raw),
 })
 

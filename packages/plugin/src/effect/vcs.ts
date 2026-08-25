@@ -11,6 +11,11 @@ export interface VcsScope {
   readonly store?: string
 }
 
+export interface VcsBranchesInput extends VcsScope {
+  readonly search?: string
+  readonly limit?: number
+}
+
 export interface VcsDiffInput extends VcsScope {
   readonly mode: Vcs.Mode
   readonly context: number
@@ -21,6 +26,7 @@ export interface VcsDefinition {
   readonly id: string
   readonly name: string
   readonly info: (input: VcsScope) => Effect.Effect<Vcs.Info, unknown>
+  readonly branches: (input: VcsBranchesInput) => Effect.Effect<Vcs.BranchList, unknown>
   readonly status: (input: VcsScope) => Effect.Effect<readonly Vcs.FileStatus[], unknown>
   readonly diff: (input: VcsDiffInput) => Effect.Effect<readonly FileDiff.Info[], unknown>
 }

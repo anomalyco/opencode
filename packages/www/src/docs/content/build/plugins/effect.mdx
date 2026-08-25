@@ -863,6 +863,7 @@ effect: (ctx) =>
   Effect.gen(function* () {
     const vcs = ctx.vcs
     const info = yield* vcs.get().pipe(Effect.orDie)
+    const branches = yield* vcs.branches({ search: "feature", limit: 10 }).pipe(Effect.orDie)
     const changes = yield* vcs.status().pipe(Effect.orDie)
     const diff = yield* vcs.diff({ mode: "working", context: 3 }).pipe(Effect.orDie)
     yield* Effect.logInfo("vcs", { branch: info.data.branch.current, files: changes.data.length })
@@ -881,6 +882,7 @@ effect: (ctx) =>
         id: "custom",
         name: "Custom VCS",
         info: () => Effect.succeed({ branch: { current: "feature", default: "main" } }),
+        branches: (input) => readBranches(input),
         status: (scope) => readStatus(scope.worktree),
         diff: (input) => readDiff(input),
       })

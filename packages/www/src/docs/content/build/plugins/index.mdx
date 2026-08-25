@@ -803,6 +803,7 @@ Read repository information, working-copy status, or file diffs.
 
 ```ts
 const info = await ctx.vcs.get()
+const branches = await ctx.vcs.branches({ search: "feature", limit: 10 })
 const changes = await ctx.vcs.status()
 const diff = await ctx.vcs.diff({ mode: "working", context: 3 })
 ```
@@ -816,6 +817,7 @@ await ctx.vcs.transform((draft) => {
     id: "custom",
     name: "Custom VCS",
     info: async () => ({ branch: { current: "feature", default: "main" } }),
+    branches: async (input, { signal }) => readBranches(input, signal),
     status: async (scope, { signal }) => readStatus(scope.worktree, signal),
     diff: async (input, { signal }) => readDiff(input, signal),
   })
@@ -835,6 +837,7 @@ Schemas: [`Vcs.Info`](/api#schema-Vcs.Info), [`Vcs.FileStatus`](/api#schema-Vcs.
 ```ts
 interface VcsContext {
   get(input?: VcsGetInput, requestOptions?: RequestOptions): Promise<VcsGetOutput>
+  branches(input?: VcsBranchesInput, requestOptions?: RequestOptions): Promise<VcsBranchesOutput>
   status(input?: VcsStatusInput, requestOptions?: RequestOptions): Promise<VcsStatusOutput>
   diff(input: VcsDiffInput, requestOptions?: RequestOptions): Promise<VcsDiffOutput>
   transform(callback: (draft: VcsDraft) => void): Promise<Registration>

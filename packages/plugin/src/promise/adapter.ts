@@ -298,6 +298,7 @@ export function fromPromise(plugin: Plugin) {
           },
           vcs: {
             get: adaptApiMethod(VcsEndpoints["vcs.get"], host.vcs.get),
+            branches: adaptApiMethod(VcsEndpoints["vcs.branches"], host.vcs.branches),
             status: adaptApiMethod(VcsEndpoints["vcs.status"], host.vcs.status),
             diff: adaptApiMethod(VcsEndpoints["vcs.diff"], host.vcs.diff),
             reload: () => run(host.vcs.reload()),
@@ -310,6 +311,7 @@ export function fromPromise(plugin: Plugin) {
                         id: definition.id,
                         name: definition.name,
                         info: (input) => attempt((signal) => definition.info(input, { signal })),
+                        branches: (input) => attempt((signal) => definition.branches(input, { signal })),
                         status: (input) => attempt((signal) => definition.status(input, { signal })),
                         diff: (input) => attempt((signal) => definition.diff(input, { signal })),
                       }),

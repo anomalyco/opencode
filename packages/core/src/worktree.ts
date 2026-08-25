@@ -94,6 +94,7 @@ export interface Strategy {
   readonly create: (input: {
     sourceDirectory: AbsolutePath
     directory: AbsolutePath
+    branch?: string
   }) => Effect.Effect<Info, Git.WorktreeError | DirectoryUnavailableError>
   readonly remove: (input: {
     directory: AbsolutePath
@@ -251,6 +252,7 @@ const layer = Layer.effect(
       const result = yield* selected.create({
         directory: worktreeDirectory,
         sourceDirectory,
+        branch: input.branch,
       })
       yield* changed(
         input.projectID,

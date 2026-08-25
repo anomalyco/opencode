@@ -100,6 +100,7 @@ const Group = HttpApiGroup.make("mock")
   .add(HttpApiEndpoint.get("formRequests", "/api/form/request", { success: Json }))
   .add(HttpApiEndpoint.get("vcs", "/api/vcs", { success: Json }))
   .add(HttpApiEndpoint.get("vcsStatus", "/api/vcs/status", { success: Json }))
+  .add(HttpApiEndpoint.get("vcsBranches", "/api/vcs/branches", { success: Json }))
   .add(HttpApiEndpoint.get("vcsDiff", "/api/vcs/diff", { success: Json }))
   .add(HttpApiEndpoint.get("fsList", "/api/fs/list", { query: Query, success: Json }))
   .add(

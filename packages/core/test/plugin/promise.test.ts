@@ -450,6 +450,11 @@ describe("fromPromise", () => {
                 signals.push(request.signal)
                 return { branch: { current: "feature", default: "main" } }
               },
+              branches: async (input, request) => {
+                signals.push(request.signal)
+                expect(input.search).toBe("feat")
+                return ["feature"]
+              },
               status: async (_input, request) => {
                 signals.push(request.signal)
                 return [{ file: "file.txt", additions: 1, deletions: 0, status: "added" }]
@@ -465,6 +470,7 @@ describe("fromPromise", () => {
           })
 
           expect((await ctx.vcs.get()).data.branch.current).toBe("feature")
+          expect((await ctx.vcs.branches({ search: "feat" })).data).toEqual(["feature"])
           expect((await ctx.vcs.status()).data).toHaveLength(1)
           expect((await ctx.vcs.diff({ mode: "working", context: 2 })).data[0].patch).toBe("+hello")
         },
@@ -472,7 +478,7 @@ describe("fromPromise", () => {
 
       yield* PluginPromise.fromPromise(promisePlugin).effect(host)
       expect((yield* vcs.info()).branch.current).toBe("feature")
-      expect(signals).toHaveLength(3)
+      expect(signals).toHaveLength(4)
       expect(signals.every((signal) => signal instanceof AbortSignal)).toBeTrue()
     }),
   )

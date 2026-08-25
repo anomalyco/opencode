@@ -107,6 +107,7 @@ describe("Plugin", () => {
                 id: "custom",
                 name: "Custom VCS",
                 info: () => Effect.succeed({ branch: { current: "feature" } }),
+                branches: () => Effect.succeed(["feature"]),
                 status: () => Effect.succeed([]),
                 diff: () => Effect.succeed([]),
               })
@@ -117,6 +118,7 @@ describe("Plugin", () => {
 
       yield* plugins.activate([versioned(provider)])
       expect(yield* vcs.info()).toEqual({ branch: { current: "feature" } })
+      expect(yield* vcs.branches()).toEqual(["feature"])
 
       yield* plugins.activate([])
       expect(yield* vcs.info()).toEqual({ branch: {} })

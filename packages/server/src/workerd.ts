@@ -98,6 +98,7 @@ const vcsLayer = Layer.succeed(
     transform: () => Effect.succeed({ dispose: Effect.void }),
     reload: () => Effect.void,
     info: () => Effect.succeed({ branch: {} }),
+    branches: () => Effect.succeed([]),
     status: () => Effect.succeed([]),
     diff: () => Effect.succeed([]),
   }),

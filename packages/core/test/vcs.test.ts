@@ -64,6 +64,7 @@ const provider = (input: Partial<VcsDefinition> = {}) =>
     id: "custom",
     name: "Custom VCS",
     info: () => Effect.succeed({ branch: { current: "feature", default: "main" } }),
+    branches: () => Effect.succeed(["feature", "main"]),
     status: () => Effect.succeed([{ file: "file.txt", additions: 1, deletions: 0, status: "added" }]),
     diff: () => Effect.succeed([{ file: "file.txt", patch: "+hello", additions: 1, deletions: 0, status: "added" }]),
     ...input,
@@ -75,6 +76,7 @@ describe("Vcs", () => {
       Effect.gen(function* () {
         const vcs = yield* Vcs.Service
         expect(yield* vcs.info()).toEqual({ branch: {} })
+        expect(yield* vcs.branches()).toEqual([])
         expect(yield* vcs.status()).toEqual([])
         expect(yield* vcs.diff("working")).toEqual([])
         expect(yield* vcs.diff("branch")).toEqual([])
@@ -92,6 +94,7 @@ describe("Vcs", () => {
         })
 
         expect(yield* vcs.info()).toEqual({ branch: { current: "feature", default: "main" } })
+        expect(yield* vcs.branches()).toEqual(["feature", "main"])
         expect(yield* vcs.status()).toEqual([{ file: "file.txt", additions: 1, deletions: 0, status: "added" }])
         expect(yield* vcs.diff("working")).toEqual([
           { file: "file.txt", patch: "+hello", additions: 1, deletions: 0, status: "added" },
@@ -190,6 +193,33 @@ describe("Vcs", () => {
         const exit = yield* Fiber.await(fiber)
         expect(Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)).toBeTrue()
       }).pipe(provide(directory)),
+    ),
+  )
+
+  it.live("lists local branches by recent activity", () =>
+    withGit((directory) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(async () => {
+          await fs.writeFile(path.join(directory, "file.txt"), "one\n")
+          await commitAll(directory, "initial")
+          await $`git checkout -b z-recent`.cwd(directory).quiet()
+          await fs.writeFile(path.join(directory, "file.txt"), "two\n")
+          await $`git add -A`.cwd(directory).quiet()
+          await $`git commit -m recent`
+            .cwd(directory)
+            .env({
+              ...process.env,
+              GIT_AUTHOR_DATE: "2030-01-01T00:00:00Z",
+              GIT_COMMITTER_DATE: "2030-01-01T00:00:00Z",
+            })
+            .quiet()
+        })
+        const vcs = yield* Vcs.Service
+        expect(yield* vcs.branches()).toEqual(["z-recent", "main"])
+        expect(yield* vcs.branches({ limit: 1 })).toEqual(["z-recent"])
+        expect(yield* vcs.branches({ search: "MAIN", limit: 1 })).toEqual(["main"])
+        expect(yield* vcs.branches({ search: "*" })).toEqual([])
+      }),
     ),
   )
 
