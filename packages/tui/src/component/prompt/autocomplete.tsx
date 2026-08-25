@@ -878,7 +878,8 @@ export function Autocomplete(props: {
     return Math.min(10, count, Math.max(1, props.anchor().y))
   })
 
-  let scroll: ScrollBoxRenderable
+  let scroll: ScrollBoxRenderable | undefined
+  onCleanup(() => scroll?.verticalScrollBar.off("change", syncSelectionWindow))
   const scrollAcceleration = createMemo(() => getScrollAcceleration(config))
   const emptyMessage = createMemo(() => {
     const fileSearch = visibleFiles()
@@ -906,12 +907,15 @@ export function Autocomplete(props: {
       borderColor={theme.border.default}
     >
       <scrollbox
-        ref={(r: ScrollBoxRenderable) => (scroll = r)}
+        ref={(r: ScrollBoxRenderable) => {
+          scroll?.verticalScrollBar.off("change", syncSelectionWindow)
+          scroll = r
+          scroll.verticalScrollBar.on("change", syncSelectionWindow)
+        }}
         backgroundColor={theme.background.default}
         height={height()}
         scrollbarOptions={{ visible: false }}
         scrollAcceleration={scrollAcceleration()}
-        onMouseScroll={() => queueMicrotask(syncSelectionWindow)}
       >
         <Index
           each={options()}
