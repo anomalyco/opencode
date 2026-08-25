@@ -1,10 +1,16 @@
 import { FileDiff } from "@opencode-ai/schema/file-diff"
 import { Location } from "@opencode-ai/schema/location"
-import { NonNegativeInt } from "@opencode-ai/schema/schema"
+import { NonNegativeInt, PositiveInt } from "@opencode-ai/schema/schema"
 import { Vcs } from "@opencode-ai/schema/vcs"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { LocationQuery, locationQueryOpenApi } from "./location.js"
+
+const BranchesQuery = Schema.Struct({
+  ...LocationQuery.fields,
+  search: Schema.optional(Schema.String),
+  limit: Schema.NumberFromString.pipe(Schema.decodeTo(PositiveInt), Schema.optional),
+})
 
 const DiffQuery = Schema.Struct({
   ...LocationQuery.fields,
@@ -38,6 +44,20 @@ export const VcsGroup = HttpApiGroup.make("server.vcs")
           identifier: "v2.vcs.status",
           summary: "VCS status",
           description: "List uncommitted working-copy changes relative to the requested location.",
+        }),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.get("vcs.branches", "/api/vcs/branches", {
+      query: BranchesQuery,
+      success: Location.response(Vcs.BranchList),
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.vcs.branches",
+          summary: "VCS branches",
+          description: "List local and remote branches available at the requested location.",
         }),
       ),
   )

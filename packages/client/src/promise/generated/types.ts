@@ -393,6 +393,8 @@ export type VcsFileStatus = {
   status: "added" | "deleted" | "modified"
 }
 
+export type VcsBranchList = Array<string>
+
 export type WebSearchProvider = { id: string; name: string }
 
 export type WebSearchResult = { url: string; title?: string; content?: string; time: { published?: number } }
@@ -5593,24 +5595,35 @@ export type WorktreeCreateInput = {
   readonly strategy: {
     readonly strategy: string
     readonly from?: string
+    readonly branch?: string
     readonly directory: string
     readonly name?: string
   }["strategy"]
   readonly from?: {
     readonly strategy: string
     readonly from?: string
+    readonly branch?: string
     readonly directory: string
     readonly name?: string
   }["from"]
+  readonly branch?: {
+    readonly strategy: string
+    readonly from?: string
+    readonly branch?: string
+    readonly directory: string
+    readonly name?: string
+  }["branch"]
   readonly directory: {
     readonly strategy: string
     readonly from?: string
+    readonly branch?: string
     readonly directory: string
     readonly name?: string
   }["directory"]
   readonly name?: {
     readonly strategy: string
     readonly from?: string
+    readonly branch?: string
     readonly directory: string
     readonly name?: string
   }["name"]
@@ -5661,6 +5674,29 @@ export type VcsStatusInput = {
 export type VcsStatusOutput = {
   location: { directory: string; workspaceID?: string; project: { id: string; directory: string; canonical: string } }
   data: Array<VcsFileStatus>
+}
+
+export type VcsBranchesInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+    readonly search?: string | undefined
+    readonly limit?: number | undefined
+  }["location"]
+  readonly search?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+    readonly search?: string | undefined
+    readonly limit?: number | undefined
+  }["search"]
+  readonly limit?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+    readonly search?: string | undefined
+    readonly limit?: number | undefined
+  }["limit"]
+}
+
+export type VcsBranchesOutput = {
+  location: { directory: string; workspaceID?: string; project: { id: string; directory: string; canonical: string } }
+  data: VcsBranchList
 }
 
 export type VcsDiffInput = {

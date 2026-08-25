@@ -65,6 +65,17 @@ describe("new session workspace selection", () => {
     ).toBe(undefined)
   })
 
+  test("uses a selected branch for a new workspace", () => {
+    expect(
+      resolveNewSessionBranch({
+        worktree: "create",
+        directory: "/project/feature",
+        createBranch: "release",
+        worktreeBranch: () => "feature",
+      }),
+    ).toBe("release")
+  })
+
   test("uses location VCS state when the project inventory is stale", () => {
     expect(resolveNewSessionGit({ branch: "dev" })).toBe(true)
     expect(resolveNewSessionGit({ projectVcs: "git" })).toBe(true)

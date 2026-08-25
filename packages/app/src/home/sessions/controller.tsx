@@ -69,7 +69,9 @@ export function createHomeSessionsController(home: HomeController) {
     const conn = home.server.focused()
     if (!ctx || !conn) return []
     return retainHomeSessions(
-      ctx.data.session.apply(mergeHomeSessionIndex(sessionLoad.data?.() ?? [], ctx.data.session.list())),
+      ctx.data.session.apply(
+        mergeHomeSessionIndex(sessionLoad.isPending ? [] : (sessionLoad.data?.() ?? []), ctx.data.session.list()),
+      ),
       HOME_SESSION_LIMIT,
       Date.now(),
     )
@@ -242,7 +244,7 @@ export function createHomeSessionsController(home: HomeController) {
     data: {
       records,
       groups,
-      loading: () => sessionLoad.isLoading,
+      loading: () => sessionLoad.isPending,
       searchRecords: allRecords,
     },
     session: {

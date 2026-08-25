@@ -21,6 +21,7 @@ export interface MockServerConfig {
     cursor?: string
   }
   vcsDiff?: unknown[]
+  vcsBranches?: string[]
   messageDelay?: number
   beforeMessagesResponse?: (input: { sessionID: string; before?: string }) => Promise<void>
   onMessages?: (input: { sessionID: string; before?: string; phase: "start" | "end" }) => void
@@ -296,6 +297,7 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
         vcs: () =>
           Effect.succeed({ location: location(config), data: { branch: { current: "main", default: "main" } } }),
         vcsStatus: () => Effect.succeed({ location: location(config), data: [] }),
+        vcsBranches: () => Effect.succeed({ location: location(config), data: config.vcsBranches ?? ["main"] }),
         vcsDiff: () => Effect.succeed({ location: location(config), data: config.vcsDiff ?? [] }),
         fsList: (ctx) =>
           Effect.promise(() => Promise.resolve(config.fileList?.(ctx.query.path ?? ""))).pipe(

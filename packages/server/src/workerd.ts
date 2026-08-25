@@ -96,6 +96,7 @@ const vcsLayer = Layer.succeed(
   Vcs.Service,
   Vcs.Service.of({
     info: () => Effect.succeed({ branch: {} }),
+    branches: () => Effect.succeed([]),
     status: () => Effect.succeed([]),
     diff: () => Effect.succeed([]),
   }),

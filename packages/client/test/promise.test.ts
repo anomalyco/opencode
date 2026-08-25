@@ -27,7 +27,6 @@ test("exposes every standard HTTP API group", () => {
     "event",
     "pty",
     "shell",
-    "question",
     "reference",
     "worktree",
     "workspace",
@@ -47,7 +46,7 @@ test("exposes every standard HTTP API group", () => {
   expect(Object.keys(client.integration.command)).toEqual(["connect", "status", "cancel"])
   expect(Object.keys(client.websearch)).toEqual(["providers", "query"])
   expect(Object.keys(client.file)).toEqual(["read", "list", "find"])
-  expect(Object.keys(client.vcs)).toEqual(["get", "status", "diff"])
+  expect(Object.keys(client.vcs)).toEqual(["get", "status", "branches", "diff"])
   expect(Object.keys(client.pty)).toEqual(["list", "create", "get", "update", "remove", "connect"])
   expect(Object.keys(client.pty.connect)).toEqual(["token"])
   expect(Object.keys(client.shell)).toEqual(["list", "create", "get", "timeout", "output", "remove"])

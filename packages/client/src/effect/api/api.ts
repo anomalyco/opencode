@@ -1664,6 +1664,7 @@ export type WorktreeCreateInput = {
   readonly projectID: Project.ID
   readonly strategy: Worktree.StrategyID
   readonly from?: AbsolutePath | undefined
+  readonly branch?: string | undefined
   readonly directory: AbsolutePath
   readonly name?: string | undefined
 }
@@ -1720,6 +1721,14 @@ export type VcsStatusInput = {
 export type VcsStatusOutput = { readonly location: Location.Info; readonly data: ReadonlyArray<Vcs.FileStatus> }
 export type VcsStatusOperation<E = never> = (input?: VcsStatusInput) => Effect.Effect<VcsStatusOutput, E>
 
+export type VcsBranchesInput = {
+  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  readonly search?: string | undefined
+  readonly limit?: number | undefined
+}
+export type VcsBranchesOutput = { readonly location: Location.Info; readonly data: Vcs.BranchList }
+export type VcsBranchesOperation<E = never> = (input?: VcsBranchesInput) => Effect.Effect<VcsBranchesOutput, E>
+
 export type VcsDiffInput = {
   readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   readonly mode: Vcs.Mode
@@ -1731,6 +1740,7 @@ export type VcsDiffOperation<E = never> = (input: VcsDiffInput) => Effect.Effect
 export interface VcsApi<E = never> {
   readonly get: VcsGetOperation<E>
   readonly status: VcsStatusOperation<E>
+  readonly branches: VcsBranchesOperation<E>
   readonly diff: VcsDiffOperation<E>
 }
 
