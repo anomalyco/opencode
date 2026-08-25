@@ -14,7 +14,6 @@ describe("AISDKNative", () => {
         reasoningEffort: "xhigh",
         reasoningSummary: "auto",
         include: ["reasoning.encrypted_content"],
-        instructions: "Follow the repository instructions.",
         truncation: "auto",
       }),
     ).toEqual({
@@ -26,7 +25,6 @@ describe("AISDKNative", () => {
           reasoningEffort: "xhigh",
           reasoningSummary: "auto",
           include: ["reasoning.encrypted_content"],
-          instructions: "Follow the repository instructions.",
           truncation: "auto",
         },
         organization: "org",

@@ -123,22 +123,6 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("prefers explicit provider instructions over canonical initial instructions", () =>
-    Effect.gen(function* () {
-      const prepared = yield* compileRequest(
-        LLM.request({
-          model,
-          system: "Canonical instructions.",
-          prompt: "Say hello.",
-          providerOptions: { instructions: "Provider instructions." },
-        }),
-      )
-
-      expect(prepared.body.instructions).toBe("Provider instructions.")
-      expect(prepared.body.input).toEqual([{ role: "user", content: [{ type: "input_text", text: "Say hello." }] }])
-    }),
-  )
-
   it.effect("lowers the hosted OpenAI image generation tool", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
