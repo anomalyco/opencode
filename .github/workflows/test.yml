@@ -22,6 +22,36 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
+  affected:
+    name: affected packages
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    outputs:
+      app: ${{ steps.packages.outputs.app }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: package.json
+
+      - name: Find affected packages
+        id: packages
+        env:
+          TURBO_SCM_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          TURBO_SCM_HEAD: ${{ github.sha }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "app=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          bun x turbo@2.10.2 ls --affected --filter=@opencode-ai/app --output=json > affected.json
+          bun -e 'const result = await Bun.file("affected.json").json(); console.log(`app=${result.packages.count > 0}`)' >> "$GITHUB_OUTPUT"
+
   unit:
     name: unit (${{ matrix.settings.name }})
     strategy:
@@ -133,7 +163,8 @@ jobs:
 
   e2e:
     name: e2e (${{ matrix.settings.name }})
-    if: github.ref_name != 'v2' && github.head_ref != 'v2'
+    needs: affected
+    if: needs.affected.outputs.app == 'true' && github.ref_name != 'v2' && github.head_ref != 'v2'
     strategy:
       fail-fast: false
       matrix:
