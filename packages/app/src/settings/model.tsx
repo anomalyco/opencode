@@ -128,7 +128,7 @@ const defaultSettings: Settings = {
     showCustomAgents: false,
     mobileTitlebarPosition: "top",
     terminalPlacement: "side",
-    followUpBehavior: "steer",
+    followUpBehavior: "queue",
   },
   appearance: {
     fontSize: 14,
@@ -167,7 +167,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
   name: "Settings",
   gate: false,
   init: () => {
-    const [store, setStore, , ready] = persisted("settings.v3", createStore<Settings>(defaultSettings))
+    const [store, setStore, , ready] = persisted(
+      { key: "settings.v3", migrate: migrateSettings },
+      createStore<Settings>(defaultSettings),
+    )
     const showFileTree = withFallback(() => store.general?.showFileTree, defaultSettings.general.showFileTree)
     const showSearch = withFallback(() => store.general?.showSearch, defaultSettings.general.showSearch)
     const showStatus = withFallback(() => store.general?.showStatus, defaultSettings.general.showStatus)
@@ -380,3 +383,16 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
     }
   },
 })
+
+export function migrateSettings(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value
+  const settings = value as Partial<Settings>
+  if (settings.general?.followUpBehavior) return value
+  return {
+    ...settings,
+    general: {
+      ...settings.general,
+      followUpBehavior: "steer",
+    },
+  }
+}
