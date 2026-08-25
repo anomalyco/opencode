@@ -1,4 +1,5 @@
-import { createEffect, createMemo, For, Show, type JSX } from "solid-js"
+import { createEffect, createMemo, createSignal, For, Show, type JSX } from "solid-js"
+import createPresence from "solid-presence"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -716,16 +717,34 @@ function ComposerEditorAlternateDelivery(props: { controller: ComposerEditorMode
     if (queue.editing()) return "steer" as const
     return queue.alternate()
   })
+  const visibility = createMemo<{ show: boolean; animate: boolean; delivery: ReturnType<typeof action> }>(
+    (previous) => {
+      const delivery = action()
+      const show = delivery !== undefined
+      return { show, animate: previous.animate || previous.show !== show, delivery: delivery ?? previous.delivery }
+    },
+    { show: action() !== undefined, animate: false, delivery: action() },
+  )
+  const [button, setButton] = createSignal<HTMLButtonElement>()
+  const presence = createPresence({
+    show: () => visibility().show,
+    element: () => button() ?? null,
+  })
   return (
-    <Show when={action()} keyed>
+    <Show when={presence.present() && visibility().delivery} keyed>
       {(delivery) => (
         <Tooltip placement="top" inactive={delivery !== "steer"} value={i18n.t("ui.promptInput.steerHint")}>
           <Button
+            ref={setButton}
             data-action="composer-alternate-delivery"
             type="button"
             variant="ghost-muted"
             size="small"
-            class="me-3 gap-1.5 px-1.5 text-v2-text-text-muted ![font-weight:530]"
+            class="me-3 gap-1.5 px-1.5 text-v2-text-text-muted ![font-weight:530] duration-150 motion-reduce:animate-none"
+            classList={{
+              "animate-in fade-in": visibility().animate && visibility().show,
+              "animate-out fade-out fill-mode-forwards": visibility().animate && !visibility().show,
+            }}
             onClick={() => props.controller.submit({ alternate: true })}
           >
             {delivery === "steer" ? i18n.t("ui.promptInput.steer") : i18n.t("ui.promptInput.queue")}
