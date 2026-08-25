@@ -542,7 +542,10 @@ const layer = Layer.effect(
         // Local-scope MCP entries replace same-named servers from project/user config wholesale,
         // matching Claude Code's scope semantics instead of field-level merging.
         // Non-git projects set worktree to "/", so fall back to the working directory for the key.
-        const projectRoot = ctx.worktree && ctx.worktree !== "/" ? ctx.worktree : ctx.directory
+        // The key is canonicalized (realpath) so reaching the project through a symlinked path
+        // resolves to the same local-scope entry.
+        const rawRoot = ctx.worktree && ctx.worktree !== "/" ? ctx.worktree : ctx.directory
+        const projectRoot = yield* fs.resolve(rawRoot).pipe(Effect.orElseSucceed(() => rawRoot))
         const localMcp = yield* loadLocalMcp(projectRoot, authEnv).pipe(
           Effect.catch(() => Effect.succeed({})),
         )

@@ -414,6 +414,15 @@ const layer = Layer.effect(
     })
 
     const cfgSvc = yield* Config.Service
+    const fs = yield* FSUtil.Service
+
+    // Approvals and local-scope storage must key on the canonical project root: the same project
+    // reached through a symlinked path must not produce a second identity (or a second approval).
+    const canonicalRoot = Effect.fn("MCP.canonicalRoot")(function* () {
+      const ctx = yield* InstanceState.context
+      const raw = ctx.worktree && ctx.worktree !== "/" ? ctx.worktree : ctx.directory
+      return yield* fs.resolve(raw).pipe(Effect.orElseSucceed(() => raw))
+    })
 
     const create = Effect.fn("MCP.create")(
       function* (key: string, mcp: ConfigMCPV1.Info) {
@@ -426,8 +435,7 @@ const layer = Layer.effect(
         const projectScope = (yield* cfgSvc.get()).mcp_project_scope
         const expected = projectScope?.[key]
         if (expected) {
-          const ctx = yield* InstanceState.context
-          const root = ctx.worktree && ctx.worktree !== "/" ? ctx.worktree : ctx.directory
+          const root = yield* canonicalRoot()
           const approvals = yield* readApprovals()
           if (approvals[root]?.[key] !== expected) {
             yield* Effect.logWarning("project MCP server requires approval", { server: key })
@@ -1028,19 +1036,14 @@ const layer = Layer.effect(
       return "authenticated"
     })
 
-    const projectRoot = Effect.fn("MCP.projectRoot")(function* () {
-      const ctx = yield* InstanceState.context
-      return ctx.worktree && ctx.worktree !== "/" ? ctx.worktree : ctx.directory
-    })
-
     const approve = Effect.fn("MCP.approve")(function* (name: string) {
       const hash = (yield* cfgSvc.get()).mcp_project_scope?.[name]
       if (!hash) return yield* new NotFoundError({ name })
-      yield* writeApproval(yield* projectRoot(), name, hash)
+      yield* writeApproval(yield* canonicalRoot(), name, hash)
     })
 
     const revokeApproval = Effect.fn("MCP.revokeApproval")(function* (name: string) {
-      yield* writeApproval(yield* projectRoot(), name, undefined)
+      yield* writeApproval(yield* canonicalRoot(), name, undefined)
     })
 
     return Service.of({
@@ -1074,7 +1077,7 @@ export type AuthStatus = "authenticated" | "expired" | "not_authenticated"
 export const node = LayerNode.make({
   service: Service,
   layer: layer,
-  deps: [CrossSpawnSpawner.node, McpAuth.node, EventV2Bridge.node, Config.node, McpBrowser.node],
+  deps: [CrossSpawnSpawner.node, McpAuth.node, EventV2Bridge.node, Config.node, McpBrowser.node, FSUtil.node],
 })
 
 export * as MCP from "."
