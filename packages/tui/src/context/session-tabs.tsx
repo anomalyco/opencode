@@ -29,6 +29,7 @@ import {
 
 type TabsState = {
   tabs: SessionTab[]
+  selectedSessionID?: string
   // Kept empty for rollback compatibility with clients that still read this field.
   unread: Record<string, unknown>
 }
@@ -141,13 +142,18 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       const members = data.session.family(session)
       return members.length > 0 ? members : [session]
     }
-    const normalize = (value: TabsState) => ({
-      tabs: value.tabs.reduce<SessionTab[]>((tabs, tab) => {
+    const normalize = (value: TabsState) => {
+      const tabs = value.tabs.reduce<SessionTab[]>((tabs, tab) => {
         const sessionID = root(tab.sessionID)
         return openSessionTab(tabs, { sessionID, title: title(sessionID, tab.title) })
-      }, []),
-      unread: {},
-    })
+      }, [])
+      const selected = value.selectedSessionID && root(value.selectedSessionID)
+      return {
+        tabs,
+        ...(selected && tabs.some((tab) => tab.sessionID === selected) ? { selectedSessionID: selected } : {}),
+        unread: {},
+      }
+    }
     const current = () => (route.data.type === "session" ? root(route.data.sessionID) : undefined)
     const newTab = createMemo((open = false) => {
       if (route.data.type === "home") return true
@@ -198,7 +204,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
           promotedSession = undefined
           cancelledTabs.delete(sessionID)
           history = recordSessionTabHistory(history, sessionID)
-          if (state().tabs.some((tab) => tab.sessionID === sessionID)) return
+          if (state().selectedSessionID === sessionID && state().tabs.some((tab) => tab.sessionID === sessionID)) return
           const fallback = newTab() ? NEW_SESSION_TAB_TITLE : undefined
           const temporary = previews() && !permanent
           const replaced = temporary ? previewID() : undefined
@@ -214,10 +220,12 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
               const index = draft.tabs.findIndex((item) => item.sessionID === replaced)
               if (index !== -1) {
                 draft.tabs[index] = tab
+                draft.selectedSessionID = sessionID
                 return
               }
             }
             draft.tabs = openSessionTab(draft.tabs, tab)
+            draft.selectedSessionID = sessionID
           })
         },
       ),
@@ -267,6 +275,8 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
         const next = normalize(draft)
         draft.tabs = next.tabs
         draft.unread = next.unread
+        if (next.selectedSessionID) draft.selectedSessionID = next.selectedSessionID
+        else delete draft.selectedSessionID
       })
     })
 
@@ -358,6 +368,10 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       history = previous.history
       update((draft) => {
         draft.tabs = closeSessionTab(draft.tabs, target).tabs
+        if (draft.selectedSessionID === target) {
+          if (next) draft.selectedSessionID = next
+          else delete draft.selectedSessionID
+        }
       })
       setPromptPulses((pulses) => {
         if (pulses[target] === undefined) return pulses
@@ -380,6 +394,9 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
         return newTab()
       },
       current,
+      selected() {
+        return state().selectedSessionID
+      },
       status,
       scrollAnchor(sessionID: string) {
         const target = root(sessionID)

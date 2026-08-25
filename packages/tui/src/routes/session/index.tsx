@@ -1,5 +1,4 @@
 import {
-  batch,
   createContext,
   createEffect,
   createMemo,
@@ -60,7 +59,6 @@ import { DialogImagePreview } from "../../component/dialog-image-preview"
 import { DialogMessage } from "./dialog-message"
 import { DialogFork } from "./dialog-fork"
 import { DialogTimeline } from "./dialog-timeline"
-import { Sidebar } from "./sidebar"
 import { Composer } from "./composer"
 import { filetype } from "../../util/filetype"
 import parsers from "../../parsers-config"
@@ -110,6 +108,7 @@ import { createDelayedPresence } from "../../util/delayed-presence"
 import { SessionLocationMissing } from "./location-missing"
 import { isRecord } from "../../util/record"
 import { createHistoryPrepend } from "./history"
+import { useSessionTerminals } from "../../context/session-terminals"
 
 addDefaultParsers(parsers.parsers)
 
@@ -148,7 +147,13 @@ function use() {
   return ctx
 }
 
-export function Session(props: { verticalTabsWidth: number }) {
+export function Session(props: {
+  verticalTabsWidth: number
+  promptMuted?: boolean
+  sidebarVisible: boolean
+  onToggleSidebar: () => void
+  width?: number
+}) {
   const setEpilogue = useEpilogue()
   const clipboard = useClipboard()
   const writeExport = async (file: string, content: string) => {
@@ -226,28 +231,18 @@ export function Session(props: { verticalTabsWidth: number }) {
   })
 
   const dimensions = useTerminalDimensions()
-  const sidebar = createMemo(() => config.session?.sidebar ?? "auto")
-  const [sidebarOpen, setSidebarOpen] = createSignal(false)
   const thinkingMode = createMemo<ThinkingMode>(() => config.session?.thinking ?? "hide")
   const showScrollbar = createMemo(() => config.session?.scrollbar ?? false)
   const markdownMode = createMemo(() => config.session?.markdown ?? "rendered")
   const diffWrapMode = createMemo(() => config.diffs?.wrap ?? "word")
   const groupExploration = createMemo(() => config.session?.grouping !== "none")
 
-  const availableWidth = createMemo(() => dimensions().width - props.verticalTabsWidth)
-  const wide = createMemo(() => availableWidth() > 120)
-  const sidebarVisible = createMemo(() => {
-    if (session()?.parentID) return false
-    if (sidebarOpen()) return true
-    if (sidebar() === "auto" && wide()) return true
-    return false
-  })
   Keymap.createLayer(() => ({
     priority: 10,
-    enabled: () => sidebarOpen() && !wide() && !disabled(),
-    commands: [{ bind: "escape,ctrl+c", title: "Close sidebar", group: "Session", run: () => setSidebarOpen(false) }],
+    enabled: () => props.sidebarVisible && dimensions().width - props.verticalTabsWidth <= 120 && !disabled(),
+    commands: [{ bind: "escape,ctrl+c", title: "Close sidebar", group: "Session", run: props.onToggleSidebar }],
   }))
-  const contentWidth = createMemo(() => availableWidth() - (sidebarVisible() ? 42 : 0) - 4)
+  const contentWidth = createMemo(() => (props.width ?? dimensions().width - props.verticalTabsWidth) - 4)
   const models = createMemo(() => data.location.model.list(location()) ?? [])
 
   const scrollAcceleration = createMemo(() => getScrollAcceleration(config))
@@ -285,6 +280,7 @@ export function Session(props: { verticalTabsWidth: number }) {
   const [navigationSlack, setNavigationSlack] = createSignal(0)
   const [synced, setSynced] = createSignal(false)
   const sessionTabs = useSessionTabs()
+  const terminals = useSessionTerminals()
   const [awayFromBottom, setAwayFromBottom] = createSignal(false)
   const [latestHovered, setLatestHovered] = createSignal(false)
   let ensureAllRowsPending: (() => void)[] | undefined
@@ -885,20 +881,22 @@ export function Session(props: { verticalTabsWidth: number }) {
       },
     },
     {
-      title: sidebarVisible() ? "Hide sidebar" : "Show sidebar",
+      title: props.sidebarVisible ? "Hide sidebar" : "Show sidebar",
       id: "session.sidebar.toggle",
       group: "Session",
       run: () => {
-        batch(() => {
-          const isVisible = sidebarVisible()
-          void configState
-            .update((draft) => {
-              draft.session = { ...draft.session, sidebar: isVisible ? "hide" : "auto" }
-            })
-            .catch(toast.error)
-          setSidebarOpen(!isVisible)
-        })
+        props.onToggleSidebar()
         dialog.clear()
+      },
+    },
+    {
+      title: "New terminal",
+      id: "session.terminal",
+      group: "Session",
+      slash: { name: "terminal" },
+      run: async () => {
+        dialog.clear()
+        await terminals.newTerminal(route.sessionID).catch(toast.error)
       },
     },
     {
@@ -1346,6 +1344,7 @@ export function Session(props: { verticalTabsWidth: number }) {
                     visible={true}
                     ref={bind}
                     disabled={false}
+                    muted={props.promptMuted}
                     onSubmit={() => {
                       toBottom()
                     }}
@@ -1361,26 +1360,6 @@ export function Session(props: { verticalTabsWidth: number }) {
             </box>
           </Show>
         </box>
-        <Show when={sidebarVisible()}>
-          <Switch>
-            <Match when={wide()}>
-              <Sidebar sessionID={route.sessionID} />
-            </Match>
-            <Match when={!wide()}>
-              <box
-                position="absolute"
-                top={0}
-                left={0}
-                right={0}
-                bottom={0}
-                alignItems="flex-end"
-                backgroundColor={RGBA.fromInts(0, 0, 0, 70)}
-              >
-                <Sidebar sessionID={route.sessionID} />
-              </box>
-            </Match>
-          </Switch>
-        </Show>
       </box>
     </context.Provider>
   )

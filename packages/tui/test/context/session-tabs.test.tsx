@@ -559,7 +559,27 @@ test("stores session tabs for the current working directory by default", async (
     expect(stored.global).toEqual({ tabs: [], unread: {} })
     expect(Object.keys(stored.cwd)).toEqual([directory])
     expect(stored.cwd[directory].tabs.map((tab: { sessionID: string }) => tab.sessionID)).toEqual(["first"])
+    expect(stored.cwd[directory].selectedSessionID).toBe("first")
     expect(stored.cwd[directory].unread).toEqual({})
+  } finally {
+    await setup.destroy()
+  }
+})
+
+test("persists selection when returning to an already open session tab", async () => {
+  const setup = await renderSessionTabs("first", { persisted: ["first", "second"] })
+
+  try {
+    await wait(() => setup.tabs.selected() === "first")
+    setup.tabs.select("second")
+    await wait(() => setup.tabs.selected() === "second")
+    setup.tabs.select("first")
+    await wait(() => setup.tabs.selected() === "first")
+    await setup.flush()
+
+    const stored = await Bun.file(path.join(setup.state, "test", "tui", "tabs.json")).json()
+    expect(stored.cwd[directory].selectedSessionID).toBe("first")
+    expect(stored.cwd[directory].tabs.map((tab: { sessionID: string }) => tab.sessionID)).toEqual(["first", "second"])
   } finally {
     await setup.destroy()
   }
