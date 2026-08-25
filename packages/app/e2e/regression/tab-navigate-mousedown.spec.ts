@@ -68,6 +68,41 @@ test("keyboard navigation follows the visible tab order", async ({ page }) => {
   await expect(page).toHaveURL(new RegExp(`${hrefC.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`))
 })
 
+test("cramped tabs only show the close button for the active tab", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 720 })
+  await mockServer(page)
+  await page.addInitScript(
+    ({ server, sessionA, sessionB, sessionC }) => {
+      localStorage.setItem(
+        "opencode.window.browser.dat:tabs",
+        JSON.stringify([
+          { type: "session", server, sessionId: sessionA },
+          { type: "session", server, sessionId: sessionB },
+          { type: "session", server, sessionId: sessionC },
+        ]),
+      )
+    },
+    { server, sessionA: sessionA.id, sessionB: sessionB.id, sessionC: sessionC.id },
+  )
+
+  const hrefA = `/server/${base64Encode(server)}/session/${sessionA.id}`
+  const hrefB = `/server/${base64Encode(server)}/session/${sessionB.id}`
+  await page.goto(hrefA)
+
+  const tabA = page.locator(`[data-titlebar-tab-slot]:has(a[href="${hrefA}"])`)
+  const tabB = page.locator(`[data-titlebar-tab-slot]:has(a[href="${hrefB}"])`)
+  await expect(tabA).toHaveAttribute("data-active", "true")
+  await expect(tabB).toBeVisible()
+  await expect(tabA.locator('[data-slot="tab-close"]')).toBeVisible()
+  await expect(tabB.locator('[data-slot="tab-close"]')).toBeHidden()
+
+  await tabB.locator(`a[href="${hrefB}"]`).click()
+
+  await expect(page).toHaveURL(new RegExp(`${hrefB.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`))
+  await expect(tabA.locator('[data-slot="tab-close"]')).toBeHidden()
+  await expect(tabB.locator('[data-slot="tab-close"]')).toBeVisible()
+})
+
 function session(id: string, title: string) {
   return {
     id,
