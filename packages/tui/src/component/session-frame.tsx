@@ -1,13 +1,12 @@
 import type { PersistentPtyInfo } from "@opencode-ai/client"
 import { RGBA } from "@opentui/core"
 import { useTerminalDimensions } from "@opentui/solid"
-import { batch, createEffect, createMemo, createResource, createSignal, on, onCleanup, Show, type JSX } from "solid-js"
+import { batch, createEffect, createMemo, createResource, createSignal, on, Show } from "solid-js"
 import { useConfig } from "../config"
 import { useData } from "../context/data"
 import { Keymap } from "../context/keymap"
 import { useSessionTerminals } from "../context/session-terminals"
 import { usePromptRef } from "../context/prompt"
-import { useTheme, useThemes } from "../context/theme"
 import { Session } from "../routes/session"
 import { Sidebar } from "../routes/session/sidebar"
 import { createAnimatable, tween } from "../ui/animation"
@@ -189,117 +188,17 @@ function TerminalPanel(props: {
   onDisconnect: () => void
 }) {
   const sessions = useSessionTerminals()
-  const [terminalTitle, setTerminalTitle] = createSignal(props.info.title)
-  const [foregroundProcess, setForegroundProcess] = createSignal(props.info.foregroundProcess ?? undefined)
-  const [focused, setFocused] = createSignal(false)
-  let focusTerminal: (() => void) | undefined
   return (
-    <PaneSurface focus={() => focusTerminal?.()} title={foregroundProcess() ?? terminalTitle()} focused={focused()}>
-      <TerminalPane
-        ptyID={props.info.id}
-        autoFocus={props.restoreFocus || sessions.shouldFocus(props.info.id)}
-        onAutoFocus={() => {
-          sessions.clearFocus(props.info.id)
-          props.onAutoFocus()
-        }}
-        onFocusRequest={(value) => {
-          focusTerminal = value
-          props.onFocusRequest(value)
-        }}
-        onDisconnect={props.onDisconnect}
-        onFocusChange={(value) => {
-          setFocused(value)
-          props.onFocusChange(value)
-        }}
-        onInfo={(info) => {
-          setTerminalTitle(info.title)
-          setForegroundProcess(info.foregroundProcess)
-        }}
-        onTitleChange={(title) => {
-          setTerminalTitle(title)
-        }}
-        onForegroundProcessChange={(process) => {
-          setForegroundProcess(process)
-        }}
-      />
-    </PaneSurface>
-  )
-}
-
-function PaneSurface(props: { focus: () => void; title: string; focused: boolean; children: JSX.Element }) {
-  const theme = useTheme()
-  const themes = useThemes()
-  const config = useConfig()
-  const shortcut = Keymap.useShortcut("terminal.select")
-  const background = () => themes.currentTokens().contextual.elevated.background.default
-  const title = createAnimatable(
-    { opacity: 0 },
-    {
-      transition: tween({ duration: 0.2 }),
-      enabled: () => config.data.animations ?? true,
-    },
-  )
-  let hideTitle: ReturnType<typeof setTimeout> | undefined
-  const revealTitle = () => {
-    title.jump({ opacity: 1 })
-    clearTimeout(hideTitle)
-    hideTitle = setTimeout(() => title.animate({ opacity: 0 }), 2_000)
-  }
-  onCleanup(() => clearTimeout(hideTitle))
-  return (
-    <box
-      flexGrow={1}
-      minWidth={0}
-      minHeight={0}
-      flexDirection="column"
-      position="relative"
-      backgroundColor={background()}
-      onMouseMove={revealTitle}
-      onMouseOver={revealTitle}
-    >
-      <box flexGrow={1} minWidth={0} minHeight={0} position="relative" backgroundColor={background()}>
-        {props.children}
-      </box>
-      <Show when={title.value().opacity > 0}>
-        <box
-          position="absolute"
-          top={0}
-          left={0}
-          right={0}
-          height={1}
-          paddingLeft={1}
-          paddingRight={1}
-          flexDirection="row"
-          backgroundColor={background()}
-          opacity={title.value().opacity}
-          zIndex={1}
-          onMouseDown={props.focus}
-        >
-          <text
-            fg={props.focused ? theme.text.formfield.selected : theme.text.subdued}
-            bg={background()}
-            wrapMode="none"
-            truncate
-            flexGrow={1}
-            minWidth={0}
-          >
-            Terminal: {props.title}
-          </text>
-          <Show when={shortcut()}>
-            {(value) => (
-              <>
-                <text fg={theme.text.default} bg={background()} wrapMode="none" flexShrink={0}>
-                  {value()}
-                </text>
-                <text fg={theme.text.subdued} bg={background()} wrapMode="none" flexShrink={0}>
-                  {" "}
-                  terminals
-                </text>
-              </>
-            )}
-          </Show>
-        </box>
-      </Show>
-    </box>
+    <TerminalPane
+      ptyID={props.info.id}
+      autoFocus={props.restoreFocus || sessions.shouldFocus(props.info.id)}
+      onAutoFocus={() => {
+        sessions.clearFocus(props.info.id)
+        props.onAutoFocus()
+      }}
+      onFocusRequest={props.onFocusRequest}
+      onDisconnect={props.onDisconnect}
+      onFocusChange={props.onFocusChange}
+    />
   )
 }
