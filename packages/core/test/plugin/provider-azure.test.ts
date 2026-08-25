@@ -1,3 +1,4 @@
+import { chmod } from "node:fs/promises"
 import { Agent } from "@opencode-ai/core/agent"
 import { AISDK } from "@opencode-ai/core/aisdk"
 import { describe, expect } from "bun:test"
@@ -12,6 +13,7 @@ import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { AzurePlugin } from "@opencode-ai/core/plugin/provider/azure"
 import { Provider } from "@opencode-ai/core/provider"
 import { Integration } from "@opencode-ai/core/integration"
+import { Location } from "@opencode-ai/core/location"
 import { Session } from "@opencode-ai/core/session"
 import { AppProcess } from "@opencode-ai/util/process"
 import { testEffect } from "../lib/effect"
@@ -148,6 +150,43 @@ describe("AzurePlugin", () => {
         })
       }),
     ),
+  )
+
+  it.live("lists Azure CLI resources and keeps manual resource entry available", () =>
+    Effect.gen(function* () {
+      const directory = (yield* Location.Service).directory
+      const executable = `${directory}/az`
+      yield* Effect.promise(() => Bun.write(executable, "#!/bin/sh\nexit 0\n"))
+      yield* Effect.promise(() => chmod(executable, 0o755))
+      return yield* withEnv(
+        {
+          PATH: `${directory}:${process.env.PATH}`,
+          AZURE_RESOURCE_NAME: undefined,
+          AZURE_COGNITIVE_SERVICES_RESOURCE_NAME: undefined,
+        },
+        () =>
+          withAzureCommands(
+            () => [
+              { name: "first-resource", resourceGroup: "first-group" },
+              { name: "second-resource", resourceGroup: "second-group" },
+            ],
+            () =>
+              Effect.gen(function* () {
+                yield* addPlugin()
+                const integration = yield* (yield* Integration.Service).get(Integration.ID.make("azure"))
+                const method = integration?.methods.find((item) => item.type === "oauth")
+                expect(method?.form?.[0]).toMatchObject({
+                  title: "Microsoft Entra ID (Azure CLI) · Resource name",
+                  options: [
+                    { value: "first-resource", label: "first-resource", description: "first-group" },
+                    { value: "second-resource", label: "second-resource", description: "second-group" },
+                  ],
+                  custom: true,
+                })
+              }),
+          ),
+      )
+    }),
   )
 
   it.live("connects with the Azure CLI and accepts legacy token expiration", () =>

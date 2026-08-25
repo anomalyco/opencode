@@ -79,7 +79,17 @@ export const AzurePlugin = define({
       return refreshed
     })
 
-    const form = (label: string) =>
+    const accounts =
+      !resolveResourceName(configured) &&
+      typeof configured?.baseURL !== "string" &&
+      Bun.which("az", { PATH: process.env.PATH })
+        ? yield* command(["cognitiveservices", "account", "list", "--output", "json", "--only-show-errors"]).pipe(
+            Effect.flatMap(decodeAccounts),
+            Effect.catch(() => Effect.succeed([])),
+          )
+        : []
+
+    const form = (label: string, select = false) =>
       iife(() => {
         if (resolveResourceName(configured) || typeof configured?.baseURL === "string") return
         return Form.Fields.make([
@@ -89,6 +99,16 @@ export const AzurePlugin = define({
             title: `${label} · Resource name`,
             placeholder: "e.g. my-models",
             required: true,
+            ...(select && accounts.length > 0
+              ? {
+                  options: accounts.map((account) => ({
+                    value: account.name,
+                    label: account.name,
+                    description: account.resourceGroup,
+                  })),
+                  custom: true,
+                }
+              : {}),
           },
         ])
       })
@@ -104,7 +124,7 @@ export const AzurePlugin = define({
           id: methodID,
           type: "oauth",
           label: "Microsoft Entra ID (Azure CLI)",
-          form: form("Microsoft Entra ID (Azure CLI)"),
+          form: form("Microsoft Entra ID (Azure CLI)", true),
         },
         authorize: (answer) =>
           Effect.succeed({
@@ -156,9 +176,12 @@ export const AzurePlugin = define({
         const group = process.env.AZURE_RESOURCE_GROUP
         const account = group
           ? { name: resource, resourceGroup: group }
-          : (yield* command(["cognitiveservices", "account", "list", "--output", "json", "--only-show-errors"]).pipe(
-              Effect.flatMap(decodeAccounts),
-            )).find((item) => item.name.toLowerCase() === resource.toLowerCase())
+          : (accounts.length > 0
+              ? accounts
+              : yield* command(["cognitiveservices", "account", "list", "--output", "json", "--only-show-errors"]).pipe(
+                  Effect.flatMap(decodeAccounts),
+                )
+            ).find((item) => item.name.toLowerCase() === resource.toLowerCase())
         if (!account)
           return yield* Effect.fail(new Error(`Azure resource "${resource}" was not found in the active subscription`))
         const deployments = yield* command([
