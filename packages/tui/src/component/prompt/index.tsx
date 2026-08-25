@@ -60,6 +60,7 @@ import { usePromptWorkspace } from "./workspace"
 import { usePromptMove } from "./move"
 import { readLocalAttachment } from "./local-attachment"
 import { useLocation } from "../../context/location"
+import { countActiveDescendants } from "../../util/session-tree"
 
 registerOpencodeSpinner()
 
@@ -115,6 +116,15 @@ function fadeColor(color: RGBA, alpha: number) {
   return RGBA.fromValues(color.r, color.g, color.b, color.a * alpha)
 }
 
+function ActiveIndicator(props: { count: number }) {
+  const theme = useTheme().theme
+  return (
+    <Spinner color={theme.primary}>
+      {props.count} active task{props.count === 1 ? "" : "s"}
+    </Spinner>
+  )
+}
+
 function hasEditorRangeSelection(selection: EditorSelection["ranges"][number]) {
   return (
     selection.selection.start.line !== selection.selection.end.line ||
@@ -164,6 +174,9 @@ export function Prompt(props: PromptProps) {
   const dialog = useDialog()
   const toast = useToast()
   const status = createMemo(() => sync.data.session_status?.[props.sessionID ?? ""] ?? { type: "idle" })
+  const activeDescendants = createMemo(() =>
+    countActiveDescendants(sync.data.session, sync.data.session_status, props.sessionID ?? ""),
+  )
   const history = usePromptHistory()
   const stash = usePromptStash()
   const keymap = useOpencodeKeymap()
@@ -1632,6 +1645,9 @@ export function Prompt(props: PromptProps) {
                     {store.interrupt > 0 ? "again to interrupt" : "interrupt"}
                   </span>
                 </text>
+                <Show when={activeDescendants() > 0}>
+                  <ActiveIndicator count={activeDescendants()} />
+                </Show>
               </box>
             </Match>
             <Match when={workspace.notice()}>
@@ -1682,6 +1698,11 @@ export function Prompt(props: PromptProps) {
             <Match when={move.pendingNew()}>
               <box paddingLeft={3}>
                 <text fg={theme.accent}>(new working copy)</text>
+              </box>
+            </Match>
+            <Match when={activeDescendants() > 0}>
+              <box paddingLeft={1}>
+                <ActiveIndicator count={activeDescendants()} />
               </box>
             </Match>
             <Match when={true}>

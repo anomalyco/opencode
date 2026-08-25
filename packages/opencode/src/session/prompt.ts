@@ -15,6 +15,7 @@ import { SessionPhysical } from "./physical-interrupt"
 import { SessionToolPart } from "./toolpart-closure"
 import { hasUnconsumedLocalTool } from "./task-return"
 import type { SessionMutation } from "./closure/mutation"
+import { isCompleteClosurePair } from "@opencode-ai/core/session/closure-record"
 import { Agent } from "../agent/agent"
 import { Provider } from "@/provider/provider"
 
@@ -725,7 +726,7 @@ const layer = Layer.effect(
         }
       }
       const match = yield* sessions
-        .findMessage(sessionID, (m) => m.info.role === "user" && !!m.info.model)
+        .findMessage(sessionID, (m) => m.info.role === "user" && !!m.info.model && !isCompleteClosurePair(m))
         .pipe(Effect.orDie)
       if (Option.isSome(match) && match.value.info.role === "user") return match.value.info.model
       return yield* provider.defaultModel().pipe(Effect.orDie)

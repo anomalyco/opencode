@@ -161,6 +161,21 @@ describe("shared closure evidence selectors", () => {
     expect(turn).toContain("<Message message={message()!} parts={parts()} actions={props.actions} />")
   })
 
+  test("the Web classifier stays textually identical to core modulo its declared browser-local header", () => {
+    const core = readFileSync(
+      fileURLToPath(new URL("../../../core/src/session/closure-record.ts", import.meta.url)),
+      "utf8",
+    ).replaceAll("\r\n", "\n")
+    const web = readFileSync(
+      fileURLToPath(new URL("../../../web/src/components/share/closure-record.ts", import.meta.url)),
+      "utf8",
+    ).replaceAll("\r\n", "\n")
+    const header =
+      "// Browser-local parity copy: packages/web deliberately has no runtime dependency on @opencode-ai/core.\n"
+    expect(web.startsWith(header)).toBe(true)
+    expect(web.slice(header.length)).toBe(core)
+  })
+
   test("Enterprise partitions selectors from chronological evidence and guards evidence-only shares", () => {
     const source = readFileSync(
       fileURLToPath(new URL("../../../enterprise/src/routes/share/[shareID].tsx", import.meta.url)),
