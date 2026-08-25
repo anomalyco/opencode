@@ -112,16 +112,30 @@ describe("OpenAI Responses route", () => {
 
       expect(prepared.body).toEqual({
         model: "gpt-4.1-mini",
-        input: [
-          { role: "system", content: "You are concise." },
-          { role: "user", content: [{ type: "input_text", text: "Say hello." }] },
-        ],
+        input: [{ role: "user", content: [{ type: "input_text", text: "Say hello." }] }],
+        instructions: "You are concise.",
         store: false,
         include: ["reasoning.encrypted_content"],
         stream: true,
         max_output_tokens: 20,
         temperature: 0,
       })
+    }),
+  )
+
+  it.effect("prefers explicit provider instructions over canonical initial instructions", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          system: "Canonical instructions.",
+          prompt: "Say hello.",
+          providerOptions: { instructions: "Provider instructions." },
+        }),
+      )
+
+      expect(prepared.body.instructions).toBe("Provider instructions.")
+      expect(prepared.body.input).toEqual([{ role: "user", content: [{ type: "input_text", text: "Say hello." }] }])
     }),
   )
 
@@ -1597,8 +1611,8 @@ describe("OpenAI Responses route", () => {
       )
 
       expect(prepared.body).toMatchObject({
+        instructions: "You are concise. Continue from the provided history.",
         input: [
-          { role: "system", content: "You are concise. Continue from the provided history." },
           {
             role: "user",
             content: [

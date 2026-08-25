@@ -584,9 +584,7 @@ const lowerToolResultOutput = Effect.fnUntraced(function* (
 })
 
 const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (request: LLMRequest, extension: Extension) {
-  const system: LoweredInputItem[] =
-    request.system.length === 0 ? [] : [{ role: "system", content: ProviderShared.joinText(request.system) }]
-  const input: LoweredInputItem[] = [...system]
+  const input: LoweredInputItem[] = []
   const providerMetadataKey = request.model.route.providerMetadataKey ?? "openresponses"
 
   for (const message of request.messages) {
@@ -716,10 +714,11 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
 
 const lowerOptions = (request: LLMRequest) => {
   const options = OpenResponsesOptions.resolve(request)
+  const instructions = options.instructions || ProviderShared.joinText(request.system)
   const cacheKey = ProviderShared.promptCacheKey(request)
   const parallelToolCalls = resolveParallelToolCalls(request)
   return {
-    ...(options.instructions ? { instructions: options.instructions } : {}),
+    ...(instructions ? { instructions } : {}),
     ...(options.store !== undefined ? { store: options.store } : {}),
     ...(options.metadata ? { metadata: options.metadata } : {}),
     ...(options.safetyIdentifier ? { safety_identifier: options.safetyIdentifier } : {}),

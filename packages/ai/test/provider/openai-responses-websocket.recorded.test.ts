@@ -136,6 +136,7 @@ describe("OpenAI Responses WebSocket recorded", () => {
       expect(channel.opens()).toBe(1)
       expect(channel.sent).toHaveLength(2)
       expect(channel.sent[1]).toMatchObject({
+        instructions: "Call get_weather once, then reply exactly: Paris is sunny.",
         previous_response_id: expect.any(String),
         input: [{ type: "function_call_output", call_id: call.id, output: expect.any(String) }],
       })
@@ -167,8 +168,8 @@ describe("OpenAI Responses WebSocket recorded", () => {
       expect(channel.opens()).toBe(2)
       expect(channel.sent[1]).not.toHaveProperty("previous_response_id")
       expect(channel.sent[1]).toMatchObject({
+        instructions: "Follow the user's exact reply instruction.",
         input: [
-          { role: "system", content: "Follow the user's exact reply instruction." },
           { role: "user", content: [{ type: "input_text", text: "Reply exactly: Alpha." }] },
           { role: "assistant", content: [{ type: "output_text", text: "Alpha." }] },
           { role: "user", content: [{ type: "input_text", text: "Reply exactly: Beta." }] },
@@ -204,8 +205,8 @@ describe("OpenAI Responses WebSocket recorded", () => {
       expect(channel.sent[1]).toHaveProperty("previous_response_id", expect.any(String))
       expect(channel.sent[2]).not.toHaveProperty("previous_response_id")
       expect(channel.sent[2]).toMatchObject({
+        instructions: "Follow the user's exact reply instruction.",
         input: [
-          { role: "system", content: "Follow the user's exact reply instruction." },
           { role: "user", content: [{ type: "input_text", text: "Reply exactly: Ready." }] },
           { role: "assistant", content: [{ type: "output_text", text: "Ready." }] },
           { role: "user", content: [{ type: "input_text", text: "Reply exactly: Recovered." }] },

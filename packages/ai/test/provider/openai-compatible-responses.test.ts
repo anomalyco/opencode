@@ -47,10 +47,8 @@ describe("Open Responses-compatible route", () => {
       })
       expect(prepared.body).toEqual({
         model: "example-model",
-        input: [
-          { role: "system", content: "You are concise." },
-          { role: "user", content: [{ type: "input_text", text: "Say hello." }] },
-        ],
+        input: [{ role: "user", content: [{ type: "input_text", text: "Say hello." }] }],
+        instructions: "You are concise.",
         stream: true,
         store: false,
         include: ["reasoning.encrypted_content"],
@@ -84,10 +82,12 @@ describe("Open Responses-compatible route", () => {
       const prepared = yield* compileRequest(
         LLM.request({
           model,
+          system: "Initial instructions.",
           messages: [Message.user("Before."), Message.system("Operator update."), Message.assistant("After.")],
         }),
       )
 
+      expect(prepared.body.instructions).toBe("Initial instructions.")
       expect(prepared.body.input).toEqual([
         { role: "user", content: [{ type: "input_text", text: "Before." }] },
         { role: "developer", content: "Operator update." },

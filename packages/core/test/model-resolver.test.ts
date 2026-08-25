@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { LLM, LanguageModel } from "@opencode-ai/ai"
+import { LLM, LanguageModel, Message } from "@opencode-ai/ai"
 import { OpenAIChat } from "@opencode-ai/ai/protocols"
 import { compileRequest } from "@opencode-ai/ai/route/client"
 import { ConfigProvider, Effect, Layer } from "effect"
@@ -679,7 +679,15 @@ describe("ModelResolver", () => {
           metadata: { accountID: "acct_123" },
         }),
       )
-      const request = LLM.request({ model: resolved, prompt: "Hello" })
+      const request = LLM.request({
+        model: resolved,
+        system: [
+          { type: "text", text: "Base instructions." },
+          { type: "text", text: "Project instructions." },
+        ],
+        messages: [Message.user("Hello"), Message.system("Updated instructions.")],
+      })
+      const prepared = yield* compileRequest(request)
       const headers = yield* resolved.route.auth.apply({
         request,
         method: "POST",
@@ -694,6 +702,13 @@ describe("ModelResolver", () => {
       })
       expect(resolved.route.defaults.headers).toMatchObject({ "chatgpt-account-id": "acct_123" })
       expect(headers.authorization).toBe("Bearer chatgpt-token")
+      expect(prepared.body).toMatchObject({
+        instructions: "Base instructions.\nProject instructions.",
+        input: [
+          { role: "user", content: [{ type: "input_text", text: "Hello" }] },
+          { role: "developer", content: "Updated instructions." },
+        ],
+      })
     }),
   )
 
