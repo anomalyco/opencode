@@ -70,8 +70,11 @@ describe("Session.skill", () => {
       yield* sessions.prompt({
         id,
         sessionID: session.id,
-        text: "Apply @effect",
-        skills: [{ id: Skill.ID.make("effect"), mention: { start: 6, end: 13, text: "@effect" } }],
+        text: "Apply @effect and @effect",
+        skills: [
+          { id: Skill.ID.make("effect"), mention: { start: 6, end: 13, text: "@effect" } },
+          { id: Skill.ID.make("effect"), mention: { start: 18, end: 25, text: "@effect" } },
+        ],
         resume: false,
       })
       expect(yield* sessions.messages({ sessionID: session.id })).toEqual([])
@@ -81,13 +84,18 @@ describe("Session.skill", () => {
         expect.objectContaining({
           id,
           type: "user",
-          text: "Apply @effect",
+          text: "Apply @effect and @effect",
           skills: [
             {
               id: "effect",
               name: "Effect",
               text: Skill.toModelOutput(info, []),
               mention: { start: 6, end: 13, text: "@effect" },
+            },
+            {
+              id: "effect",
+              name: "Effect",
+              mention: { start: 18, end: 25, text: "@effect" },
             },
           ],
         }),
@@ -131,13 +139,7 @@ describe("Session.skill", () => {
       yield* sessions.skill({ id, sessionID: session.id, skill: Skill.ID.make("effect"), resume: false })
 
       expect(yield* sessions.messages({ sessionID: session.id })).toContainEqual(
-        expect.objectContaining({
-          id,
-          type: "skill",
-          skill: "effect",
-          name: "Effect",
-          text: Skill.toModelOutput(info, []),
-        }),
+        expect.objectContaining({ id, type: "skill", skill: "effect", name: "Effect", text: "Use Effect" }),
       )
     }),
   )

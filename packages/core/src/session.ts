@@ -721,21 +721,16 @@ const layer = Layer.effect(
       }),
       skill: Effect.fn("Session.skill")(function* (input) {
         const session = yield* result.get(input.sessionID)
-        const skills = yield* Effect.gen(function* () {
-          const plugins = yield* PluginSupervisor.Service
-          yield* plugins.flush
-          return yield* Skill.Service
-        }).pipe(Effect.provide(locations.get(session.location)))
+        const skills = yield* Skill.Service.pipe(Effect.provide(locations.get(session.location)))
         const skill = yield* skills.get(input.skill)
         if (!skill) return yield* new SkillNotFoundError({ skill: input.skill })
-        const prepared = yield* Skill.prepare(fs, skill).pipe(Effect.orDie)
         yield* bus.publish(
           SessionEvent.Skill.Activated,
           {
             sessionID: input.sessionID,
-            id: prepared.id,
-            name: prepared.name,
-            text: prepared.output,
+            id: skill.id,
+            name: skill.name,
+            text: skill.content,
           },
           { id: input.id ? Event.ID.make(input.id.replace(/^msg_/, "evt_")) : undefined },
         )
@@ -979,17 +974,18 @@ const resolvePrompt = Effect.fn("Session.resolvePrompt")(function* (
   const selected = yield* Effect.gen(function* () {
     if (!requested?.length) return undefined
     const skillService = yield* skills
-    const prepared = new Map<Skill.ID, string>()
+    const prepared = new Map<Skill.ID, Skill.Name>()
     return yield* Effect.forEach(requested, (attachment) =>
       Effect.gen(function* () {
+        const name = prepared.get(attachment.id)
+        if (name !== undefined) return { id: attachment.id, name, mention: attachment.mention }
         const skill = yield* skillService.get(attachment.id)
         if (!skill) return yield* new SkillNotFoundError({ skill: attachment.id })
-        const text = prepared.get(skill.id) ?? (yield* Skill.prepare(fs, skill).pipe(Effect.orDie)).output
-        prepared.set(skill.id, text)
+        prepared.set(skill.id, skill.name)
         return {
           id: skill.id,
           name: skill.name,
-          text,
+          text: (yield* Skill.prepare(fs, skill).pipe(Effect.orDie)).output,
           mention: attachment.mention,
         }
       }),

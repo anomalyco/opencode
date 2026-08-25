@@ -669,7 +669,10 @@ describe("V2 mini transport", () => {
             type: "user",
             payload: {
               text: "follow up",
-              skills: [{ id: "effect", name: "Effect", text: "Use Effect services" }],
+              skills: [
+                { id: "effect", name: "Effect", text: "Use Effect services" },
+                { id: "effect", name: "Effect" },
+              ],
             },
             delivery: "queue",
           },

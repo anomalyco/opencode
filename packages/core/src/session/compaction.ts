@@ -139,13 +139,10 @@ const serialize = (message: SessionMessage.Info) => {
         (file) =>
           `[Attached ${file.mime}: ${file.name ?? (file.source.type === "uri" ? file.source.uri : "inline attachment")}]`,
       ) ?? []
-    const skills = Array.from(
-      new Map(
-        (message.skills ?? []).flatMap((skill) =>
-          skill.text === undefined ? [] : [[skill.id, `[Skill activated: ${skill.name}]\n${skill.text}`] as const],
-        ),
-      ).values(),
-    )
+    const skills =
+      message.skills?.flatMap((skill) =>
+        skill.text === undefined ? [] : [`[Skill activated: ${skill.name}]\n${skill.text}`],
+      ) ?? []
     return [...skills, `[User]: ${message.text}`, ...files].join("\n")
   }
   if (message.type === "location-switched")

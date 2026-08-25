@@ -1,7 +1,7 @@
 export * as Skill from "./skill.js"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { FSUtil } from "@opencode-ai/util/fs-util"
+import type { FSUtil } from "@opencode-ai/util/fs-util"
 import path from "path"
 import { Context, Effect, Layer, Types } from "effect"
 import { Skill } from "@opencode-ai/schema/skill"
@@ -63,8 +63,6 @@ export const prepare = Effect.fn("Skill.prepare")(function* (fs: FSUtil.Interfac
           .slice(0, 10)
       : []
   return {
-    id: skill.id,
-    name: skill.name,
     directory,
     output: toModelOutput(skill, files),
   }

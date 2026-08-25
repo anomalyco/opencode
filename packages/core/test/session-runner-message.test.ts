@@ -222,7 +222,7 @@ Recent work
           id: id("user-skill-content"),
           type: "user",
           text: "Use @effect and @api-design",
-          skills: [effect, api, effect],
+          skills: [effect, api, SkillAttachment.make({ id: effect.id, name: effect.name })],
           time: { created },
         }),
       ],
