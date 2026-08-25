@@ -234,6 +234,9 @@ export async function handler(
             }
             headers.set(k, v)
           })
+          if (isNewInference) {
+            headers.set("x-zen-model", model)
+          }
           headers.delete("host")
           headers.delete("content-length")
           if (!isNewInference) {
@@ -241,6 +244,7 @@ export async function handler(
             headers.delete("x-opencode-project")
             headers.delete("x-opencode-client")
             headers.delete("x-opencode-request")
+            headers.delete("x-zen-model")
           }
           return headers
         })(),
@@ -1110,7 +1114,7 @@ export async function handler(
           enrichment: (() => {
             if (billingSource === "subscription") return { plan: "sub" }
             if (billingSource === "byok") return { plan: "byok" }
-            if (billingSource === "lite") return { plan: "lite" }
+            if (billingSource === "lite") return { plan: "lite", costMultiplier: modelInfo.costMultiplier }
             return undefined
           })(),
         }),
