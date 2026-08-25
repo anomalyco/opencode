@@ -21,6 +21,7 @@ export function createHomeSessionSearchController(home: HomeController, sessions
     highlighted: "",
     exact: undefined as HomeSessionRecord | undefined,
     lookingUp: false,
+    includeArchived: false,
   })
   let lookup = 0
   let root: HTMLDivElement | undefined
@@ -31,7 +32,7 @@ export function createHomeSessionSearchController(home: HomeController, sessions
     const value = query().toLowerCase()
     if (!value) return []
     const records = sessions.data
-      .searchRecords()
+      .searchRecords(state.includeArchived)
       .filter((record) => `${sessionLabel(record.session)} ${record.projectName}`.toLowerCase().includes(value))
     if (!state.exact || records.some((record) => record.session.id === state.exact?.session.id)) return records
     return [state.exact, ...records]
@@ -82,13 +83,13 @@ export function createHomeSessionSearchController(home: HomeController, sessions
     setState({ value: "", focused: false, exact: undefined, lookingUp: false })
   }
 
-  function update(value: string) {
+  function update(value: string, includeArchived = state.includeArchived) {
     const current = ++lookup
     const sessionID = value.trim()
     setState({ value, highlighted: "", exact: undefined, lookingUp: false })
     if (!looksLikeSessionID(sessionID)) return
     setState("lookingUp", true)
-    void sessions.session.lookup(sessionID).then(
+    void sessions.session.lookup(sessionID, includeArchived).then(
       (record) => {
         if (current !== lookup) return
         setState({ exact: record, lookingUp: false })
@@ -113,6 +114,11 @@ export function createHomeSessionSearchController(home: HomeController, sessions
       focus,
       input: update,
       close,
+      includeArchived: () => state.includeArchived,
+      setIncludeArchived: (value: boolean) => {
+        setState("includeArchived", value)
+        update(state.value, value)
+      },
     },
     result: {
       loading: () => sessions.data.loading() || state.lookingUp,

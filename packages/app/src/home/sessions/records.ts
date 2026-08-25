@@ -28,11 +28,12 @@ export function buildHomeSessionRecords(input: {
         .find(
           (item) =>
             pathKey(item.worktree) === directory || item.sandboxes?.some((sandbox) => pathKey(sandbox) === directory),
-        ) ?? {
-        id: session.projectID,
-        worktree: session.location.directory,
-        expanded: false,
-      }
+        ) ??
+        input.projects().find((item) => item.id === session.projectID) ?? {
+          id: session.projectID,
+          worktree: session.location.directory,
+          expanded: false,
+        }
       return { session, project, projectName: displayName(project) }
     })
 }

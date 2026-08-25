@@ -22,6 +22,7 @@ export function HomeSessions(props: {
       searchResults={props.search.result.list()}
       searchActive={props.search.result.active()}
       searchNoResultsLabel={props.search.result.noResultsLabel()}
+      searchIncludeArchived={props.search.query.includeArchived()}
       titleOpacity={props.scroll.header.titleOpacity}
       isOpenTab={props.sessions.tab.isOpen}
       onCreateSession={props.sessions.session.create}
@@ -41,6 +42,7 @@ export function HomeSessions(props: {
       onSearchFocus={props.search.query.focus}
       onSearchInput={props.search.query.input}
       onSearchClose={props.search.query.close}
+      onSearchIncludeArchived={props.search.query.setIncludeArchived}
       onSearchMove={props.search.result.move}
       onSearchSelectActive={props.search.result.selectActive}
       onSearchHighlight={props.search.result.highlight}

@@ -13,7 +13,7 @@ import type { LocalProject } from "@/shell/state/layout"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ServerConnection } from "@/runtime/server/registry"
 import { sessionHasOpenTab, useTabs } from "@/shell/tabs/tabs"
-import { errorMessage } from "@/shell/layout/helpers"
+import { compareSessionTime, errorMessage } from "@/shell/layout/helpers"
 import { useSessionTabAvatarState } from "@/shell/layout/project-avatar-state"
 import { removedSessionIDs } from "@/session/session-domain"
 import { pathKey } from "@/workspaces/path-key"
@@ -71,22 +71,47 @@ export function createHomeSessionsController(home: HomeController) {
     const conn = home.server.focused()
     if (!ctx || !conn) return []
     const server = ServerConnection.key(conn)
-    return retainHomeSessions(
-      mergeHomeSessionIndex(sessionLoad.data?.() ?? [], ctx.data.session.list()).filter(
-        (session) => !removed.keys.includes(`${server}\0${session.id}`),
-      ),
-      HOME_SESSION_LIMIT,
-      Date.now(),
+    return mergeHomeSessionIndex(sessionLoad.data?.() ?? [], ctx.data.session.list()).filter(
+      (session) => !removed.keys.includes(`${server}\0${session.id}`),
     )
   })
-  const allRecords = createMemo(() =>
+  const activeSessions = createMemo(() =>
+    retainHomeSessions(
+      indexedSessions().filter((session) => typeof session.time.archived !== "number"),
+      HOME_SESSION_LIMIT,
+      Date.now(),
+    ),
+  )
+  const archivedSessions = createMemo(() =>
+    retainHomeSessions(
+      indexedSessions().filter((session) => typeof session.time.archived === "number"),
+      HOME_SESSION_LIMIT,
+      Date.now(),
+    ),
+  )
+  const activeRecords = createMemo(() =>
     buildHomeSessionRecords({
-      sessions: indexedSessions,
+      sessions: activeSessions,
       projectDirectories,
       projects: home.project.list,
     }),
   )
-  const records = createMemo(() => allRecords().slice(0, HOME_SESSION_LIMIT))
+  const archivedRecords = createMemo(() =>
+    buildHomeSessionRecords({
+      sessions: () => {
+        const project = home.project.selected()
+        if (!project) return archivedSessions()
+        return archivedSessions().filter((session) => session.projectID === project.id)
+      },
+      // Archived workspaces may already be removed from the project's directory inventory.
+      projectDirectories: () => undefined,
+      projects: home.project.list,
+    }),
+  )
+  const searchRecords = createMemo(() =>
+    [...activeRecords(), ...archivedRecords()].toSorted((a, b) => compareSessionTime(a.session, b.session)),
+  )
+  const records = createMemo(() => activeRecords().slice(0, HOME_SESSION_LIMIT))
   const groups = createMemo(() => groupSessions(records(), language))
   const prefetched = new Set<string>()
 
@@ -257,33 +282,36 @@ export function createHomeSessionsController(home: HomeController) {
       records,
       groups,
       loading: () => sessionLoad.isLoading,
-      searchRecords: allRecords,
+      searchRecords: (includeArchived = false) => (includeArchived ? searchRecords() : activeRecords()),
     },
     session: {
       showProjectName: () => !home.project.selected(),
       server: () => home.selection.value().server,
       canCreate: () => !!home.project.newSession(),
-      lookup: async (sessionID: string) => {
+      lookup: async (sessionID: string, includeArchived = false) => {
         const ctx = home.server.focusedContext()
         if (!ctx) return
         const result = await ctx.sdk.api.session.get({ sessionID })
-        if (result.time.archived) return
+        if (result.time.archived && !includeArchived) return
+        const project = home.project.selected()
+        if (result.time.archived && project && result.projectID !== project.id) return
         return buildHomeSessionRecords({
           sessions: () => [result],
-          projectDirectories,
+          projectDirectories: result.time.archived ? () => undefined : projectDirectories,
           projects: home.project.list,
         })[0]
       },
       create: home.project.openNewSession,
       open: (session: SessionInfo, options?: OpenSessionOptions) => {
         const directoryKey = pathKey(session.location.directory)
-        const project = home.project
-          .list()
-          .find(
-            (item) =>
-              pathKey(item.worktree) === directoryKey ||
-              item.sandboxes?.some((sandbox) => pathKey(sandbox) === directoryKey),
-          )
+        const project =
+          home.project
+            .list()
+            .find(
+              (item) =>
+                pathKey(item.worktree) === directoryKey ||
+                item.sandboxes?.some((sandbox) => pathKey(sandbox) === directoryKey),
+            ) ?? home.project.list().find((item) => item.id === session.projectID)
         const conn = home.server.focused()
         if (!conn) return
         const connKey = ServerConnection.key(conn)

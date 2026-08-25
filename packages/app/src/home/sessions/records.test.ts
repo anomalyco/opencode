@@ -36,4 +36,14 @@ describe("buildHomeSessionRecords", () => {
 
     expect(records.map((record) => record.session.id)).toEqual(["a"])
   })
+
+  test("maps a removed workspace back to its project", () => {
+    const records = buildHomeSessionRecords({
+      sessions: () => [session("archived", "/removed/worktree", "project-a")],
+      projectDirectories: () => undefined,
+      projects: () => [opened],
+    })
+
+    expect(records[0]?.project).toBe(opened)
+  })
 })

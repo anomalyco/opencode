@@ -10,6 +10,7 @@ import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Menu } from "@opencode-ai/ui/menu"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { Switch } from "@opencode-ai/ui/switch"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ServerConnection } from "@/runtime/server/registry"
 import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
@@ -54,6 +55,7 @@ export type HomeSessionsViewProps = {
   searchResults: HomeSessionRecord[]
   searchActive: string
   searchNoResultsLabel: string
+  searchIncludeArchived: boolean
   titleOpacity: (id: HomeSessionGroup["id"]) => number
   isOpenTab: (record: HomeSessionRecord) => boolean
   onCreateSession: () => void
@@ -73,6 +75,7 @@ export type HomeSessionsViewProps = {
   onSearchFocus: () => void
   onSearchInput: (value: string) => void
   onSearchClose: () => void
+  onSearchIncludeArchived: (value: boolean) => void
   onSearchMove: (delta: number) => void
   onSearchSelectActive: () => void
   onSearchHighlight: (record: HomeSessionRecord) => void
@@ -238,6 +241,17 @@ function HomeSessionSearch(props: HomeSessionsViewProps) {
             style={{ top: "-6px", left: "-6px", width: "calc(100% + 12px)" }}
           >
             <div class="flex flex-col pt-9">
+              <div
+                class={`
+                  my-1.5 flex items-center justify-between gap-3 pl-[18px] pr-4
+                  text-[13px] leading-4 tracking-[-0.04px] text-v2-text-text-muted [font-weight:440]
+                `}
+              >
+                <span>{props.language.t("home.sessions.search.sessions")}</span>
+                <Switch checked={props.searchIncludeArchived} onChange={props.onSearchIncludeArchived}>
+                  {props.language.t("home.sessions.search.includeArchived")}
+                </Switch>
+              </div>
               <div id={HOME_SESSION_SEARCH_RESULTS_ID} role="listbox" class="flex flex-col gap-4 pt-4">
                 <Show
                   when={!props.searchLoading}
@@ -261,14 +275,6 @@ function HomeSessionSearch(props: HomeSessionsViewProps) {
                     }
                   >
                     <div class="flex flex-col">
-                      <p
-                        class={`
-                          my-1.5 pl-[18px] pr-6 text-[13px] leading-4 tracking-[-0.04px]
-                          text-v2-text-text-muted [font-weight:440]
-                        `}
-                      >
-                        {props.language.t("home.sessions.search.sessions")}
-                      </p>
                       <ScrollView class="max-h-80" viewportRef={props.onSetSearchList}>
                         <div class="flex flex-col gap-px pb-2">
                           <For each={props.searchResults}>
@@ -409,6 +415,17 @@ function HomeSessionSearchResultRow(
           <HomeSessionProjectName name={props.record.projectName} search />
         </Show>
       </div>
+      <Show when={props.record.session.time.archived}>
+        <span
+          class={`
+            flex shrink-0 items-center gap-1 text-[11px] leading-4 tracking-[0.05px]
+            text-v2-text-text-faint [font-weight:440]
+          `}
+        >
+          <Icon name="archive" size="small" />
+          {props.language.t("home.sessions.search.archived")}
+        </span>
+      </Show>
     </button>
   )
 }

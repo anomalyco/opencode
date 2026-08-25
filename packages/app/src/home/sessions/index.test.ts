@@ -27,14 +27,14 @@ describe("Home session index", () => {
     expect(calls.every((call) => call.parentID === null)).toBe(true)
   })
 
-  test("keeps only visible roots", () => {
+  test("keeps active and archived roots", () => {
     expect(
       parseHomeSessionIndex([
         session("root"),
         session("child", { parentID: "root" }),
         session("archived", { time: { created: 1, updated: 1, archived: 2 } }),
       ]).map((item) => item.id),
-    ).toEqual(["root"])
+    ).toEqual(["root", "archived"])
   })
 
   test("preserves the per-directory retention limit", () => {
