@@ -39,6 +39,7 @@ export interface MockServerConfig {
   inbox?: unknown[] | (() => unknown[])
   onPrompt?: (input: { sessionID: string; body: Record<string, unknown> }) => void
   onInboxChange?: (input: { sessionID: string; inboxID: string; action: "cancel" | "steer" }) => void
+  onInboxReorder?: (input: { sessionID: string; inboxIDs: readonly string[] }) => void
 }
 
 type MockStreamWindow = Window & {
@@ -410,7 +411,7 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
             config.onPrompt?.({ sessionID: ctx.params.sessionID, body })
             return {
               data: {
-                id: typeof body.id === "string" ? body.id : `inb_mock_${Date.now()}`,
+                id: typeof body.id === "string" ? body.id : `msg_mock_${Date.now()}`,
                 sessionID: ctx.params.sessionID,
                 timeCreated: Date.now(),
                 type: "user",
@@ -432,6 +433,10 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
         sessionInboxSteer: (ctx) =>
           Effect.sync(() =>
             config.onInboxChange?.({ sessionID: ctx.params.sessionID, inboxID: ctx.params.inboxID, action: "steer" }),
+          ).pipe(Effect.andThen(noContent)),
+        sessionInboxReorder: (ctx) =>
+          Effect.sync(() =>
+            config.onInboxReorder?.({ sessionID: ctx.params.sessionID, inboxIDs: ctx.payload.inboxIDs }),
           ).pipe(Effect.andThen(noContent)),
         sessionSwitchAgent: () => noContent,
         sessionSwitchModel: () => noContent,

@@ -198,13 +198,17 @@ export interface Interface {
   ) => Effect.Effect<SessionMessage.Info[], NotFoundError | MessageDecodeError>
   /**
    * Durable admitted session work not yet visible in projected history,
-   * ordered by admission. Includes unpromoted user and synthetic inputs and
+   * ordered by effective inbox position. Includes unpromoted user and synthetic inputs and
    * unhandled compaction barriers.
    */
   readonly inbox: (sessionID: SessionSchema.ID) => Effect.Effect<SessionInbox.Info[], NotFoundError>
   readonly cancelInbox: (input: InboxItemRef) => Effect.Effect<void, NotFoundError | InboxConflictError>
   readonly steerInbox: (input: InboxItemRef) => Effect.Effect<void, NotFoundError | InboxConflictError>
   readonly queueInbox: (input: InboxItemRef) => Effect.Effect<void, NotFoundError | InboxConflictError>
+  readonly reorderInbox: (input: {
+    readonly sessionID: SessionSchema.ID
+    readonly inboxIDs: ReadonlyArray<SessionMessage.ID>
+  }) => Effect.Effect<void, NotFoundError | InboxConflictError>
   /**
    * Durable, ordered session log read. Replays durable session bus after
    * the exclusive `after` cursor, emits a `Synced` marker at the captured
@@ -571,6 +575,20 @@ const layer = Layer.effect(
       cancelInbox: Effect.fn("Session.cancelInbox")((input) => mutatePending(input, SessionInbox.cancel)),
       steerInbox: Effect.fn("Session.steerInbox")((input) => mutatePending(input, SessionInbox.steer, true)),
       queueInbox: Effect.fn("Session.queueInbox")((input) => mutatePending(input, SessionInbox.queue)),
+      reorderInbox: Effect.fn("Session.reorderInbox")((input) =>
+        Effect.uninterruptible(
+          Effect.gen(function* () {
+            yield* result.get(input.sessionID)
+            yield* SessionInbox.reorder(db, bus, input).pipe(
+              Effect.catchDefect((defect) =>
+                defect instanceof SessionInbox.LifecycleConflict
+                  ? new InboxConflictError({ sessionID: input.sessionID, inboxID: defect.id })
+                  : Effect.die(defect),
+              ),
+            )
+          }),
+        ),
+      ),
       log: (input) =>
         Stream.unwrap(
           result

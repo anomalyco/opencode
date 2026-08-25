@@ -530,6 +530,15 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         }),
       )
       .handle(
+        "session.inbox.reorder",
+        Effect.fn(function* (ctx) {
+          return yield* pendingMutation(
+            session.reorderInbox({ sessionID: ctx.params.sessionID, inboxIDs: ctx.payload.inboxIDs }),
+            "Pending input can no longer be reordered",
+          )
+        }),
+      )
+      .handle(
         "session.inbox.cancel",
         Effect.fn(function* (ctx) {
           return yield* pendingMutation(

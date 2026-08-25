@@ -201,6 +201,13 @@ export const InboxDeliveryChanged = Event.durable({
 })
 export type InboxDeliveryChanged = typeof InboxDeliveryChanged.Type
 
+export const InboxReordered = Event.durable({
+  type: "session.inbox.reordered",
+  ...options,
+  schema: { ...Base, inboxIDs: Schema.Array(SessionMessage.ID) },
+})
+export type InboxReordered = typeof InboxReordered.Type
+
 export namespace Execution {
   export const Started = Event.durable({ type: "session.execution.started", ...options, schema: Base })
   export type Started = typeof Started.Type
@@ -606,6 +613,7 @@ export const Definitions = Event.inventory(
   InboxEnqueued,
   InboxCancelled,
   InboxDeliveryChanged,
+  InboxReordered,
   Execution.Started,
   Execution.Succeeded,
   Execution.Failed,

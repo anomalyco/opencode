@@ -67,38 +67,6 @@ export function createSessionQueue(input: {
       })
   }
 
-  const rewrite = async (inboxIDs: string[]) => {
-    const pending = await server.api.session.inbox.list({ sessionID: input.sessionID })
-    if (pending.some((item) => item.delivery === "queue" && item.type !== "user"))
-      throw new Error("Queued control items block reordering")
-    const current = pending.filter((item): item is QueuedPrompt => item.type === "user" && item.delivery === "queue")
-    const ordered = inboxIDs.flatMap((id) => current.filter((item) => item.id === id))
-    if (ordered.length !== current.length) throw new Error("Queued prompts changed before reordering")
-    const changed = ordered.findIndex((item, index) => item.id !== current[index]?.id)
-    if (changed < 0) return
-
-    // Existing inbox APIs cannot reorder rows, so replace only the changed suffix.
-    for (const item of ordered.slice(changed)) {
-      await data.session.prompt({
-        sessionID: input.sessionID,
-        text: item.payload.text,
-        files: item.payload.files?.map((file) => ({
-          uri: `data:${file.mime};base64,${file.data}`,
-          name: file.name,
-          description: file.description,
-          mention: file.mention,
-        })),
-        agents: item.payload.agents,
-        skills: item.payload.skills,
-        metadata: item.payload.metadata,
-        delivery: "queue",
-        resume: false,
-      })
-    }
-    for (const item of current.slice(changed)) {
-      await server.api.session.inbox.cancel({ sessionID: input.sessionID, inboxID: item.id })
-    }
-  }
   const steer = (id: string) => {
     if (state.editing?.id === id) cancelEdit()
     return server.api.session.inbox.steer({ sessionID: input.sessionID, inboxID: id }).catch(() => notify())
@@ -109,7 +77,14 @@ export function createSessionQueue(input: {
   }
   const reorder = (inboxIDs: string[]) => {
     if (state.busy) return Promise.resolve()
-    return run(() => rewrite(inboxIDs))
+    return run(async () => {
+      await data.session.pending.settled(input.sessionID)
+      const visible = new Set(queued().map((item) => item.id))
+      await server.api.session.inbox.reorder({
+        sessionID: input.sessionID,
+        inboxIDs: inboxIDs.filter((id) => visible.has(id)),
+      })
+    })
   }
 
   const edit = (id: string) => {
@@ -157,15 +132,20 @@ export function createSessionQueue(input: {
     const inboxIDs = queued().map((entry) => entry.id)
     void run(async () => {
       const replacement = await editedPromptInput(input.sessionID, location().directory, item, prompt, text)
-      // Admit before cancelling so a failed replacement never discards the original.
+      // Admit and reorder before cancelling so failures never discard the original.
       const admitted = await data.session.prompt({
         ...replacement,
         delivery,
         ...(delivery === "queue" ? { resume: false } : {}),
       })
+      if (delivery === "queue") {
+        await server.api.session.inbox.reorder({
+          sessionID: input.sessionID,
+          inboxIDs: [...inboxIDs.map((id) => (id === editing.id ? admitted.id : id)), editing.id],
+        })
+      }
       await server.api.session.inbox.cancel({ sessionID: input.sessionID, inboxID: editing.id })
       cancelEdit()
-      if (delivery === "queue") await rewrite(inboxIDs.map((id) => (id === editing.id ? admitted.id : id)))
     })
   }
   const editFirst = () => {

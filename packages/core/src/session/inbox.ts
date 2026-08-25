@@ -1,6 +1,6 @@
 export * as SessionInbox from "./inbox.js"
 
-import { and, asc, eq, or } from "drizzle-orm"
+import { and, asc, eq, or, sql } from "drizzle-orm"
 import { DateTime, Effect, Schema } from "effect"
 import {
   Compaction,
@@ -312,12 +312,50 @@ export const projectDeliveryChanged = Effect.fn("SessionInbox.projectDeliveryCha
     }),
 )
 
+export const projectReordered = Effect.fn("SessionInbox.projectReordered")(function* (
+  db: DatabaseService,
+  input: { readonly sessionID: SessionSchema.ID; readonly inboxIDs: ReadonlyArray<SessionMessage.ID> },
+) {
+  const queued = yield* db
+    .select()
+    .from(SessionInboxTable)
+    .where(and(eq(SessionInboxTable.session_id, input.sessionID), eq(SessionInboxTable.delivery, "queue")))
+    .orderBy(asc(sql`coalesce(${SessionInboxTable.order_seq}, ${SessionInboxTable.enqueued_seq})`))
+    .all()
+    .pipe(Effect.orDie)
+  const barrier = queued.find((row) => row.type === "compaction" || row.type === "move")
+  if (barrier) return yield* Effect.die(new LifecycleConflict({ id: barrier.id }))
+  const users = queued.filter((row) => row.type === "user")
+  const duplicate = input.inboxIDs.find((id, index) => input.inboxIDs.indexOf(id) !== index)
+  if (duplicate) return yield* Effect.die(new LifecycleConflict({ id: duplicate }))
+  const invalid = input.inboxIDs.find((id) => !users.some((row) => row.id === id))
+  if (invalid) return yield* Effect.die(new LifecycleConflict({ id: invalid }))
+  const missing = users.find((row) => !input.inboxIDs.includes(row.id))
+  if (missing) return yield* Effect.die(new LifecycleConflict({ id: missing.id }))
+  yield* Effect.forEach(
+    input.inboxIDs,
+    (id, index) =>
+      db
+        .update(SessionInboxTable)
+        .set({ order_seq: users[index]?.order_seq ?? users[index]?.enqueued_seq })
+        .where(and(eq(SessionInboxTable.id, id), eq(SessionInboxTable.session_id, input.sessionID)))
+        .run()
+        .pipe(Effect.orDie),
+    { discard: true },
+  )
+})
+
 export const list = Effect.fn("SessionInbox.list")(function* (db: DatabaseService, sessionID: SessionSchema.ID) {
   const rows = yield* db
     .select()
     .from(SessionInboxTable)
     .where(eq(SessionInboxTable.session_id, sessionID))
-    .orderBy(asc(SessionInboxTable.enqueued_seq))
+    .orderBy(
+      asc(
+        sql`case when ${SessionInboxTable.delivery} = 'queue' then coalesce(${SessionInboxTable.order_seq}, ${SessionInboxTable.enqueued_seq}) else ${SessionInboxTable.enqueued_seq} end`,
+      ),
+      asc(SessionInboxTable.enqueued_seq),
+    )
     .all()
     .pipe(Effect.orDie)
   return rows.map(fromRow)
@@ -343,7 +381,11 @@ export const nextPromotable = Effect.fn("SessionInbox.nextPromotable")(function*
       .select()
       .from(SessionInboxTable)
       .where(and(eq(SessionInboxTable.session_id, sessionID), eq(SessionInboxTable.delivery, delivery)))
-      .orderBy(asc(SessionInboxTable.enqueued_seq))
+      .orderBy(
+        delivery === "steer"
+          ? asc(SessionInboxTable.enqueued_seq)
+          : asc(sql`coalesce(${SessionInboxTable.order_seq}, ${SessionInboxTable.enqueued_seq})`),
+      )
       .limit(1)
       .get()
       .pipe(Effect.orDie)
@@ -414,6 +456,32 @@ export const queue = Effect.fn("SessionInbox.queue")((bus: Bus.Interface, input:
   ),
 )
 
+export const reorder = Effect.fn("SessionInbox.reorder")(
+  (
+    db: DatabaseService,
+    bus: Bus.Interface,
+    input: { readonly sessionID: SessionSchema.ID; readonly inboxIDs: ReadonlyArray<SessionMessage.ID> },
+  ) =>
+    serialized(
+      input.sessionID,
+      Effect.gen(function* () {
+        const queued = yield* db
+          .select({ id: SessionInboxTable.id, type: SessionInboxTable.type })
+          .from(SessionInboxTable)
+          .where(and(eq(SessionInboxTable.session_id, input.sessionID), eq(SessionInboxTable.delivery, "queue")))
+          .orderBy(asc(sql`coalesce(${SessionInboxTable.order_seq}, ${SessionInboxTable.enqueued_seq})`))
+          .all()
+          .pipe(Effect.orDie)
+        const barrier = queued.find((row) => row.type === "compaction" || row.type === "move")
+        if (barrier) return yield* Effect.die(new LifecycleConflict({ id: barrier.id }))
+        const users = queued.filter((row) => row.type === "user")
+        if (users.length === input.inboxIDs.length && users.every((row, index) => row.id === input.inboxIDs[index]))
+          return
+        yield* bus.publish(SessionEvent.InboxReordered, input)
+      }),
+    ).pipe(Effect.asVoid),
+)
+
 const publish = Effect.fn("SessionInbox.publish")(function* (
   db: DatabaseService,
   bus: Bus.Interface,
@@ -469,7 +537,7 @@ export const promote = Effect.fn("SessionInbox.promote")(function* (
         .select()
         .from(SessionInboxTable)
         .where(and(eq(SessionInboxTable.session_id, sessionID), eq(SessionInboxTable.delivery, "queue")))
-        .orderBy(asc(SessionInboxTable.enqueued_seq))
+        .orderBy(asc(sql`coalesce(${SessionInboxTable.order_seq}, ${SessionInboxTable.enqueued_seq})`))
         .limit(1)
         .get()
         .pipe(Effect.orDie)

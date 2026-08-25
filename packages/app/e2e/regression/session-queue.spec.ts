@@ -13,23 +13,34 @@ type InboxRow = {
   id: string
   sessionID: string
   timeCreated: number
-  type: "user"
+  type: "user" | "synthetic"
   payload: { text: string; metadata?: Record<string, unknown> }
   delivery: "steer" | "queue"
 }
 
-function createQueueMock(seed: string[]) {
+function createQueueMock(seed: string[], synthetic?: number) {
   const rows: InboxRow[] = seed.map((text, index) => ({
-    id: `inb_seed_${index + 1}`,
+    id: `msg_seed_${index + 1}`,
     sessionID,
     timeCreated: 1700000000000 + index,
     type: "user",
     payload: { text },
     delivery: "queue",
   }))
+  if (synthetic !== undefined) {
+    rows.splice(synthetic, 0, {
+      id: "msg_seed_synthetic",
+      sessionID,
+      timeCreated: 1700000000000 + synthetic,
+      type: "synthetic",
+      payload: { text: "synthetic queued work" },
+      delivery: "queue",
+    })
+  }
   const events: OpenCodeEvent[] = []
   const prompts: Record<string, unknown>[] = []
   const changes: { inboxID: string; action: "cancel" | "steer" }[] = []
+  const reorders: string[][] = []
   const log: string[] = []
   let sequence = 0
   const emit = (type: OpenCodeEvent["type"], data: OpenCodeEvent["data"]) => {
@@ -46,13 +57,14 @@ function createQueueMock(seed: string[]) {
     rows,
     prompts,
     changes,
+    reorders,
     log,
     events: () => events.splice(0),
     onPrompt: (input: { sessionID: string; body: Record<string, unknown> }) => {
       prompts.push(input.body)
       log.push(`prompt:${String(input.body.delivery ?? "steer")}`)
       const row: InboxRow = {
-        id: typeof input.body.id === "string" ? input.body.id : `inb_mock_${sequence}`,
+        id: typeof input.body.id === "string" ? input.body.id : `msg_mock_${sequence}`,
         sessionID: input.sessionID,
         timeCreated: Date.now(),
         type: "user",
@@ -86,6 +98,15 @@ function createQueueMock(seed: string[]) {
         inboxID: input.inboxID,
         delivery: "steer",
       })
+    },
+    onInboxReorder: (input: { sessionID: string; inboxIDs: readonly string[] }) => {
+      const users = rows.filter((row) => row.type === "user" && row.delivery === "queue")
+      expect(input.inboxIDs.toSorted()).toEqual(users.map((row) => row.id).toSorted())
+      reorders.push([...input.inboxIDs])
+      log.push("reorder")
+      const ordered = input.inboxIDs.flatMap((id) => users.filter((row) => row.id === id)).values()
+      rows.splice(0, rows.length, ...rows.map((row) => (users.includes(row) ? (ordered.next().value ?? row) : row)))
+      emit("session.inbox.reordered", { sessionID: input.sessionID, inboxIDs: [...input.inboxIDs] })
     },
   }
 }
@@ -134,6 +155,7 @@ async function openSession(page: Page, mock: ReturnType<typeof createQueueMock>,
     inbox: () => mock.rows.map((row) => ({ ...row, payload: { ...row.payload } })),
     onPrompt: mock.onPrompt,
     onInboxChange: mock.onInboxChange,
+    onInboxReorder: mock.onInboxReorder,
     events: mock.events,
   })
   await page.goto(`/server/${base64Encode(server)}/session/${sessionID}`)
@@ -161,7 +183,7 @@ test("follow-up preference controls Enter while Mod+Enter uses the alternate del
   await expect(view.input).toHaveText("")
 })
 
-test("dragging reorders queued prompts", async ({ page }) => {
+test("dragging reorders stable queue IDs without cloning or cancelling prompts", async ({ page }) => {
   const mock = createQueueMock(["first queued prompt", "second queued prompt", "third queued prompt"])
   const view = await openSession(page, mock)
   await expect(view.rows).toHaveCount(3)
@@ -180,20 +202,14 @@ test("dragging reorders queued prompts", async ({ page }) => {
     "third queued prompt",
     "first queued prompt",
   ])
-  expect(mock.prompts.map((prompt) => prompt.text)).toEqual([
-    "second queued prompt",
-    "third queued prompt",
-    "first queued prompt",
-  ])
-  expect(mock.changes).toEqual([
-    { inboxID: "inb_seed_1", action: "cancel" },
-    { inboxID: "inb_seed_2", action: "cancel" },
-    { inboxID: "inb_seed_3", action: "cancel" },
-  ])
+  expect(mock.reorders).toEqual([["msg_seed_2", "msg_seed_3", "msg_seed_1"]])
+  expect(mock.rows.map((row) => row.id)).toEqual(["msg_seed_2", "msg_seed_3", "msg_seed_1"])
+  expect(mock.prompts).toEqual([])
+  expect(mock.changes).toEqual([])
 })
 
 test("editing restores the existing draft and replaces only the original queue position", async ({ page }) => {
-  const mock = createQueueMock(["first queued prompt", "tighten the error copy", "third queued prompt"])
+  const mock = createQueueMock(["first queued prompt", "tighten the error copy", "third queued prompt"], 2)
   const view = await openSession(page, mock)
   const original = view.rows.getByText("tighten the error copy", { exact: true })
   await expect(original).toBeVisible()
@@ -215,12 +231,19 @@ test("editing restores the existing draft and replaces only the original queue p
     "third queued prompt",
   ])
   await expect(view.input).toHaveText("my in-progress draft")
-  expect(mock.prompts.map((prompt) => prompt.text)).toEqual([
-    "tighten the error copy and add a retry hint",
-    "tighten the error copy and add a retry hint",
-    "third queued prompt",
+  expect(mock.prompts).toHaveLength(1)
+  expect(mock.prompts[0]).toMatchObject({
+    text: "tighten the error copy and add a retry hint",
+    delivery: "queue",
+    resume: false,
+  })
+  expect(mock.changes).toEqual([{ inboxID: "msg_seed_2", action: "cancel" }])
+  expect(mock.reorders).toEqual([["msg_seed_1", mock.prompts[0]?.id, "msg_seed_3", "msg_seed_2"]])
+  expect(mock.rows.map((row) => row.id)).toEqual([
+    "msg_seed_1",
+    mock.prompts[0]?.id,
+    "msg_seed_synthetic",
+    "msg_seed_3",
   ])
-  expect(mock.prompts.every((prompt) => prompt.delivery === "queue" && prompt.resume === false)).toBe(true)
-  expect(mock.changes.map((change) => change.action)).toEqual(["cancel", "cancel", "cancel"])
-  expect(mock.log[0]).toBe("prompt:queue")
+  expect(mock.log).toEqual(["prompt:queue", "reorder", "cancel:msg_seed_2"])
 })

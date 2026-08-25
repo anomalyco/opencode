@@ -2982,8 +2982,94 @@
             }
           }
         },
-        "description": "List durable enqueued session work not yet delivered, ordered by enqueue sequence. Includes user, synthetic, compaction, and move items.",
+        "description": "List durable enqueued session work not yet delivered, ordered by effective delivery order. Includes user, synthetic, compaction, and move items.",
         "summary": "List session inbox"
+      }
+    },
+    "/api/session/{sessionID}/inbox/reorder": {
+      "post": {
+        "tags": ["session"],
+        "operationId": "v2.session.inbox.reorder",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ConflictError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConflictErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Provide a complete permutation of pending queued user prompts. Synthetic items retain their position; compaction and move controls block reordering. Does not wake execution.",
+        "summary": "Reorder session inbox",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "inboxIDs": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^msg_"
+                    }
+                  }
+                },
+                "required": ["inboxIDs"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
       }
     },
     "/api/session/{sessionID}/inbox/{inboxID}": {

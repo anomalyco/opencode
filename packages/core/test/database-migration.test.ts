@@ -18,6 +18,7 @@ import workspaceMigration from "@opencode-ai/core/database/migration/20260808023
 import executionClaimsMigration from "@opencode-ai/core/database/migration/20260811161259_execution_claim_attempts"
 import sessionInboxMigration from "@opencode-ai/core/database/migration/20260812181746_session_inbox"
 import sessionViewedStateMigration from "@opencode-ai/core/database/migration/20260819222447_session_viewed_state"
+import sessionInboxOrderMigration from "@opencode-ai/core/database/migration/20260825004258_session_inbox_order"
 import { Global } from "@opencode-ai/util/global"
 
 const run = <A, E>(
@@ -240,8 +241,21 @@ describe("DatabaseMigration", () => {
           executionClaimsMigration,
           sessionInboxMigration,
           worktreeMigration,
+          sessionInboxOrderMigration,
         ])
 
+        expect(
+          yield* db.all(sql`
+            EXPLAIN QUERY PLAN
+            SELECT id FROM session_inbox
+            WHERE session_id = 'session' AND delivery = 'queue'
+            ORDER BY coalesce(order_seq, enqueued_seq)
+          `),
+        ).toEqual([
+          expect.objectContaining({
+            detail: expect.stringContaining("USING INDEX session_inbox_session_delivery_order_idx"),
+          }),
+        ])
         expect(yield* db.get(sql`SELECT id, resume_attempts FROM session_v2`)).toEqual({
           id: "session",
           resume_attempts: 0,

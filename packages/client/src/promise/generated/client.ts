@@ -58,6 +58,8 @@ import type {
   SessionContextOutput,
   SessionInboxListInput,
   SessionInboxListOutput,
+  SessionInboxReorderInput,
+  SessionInboxReorderOutput,
   SessionInboxCancelInput,
   SessionInboxCancelOutput,
   SessionInboxSteerInput,
@@ -797,6 +799,18 @@ export function make(options: ClientOptions) {
             },
             requestOptions,
           ).then((value) => value.data),
+        reorder: (input: SessionInboxReorderInput, requestOptions?: RequestOptions) =>
+          request<SessionInboxReorderOutput>(
+            {
+              method: "POST",
+              path: `/api/session/${encodeURIComponent(input.sessionID)}/inbox/reorder`,
+              body: { inboxIDs: input["inboxIDs"] },
+              successStatus: 204,
+              declaredStatuses: [409, 404, 401, 400],
+              empty: true,
+            },
+            requestOptions,
+          ),
         cancel: (input: SessionInboxCancelInput, requestOptions?: RequestOptions) =>
           request<SessionInboxCancelOutput>(
             {

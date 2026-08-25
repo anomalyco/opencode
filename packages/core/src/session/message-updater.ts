@@ -122,6 +122,7 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
       "session.inbox.enqueued": () => Effect.void,
       "session.inbox.cancelled": () => Effect.void,
       "session.inbox.delivery.changed": () => Effect.void,
+      "session.inbox.reordered": () => Effect.void,
       "session.execution.started": () => Effect.void,
       "session.execution.succeeded": () => clearCurrentRetry,
       "session.execution.failed": () => clearCurrentRetry,

@@ -457,12 +457,12 @@ test("session.inbox.list uses the public HTTP contract", async () => {
 })
 
 test("session.inbox mutations use the public HTTP contract", async () => {
-  const requests: Array<{ method: string; url: string }> = []
+  const requests: Request[] = []
   const client = OpenCode.make({
     baseUrl: "http://localhost:3000",
     fetch: async (input, init) => {
       const request = input instanceof Request ? input : new Request(input, init)
-      requests.push({ method: request.method, url: request.url })
+      requests.push(request)
       return new Response(null, { status: 204 })
     },
   })
@@ -470,12 +470,17 @@ test("session.inbox mutations use the public HTTP contract", async () => {
   await client.session.inbox.cancel({ sessionID: "ses_test", inboxID: "msg_cancel" })
   await client.session.inbox.steer({ sessionID: "ses_test", inboxID: "msg_steer" })
   await client.session.inbox.queue({ sessionID: "ses_test", inboxID: "msg_queue" })
+  expect(
+    await client.session.inbox.reorder({ sessionID: "ses_test", inboxIDs: ["msg_second", "msg_first"] }),
+  ).toBeUndefined()
 
-  expect(requests).toEqual([
+  expect(requests.map((request) => ({ method: request.method, url: request.url }))).toEqual([
     { method: "DELETE", url: "http://localhost:3000/api/session/ses_test/inbox/msg_cancel" },
     { method: "POST", url: "http://localhost:3000/api/session/ses_test/inbox/msg_steer/steer" },
     { method: "POST", url: "http://localhost:3000/api/session/ses_test/inbox/msg_queue/queue" },
+    { method: "POST", url: "http://localhost:3000/api/session/ses_test/inbox/reorder" },
   ])
+  expect(await requests[3]?.json()).toEqual({ inboxIDs: ["msg_second", "msg_first"] })
 })
 
 test("event.subscribe exposes the Promise event stream wire projection", async () => {

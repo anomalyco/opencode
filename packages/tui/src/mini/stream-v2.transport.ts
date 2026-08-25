@@ -988,6 +988,19 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       ])
       return
     }
+    if (event.type === "session.inbox.reordered") {
+      const queued = [...state.pending].filter(
+        ([id, item]) => item.delivery === "queue" && event.data.inboxIDs.includes(id),
+      )
+      queued.sort(([left], [right]) => event.data.inboxIDs.indexOf(left) - event.data.inboxIDs.indexOf(right))
+      state.pending = new Map(
+        [...state.pending].map(([id, item]) =>
+          item.delivery === "queue" && event.data.inboxIDs.includes(id) ? (queued.shift() ?? [id, item]) : [id, item],
+        ),
+      )
+      syncPending()
+      return
+    }
     if (event.type === "session.inbox.cancelled") {
       state.admitted.delete(event.data.inboxID)
       if (state.pending.delete(event.data.inboxID)) syncPending()

@@ -531,7 +531,22 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
           identifier: "v2.session.inbox.list",
           summary: "List session inbox",
           description:
-            "List durable enqueued session work not yet delivered, ordered by enqueue sequence. Includes user, synthetic, compaction, and move items.",
+            "List durable enqueued session work not yet delivered, ordered by effective delivery order. Includes user, synthetic, compaction, and move items.",
+        }),
+      ),
+    )
+    .add(
+      HttpApiEndpoint.post("session.inbox.reorder", "/api/session/:sessionID/inbox/reorder", {
+        params: { sessionID: Session.ID },
+        payload: Schema.Struct({ inboxIDs: Schema.Array(SessionMessage.ID) }),
+        success: HttpApiSchema.NoContent,
+        error: [ConflictError, SessionNotFoundError],
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.session.inbox.reorder",
+          summary: "Reorder session inbox",
+          description:
+            "Provide a complete permutation of pending queued user prompts. Synthetic items retain their position; compaction and move controls block reordering. Does not wake execution.",
         }),
       ),
     )

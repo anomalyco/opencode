@@ -1,8 +1,8 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "be60f352-8da1-40e1-8d70-dc41121cfbc5",
-  "prevIds": ["3fb67508-0196-4bae-b2bd-c08ece7583fd"],
+  "id": "ba9e3e23-6bcb-4570-aaea-cb1e02e2f1cf",
+  "prevIds": ["be60f352-8da1-40e1-8d70-dc41121cfbc5"],
   "ddl": [
     {
       "name": "account_state",
@@ -907,6 +907,16 @@
       "default": null,
       "generated": null,
       "name": "enqueued_seq",
+      "entityType": "columns",
+      "table": "session_inbox"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "order_seq",
       "entityType": "columns",
       "table": "session_inbox"
     },
@@ -1845,6 +1855,28 @@
       "where": null,
       "origin": "manual",
       "name": "session_inbox_session_delivery_seq_idx",
+      "entityType": "indexes",
+      "table": "session_inbox"
+    },
+    {
+      "columns": [
+        {
+          "value": "session_id",
+          "isExpression": false
+        },
+        {
+          "value": "delivery",
+          "isExpression": false
+        },
+        {
+          "value": "coalesce(\"order_seq\", \"enqueued_seq\")",
+          "isExpression": true
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "session_inbox_session_delivery_order_idx",
       "entityType": "indexes",
       "table": "session_inbox"
     },

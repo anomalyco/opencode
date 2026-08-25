@@ -639,6 +639,27 @@ export function createData(config: CreateDataInput) {
       case "session.inbox.delivery.changed":
         updatePending(event.data.sessionID, event.data.inboxID, event.data.delivery)
         return
+      case "session.inbox.reordered": {
+        const pending = store.session.pending[event.data.sessionID]
+        if (!pending) return
+        const queued = new Map(
+          pending.filter((item) => item.type === "user" && item.delivery === "queue").map((item) => [item.id, item]),
+        )
+        const reordered = new Map(
+          event.data.inboxIDs.flatMap((id) => {
+            const item = queued.get(id)
+            return item ? [[id, item] as const] : []
+          }),
+        )
+        const items = reordered.values()
+        setStore(
+          "session",
+          "pending",
+          event.data.sessionID,
+          pending.map((item) => (reordered.has(item.id) ? (items.next().value ?? item) : item)),
+        )
+        return
+      }
       case "session.inbox.cancelled": {
         retractLocal(event.data.sessionID, event.data.inboxID)
         return
@@ -1180,6 +1201,9 @@ export function createData(config: CreateDataInput) {
       pending: {
         list(sessionID: string) {
           return store.session.pending[sessionID] ?? []
+        },
+        settled(sessionID: string) {
+          return sending.get(sessionID) ?? Promise.resolve()
         },
         sync(sessionID: string) {
           return sync.run(`session.pending:${sessionID}`, async () => {

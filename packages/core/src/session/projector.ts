@@ -625,6 +625,12 @@ const layer = Layer.effectDiscard(
         delivery: event.data.delivery,
       }),
     )
+    yield* bus.project(SessionEvent.InboxReordered, (event) =>
+      SessionInbox.projectReordered(db, {
+        sessionID: event.data.sessionID,
+        inboxIDs: event.data.inboxIDs,
+      }),
+    )
     yield* bus.project(SessionEvent.Execution.Succeeded, (event) => projectIdle(db, event))
     yield* bus.project(SessionEvent.Execution.Failed, (event) => projectIdle(db, event))
     yield* bus.project(SessionEvent.Execution.Interrupted, (event) => projectIdle(db, event))

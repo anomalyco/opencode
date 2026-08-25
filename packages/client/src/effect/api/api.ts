@@ -340,6 +340,15 @@ export type SessionInboxListOperation<E = never> = (
   input: SessionInboxListInput,
 ) => Effect.Effect<SessionInboxListOutput, E>
 
+export type SessionInboxReorderInput = {
+  readonly sessionID: Session.ID
+  readonly inboxIDs: ReadonlyArray<SessionMessage.ID>
+}
+export type SessionInboxReorderOutput = void
+export type SessionInboxReorderOperation<E = never> = (
+  input: SessionInboxReorderInput,
+) => Effect.Effect<SessionInboxReorderOutput, E>
+
 export type SessionInboxCancelInput = { readonly sessionID: Session.ID; readonly inboxID: SessionMessage.ID }
 export type SessionInboxCancelOutput = void
 export type SessionInboxCancelOperation<E = never> = (
@@ -540,6 +549,15 @@ export type SessionLogOutput =
             readonly inboxID: SessionMessage.ID
             readonly delivery: SessionInbox.Delivery
           }
+        }
+      | {
+          readonly id: Event.ID
+          readonly created: number
+          readonly metadata?: { readonly [x: string]: unknown } | undefined
+          readonly type: "session.inbox.reordered"
+          readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
+          readonly location?: Location.Ref | undefined
+          readonly data: { readonly sessionID: Session.ID; readonly inboxIDs: ReadonlyArray<SessionMessage.ID> }
         }
       | {
           readonly id: Event.ID
@@ -1055,6 +1073,7 @@ export interface SessionApi<E = never> {
   readonly context: SessionContextOperation<E>
   readonly inbox: {
     readonly list: SessionInboxListOperation<E>
+    readonly reorder: SessionInboxReorderOperation<E>
     readonly cancel: SessionInboxCancelOperation<E>
     readonly steer: SessionInboxSteerOperation<E>
     readonly queue: SessionInboxQueueOperation<E>

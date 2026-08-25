@@ -150,6 +150,7 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
           \`payload\` text NOT NULL,
           \`delivery\` text NOT NULL,
           \`enqueued_seq\` integer NOT NULL,
+          \`order_seq\` integer,
           \`time_created\` integer NOT NULL,
           CONSTRAINT \`fk_session_inbox_session_id_session_v2_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session_v2\`(\`id\`) ON DELETE CASCADE
         );
@@ -245,6 +246,9 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
       )
       yield* tx.run(
         `CREATE INDEX \`session_inbox_session_delivery_seq_idx\` ON \`session_inbox\` (\`session_id\`,\`delivery\`,\`enqueued_seq\`);`,
+      )
+      yield* tx.run(
+        `CREATE INDEX \`session_inbox_session_delivery_order_idx\` ON \`session_inbox\` (\`session_id\`,\`delivery\`,coalesce("order_seq", "enqueued_seq"));`,
       )
       yield* tx.run(
         `CREATE UNIQUE INDEX \`session_inbox_session_enqueued_seq_idx\` ON \`session_inbox\` (\`session_id\`,\`enqueued_seq\`);`,

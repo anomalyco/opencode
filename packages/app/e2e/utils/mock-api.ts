@@ -1,3 +1,4 @@
+import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { Schema, SchemaGetter } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/unstable/httpapi"
 
@@ -198,13 +199,20 @@ const Group = HttpApiGroup.make("mock")
   )
   .add(
     HttpApiEndpoint.delete("sessionInboxCancel", "/api/session/:sessionID/inbox/:inboxID", {
-      params: { ...SessionParams, inboxID: Schema.String },
+      params: { ...SessionParams, inboxID: SessionMessage.ID },
       success: NoContent,
     }),
   )
   .add(
     HttpApiEndpoint.post("sessionInboxSteer", "/api/session/:sessionID/inbox/:inboxID/steer", {
-      params: { ...SessionParams, inboxID: Schema.String },
+      params: { ...SessionParams, inboxID: SessionMessage.ID },
+      success: NoContent,
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("sessionInboxReorder", "/api/session/:sessionID/inbox/reorder", {
+      params: SessionParams,
+      payload: Schema.Struct({ inboxIDs: Schema.Array(SessionMessage.ID) }),
       success: NoContent,
     }),
   )

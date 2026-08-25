@@ -776,6 +776,105 @@ describe("V2 mini transport", () => {
     await transport.close()
   })
 
+  test("reorders queued prompts without moving steers or unmatched optimistic prompts", async () => {
+    const events = feed()
+    events.push(connected())
+    const client = sdk({
+      streams: [events],
+      pending: {
+        ses_1: [
+          {
+            id: "msg_first",
+            sessionID: "ses_1",
+            timeCreated: 1,
+            type: "user",
+            payload: { text: "First" },
+            delivery: "queue",
+          },
+          {
+            id: "msg_steer",
+            sessionID: "ses_1",
+            timeCreated: 2,
+            type: "user",
+            payload: { text: "Steer" },
+            delivery: "steer",
+          },
+          {
+            id: "msg_second",
+            sessionID: "ses_1",
+            timeCreated: 3,
+            type: "user",
+            payload: { text: "Second" },
+            delivery: "queue",
+          },
+        ],
+      },
+    })
+    spyOn(client.session, "prompt").mockImplementation((request) => ok(promptAdmission(request)) as never)
+    const ui = footer()
+    const transport = await createSessionTransport({
+      sdk: client,
+      sessionID: "ses_1",
+      thinking: false,
+      footer: ui.api,
+    })
+    await transport.admitPromptTurn(
+      {
+        agent: undefined,
+        model: undefined,
+        variant: undefined,
+        prompt: { messageID: "msg_optimistic", text: "Optimistic", parts: [] },
+        files: [],
+        includeFiles: false,
+      },
+      "queue",
+    )
+    const calls = ui.calls.length
+    const pending = () =>
+      ui.events.findLast((event) => event.type === "queued.prompts")?.prompts.map((prompt) => prompt.messageID)
+
+    events.push({
+      id: "evt_reordered",
+      created: 4,
+      type: "session.inbox.reordered",
+      durable: durable("ses_1", 4),
+      data: { sessionID: "ses_1", inboxIDs: ["msg_second", "msg_first"] },
+    })
+    while (pending()?.[0] !== "msg_second") await Bun.sleep(0)
+
+    expect(pending()).toEqual(["msg_second", "msg_first", "msg_optimistic"])
+    expect(ui.calls.slice(calls)).toEqual([
+      {
+        type: "event",
+        value: {
+          type: "queued.prompts",
+          prompts: [
+            expect.objectContaining({ messageID: "msg_second" }),
+            expect.objectContaining({ messageID: "msg_first" }),
+            expect.objectContaining({ messageID: "msg_optimistic" }),
+          ],
+        },
+      },
+    ])
+    expect(ui.commits).toHaveLength(0)
+
+    events.push({
+      id: "evt_steer_queued",
+      created: 5,
+      type: "session.inbox.delivery.changed",
+      durable: durable("ses_1", 5),
+      data: { sessionID: "ses_1", inboxID: "msg_steer", delivery: "queue" },
+    })
+    while (pending()?.length !== 4) await Bun.sleep(0)
+
+    expect(pending()).toEqual(["msg_second", "msg_steer", "msg_first", "msg_optimistic"])
+    expect(ui.commits).toHaveLength(0)
+    expect(ui.calls.slice(calls).every((call) => call.type === "event" && call.value.type === "queued.prompts")).toBe(
+      true,
+    )
+    await transport.close()
+  })
+
   test("reports an observed execution failure before prompt promotion", async () => {
     const events = feed()
     events.push(connected())

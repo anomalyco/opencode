@@ -92,6 +92,7 @@ describe("public event manifest", () => {
         "session.inbox.enqueued.1",
         "session.inbox.cancelled.1",
         "session.inbox.delivery.changed.1",
+        "session.inbox.reordered.1",
         "session.execution.started.1",
         "session.execution.succeeded.1",
         "session.execution.failed.1",

@@ -134,12 +134,18 @@ export const SessionInboxTable = sqliteTable(
     payload: text({ mode: "json" }).$type<UserPayload | SyntheticPayload | CompactionPayload | MovePayload>().notNull(),
     delivery: text().$type<SessionInbox.Delivery>().notNull(),
     enqueued_seq: integer().notNull(),
+    order_seq: integer(),
     time_created: integer()
       .notNull()
       .$default(() => Date.now()),
   },
   (table) => [
     index("session_inbox_session_delivery_seq_idx").on(table.session_id, table.delivery, table.enqueued_seq),
+    index("session_inbox_session_delivery_order_idx").on(
+      table.session_id,
+      table.delivery,
+      sql`coalesce(${table.order_seq}, ${table.enqueued_seq})`,
+    ),
     uniqueIndex("session_inbox_session_enqueued_seq_idx").on(table.session_id, table.enqueued_seq),
   ],
 )

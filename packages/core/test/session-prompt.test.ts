@@ -24,6 +24,7 @@ import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionInbox } from "@opencode-ai/core/session/inbox"
 import { SessionInboxTable, SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
+import { Location } from "@opencode-ai/core/location"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import type { LocationServices } from "@opencode-ai/core/location-services"
 import { Image } from "@opencode-ai/core/image"
@@ -76,8 +77,7 @@ const locations = Layer.effect(
             Layer.mock(Snapshot.Service, {
               capture: () =>
                 ready ? Effect.undefined : Effect.die(new Error("Snapshot used before plugins were ready")),
-              restore: () =>
-                ready ? Effect.void : Effect.die(new Error("Snapshot used before plugins were ready")),
+              restore: () => (ready ? Effect.void : Effect.die(new Error("Snapshot used before plugins were ready"))),
             }),
             Layer.succeed(
               PluginSupervisor.Service,
@@ -1090,6 +1090,220 @@ describe("Session.inbox", () => {
       expect(yield* session.inbox(Session.ID.make("ses_missing")).pipe(Effect.flip)).toMatchObject({
         _tag: "Session.NotFoundError",
       })
+    }),
+  )
+
+  it.effect("rejects reordering an unknown session", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      expect(
+        yield* session.reorderInbox({ sessionID: Session.ID.make("ses_missing"), inboxIDs: [] }).pipe(Effect.flip),
+      ).toMatchObject({ _tag: "Session.NotFoundError" })
+      expect(yield* eventCount(Bus.versionedType(SessionEvent.InboxReordered.type, 1))).toBe(0)
+    }),
+  )
+
+  it.effect("does not publish reorder events for empty or unchanged queued users", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+      const type = Bus.versionedType(SessionEvent.InboxReordered.type, 1)
+
+      yield* session.reorderInbox({ sessionID, inboxIDs: [] })
+      yield* session.synthetic({ sessionID, text: "Stationary completion", delivery: "queue", resume: false })
+      yield* session.reorderInbox({ sessionID, inboxIDs: [] })
+      const first = yield* session.prompt({ sessionID, text: "First queued", delivery: "queue", resume: false })
+      const second = yield* session.prompt({ sessionID, text: "Second queued", delivery: "queue", resume: false })
+      yield* session.reorderInbox({ sessionID, inboxIDs: [first.id, second.id] })
+
+      expect(yield* eventCount(type)).toBe(0)
+
+      yield* session.reorderInbox({ sessionID, inboxIDs: [second.id, first.id] })
+      yield* session.reorderInbox({ sessionID, inboxIDs: [second.id, first.id] })
+
+      expect(yield* eventCount(type)).toBe(1)
+    }),
+  )
+
+  it.effect("reorders queued users without changing admission slots, identities, or execution", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+      const database = yield* Database.Service
+      const first = yield* session.prompt({ sessionID, text: "First queued", delivery: "queue", resume: false })
+      const steer = yield* session.prompt({ sessionID, text: "Keep this steer in place", resume: false })
+      const second = yield* session.prompt({ sessionID, text: "Second queued", delivery: "queue", resume: false })
+      const third = yield* session.prompt({ sessionID, text: "Third queued", delivery: "queue", resume: false })
+      const before = yield* database.db
+        .select()
+        .from(SessionInboxTable)
+        .where(eq(SessionInboxTable.session_id, sessionID))
+        .all()
+        .pipe(Effect.orDie)
+      wakeCalls.length = 0
+
+      yield* session.reorderInbox({ sessionID, inboxIDs: [third.id, first.id, second.id] })
+
+      expect(yield* session.inbox(sessionID)).toMatchObject([
+        { id: third.id, payload: { text: "Third queued" } },
+        { id: steer.id, payload: { text: "Keep this steer in place" } },
+        { id: first.id, payload: { text: "First queued" } },
+        { id: second.id, payload: { text: "Second queued" } },
+      ])
+      const after = yield* database.db
+        .select()
+        .from(SessionInboxTable)
+        .where(eq(SessionInboxTable.session_id, sessionID))
+        .all()
+        .pipe(Effect.orDie)
+      expect(after.map((row) => [row.id, row.enqueued_seq]).toSorted()).toEqual(
+        before.map((row) => [row.id, row.enqueued_seq]).toSorted(),
+      )
+      expect(after.find((row) => row.id === third.id)?.order_seq).toBe(
+        before.find((row) => row.id === first.id)?.enqueued_seq,
+      )
+      expect(after.find((row) => row.id === steer.id)?.order_seq).toBeNull()
+      expect(wakeCalls).toEqual([])
+      expect(yield* eventCount(Bus.versionedType(SessionEvent.InboxReordered.type, 1))).toBe(1)
+    }),
+  )
+
+  it.effect("keeps queued synthetic input in its original slot when users are reordered", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+      const { db } = yield* Database.Service
+      const first = yield* session.prompt({ sessionID, text: "First queued", delivery: "queue", resume: false })
+      const synthetic = yield* session.synthetic({
+        sessionID,
+        text: "Stationary completion",
+        delivery: "queue",
+        resume: false,
+      })
+      const second = yield* session.prompt({ sessionID, text: "Second queued", delivery: "queue", resume: false })
+      const third = yield* session.prompt({ sessionID, text: "Third queued", delivery: "queue", resume: false })
+
+      yield* session.reorderInbox({ sessionID, inboxIDs: [third.id, first.id, second.id] })
+
+      expect((yield* session.inbox(sessionID)).map((item) => item.id)).toEqual([
+        third.id,
+        synthetic.id,
+        first.id,
+        second.id,
+      ])
+      expect(
+        yield* db
+          .select({ order: SessionInboxTable.order_seq })
+          .from(SessionInboxTable)
+          .where(eq(SessionInboxTable.id, synthetic.id))
+          .get()
+          .pipe(Effect.orDie),
+      ).toEqual({ order: null })
+      expect(
+        yield* session
+          .reorderInbox({ sessionID, inboxIDs: [third.id, synthetic.id, first.id, second.id] })
+          .pipe(Effect.flip),
+      ).toMatchObject({ _tag: "Session.InboxConflictError", sessionID, inboxID: synthetic.id })
+    }),
+  )
+
+  it.effect("promotes queued users in their reordered sequence with stable message IDs", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+      const bus = yield* Bus.Service
+      const database = yield* Database.Service
+      const first = yield* session.prompt({ sessionID, text: "First queued", delivery: "queue", resume: false })
+      const second = yield* session.prompt({ sessionID, text: "Second queued", delivery: "queue", resume: false })
+      const third = yield* session.prompt({ sessionID, text: "Third queued", delivery: "queue", resume: false })
+
+      yield* session.reorderInbox({ sessionID, inboxIDs: [third.id, first.id, second.id] })
+      expect(yield* SessionInbox.nextPromotable(database.db, sessionID, "input")).toMatchObject({ id: third.id })
+      yield* SessionInbox.promote(database.db, bus, sessionID, "input")
+      yield* SessionInbox.promote(database.db, bus, sessionID, "input")
+      yield* SessionInbox.promote(database.db, bus, sessionID, "input")
+
+      expect((yield* session.messages({ sessionID, order: "asc" })).map((message) => message.id)).toEqual([
+        third.id,
+        first.id,
+        second.id,
+      ])
+      expect(yield* session.inbox(sessionID)).toEqual([])
+    }),
+  )
+
+  it.effect("promotes reordered users changed to steers in admission order before control barriers", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+      const bus = yield* Bus.Service
+      const { db } = yield* Database.Service
+      const first = yield* session.prompt({ sessionID, text: "Before compaction", delivery: "queue", resume: false })
+      const barrier = yield* session.compact({ sessionID })
+      const second = yield* session.prompt({ sessionID, text: "After compaction", delivery: "queue", resume: false })
+
+      yield* session.reorderInbox({ sessionID, inboxIDs: [second.id, first.id] })
+      yield* session.steerInbox({ sessionID, inboxID: second.id })
+      yield* session.steerInbox({ sessionID, inboxID: first.id })
+
+      expect((yield* session.inbox(sessionID)).map((item) => item.id)).toEqual([first.id, barrier.id, second.id])
+      expect(yield* SessionInbox.nextPromotable(db, sessionID, "steer")).toMatchObject({ id: first.id })
+      expect(yield* SessionInbox.promote(db, bus, sessionID, "steer")).toBe(1)
+      expect((yield* session.messages({ sessionID, order: "asc" })).map((message) => message.id)).toEqual([first.id])
+      expect(yield* SessionInbox.nextPromotable(db, sessionID, "steer")).toMatchObject({ id: barrier.id })
+      expect(yield* SessionInbox.promote(db, bus, sessionID, "steer")).toBe(0)
+      expect(yield* SessionInbox.find(db, second.id)).toMatchObject({ id: second.id, delivery: "steer" })
+    }),
+  )
+
+  it.effect("rejects invalid queued-user permutations and queued control barriers transactionally", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+      const bus = yield* Bus.Service
+      const { db } = yield* Database.Service
+      const first = yield* session.prompt({ sessionID, text: "First queued", delivery: "queue", resume: false })
+      const second = yield* session.prompt({ sessionID, text: "Second queued", delivery: "queue", resume: false })
+      const unknown = SessionMessage.ID.make("msg_unknown_queued")
+
+      expect(
+        yield* session.reorderInbox({ sessionID, inboxIDs: [first.id, first.id] }).pipe(Effect.flip),
+      ).toMatchObject({ _tag: "Session.InboxConflictError", sessionID, inboxID: first.id })
+      expect(yield* session.reorderInbox({ sessionID, inboxIDs: [second.id] }).pipe(Effect.flip)).toMatchObject({
+        _tag: "Session.InboxConflictError",
+        sessionID,
+        inboxID: first.id,
+      })
+      expect(yield* session.reorderInbox({ sessionID, inboxIDs: [first.id, unknown] }).pipe(Effect.flip)).toMatchObject(
+        { _tag: "Session.InboxConflictError", sessionID, inboxID: unknown },
+      )
+      expect((yield* session.inbox(sessionID)).map((item) => item.id)).toEqual([first.id, second.id])
+      expect(yield* eventCount(Bus.versionedType(SessionEvent.InboxReordered.type, 1))).toBe(0)
+
+      const compaction = yield* session.compact({ sessionID, delivery: "queue" })
+      expect(
+        yield* session.reorderInbox({ sessionID, inboxIDs: [first.id, second.id] }).pipe(Effect.flip),
+      ).toMatchObject({ _tag: "Session.InboxConflictError", sessionID, inboxID: compaction.id })
+      expect((yield* session.inbox(sessionID)).map((item) => item.id)).toEqual([first.id, second.id, compaction.id])
+
+      yield* session.cancelInbox({ sessionID, inboxID: compaction.id })
+      const move = yield* SessionInbox.admit(db, bus, {
+        id: SessionMessage.ID.create(),
+        sessionID,
+        item: {
+          type: "move",
+          payload: {
+            location: Location.Ref.make({ directory: AbsolutePath.make("/moved") }),
+            projectID: Project.ID.global,
+          },
+          delivery: "queue",
+        },
+      })
+      expect(
+        yield* session.reorderInbox({ sessionID, inboxIDs: [second.id, first.id] }).pipe(Effect.flip),
+      ).toMatchObject({ _tag: "Session.InboxConflictError", sessionID, inboxID: move.id })
+      expect((yield* session.inbox(sessionID)).map((item) => item.id)).toEqual([first.id, second.id, move.id])
+      expect(yield* eventCount(Bus.versionedType(SessionEvent.InboxReordered.type, 1))).toBe(0)
     }),
   )
 

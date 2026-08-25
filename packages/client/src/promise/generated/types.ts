@@ -634,6 +634,16 @@ export type SessionInboxDeliveryChanged = {
   data: { sessionID: string; inboxID: string; delivery: SessionInboxDelivery }
 }
 
+export type SessionInboxReordered = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.inbox.reordered"
+  durable: { aggregateID: string; seq: number; version: 1 }
+  location?: LocationRef
+  data: { sessionID: string; inboxIDs: Array<string> }
+}
+
 export type SessionExecutionStarted = {
   id: string
   created: number
@@ -2033,6 +2043,7 @@ export type SessionEventDurable =
   | SessionInboxEnqueued
   | SessionInboxCancelled
   | SessionInboxDeliveryChanged
+  | SessionInboxReordered
   | SessionExecutionStarted
   | SessionExecutionSucceeded
   | SessionExecutionFailed
@@ -2125,6 +2136,7 @@ export type V2Event =
   | SessionInboxEnqueued
   | SessionInboxCancelled
   | SessionInboxDeliveryChanged
+  | SessionInboxReordered
   | SessionExecutionStarted
   | SessionExecutionSucceeded
   | SessionExecutionFailed
@@ -3925,6 +3937,13 @@ export type SessionContextOutput = { data: Array<SessionMessageInfo> }["data"]
 export type SessionInboxListInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
 
 export type SessionInboxListOutput = { data: Array<SessionInboxInfo> }["data"]
+
+export type SessionInboxReorderInput = {
+  readonly sessionID: { readonly sessionID: string }["sessionID"]
+  readonly inboxIDs: { readonly inboxIDs: ReadonlyArray<string> }["inboxIDs"]
+}
+
+export type SessionInboxReorderOutput = void
 
 export type SessionInboxCancelInput = {
   readonly sessionID: { readonly sessionID: string; readonly inboxID: string }["sessionID"]

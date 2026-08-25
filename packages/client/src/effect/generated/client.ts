@@ -64,6 +64,8 @@ import type {
   SessionContextOutput,
   SessionInboxListInput,
   SessionInboxListOutput,
+  SessionInboxReorderInput,
+  SessionInboxReorderOutput,
   SessionInboxCancelInput,
   SessionInboxCancelOutput,
   SessionInboxSteerInput,
@@ -560,6 +562,14 @@ const EndpointSessionInboxList = (raw: RawClient["server.session"]) => (input: S
     ),
   )
 
+const EndpointSessionInboxReorder = (raw: RawClient["server.session"]) => (input: SessionInboxReorderInput) =>
+  preserveEffect<SessionInboxReorderOutput>()(
+    raw["session.inbox.reorder"]({
+      params: { sessionID: input["sessionID"] },
+      payload: { inboxIDs: input["inboxIDs"] },
+    }).pipe(Effect.mapError(mapClientError)),
+  )
+
 const EndpointSessionInboxCancel = (raw: RawClient["server.session"]) => (input: SessionInboxCancelInput) =>
   preserveEffect<SessionInboxCancelOutput>()(
     raw["session.inbox.cancel"]({ params: { sessionID: input["sessionID"], inboxID: input["inboxID"] } }).pipe(
@@ -693,6 +703,7 @@ const adaptGroupSession = (raw: RawClient["server.session"]) => ({
   context: EndpointSessionContext(raw),
   inbox: {
     list: EndpointSessionInboxList(raw),
+    reorder: EndpointSessionInboxReorder(raw),
     cancel: EndpointSessionInboxCancel(raw),
     steer: EndpointSessionInboxSteer(raw),
     queue: EndpointSessionInboxQueue(raw),
