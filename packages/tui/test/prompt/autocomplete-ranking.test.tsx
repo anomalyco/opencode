@@ -42,7 +42,10 @@ async function runApp(setup: Awaited<ReturnType<typeof createTestRenderer>>) {
   const task = Effect.runPromise(
     run({
       app: { name: "test", version: "test", channel: "test" },
-      server: { endpoint: { url: server.url.toString() } },
+      server: {
+        endpoint: { url: server.url.toString() },
+        service: { reconnect: async () => ({ url: server.url.toString() }), restart: async () => {} },
+      },
       config: { get: async () => ({}), update: async () => ({}) },
       packages: { resolve: async () => undefined },
       terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
@@ -63,9 +66,12 @@ test("slash autocomplete ranks resume first for /res", async () => {
     const frame = await setup.waitForFrame((frame) => firstSlashRow(frame).includes("/sessions"))
     const sessions = rowOf(frame, "/sessions")
     const next = rowOf(frame, "/new")
+    const restart = rowOf(frame, "/restart")
     expect(sessions).toBeGreaterThanOrEqual(0)
     expect(next).toBeGreaterThanOrEqual(0)
+    expect(restart).toBeGreaterThanOrEqual(0)
     expect(sessions).toBeLessThan(next)
+    expect(next).toBeLessThan(restart)
   } finally {
     setup.renderer.destroy()
     await task
