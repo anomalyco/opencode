@@ -189,6 +189,16 @@ export const TaskTool = Tool.define(
       const session = params.task_id
         ? yield* sessions.get(SessionID.make(params.task_id)).pipe(Effect.catchCause(() => Effect.succeed(undefined)))
         : undefined
+
+      // (A) Resume-ownership guard — a resumed task_id must be the caller's own child.
+      if (params.task_id && session && session.parentID !== ctx.sessionID) {
+        return yield* Effect.fail(new Error(`Cannot resume session: "${params.task_id}" is not owned by this caller.`))
+      }
+      if (session && session.agent !== next.name) {
+        return yield* Effect.fail(
+          new Error(`Cannot resume session: "${params.task_id}" belongs to a different target agent.`),
+        )
+      }
       const childPermission = deriveSubagentSessionPermission({
         parentSessionPermission: parent.permission ?? [],
         subagent: next,

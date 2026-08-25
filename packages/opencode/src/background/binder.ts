@@ -1,4 +1,4 @@
-import { BackgroundJob as CoreBackgroundJob, type BackgroundJob } from "@opencode-ai/core/background-job"
+import type { BackgroundJob } from "@opencode-ai/core/background-job"
 import { Effect, Ref } from "effect"
 import type { SessionClosure } from "../session/closure/coordinator"
 import * as Model from "../session/closure/model"
@@ -30,10 +30,11 @@ export namespace BackgroundJobBinder {
     return {
       bind: (input: BackgroundJob.BindRequest) =>
         Effect.gen(function* () {
-          // A caller that supplies no admission gets the behaviour it would get with no authority
-          // wired at all. Fencing is what admission opts into; refusing its absence would reject
-          // every background job started by a caller that predates it.
-          if (!input.admission) return yield* CoreBackgroundJob.permissiveBinder.bind(input)
+          // No admission capability may make a safety guard permissive. An absent admission is
+          // "this caller supplied none", and the only fail-closed reading of that is refusal. The
+          // id-keyed compatibility surface reaches this same path, so callers outside closure
+          // authority are refused here rather than being quietly granted.
+          if (!input.admission) return { kind: "rejected" as const, reason: "no_admission" satisfies Refusal }
 
           const lifetime = yield* identify(input.lifetime.token)
           const job = Model.id("job", `job_${input.lifetime.id}`)

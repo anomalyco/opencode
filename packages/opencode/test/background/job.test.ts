@@ -2,10 +2,12 @@ import { describe, expect } from "bun:test"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Deferred, Effect } from "effect"
 import { BackgroundJob } from "@/background/job"
-import { answered, noAnswer } from "../lib/background"
+import { SessionClosure } from "@/session/closure/coordinator"
+import { answered, noAnswer, syntheticAdmission } from "../lib/background"
+import { admittingClosure } from "../lib/closure"
 import { testEffect } from "../lib/effect"
 
-const it = testEffect(LayerNode.compile(BackgroundJob.node))
+const it = testEffect(LayerNode.compile(BackgroundJob.node, [[SessionClosure.node, admittingClosure]]))
 
 describe("background.job", () => {
   it.instance("tracks started jobs through completion", () =>
@@ -13,6 +15,7 @@ describe("background.job", () => {
       const jobs = yield* BackgroundJob.Service
       const latch = yield* Deferred.make<void>()
       const job = yield* jobs.start({
+        admission: syntheticAdmission(),
         type: "test",
         title: "test job",
         run: Deferred.await(latch).pipe(Effect.as(answered("m1", 100, "done"))),
@@ -36,6 +39,7 @@ describe("background.job", () => {
     Effect.gen(function* () {
       const jobs = yield* BackgroundJob.Service
       const job = yield* jobs.start({
+        admission: syntheticAdmission(),
         type: "test",
         run: Effect.never,
       })
@@ -55,11 +59,13 @@ describe("background.job", () => {
       const [first, second] = yield* Effect.all(
         [
           jobs.start({
+            admission: syntheticAdmission(),
             id,
             type: "test",
             run: Deferred.succeed(started, undefined).pipe(Effect.andThen(Effect.never)),
           }),
           jobs.start({
+            admission: syntheticAdmission(),
             id,
             type: "test",
             run: Effect.fail(new Error("duplicate started")),
@@ -86,12 +92,17 @@ describe("background.job", () => {
       const first = yield* Deferred.make<void>()
       const second = yield* Deferred.make<void>()
       const job = yield* jobs.start({
+        admission: syntheticAdmission(),
         type: "test",
         run: Deferred.await(first).pipe(Effect.as(answered("m1", 100, "first"))),
       })
 
       expect(
-        yield* jobs.extend({ id: job.id, run: Deferred.await(second).pipe(Effect.as(answered("m2", 200, "second"))) }),
+        yield* jobs.extend({
+          admission: syntheticAdmission(),
+          id: job.id,
+          run: Deferred.await(second).pipe(Effect.as(answered("m2", 200, "second"))),
+        }),
       ).toBe(true)
       yield* Deferred.succeed(first, undefined)
       expect((yield* jobs.get(job.id))?.status).toBe("running")
@@ -112,6 +123,7 @@ describe("background.job", () => {
       const extended = yield* Deferred.make<void>()
       const order: string[] = []
       const job = yield* jobs.start({
+        admission: syntheticAdmission(),
         type: "test",
         run: Effect.sync(() => order.push("start")).pipe(
           Effect.andThen(Deferred.await(first)),
@@ -121,6 +133,7 @@ describe("background.job", () => {
 
       expect(
         yield* jobs.extend({
+          admission: syntheticAdmission(),
           id: job.id,
           run: Effect.sync(() => order.push("extend")).pipe(
             Effect.andThen(Deferred.succeed(extended, undefined)),
@@ -145,10 +158,20 @@ describe("background.job", () => {
   it.instance("rejects extensions after a job completes", () =>
     Effect.gen(function* () {
       const jobs = yield* BackgroundJob.Service
-      const job = yield* jobs.start({ type: "test", run: Effect.succeed(answered("m1", 100, "done")) })
+      const job = yield* jobs.start({
+        admission: syntheticAdmission(),
+        type: "test",
+        run: Effect.succeed(answered("m1", 100, "done")),
+      })
       yield* jobs.wait({ id: job.id })
 
-      expect(yield* jobs.extend({ id: job.id, run: Effect.succeed(answered("m2", 200, "late")) })).toBe(false)
+      expect(
+        yield* jobs.extend({
+          admission: syntheticAdmission(),
+          id: job.id,
+          run: Effect.succeed(answered("m2", 200, "late")),
+        }),
+      ).toBe(false)
       expect((yield* jobs.get(job.id))?.output).toBe("done")
     }),
   )
@@ -157,6 +180,7 @@ describe("background.job", () => {
     Effect.gen(function* () {
       const jobs = yield* BackgroundJob.Service
       const job = yield* jobs.start({
+        admission: syntheticAdmission(),
         type: "test",
         run: Effect.fail(new Error("boom")),
       })
@@ -176,11 +200,13 @@ describe("background.job", () => {
       const release = yield* Deferred.make<void>()
       const id = "job_test"
       yield* jobs.start({
+        admission: syntheticAdmission(),
         id,
         type: "test",
         run: Deferred.await(fail).pipe(Effect.andThen(Effect.fail(new Error("boom")))),
       })
       yield* jobs.extend({
+        admission: syntheticAdmission(),
         id,
         run: Effect.never.pipe(
           Effect.ensuring(Deferred.succeed(interrupted, undefined).pipe(Effect.andThen(Deferred.await(release)))),
@@ -190,7 +216,7 @@ describe("background.job", () => {
       yield* Deferred.succeed(fail, undefined)
       expect((yield* jobs.wait({ id })).info?.status).toBe("error")
       yield* Deferred.await(interrupted)
-      yield* jobs.start({ id, type: "test", run: Effect.never })
+      yield* jobs.start({ admission: syntheticAdmission(), id, type: "test", run: Effect.never })
 
       yield* Deferred.succeed(release, undefined)
       yield* Effect.yieldNow
@@ -204,10 +230,12 @@ describe("background.job", () => {
       const jobs = yield* BackgroundJob.Service
       const interrupted = yield* Deferred.make<void>()
       const job = yield* jobs.start({
+        admission: syntheticAdmission(),
         type: "test",
         run: Effect.never.pipe(Effect.ensuring(Deferred.succeed(interrupted, undefined))),
       })
       yield* jobs.extend({
+        admission: syntheticAdmission(),
         id: job.id,
         run: Effect.never,
       })
@@ -226,6 +254,7 @@ describe("background.job", () => {
       const latch = yield* Deferred.make<void>()
       const promoted = yield* Deferred.make<void>()
       const started = yield* jobs.startExact({
+        admission: syntheticAdmission(),
         type: "test",
         metadata: { parentSessionId: "parent" },
         onPromote: Deferred.succeed(promoted, undefined).pipe(Effect.asVoid),
@@ -257,6 +286,7 @@ describe("background.job", () => {
     Effect.gen(function* () {
       const jobs = yield* BackgroundJob.Service
       const job = yield* jobs.start({
+        admission: syntheticAdmission(),
         type: "test",
         metadata: { value: "initial" },
         run: Effect.succeed(noAnswer),

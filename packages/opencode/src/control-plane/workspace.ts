@@ -120,11 +120,21 @@ export class SyncAbortedError extends Schema.TaggedErrorClass<SyncAbortedError>(
   cause: Schema.optional(Schema.Defect()),
 }) {}
 
+export class SessionWarpRemoteClosureProofError extends Schema.TaggedErrorClass<SessionWarpRemoteClosureProofError>()(
+  "WorkspaceSessionWarpRemoteClosureProofError",
+  {
+    message: Schema.String,
+    workspaceID: WorkspaceV2.ID,
+    sessionID: SessionID,
+  },
+) {}
+
 type CreateError = Auth.AuthError
 type SessionWarpError =
   | WorkspaceNotFoundError
   | SessionEventsNotFoundError
   | SessionWarpHttpError
+  | SessionWarpRemoteClosureProofError
   | SessionClosure.Failure
   | SessionClosure.LocationError
   | Vcs.PatchApplyError
@@ -601,37 +611,23 @@ const layer = Layer.effect(
             const target = yield* WorkspaceAdapterRuntime.target(previous)
 
             if (target.type === "remote") {
-              yield* syncHistory(previous, target.url, target.headers).pipe(
-                Effect.catch((error) =>
-                  Effect.logWarning("session warp final source sync failed", {
-                    workspaceID: previous.id,
-                    sessionID: input.sessionID,
-                    error: errorData(error),
-                  }),
-                ),
-              )
-            } else {
-              // Taking a session away from its current owner is only safe once the work running
-              // under it has actually stopped. The previous one-list sweep signalled whatever was
-              // running at one instant and returned; branch closure follows current Task
-              // relationships, blocks the proven branch from starting more, and rescans until
-              // nothing in scope can continue. If it cannot prove the branch, the warp fails here
-              // rather than claiming a session that is still executing.
-              //
-              // Only the local case changes. A remote source owner runs in another process, and
-              // branch closure is process-local, so this cannot prove that branch either way; that
-              // path keeps its existing best-effort history sync unchanged.
-              //
-              // Scoped to the session's current owner rather than to whatever workspace the caller
-              // routed this request to. Closure validates that the named session belongs to the
-              // location asking, by comparing the session's stored workspace against the ambient
-              // one; during a warp the session still belongs to `previous`, so an unscoped call
-              // would be refused whenever the caller routed anywhere else. `previous` was resolved
-              // from the session's own row above, so this names the location that actually owns it.
-              yield* closureRunState
-                .request(input.sessionID)
-                .pipe(Effect.provideService(WorkspaceRef, previous.id))
+              return yield* new SessionWarpRemoteClosureProofError({
+                message:
+                  "Session warp from a remote owner requires authenticated owner-runtime closure proof, which is unavailable.",
+                workspaceID: previous.id,
+                sessionID: input.sessionID,
+              })
             }
+
+            // Scoped to the session's current owner rather than to whatever workspace the caller
+            // routed this request to. Closure validates that the named session belongs to the
+            // location asking, by comparing the session's stored workspace against the ambient
+            // one; during a warp the session still belongs to `previous`, so an unscoped call
+            // would be refused whenever the caller routed anywhere else. `previous` was resolved
+            // from the session's own row above, so this names the location that actually owns it.
+            yield* closureRunState
+              .request(input.sessionID)
+              .pipe(Effect.provideService(WorkspaceRef, previous.id))
 
             // "claim" this session so any future events coming from
             // the old workspace are ignored

@@ -193,8 +193,24 @@ export type Admission = {
 }
 
 /**
- * Binder input keeps admission separate from observable invocation identity. The cross-package
- * boundary permits absence so a binder can explicitly reject it rather than assume the producer.
+ * What the binder is asked about: one invocation coordinate, plus the admission the
+ * caller holds for it.
+ *
+ * Deliberately NOT `Invocation`. That type is the observation coordinate and is
+ * handed to callers reading per-sequence state; admission is a property of the request to
+ * arm, not of the coordinate, and folding it in would put lease identity into every
+ * accounting read.
+ *
+ * `admission` is optional HERE and required on every input that reaches here, and those are
+ * not in tension - they guard different things. `StartInput`, `ExtendInput`, and
+ * `ExtendExactInput` all require it, so a CALLER cannot omit one: that is a compile error,
+ * which is the enforcement. This type is the other side, the contract between two packages
+ * that version independently - core produces the request, the binder consumes it - and the
+ * binder must not assume its producer was well-behaved.
+ *
+ * So absence still means "none was supplied", NEVER "permitted". A real binder must decide
+ * what to do about that; keeping the field optional is what keeps that decision reachable,
+ * testable, and falsifiable rather than a branch the type system has quietly deleted.
  */
 export type BindRequest = {
   readonly lifetime: Lifetime
@@ -431,8 +447,18 @@ export type StartInput = {
    */
   outstanding?: { readonly observer: string; readonly inline: string }
   run: Effect.Effect<SequenceOutcome, unknown>
-  /** Relayed to the binder for sequence zero; omission is handled by the configured binder. */
-  admission?: Admission
+  /**
+   * The execution admission this start rests on, relayed to the binder for sequence zero.
+   *
+   * REQUIRED, and that is the enforcement rather than a convention: a start with no admission is
+   * a compile error instead of a silent runtime pass. An optional field here would degrade toward
+   * PERMITTING MORE - a caller that simply omitted it would run unfenced with no type error and no
+   * runtime signal - and silent composition failure is this codebase's recurring hazard, not a
+   * hypothetical one. The ID-based compatibility exemption covers
+   * `list`/`get`/`promote`/`waitForPromotion`; it does not cover `start` or `extend`, so the
+   * id-keyed surface carries an admission too.
+   */
+  admission: Admission
 }
 
 export type StartExactResult = ArmOutcome
@@ -440,15 +466,20 @@ export type StartExactResult = ArmOutcome
 export type ExtendInput = {
   id: string
   run: Effect.Effect<SequenceOutcome, unknown>
-  /** Each extension carries separate admission; sequence zero's consumed permit cannot be reused. */
-  admission?: Admission
+  /**
+   * Relayed to the binder for the reserved sequence. REQUIRED for the reason `StartInput.admission`
+   * gives, and with one addition: an extension is a SEPARATE admission, never a reuse of the one
+   * that armed sequence zero. Consuming that permit bound the lease to that invocation, and a bound
+   * lease is no longer `reserved`, so `validLease` refuses it for anything else.
+   */
+  admission: Admission
 }
 
 export type ExtendExactInput = {
   lifetime: Lifetime
   run: Effect.Effect<SequenceOutcome, unknown>
-  /** Relayed to the binder for the reserved sequence. Optional - see `ExtendInput.admission`. */
-  admission?: Admission
+  /** Relayed to the binder for the reserved sequence. REQUIRED - see `ExtendInput.admission`. */
+  admission: Admission
 }
 
 export type ExtendExactResult =

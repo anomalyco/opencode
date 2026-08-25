@@ -123,7 +123,7 @@ const holdLease = (closure: SessionClosure.Interface, session: SessionID, tag: s
 const lifetimeOf = (id: string) => ({ id, token: {} })
 
 describe("BackgroundJob binder", () => {
-  it.live("grants an invocation that carries no admission, and registers nothing", () =>
+  it.live("refuses an invocation that carries no admission, and registers nothing", () =>
     Effect.gen(function* () {
       const { ports } = yield* inflightPorts()
 
@@ -131,25 +131,15 @@ describe("BackgroundJob binder", () => {
         Effect.gen(function* () {
           const closure = yield* SessionClosure.Service
           const binder = yield* BackgroundJobBinder.make(closure)
-          const lifetime = lifetimeOf("job_noadmit")
 
-          const decision = yield* binder.bind({ lifetime, sequence: 0 })
+          const decision = yield* binder.bind({ lifetime: lifetimeOf("job_noadmit"), sequence: 0 })
 
-          // Admission is what a caller opts into. Omitting it selects core's permissive binder,
-          // which is the behaviour of a caller that predates admission entirely; refusing its
-          // absence would reject every unmigrated caller.
-          expect(decision.kind).toBe("arm_allowed")
-          if (decision.kind !== "arm_allowed") return
-          expect(decision.permit.lifetime).toBe(lifetime)
-          expect(decision.permit.sequence).toBe(0)
+          // An absent admission capability must never resolve permissively.
+          expect(decision.kind).toBe("rejected")
+          if (decision.kind === "rejected") expect(decision.reason).toBe("no_admission")
 
-          // Still claimable exactly once, so an unfenced grant cannot arm twice.
-          expect(yield* decision.permit.claim).toBe(true)
-          expect(yield* decision.permit.claim).toBe(false)
-
-          // The permissive path never reaches the coordinator, so an unfenced invocation publishes
-          // no lifetime. That is the cost of the omission: such a job is outside the closure's view
-          // and cannot be discovered, proven, or cancelled as part of a branch.
+          // Fail-closed means it left no trace: no lifetime was published to the coordinator, so
+          // there is nothing a later caller could adopt or mistake for an admitted invocation.
           expect((yield* closure.view).jobs).toHaveLength(0)
         }),
       )

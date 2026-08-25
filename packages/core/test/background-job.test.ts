@@ -110,6 +110,7 @@ describe("BackgroundJob", () => {
       const jobs = yield* BackgroundJob.Service
       const latch = yield* Deferred.make<void>()
       const job = yield* jobs.start({
+        admission,
         type: "test",
         metadata: { durable: false },
         run: Deferred.await(latch).pipe(Effect.as(answered("m1", 100, "done"))),
@@ -137,6 +138,7 @@ describe("BackgroundJob", () => {
         const id = `job_immediate_start_${index}`
         return Effect.gen(function* () {
           const job = yield* jobs.start({
+            admission,
             id,
             type: "test",
             run: jobs
@@ -167,12 +169,17 @@ describe("BackgroundJob", () => {
         Effect.gen(function* () {
           const first = yield* Deferred.make<void>()
           const job = yield* jobs.start({
+            admission,
             type: "test",
             run: Deferred.await(first).pipe(Effect.as(answered(`m1_${index}`, 100, `first-${index}`))),
           })
 
           expect(
-            yield* jobs.extend({ id: job.id, run: Effect.succeed(answered(`m2_${index}`, 200, `second-${index}`)) }),
+            yield* jobs.extend({
+              admission,
+              id: job.id,
+              run: Effect.succeed(answered(`m2_${index}`, 200, `second-${index}`)),
+            }),
           ).toBe(true)
           expect((yield* jobs.get(job.id))?.status).toBe("running")
 
@@ -195,6 +202,7 @@ describe("BackgroundJob", () => {
       const held = yield* Deferred.make<void>()
       const supplementStarted = yield* Deferred.make<void>()
       const job = yield* jobs.start({
+        admission,
         type: "test",
         run: Deferred.await(held).pipe(Effect.as(answered("m1", 100, "owner"))),
       })
@@ -203,6 +211,7 @@ describe("BackgroundJob", () => {
       // and awaiting its start signal below would time out.
       expect(
         yield* jobs.extend({
+          admission,
           id: job.id,
           run: Deferred.succeed(supplementStarted, undefined).pipe(Effect.as(answered("m2", 200, "supplement"))),
         }),
@@ -221,6 +230,7 @@ describe("BackgroundJob", () => {
       const supplement = yield* Deferred.make<void>()
       // Both runs are held, so the lifetime cannot terminalize before the extension registers.
       const started = yield* jobs.startExact({
+        admission,
         id: "job_answer_order",
         type: "test",
         metadata: { background: true },
@@ -231,6 +241,7 @@ describe("BackgroundJob", () => {
       if (!handle) return
 
       yield* jobs.extend({
+        admission,
         id: "job_answer_order",
         run: Deferred.await(supplement).pipe(Effect.as(answered("m2", 200, "supplement"))),
       })
@@ -257,11 +268,16 @@ describe("BackgroundJob", () => {
       const jobs = yield* BackgroundJob.Service
       const held = yield* Deferred.make<void>()
       const job = yield* jobs.start({
+        admission,
         type: "test",
         run: Deferred.await(held).pipe(Effect.as(answered("m1", 100, "owner"))),
       })
 
-      yield* jobs.extend({ id: job.id, run: Effect.succeed({ note: "could not be admitted: closing." }) })
+      yield* jobs.extend({
+        admission,
+        id: job.id,
+        run: Effect.succeed({ note: "could not be admitted: closing." }),
+      })
       yield* Deferred.succeed(held, undefined)
 
       const waited = yield* jobs.wait({ id: job.id })
@@ -275,12 +291,17 @@ describe("BackgroundJob", () => {
       const jobs = yield* BackgroundJob.Service
       const held = yield* Deferred.make<void>()
       const job = yield* jobs.start({
+        admission,
         type: "test",
         outstanding: { observer: "delivered separately", inline: "still registered" },
         run: Deferred.await(held).pipe(Effect.as(answered("m1", 100, "owner"))),
       })
 
-      yield* jobs.extend({ id: job.id, run: Effect.succeed(answered("m2", 200, "supplement")) })
+      yield* jobs.extend({
+        admission,
+        id: job.id,
+        run: Effect.succeed(answered("m2", 200, "supplement")),
+      })
       yield* Deferred.succeed(held, undefined)
 
       const waited = yield* jobs.wait({ id: job.id })
@@ -296,6 +317,7 @@ describe("BackgroundJob", () => {
       const jobs = yield* BackgroundJob.Service
       const held = yield* Deferred.make<void>()
       const started = yield* jobs.startExact({
+        admission,
         id: "job_born_observed",
         type: "test",
         metadata: { background: true },
@@ -322,6 +344,7 @@ describe("BackgroundJob", () => {
       // and keeps pending above zero as each answer completes - the latter is what earns the
       // outstanding notice.
       const started = yield* jobs.startExact({
+        admission,
         id,
         type: "test",
         outstanding: { observer: "delivered separately", inline: "still registered" },
@@ -332,8 +355,8 @@ describe("BackgroundJob", () => {
       if (!handle) return
 
       // Filed later but earlier in conversation, so publication order is not filing order.
-      yield* jobs.extend({ id, run: Effect.succeed(answered("m2", 200, "supplement")) })
-      yield* jobs.extend({ id, run: Effect.succeed(answered("m1", 100, "owner")) })
+      yield* jobs.extend({ admission, id, run: Effect.succeed(answered("m2", 200, "supplement")) })
+      yield* jobs.extend({ admission, id, run: Effect.succeed(answered("m1", 100, "owner")) })
 
       // A settling delay, not an ordering proof: it gives both runs time to reach the buffer so
       // that promotion below exercises the buffered drain. Ordering itself is pinned by the pure
@@ -360,7 +383,12 @@ describe("BackgroundJob", () => {
       const jobs = yield* BackgroundJob.Service
       const id = "job_lifetime_current"
       const latch = yield* Deferred.make<void>()
-      yield* jobs.start({ id, type: "test", run: Deferred.await(latch).pipe(Effect.as(answered("m1", 100, "done"))) })
+      yield* jobs.start({
+        admission,
+        id,
+        type: "test",
+        run: Deferred.await(latch).pipe(Effect.as(answered("m1", 100, "done"))),
+      })
 
       const observed = (yield* jobs.listExact()).filter((entry) => entry.info.id === id)[0]
       expect(observed.info).toMatchObject({ id, type: "test", status: "running" })
@@ -375,8 +403,13 @@ describe("BackgroundJob", () => {
       const jobs = yield* BackgroundJob.Service
       const id = "job_cancel_no_output"
       const held = yield* Deferred.make<void>()
-      yield* jobs.start({ id, type: "test", run: Deferred.await(held).pipe(Effect.as(answered("m1", 100, "owner"))) })
-      yield* jobs.extend({ id, run: Effect.succeed(answered("m2", 200, "supplement")) })
+      yield* jobs.start({
+        admission,
+        id,
+        type: "test",
+        run: Deferred.await(held).pipe(Effect.as(answered("m1", 100, "owner"))),
+      })
+      yield* jobs.extend({ admission, id, run: Effect.succeed(answered("m2", 200, "supplement")) })
 
       const cancelled = yield* jobs.cancel(id)
       expect(cancelled?.status).toBe("cancelled")
@@ -390,7 +423,12 @@ describe("BackgroundJob", () => {
       const jobs = yield* BackgroundJob.Service
       const id = "job_lifetime_replaced"
       const first = yield* Deferred.make<void>()
-      yield* jobs.start({ id, type: "test", run: Deferred.await(first).pipe(Effect.as(answered("m1", 100, "first"))) })
+      yield* jobs.start({
+        admission,
+        id,
+        type: "test",
+        run: Deferred.await(first).pipe(Effect.as(answered("m1", 100, "first"))),
+      })
 
       // What a caller sees before it acts.
       const observed = (yield* jobs.listExact()).filter((entry) => entry.info.id === id)[0]
@@ -399,7 +437,12 @@ describe("BackgroundJob", () => {
       yield* Deferred.succeed(first, undefined)
       expect(yield* jobs.wait({ id })).toMatchObject({ info: { status: "completed", output: "first" } })
       const second = yield* Deferred.make<void>()
-      yield* jobs.start({ id, type: "test", run: Deferred.await(second).pipe(Effect.as(answered("m2", 200, "second"))) })
+      yield* jobs.start({
+        admission,
+        id,
+        type: "test",
+        run: Deferred.await(second).pipe(Effect.as(answered("m2", 200, "second"))),
+      })
 
       expect(yield* jobs.cancelExact(observed.lifetime)).toBeUndefined()
       expect((yield* jobs.get(id))?.status).toBe("running")
@@ -414,12 +457,22 @@ describe("BackgroundJob", () => {
       const jobs = yield* BackgroundJob.Service
       const id = "job_lifetime_by_id"
       const first = yield* Deferred.make<void>()
-      yield* jobs.start({ id, type: "test", run: Deferred.await(first).pipe(Effect.as(answered("m1", 100, "first"))) })
+      yield* jobs.start({
+        admission,
+        id,
+        type: "test",
+        run: Deferred.await(first).pipe(Effect.as(answered("m1", 100, "first"))),
+      })
 
       yield* Deferred.succeed(first, undefined)
       expect(yield* jobs.wait({ id })).toMatchObject({ info: { status: "completed", output: "first" } })
       const second = yield* Deferred.make<void>()
-      yield* jobs.start({ id, type: "test", run: Deferred.await(second).pipe(Effect.as(answered("m2", 200, "second"))) })
+      yield* jobs.start({
+        admission,
+        id,
+        type: "test",
+        run: Deferred.await(second).pipe(Effect.as(answered("m2", 200, "second"))),
+      })
 
       expect((yield* jobs.cancel(id))?.status).toBe("cancelled")
       expect((yield* jobs.get(id))?.status).toBe("cancelled")
@@ -432,6 +485,7 @@ describe("BackgroundJob", () => {
       const interrupted = yield* Deferred.make<void>()
       const jobs = yield* BackgroundJob.make.pipe(Scope.provide(scope))
       const job = yield* jobs.start({
+        admission,
         type: "test",
         run: Effect.never.pipe(Effect.ensuring(Deferred.succeed(interrupted, undefined))),
       })

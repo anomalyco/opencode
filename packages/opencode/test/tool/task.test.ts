@@ -25,6 +25,7 @@ import { Truncate } from "@/tool/truncate"
 import { ToolRegistry } from "@/tool/registry"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { disposeAllInstances } from "../fixture/fixture"
+import { syntheticAdmission } from "../lib/background"
 import { testEffect } from "../lib/effect"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
@@ -399,7 +400,7 @@ describe("tool.task", () => {
     Effect.gen(function* () {
       const sessions = yield* Session.Service
       const { chat, assistant } = yield* seed()
-      const child = yield* sessions.create({ parentID: chat.id, title: "Existing child" })
+      const child = yield* sessions.create({ parentID: chat.id, title: "Existing child", agent: "general" })
       const tool = yield* TaskTool
       const def = yield* tool.init()
       let seen: SessionPrompt.PromptInput | undefined
@@ -1348,6 +1349,7 @@ describe("tool.task", () => {
       const child = yield* sessions.create({ parentID: chat.id, title: "child" })
 
       yield* jobs.start({
+        admission: syntheticAdmission(),
         id: child.id,
         type: "task",
         metadata: { parentSessionId: chat.id, sessionId: child.id },
@@ -1370,12 +1372,14 @@ describe("tool.task", () => {
       const grandchild = yield* sessions.create({ parentID: child.id, title: "grandchild" })
 
       yield* jobs.start({
+        admission: syntheticAdmission(),
         id: child.id,
         type: "task",
         metadata: { parentSessionId: chat.id, sessionId: child.id },
         run: Effect.never,
       })
       yield* jobs.start({
+        admission: syntheticAdmission(),
         id: grandchild.id,
         type: "task",
         metadata: { parentSessionId: child.id, sessionId: grandchild.id },
