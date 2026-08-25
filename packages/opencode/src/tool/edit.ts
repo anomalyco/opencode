@@ -722,7 +722,7 @@ export function replace(content: string, oldString: string, newString: string, r
 
   if (notFound) {
     throw new Error(
-      "Could not find oldString in the file. It must match exactly, including whitespace, indentation, and line endings.",
+      "Could not find oldString in the file. Exact match and all fuzzy fallbacks (whitespace/indentation/escape-tolerant) were attempted. Re-read the file and copy the exact text (whitespace included) into oldString.",
     )
   }
   throw new Error("Found multiple matches for oldString. Provide more surrounding context to make the match unique.")
