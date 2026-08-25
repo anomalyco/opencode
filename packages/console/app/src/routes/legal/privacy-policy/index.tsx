@@ -237,7 +237,8 @@ export default function PrivacyPolicy() {
                       </td>
                       <td>
                         <ul>
-                          <li>Providing the Services</li>
+                          <li>Passing through to upstream provider to provide services</li>
+                          <li>Not stored</li>
                         </ul>
                       </td>
                       <td>
@@ -251,13 +252,6 @@ export default function PrivacyPolicy() {
                   </tbody>
                 </table>
               </div>
-              <p>
-                When you use OpenCode-hosted models, your prompts and related context pass through OpenCode systems so
-                we can send them to the selected model provider and return the response. OpenCode does not store this
-                data. Most upstream providers operate under zero data retention (ZDR), but retention and training
-                policies vary by model. See the <a href={language.route("/docs/zen/#privacy")}>Zen</a> and{" "}
-                <a href={language.route("/docs/go/#privacy")}>Go</a> model tables for current model-specific details.
-              </p>
 
               <h3 id="commercial-purposes">Our Commercial or Business Purposes for Collecting Personal Data</h3>
 
