@@ -7,6 +7,7 @@ import { scoped } from "../native/logging"
 import { DesktopPaths } from "../paths"
 import { forgetStore, getStore } from "../storage/store"
 import { WINDOW_IDS_KEY } from "../storage/keys"
+import { windowIDArgument } from "../../shared/window-bootstrap"
 import {
   getBackgroundColor,
   getPinchZoomEnabled,
@@ -24,7 +25,6 @@ import { createWindowRegistry } from "./registry"
 import { makeWindowRecovery } from "./recovery"
 import { allowRendererPermissions, wireNavigationPolicy, wireRendererHeaders } from "./security"
 
-const windowIDs = new WeakMap<BrowserWindow, string>()
 const themeReady = new WeakMap<BrowserWindow, () => void>()
 const registry = createWindowRegistry<BrowserWindow>({
   read: () => getStore().get(WINDOW_IDS_KEY),
@@ -59,10 +59,6 @@ export function setAppQuitting(quitting = true) {
   registry.setQuitting(quitting)
 }
 
-export function getWindowID(win: BrowserWindow) {
-  return windowIDs.get(win)
-}
-
 export function getLastFocusedWindow() {
   const focused = BrowserWindow.getFocusedWindow()
   if (focused) return focused
@@ -89,6 +85,7 @@ export const makeMainWindows = Effect.fn("Window.make")(function* () {
 
   const create = (id: string = randomUUID()) => {
     const state = windowState({ file: windowStateFile(id), defaultWidth: 1280, defaultHeight: 800 })
+    const appearance = windowAppearance(path, paths)
     const win = new BrowserWindow({
       x: state.x,
       y: state.y,
@@ -96,7 +93,11 @@ export const makeMainWindows = Effect.fn("Window.make")(function* () {
       height: state.height,
       show: false,
       autoHideMenuBar: true,
-      ...windowAppearance(path, paths),
+      ...appearance,
+      webPreferences: {
+        ...appearance.webPreferences,
+        additionalArguments: [windowIDArgument(id)],
+      },
     })
 
     allowRendererPermissions(win)
@@ -132,7 +133,6 @@ export const makeMainWindows = Effect.fn("Window.make")(function* () {
   }
 
   const register = (win: BrowserWindow, id: string) => {
-    windowIDs.set(win, id)
     registry.register(id, win)
     win.on("focus", () => registry.focused(id))
     // Windows emits session-end, but not before-quit, during shutdown and logoff.

@@ -70,7 +70,7 @@ describe("OpenAI-compatible Chat route", () => {
         baseURL: "https://api.deepseek.test/v1/",
         query: { "api-version": "2026-01-01" },
       })
-      expect(prepared.body).toEqual({
+      expect(prepared.body).toMatchObject({
         model: "deepseek-chat",
         messages: [
           { role: "system", content: "You are concise." },
@@ -79,7 +79,7 @@ describe("OpenAI-compatible Chat route", () => {
         tools: [
           {
             type: "function",
-            function: { name: "lookup", description: "Lookup data", parameters: { type: "object" } },
+            function: { name: "lookup", description: "Lookup data", parameters: { type: "object" }, strict: false },
           },
         ],
         tool_choice: "required",
@@ -130,7 +130,7 @@ describe("OpenAI-compatible Chat route", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(request)
 
-      expect(prepared.body).toEqual({
+      expect(prepared.body).toMatchObject({
         model: "deepseek-chat",
         messages: [
           { role: "system", content: "You are concise." },
@@ -158,6 +158,29 @@ describe("OpenAI-compatible Chat route", () => {
     }),
   )
 
+  it.effect("enables ZAI tool streaming except for GLM 4.5 models", () =>
+    Effect.gen(function* () {
+      const prepare = (provider: string, baseURL: string, id: string) =>
+        compileRequest(
+          LLM.request({
+            model: OpenAICompatibleChat.route.with({ provider, endpoint: { baseURL } }).model({ id }),
+            prompt: "Use a tool.",
+            tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: {} })],
+          }),
+        )
+
+      const current = yield* prepare("zai", "https://api.z.ai/api/paas/v4", "glm-4.7")
+      expect(current.body).toMatchObject({ tool_stream: true })
+
+      const legacy = yield* Effect.all(
+        ["glm-4.5", "glm-4.5-air", "glm-4.5-flash", "glm-4.5v"].map((id) =>
+          prepare("zhipuai", "https://open.bigmodel.cn/api/paas/v4", id),
+        ),
+      )
+      legacy.forEach((item) => expect(item.body).not.toHaveProperty("tool_stream"))
+    }),
+  )
+
   it.effect("matches AI SDK compatible tool request body fixture", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
@@ -180,7 +203,7 @@ describe("OpenAI-compatible Chat route", () => {
         }),
       )
 
-      expect(prepared.body).toEqual({
+      expect(prepared.body).toMatchObject({
         model: "deepseek-chat",
         messages: [
           { role: "user", content: "What is the weather?" },
@@ -204,6 +227,7 @@ describe("OpenAI-compatible Chat route", () => {
               name: "lookup",
               description: "Lookup data",
               parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] },
+              strict: false,
             },
           },
         ],

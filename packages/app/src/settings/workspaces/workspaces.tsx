@@ -93,14 +93,24 @@ export const SettingsWorkspaces: Component<{ activeDirectory?: string }> = (prop
       activeDirectory: props.activeDirectory,
     }
   }
-  const loadSessions = async (context = captureDeleteContext()) => {
-    const fetched = await listAllSessions(context.sdk.api.session, { order: "desc" })
-    fetched.forEach(context.data.session.remember)
-    return mergeWorkspaceSessionInventory(fetched, context.data.session.list())
+  // Fetch sessions per workspace directory instead of paging through every session on the server.
+  const loadSessions = async (directories: readonly string[], context = captureDeleteContext()) => {
+    const fetched = await Promise.all(
+      directories.map((directory) => listAllSessions(context.sdk.api.session, { order: "desc", directory })),
+    )
+    const sessions = fetched.flat()
+    return mergeWorkspaceSessionInventory(sessions, context.data.session.list())
   }
+  const workspaceDirectories = createMemo(() => workspaces().map((workspace) => workspace.directory))
   const sessionQuery = useQuery(() => ({
-    queryKey: [serverSDK.scope, null, "settings-workspace-sessions"] as const,
-    queryFn: () => loadSessions().then(() => Date.now()),
+    queryKey: [
+      serverSDK.scope,
+      null,
+      "settings-workspace-sessions",
+      workspaceDirectories().map((directory) => String(pathKey(directory))),
+    ] as const,
+    queryFn: () => loadSessions(workspaceDirectories()),
+    enabled: workspaceDirectories().length > 0,
     refetchOnMount: "always",
   }))
   const sessionsByWorkspace = createMemo(
@@ -108,7 +118,7 @@ export const SettingsWorkspaces: Component<{ activeDirectory?: string }> = (prop
       new Map(
         workspaces().map((workspace) => [
           pathKey(workspace.directory),
-          sessionQuery.isSuccess ? sessionsForWorkspace(data.session.list(), workspace.directory) : [],
+          sessionQuery.data ? sessionsForWorkspace(sessionQuery.data, workspace.directory) : [],
         ]),
       ),
   )
@@ -136,7 +146,7 @@ export const SettingsWorkspaces: Component<{ activeDirectory?: string }> = (prop
     const [working, branch, sessions] = await Promise.all([
       context.sdk.api.vcs.status({ location: { directory: workspace.directory } }),
       context.sdk.api.vcs.diff({ location: { directory: workspace.directory }, mode: "branch" }),
-      loadSessions(context),
+      loadSessions([workspace.directory], context),
     ])
     const result = inspectWorkspaceDeletion({
       workspace: workspace.directory,

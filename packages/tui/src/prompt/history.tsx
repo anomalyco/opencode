@@ -26,11 +26,6 @@ export type PromptPartRef = {
   index: number
 }
 
-type PromptHistoryEntry = {
-  sessionID: string | undefined
-  prompt: PromptInfo
-}
-
 export const emptyPrompt = (): PromptInfo => ({ text: "", files: [], agents: [], skills: [], pasted: [] })
 
 export const MAX_HISTORY_ENTRIES = 50
@@ -41,19 +36,12 @@ export function parsePromptHistory(text: string) {
     .filter(Boolean)
     .map((line) => {
       try {
-        const value: unknown = JSON.parse(line)
-        const input = value && typeof value === "object" ? (value as Record<string, unknown>) : undefined
-        const prompt = parsePromptInfo(input?.prompt ?? value)
-        if (!prompt) return
-        return {
-          sessionID: typeof input?.sessionID === "string" ? input.sessionID : undefined,
-          prompt,
-        }
+        return parsePromptInfo(JSON.parse(line))
       } catch {
         return undefined
       }
     })
-    .filter((line): line is PromptHistoryEntry => line !== undefined)
+    .filter((line): line is PromptInfo => line !== undefined)
     .slice(-MAX_HISTORY_ENTRIES)
 }
 
@@ -83,28 +71,24 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
         writeText(historyPath, lines.map((line) => JSON.stringify(line)).join("\n") + "\n").catch(() => {})
     })
 
-    const [store, setStore] = createStore({ history: [] as PromptHistoryEntry[] })
-    const indices = new Map<string | undefined, number>()
+    const [store, setStore] = createStore({ index: 0, history: [] as PromptInfo[] })
 
     return {
-      move(sessionID: string | undefined, direction: 1 | -1, input: string) {
-        const items = store.history.filter((entry) => entry.sessionID === sessionID)
-        if (!items.length) return undefined
-        const index = indices.get(sessionID) ?? 0
-        const current = items.at(index)?.prompt
+      move(direction: 1 | -1, input: string) {
+        if (!store.history.length) return undefined
+        const current = store.history.at(store.index)
         if (!current) return undefined
         if (current.text !== input && input.length) return
-        const next = index + direction
-        if (Math.abs(next) > items.length || next > 0) return
-        indices.set(sessionID, next)
+        const next = store.index + direction
+        if (Math.abs(next) > store.history.length || next > 0) return
+        setStore("index", next)
         if (next === 0) return emptyPrompt()
-        return items.at(next)?.prompt
+        return store.history.at(next)
       },
-      append(sessionID: string | undefined, item: PromptInfo) {
-        const entry = { sessionID, prompt: structuredClone(unwrap(item)) }
-        const previous = store.history.findLast((item) => item.sessionID === sessionID)
-        if (isDuplicateEntry(previous?.prompt, entry.prompt)) {
-          indices.set(sessionID, 0)
+      append(item: PromptInfo) {
+        const entry = structuredClone(unwrap(item))
+        if (isDuplicateEntry(store.history.at(-1), entry)) {
+          setStore("index", 0)
           return
         }
         let trimmed = false
@@ -115,9 +99,9 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
               draft.history = draft.history.slice(-MAX_HISTORY_ENTRIES)
               trimmed = true
             }
+            draft.index = 0
           }),
         )
-        indices.set(sessionID, 0)
 
         if (trimmed) {
           writeText(historyPath, store.history.map((line) => JSON.stringify(line)).join("\n") + "\n").catch(() => {})

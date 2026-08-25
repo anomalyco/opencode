@@ -87,7 +87,6 @@ export const planAgent = {
 export const reviewCommand = {
   name: "review",
   description: "Review changes",
-  template: "",
 } satisfies CommandInfo
 
 export const verifySkill = {

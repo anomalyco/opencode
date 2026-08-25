@@ -124,7 +124,7 @@
   color: var(--v2-text-text-base);
   font-size: 13px;
   font-weight: 530;
-  line-height: 1;
+  line-height: var(--line-height-compact);
 }
 
 .project-settings-extension-section-header > :last-child {

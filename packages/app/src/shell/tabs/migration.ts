@@ -7,8 +7,25 @@ export function migrateTabs(value: unknown): Tab[] {
     if (!tab || typeof tab !== "object") return []
     if (!("server" in tab) || typeof tab.server !== "string") return []
     const server = tab.server as ServerConnection.Key
-    if (tab.type === "session" && typeof tab.sessionId === "string") {
-      return [{ type: tab.type, server, sessionId: tab.sessionId }]
+    if (
+      tab.type === "session" &&
+      typeof tab.sessionId === "string" &&
+      (tab.routeSessionId === undefined || typeof tab.routeSessionId === "string") &&
+      (tab.routeParentId === undefined || typeof tab.routeParentId === "string")
+    ) {
+      return [
+        {
+          type: tab.type,
+          server,
+          sessionId: tab.sessionId,
+          ...(tab.routeSessionId && tab.routeSessionId !== tab.sessionId
+            ? {
+                routeSessionId: tab.routeSessionId,
+                ...(tab.routeParentId ? { routeParentId: tab.routeParentId } : {}),
+              }
+            : {}),
+        },
+      ]
     }
     if (
       tab.type === "draft" &&

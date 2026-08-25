@@ -54,6 +54,7 @@ import { KeyedMutex } from "./effect/keyed-mutex.js"
 import { fileURLToPath } from "url"
 import { SessionEnvironment } from "./session/environment.js"
 import { SessionHistory } from "./session/history.js"
+import { InstructionEntry } from "./session/instruction-entry.js"
 
 // get project -> project.locations
 //
@@ -177,6 +178,7 @@ export interface Interface {
     readonly sessionID: SessionSchema.ID
     readonly variables?: SessionEnvironment.Variables
   }) => Effect.Effect<SessionEnvironment.Variables | undefined, NotFoundError>
+  readonly view: (input: { sessionID: SessionSchema.ID; idle: number }) => Effect.Effect<void, NotFoundError>
   readonly remove: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError>
   readonly messages: (input: {
     sessionID: SessionSchema.ID
@@ -244,26 +246,14 @@ export interface Interface {
     prompt: string
   }) => Effect.Effect<string, NotFoundError | SessionGenerate.Error>
   readonly command: (input: {
-    id?: SessionMessage.ID
     sessionID: SessionSchema.ID
     command: string
-    arguments?: string
-    agent?: Agent.ID
-    model?: Model.Ref
+    text: string
     files?: PromptInput.Prompt["files"]
     agents?: PromptInput.Prompt["agents"]
     skills?: PromptInput.Prompt["skills"]
     delivery?: SessionInbox.Delivery
-    resume?: boolean
-  }) => Effect.Effect<
-    SessionInbox.User,
-    | NotFoundError
-    | PromptConflictError
-    | AttachmentError
-    | SkillNotFoundError
-    | Command.NotFoundError
-    | Command.EvaluationError
-  >
+  }) => Effect.Effect<void, NotFoundError | Command.NotFoundError | Command.ExecutionError>
   readonly shell: (input: {
     id?: Event.ID
     sessionID: SessionSchema.ID
@@ -282,7 +272,7 @@ export interface Interface {
   readonly active: Effect.Effect<ReadonlySet<SessionSchema.ID>>
   readonly background: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError>
   readonly resume: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError | SessionRunner.RunError>
-  readonly interrupt: (sessionID: SessionSchema.ID, options?: { readonly continue?: boolean }) => Effect.Effect<void>
+  readonly interrupt: (sessionID: SessionSchema.ID, options?: { readonly continue?: boolean }) => Effect.Effect<boolean>
   readonly synthetic: (input: {
     id?: SessionMessage.ID
     sessionID: SessionSchema.ID
@@ -436,6 +426,14 @@ const layer = Layer.effect(
           })
         if (!boundary) return yield* new ForkEmptyError({ sessionID: input.sessionID })
         const sessionID = SessionSchema.ID.create()
+        const inherited = yield* db
+          .transaction(() =>
+            Effect.all({
+              instructions: InstructionState.current(db, parent.id),
+              instructionEntries: InstructionEntry.snapshot(db, parent.id),
+            }),
+          )
+          .pipe(Effect.orDie)
         // The fork adopts the parent's newest instruction values rather than the
         // values in effect at the boundary; copied history may contain frozen
         // instruction-update text the initial baseline already reflects.
@@ -443,7 +441,7 @@ const layer = Layer.effect(
           sessionID,
           parentID: parent.id,
           boundary: { ...input.boundary, messageID: boundary.id },
-          instructions: yield* InstructionState.current(db, parent.id),
+          ...inherited,
         })
         return yield* result.get(sessionID).pipe(Effect.orDie)
       }),
@@ -456,6 +454,18 @@ const layer = Layer.effect(
         yield* result.get(input.sessionID)
         if (input.variables !== undefined) yield* environments.set(input.sessionID, input.variables)
         return yield* environments.get(input.sessionID)
+      }),
+      view: Effect.fn("Session.view")(function* (input) {
+        const row = yield* db
+          .select({ idle: SessionTable.time_idle, viewed: SessionTable.time_viewed })
+          .from(SessionTable)
+          .where(eq(SessionTable.id, input.sessionID))
+          .get()
+          .pipe(Effect.orDie)
+        if (!row) return yield* new NotFoundError({ sessionID: input.sessionID })
+        if (row.idle === null || input.idle > row.idle || (row.viewed !== null && row.viewed >= input.idle))
+          return yield* Effect.void
+        yield* bus.publish(SessionEvent.Viewed, { sessionID: input.sessionID, idle: input.idle })
       }),
       remove: Effect.fn("Session.remove")(function* (sessionID) {
         const session = yield* result.get(sessionID)
@@ -633,35 +643,19 @@ const layer = Layer.effect(
           yield* plugins.flush
           return yield* Command.Service
         }).pipe(Effect.provide(locations.get(session.location)))
-        const command = yield* commands.get(input.command)
-        if (!command)
-          return yield* new Command.NotFoundError({
-            command: input.command,
-            message: `Command not found: ${input.command}`,
-          })
-        const evaluated = yield* commands.evaluate({ name: input.command, arguments: input.arguments })
-
-        // TODO(v2 commands): decide whether command-level subtask/background execution belongs in v2 commands.
-        const agent = command.agent ?? input.agent
-        const commandAgent = yield* Effect.gen(function* () {
-          if (!command.agent) return undefined
-          const agents = yield* Agent.Service.pipe(Effect.provide(locations.get(session.location)))
-          return yield* agents.get(Agent.ID.make(command.agent))
-        })
-        const model = command.model ?? commandAgent?.model ?? input.model
-        if (agent !== undefined && session.agent !== Agent.ID.make(agent))
-          yield* result.switchAgent({ sessionID: input.sessionID, agent: Agent.ID.make(agent) })
-        if (model !== undefined) yield* result.switchModel({ sessionID: input.sessionID, model })
-
-        return yield* result.prompt({
-          id: input.id,
-          sessionID: input.sessionID,
-          text: evaluated.text,
-          files: input.files,
-          agents: input.agents,
-          skills: input.skills,
-          delivery: input.delivery,
-          resume: input.resume,
+        const delivery = input.delivery ?? "steer"
+        yield* commands.execute({
+          name: input.command,
+          invocation: {
+            sessionID: input.sessionID,
+            prompt: {
+              text: input.text,
+              files: input.files,
+              agents: input.agents,
+              skills: input.skills,
+            },
+            delivery,
+          },
         })
       }),
       shell: Effect.fn("Session.shell")(function* (input) {

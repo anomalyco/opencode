@@ -7,7 +7,7 @@ import { createStore } from "solid-js/store"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useLanguage } from "@/runtime/i18n/language"
 import { Icon } from "@opencode-ai/ui/icon"
-import { errorDescriptionKey } from "./description"
+import { errorDescriptionKey, errorStatus } from "./description"
 
 export type InitError = {
   name: string
@@ -223,6 +223,7 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
   const platform = usePlatform()
   const language = useLanguage()
   const formattedError = () => formatError(props.error, language.t)
+  const status = () => errorStatus(props.error)
   let recordedFatalError: Promise<void> | undefined
   const [store, setStore] = createStore({
     actionError: undefined as string | undefined,
@@ -277,14 +278,20 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
 
   return (
     <div
-      class="relative flex-1 h-screen w-screen min-h-0 flex flex-col items-center justify-center font-sans"
+      class="relative flex-1 h-screen w-screen min-h-0 overflow-y-auto flex flex-col items-center justify-start sm:justify-center p-4 sm:p-8 font-sans"
       data-tauri-drag-region
     >
-      <div class="w-2/3 max-w-3xl flex flex-col items-center justify-center gap-8">
-        <Logo class="w-58.5 opacity-12 shrink-0" />
+      <div class="w-full max-w-3xl flex flex-col items-center justify-center gap-6 sm:gap-8 my-auto">
+        <Logo class="w-48 sm:w-58.5 opacity-12 shrink-0" />
         <div class="flex flex-col items-center gap-2 text-center">
-          <h1 class="text-lg font-medium text-text-strong">{language.t("error.page.title")}</h1>
-          <p class="text-sm text-text-weak">{language.t(errorDescriptionKey(props.error))}</p>
+          <h1 class="text-lg font-medium text-text-strong">
+            {language.t(status() ? "error.page.title.status" : "error.page.title")}
+          </h1>
+          <p class="text-sm text-text-weak">
+            {status()
+              ? language.t("error.page.description.status", { status: status()! })
+              : language.t(errorDescriptionKey(props.error))}
+          </p>
         </div>
         <TextField
           value={formattedError()}
@@ -297,7 +304,7 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
         />
         <div class="flex flex-row items-center justify-center gap-3 flex-wrap max-w-64">
           <Button size="large" onClick={platform.restart}>
-            {language.t("error.page.action.restart")}
+            {language.t(platform.platform === "web" ? "error.page.action.reload" : "error.page.action.restart")}
           </Button>
           <Show when={platform.platform === "desktop" && platform.exportDebugLogs}>
             <Button size="large" variant="ghost" onClick={exportDebugLogs}>
@@ -348,8 +355,8 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
         <Show when={store.actionError}>
           {(message) => <p class="text-xs text-text-danger-base text-center max-w-2xl">{message()}</p>}
         </Show>
-        <div class="flex flex-col items-center gap-2">
-          <div class="flex items-center justify-center gap-1">
+        <div class="flex flex-col items-center gap-2 text-xs text-center">
+          <div class="flex flex-wrap items-center justify-center gap-1">
             {language.t("error.page.report.prefix")}
             <button
               type="button"

@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionMessageAssistant, SessionMessageInfo, SessionMessageUser } from "@opencode-ai/client/promise"
-import { loadOlderTimeline, selectUserMessages, selectVisibleUserMessages } from "./model"
+import {
+  enrichLeadingTurn,
+  leadingTurnNeedsParent,
+  loadOlderTimeline,
+  selectUserMessages,
+  selectVisibleUserMessages,
+} from "./model"
 
 const user = (id: string): SessionMessageUser => ({ id, type: "user", text: id, time: { created: 1 } })
 const assistant = (id: string): SessionMessageAssistant => ({
@@ -40,6 +46,56 @@ describe("timeline model", () => {
 
     expect(calls).toBe(1)
     expect(anchors).toEqual(["before", "after", true])
+  })
+
+  test("recognizes a leading partial assistant turn", () => {
+    expect(leadingTurnNeedsParent([assistant("msg_assistant"), user("msg_next")])).toBe(true)
+    expect(leadingTurnNeedsParent([user("msg_user"), assistant("msg_assistant")])).toBe(false)
+    expect(leadingTurnNeedsParent([user("msg_user")])).toBe(false)
+  })
+
+  test("pauses between bounded history pages until the leading turn has its parent", async () => {
+    const pages: SessionMessageInfo[][] = [[assistant("msg_older")], [user("msg_parent")]]
+    const messages: SessionMessageInfo[] = [assistant("msg_latest"), user("msg_next")]
+    let pauses = 0
+    let loads = 0
+
+    await enrichLeadingTurn({
+      current: () => true,
+      messages: () => messages,
+      more: () => pages.length > 0,
+      loading: () => false,
+      loadMore: async () => {
+        messages.unshift(...pages.shift()!)
+        loads += 1
+      },
+      pause: async () => {
+        pauses += 1
+      },
+      maxPages: 3,
+    })
+
+    expect(loads).toBe(2)
+    expect(pauses).toBe(2)
+    expect(leadingTurnNeedsParent(messages)).toBe(false)
+  })
+
+  test("caps background pages when the parent remains outside the window", async () => {
+    let loads = 0
+
+    await enrichLeadingTurn({
+      current: () => true,
+      messages: () => [assistant("msg_latest")],
+      more: () => true,
+      loading: () => false,
+      loadMore: async () => {
+        loads += 1
+      },
+      pause: async () => undefined,
+      maxPages: 3,
+    })
+
+    expect(loads).toBe(3)
   })
 
   test("does not restore an anchor after the session changes", async () => {

@@ -16,6 +16,11 @@ export type PartGroup =
       type: "context"
       refs: PartRef[]
     }
+  | {
+      key: string
+      type: "file"
+      refs: PartRef[]
+    }
 
 export namespace TimelineRow {
   export class TurnGap extends Data.TaggedClass("TurnGap")<{
@@ -83,8 +88,11 @@ export namespace TimelineRow {
         return `notice:${row.messageID}`
       case "TurnDivider":
         return `turn-divider:${row.userMessageID}`
+      // Keyed by part identity alone: a page boundary can truncate the leading turn,
+      // and its rows regroup under the real user message once older history loads.
+      // The group key already carries the owning message and part IDs.
       case "AssistantPart":
-        return `assistant-part:${row.userMessageID}:${row.group.key}`
+        return `assistant-part:${row.group.key}`
       case "Thinking":
         return `thinking:${row.userMessageID}`
       case "Error":

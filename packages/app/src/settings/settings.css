@@ -134,7 +134,7 @@
   font-style: normal;
   font-size: 13px;
   font-weight: 530;
-  line-height: 1;
+  line-height: var(--line-height-compact);
   letter-spacing: -0.04px;
   color: var(--v2-text-text-base);
   font-variation-settings: "slnt" 0;
@@ -281,7 +281,7 @@
   padding-block: 20px;
   font-size: 13px;
   font-weight: 440;
-  line-height: 1;
+  line-height: var(--line-height-compact);
   color: var(--v2-text-text-muted);
 }
 
@@ -289,7 +289,7 @@
   padding-inline-end: 12px;
   font-size: 13px;
   font-weight: 440;
-  line-height: 1;
+  line-height: var(--line-height-compact);
   color: var(--v2-text-text-muted);
   opacity: 0;
   transition: opacity 200ms ease;
@@ -307,7 +307,7 @@
   background: transparent;
   font-size: 13px;
   font-weight: 530;
-  line-height: 1;
+  line-height: var(--line-height-compact);
   color: var(--v2-text-text-accent);
   cursor: pointer;
   text-align: start;
@@ -329,7 +329,7 @@
   padding-bottom: 0;
   font-size: 13px;
   font-weight: 530;
-  line-height: 1;
+  line-height: var(--line-height-compact);
 }
 
 .settings-providers .settings-section-title + [data-component="settings-list"] {
@@ -478,7 +478,7 @@
   padding-block: 48px;
   font-size: 13px;
   font-weight: 440;
-  line-height: 1;
+  line-height: var(--line-height-compact);
   color: var(--v2-text-text-muted);
   text-align: center;
 }
@@ -495,7 +495,7 @@
   padding-bottom: 0;
   font-size: 13px;
   font-weight: 530;
-  line-height: 1;
+  line-height: var(--line-height-compact);
 }
 
 .settings-shortcuts [data-component="settings-list"] {
@@ -525,7 +525,7 @@
 .settings-shortcuts [data-component="settings-list"] > div > span {
   font-weight: 440;
   font-size: 13px;
-  line-height: 1;
+  line-height: var(--line-height-compact);
   letter-spacing: -0.04px;
   color: var(--v2-text-text-base);
   font-variation-settings: "slnt" 0;
@@ -577,7 +577,7 @@
   padding-block: 48px;
   font-size: 13px;
   font-weight: 440;
-  line-height: 1;
+  line-height: var(--line-height-compact);
   color: var(--v2-text-text-muted);
   text-align: center;
 }
@@ -654,7 +654,7 @@
 .settings-servers-name {
   font-size: 13px;
   font-weight: 530;
-  line-height: 1;
+  line-height: var(--line-height-compact);
   color: var(--v2-text-text-base);
 }
 
@@ -674,7 +674,7 @@
   padding-block: 48px;
   font-size: 13px;
   font-weight: 440;
-  line-height: 1;
+  line-height: var(--line-height-compact);
   color: var(--v2-text-text-muted);
   text-align: center;
 }
@@ -724,6 +724,8 @@
   display: flex;
   flex-direction: column;
   gap: 0;
+  max-height: 480px;
+  overflow-y: auto;
   padding: 20px;
   border-radius: 6px;
   background-color: var(--v2-background-bg-base);
@@ -784,7 +786,7 @@
   font-family: inherit;
   font-size: 13px;
   font-weight: 530;
-  line-height: 1;
+  line-height: var(--line-height-compact);
   letter-spacing: -0.04px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -796,7 +798,7 @@
 .settings-workspaces-meta {
   font-size: 13px;
   font-weight: 440;
-  line-height: 1;
+  line-height: var(--line-height-compact);
   color: var(--v2-text-text-faint);
 }
 
@@ -856,7 +858,7 @@
   padding-block: 48px;
   font-size: 13px;
   font-weight: 440;
-  line-height: 1;
+  line-height: var(--line-height-compact);
   color: var(--v2-text-text-muted);
 }
 
@@ -885,6 +887,8 @@
   }
 
   .settings-workspaces-inventory [data-component="settings-list"] {
+    max-height: none;
+    overflow-y: visible;
     padding: 14px;
   }
 
@@ -933,7 +937,7 @@
 .settings-server-dialog-label {
   font-size: 13px;
   font-weight: 530;
-  line-height: 1;
+  line-height: var(--line-height-compact);
   color: var(--v2-text-text-base);
 }
 

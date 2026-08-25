@@ -1,0 +1,36 @@
+---
+import { getCollection, render, type CollectionEntry } from "astro:content"
+import Callout from "../../docs/components/Callout.astro"
+import Card from "../../docs/components/Card.astro"
+import CardGroup from "../../docs/components/CardGroup.astro"
+import CodeBlock from "../../docs/components/CodeBlock.astro"
+import DocsLayout from "../../docs/layouts/DocsLayout.astro"
+
+interface Props {
+  entry: CollectionEntry<"docs">
+}
+
+export async function getStaticPaths() {
+  return (await getCollection("docs")).map((entry) => ({
+    params: {
+      slug: entry.id === "index" ? undefined : entry.id.replace(/\/index$/, ""),
+    },
+    props: { entry },
+  }))
+}
+
+export const prerender = true
+
+const entry = Astro.props.entry
+const rendered = await render(entry)
+---
+
+<DocsLayout
+  title={entry.data.title}
+  description={entry.data.description}
+  currentSlug={entry.id}
+  headings={rendered.headings}
+  showTableOfContents={entry.data.tableOfContents !== false}
+>
+  <rendered.Content components={{ Callout, Card, CardGroup, CodeBlock }} />
+</DocsLayout>

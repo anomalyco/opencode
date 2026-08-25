@@ -1,9 +1,10 @@
 import { Route, useParams } from "@solidjs/router"
-import { createMemo, lazy, Show, type ParentProps } from "solid-js"
+import { createMemo, lazy, Show, Suspense, type ParentProps } from "solid-js"
 import { Home } from "@/home/route"
 import { ServerProvider } from "@/runtime/server/current"
 import { useGlobal } from "@/runtime/server/runtime"
 import { ServerConnection } from "@/runtime/server/registry"
+import { SessionPanelFrame, SessionRouteFrame } from "@/session/session-frame"
 import { LayoutProvider } from "@/shell/state/layout"
 import Shell from "@/shell/shell"
 import { requireServerKey } from "./session"
@@ -31,9 +32,19 @@ export function AppRoutes() {
       <Route
         path="/server/:serverKey/session/:id"
         component={() => (
-          <TargetServerRoute>
-            <TargetSessionRouteContent />
-          </TargetServerRoute>
+          <SessionRouteFrame>
+            <Suspense
+              fallback={
+                <div class="flex min-h-0 flex-1 p-2">
+                  <SessionPanelFrame raised />
+                </div>
+              }
+            >
+              <TargetServerRoute>
+                <TargetSessionRouteContent />
+              </TargetServerRoute>
+            </Suspense>
+          </SessionRouteFrame>
         )}
       />
       <Route path="/new-session" component={DraftRoute} />

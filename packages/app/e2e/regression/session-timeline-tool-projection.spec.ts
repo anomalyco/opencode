@@ -98,9 +98,9 @@ test("labels completed searches with result counts", async ({ page }) => {
 
   const group = page.locator(`[data-timeline-part-ids="${glob},${grep}"]`)
   await group.locator('[data-slot="collapsible-trigger"]').click()
-  const rows = group.locator('[data-component="tool-trigger"]')
-  await expect(rows.nth(0)).toContainText("(1 match)")
-  await expect(rows.nth(1)).toContainText("(12 matches)")
+  const rows = group.locator('[data-component="context-tool-group-list"] [data-component="tool-trigger"]')
+  await expect(rows.filter({ hasText: "Glob" })).toContainText("(1 match)")
+  await expect(rows.filter({ hasText: "Grep" })).toContainText("(12 matches)")
 })
 
 test("labels read tools from their path input", async ({ page }) => {
@@ -111,7 +111,11 @@ test("labels read tools from their path input", async ({ page }) => {
 
   const group = page.locator(`[data-timeline-part-ids="${id}"]`)
   await group.locator('[data-slot="collapsible-trigger"]').click()
-  await expect(group.locator('[data-slot="basic-tool-tool-subtitle"]')).toHaveText("a.ts")
+  await expect(
+    group
+      .locator('[data-component="context-tool-group-list"] [data-component="tool-trigger"]')
+      .filter({ hasText: "Read" }),
+  ).toContainText("a.ts")
 })
 
 test("labels skill tools from IDs and result metadata", async ({ page }) => {
@@ -121,25 +125,23 @@ test("labels skill tools from IDs and result metadata", async ({ page }) => {
     messages: [
       userMessage(),
       assistantMessage([
-        toolPart(pending, "skill", "running", { id: "sample-skill" }),
+        toolPart(pending, "skill", "running", { id: "frontend-design" }),
         toolPart(completed, "skill", "completed", { id: "opencode" }, { metadata: { name: "OpenCode" } }),
       ]),
     ],
   })
 
-  await expect(page.locator(`[data-timeline-part-id="${pending}"] [data-component="text-shimmer"]`)).toHaveAttribute(
-    "aria-label",
-    "sample-skill",
-  )
-  await expect(page.locator(`[data-timeline-part-id="${completed}"] [data-component="text-shimmer"]`)).toHaveAttribute(
-    "aria-label",
-    "OpenCode",
-  )
-  for (const id of [pending, completed]) {
+  for (const [id, name] of [
+    [pending, "frontend-design"],
+    [completed, "OpenCode"],
+  ] as const) {
     const skill = page.locator(`[data-timeline-part-id="${id}"]`)
-    await expect(skill.locator('[data-slot="skill-tool-label"]')).toHaveText("Skill")
-    await expect(skill.locator('[data-slot="skill-tool-separator"]')).toHaveText("·")
-    await expect(skill.locator('use[href="#opencode-v2-icon-post-skill"]')).toBeVisible()
+    const loaded = skill.locator('[data-component="tool-loaded-item"]')
+    await expect(loaded).toHaveAttribute("aria-label", `Loaded ${name} skill`)
+    await expect(loaded).toHaveCSS("line-height", "16px")
+    await expect(loaded.locator('[data-slot="tool-loaded-label"]')).toHaveText("Loaded")
+    await expect(loaded.locator('[data-slot="tool-loaded-kind"]')).toHaveText("skill")
+    await expect(loaded.locator('[data-component="text-shimmer"]')).toHaveAttribute("aria-label", name)
   }
 })
 

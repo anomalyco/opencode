@@ -84,7 +84,6 @@ export type SessionPreviewProps = {
   draft?: string
   request?: { type: "permission"; value: PermissionRequest } | { type: "question"; value: FormInfo }
   reviewOpened?: boolean
-  backgroundTasks?: { id: string; type: "shell" | "subagent"; label: string }[]
   child?: { parentID: string }
   terminal?: { title: string; lines: string[] }
 }
@@ -196,13 +195,6 @@ function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void 
         setState("request", undefined)
         setState("activity", `Permission response: ${response}`)
       },
-      background: {
-        blocking: () => [],
-        tasks: () => props.backgroundTasks ?? [],
-        move: async () => {
-          setState("activity", "Requested background execution")
-        },
-      },
       blocked: () => state.request !== undefined,
     },
     centered: () => true,
@@ -216,8 +208,6 @@ function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void 
     parentID: () => props.child?.parentID,
     child: () => !!props.child,
     showComposer: () => true,
-    handoffPrompt: () => undefined,
-    promptReady: () => true,
   } satisfies SessionComposerRegionViewController
 
   return (

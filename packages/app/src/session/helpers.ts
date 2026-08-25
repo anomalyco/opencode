@@ -101,11 +101,11 @@ export const focusTerminalById = (id: string) => {
 
   const textarea = terminal.querySelector("textarea")
   if (textarea instanceof HTMLTextAreaElement) {
-    textarea.focus()
+    textarea.focus({ preventScroll: true })
     return true
   }
 
-  terminal.focus()
+  terminal.focus({ preventScroll: true })
   terminal.dispatchEvent(
     typeof PointerEvent === "function"
       ? new PointerEvent("pointerdown", { bubbles: true, cancelable: true })

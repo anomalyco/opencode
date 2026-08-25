@@ -59,7 +59,7 @@
 
   font-size: 13px;
   font-weight: 440;
-  line-height: 100%;
+  line-height: var(--line-height-compact);
   letter-spacing: -0.04px;
 }
 

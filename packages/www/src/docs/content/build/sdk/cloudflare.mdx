@@ -1,0 +1,81 @@
+---
+title: "Cloudflare"
+---
+
+Use `@opencode-ai/sdk/workerd` inside a Cloudflare Durable Object. This profile uses the object's SQLite storage,
+persists durable events for eviction recovery, and replaces unavailable local filesystem and process services.
+
+```sh
+bun add @opencode-ai/sdk@dev
+```
+
+Hold one host for the lifetime of the Durable Object instance instead of creating one for every request.
+
+```ts
+import { OpenCodeWorkerd } from "@opencode-ai/sdk/workerd"
+import myPlugin from "./my-plugin"
+
+export class OpenCodeDO {
+  private readonly opencode: Promise<OpenCodeWorkerd.Interface>
+
+  constructor(state: DurableObjectState) {
+    this.opencode = state.blockConcurrencyWhile(() =>
+      OpenCodeWorkerd.create({
+        storage: state.storage,
+        config: { default_agent: "build" },
+        plugins: [myPlugin],
+      }),
+    )
+  }
+
+  async fetch() {
+    const opencode = await this.opencode
+    return Response.json(await opencode.health.get())
+  }
+}
+```
+
+`blockConcurrencyWhile` keeps every Durable Object event out until the host is ready and resets the object if
+initialization fails. The retained Promise gives request handlers direct access to the same host after startup.
+
+```ts
+constructor(state: DurableObjectState) {
+  this.opencode = state.blockConcurrencyWhile(() =>
+    OpenCodeWorkerd.create({ storage: state.storage }),
+  )
+}
+```
+
+Configuration is a typed JavaScript object, and plugins are imported values bundled with the Worker.
+
+```ts
+await OpenCodeWorkerd.create({
+  storage: state.storage,
+  config: { default_agent: "build" },
+  plugins: [myPlugin],
+})
+```
+
+Wrangler selects OpenCode's Workerd-safe implementations through the `workerd` package condition. Cloudflare may evict
+a Durable Object without running cleanup, so correctness does not depend on `close()` being called.
+
+```jsonc title="wrangler.jsonc"
+{
+  "compatibility_flags": ["nodejs_compat"]
+}
+```
+
+## Effect
+
+Use the Effect-native entrypoint from `@opencode-ai/sdk/workerd/effect`.
+
+```ts
+import { OpenCodeWorkerd } from "@opencode-ai/sdk/workerd/effect"
+import { Effect } from "effect"
+
+const program = Effect.scoped(
+  Effect.gen(function* () {
+    return yield* OpenCodeWorkerd.create({ storage: state.storage })
+  }),
+)
+```

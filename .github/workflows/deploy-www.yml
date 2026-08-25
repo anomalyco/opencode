@@ -27,7 +27,6 @@ jobs:
         working-directory: packages/www
         run: bun run build
         env:
-          BLUME_ENV: ${{ github.ref_name == 'v2' && 'production' || 'dev' }}
           CLOUDFLARE_ENV: ${{ github.ref_name == 'v2' && 'production' || 'dev' }}
 
       - name: Deploy

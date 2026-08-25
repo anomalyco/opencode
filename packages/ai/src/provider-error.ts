@@ -80,6 +80,9 @@ export interface ProviderFailure {
   readonly message: string
   readonly status?: number | undefined
   readonly code?: string | undefined
+  // Raw wire payload, scanned for failure signals (codes, overflow phrases)
+  // that the summary message does not carry. Not shown to users.
+  readonly rawBody?: string | undefined
   readonly retryAfterMs?: number | undefined
   readonly rateLimit?: HttpRateLimitDetails | undefined
   readonly http?: HttpContext | undefined
@@ -89,11 +92,13 @@ export interface ProviderFailure {
 // Keep HTTP failures and provider-reported stream failures on one typed path so
 // session retry policy never needs provider-specific string matching.
 export function classifyProviderFailure(input: ProviderFailure): AIError["reason"] {
-  const body = input.http?.body ?? ""
+  const body = input.http?.body ?? input.rawBody ?? ""
   const codes = [input.code, ...providerCodes(body), ...providerCodes(input.message)]
     .filter((code): code is string => code !== undefined)
     .map((code) => code.toLowerCase())
-  const text = body || input.message
+  // Scan the raw payload too so signals missing from the summary message
+  // (e.g. overflow phrases nested in a JSON error body) still classify.
+  const text = [input.message, body].filter((value) => value.length > 0).join("\n")
   const common = { message: input.message, providerMetadata: input.providerMetadata, http: input.http }
   const clientScoped = input.status === undefined || (input.status >= 400 && input.status < 500)
 

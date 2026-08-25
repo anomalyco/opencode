@@ -121,7 +121,7 @@ describe("fromPromise", () => {
     }),
   )
 
-  it.effect("preserves no-content and rejected Promise behavior", () =>
+  it.effect("preserves interrupt results and rejected Promise behavior", () =>
     Effect.gen(function* () {
       const seen: unknown[] = []
       const host = testHost({
@@ -131,7 +131,7 @@ describe("fromPromise", () => {
               return Effect.fail(new Error("interrupt failed"))
             }
             expect(input.continue).toBe(true)
-            return Effect.void
+            return Effect.succeed({ interrupted: false })
           },
           switchAgent: (input) => Effect.sync(() => seen.push(input)),
           switchModel: (input) => Effect.sync(() => seen.push(input)),
@@ -144,7 +144,9 @@ describe("fromPromise", () => {
         define({
           id: "promise-session-interrupt",
           setup: async (ctx) => {
-            expect(await ctx.session.interrupt({ sessionID: "ses_success", continue: true })).toBeUndefined()
+            expect(await ctx.session.interrupt({ sessionID: "ses_success", continue: true })).toEqual({
+              interrupted: false,
+            })
             await expect(ctx.session.interrupt({ sessionID: "ses_failure" })).rejects.toThrow("interrupt failed")
             expect(await ctx.session.switchAgent({ sessionID: "ses_success", agent: "build" })).toBeUndefined()
             expect(

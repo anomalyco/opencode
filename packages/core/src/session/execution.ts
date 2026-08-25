@@ -24,9 +24,10 @@ export interface Interface {
   /**
    * Interrupt active work owned by this process. Idle interruption is a no-op. Resolves once
    * the interruption is accepted; cleanup settles asynchronously in the execution fiber.
-   * Compose with `awaitIdle` when settlement matters.
+   * Returns whether an active execution was interrupted. Compose with `awaitIdle` when
+   * settlement matters.
    */
-  readonly interrupt: (sessionID: SessionSchema.ID, options?: { readonly continue?: boolean }) => Effect.Effect<void>
+  readonly interrupt: (sessionID: SessionSchema.ID, options?: { readonly continue?: boolean }) => Effect.Effect<boolean>
   /** Resolves once this process owns no active execution for the Session. Returns immediately when idle and never starts work. */
   readonly awaitIdle: (sessionID: SessionSchema.ID) => Effect.Effect<void>
 }
@@ -140,8 +141,8 @@ export const layer = Layer.effect(
       active: coordinator.active,
       interrupt: (sessionID, options) =>
         Effect.gen(function* () {
-          yield* coordinator.interrupt(sessionID, "user")
-          if (!options?.continue) return
+          const interrupted = yield* coordinator.interrupt(sessionID, "user")
+          if (!options?.continue) return interrupted
           // Resume steering input and between-turn control work from the interrupted
           // intent. Queued next-turn prompts stay parked: a steer-scoped drain never
           // promotes them, and a control item behind a queued prompt waits its turn.
@@ -151,9 +152,10 @@ export const layer = Layer.effect(
           // rows inside uninterruptible publications, so a steer row is either still
           // promotable here or was fully delivered and needs no resumption.
           const next = yield* SessionInbox.nextPromotable(db, sessionID, "input")
-          if (next === undefined) return
+          if (next === undefined) return interrupted
           if (next.delivery === "steer" || next.type === "compaction" || next.type === "move")
             yield* coordinator.wake(sessionID, "steer")
+          return interrupted
         }),
       resume: coordinator.run,
       wake: coordinator.wake,
@@ -175,7 +177,7 @@ export const noopLayer = Layer.succeed(
     active: Effect.succeed(new Set()),
     resume: () => Effect.void,
     wake: () => Effect.void,
-    interrupt: () => Effect.void,
+    interrupt: () => Effect.succeed(false),
     awaitIdle: () => Effect.void,
   }),
 )

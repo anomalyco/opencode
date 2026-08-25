@@ -601,6 +601,7 @@ describe("acp event behavior", () => {
       },
       onInterrupt({ sessionID, send }) {
         send(durableEvent("session.execution.interrupted", { sessionID, reason: "user" }))
+        return true
       },
     })
     const result = streamTurn({
@@ -624,7 +625,7 @@ describe("acp event behavior", () => {
       await withTimeout(submitted.promise, "cancel test prompt was not admitted")
       control.cancelled = true
       control.admission.abort()
-      await fixture.client.session.interrupt({ sessionID: "ses_cancel" })
+      expect(await fixture.client.session.interrupt({ sessionID: "ses_cancel" })).toEqual({ interrupted: true })
 
       const response = await withTimeout(result, "cancelled turn did not terminate")
       expect(response).toMatchObject({ stopReason: "cancelled" })

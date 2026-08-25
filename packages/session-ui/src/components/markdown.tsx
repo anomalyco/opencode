@@ -1,5 +1,4 @@
 import { useI18n } from "@opencode-ai/ui/context/i18n"
-import morphdom from "morphdom"
 import { checksum } from "@opencode-ai/util/encode"
 import {
   type ComponentProps,
@@ -32,6 +31,7 @@ import { shouldResetCodeTokens, type RenderedCodeState } from "./markdown-code-s
 import { getCachedMarkdown, sanitizeMarkdown, touchCachedMarkdown, type MarkdownCacheEntry } from "./markdown-cache"
 import { inlineCodeKind } from "./markdown-inline-code-kind"
 import { renderMermaidSvg } from "./markdown-mermaid"
+import { createMarkdownRenderer } from "./markdown-solid"
 
 type RenderedBlock =
   | (MarkdownCacheEntry & { key: string; mode: Exclude<Block["mode"], "code"> })
@@ -50,9 +50,14 @@ type RenderedBlock =
 type RenderResult = {
   text: string
   blocks: RenderedBlock[]
+  ready: boolean
 }
 
 const renderedCodeTokens = new WeakMap<HTMLDivElement, RenderedCodeState>()
+const renderedMarkdown = new WeakMap<
+  HTMLDivElement,
+  { renderer: ReturnType<typeof createMarkdownRenderer>; raw: string }
+>()
 
 function escape(text: string) {
   return text
@@ -176,18 +181,23 @@ function disposeCopyButtons(root: Element) {
   hosts.forEach(disposeCopyButton)
 }
 
+function disposeRenderedMarkdown(root: Element) {
+  const blocks = [
+    ...(root instanceof HTMLDivElement && root.hasAttribute("data-markdown-block") ? [root] : []),
+    ...Array.from(root.querySelectorAll<HTMLDivElement>("[data-markdown-block]")),
+  ]
+  blocks.forEach((block) => {
+    renderedMarkdown.get(block)?.renderer.dispose()
+    renderedMarkdown.delete(block)
+  })
+}
+
 const shellLanguages = new Set(["bash", "sh", "shell", "zsh", "fish", "console", "terminal"])
 
 function codeKind(language: string | undefined) {
   const value = language?.toLowerCase()
   if (!value) return
   if (shellLanguages.has(value)) return "shell"
-}
-
-function codeLanguage(block: HTMLPreElement) {
-  const code = block.querySelector("code")
-  if (!(code instanceof HTMLElement)) return
-  return code.className.match(/(?:^|\s)language-([^\s]+)/)?.[1]
 }
 
 function applyCodeMetadata(wrapper: HTMLElement, language: string | undefined) {
@@ -197,37 +207,6 @@ function applyCodeMetadata(wrapper: HTMLElement, language: string | undefined) {
   const kind = codeKind(language)
   if (kind) wrapper.dataset.codeKind = kind
   else delete wrapper.dataset.codeKind
-}
-
-function ensureCodeWrapper(block: HTMLPreElement, labels: CopyLabels) {
-  const parent = block.parentElement
-  if (!parent) return
-  const wrapped = parent.getAttribute("data-component") === "markdown-code"
-  if (!wrapped) {
-    const wrapper = document.createElement("div")
-    wrapper.setAttribute("data-component", "markdown-code")
-    applyCodeMetadata(wrapper, codeLanguage(block))
-    parent.replaceChild(wrapper, block)
-    wrapper.appendChild(block)
-    wrapper.appendChild(createCopyButton(labels))
-    return
-  }
-
-  applyCodeMetadata(parent, codeLanguage(block))
-
-  const buttons = Array.from(parent.querySelectorAll('[data-slot="markdown-copy-button"]')).filter(
-    (el): el is HTMLButtonElement => el instanceof HTMLButtonElement,
-  )
-
-  if (buttons.length === 0) {
-    parent.appendChild(createCopyButton(labels))
-    return
-  }
-
-  for (const button of buttons.slice(1)) {
-    disposeCopyButton(button)
-    button.remove()
-  }
 }
 
 function decorateMermaid(wrapper: HTMLElement, code: HTMLElement, complete: boolean) {
@@ -310,18 +289,6 @@ function markInlineCode(root: HTMLDivElement) {
   }
 }
 
-function decorate(root: HTMLDivElement, labels: CopyLabels, complete: boolean) {
-  const blocks = Array.from(root.querySelectorAll("pre"))
-  for (const block of blocks) {
-    ensureCodeWrapper(block, labels)
-    const wrapper = block.parentElement
-    const code = block.querySelector("code")
-    if (wrapper instanceof HTMLElement && code instanceof HTMLElement) decorateMermaid(wrapper, code, complete)
-  }
-  markInlineCode(root)
-  markCodeLinks(root)
-}
-
 function setupCodeCopy(root: HTMLDivElement, getLabels: () => CopyLabels) {
   const timeouts = new Map<HTMLElement, ReturnType<typeof setTimeout>>()
 
@@ -367,8 +334,14 @@ function setupCodeCopy(root: HTMLDivElement, getLabels: () => CopyLabels) {
   }
 }
 
-function initialResult(text: string, key: string | undefined, projection: Projection, owner: string): RenderResult {
-  if (!text) return { text, blocks: [] }
+function initialResult(
+  text: string,
+  key: string | undefined,
+  projection: Projection,
+  owner: string,
+  deferUntilReady: boolean | undefined,
+): RenderResult {
+  if (!text) return { text, blocks: [], ready: true }
   const base = key ?? checksum(text)
   if (base) {
     const blocks = projection.blocks.flatMap((block, index) => {
@@ -378,10 +351,12 @@ function initialResult(text: string, key: string | undefined, projection: Projec
       if (cached?.raw !== block.raw) return []
       return [{ key: `${owner}:${cacheKey}`, mode: block.mode, ...cached }]
     })
-    if (blocks.length === projection.blocks.length) return { text, blocks }
+    if (blocks.length === projection.blocks.length) return { text, blocks, ready: true }
   }
+  if (deferUntilReady) return { text, blocks: [], ready: false }
   return {
     text,
+    ready: false,
     blocks: [
       {
         key: "initial",
@@ -403,11 +378,12 @@ export function Markdown(
     text: string
     cacheKey?: string
     streaming?: boolean
+    deferUntilReady?: boolean
     class?: string
     classList?: Record<string, boolean>
   },
 ) {
-  const [local, others] = splitProps(props, ["text", "cacheKey", "streaming", "class", "classList"])
+  const [local, others] = splitProps(props, ["text", "cacheKey", "streaming", "deferUntilReady", "class", "classList"])
   const i18n = useI18n()
   const [root, setRoot] = createSignal<HTMLDivElement>()
   const owner = createUniqueId()
@@ -448,10 +424,11 @@ export function Markdown(
         projection: value,
       }
     },
-    async (src) => {
+    async (src): Promise<RenderResult> => {
       if (isServer)
         return {
           text: src.text,
+          ready: true,
           blocks: [
             {
               key: "server",
@@ -462,7 +439,7 @@ export function Markdown(
             },
           ],
         } satisfies RenderResult
-      if (!src.text) return { text: src.text, blocks: [] } satisfies RenderResult
+      if (!src.text) return { text: src.text, blocks: [], ready: true } satisfies RenderResult
 
       const base = src.key ?? checksum(src.text)
       return Promise.all(
@@ -500,11 +477,12 @@ export function Markdown(
           return { key: blockKey, mode: block.mode, raw: block.raw, hash: hash ?? "", html: safe }
         }),
       )
-        .then((blocks) => ({ text: src.text, blocks }) satisfies RenderResult)
+        .then((blocks) => ({ text: src.text, blocks, ready: true }) satisfies RenderResult)
         .catch(
           () =>
             ({
               text: src.text,
+              ready: true,
               blocks: [
                 {
                   key: base ?? "fallback",
@@ -523,6 +501,7 @@ export function Markdown(
         local.cacheKey,
         local.streaming ? pendingProjection(local.text) : completedProjection(local.text),
         owner,
+        local.deferUntilReady,
       ),
     },
   )
@@ -533,12 +512,15 @@ export function Markdown(
     const container = root()
     const result = html.latest ?? html()
     const projected = currentProjection()
-    const content = local.text ? pendingBlocks(result, projected, local.cacheKey, owner) : []
+    const content = local.text ? pendingBlocks(result, projected, local.cacheKey, owner, local.deferUntilReady) : []
     if (!container) return
     if (isServer) return
+    delete container.dataset.markdownReady
     if (content.length === 0) {
       disposeCopyButtons(container)
+      disposeRenderedMarkdown(container)
       container.innerHTML = ""
+      if (result?.ready && result.text === local.text) container.dataset.markdownReady = ""
       return
     }
 
@@ -557,6 +539,7 @@ export function Markdown(
       const child = container.lastElementChild
       if (!child) break
       disposeCopyButtons(child)
+      disposeRenderedMarkdown(child)
       child.remove()
     }
     container
@@ -567,10 +550,13 @@ export function Markdown(
         copy: i18n.t("ui.message.copy"),
         copied: i18n.t("ui.message.copied"),
       }))
+    if (result?.ready && result.text === local.text) container.dataset.markdownReady = ""
   })
 
   onCleanup(() => {
     if (copyCleanup) copyCleanup()
+    const container = root()
+    if (container) disposeRenderedMarkdown(container)
     disposeMarkdownProjection(owner)
     activeCodeKeys.forEach(disposeCode)
     completedCode.clear()
@@ -579,7 +565,6 @@ export function Markdown(
   return (
     <div
       data-component="markdown"
-      data-markdown-ready={html.loading ? undefined : ""}
       dir="auto"
       classList={{
         ...local.classList,
@@ -596,9 +581,11 @@ function pendingBlocks(
   projection: Projection | undefined,
   cacheKey: string | undefined,
   owner: string,
+  deferUntilReady: boolean | undefined,
 ) {
   if (!result) return []
   if (!projection || result.text === projection.text) return result.blocks
+  if (deferUntilReady) return result.blocks
   const initial = result.blocks.length === 1 && result.blocks[0]?.key === "initial"
   return projection.blocks.map((block, index) => {
     const current = initial ? undefined : result.blocks[index]
@@ -630,44 +617,43 @@ function updateBlock(container: HTMLDivElement, index: number, block: RenderedBl
     updateCodeBlock(container, current, block, labels)
     return
   }
-  if (
-    current instanceof HTMLDivElement &&
-    current.dataset.markdownKey === block.key &&
-    current.dataset.markdownHash === block.hash
-  )
-    return
+  const existing = current instanceof HTMLDivElement && current.dataset.markdownKey === block.key ? current : undefined
+  if (existing?.dataset.markdownHash === block.hash) return
 
-  const next = document.createElement("div")
+  const next = existing ?? document.createElement("div")
   next.dataset.markdownBlock = ""
   next.dataset.markdownKey = block.key
   next.dataset.markdownHash = block.hash
   next.style.display = "contents"
-  next.innerHTML = block.html
-  decorate(next, labels, block.mode === "full")
+  const source = document.createElement("div")
+  source.innerHTML = block.html
+  markInlineCode(source)
+  markCodeLinks(source)
+  const html = source.innerHTML
 
-  if (!(current instanceof HTMLDivElement)) {
-    container.appendChild(next)
+  if (existing) {
+    const rendered = renderedMarkdown.get(existing)
+    if (rendered) {
+      rendered.renderer.update(html, block.mode === "live", rendered.raw !== block.raw)
+      rendered.raw = block.raw
+      return
+    }
+    existing.innerHTML = ""
+    renderedMarkdown.set(existing, {
+      renderer: createMarkdownRenderer(existing, html, block.mode === "live"),
+      raw: block.raw,
+    })
     return
   }
 
-  morphdom(current, next, {
-    onBeforeElUpdated: (fromEl, toEl) => {
-      if (
-        fromEl instanceof HTMLElement &&
-        toEl instanceof HTMLElement &&
-        fromEl.getAttribute("data-slot") === "markdown-copy-button" &&
-        toEl.getAttribute("data-slot") === "markdown-copy-button"
-      ) {
-        return false
-      }
-      if (fromEl.isEqualNode(toEl)) return false
-      return true
-    },
-    onBeforeNodeDiscarded: (node) => {
-      if (node instanceof Element) disposeCopyButtons(node)
-      return true
-    },
-  })
+  renderedMarkdown.set(next, { renderer: createMarkdownRenderer(next, html, block.mode === "live"), raw: block.raw })
+  if (!current) {
+    container.appendChild(next)
+    return
+  }
+  disposeCopyButtons(current)
+  disposeRenderedMarkdown(current)
+  current.replaceWith(next)
 }
 
 function updateCodeBlock(
@@ -739,6 +725,7 @@ function updateCodeBlock(
   })
   if (current) {
     disposeCopyButtons(current)
+    disposeRenderedMarkdown(current)
     current.replaceWith(next)
     return
   }

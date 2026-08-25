@@ -1,4 +1,5 @@
 import { markdown } from "@opencode-ai/ui/storybook/fixtures"
+import { createSignal, onCleanup } from "solid-js"
 import { Markdown } from "./markdown"
 
 export default {
@@ -29,6 +30,25 @@ export const CompactResult = {
       <Markdown
         text={"Updated the Session status and verified it.\n\n- **12 tests passed**\n- `bun typecheck` passed"}
       />
+    </div>
+  ),
+}
+
+const streamed =
+  "Streaming Markdown now keeps existing elements alive while each newly arriving word fades into the response."
+
+function StreamingMarkdown() {
+  const words = streamed.match(/\S+\s*/g) ?? []
+  const [count, setCount] = createSignal(1)
+  const timer = setInterval(() => setCount((value) => Math.min(value + 1, words.length)), 180)
+  onCleanup(() => clearInterval(timer))
+  return <Markdown text={words.slice(0, count()).join("")} streaming={count() < words.length} />
+}
+
+export const StreamingResponse = {
+  render: () => (
+    <div class="mx-auto max-w-[760px] rounded-lg border border-border-weak-base bg-background-base px-5 py-4">
+      <StreamingMarkdown />
     </div>
   ),
 }

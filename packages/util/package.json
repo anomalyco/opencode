@@ -25,7 +25,7 @@
       "default": "./src/global-roots.ts"
     },
     "#runtime-import": {
-      "workerd": "./src/runtime/import.bun.ts",
+      "workerd": "./src/runtime/import.workerd.ts",
       "bun": "./src/runtime/import.bun.ts",
       "node": "./src/runtime/import.node.ts",
       "default": "./src/runtime/import.bun.ts"

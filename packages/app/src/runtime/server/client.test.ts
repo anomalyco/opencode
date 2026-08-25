@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import type { OpenCodeEvent } from "@opencode-ai/client/promise"
 import { createRoot } from "solid-js"
-import { createOpenCodeEventSource } from "./client"
+import { createOpenCodeEventSource, createServerTransport } from "./client"
 
 const permission = {
   id: "evt_permission",
@@ -83,4 +83,40 @@ describe("server event stream", () => {
     expect(received).toEqual({ first: 1, second: 1 })
     second.dispose()
   })
+})
+
+test("rotates HTTP and PTY clients together", async () => {
+  const requests: Array<{ url: string; authorization: string | null }> = []
+  const fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const request = input instanceof Request ? input : new Request(input, init)
+    requests.push({ url: request.url, authorization: request.headers.get("authorization") })
+    return Response.json({ healthy: true, version: "2.0.0-test", pid: 1 })
+  }) as typeof globalThis.fetch
+  const transport = createServerTransport({
+    http: { url: "http://127.0.0.1:4100", username: "opencode", password: "first" },
+    fetch,
+  })
+  const initialPty = transport.pty
+
+  await transport.api.health.get()
+  const replacement = transport.update({
+    url: "http://127.0.0.1:4200",
+    username: "opencode",
+    password: "second",
+  })
+  await transport.api.health.get()
+
+  expect(replacement).toBe(transport.api)
+  expect(transport.pty).not.toBe(initialPty)
+  expect(transport.url).toBe("http://127.0.0.1:4200")
+  expect(requests).toEqual([
+    {
+      url: "http://127.0.0.1:4100/api/health",
+      authorization: `Basic ${btoa("opencode:first")}`,
+    },
+    {
+      url: "http://127.0.0.1:4200/api/health",
+      authorization: `Basic ${btoa("opencode:second")}`,
+    },
+  ])
 })

@@ -5,35 +5,35 @@ import { HttpClientError } from "effect/unstable/http"
 import { HttpApiClient, HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/unstable/httpapi"
 import { ClientError } from "./client-error.js"
 
-const Endpoint0SuccessData = Schema.Struct({ type: Schema.String })
+const EndpointSubscribeSuccessData = Schema.Struct({ type: Schema.String })
 
-const Endpoint0SuccessError = Schema.Never
+const EndpointSubscribeSuccessError = Schema.Never
 
-export const Group1 = HttpApiGroup.make("event", { topLevel: false }).add(
+export const GroupEvent = HttpApiGroup.make("event", { topLevel: false }).add(
   HttpApiEndpoint.make("GET")("subscribe", "/event", {
     success: HttpApiSchema.StreamSse({
-      data: Endpoint0SuccessData,
-      error: Endpoint0SuccessError,
+      data: EndpointSubscribeSuccessData,
+      error: EndpointSubscribeSuccessError,
       contentType: "text/event-stream",
     }).pipe(HttpApiSchema.status(202)),
   }),
 )
 
-type RawGroup = HttpApiClient.Client.Group<typeof Group1, never, never>
+type RawGroup = HttpApiClient.Client.Group<typeof GroupEvent, never, never>
 
-const Endpoint0DeclaredError = Schema.Union([Endpoint0SuccessError])
-const mapEndpoint0Error = (error: unknown) =>
+const EndpointSubscribeDeclaredError = Schema.Union([EndpointSubscribeSuccessError])
+const mapEndpointSubscribeError = (error: unknown) =>
   HttpClientError.isHttpClientError(error) || Schema.isSchemaError(error) || Sse.Retry.is(error)
     ? new ClientError({ cause: error })
-    : Schema.is(Endpoint0DeclaredError)(error)
+    : Schema.is(EndpointSubscribeDeclaredError)(error)
       ? error
       : new ClientError({ cause: error })
-const Endpoint0 = (raw: RawGroup) => () =>
+const EndpointSubscribe = (raw: RawGroup) => () =>
   Stream.unwrap(
     raw["subscribe"]({}).pipe(
-      Effect.mapError(mapEndpoint0Error),
-      Effect.map((stream) => stream.pipe(Stream.mapError(mapEndpoint0Error))),
+      Effect.mapError(mapEndpointSubscribeError),
+      Effect.map((stream) => stream.pipe(Stream.mapError(mapEndpointSubscribeError))),
     ),
   )
 
-export const adaptGroup1 = (raw: RawGroup) => ({ subscribe: Endpoint0(raw) })
+export const adaptGroupEvent = (raw: RawGroup) => ({ subscribe: EndpointSubscribe(raw) })

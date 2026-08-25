@@ -18,6 +18,15 @@ const opus48 = AnthropicMessages.route
   .with({ endpoint: { baseURL: "https://api.anthropic.test/v1/" }, auth: Auth.header("x-api-key", "test") })
   .model({ id: "claude-opus-4-8" })
 
+const compileUnsignedReasoning = (model: LLMRequest["model"]) =>
+  compileRequest(
+    LLM.request({
+      model,
+      messages: [Message.assistant([{ type: "reasoning", text: "unsigned reasoning" }])],
+      cache: "none",
+    }),
+  )
+
 const request = LLM.request({
   id: "req_1",
   model,
@@ -561,6 +570,66 @@ describe("Anthropic Messages route", () => {
       expect(prepared.body).toMatchObject({
         messages: [{ role: "assistant", content: [{ type: "thinking", thinking: "thinking", signature: "sig_1" }] }],
       })
+    }),
+  )
+
+  it.effect("demotes unsigned reasoning when signatures are required", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileUnsignedReasoning(model)
+
+      expect(prepared.body.messages).toEqual([
+        { role: "assistant", content: [{ type: "text", text: "unsigned reasoning" }] },
+      ])
+    }),
+  )
+
+  it.effect("infers empty-signature compatibility across Kimi providers", () =>
+    Effect.gen(function* () {
+      const coding = AnthropicMessages.route
+        .with({
+          provider: "kimi-for-coding",
+          endpoint: { baseURL: "https://compatible.test/v1/" },
+          auth: Auth.header("x-api-key", "test"),
+        })
+      const moonshot = AnthropicMessages.route
+        .with({
+          provider: "moonshotai",
+          endpoint: { baseURL: "https://api.moonshot.ai/anthropic" },
+          auth: Auth.bearer("test"),
+        })
+        .model({ id: "kimi-k2.6" })
+      const codingPrepared = yield* compileUnsignedReasoning(coding.model({ id: "k3" }))
+      const moonshotPrepared = yield* compileUnsignedReasoning(moonshot)
+
+      expect(codingPrepared.body.messages).toEqual([
+        {
+          role: "assistant",
+          content: [{ type: "thinking", thinking: "unsigned reasoning", signature: "" }],
+        },
+      ])
+      expect(moonshotPrepared.body.messages).toEqual([
+        {
+          role: "assistant",
+          content: [{ type: "thinking", thinking: "unsigned reasoning", signature: "" }],
+        },
+      ])
+    }),
+  )
+
+  it.effect("lets an explicit signature requirement override inference", () =>
+    Effect.gen(function* () {
+      const compatible = AnthropicMessages.route
+        .with({
+          provider: "kimi-for-coding",
+          endpoint: { baseURL: "https://api.kimi.com/coding/v1/" },
+          auth: Auth.header("x-api-key", "test"),
+        })
+        .model({ id: "k3", compatibility: { requireSignature: true } })
+      const prepared = yield* compileUnsignedReasoning(compatible)
+
+      expect(prepared.body.messages).toEqual([
+        { role: "assistant", content: [{ type: "text", text: "unsigned reasoning" }] },
+      ])
     }),
   )
 

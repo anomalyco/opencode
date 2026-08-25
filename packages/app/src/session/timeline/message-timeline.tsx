@@ -1,11 +1,15 @@
-import { createEffect, createMemo, createSignal, on, Show, type Accessor } from "solid-js"
+import { createEffect, createMemo, createSignal, For, on, Show, type Accessor, type JSX } from "solid-js"
+import createPresence from "solid-presence"
 import { createStore } from "solid-js/store"
 import type { SessionUserActions } from "@opencode-ai/session-ui/actions"
+import { Badge } from "@opencode-ai/ui/badge"
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { InlineInput } from "@opencode-ai/ui/inline-input"
+import { Keybind } from "@opencode-ai/ui/keybind"
 import { Menu } from "@opencode-ai/ui/menu"
+import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { ProjectAvatar } from "@opencode-ai/ui/project-avatar"
 import type { Project } from "@/runtime/server/types"
@@ -13,17 +17,111 @@ import { getFilename } from "@opencode-ai/util/path"
 import { Popover } from "@kobalte/core/popover"
 import { SessionContextUsage } from "@/session/timeline/session-context-usage"
 import { useLanguage } from "@/runtime/i18n/language"
-import { useData } from "@/runtime/server/current"
+import { useData, useServer } from "@/runtime/server/current"
 import { useWorkspaceLocation } from "@/workspaces/location"
-import { Timeline } from "@opencode-ai/session-ui/timeline/projection"
+import { Timeline, TimelineRow } from "@opencode-ai/session-ui/timeline/projection"
 import { createSessionTimelineRowRenderer } from "@opencode-ai/session-ui/timeline/row"
 import { createTimelineController, type TimelineController, type TimelineSessionSource } from "./controller"
 import { createTimelineVirtualizer } from "./virtualizer"
 import { containsDirectory, isWorkspaceDirectory, workspaceDirectories } from "@/workspaces/paths"
 import { SessionWorkspaceMenu } from "@/session/timeline/session-workspace-menu"
 import { getProjectAvatarVariant } from "@/shell/state/layout"
-import { displayName, getProjectAvatarSource } from "@/shell/layout/helpers"
+import { displayName, getProjectAvatarSource, projectForSession } from "@/shell/layout/helpers"
 import { parseCommentNote, readPromptPresentation } from "@/composer/comment-note"
+import { useCommand } from "@/shell/commands/command"
+import { useSettings } from "@/settings/model"
+import { SessionTitleHeader } from "../session-identity-header"
+
+type BackgroundTask = {
+  id: string
+  type: "shell" | "subagent"
+  label: string
+  agent?: string
+}
+
+type SessionBackground = {
+  blocking: Accessor<{ type: "shell" | "subagent"; partID: string; id?: string; label?: string }[]>
+  tasks: Accessor<BackgroundTask[]>
+  move: () => Promise<void>
+}
+
+export function BackgroundMoveHint(props: { keybind?: string[] }) {
+  const language = useLanguage()
+  const command = useCommand()
+  const marker = "__OPENCODE_BACKGROUND_KEYBIND__"
+  const parts = createMemo(() => language.t("session.background.moveInline", { keybind: marker }).split(marker))
+  const keys = () => props.keybind ?? command.keybindParts("session.background")
+  const keybind = () => props.keybind?.join("+") ?? command.keybind("session.background")
+
+  return (
+    <div
+      data-component="session-background-hint"
+      class="flex h-6 max-w-full items-center justify-center gap-[3px] overflow-hidden text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted"
+      aria-label={language.t("session.background.moveInline", { keybind: keybind() })}
+    >
+      <span data-slot="session-background-hint-prefix" class="shrink-0">
+        {parts()[0].trim()}
+      </span>
+      <Keybind keys={keys()} variant="neutral" />
+      <span class="min-w-0 truncate">{parts()[1].trim()}</span>
+    </div>
+  )
+}
+
+export function BackgroundWorkSummary(props: { tasks: BackgroundTask[] }) {
+  const language = useLanguage()
+  const [open, setOpen] = createSignal(false)
+  const taskType = (task: BackgroundTask) => {
+    if (task.type === "shell") return language.t("ui.tool.shell")
+    if (!task.agent) return language.t("ui.tool.agent.default")
+    return task.agent.slice(0, 1).toUpperCase() + task.agent.slice(1)
+  }
+
+  return (
+    <Popover
+      open={open()}
+      placement={language.direction() === "rtl" ? "right-end" : "left-end"}
+      gutter={4}
+      onOpenChange={setOpen}
+    >
+      <Popover.Trigger
+        as="button"
+        type="button"
+        data-component="session-background-summary"
+        class="flex h-7 w-full items-center gap-2 rounded-[4px] px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none data-[expanded]:bg-v2-overlay-simple-overlay-pressed"
+        aria-label={language.plural("session.background.runningCount", props.tasks.length)}
+      >
+        <Badge class="!w-4 !px-0 !border-v2-border-border-strong !bg-v2-background-bg-layer-03">
+          {props.tasks.length}
+        </Badge>
+        <TextShimmer
+          as="span"
+          text={language.t("session.background.running")}
+          active
+          class="min-w-0 flex-1 truncate text-start"
+        />
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Content
+          data-component="session-background-list"
+          class="z-[60] w-[200px] overflow-hidden rounded-[6px] bg-v2-background-bg-layer-01 p-0.5 shadow-[var(--v2-elevation-floating)] outline-none"
+        >
+          <For each={props.tasks.slice(0, 10)}>
+            {(task) => (
+              <div
+                data-component="session-background-list-item"
+                class="flex h-7 min-w-0 items-center gap-2 rounded-[4px] px-3 text-[13px] font-[440] leading-none tracking-[-0.04px]"
+              >
+                <span class="shrink-0 text-v2-text-text-base">{taskType(task)}</span>
+                <span class="min-w-0 flex-1 truncate text-v2-text-text-faint">{task.label}</span>
+              </div>
+            )}
+          </For>
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover>
+  )
+}
 
 function WorkspaceMoveAction(props: {
   variant: "inline" | "panel"
@@ -84,6 +182,7 @@ function WorkspaceMoveAction(props: {
 
 function SessionSummaryPanel(props: {
   project: Project
+  avatar?: JSX.Element
   directory: string
   local: boolean
   branch?: string
@@ -94,6 +193,7 @@ function SessionSummaryPanel(props: {
   moveDismissed: boolean
   onMoveDismiss: () => void
   onReview: () => void
+  backgroundTasks: BackgroundTask[]
 }) {
   const language = useLanguage()
   const location = () => {
@@ -109,11 +209,13 @@ function SessionSummaryPanel(props: {
     <div data-component="session-summary-panel" class="w-[280px]">
       <div class="relative z-10 flex flex-col gap-1 overflow-hidden rounded-[6px] bg-v2-background-bg-base px-0.5 py-1.5 shadow-[var(--v2-elevation-raised)]">
         <div class={row}>
-          <ProjectAvatar
-            fallback={displayName(props.project)}
-            src={getProjectAvatarSource(props.project.id, props.project.icon)}
-            variant={getProjectAvatarVariant(props.project.icon?.color)}
-          />
+          {props.avatar ?? (
+            <ProjectAvatar
+              fallback={displayName(props.project)}
+              src={getProjectAvatarSource(props.project.id, props.project.icon)}
+              variant={getProjectAvatarVariant(props.project.icon?.color)}
+            />
+          )}
           <span class="min-w-0 flex-1 truncate text-v2-text-text-muted">{displayName(props.project)}</span>
         </div>
         <SessionWorkspaceMenu
@@ -168,6 +270,9 @@ function SessionSummaryPanel(props: {
             )}
           </Show>
         </button>
+        <Show when={props.backgroundTasks.length > 0}>
+          <BackgroundWorkSummary tasks={props.backgroundTasks} />
+        </Show>
       </div>
       <Show when={props.local && props.diffs && props.diffs.length > 0 && props.moveEligible}>
         <WorkspaceMoveAction
@@ -186,18 +291,18 @@ function SessionSummaryPanel(props: {
 
 type MessageTimelineProps = {
   session: TimelineSessionSource
+  background: SessionBackground
   actions?: SessionUserActions
   scroll: { overflow: boolean; jump: boolean }
   onResumeScroll: () => void
   setScrollRef: (el: HTMLDivElement | undefined) => void
   onScheduleScrollState: (el: HTMLDivElement) => void
-  onAutoScrollHandleScroll: () => void
-  onMarkScrollGesture: (target?: EventTarget | null) => void
-  hasScrollGesture: boolean
-  onUserScroll: () => void
+  onPin: () => void
+  onUnpin: () => void
+  onUserScroll: (target?: EventTarget | null) => void
   onHistoryScroll: () => void
-  onAutoScrollInteraction: (event: MouseEvent) => void
-  shouldAnchorBottom: boolean
+  onSelectionInteraction: (event: MouseEvent) => void
+  pinned: boolean
   centered: boolean
   setContentRef: (el: HTMLDivElement) => void
   diffs: Accessor<{ additions: number; deletions: number }[] | undefined>
@@ -207,7 +312,6 @@ type MessageTimelineProps = {
   anchor: (id: string) => string
   setRevealMessage?: (fn: (id: string) => void) => void
   setScrollToEnd?: (fn: () => void) => void
-  setHistoryAnchor?: (handlers: { capture: () => void; restore: (done: boolean) => void }) => void
 }
 
 export function MessageTimeline(props: MessageTimelineProps) {
@@ -226,6 +330,8 @@ function MessageTimelineView(
 ) {
   const language = useLanguage()
   const data = useData()
+  const server = useServer()
+  const settings = useSettings()
   const sdk = useWorkspaceLocation()
   const sessionID = props.data.sessionID
   const sessionStatus = props.data.status
@@ -244,6 +350,21 @@ function MessageTimelineView(
     return { ...value, worktree: value.canonical, worktrees: [] }
   })
   const workspaceSession = createMemo(() => isWorkspaceDirectory(project(), sessionDirectory()))
+  const showProjectIcon = () =>
+    import.meta.env.VITE_OPENCODE_CHANNEL !== "prod" && settings.general.showProjectIcon()
+  const avatarProject = createMemo(() => {
+    if (!showProjectIcon()) return
+    const session = props.session.data.info()
+    if (!session) return
+    return projectForSession(session, server.ctx.projects.list())
+  })
+  const projectAvatar = () => (
+    <ProjectAvatar
+      fallback={displayName(avatarProject() ?? { worktree: sessionDirectory() })}
+      src={getProjectAvatarSource(avatarProject()?.id, avatarProject()?.icon)}
+      variant={getProjectAvatarVariant(avatarProject()?.icon?.color)}
+    />
+  )
   createEffect(() => {
     const directory = project()?.worktree
     if (!directory) return
@@ -264,28 +385,25 @@ function MessageTimelineView(
   )
   const turnPadding = () => "px-4 md:px-5"
   const showHeader = createMemo(() => props.data.showHeader() || workspaceSession())
-  const shouldAnchorBottom = createMemo(() => props.shouldAnchorBottom)
-  const hasScrollGesture = createMemo(() => props.hasScrollGesture)
+  const pinned = createMemo(() => props.pinned)
   const messageByID = projection.messageByID
   const virtualized = createTimelineVirtualizer({
     sessionKey: props.data.sessionKey,
     projection,
     showHeader,
-    shouldAnchorBottom,
-    hasScrollGesture,
+    pinned,
     scroll: () => props.scroll,
     onResumeScroll: props.onResumeScroll,
     setScrollRef: props.setScrollRef,
     setContentRef: props.setContentRef,
     onScheduleScrollState: props.onScheduleScrollState,
-    onAutoScrollHandleScroll: props.onAutoScrollHandleScroll,
-    onAutoScrollInteraction: props.onAutoScrollInteraction,
-    onMarkScrollGesture: props.onMarkScrollGesture,
+    onPin: props.onPin,
+    onUnpin: props.onUnpin,
+    onSelectionInteraction: props.onSelectionInteraction,
     onUserScroll: props.onUserScroll,
     onHistoryScroll: props.onHistoryScroll,
     setRevealMessage: props.setRevealMessage,
     setScrollToEnd: props.setScrollToEnd,
-    setHistoryAnchor: props.setHistoryAnchor,
   })
   const VirtualizedTimeline = virtualized.View
   const [title, setTitle] = createStore({
@@ -350,21 +468,63 @@ function MessageTimelineView(
     padding: turnPadding,
     anchor: props.anchor,
   })
-
+  const backgroundHintPartID = createMemo(() => {
+    const blocking = new Set(props.background.blocking().map((task) => task.partID))
+    const row = projection
+      .rows()
+      .findLast(
+        (row) => row._tag === "AssistantPart" && row.group.type === "part" && blocking.has(row.group.ref.partID),
+      )
+    if (row?._tag !== "AssistantPart" || row.group.type !== "part") return
+    return row.group.ref.partID
+  })
+  const [backgroundHintRef, setBackgroundHintRef] = createSignal<HTMLDivElement>()
+  const backgroundHintVisibility = createMemo<{ show: boolean; animate: boolean }>(
+    (previous) => {
+      const show = backgroundHintPartID() !== undefined
+      return { show, animate: previous.animate || previous.show !== show }
+    },
+    { show: backgroundHintPartID() !== undefined, animate: false },
+  )
+  const backgroundHintPresence = createPresence({
+    show: () => backgroundHintVisibility().show,
+    element: () => backgroundHintRef() ?? null,
+  })
   return (
     <VirtualizedTimeline
       workspaceSession={workspaceSession}
+      bottomSpacer={
+        <Show when={backgroundHintPresence.present()}>
+          <div
+            data-component="session-background-hint-row"
+            classList={{
+              "min-w-0 w-full max-w-full": true,
+              "md:max-w-[1000px] md:mx-auto": props.centered,
+            }}
+          >
+            <div
+              ref={setBackgroundHintRef}
+              class="duration-150 motion-reduce:animate-none"
+              classList={{
+                [`flex h-9 items-start pt-3 ${turnPadding()}`]: true,
+                "animate-in fade-in": backgroundHintVisibility().animate && backgroundHintVisibility().show,
+                "animate-out fade-out fill-mode-forwards":
+                  backgroundHintVisibility().animate && !backgroundHintVisibility().show,
+              }}
+            >
+              <BackgroundMoveHint />
+            </div>
+          </div>
+        </Show>
+      }
       deferred={(row) => {
         if (row._tag !== "AssistantPart" || row.group.type !== "part") return false
         const content = Timeline.resolveContent(messageByID().get(row.group.ref.messageID), row.group.ref.partID)
-        return content?.type === "tool" && ["edit", "write", "patch"].includes(content.name)
+        return content?.type === "tool" && ["edit", "write"].includes(content.name)
       }}
       renderRow={(row, onSizeChange) => <rowRenderer.Row row={row} onSizeChange={onSizeChange} />}
       header={
-        <div
-          data-session-title
-          class="sticky top-0 z-30 bg-[linear-gradient(to_bottom,var(--v2-background-bg-base)_48px,transparent)] w-full pb-4 pr-3 pl-2.5"
-        >
+        <SessionTitleHeader>
           <div class="h-12 w-full flex items-center justify-between gap-2">
             <div class="flex items-center gap-1 min-w-0 flex-1">
               <div class="flex items-center min-w-0 flex-1 w-full">
@@ -372,7 +532,9 @@ function MessageTimelineView(
                   when={workspaceSession()}
                   fallback={
                     <span class="flex size-6 shrink-0 items-center justify-center text-v2-icon-icon-muted">
-                      <Icon name="monitor" />
+                      <Show when={showProjectIcon()} fallback={<Icon name="monitor" />}>
+                        {projectAvatar()}
+                      </Show>
                     </span>
                   }
                 >
@@ -384,9 +546,14 @@ function MessageTimelineView(
                     <span
                       tabIndex={0}
                       aria-label={sessionDirectory()}
-                      class="flex size-6 shrink-0 items-center justify-center text-v2-icon-icon-accent"
+                      classList={{
+                        "flex size-6 shrink-0 items-center justify-center": true,
+                        "text-v2-icon-icon-accent": !showProjectIcon(),
+                      }}
                     >
-                      <Icon name="workspace-isolated" />
+                      <Show when={showProjectIcon()} fallback={<Icon name="workspace-isolated" />}>
+                        {projectAvatar()}
+                      </Show>
                     </span>
                   </Tooltip>
                 </Show>
@@ -472,6 +639,7 @@ function MessageTimelineView(
                           <Popover.Content class="z-50 border-0 bg-transparent p-0 outline-none">
                             <SessionSummaryPanel
                               project={project()}
+                              avatar={showProjectIcon() ? projectAvatar() : undefined}
                               directory={sessionDirectory()}
                               local={!workspaceSession()}
                               branch={data.location.vcs.info({ directory: sdk().directory })?.branch.current}
@@ -485,6 +653,7 @@ function MessageTimelineView(
                                 setSummary(false)
                                 props.onReview()
                               }}
+                              backgroundTasks={props.background.tasks()}
                             />
                           </Popover.Content>
                         </Popover.Portal>
@@ -545,7 +714,7 @@ function MessageTimelineView(
               )}
             </Show>
           </div>
-        </div>
+        </SessionTitleHeader>
       }
     />
   )

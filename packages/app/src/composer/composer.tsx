@@ -29,7 +29,7 @@ export function Composer(props: {
         accentSubmit={props.accentSubmit}
         borderUnderlay={props.borderUnderlay}
         class={props.class}
-        variantControlVisible={!props.model.model.loading}
+        modelControlsVisible={!props.model.model.loading}
         attachKeybind={command.keybindParts("file.attach")}
         attachShortcut={command.keybind("file.attach")}
         modelControl={

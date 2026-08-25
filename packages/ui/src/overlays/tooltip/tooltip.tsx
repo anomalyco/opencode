@@ -12,6 +12,7 @@ export interface TooltipProps extends ComponentProps<typeof Root> {
   contentStyle?: JSX.CSSProperties
   inactive?: boolean
   forceOpen?: boolean
+  triggerTabIndex?: number
 }
 
 export function Tooltip(props: TooltipProps) {
@@ -29,6 +30,7 @@ export function Tooltip(props: TooltipProps) {
     "contentStyle",
     "inactive",
     "forceOpen",
+    "triggerTabIndex",
     "ignoreSafeArea",
     "value",
   ])
@@ -110,6 +112,7 @@ export function Tooltip(props: TooltipProps) {
           <Trigger
             ref={ref}
             as="div"
+            tabIndex={local.triggerTabIndex}
             data-component="tooltip-v2-trigger"
             class={local.class}
             onPointerDownCapture={arm}

@@ -147,8 +147,9 @@ const platform = Layer.merge(DesktopLogging.layer, Shutdown.layer)
 
 export const layer = Layer.unwrap(
   Effect.gen(function* () {
-    if (!acquireApplicationLock()) return yield* Effect.interrupt
+    // Electron scopes the single-instance lock to userData.
     yield* configureApplication()
+    if (!acquireApplicationLock()) return yield* Effect.interrupt
     return runtime.pipe(Layer.provideMerge(platform))
   }),
 )

@@ -5,7 +5,7 @@ import { useParams } from "@solidjs/router"
 import { showToast } from "@/shell/notifications/toast"
 import { useServerSDK } from "@/runtime/server/client"
 import { useLanguage } from "@/runtime/i18n/language"
-import { usePermission } from "@/session/requests/permission"
+import { useSettings } from "@/settings/model"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { sessionPermissionRequest, sessionQuestionForm } from "@/session/requests/session-request-tree"
 import { useData } from "@/runtime/server/current"
@@ -16,7 +16,7 @@ export function createSessionRequestModel() {
   const serverSDK = useServerSDK()
   const data = useData()
   const language = useLanguage()
-  const permission = usePermission()
+  const settings = useSettings()
   createEffect(() => {
     const id = params.id
     if (!id || serverSDK.connection.status() !== "connected") return
@@ -32,9 +32,8 @@ export function createSessionRequestModel() {
   })
 
   const permissionRequest = createMemo((): PermissionRequest | undefined => {
-    return sessionPermissionRequest(data.session.list(), data.session.permission.list, params.id, (item) => {
-      return !permission.autoResponds(item, sdk().directory)
-    })
+    if (settings.permissions.autoApprove()) return undefined
+    return sessionPermissionRequest(data.session.list(), data.session.permission.list, params.id)
   })
 
   const blocked = createMemo(() => {
@@ -63,6 +62,7 @@ export function createSessionRequestModel() {
       return [
         {
           type: part.name as "shell" | "subagent",
+          partID: part.id,
           id: typeof value === "string" ? value : undefined,
           label: typeof label === "string" ? label : undefined,
         },
@@ -93,11 +93,13 @@ export function createSessionRequestModel() {
         const sessionID = part.state.metadata.sessionID
         if (typeof sessionID !== "string" || completed.has(sessionID)) return []
         const description = part.state.input.description
+        const agent = part.state.input.agent
         return [
           {
             id: sessionID,
             type: "subagent" as const,
             label: typeof description === "string" ? description : sessionID,
+            agent: typeof agent === "string" ? agent : undefined,
           },
         ]
       })

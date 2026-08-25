@@ -3,6 +3,7 @@ import { observeElementOffset, type Virtualizer } from "@tanstack/solid-virtual"
 export function observeElementOffsetReconnectAware<TScrollElement extends Element, TItemElement extends Element>(
   instance: Virtualizer<TScrollElement, TItemElement>,
   callback: (offset: number, isScrolling: boolean) => void,
+  onReconnect?: () => void,
 ) {
   let active = true
   const deliver = (offset: number, isScrolling: boolean) => {
@@ -54,6 +55,7 @@ export function observeElementOffsetReconnectAware<TScrollElement extends Elemen
       }
       if (!removed || !element.isConnected || !mutationNodesContainElement(record.addedNodes, element)) return
       removed = false
+      onReconnect?.()
       startCheck()
     })
   })

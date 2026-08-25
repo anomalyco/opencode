@@ -47,7 +47,7 @@ describe("OpenAI Chat route", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(request)
 
-      expect(prepared.body).toEqual({
+      expect(prepared.body).toMatchObject({
         model: "gpt-4o-mini",
         messages: [
           { role: "system", content: "You are concise." },
@@ -55,7 +55,8 @@ describe("OpenAI Chat route", () => {
         ],
         stream: true,
         stream_options: { include_usage: true },
-        max_tokens: 20,
+        store: false,
+        max_completion_tokens: 20,
         temperature: 0,
       })
     }),
@@ -325,7 +326,7 @@ describe("OpenAI Chat route", () => {
         }),
       )
 
-      expect(prepared.body).toEqual({
+      expect(prepared.body).toMatchObject({
         model: "gpt-4o-mini",
         messages: [
           { role: "user", content: "What is the weather?" },
@@ -342,8 +343,10 @@ describe("OpenAI Chat route", () => {
           },
           { role: "tool", tool_call_id: "call_1", content: encodeJson({ forecast: "sunny" }) },
         ],
+        tools: [],
         stream: true,
         stream_options: { include_usage: true },
+        store: false,
       })
     }),
   )

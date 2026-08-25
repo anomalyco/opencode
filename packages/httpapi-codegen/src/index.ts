@@ -216,12 +216,17 @@ export function compile<Id extends string, Groups extends HttpApiGroup.Constrain
   const modules = new Set(["client", "client-error", "index"])
   const groups = Array.from(
     Map.groupBy(endpoints, (endpoint) => endpoint.group),
-    ([identifier, endpoints], index) => {
+    ([identifier, endpoints]) => {
       if (new Set(endpoints.map((endpoint) => endpoint.sourceGroup)).size > 1) {
         throw new GenerationError({ reason: `Client group name collision: ${identifier}` })
       }
-      const base = /^[A-Za-z0-9_-]+$/.test(identifier) ? identifier : `group-${index}`
-      const module = uniqueModule(base, index, modules)
+      // Module names derive from the group identifier so unrelated groups never rename.
+      const sanitized = identifier.replace(/[^A-Za-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "")
+      const reserved = /^(aux|client|client-error|con|index|nul|prn|com[1-9]|lpt[1-9])$/i.test(sanitized)
+      const module = sanitized === "" || reserved ? `group-${sanitized}` : sanitized
+      if (modules.has(module.toLowerCase())) {
+        throw new GenerationError({ reason: `Client module name collision: ${module}` })
+      }
       modules.add(module.toLowerCase())
       return { identifier, sourceIdentifier: endpoints[0].sourceGroup, module, endpoints }
     },
@@ -363,9 +368,28 @@ function renderEffectShape(
 ) {
   const references = effectTypeReferences(typeReferences)
   const imports = new Set<string>()
-  const endpointTypes = groups.map((group, groupIndex) => {
-    const endpoints = group.endpoints.map((endpoint, endpointIndex) => {
-      const prefix = `Endpoint${groupIndex}_${endpointIndex}`
+  const externalNames = new Set([
+    "AppApi",
+    "Effect",
+    "Stream",
+    ...typeReferences.flatMap((reference) => reference.name.match(/^[A-Za-z_$][A-Za-z0-9_$]*/) ?? []),
+    ...Object.values(outputTypes ?? {}).flatMap((output) => output.name.match(/^[A-Za-z_$][A-Za-z0-9_$]*/) ?? []),
+  ])
+  const generatedNames = groups.flatMap((group) => [
+    groupShapeName(group),
+    ...group.endpoints.flatMap((endpoint) => [
+      ...(endpoint.operation.inputMode === "none" ? [] : [`${endpointTypeName(group, endpoint)}Input`]),
+      `${endpointTypeName(group, endpoint)}Output`,
+      groupShapeTypeName(group, endpoint),
+    ]),
+  ])
+  const collision = generatedNames.find((name) => externalNames.has(name))
+  if (collision !== undefined) {
+    throw new GenerationError({ reason: `Generated Effect type collides with imported type: ${collision}` })
+  }
+  const endpointTypes = groups.map((group) => {
+    const endpoints = group.endpoints.map((endpoint) => {
+      const prefix = endpointTypeName(group, endpoint)
       const input = endpoint.input
         .map((field) => {
           const schema = effectInputSchema(endpoint, field)
@@ -530,8 +554,23 @@ function groupShapeName(group: Group) {
   return `${identifierPart(group.identifier)}Api`
 }
 
+// Generated symbol names derive from group and endpoint identity, never from traversal
+// position, so adding an endpoint or group cannot rename unrelated generated code.
+// Uniqueness is validated by compile (groupTypeNames/endpointTypeNames).
+function groupTypeName(group: Group) {
+  return identifierPart(group.identifier)
+}
+
+function endpointTypeName(group: Group, endpoint: Endpoint) {
+  return `${groupTypeName(group)}${endpoint.clientPath.map(identifierPart).join("")}`
+}
+
+function endpointAdapterName(group: Group, endpoint: Endpoint) {
+  return `Endpoint${endpointTypeName(group, endpoint)}`
+}
+
 function groupShapeTypeName(group: Group, endpoint: Endpoint) {
-  return `${identifierPart(group.identifier)}${endpoint.clientPath.map(identifierPart).join("")}Operation`
+  return `${endpointTypeName(group, endpoint)}Operation`
 }
 
 function assertPromiseEndpoint(endpoint: Endpoint) {
@@ -585,7 +624,7 @@ function promiseOperations(groups: ReadonlyArray<Group>) {
 
 function renderEffectFiles(groups: ReadonlyArray<Group>): Output["files"] {
   return [
-    ...groups.map((group, index) => ({ path: `${group.module}.ts`, content: renderGroup(group, index) })),
+    ...groups.map((group) => ({ path: `${group.module}.ts`, content: renderGroup(group) })),
     {
       path: "client-error.ts",
       content:
@@ -610,10 +649,11 @@ function renderImportedEffectFiles(
         readonly shapeModule?: string
       },
 ): Output["files"] {
-  const adapters = groups.map((group, groupIndex) => {
+  const adapters = groups.map((group) => {
     const rawGroup = group.endpoints[0]?.topLevel ? "RawClient" : `RawClient[${JSON.stringify(group.sourceIdentifier)}]`
-    const methods = group.endpoints.map((item, endpointIndex) => {
-      const prefix = `Endpoint${groupIndex}_${endpointIndex}`
+    const methods = group.endpoints.map((item) => {
+      const prefix = endpointTypeName(group, item)
+      const adapter = endpointAdapterName(group, item)
       const schemaBySource = {
         params: item.params,
         query: item.query,
@@ -660,20 +700,22 @@ function renderImportedEffectFiles(
           : isOpaquePayload(item)
             ? `type ${prefix}Request = Parameters<${rawGroup}[${JSON.stringify(item.endpoint.identifier)}]>[0]\n`
             : ""
-      return `${declarations}const ${prefix} = (raw: ${rawGroup}) => (${argument}) => ${output}`
+      return `${declarations}const ${adapter} = (raw: ${rawGroup}) => (${argument}) => ${output}`
     })
     const fields = renderClientTree(
       group.endpoints,
-      (_item, endpointIndex) => `Endpoint${groupIndex}_${endpointIndex}(raw)`,
+      (item) => `${endpointAdapterName(group, item)}(raw)`,
       (name, value) => `${JSON.stringify(name)}: ${value}`,
       ", ",
     )
-    return `${methods.join("\n\n")}\n\nconst adaptGroup${groupIndex} = (raw: ${rawGroup}) => ({ ${fields} })`
+    return `${methods.join("\n\n")}\n\nconst adaptGroup${groupTypeName(group)} = (raw: ${rawGroup}) => ({ ${fields} })`
   })
-  const fields = groups.flatMap((group, index) =>
+  const fields = groups.flatMap((group) =>
     group.endpoints[0]?.topLevel
-      ? [`...adaptGroup${index}(raw)`]
-      : [`${JSON.stringify(group.identifier)}: adaptGroup${index}(raw[${JSON.stringify(group.sourceIdentifier)}])`],
+      ? [`...adaptGroup${groupTypeName(group)}(raw)`]
+      : [
+          `${JSON.stringify(group.identifier)}: adaptGroup${groupTypeName(group)}(raw[${JSON.stringify(group.sourceIdentifier)}])`,
+        ],
   )
   const usesStream = groups.some((group) => group.endpoints.some((item) => item.operation.success === "stream"))
   const imported = "api" in options
@@ -683,15 +725,24 @@ function renderImportedEffectFiles(
       ? renderImportedGroup(options.group)
       : renderImportedProjection(groups, options.endpoints)
   const api = imported ? options.api : "Api"
+  const adapterNames = new Set(
+    groups.flatMap((group) => group.endpoints.map((endpoint) => endpointAdapterName(group, endpoint))),
+  )
+  const adapterCollision = (projection?.imports ?? [api]).find((name) => adapterNames.has(name))
+  if (adapterCollision !== undefined) {
+    throw new GenerationError({
+      reason: `Generated Effect adapter collides with imported endpoint: ${adapterCollision}`,
+    })
+  }
   const imports =
     projection === undefined
       ? `import { ${api} } from ${JSON.stringify(options.module)}`
       : `import { HttpApi, HttpApiClient${"endpoints" in options ? ", HttpApiGroup" : ""} } from "effect/unstable/httpapi"\nimport { ${projection.imports.join(", ")} } from ${JSON.stringify(options.module)}`
   const httpApiImport = projection === undefined ? 'import { HttpApiClient } from "effect/unstable/httpapi"\n' : ""
-  const shapeTypes = groups.flatMap((group, groupIndex) =>
-    group.endpoints.flatMap((endpoint, endpointIndex) => [
-      ...(endpoint.operation.inputMode === "none" ? [] : [`Endpoint${groupIndex}_${endpointIndex}Input`]),
-      `Endpoint${groupIndex}_${endpointIndex}Output`,
+  const shapeTypes = groups.flatMap((group) =>
+    group.endpoints.flatMap((endpoint) => [
+      ...(endpoint.operation.inputMode === "none" ? [] : [`${endpointTypeName(group, endpoint)}Input`]),
+      `${endpointTypeName(group, endpoint)}Output`,
     ]),
   )
   const shapeImport =
@@ -975,11 +1026,12 @@ function renderClientTree(
 }
 
 function identifierPart(value: string) {
-  return value
+  const identifier = value
     .split(/[^A-Za-z0-9]+/)
     .filter(Boolean)
     .map((part) => `${part[0]?.toUpperCase() ?? ""}${part.slice(1)}`)
     .join("")
+  return /^[A-Za-z_$]/.test(identifier) ? identifier : `_${identifier}`
 }
 
 function structuralTypes(schemas: ReadonlyArray<Schema.Top>, mutable: boolean, reservedNames: ReadonlySet<string>) {
@@ -1237,14 +1289,6 @@ function promisePath(path: string, input: ReadonlyArray<InputField>, wildcard?: 
     })
     .join("")
   return `\`${template}${wildcard === undefined ? "" : `\${encodePath(input.${wildcard.name})}`}\``
-}
-
-function uniqueModule(base: string, index: number, modules: ReadonlySet<string>) {
-  if (!modules.has(base.toLowerCase())) return base
-  const seed = `${base}-${index}`
-  let suffix = 0
-  while (modules.has(`${seed}${suffix === 0 ? "" : `-${suffix}`}`.toLowerCase())) suffix++
-  return `${seed}${suffix === 0 ? "" : `-${suffix}`}`
 }
 
 function normalizeTransport(
@@ -1697,10 +1741,10 @@ function streamEffectPortable(schema: Schema.Top) {
   return sameEncoding(schema.events.ast, rebuilt.events.ast)
 }
 
-function renderGroup(group: Group, groupIndex: number) {
+function renderGroup(group: Group) {
   const slots: Array<Slot> = []
   const adapters: Array<string> = []
-  const endpointSources = group.endpoints.map((operation, endpointIndex) => {
+  const endpointSources = group.endpoints.map((operation) => {
     const {
       endpoint,
       errors,
@@ -1710,7 +1754,7 @@ function renderGroup(group: Group, groupIndex: number) {
       query: endpointQuery,
       successes,
     } = operation
-    const prefix = `Endpoint${endpointIndex}`
+    const prefix = `Endpoint${operation.clientPath.map(identifierPart).join("")}`
     const params = addSlot(endpointParams, `${prefix}Params`)
     const query = addSlot(endpointQuery, `${prefix}Query`)
     const headers = addSlot(endpointHeaders, `${prefix}Headers`)
@@ -1805,15 +1849,16 @@ function renderGroup(group: Group, groupIndex: number) {
   const usesHttpApiSchema = endpointSources.some((source) => source.includes("HttpApiSchema."))
   const methods = renderClientTree(
     group.endpoints,
-    (_item, index) => `Endpoint${index}(raw)`,
+    (item) => `Endpoint${item.clientPath.map(identifierPart).join("")}(raw)`,
     (name, value) => `${JSON.stringify(name)}: ${value}`,
     ", ",
   )
+  const name = groupTypeName(group)
   const rawGroup = group.endpoints[0]?.topLevel
-    ? `HttpApiClient.Client<typeof Group${groupIndex}>`
-    : `HttpApiClient.Client.Group<typeof Group${groupIndex}, never, never>`
+    ? `HttpApiClient.Client<typeof Group${name}>`
+    : `HttpApiClient.Client.Group<typeof Group${name}, never, never>`
   const usesStream = group.endpoints.some((item) => item.operation.success === "stream")
-  return `// Generated by @opencode-ai/httpapi-codegen. Do not edit.\nimport { Effect, Schema${usesStream ? ", Stream" : ""} } from "effect"\nimport { Sse } from "effect/unstable/encoding"\nimport { HttpClientError } from "effect/unstable/http"\nimport { HttpApiClient, HttpApiEndpoint, HttpApiGroup${usesHttpApiSchema ? ", HttpApiSchema" : ""} } from "effect/unstable/httpapi"\nimport { ClientError } from "./client-error.js"\n\n${declarations}\n\nexport const Group${groupIndex} = ${groupSource}\n\ntype RawGroup = ${rawGroup}\n\n${adapters.join("\n\n")}\n\nexport const adaptGroup${groupIndex} = (raw: RawGroup) => ({ ${methods} })\n`
+  return `// Generated by @opencode-ai/httpapi-codegen. Do not edit.\nimport { Effect, Schema${usesStream ? ", Stream" : ""} } from "effect"\nimport { Sse } from "effect/unstable/encoding"\nimport { HttpClientError } from "effect/unstable/http"\nimport { HttpApiClient, HttpApiEndpoint, HttpApiGroup${usesHttpApiSchema ? ", HttpApiSchema" : ""} } from "effect/unstable/httpapi"\nimport { ClientError } from "./client-error.js"\n\n${declarations}\n\nexport const Group${name} = ${groupSource}\n\ntype RawGroup = ${rawGroup}\n\n${adapters.join("\n\n")}\n\nexport const adaptGroup${name} = (raw: RawGroup) => ({ ${methods} })\n`
 }
 
 function renderEffectRequestPart(
@@ -1883,15 +1928,20 @@ function renderSchemas(slots: ReadonlyArray<Slot>) {
 
 function renderClient(groups: ReadonlyArray<Group>) {
   const imports = groups
-    .map((group, index) => `import { adaptGroup${index}, Group${index} } from ${JSON.stringify(`./${group.module}`)}`)
+    .map(
+      (group) =>
+        `import { adaptGroup${groupTypeName(group)}, Group${groupTypeName(group)} } from ${JSON.stringify(`./${group.module}`)}`,
+    )
     .join("\n")
-  const api = `HttpApi.make("generated")${groups.map((_, index) => `.add(Group${index})`).join("")}`
-  const fields = groups.flatMap((group, index) => {
+  const api = `HttpApi.make("generated")${groups.map((group) => `.add(Group${groupTypeName(group)})`).join("")}`
+  const fields = groups.flatMap((group) => {
     if (!group.endpoints[0]?.topLevel) {
-      return [`${JSON.stringify(group.identifier)}: adaptGroup${index}(raw[${JSON.stringify(group.identifier)}])`]
+      return [
+        `${JSON.stringify(group.identifier)}: adaptGroup${groupTypeName(group)}(raw[${JSON.stringify(group.identifier)}])`,
+      ]
     }
     const raw = `{ ${group.endpoints.map((item) => `${JSON.stringify(item.endpoint.identifier)}: raw[${JSON.stringify(item.endpoint.identifier)}]`).join(", ")} }`
-    return [`...adaptGroup${index}(${raw})`]
+    return [`...adaptGroup${groupTypeName(group)}(${raw})`]
   })
   return `// Generated by @opencode-ai/httpapi-codegen. Do not edit.\nimport { Effect } from "effect"\nimport { HttpApi, HttpApiClient } from "effect/unstable/httpapi"\n${imports}\n\nconst Api = ${api}\nconst adaptClient = (raw: HttpApiClient.ForApi<typeof Api>) => ({ ${fields.join(", ")} })\n\nexport const make = (options?: { readonly baseUrl?: URL | string }) =>\n  HttpApiClient.make(Api, options).pipe(Effect.map(adaptClient))\n`
 }

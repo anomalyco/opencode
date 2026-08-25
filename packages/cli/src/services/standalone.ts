@@ -27,7 +27,7 @@ function command(password: string, options: Options) {
     // The server treats EOF on this pipe as the end of its ownership lease.
     // The OS closes it even when the TUI is killed before Effect finalizers run.
     stdin: "pipe",
-    stderr: "ignore",
+    stderr: process.env.OPENCODE_PRINT_LOGS === "1" ? "inherit" : "ignore",
     killSignal: "SIGTERM",
     forceKillAfter: "3 seconds",
   })

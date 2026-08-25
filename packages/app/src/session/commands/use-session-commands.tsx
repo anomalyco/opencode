@@ -4,14 +4,13 @@ import { previewSelectedLines } from "@opencode-ai/session-ui/pierre/selection-b
 import { useFile, selectionFromLines, type FileSelection, type SelectedLineRange } from "@/workspaces/files/model"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useLayout } from "@/shell/state/layout"
-import { usePermission } from "@/session/requests/permission"
 import { useComposerState } from "@/composer/persistence"
-import { useWorkspaceLocation } from "@/workspaces/location"
 import { useServerSDK } from "@/runtime/server/client"
 import { useSettings } from "@/settings/model"
 import { useTerminal } from "@/session/terminal/context"
 import { showToast } from "@/shell/notifications/toast"
 import { downloadSessionExport, fetchSessionExport, sessionExportFilename } from "@/session/commands/export"
+import { usePlatform } from "@/runtime/platform/platform"
 import type { SessionModel } from "@/session/model"
 import type { SessionRevert } from "@/session/revert"
 
@@ -47,12 +46,11 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const dialog = useDialog()
   const file = useFile()
   const language = useLanguage()
-  const permission = usePermission()
   const prompt = useComposerState()
-  const sdk = useWorkspaceLocation()
   const serverSDK = useServerSDK()
   const settings = useSettings()
   const terminal = useTerminal()
+  const platform = usePlatform()
   const layout = useLayout()
   const openDialog = async <T,>(load: () => Promise<T>, show: (value: T) => void) => {
     const owner = actions.session.ownership.capture()
@@ -89,6 +87,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const focusInput = actions.focusInput
 
   const sessionCommand = withCategory(language.t("command.category.session"))
+  const projectCommand = withCategory(language.t("command.category.project"))
   const fileCommand = withCategory(language.t("command.category.file"))
   const contextCommand = withCategory(language.t("command.category.context"))
   const viewCommand = withCategory(language.t("command.category.view"))
@@ -96,11 +95,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const mcpCommand = withCategory(language.t("command.category.mcp"))
   const permissionsCommand = withCategory(language.t("command.category.permissions"))
 
-  const isAutoAcceptActive = () => {
-    const sessionID = actions.session.identity.params.id
-    if (sessionID) return permission.isAutoAccepting(sessionID, sdk().directory)
-    return permission.isAutoAcceptingDirectory(sdk().directory)
-  }
   const exportSession = async () => {
     const sessionID = actions.session.identity.params.id
     if (!sessionID) return
@@ -122,6 +116,46 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         variant: "error",
         title: language.t("toast.session.export.failed.title"),
         description: err instanceof Error ? err.message : language.t("toast.session.export.failed.description"),
+      })
+    }
+  }
+
+  const copySessionID = async () => {
+    const sessionID = actions.session.identity.params.id
+    if (!sessionID) return
+    try {
+      await (platform.writeClipboardText?.(sessionID) ?? navigator.clipboard.writeText(sessionID))
+      showToast({
+        variant: "success",
+        icon: "circle-check",
+        title: language.t("common.copied"),
+        description: sessionID,
+      })
+    } catch (err) {
+      showToast({
+        variant: "error",
+        title: language.t("toast.session.copyID.failed.title"),
+        description: err instanceof Error ? err.message : language.t("toast.session.copyID.failed.description"),
+      })
+    }
+  }
+
+  const copyProjectID = async () => {
+    const projectID = actions.session.data.info()?.projectID
+    if (!projectID) return
+    try {
+      await (platform.writeClipboardText?.(projectID) ?? navigator.clipboard.writeText(projectID))
+      showToast({
+        variant: "success",
+        icon: "circle-check",
+        title: language.t("common.copied"),
+        description: projectID,
+      })
+    } catch (err) {
+      showToast({
+        variant: "error",
+        title: language.t("toast.project.copyID.failed.title"),
+        description: err instanceof Error ? err.message : language.t("toast.project.copyID.failed.description"),
       })
     }
   }
@@ -159,9 +193,9 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   }
 
   const openTerminal = () => {
+    actions.session.layout.view().terminal.open()
     if (terminal.all().length > 0) terminal.new({ focus: true })
     if (terminal.all().length === 0) terminal.requestFocus()
-    actions.session.layout.view().terminal.open()
   }
 
   const closeTerminal = () => {
@@ -180,13 +214,8 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   }
 
   const toggleAutoAccept = () => {
-    const sessionID = actions.session.identity.params.id
-    if (sessionID) permission.toggleAutoAccept(sessionID, sdk().directory)
-    else permission.toggleAutoAcceptDirectory(sdk().directory)
-
-    const active = sessionID
-      ? permission.isAutoAccepting(sessionID, sdk().directory)
-      : permission.isAutoAcceptingDirectory(sdk().directory)
+    const active = !settings.permissions.autoApprove()
+    settings.permissions.setAutoApprove(active)
     showToast({
       title: active
         ? language.t("toast.permissions.autoaccept.on.title")
@@ -271,6 +300,12 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       disabled: !actions.session.identity.params.id,
       onSelect: exportSession,
     }),
+    sessionCommand({
+      id: "session.copyID",
+      title: language.t("command.session.copyID"),
+      disabled: !actions.session.identity.params.id,
+      onSelect: copySessionID,
+    }),
   ]
 
   const fileCmds = () => {
@@ -293,6 +328,15 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         }),
     ].filter((v) => !!v)
   }
+
+  const projectCmds = () => [
+    projectCommand({
+      id: "project.copyID",
+      title: language.t("command.project.copyID"),
+      disabled: !actions.session.data.info()?.projectID,
+      onSelect: copyProjectID,
+    }),
+  ]
 
   const contextCmds = () => [
     contextCommand({
@@ -317,8 +361,8 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
           actions.session.layout.view().terminal.close()
           return
         }
-        terminal.requestFocus(terminal.active())
         actions.session.layout.view().terminal.open()
+        terminal.requestFocus(terminal.active())
       },
     }),
     viewCommand({
@@ -396,7 +440,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const permissionsCmds = () => [
     permissionsCommand({
       id: "permissions.autoaccept",
-      title: isAutoAcceptActive()
+      title: settings.permissions.autoApprove()
         ? language.t("command.permissions.autoaccept.disable")
         : language.t("command.permissions.autoaccept.enable"),
       keybind: "mod+shift+a",
@@ -407,6 +451,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
 
   command.register("session", () => [
     ...sessionCmds(),
+    ...projectCmds(),
     ...fileCmds(),
     ...contextCmds(),
     ...viewCmds(),

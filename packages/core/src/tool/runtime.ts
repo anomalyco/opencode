@@ -1,7 +1,18 @@
 import type { ToolDefinition } from "@opencode-ai/ai"
 import { Tool } from "@opencode-ai/schema/tool"
 import type { StandardJSONSchemaV1, StandardSchemaV1 } from "@standard-schema/spec"
-import { Effect, JsonSchema, Schema } from "effect"
+import { Cache, Effect, JsonSchema, Schema, SchemaRepresentation } from "effect"
+
+const jsonSchemas = Effect.runSync(
+  Cache.make<JsonSchema.JsonSchema, Schema.Codec<unknown> | undefined>({
+    capacity: 100,
+    lookup: (schema) =>
+      Effect.try({
+        try: () => jsonSchema(schema),
+        catch: () => undefined,
+      }).pipe(Effect.orElseSucceed(() => undefined)),
+  }),
+)
 
 export const definition = (tool: Tool.Info<any, any>): ToolDefinition => ({
   name: effectiveName(tool),
@@ -50,7 +61,20 @@ const decodeInput = (schema: Tool.ValueSchema<any>, value: unknown) => {
       Effect.mapError((error) => new Tool.Error({ message: `Invalid tool input: ${error.message}` })),
     )
   if (isStandardSchema(schema)) return validateStandard(schema, value, "Invalid tool input")
-  return Effect.succeed(value)
+  return Cache.get(jsonSchemas, schema).pipe(
+    Effect.flatMap((schema) =>
+      schema === undefined ? Effect.succeed(value) : Schema.decodeUnknownEffect(schema)(value),
+    ),
+    Effect.mapError((error) => new Tool.Error({ message: `Invalid tool input: ${error.message}` })),
+  )
+}
+
+const jsonSchema = (schema: JsonSchema.JsonSchema) => {
+  const draft =
+    (typeof schema.$schema === "string" && schema.$schema.includes("draft-07")) || "definitions" in schema
+      ? JsonSchema.fromSchemaDraft07(schema)
+      : JsonSchema.fromSchemaDraft2020_12(schema)
+  return Schema.make<Schema.Codec<unknown>>(SchemaRepresentation.fromJsonSchemaDocument(draft).ast)
 }
 
 const encodeOutput = (schema: Tool.ValueSchema<any>, value: unknown) => {

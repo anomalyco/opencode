@@ -4,7 +4,6 @@ import { Icon } from "@opencode-ai/ui/icon"
 import { Wordmark } from "@opencode-ai/ui/wordmark"
 import { Show, createMemo, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
-import { Portal } from "solid-js/web"
 import createPresence from "solid-presence"
 import { Composer } from "@/composer/composer"
 import type { ComposerModel } from "@/composer/model"
@@ -15,6 +14,7 @@ import {
   type PromptProjectController,
 } from "@/new-session/project/selector"
 import { StatusPopover } from "@/shell/status/status-popover"
+import { TitlebarRight } from "@/shell/titlebar/right-slot"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useProviders } from "@/providers/catalog/providers"
@@ -87,21 +87,16 @@ export function NewSessionView(props: {
   )
 }
 
-export function NewSessionStatus(props: { mount: HTMLElement | null; visible: boolean }) {
+export function NewSessionStatus(props: { visible: boolean }) {
   const language = useLanguage()
-
   return (
-    <Show when={props.mount} keyed>
-      {(mount) => (
-        <Portal mount={mount}>
-          <Show when={props.visible}>
-            <Tooltip appearance="standard" placement="bottom" value={language.t("status.popover.trigger")}>
-              <StatusPopover />
-            </Tooltip>
-          </Show>
-        </Portal>
-      )}
-    </Show>
+    <TitlebarRight>
+      <Show when={props.visible}>
+        <Tooltip appearance="standard" placement="bottom" value={language.t("status.popover.trigger")}>
+          <StatusPopover />
+        </Tooltip>
+      </Show>
+    </TitlebarRight>
   )
 }
 
@@ -144,7 +139,7 @@ function ProviderTip() {
         >
           <button
             type="button"
-            class="flex h-6 min-w-0 items-center rounded-[4px] pl-1.5 text-[13px] leading-none tracking-[-0.04px] text-v2-text-text-faint transition-[background-color,color] duration-150 ease-in-out hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-muted focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:text-v2-text-text-muted focus-visible:outline-none"
+            class="flex h-6 min-w-0 items-center rounded-[4px] pl-1.5 text-[13px] leading-text-compact tracking-[-0.04px] text-v2-text-text-faint transition-[background-color,color] duration-150 ease-in-out hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-muted focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:text-v2-text-text-muted focus-visible:outline-none"
             onClick={openProviders}
           >
             <span class="truncate">{language.t("home.providerTip")}</span>
