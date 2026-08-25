@@ -36,6 +36,7 @@ function makeModel(input: { providerID: string; apiID: string; npm: string; id?:
   } as unknown as Provider.Model
 }
 
+/** Eligible, and takes applyCaching's message-level write path. */
 const anthropicModel = () => makeModel({ providerID: "anthropic", apiID: "claude-opus-5", npm: "@ai-sdk/anthropic" })
 
 const deepseekModel = () =>
@@ -43,7 +44,18 @@ const deepseekModel = () =>
 
 const mistralModel = () => makeModel({ providerID: "mistral", apiID: "mistral-large-latest", npm: "@ai-sdk/mistral" })
 
+/** Not eligible for automatic breakpoints at all. */
 const ineligibleModel = () => makeModel({ providerID: "openai", apiID: "gpt-5", npm: "@ai-sdk/openai" })
+
+/**
+ * Eligible, but takes applyCaching's *content-part* write path rather than the message-level one.
+ *
+ * The eligibility predicate is strictly broader than the message-level condition, so a Claude
+ * served through a non-Anthropic package is eligible and writes into the last content part. This is
+ * the only fixture shape on which the non-mutation property can actually fail.
+ */
+const contentBranchModel = () =>
+  makeModel({ providerID: "openrouter", apiID: "anthropic/claude-opus-5", npm: "@openrouter/ai-sdk-provider" })
 
 function sse(events: Record<string, unknown>[]) {
   return events.map((event) => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`).join("")
@@ -462,7 +474,52 @@ function marked(messages: ModelMessage[]): number {
   }).length
 }
 
+function arrayContent(): ModelMessage[] {
+  return [
+    { role: "user", content: [{ type: "text", text: "one" }] },
+    { role: "assistant", content: [{ type: "text", text: "two" }] },
+  ]
+}
+
 describe("cache selection invariants", () => {
+  test("does not mutate input on the content-part write path", () => {
+    // This fixture must satisfy BOTH conditions or it passes vacuously: a content-branch model AND
+    // array content with a markable last part. A content-branch model carrying string content
+    // falls through to the message-level write, which a shallow message copy already protects.
+    const model = contentBranchModel()
+    const input = arrayContent()
+    const before = structuredClone(input)
+
+    const output = ProviderTransform.cacheBreakpoints(input, model)
+
+    expect(input).toEqual(before)
+    expect(marked(input)).toBe(0)
+    expect(marked(output)).toBe(2)
+    expect(output).not.toBe(input)
+    // The copy must reach the part, not just the message: these are the objects that were written.
+    expect(output[0]).not.toBe(input[0])
+    expect((output[0]!.content as unknown[])[0]).not.toBe((input[0]!.content as unknown[])[0])
+  })
+
+  test("does not mutate input on the message-level write path", () => {
+    const input = arrayContent()
+    const before = structuredClone(input)
+
+    const output = ProviderTransform.cacheBreakpoints(input, anthropicModel())
+
+    expect(input).toEqual(before)
+    expect(marked(input)).toBe(0)
+    expect(marked(output)).toBe(2)
+  })
+
+  test("returns its input by reference when the model is ineligible", () => {
+    const input = arrayContent()
+    const output = ProviderTransform.cacheBreakpoints(input, ineligibleModel())
+
+    expect(output).toBe(input)
+    expect(marked(output)).toBe(0)
+  })
+
   test("normalizes before selection so a deleted empty message cannot consume a breakpoint", () => {
     const output = ProviderTransform.message(
       [
