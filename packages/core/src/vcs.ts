@@ -20,9 +20,14 @@ export interface DiffOptions {
   readonly context?: number
 }
 
+export interface BranchOptions {
+  readonly search?: string
+  readonly limit?: number
+}
+
 export interface Interface {
   readonly info: () => Effect.Effect<Info>
-  readonly branches: () => Effect.Effect<BranchList>
+  readonly branches: (options?: BranchOptions) => Effect.Effect<BranchList>
   readonly status: () => Effect.Effect<FileStatus[]>
   readonly diff: (mode: Mode, options?: DiffOptions) => Effect.Effect<FileDiff.Info[]>
 }
@@ -74,9 +79,9 @@ const layer = Layer.effect(
       info: Effect.fn("Vcs.info")(function* () {
         return state.info
       }),
-      branches: Effect.fn("Vcs.branches")(function* () {
+      branches: Effect.fn("Vcs.branches")(function* (options?: BranchOptions) {
         if (!impl) return []
-        return yield* impl.branches()
+        return yield* impl.branches(options)
       }),
       status: Effect.fn("Vcs.status")(function* () {
         if (!impl) return []

@@ -1723,6 +1723,8 @@ export type VcsStatusOperation<E = never> = (input?: VcsStatusInput) => Effect.E
 
 export type VcsBranchesInput = {
   readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  readonly search?: string | undefined
+  readonly limit?: number | undefined
 }
 export type VcsBranchesOutput = { readonly location: Location.Info; readonly data: Vcs.BranchList }
 export type VcsBranchesOperation<E = never> = (input?: VcsBranchesInput) => Effect.Effect<VcsBranchesOutput, E>

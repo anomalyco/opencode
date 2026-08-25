@@ -5679,7 +5679,19 @@ export type VcsStatusOutput = {
 export type VcsBranchesInput = {
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+    readonly search?: string | undefined
+    readonly limit?: number | undefined
   }["location"]
+  readonly search?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+    readonly search?: string | undefined
+    readonly limit?: number | undefined
+  }["search"]
+  readonly limit?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+    readonly search?: string | undefined
+    readonly limit?: number | undefined
+  }["limit"]
 }
 
 export type VcsBranchesOutput = {

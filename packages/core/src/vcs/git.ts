@@ -5,7 +5,7 @@ import { ChildProcess } from "effect/unstable/process"
 import { FileDiff } from "@opencode-ai/schema/file-diff"
 import { BranchList, FileStatus, Info, Mode } from "@opencode-ai/schema/vcs"
 import { AppProcess } from "@opencode-ai/util/process"
-import type { DiffOptions, Interface } from "../vcs.js"
+import type { BranchOptions, DiffOptions, Interface } from "../vcs.js"
 import { chunksByFile, emptyPatch, MAX_PATCH_BYTES, MAX_TOTAL_PATCH_BYTES, PATCH_CONTEXT_LINES } from "./patch.js"
 import type { Patch } from "./patch.js"
 
@@ -26,8 +26,8 @@ export function make(proc: AppProcess.Interface, input: { directory: string; wor
       })
       return { branch: { current, default: root?.name } } satisfies Info
     }),
-    branches: Effect.fn("VcsGit.branches")(function* () {
-      return yield* ctx.git.branches(ctx.directory)
+    branches: Effect.fn("VcsGit.branches")(function* (options?: BranchOptions) {
+      return yield* ctx.git.branches(ctx.directory, options)
     }),
     status: Effect.fn("VcsGit.status")(function* () {
       const git = ctx.git
@@ -179,10 +179,22 @@ function makeGit(proc: AppProcess.Interface) {
     return result.text().trim() || undefined
   })
 
-  const branches = Effect.fn("VcsGit.branches")(function* (cwd: string) {
-    return (yield* lines(["for-each-ref", "--format=%(refname:short)", "refs/heads", "refs/remotes"], { cwd }))
-      .filter((item) => !item.endsWith("/HEAD"))
-      .toSorted((a, b) => a.localeCompare(b)) satisfies BranchList
+  const branches = Effect.fn("VcsGit.branches")(function* (cwd: string, options?: BranchOptions) {
+    const search = options?.search?.trim().replace(/[*?[\]\\]/g, "\\$&")
+    return (
+      yield* lines(
+        [
+          "for-each-ref",
+          "--ignore-case",
+          "--sort=refname",
+          "--sort=-committerdate",
+          "--format=%(refname:short)",
+          ...(options?.limit ? [`--count=${options.limit}`] : []),
+          ...(search ? [`refs/heads/*${search}*`, `refs/remotes/*${search}*`] : ["refs/heads", "refs/remotes"]),
+        ],
+        { cwd },
+      )
+    ).filter((item) => !item.endsWith("/HEAD")) satisfies BranchList
   })
 
   const defaultBranch = Effect.fn("VcsGit.defaultBranch")(function* (cwd: string) {

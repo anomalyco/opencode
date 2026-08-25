@@ -74,6 +74,7 @@ export function NewSessionView(props: {
                       onboarding={onboardingReady() && !onboarding.used}
                       onChange={select}
                       onCreate={props.workspace.selection.create}
+                      onSearch={props.workspace.project.searchBranches}
                       onDone={props.composer.restoreFocus}
                       onViewAll={props.workspace.project.openAll}
                     />

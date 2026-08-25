@@ -1827,7 +1827,7 @@ export function make(options: ClientOptions) {
           {
             method: "GET",
             path: `/api/vcs/branches`,
-            query: { location: input?.["location"] },
+            query: { location: input?.["location"], search: input?.["search"], limit: input?.["limit"] },
             successStatus: 200,
             declaredStatuses: [401, 400],
             empty: false,

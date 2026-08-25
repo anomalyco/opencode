@@ -16,6 +16,7 @@ export function PromptWorkspaceSelector(props: {
   onboarding?: boolean
   onChange: (value: string) => void
   onCreate: (branch: string) => void
+  onSearch: (search: string) => void
   onDone: () => void
   onViewAll: () => void
 }) {
@@ -24,18 +25,12 @@ export function PromptWorkspaceSelector(props: {
   let searchInput: HTMLInputElement | undefined
   let branchSearchInput: HTMLInputElement | undefined
   let focusSearch = false
-  let focusBranchSearch = false
   let pending: { type: "select"; value: string } | { type: "create"; branch: string } | { type: "viewAll" } | undefined
   const selected = () => (sameDirectory(props.value, props.projectRoot) ? "main" : props.value)
   const workspaces = createMemo(() => {
     const query = search.workspaces.trim().toLowerCase()
     if (!query) return props.workspaces
     return props.workspaces.filter((workspace) => getFilename(workspace).toLowerCase().includes(query))
-  })
-  const branches = createMemo(() => {
-    const query = search.branches.trim().toLowerCase()
-    if (!query) return props.branches
-    return props.branches.filter((branch) => branch.toLowerCase().includes(query))
   })
   const icon = () => {
     if (selected() === "main") return "monitor"
@@ -48,6 +43,7 @@ export function PromptWorkspaceSelector(props: {
   const onOpenChange = (open: boolean) => {
     if (open) {
       setSearch({ workspaces: "", branches: "" })
+      props.onSearch("")
       return
     }
     const action = pending
@@ -129,88 +125,13 @@ export function PromptWorkspaceSelector(props: {
                     <Icon name="check" size="small" class="shrink-0" />
                   </Show>
                 </Menu.Item>
-                <Show
-                  when={props.branches.length > 0}
-                  fallback={
-                    <Menu.Item onSelect={() => select("create")}>
-                      <Icon name="workspace-new" />
-                      <span class="min-w-0 flex-1 truncate">{language.t("workspace.new")}</span>
-                    </Menu.Item>
-                  }
-                >
-                  <Menu.Sub
-                    gutter={0}
-                    overlap
-                    overflowPadding={8}
-                    onOpenChange={(open) => {
-                      if (!open) {
-                        focusBranchSearch = false
-                        return
-                      }
-                      if (!focusBranchSearch || props.branches.length < 10) return
-                      focusBranchSearch = false
-                      requestAnimationFrame(() => branchSearchInput?.focus())
-                    }}
-                  >
-                    <Menu.SubTrigger
-                      onKeyDown={(event) => {
-                        if (
-                          event.key === "ArrowRight" ||
-                          event.key === "ArrowLeft" ||
-                          event.key === "Enter" ||
-                          event.key === " "
-                        )
-                          focusBranchSearch = true
-                      }}
-                    >
-                      <Icon name="workspace-new" />
-                      <span class="min-w-0 flex-1 truncate">{language.t("workspace.new")}</span>
-                      <Show when={selected() === "create"}>
-                        <Icon name="check" size="small" class="shrink-0" />
-                      </Show>
-                    </Menu.SubTrigger>
-                    <Menu.Portal>
-                      <Menu.SubContent class="max-h-[calc(100dvh-16px)] w-[220px] overflow-y-auto">
-                        <Menu.GroupLabel>{language.t("session.new.workspace.createFrom")}</Menu.GroupLabel>
-                        <Show when={props.branches.length >= 10}>
-                          <div class="flex h-7 items-center gap-2 rounded-sm ps-3 pe-2 text-v2-icon-icon-muted">
-                            <Icon name="magnifying-glass" size="small" class="shrink-0" />
-                            <input
-                              ref={(element) => {
-                                branchSearchInput = element
-                              }}
-                              value={search.branches}
-                              placeholder={language.t("session.new.workspace.branch.search.placeholder")}
-                              aria-label={language.t("session.new.workspace.branch.search.placeholder")}
-                              class="h-7 min-w-0 flex-1 border-0 bg-transparent text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base outline-none placeholder:text-v2-text-text-faint"
-                              onInput={(event) => setSearch("branches", event.currentTarget.value)}
-                              onKeyDown={(event) => {
-                                if (
-                                  event.key === "Escape" ||
-                                  event.key === "ArrowDown" ||
-                                  event.key === "ArrowUp" ||
-                                  event.key === "Enter"
-                                )
-                                  return
-                                event.stopPropagation()
-                              }}
-                            />
-                          </div>
-                        </Show>
-                        <For each={branches()}>
-                          {(branch) => (
-                            <Menu.Item onSelect={() => (pending = { type: "create", branch })}>
-                              <span class="min-w-0 flex-1 truncate">{branch}</span>
-                              <Show when={selected() === "create" && props.branch === branch}>
-                                <Icon name="check" size="small" class="shrink-0" />
-                              </Show>
-                            </Menu.Item>
-                          )}
-                        </For>
-                      </Menu.SubContent>
-                    </Menu.Portal>
-                  </Menu.Sub>
-                </Show>
+                <Menu.Item onSelect={() => select("create")}>
+                  <Icon name="workspace-new" />
+                  <span class="min-w-0 flex-1 truncate">{language.t("workspace.new")}</span>
+                  <Show when={selected() === "create"}>
+                    <Icon name="check" size="small" class="shrink-0" />
+                  </Show>
+                </Menu.Item>
               </Menu.Group>
               <Show
                 when={props.workspaces.length > 0}
@@ -304,7 +225,94 @@ export function PromptWorkspaceSelector(props: {
           </Menu.Portal>
         </Menu>
       </Tooltip>
-      <PromptGitStatus branch={props.branch} from={selected() === "create"} class="ms-1" />
+      <Show
+        when={selected() === "create" && props.branch}
+        fallback={<PromptGitStatus branch={props.branch} from={selected() === "create"} class="ms-1" />}
+      >
+        <Tooltip
+          placement="top"
+          value={language.t("session.new.workspace.fromBranch", { branch: props.branch! })}
+          class="ms-1 min-w-0 max-w-[220px]"
+          contentClass="max-w-[calc(100vw-32px)] break-all"
+        >
+          <Menu
+            placement="bottom"
+            gutter={4}
+            onOpenChange={(open) => {
+              onOpenChange(open)
+              if (open) requestAnimationFrame(() => branchSearchInput?.focus())
+            }}
+          >
+            <Menu.Trigger class="flex h-6 min-w-0 max-w-[220px] items-center gap-1.5 rounded-full bg-v2-background-bg-layer-02 px-2.5 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-faint transition-colors hover:bg-v2-background-bg-layer-03 hover:text-v2-text-text-muted focus-visible:bg-v2-background-bg-layer-03 focus-visible:text-v2-text-text-muted focus-visible:outline-none data-[expanded]:bg-v2-background-bg-layer-03 data-[expanded]:text-v2-text-text-muted">
+              <Icon name="branch-out" size="small" class="shrink-0 text-v2-icon-icon-muted" />
+              <span class="min-w-0 truncate">
+                {language.t("session.new.workspace.fromBranch", { branch: props.branch! })}
+              </span>
+              <Icon name="chevron-down" size="small" class="shrink-0 text-v2-icon-icon-muted" />
+            </Menu.Trigger>
+            <Menu.Portal>
+              <Menu.Content class="w-[243px] overflow-hidden rounded-md border-0 bg-v2-background-bg-layer-01 shadow-[var(--v2-elevation-floating)] focus:outline-none">
+                <div class="flex h-7 shrink-0 items-center gap-2 rounded-sm pl-3 pr-2.5 text-v2-icon-icon-muted">
+                  <Icon name="magnifying-glass" size="small" class="shrink-0" />
+                  <input
+                    ref={(element) => {
+                      branchSearchInput = element
+                    }}
+                    value={search.branches}
+                    placeholder={language.t("session.new.workspace.branch.search.placeholder")}
+                    aria-label={language.t("session.new.workspace.branch.search.placeholder")}
+                    class="h-7 min-w-0 flex-1 border-0 bg-transparent text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base outline-none placeholder:text-v2-text-text-faint"
+                    onInput={(event) => {
+                      setSearch("branches", event.currentTarget.value)
+                      props.onSearch(event.currentTarget.value)
+                    }}
+                    onKeyDown={(event) => {
+                      if (
+                        event.key === "Escape" ||
+                        event.key === "ArrowDown" ||
+                        event.key === "ArrowUp" ||
+                        event.key === "Enter"
+                      )
+                        return
+                      event.stopPropagation()
+                    }}
+                  />
+                  <Show when={search.branches.trim()}>
+                    <button
+                      type="button"
+                      class="flex size-5 items-center justify-center rounded-sm text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover"
+                      onPointerDown={(event) => event.preventDefault()}
+                      onClick={() => {
+                        setSearch("branches", "")
+                        props.onSearch("")
+                      }}
+                      aria-label={language.t("common.clear")}
+                    >
+                      <Icon name="close-small" size="small" />
+                    </button>
+                  </Show>
+                </div>
+                <div class="max-h-[224px] overflow-y-auto">
+                  <Menu.RadioGroup value={props.branch}>
+                    <For each={props.branches}>
+                      {(branch) => (
+                        <Menu.RadioItem
+                          value={branch}
+                          class="h-7 gap-2 rounded-sm px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base [font-family:var(--v2-font-family-sans)] data-[highlighted]:!bg-v2-overlay-simple-overlay-hover"
+                          closeOnSelect
+                          onSelect={() => (pending = { type: "create", branch })}
+                        >
+                          <span class="min-w-0 truncate leading-5">{branch}</span>
+                        </Menu.RadioItem>
+                      )}
+                    </For>
+                  </Menu.RadioGroup>
+                </div>
+              </Menu.Content>
+            </Menu.Portal>
+          </Menu>
+        </Tooltip>
+      </Show>
     </>
   )
 }

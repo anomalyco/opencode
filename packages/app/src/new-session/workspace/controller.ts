@@ -1,4 +1,6 @@
+import { debounce } from "@solid-primitives/scheduled"
 import { createEffect, createMemo, createResource } from "solid-js"
+import { createStore } from "solid-js/store"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useServerSDK } from "@/runtime/server/client"
 import { useData } from "@/runtime/server/current"
@@ -55,6 +57,8 @@ export function createNewSessionWorkspaceController(input: {
   const serverSDK = useServerSDK()
   const data = useData()
   const settings = useSettings()
+  const [state, setState] = createStore({ search: "" })
+  const searchBranches = debounce((search: string) => setState("search", search.trim()), 100)
   const currentProject = createMemo(() => {
     const projectID = data.location.info({ directory: sdk().directory })?.project.id
     const current = projectID ? data.project.get(projectID) : undefined
@@ -91,12 +95,12 @@ export function createNewSessionWorkspaceController(input: {
   )
   const projectRoot = createMemo(() => currentProject()?.worktree ?? sdk().directory)
   const [branches] = createResource(
-    () => (visible() ? projectRoot() : undefined),
-    (directory) =>
+    () => (visible() ? { directory: projectRoot(), search: state.search } : undefined),
+    ({ directory, search }) =>
       serverSDK.api.vcs
-        .branches({ location: { directory } })
-        .then((response) => ({ directory, data: response.data }))
-        .catch(() => ({ directory, data: [] })),
+        .branches({ location: { directory }, search, limit: 50 })
+        .then((response) => ({ directory, search, data: response.data }))
+        .catch(() => ({ directory, search, data: [] })),
   )
   createEffect(() => {
     void Promise.all([data.location.syncInfo({ directory: sdk().directory }), data.project.sync()]).catch(
@@ -155,8 +159,11 @@ export function createNewSessionWorkspaceController(input: {
         const current = data.location.vcs.info({ directory: sdk().directory })?.branch.current
         const loaded = branches.latest
         const list = loaded?.directory === projectRoot() ? loaded.data : []
-        return [...new Set([...list, ...(current ? [current] : [])])]
+        return [
+          ...new Set([...list, ...(current && current.toLowerCase().includes(state.search.toLowerCase()) ? [current] : [])]),
+        ].slice(0, 50)
       },
+      searchBranches,
       openAll: input.onViewAll,
     },
     bar: {
