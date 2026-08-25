@@ -14,6 +14,8 @@ import { Session } from "@opencode-ai/schema/session"
 import { Bus } from "../bus.js"
 import { Database } from "../database/database.js"
 import { Pty } from "@opencode-ai/schema/pty"
+import { Global } from "@opencode-ai/util/global"
+import { resolveBinary } from "#persistent-pty-binary"
 
 const ProtocolVersion = 6
 const MaxFrameBytes = 8 * 1024 * 1024
@@ -217,9 +219,11 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const bus = yield* Bus.Service
     const database = yield* Database.Service
+    const global = yield* Global.Service
     const context = yield* Effect.context()
     const runFork = Effect.runForkWith(context)
-    const client = new Client(runtimeDirectory(databasePath(database.db)))
+    let binary: Promise<string> | undefined
+    const client = new Client(runtimeDirectory(databasePath(database.db)), () => (binary ??= resolveBinary(global.bin)))
     const removing = new Set<Pty.ID>()
 
     const list = Effect.fn("PersistentPty.list")(function* (sessionID?: Session.ID) {
@@ -408,12 +412,15 @@ export const layer = Layer.effect(
   }),
 )
 
-export const node = makeGlobalNode({ service: Service, layer, deps: [Bus.node, Database.node] })
+export const node = makeGlobalNode({ service: Service, layer, deps: [Bus.node, Database.node, Global.node] })
 
 class Client {
   private registration?: Promise<Registration>
 
-  constructor(private readonly directory: string) {}
+  constructor(
+    private readonly directory: string,
+    private readonly binary: () => Promise<string>,
+  ) {}
 
   request(value: object, start = false): Promise<WireResponse> {
     return this.connect(start)
@@ -550,7 +557,7 @@ class Client {
   }
 
   private connect(start: boolean) {
-    this.registration ??= start ? ensure(this.directory) : discover(this.directory)
+    this.registration ??= start ? ensure(this.directory, this.binary) : discover(this.directory)
     return this.registration.catch((error) => {
       this.registration = undefined
       throw error
@@ -594,11 +601,12 @@ const runtimeDirectory = (databasePath?: string) => {
 
 const registrationPath = (directory: string) => path.join(directory, "service.json")
 
-async function ensure(directory: string) {
+async function ensure(directory: string, binary: () => Promise<string>) {
   const found = await discover(directory).catch(() => undefined)
   if (found) return found
+  const executable = await binary()
   await new Promise<void>((resolve, reject) => {
-    const child = spawn(process.env.OPENCODE_PTY_BIN || "opencode-pty", ["daemon"], {
+    const child = spawn(executable, ["daemon"], {
       detached: true,
       stdio: "ignore",
       env: { ...process.env, OPENCODE_PTY_RUNTIME_DIR: directory },
