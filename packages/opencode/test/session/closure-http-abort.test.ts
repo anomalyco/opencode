@@ -1,14 +1,20 @@
 import { afterEach, describe, expect, mock } from "bun:test"
+import { NodeHttpServer, NodeServices } from "@effect/platform-node"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Database } from "@opencode-ai/core/database/database"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
-import { Effect, Layer } from "effect"
+import { Deferred, Effect, Fiber, Layer } from "effect"
+import { HttpRouter, HttpServer } from "effect/unstable/http"
+import { layerWebSocketConstructorGlobal } from "effect/unstable/socket/Socket"
 import { Workspace } from "@/control-plane/workspace"
 import { InstanceBootstrap as InstanceBootstrapService } from "@/project/bootstrap-service"
 import { InstanceStore } from "@/project/instance-store"
 import { Project } from "@/project/project"
+import { SessionClosure } from "@/session/closure/coordinator"
+import { SessionClosureRunState } from "@/session/closure/run-state"
 import { Session as SessionNs } from "@/session/session"
+import { HttpApiApp } from "@/server/routes/instance/httpapi/server"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { httpApiLayer, requestInDirectory } from "../server/httpapi-layer"
@@ -40,13 +46,67 @@ const appLayer = AppNodeBuilder.build(
 
 const it = testEffect(Layer.mergeAll(appLayer, httpApiLayer))
 
+const unsetRequest: SessionClosureRunState.Interface["request"] = () =>
+  Effect.die("controlled closure request was not installed")
+const controlled = {
+  requests: [] as string[],
+  request: unsetRequest,
+}
+const controlledRunState = Layer.succeed(
+  SessionClosureRunState.Service,
+  SessionClosureRunState.Service.of({
+    request: (root) =>
+      Effect.sync(() => controlled.requests.push(root)).pipe(
+        Effect.andThen(Effect.suspend(() => controlled.request(root))),
+      ),
+    view: Effect.die("unused controlled closure view"),
+    identity: Effect.die("unused controlled closure identity"),
+  }),
+)
+const replacements = [
+  [SessionClosureRunState.node, controlledRunState],
+] as const satisfies LayerNode.Replacements
+const served: Layer.Layer<never, unknown, HttpServer.HttpServer> = HttpRouter.serve(
+  HttpApiApp.createRoutes(undefined, replacements),
+  {
+    disableListenLog: true,
+    disableLogger: true,
+  },
+)
+const controlledHttp = served.pipe(
+  Layer.provide(layerWebSocketConstructorGlobal),
+  Layer.provideMerge(NodeHttpServer.layerTest),
+  Layer.provideMerge(NodeServices.layer),
+)
+const mappedIt = testEffect(controlledHttp)
+
 afterEach(async () => {
   mock.restore()
+  controlled.requests.length = 0
+  controlled.request = unsetRequest
   await disposeAllInstances()
 })
 
 const abort = (session: string, directory: string) =>
   requestInDirectory(`/session/${session}/abort`, directory, { method: "POST" })
+
+const create = (directory: string) =>
+  requestInDirectory("/session", directory, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: "{}",
+  }).pipe(
+    Effect.flatMap((response) => response.json),
+    Effect.map((body) => body as { id: string }),
+  )
+
+const messages = {
+  scope_incomplete: "The Task branch could not be proven completely; cancellation remains incomplete.",
+  quiescence_failed: "The Task branch did not reach conversational quiescence.",
+  planning_failed: "Closure evidence could not be prepared.",
+  record_failed: "Closure evidence could not be recorded or verified.",
+  closure_unavailable: "Task branch cancellation is temporarily unavailable.",
+} as const
 
 describe("session abort", () => {
   // The missing-Session compatibility path. Requesting closure for an unknown Session must not reach
@@ -57,6 +117,102 @@ describe("session abort", () => {
       Effect.gen(function* () {
         const test = yield* TestInstance
         const response = yield* abort("ses_missing00000000000000000", test.directory)
+        expect(response.status).toBe(200)
+        expect(yield* response.text).toBe("true")
+      }),
+    { git: true },
+  )
+
+  mappedIt.instance(
+    "K90 maps every expected domain failure to its exact safe HTTP 500 without leaking operation data",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const session = yield* create(test.directory)
+        const sentinel = "operation=C:/secret/path;token=tok_SECRET;row=row_SECRET;payload=payload_SECRET"
+
+        for (const kind of Object.keys(messages) as Array<keyof typeof messages>) {
+          const failure = new SessionClosure.Failure({ kind, operation: sentinel })
+          // Standing-check precondition: the injected object really carries every string the wire
+          // assertions below claim the mapper can suppress. A fixture without the field cannot prove
+          // that forwarding the domain error would leak it.
+          expect(failure.operation).toBe(sentinel)
+          controlled.request = () => Effect.fail(failure)
+
+          const response = yield* abort(session.id, test.directory)
+          const text = yield* response.text
+
+          expect(response.status).toBe(500)
+          expect(JSON.parse(text)).toEqual({ _tag: "SessionClosureError", kind, message: messages[kind] })
+          expect(text).not.toContain("C:/secret/path")
+          expect(text).not.toContain("tok_SECRET")
+          expect(text).not.toContain("row_SECRET")
+          expect(text).not.toContain("payload_SECRET")
+        }
+        expect(controlled.requests).toEqual(Array.from({ length: 5 }, () => session.id))
+      }),
+    { git: true },
+  )
+
+  mappedIt.instance(
+    "K90 maps Location refusal to scope_incomplete rather than worker failure and hides both coordinates",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const session = yield* create(test.directory)
+        const failure = new SessionClosure.LocationError({
+          expected: "C:/secret/location/path",
+          actual: "token=tok_LOCATION_SECRET",
+        })
+        expect(failure.expected).toContain("secret/location")
+        expect(failure.actual).toContain("tok_LOCATION_SECRET")
+        controlled.request = () => Effect.fail(failure)
+
+        const response = yield* abort(session.id, test.directory)
+        const text = yield* response.text
+
+        expect(response.status).toBe(500)
+        expect(JSON.parse(text)).toEqual({
+          _tag: "SessionClosureError",
+          kind: "scope_incomplete",
+          message: messages.scope_incomplete,
+        })
+        expect(text).not.toContain("C:/secret/location/path")
+        expect(text).not.toContain("tok_LOCATION_SECRET")
+        expect(controlled.requests).toEqual([session.id])
+      }),
+    { git: true },
+  )
+
+  mappedIt.instance(
+    "K90 emits true only after the closure request releases",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const session = yield* create(test.directory)
+        const entered = yield* Deferred.make<void>()
+        const release = yield* Deferred.make<void>()
+        const state = { completed: false }
+        controlled.request = () =>
+          Deferred.succeed(entered, undefined).pipe(
+            Effect.andThen(Deferred.await(release)),
+            Effect.as({ operation: "operation-k90", view: "view-k90" } as SessionClosure.Outcome),
+          )
+
+        const fiber = yield* abort(session.id, test.directory).pipe(
+          Effect.ensuring(Effect.sync(() => (state.completed = true))),
+          Effect.forkChild,
+        )
+        yield* Deferred.await(entered)
+
+        // Positive precondition: the real handler reached the replacement request. While that
+        // request is held before release, no HTTP success is available to the caller.
+        expect(controlled.requests).toEqual([session.id])
+        expect(state.completed).toBe(false)
+
+        yield* Deferred.succeed(release, undefined)
+        const response = yield* Fiber.join(fiber)
+        expect(state.completed).toBe(true)
         expect(response.status).toBe(200)
         expect(yield* response.text).toBe("true")
       }),

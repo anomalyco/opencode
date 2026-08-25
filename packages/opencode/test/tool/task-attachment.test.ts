@@ -29,7 +29,7 @@ import { disposeAllInstances } from "../fixture/fixture"
 import { answered } from "../lib/background"
 import { admittingClosure, unusedJobs } from "../lib/closure"
 import { recordingPhysical } from "../lib/physical"
-import { testEffect } from "../lib/effect"
+import { pollWithTimeout, testEffect } from "../lib/effect"
 import { SessionAdmission } from "@/session/closure/admission"
 import { SessionClosure } from "@/session/closure/coordinator"
 import { SessionClosureDiscovery } from "@/session/closure/discovery"
@@ -1619,6 +1619,67 @@ describe("task attachment integration", () => {
       // suppression rather than a degradation. Treating it as a failure would turn a routine
       // cancellation into an acceptance-blocking one.
       expect(parent.current().failed).toBe(false)
+    }),
+  )
+
+  it.instance("an async start whose observer never installs finalizes the owner scope and stays resumable", () =>
+    Effect.gen(function* () {
+      const jobs = yield* BackgroundJob.Service
+      const coordinator = yield* AttachmentCoordinator.make
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      const log = continuationLog()
+      // Every continuation acquisition is fenced: the born-background observer REFUSES
+      // before any lease exists, so no observer ever consumes this lifetime's terminal.
+      // The owner scope opened before registration must be finalized by that no-observer
+      // exit — otherwise the child stays registered in the coordinator and
+      // every later terminal resume dies on the exclusive open.
+      const promptOps = continuationOps(
+        fencingContinuationClosure(log),
+        basicOps({
+          attachments: coordinator,
+          prompt: (input) => Effect.succeed(reply(input, "child done")),
+        }),
+      )
+
+      const started = yield* def.execute(
+        { description: "refused observer", prompt: "run", subagent_type: "general", async: true },
+        context({ sessionID: chat.id, messageID: assistant.id, promptOps }),
+      )
+      expect(started.metadata.background).toBe(true)
+      const child = started.metadata.sessionId
+      const waited = yield* jobs.wait({ id: child, timeout: 1_000 })
+      expect(waited.timedOut).toBe(false)
+
+      // Positive precondition: the acquisition was genuinely attempted and refused.
+      expect(log.acquired.length).toBeGreaterThanOrEqual(1)
+      expect(log.settled).toHaveLength(0)
+
+      // The owner scope finalized on the no-observer exit: nothing remains registered for
+      // the child session. (Pre-fix, locate returned the leaked scope here.)
+      yield* pollWithTimeout(
+        Effect.gen(function* () {
+          return (yield* coordinator.locate(child)) === undefined ? true : undefined
+        }),
+        "the owner scope leaked past the refused observer",
+      )
+
+      // Resumability: a terminal resume must open the child scope FRESH and deliver
+      // inline. (Pre-fix, the exclusive open failed: "Attachment scope already open".)
+      const resumed = yield* def.execute(
+        { description: "terminal resume", prompt: "resume", subagent_type: "general", task_id: child },
+        context({ sessionID: chat.id, messageID: assistant.id, promptOps }),
+      )
+      expect(resumed.output).toContain("child done")
+      expect(resumed.output).toContain('state="completed"')
+      // And the resume's own sync delivery finalized its scope too.
+      yield* pollWithTimeout(
+        Effect.gen(function* () {
+          return (yield* coordinator.locate(child)) === undefined ? true : undefined
+        }),
+        "the resume's owner scope leaked past its inline delivery",
+      )
     }),
   )
 })
