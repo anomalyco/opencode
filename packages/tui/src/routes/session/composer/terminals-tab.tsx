@@ -5,10 +5,14 @@ import type { useSessionTerminals } from "../../../context/session-terminals"
 import { useTheme } from "../../../context/theme"
 import { useComposerTab } from "./index"
 
-export function TerminalsTab(props: { sessionID: string; terminals: ReturnType<typeof useSessionTerminals> }) {
+export function TerminalsTab(props: {
+  sessionID: string
+  terminals: ReturnType<typeof useSessionTerminals>
+  visibleTerminalID?: string
+}) {
   const composer = useComposerTab()
   const theme = useTheme()
-  const [selected, setSelected] = createSignal(0)
+  const [selected, setSelected] = createSignal<number>()
   const session = () => props.terminals.get(props.sessionID)
   const entries = () => session()?.terminals ?? []
 
@@ -19,12 +23,14 @@ export function TerminalsTab(props: { sessionID: string; terminals: ReturnType<t
 
   createEffect(() => {
     if (!composer.active("terminals")) return
-    const index = entries().findIndex((terminal) => terminal.id === session()?.selectedTerminalID)
-    setSelected(index < 0 ? 0 : index)
+    const index = entries().findIndex((terminal) => terminal.id === props.visibleTerminalID)
+    setSelected(index < 0 ? undefined : index)
   })
 
   const select = () => {
-    const terminal = entries()[selected()]
+    const index = selected()
+    if (index === undefined) return
+    const terminal = entries()[index]
     composer.close()
     if (terminal) {
       void props.terminals.selectTerminal(props.sessionID, terminal.id)
@@ -42,13 +48,13 @@ export function TerminalsTab(props: { sessionID: string; terminals: ReturnType<t
         id: "composer.terminal.up",
         title: "Previous terminal",
         group: "Composer",
-        run: () => setSelected((index) => (index + entries().length) % (entries().length + 1)),
+        run: () => setSelected((index) => ((index ?? 0) + entries().length) % (entries().length + 1)),
       },
       {
         id: "composer.terminal.down",
         title: "Next terminal",
         group: "Composer",
-        run: () => setSelected((index) => (index + 1) % (entries().length + 1)),
+        run: () => setSelected((index) => ((index ?? -1) + 1) % (entries().length + 1)),
       },
       {
         id: "composer.terminal.select",
@@ -65,7 +71,7 @@ export function TerminalsTab(props: { sessionID: string; terminals: ReturnType<t
         <For each={[...entries(), undefined]}>
           {(terminal, index) => {
             const active = createMemo(() => index() === selected())
-            const current = () => terminal?.id === session()?.selectedTerminalID
+            const current = () => terminal?.id === props.visibleTerminalID
             return (
               <box
                 flexDirection="row"

@@ -39,6 +39,7 @@ export type ComposerProps = {
   defaultTab?: string
   onClose?: () => void
   terminals?: ReturnType<typeof useSessionTerminals>
+  visibleTerminalID?: string
 }
 
 export function Composer(props: ComposerProps) {
@@ -152,7 +153,13 @@ export function Composer(props: ComposerProps) {
             <SubagentsTab sessionID={props.sessionID} />
             <ShellTab sessionID={props.sessionID} />
             <Show when={props.terminals}>
-              {(terminals) => <TerminalsTab sessionID={props.sessionID} terminals={terminals()} />}
+              {(terminals) => (
+                <TerminalsTab
+                  sessionID={props.sessionID}
+                  terminals={terminals()}
+                  visibleTerminalID={props.visibleTerminalID}
+                />
+              )}
             </Show>
             <box flexDirection="row" gap={2} paddingLeft={1} flexShrink={0}>
               <For each={footerHints()}>

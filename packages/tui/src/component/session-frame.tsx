@@ -125,6 +125,7 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
           promptMuted={terminalFocused()}
           sidebarVisible={showSidebar()}
           onToggleSidebar={toggleSidebar}
+          visibleTerminalID={showTerminal() ? selectedTerminal()?.id : undefined}
           width={sessionWidth()}
         />
         <Show when={terminalFocused()}>
