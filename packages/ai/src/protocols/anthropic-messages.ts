@@ -735,9 +735,9 @@ const supportsNativeSystemUpdates = (request: LLMRequest) => {
   return match[3] !== undefined && match[3].length <= 2 && Number(match[3]) >= 8
 }
 
-const endsInServerToolUse = (message: LLMRequest["messages"][number]) => {
+const endsInServerToolResult = (message: LLMRequest["messages"][number]) => {
   const last = message.content.at(-1)
-  return message.role === "assistant" && last?.type === "tool-call" && last.providerExecuted === true
+  return message.role === "assistant" && last?.type === "tool-result" && last.providerExecuted === true
 }
 
 const canUseNativeSystemUpdate = (messages: LLMRequest["messages"], index: number) => {
@@ -746,22 +746,68 @@ const canUseNativeSystemUpdate = (messages: LLMRequest["messages"], index: numbe
   return (
     previous !== undefined &&
     previous.role !== "system" &&
-    (previous.role === "user" || previous.role === "tool" || endsInServerToolUse(previous)) &&
+    (previous.role === "user" || previous.role === "tool" || endsInServerToolResult(previous)) &&
     next?.role !== "system" &&
     (next === undefined || next.role === "assistant")
   )
 }
 
-const splitsLocalToolResults = (messages: LLMRequest["messages"], index: number) => {
-  const pending = new Set<string>()
-  for (const message of messages.slice(0, index)) {
-    for (const part of message.content) {
-      if (message.role === "assistant" && part.type === "tool-call" && part.providerExecuted !== true)
-        pending.add(part.id)
-      if (message.role === "tool" && part.type === "tool-result") pending.delete(part.id)
+const RESULT_ORDER_ERROR =
+  "Anthropic Messages local tool calls must be followed immediately by exactly one matching result per call"
+
+const localToolOrderError = (messages: LLMRequest["messages"]): string | undefined => {
+  let index = 0
+  while (index < messages.length) {
+    const message = messages[index]
+    if (!message) return undefined
+    if (message.role === "tool")
+      return "Anthropic Messages tool results must immediately follow their matching local tool calls"
+    if (message.role !== "assistant") {
+      index += 1
+      continue
     }
+
+    const firstLocalCall = message.content.findIndex(
+      (part) => part.type === "tool-call" && part.providerExecuted !== true,
+    )
+    if (firstLocalCall === -1) {
+      index += 1
+      continue
+    }
+    if (message.content.slice(firstLocalCall + 1).some((part) => part.type !== "tool-call"))
+      return "Anthropic Messages local tool calls must be the final content blocks in an assistant message"
+
+    const calls = message.content
+      .filter((part): part is ToolCallPart => part.type === "tool-call" && part.providerExecuted !== true)
+      .map((part) => part.id)
+    if (new Set(calls).size !== calls.length)
+      return "Anthropic Messages assistant messages cannot contain duplicate local tool call IDs"
+    const wireCallIDs = message.content
+      .filter((part): part is ToolCallPart => part.type === "tool-call")
+      .map((part) => scrubToolCallID(part.id))
+    if (new Set(wireCallIDs).size !== wireCallIDs.length)
+      return "Anthropic Messages tool call IDs must remain unique after normalization"
+
+    // Consecutive canonical tool messages are batched below into one Anthropic user turn.
+    const resultStart = index + 1
+    const resultEndOffset = messages.slice(resultStart).findIndex((item) => item.role !== "tool")
+    const resultEnd = resultEndOffset === -1 ? messages.length : resultStart + resultEndOffset
+    const resultMessages = messages.slice(resultStart, resultEnd)
+    if (resultMessages.length === 0) return RESULT_ORDER_ERROR
+    const resultParts = resultMessages.flatMap((item) => item.content)
+    if (resultParts.some((part) => part.type !== "tool-result" || part.providerExecuted === true)) return RESULT_ORDER_ERROR
+    const results = resultParts.flatMap((part) => (part.type === "tool-result" ? [part.id] : []))
+    const resultIDs = new Set(results)
+    if (
+      resultIDs.size !== results.length ||
+      results.length !== calls.length ||
+      calls.some((id) => !resultIDs.has(id))
+    )
+      return RESULT_ORDER_ERROR
+
+    index = resultEnd
   }
-  return pending.size > 0
+  return undefined
 }
 
 const lowerNativeSystemUpdate = Effect.fn("AnthropicMessages.lowerNativeSystemUpdate")(function* (
@@ -783,12 +829,12 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
   request: LLMRequest,
   breakpoints: Cache.Breakpoints,
 ) {
+  const toolOrderError = localToolOrderError(request.messages)
+  if (toolOrderError) return yield* invalid(toolOrderError)
   const messages: AnthropicMessage[] = []
 
   for (const [index, message] of request.messages.entries()) {
     if (message.role === "system") {
-      if (splitsLocalToolResults(request.messages, index))
-        return yield* invalid("Anthropic Messages system updates cannot split a local tool call from its tool result")
       if (supportsNativeSystemUpdates(request) && canUseNativeSystemUpdate(request.messages, index)) {
         messages.push(yield* lowerNativeSystemUpdate(message, breakpoints))
         continue

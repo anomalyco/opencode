@@ -301,7 +301,143 @@ describe("Anthropic Messages route", () => {
         }),
       ).pipe(Effect.flip)
 
-      expect(error.message).toContain("system updates cannot split a local tool call from its tool result")
+      expect(error.message).toContain("must be followed immediately by exactly one matching result per call")
+    }),
+  )
+
+  it.effect("rejects user and assistant messages between local tool calls and results", () =>
+    Effect.gen(function* () {
+      const errors = yield* Effect.forEach([Message.user("Too early."), Message.assistant("Too early.")], (middle) =>
+        compileRequest(
+          LLM.request({
+            model,
+            messages: [
+              Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: {} })]),
+              middle,
+              Message.tool({ id: "call_1", name: "lookup", result: "Done." }),
+            ],
+          }),
+        ).pipe(Effect.flip),
+      )
+
+      expect(errors.every((error) => error.message.includes("must be followed immediately"))).toBe(true)
+    }),
+  )
+
+  it.effect("rejects content after a local tool call in the same assistant message", () =>
+    Effect.gen(function* () {
+      const error = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([
+              ToolCallPart.make({ id: "call_1", name: "lookup", input: {} }),
+              { type: "text", text: "Too late." },
+            ]),
+            Message.tool({ id: "call_1", name: "lookup", result: "Done." }),
+          ],
+        }),
+      ).pipe(Effect.flip)
+
+      expect(error.message).toContain("must be the final content blocks")
+    }),
+  )
+
+  it.effect("rejects incomplete, duplicate, mismatched, and orphaned local tool results", () =>
+    Effect.gen(function* () {
+      const calls = Message.assistant([
+        ToolCallPart.make({ id: "call_1", name: "lookup", input: {} }),
+        ToolCallPart.make({ id: "call_2", name: "lookup", input: {} }),
+      ])
+      const errors = yield* Effect.forEach(
+        [
+          [calls, Message.tool({ id: "call_1", name: "lookup", result: "Done." })],
+          [
+            calls,
+            Message.tool({ id: "call_1", name: "lookup", result: "Done." }),
+            Message.tool({ id: "call_1", name: "lookup", result: "Again." }),
+          ],
+          [
+            calls,
+            Message.tool({ id: "call_1", name: "lookup", result: "Done." }),
+            Message.tool({ id: "call_3", name: "lookup", result: "Unknown." }),
+          ],
+          [Message.tool({ id: "call_1", name: "lookup", result: "Orphaned." })],
+        ],
+        (messages) => compileRequest(LLM.request({ model, messages })).pipe(Effect.flip),
+      )
+
+      expect(errors.every((error) => error.message.includes("result"))).toBe(true)
+    }),
+  )
+
+  it.effect("rejects duplicate and normalization-colliding tool call IDs", () =>
+    Effect.gen(function* () {
+      const errors = yield* Effect.forEach(
+        [
+          ["call.1", "call.1"],
+          ["call.1", "call:1"],
+        ],
+        (ids) =>
+          compileRequest(
+            LLM.request({
+              model,
+              messages: [
+                Message.assistant(
+                  ids.map((id) => ToolCallPart.make({ id, name: "lookup", input: {} })),
+                ),
+                ...ids.map((id) => Message.tool({ id, name: "lookup", result: "Done." })),
+              ],
+            }),
+          ).pipe(Effect.flip),
+      )
+
+      expect(errors[0]?.message).toContain("duplicate local tool call IDs")
+      expect(errors[1]?.message).toContain("unique after normalization")
+    }),
+  )
+
+  it.effect("places native system updates only after completed server tool use", () =>
+    Effect.gen(function* () {
+      const call = {
+        type: "tool-call" as const,
+        id: "srvtoolu_1",
+        name: "web_search",
+        input: { query: "effect" },
+        providerExecuted: true,
+      }
+      const unresolved = yield* compileRequest(
+        LLM.request({
+          model: opus48,
+          messages: [Message.assistant([call]), Message.system("Update.")],
+          cache: "none",
+        }),
+      )
+      const completed = yield* compileRequest(
+        LLM.request({
+          model: opus48,
+          messages: [
+            Message.assistant([
+              call,
+              {
+                type: "tool-result",
+                id: "srvtoolu_1",
+                name: "web_search",
+                result: { type: "json", value: [] },
+                providerExecuted: true,
+              },
+            ]),
+            Message.system("Update."),
+          ],
+          cache: "none",
+        }),
+      )
+
+      expect(unresolved.body.messages[1]).toEqual({
+        role: "user",
+        content: [{ type: "text", text: "<system-update>\nUpdate.\n</system-update>" }],
+      })
+      expect(completed.body.messages[1]).toEqual({ role: "system", content: [{ type: "text", text: "Update." }] })
     }),
   )
 
@@ -371,8 +507,8 @@ describe("Anthropic Messages route", () => {
               ToolCallPart.make({ id: "call_paris", name: "weather", input: { city: "Paris" } }),
               ToolCallPart.make({ id: "call_london", name: "weather", input: { city: "London" } }),
             ]),
-            Message.tool({ id: "call_paris", name: "weather", result: { temperature: 22 } }),
             Message.tool({ id: "call_london", name: "weather", result: { temperature: 18 } }),
+            Message.tool({ id: "call_paris", name: "weather", result: { temperature: 22 } }),
           ],
           cache: "none",
         }),
@@ -391,8 +527,8 @@ describe("Anthropic Messages route", () => {
         {
           role: "user",
           content: [
-            { type: "tool_result", tool_use_id: "call_paris", content: '{"temperature":22}' },
             { type: "tool_result", tool_use_id: "call_london", content: '{"temperature":18}' },
+            { type: "tool_result", tool_use_id: "call_paris", content: '{"temperature":22}' },
           ],
         },
       ])
