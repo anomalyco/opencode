@@ -176,6 +176,41 @@ describe("acp usage", () => {
     expect(UsageService.totalSessionCost([assistant({ cost: 1.25 }), user(), assistant({ cost: 2.5 })])).toBe(3.75)
   })
 
+  describe("turn usage", () => {
+    const request = (input: number, output: number, read: number, write: number): UsageService.SessionMessage =>
+      assistant({ cost: 0, tokens: { input, output, reasoning: 0, cache: { read, write } } })
+
+    // Rows measured from a real 3-tool-call turn (4 model requests).
+    const turn = [request(3, 73, 0, 11156), request(1, 72, 11156, 143), request(1, 72, 11299, 140), request(1, 15, 11439, 140)]
+
+    test("sums every request of the turn, not just the final one", () => {
+      expect(UsageService.turnUsage([user(), ...turn])).toEqual({
+        inputTokens: 6,
+        outputTokens: 232,
+        cachedReadTokens: 33894,
+        cachedWriteTokens: 11579,
+        totalTokens: 45711,
+      })
+    })
+
+    test("bounds the sum to messages after the last user message", () => {
+      expect(UsageService.turnUsage([user(), request(500, 900, 0, 4000), user(), ...turn])).toEqual(
+        UsageService.turnUsage([user(), ...turn]),
+      )
+    })
+
+    test("matches buildUsage for a single-request turn", () => {
+      expect(UsageService.turnUsage([user(), request(3, 73, 0, 11156)])).toEqual(
+        UsageService.buildUsage({ cost: 0, tokens: { input: 3, output: 73, reasoning: 0, cache: { read: 0, write: 11156 } } }),
+      )
+    })
+
+    test("returns undefined when the turn has no assistant messages", () => {
+      expect(UsageService.turnUsage([])).toBeUndefined()
+      expect(UsageService.turnUsage([request(1, 1, 0, 0), user()])).toBeUndefined()
+    })
+  })
+
   it.effect("loads context limits from providers and caches by directory/provider/model", () => {
     const calls: string[] = []
     return Effect.gen(function* () {
@@ -252,14 +287,29 @@ describe("acp usage", () => {
     const updates: SessionNotification[] = []
     return Effect.gen(function* () {
       const usage = yield* UsageService.Service
-      yield* usage.sendUpdate({
+      const result = yield* usage.sendUpdate({
         connection: connection(updates),
         sessionID: "ses_1",
         directory: "/workspace",
       })
 
+      expect(result).toBeUndefined()
       expect(updates).toEqual([])
     }).pipe(Effect.provide(fakeLayer({ messages: Effect.fail(new Error("boom")) })))
+  })
+
+  it.effect("returns the fetched messages so callers can reuse them", () => {
+    const messages = [user(), assistant({ cost: 1 })]
+    return Effect.gen(function* () {
+      const usage = yield* UsageService.Service
+      const result = yield* usage.sendUpdate({
+        connection: connection([]),
+        sessionID: "ses_1",
+        directory: "/workspace",
+      })
+
+      expect(result).toEqual(messages)
+    }).pipe(Effect.provide(fakeLayer({ messages: Effect.succeed(messages) })))
   })
 
   it.effect("skips usage update when no assistant message exists", () => {
