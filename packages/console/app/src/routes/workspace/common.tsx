@@ -78,7 +78,7 @@ export const createCheckoutUrl = action(
     return json(
       await withActor(
         () =>
-          checkCheckoutRateLimit(workspaceID)
+          checkCheckoutRateLimit(Actor.account())
             .then(() => Billing.generateCheckoutUrl({ amount, successUrl, cancelUrl }))
             .then((data) => ({ error: undefined, data }))
             .catch((e) => ({

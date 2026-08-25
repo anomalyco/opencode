@@ -87,7 +87,7 @@ const createLiteCheckoutUrl = action(
     "use server"
     return json(
       await withActor(async () => {
-        await checkCheckoutRateLimit(workspaceID)
+        await checkCheckoutRateLimit(Actor.account())
         const data = await Billing.generateLiteCheckoutUrl({ successUrl, cancelUrl, method })
         await createReferralFromCookie()
         return { error: undefined, data }
