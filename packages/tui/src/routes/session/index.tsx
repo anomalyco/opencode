@@ -1824,10 +1824,7 @@ function SessionGroupView(props: {
   const grouped = createMemo(() => parts(props.refs))
   const pending = createMemo(() => parts(props.pending))
   const completed = createMemo(
-    () =>
-      props.completed ||
-      (grouped().length > 0 &&
-        grouped().every((part) => part.state.status === "completed" || part.state.status === "error")),
+    () => props.completed || (grouped().length > 0 && grouped().every((part) => part.time.completed !== undefined)),
   )
   const label = createMemo(() => {
     const counts = grouped().reduce<Record<string, number>>((result, part) => {
