@@ -7,6 +7,7 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { Context, Deferred, Effect, Fiber, Layer, Queue, Ref } from "effect"
 import { BackgroundJob } from "@/background/job"
+import { AppNodeBuilderV1 } from "@/effect/app-node-builder-v1"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { AttachmentCoordinator } from "@/session/attachment/coordinator"
 import { AttachmentParticipant } from "@/session/attachment/participant"
@@ -246,10 +247,10 @@ describe("SessionClosure LayerNode graph", () => {
           expect(server.app.dependencies.includes(SessionClosureRunState.node)).toBe(true)
           expect(server.app.dependencies.includes(SessionRunState.node)).toBe(true)
 
-          // The decisive Gate-3 cycle check. A construction cycle manifests inside `compile`'s
-          // recursion, not inside `Layer.build`, so compiling the *actual* application graph is
-          // sufficient — and it is the only thing that would surface the RangeError.
-          expect(() => LayerNode.compile(server.app)).not.toThrow()
+          // The target leaves `InstanceStore.bootstrapNode` intentionally unbound and production
+          // binds it through `AppNodeBuilderV1`. Building the actual graph through that same seam
+          // preserves the cycle check without treating the target's bootstrap boundary as missing.
+          expect(() => AppNodeBuilderV1.build(server.app)).not.toThrow()
         }),
       ),
       Effect.asVoid,
