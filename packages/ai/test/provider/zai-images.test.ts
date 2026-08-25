@@ -16,7 +16,7 @@ describe("Z.ai Images", () => {
           headers: { "x-default": "yes" },
           http: { body: { configured: true, quality: "configured" }, query: { trace: "default" } },
         }).image("glm-image"),
-        prompt: "A red circle \uD800 on a white background \u{1F600}",
+        prompt: "A red circle on a white background",
         options: {
           quality: "hd",
           userID: "alias-user",
@@ -54,7 +54,7 @@ describe("Z.ai Images", () => {
                 expect(request.headers.get("x-request")).toBe("yes")
                 expect(JSON.parse(input.text)).toEqual({
                   model: "glm-image",
-                  prompt: "A red circle \uFFFD on a white background \u{1F600}",
+                  prompt: "A red circle on a white background",
                   quality: "final",
                   user_id: "final-user",
                   future_option: true,
@@ -72,6 +72,30 @@ describe("Z.ai Images", () => {
                 )
               }),
             ),
+          ),
+        ),
+      ),
+    ),
+  )
+
+  it.effect("sanitizes unpaired surrogates in outbound image requests", () =>
+    Image.generate({
+      model: ZAI.configure({ apiKey: "test" }).image("model"),
+      prompt: "A red circle \uD800 on a white background \u{1F600}",
+    }).pipe(
+      Effect.provide(
+        ImageClient.layer.pipe(
+          Layer.provide(
+            dynamicResponse((input) => {
+              expect(JSON.parse(input.text)).toMatchObject({
+                prompt: "A red circle \uFFFD on a white background \u{1F600}",
+              })
+              return Effect.succeed(
+                input.respond(JSON.stringify({ data: [{ url: "https://example.test/image.jpg" }] }), {
+                  headers: { "content-type": "application/json" },
+                }),
+              )
+            }),
           ),
         ),
       ),

@@ -425,7 +425,7 @@ describe("OpenAI-compatible Chat route", () => {
           fixedResponse(
             sseEvents({
               id: "chatcmpl_error",
-              error: { code: 502, message: "Provider disconnected", details: { upstream: "vendor\uD800" } },
+              error: { code: 502, message: "Provider disconnected", details: { upstream: "vendor" } },
               trace_id: "trace_1",
             }),
           ),
@@ -436,8 +436,27 @@ describe("OpenAI-compatible Chat route", () => {
       expect(error.reason).toMatchObject({ _tag: "ProviderInternal", message: "Provider disconnected", status: 502 })
       expect(decodeJson(error.body ?? "")).toMatchObject({
         id: "chatcmpl_error",
-        error: { code: 502, message: "Provider disconnected", details: { upstream: "vendor\uD800" } },
+        error: { code: 502, message: "Provider disconnected", details: { upstream: "vendor" } },
         trace_id: "trace_1",
+      })
+    }),
+  )
+
+  it.effect("preserves unpaired surrogates in inbound provider error events", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents({
+              error: { code: 502, message: "Provider disconnected", details: { upstream: "vendor\uD800" } },
+            }),
+          ),
+        ),
+        Effect.flip,
+      )
+
+      expect(decodeJson(error.body ?? "")).toMatchObject({
+        error: { details: { upstream: "vendor\uD800" } },
       })
     }),
   )
