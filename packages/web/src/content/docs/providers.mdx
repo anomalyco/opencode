@@ -1718,6 +1718,10 @@ We recommend signing up for [ChatGPT Plus or Pro](https://chatgpt.com/pricing).
    /models
    ```
 
+##### Compute residency
+
+For ChatGPT OAuth, OpenCode automatically applies a regional inference residency requirement when one is advertised by your workspace credentials. It forwards the compute residency value from the credential instead of maintaining a fixed list of regions. Data residency at rest does not imply regional inference.
+
 ##### Using API keys
 
 If you already have an API key, you can select **Manually enter API Key** and paste it in your terminal.
@@ -2086,6 +2090,35 @@ To use [Scaleway Generative APIs](https://www.scaleway.com/en/docs/generative-ap
    ```
 
 4. Run the `/models` command to select a model like _devstral-2-123b-instruct-2512_ or _gpt-oss-120b_.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### SCX.ai
+
+[SCX.ai](https://scx.ai) is an Australian sovereign AI platform serving open models over an OpenAI-compatible API, hosted on renewable-powered infrastructure in Australia.
+
+1. Head over to the [SCX.ai platform](https://platform.scx.ai) to create an account and generate an API key.
+
+2. Run the `/connect` command and search for **SCX.ai**.
+
+   ```txt
+   /connect
+   ```
+
+3. Enter your SCX.ai API key.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Run the `/models` command to select a model like _MiniMax-M2.7_ or _GLM-5.2_.
 
    ```txt
    /models
