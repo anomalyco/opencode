@@ -132,7 +132,7 @@ function computeMainPath(diagram: StateDiagram): string[] {
         const toParent = statesById.get(transition.to)?.parentId
         return Boolean(fromParent && toParent && fromParent !== toParent)
       }) ??
-      (path.length === 1 && candidates.length === 1 ? candidates[0] : undefined)
+      (candidates.length === 1 ? candidates[0] : undefined)
     if (!next) break
     path.push(next.to)
     visited.add(next.to)

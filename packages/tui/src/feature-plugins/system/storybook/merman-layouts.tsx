@@ -90,6 +90,7 @@ const fixtures = [
       [*] --> Clean
       Clean --> Dirty: edit
       Dirty --> Clean: save
+      Dirty --> [*]
     }
     Open --> Closing: request close
     Closing --> Open: cancel
@@ -233,7 +234,12 @@ function MermanLayoutsStory(props: { context: Plugin.Context }) {
       },
     }
   })
-  const rendered = createMemo(() => ({ fixture: fixture(), colors: presentation().colors, generation: generation() }))
+  const rendered = createMemo(() => ({
+    fixture: fixture(),
+    colors: presentation().colors,
+    generation: generation(),
+    width: dimensions().width,
+  }))
   const markdown = createMemo(() => `\`\`\`mermaid-story\n${fixture().source}\n\`\`\``)
   const moveFixture = (offset: number) =>
     setSelected((current) => (current + offset + fixtures.length) % fixtures.length)
@@ -271,7 +277,10 @@ function MermanLayoutsStory(props: { context: Plugin.Context }) {
   onCleanup(
     props.context.markdown.registerCodeBlockRenderer(
       "mermaid-story",
-      createMermaidCodeBlockRenderer(props.context.renderer, () => ({ colors: presentation().colors })),
+      createMermaidCodeBlockRenderer(props.context.renderer, () => ({
+        colors: presentation().colors,
+        layoutMaxWidth: Math.max(1, dimensions().width - 5),
+      })),
     ),
   )
 

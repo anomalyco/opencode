@@ -211,6 +211,27 @@ describe("StateDiagramLayout", () => {
     expect(Math.sign(a.centerX - b.centerX)).toBe(expectedSign)
   })
 
+  test("continues the horizontal backbone through a reciprocal pair after an entry marker", () => {
+    const diagram = prepareVisibleStateDiagram(
+      parseMermaidStateDiagram(`stateDiagram-v2
+  direction LR
+  [*] --> Clean
+  Clean --> Dirty: edit
+  Dirty --> Clean: save
+  Dirty --> Closing: request close
+  Closing --> [*]: closed`),
+    )
+    const layout = createStateDiagramLayout(diagram, { minStateGap: 5 })
+    const clean = layout.bounds.get("Clean")!
+    const dirty = layout.bounds.get("Dirty")!
+    const closing = layout.bounds.get("Closing")!
+
+    expect(clean.centerY).toBe(dirty.centerY)
+    expect(dirty.centerY).toBe(closing.centerY)
+    expect(clean.centerX).toBeLessThan(dirty.centerX)
+    expect(dirty.centerX).toBeLessThan(closing.centerX)
+  })
+
   test.each(["TB", "TD"] as const)(
     "contains nested internal feedback with strict margins in %s diagrams",
     (direction) => {
