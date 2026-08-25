@@ -14,6 +14,8 @@ export interface OpenCodeDiagramPaletteInput {
   }
 }
 
+export type OpenCodeDiagramPalette = ReturnType<typeof createOpenCodeDiagramPalette>
+
 export function createOpenCodeDiagramPalette(input: OpenCodeDiagramPaletteInput) {
   const secondary = blendColor(input.text, input.subdued, 0.5)
   const muted = blendColor(input.text, input.subdued, 0.7)
@@ -39,4 +41,35 @@ export function createOpenCodeDiagramPalette(input: OpenCodeDiagramPaletteInput)
     noteText: input.accent.clear,
     noteConnector: input.accent.soft,
   }
+}
+
+export function resolveOpenCodeDiagramPalette(
+  theme: {
+    readonly text: {
+      readonly default: RGBA
+      readonly subdued: RGBA
+      readonly feedback: {
+        readonly info: { readonly default: RGBA }
+        readonly success: { readonly default: RGBA }
+        readonly warning: { readonly default: RGBA }
+      }
+    }
+    readonly background: { readonly default: RGBA }
+    readonly categorical: readonly Readonly<Record<200 | 300 | 700 | 800, RGBA>>[]
+  },
+  mode: "dark" | "light",
+) {
+  const accent = theme.categorical[3] ?? theme.categorical[0]!
+  return createOpenCodeDiagramPalette({
+    text: theme.text.default,
+    subdued: theme.text.subdued,
+    info: theme.text.feedback.info.default,
+    success: theme.text.feedback.success.default,
+    warning: theme.text.feedback.warning.default,
+    background: theme.background.default,
+    accent: {
+      soft: accent[mode === "dark" ? 300 : 700],
+      clear: accent[mode === "dark" ? 200 : 800],
+    },
+  })
 }

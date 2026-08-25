@@ -1,6 +1,6 @@
 import type { Plugin } from "@opencode-ai/plugin/tui"
 import { createMermaidCodeBlockRenderer } from "@opencode-ai/merman/markdown"
-import { createOpenCodeDiagramPalette } from "@opencode-ai/merman/palette"
+import { resolveOpenCodeDiagramPalette } from "@opencode-ai/merman/palette"
 import { RGBA } from "@opentui/core"
 import { useTerminalDimensions } from "@opentui/solid"
 import { createMemo, createSignal, For, onCleanup, Show } from "solid-js"
@@ -194,22 +194,10 @@ function MermanLayoutsStory(props: { context: Plugin.Context }) {
     }
   })
   const presentation = createMemo(() => {
-    const accent = theme.categorical[3] ?? theme.categorical[0]!
-    const accentSteps = themes.mode() === "light" ? ([700, 800] as const) : ([300, 200] as const)
-    const base = createOpenCodeDiagramPalette({
-      text: theme.text.default,
-      subdued: theme.text.subdued,
-      info: theme.text.feedback.info.default,
-      success: theme.text.feedback.success.default,
-      warning: theme.text.feedback.warning.default,
-      background: theme.background.default,
-      accent: {
-        soft: accent[accentSteps[0]],
-        clear: accent[accentSteps[1]],
-      },
-    })
+    const base = resolveOpenCodeDiagramPalette(props.context.theme, props.context.themeMode)
     const neutral = [theme.text.subdued, base.muted, base.secondary, theme.text.default]
-    const steps = themes.mode() === "light" ? ([400, 500, 700, 800] as const) : ([600, 500, 300, 200] as const)
+    const steps =
+      props.context.themeMode === "light" ? ([400, 500, 700, 800] as const) : ([600, 500, 300, 200] as const)
     const color = (id: DiagramComponent, tone = settings()[id].tone) => {
       const value = settings()[id]
       if (value.color === 0) return neutral[tone] ?? neutral[2]!
@@ -370,9 +358,9 @@ function MermanLayoutsStory(props: { context: Plugin.Context }) {
       flexDirection="column"
       backgroundColor={theme.background.default}
     >
-      <Show when={rendered()} keyed>
-        {(item) => (
-          <scrollbox flexGrow={1} minHeight={0} viewportOptions={{ paddingRight: 1 }}>
+      <scrollbox flexGrow={1} minHeight={0} viewportOptions={{ paddingRight: 1 }}>
+        <Show when={rendered()} keyed>
+          {(item) => (
             <box paddingLeft={2} paddingRight={2} paddingTop={1} flexDirection="column">
               <text fg={theme.text.default}>{item.fixture.title}</text>
               <text fg={theme.text.subdued}>{item.fixture.id}</text>
@@ -411,9 +399,9 @@ function MermanLayoutsStory(props: { context: Plugin.Context }) {
                 renderNode={plugins.markdown()}
               />
             </box>
-          </scrollbox>
-        )}
-      </Show>
+          )}
+        </Show>
+      </scrollbox>
       <StoryFooter
         context={props.context}
         title="storybook / Mermaid color lab"

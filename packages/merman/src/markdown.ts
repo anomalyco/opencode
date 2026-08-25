@@ -12,6 +12,7 @@ import {
   type StyledText,
 } from "@opentui/core"
 import { MermaidSyntaxError } from "./diagnostics.js"
+import type { OpenCodeDiagramPalette } from "./palette.js"
 import { DiagramCanvasSizeError } from "./core/canvas.js"
 import { detectMermaidDiagram } from "./detect.js"
 import { drawFlowchartDiagramGrid } from "./flowchart/drawing.js"
@@ -55,28 +56,7 @@ export interface MermaidMarkdownRendererOptions {
   layoutMaxWidth?: number
   /** Gantt-specific terminal rendering options. */
   gantt?: Omit<GanttDiagramRenderOptions, "layoutMaxWidth">
-  colors?: {
-    text?: ColorInput
-    primary?: ColorInput
-    secondary?: ColorInput
-    muted?: ColorInput
-    warning?: ColorInput
-    background?: ColorInput
-    request?: ColorInput
-    response?: ColorInput
-    note?: ColorInput
-    noteBackground?: ColorInput
-    boxText?: ColorInput
-    boxBorder?: ColorInput
-    line?: ColorInput
-    group?: ColorInput
-    groupText?: ColorInput
-    marker?: ColorInput
-    noteBorder?: ColorInput
-    noteText?: ColorInput
-    noteConnector?: ColorInput
-    labelBackground?: ColorInput
-  }
+  colors?: Partial<Record<keyof OpenCodeDiagramPalette, ColorInput>>
 }
 
 function color(value: ColorInput | undefined): RGBA | undefined {

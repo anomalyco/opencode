@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { RGBA } from "@opentui/core"
 import { blendColor } from "./core/color/style.js"
-import { createOpenCodeDiagramPalette } from "./palette.js"
+import { createOpenCodeDiagramPalette, resolveOpenCodeDiagramPalette } from "./palette.js"
 
 type Rgb = readonly [number, number, number]
 
@@ -69,5 +69,35 @@ describe("OpenCode diagram palette", () => {
     expect(palette.noteBorder).toBe(accent.soft)
     expect(palette.noteText).toBe(accent.clear)
     expect(palette.noteConnector).toBe(accent.soft)
+  })
+
+  test.each([
+    { mode: "dark", soft: 300, clear: 200 },
+    { mode: "light", soft: 700, clear: 800 },
+  ] as const)("uses the selected $mode mode even with a literal background", ({ mode, soft, clear }) => {
+    const accent = {
+      200: rgb([200, 100, 100]),
+      300: rgb([180, 90, 90]),
+      700: rgb([120, 60, 60]),
+      800: rgb([100, 50, 50]),
+    }
+    const theme = {
+      text: {
+        default: rgb([230, 232, 240]),
+        subdued: rgb([114, 120, 138]),
+        feedback: {
+          info: { default: rgb([40, 120, 220]) },
+          success: { default: rgb([80, 180, 120]) },
+          warning: { default: rgb([220, 160, 80]) },
+        },
+      },
+      background: { default: rgb([250, 250, 250]) },
+      categorical: [accent],
+    }
+    const palette = resolveOpenCodeDiagramPalette(theme, mode)
+
+    expect(palette.group).toBe(accent[soft])
+    expect(palette.noteBorder).toBe(accent[soft])
+    expect(palette.noteText).toBe(accent[clear])
   })
 })
