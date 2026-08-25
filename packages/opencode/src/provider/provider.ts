@@ -845,7 +845,12 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           // The passthrough wrappers inject a CF_TEMP_TOKEN sentinel that the gateway strips before
           // dispatch, so upstream billing stays on the gateway (Unified Billing / stored BYOK).
           if (modelID.startsWith("openai/")) return aigateway(createOpenAI()(modelID.slice("openai/".length)))
-          if (modelID.startsWith("anthropic/")) return aigateway(createAnthropic()(modelID.slice("anthropic/".length)))
+          // models.dev lists Anthropic ids with dotted versions (claude-haiku-4.5); Anthropic's
+          // Messages API expects dashed native slugs (claude-haiku-4-5), so translate before passing.
+          // No native Anthropic slug contains a dot, so the blanket replacement is lossless here -
+          // unlike OpenAI above, whose native ids (e.g. gpt-4.1) keep their dots and must not be touched.
+          if (modelID.startsWith("anthropic/"))
+            return aigateway(createAnthropic()(modelID.slice("anthropic/".length).replaceAll(".", "-")))
           // Workers AI is the only first-party provider whose upstream is Cloudflare itself, so it is
           // the only one that should receive the Cloudflare token as its upstream Authorization header.
           // The Unified API addresses Workers AI both with the explicit "workers-ai/" prefix and as

@@ -347,6 +347,7 @@ export function LiteSection(props: { lite: LiteSubscription | undefined }) {
             <li>Kimi K3</li>
             <li>Kimi K2.7 Code</li>
             <li>Kimi K2.6</li>
+            <li>LongCat-2.0</li>
             <li>MiniMax M3</li>
             <li>MiniMax M2.7</li>
             <li>Muse Spark 1.2 Contributor</li>
