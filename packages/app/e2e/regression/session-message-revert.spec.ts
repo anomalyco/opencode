@@ -20,45 +20,47 @@ const messages = [
   },
   { id: "msg_second", type: "user", text: "Second prompt", time: { created: 4 } },
 ] satisfies SessionMessageInfo[]
+const session = {
+  id: sessionID,
+  slug: "session-message-revert",
+  projectID,
+  directory,
+  title: "Session message revert",
+  agent: "build",
+  model: { id: "test", providerID: "opencode" },
+  version: "dev",
+  time: { created: 1, updated: 4 },
+}
+const fixture = {
+  directory,
+  project: {
+    id: projectID,
+    worktree: directory,
+    canonical: directory,
+    vcs: "git",
+    name: "session-message-revert",
+    time: { created: 1, updated: 1 },
+    sandboxes: [],
+  },
+  provider: {
+    all: [
+      {
+        id: "opencode",
+        name: "OpenCode",
+        models: { test: { id: "test", name: "Test", variants: {}, limit: { context: 200_000 } } },
+      },
+    ],
+    connected: ["opencode"],
+    default: { providerID: "opencode", modelID: "test" },
+  },
+  pageMessages: () => ({ items: messages }),
+}
 
 test("reverts directly to the selected user message", async ({ page }) => {
   const staged: { sessionID: string; messageID: string }[] = []
   await mockOpenCodeServer(page, {
-    directory,
-    project: {
-      id: projectID,
-      worktree: directory,
-      canonical: directory,
-      vcs: "git",
-      name: "session-message-revert",
-      time: { created: 1, updated: 1 },
-      sandboxes: [],
-    },
-    provider: {
-      all: [
-        {
-          id: "opencode",
-          name: "OpenCode",
-          models: { test: { id: "test", name: "Test", variants: {}, limit: { context: 200_000 } } },
-        },
-      ],
-      connected: ["opencode"],
-      default: { providerID: "opencode", modelID: "test" },
-    },
-    sessions: [
-      {
-        id: sessionID,
-        slug: "session-message-revert",
-        projectID,
-        directory,
-        title: "Session message revert",
-        agent: "build",
-        model: { id: "test", providerID: "opencode" },
-        version: "dev",
-        time: { created: 1, updated: 4 },
-      },
-    ],
-    pageMessages: () => ({ items: messages }),
+    ...fixture,
+    sessions: [session],
     onRevertStage: (input) => staged.push(input),
   })
   await page.goto(`/server/${base64Encode(server)}/session/${sessionID}`)
@@ -76,4 +78,20 @@ test("reverts directly to the selected user message", async ({ page }) => {
 
   await expect(page.getByRole("textbox", { name: "Prompt" })).toHaveText("Second prompt")
   expect(staged).toEqual([{ sessionID, messageID: "msg_second" }])
+})
+
+test("hides revert actions in a child session", async ({ page }) => {
+  await mockOpenCodeServer(page, {
+    ...fixture,
+    sessions: [
+      { ...session, id: "ses_parent", slug: "parent", title: "Parent session" },
+      { ...session, parentID: "ses_parent" },
+    ],
+  })
+  await page.goto(`/server/${base64Encode(server)}/session/${sessionID}`)
+  await expectSessionTitle(page, "Session message revert")
+
+  const message = page.locator('[data-message-id="msg_second"]')
+  await message.hover()
+  await expect(message.getByRole("button", { name: "Revert message" })).toHaveCount(0)
 })

@@ -17,22 +17,27 @@
   ],
   "exports": {
     ".": "./src/index.ts",
-    "./workerd": "./src/workerd.ts"
+    "./effect": "./src/effect/index.ts",
+    "./workerd": "./src/workerd.ts",
+    "./workerd/effect": "./src/effect/workerd.ts"
   },
   "scripts": {
     "build": "bun run script/build.ts",
     "test": "bun test --timeout 5000",
-    "typecheck": "tsgo -b"
+    "typecheck": "tsgo -b",
+    "verify:package": "bun run script/verify-package.ts"
   },
   "dependencies": {
     "@opencode-ai/client": "workspace:*",
     "@opencode-ai/core": "workspace:*",
+    "@opencode-ai/plugin": "workspace:*",
     "@opencode-ai/schema": "workspace:*",
     "@opencode-ai/server": "workspace:*",
     "@opencode-ai/util": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {
+    "@opencode-ai/ai": "workspace:*",
     "@opencode-ai/httpapi-codegen": "workspace:*",
     "@opencode-ai/protocol": "workspace:*",
     "@tsconfig/bun": "catalog:",

@@ -2,7 +2,7 @@ export * as FileSystemSearch from "./search.js"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import path from "path"
-import { Clock, Context, Duration, Effect, Layer, Schema, Scope } from "effect"
+import { Clock, Context, Deferred, Duration, Effect, Layer, Schema, Scope } from "effect"
 import { Fff } from "#fff"
 import fuzzysort from "fuzzysort"
 import { FileSystem } from "../filesystem.js"
@@ -61,7 +61,7 @@ export const ripgrepLayer = Layer.effect(
     let index = emptyIndex()
     let initialized = false
     let settledAt = Number.NEGATIVE_INFINITY
-    let refreshing = false
+    let refreshing: Deferred.Deferred<void> | undefined
     const scan = Effect.gen(function* () {
       const next = emptyIndex()
       const previous = index
@@ -84,21 +84,25 @@ export const ripgrepLayer = Layer.effect(
       })
       index = next
       initialized = true
-    }).pipe(
-      Effect.orDie,
-      Effect.ensuring(
-        Effect.sync(() => {
-          settledAt = clock.currentTimeMillisUnsafe()
-          refreshing = false
-        }),
-      ),
-    )
-    const refresh = Effect.sync(() => {
-      if (refreshing || clock.currentTimeMillisUnsafe() < settledAt + REFRESH_INTERVAL) return
-      refreshing = true
-      return scan
-    }).pipe(Effect.flatMap((effect) => (effect ? effect.pipe(Effect.forkIn(scope)) : Effect.void)))
-    yield* refresh
+    }).pipe(Effect.orDie)
+    const refresh = Effect.suspend(() => {
+      if (refreshing) return initialized ? Effect.void : Deferred.await(refreshing)
+      if (initialized && clock.currentTimeMillisUnsafe() < settledAt + REFRESH_INTERVAL) return Effect.void
+
+      const attempt = Deferred.makeUnsafe<void>()
+      refreshing = attempt
+      return scan.pipe(
+        Effect.onExit((exit) =>
+          Effect.sync(() => {
+            settledAt = clock.currentTimeMillisUnsafe()
+            if (refreshing === attempt) refreshing = undefined
+            Deferred.doneUnsafe(attempt, exit)
+          }),
+        ),
+        Effect.forkIn(scope),
+        Effect.flatMap(() => (initialized ? Effect.void : Deferred.await(attempt))),
+      )
+    })
     return Service.of({
       find: (input) =>
         Effect.gen(function* () {
@@ -180,9 +184,12 @@ export const fffLayer = Layer.effect(
 export const layer = (options?: Options) =>
   Layer.unwrap(
     Effect.gen(function* () {
+      const location = yield* Location.Service
+      // Workspace-backed Locations resolve in a remote sandbox; fff would index the local server directory
+      // in-process and serve wrong results. Ripgrep routes through the Location environment spawner.
+      if (location.workspaceID) return ripgrepLayer
       if (options?.fff === false || (options?.fff === undefined && process.platform === "win32") || !Fff.available())
         return ripgrepLayer
-      const location = yield* Location.Service
       // Non-VCS locations can contain many repositories, so avoid eagerly content-indexing the entire aggregate tree.
       return location.vcs && !Protected.isHome(location.directory) ? fffLayer : ripgrepLayer
     }),

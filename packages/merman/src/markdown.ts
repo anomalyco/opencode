@@ -17,6 +17,11 @@ import { detectMermaidDiagram } from "./detect.js"
 import { drawFlowchartDiagramGrid } from "./flowchart/drawing.js"
 import { parseMermaidFlowchartDiagram } from "./flowchart/parser.js"
 import { renderGridStyledText, resolveFlowchartStyleColors } from "./flowchart/style.js"
+import { drawGanttDiagramGrid } from "./gantt/drawing.js"
+import { parseMermaidGanttDiagram } from "./gantt/parser.js"
+import { renderGanttGridStyledText } from "./gantt/render-grid.js"
+import { resolveGanttStyleColors } from "./gantt/style.js"
+import type { GanttDiagramRenderOptions } from "./gantt/types.js"
 import { drawGitGraphDiagramGrid } from "./gitgraph/drawing.js"
 import { parseMermaidGitGraphDiagram } from "./gitgraph/parser.js"
 import { renderGitGraphGridStyledText } from "./gitgraph/render-grid.js"
@@ -46,8 +51,10 @@ interface PreparedDiagram {
 export interface MermaidMarkdownRendererOptions {
   /** Use terminal-optimized diagram spacing. Defaults to true. */
   compact?: boolean
-  /** Fold horizontal flowcharts that exceed this width. Defaults to 120 columns. */
+  /** Fold responsive horizontal diagrams that exceed this width. Defaults to 120 columns. */
   layoutMaxWidth?: number
+  /** Gantt-specific terminal rendering options. */
+  gantt?: Omit<GanttDiagramRenderOptions, "layoutMaxWidth">
   colors?: {
     text?: ColorInput
     primary?: ColorInput
@@ -134,7 +141,9 @@ function prepareDiagram(
           grid,
           resolveFlowchartStyleColors({
             node: color(colors.primary),
+            nodeBorder: color(colors.muted),
             database: color(colors.primary),
+            databaseBorder: color(colors.muted),
             edge: color(colors.secondary),
             label: color(colors.text),
             group: color(colors.muted),
@@ -157,6 +166,28 @@ function prepareDiagram(
             muted: color(colors.muted),
             warning: color(colors.warning),
             text: color(colors.text),
+          }),
+        ),
+        height: size.height,
+      }
+    }
+    case "gantt": {
+      const grid = drawGanttDiagramGrid(parseMermaidGanttDiagram(source), { ...options.gantt, layoutMaxWidth })
+      const size = grid.getTextSize({ trimBottom: true })
+      return {
+        kind,
+        source,
+        text: renderGanttGridStyledText(
+          grid,
+          resolveGanttStyleColors({
+            title: color(colors.text),
+            axis: color(colors.muted),
+            background: color(colors.background),
+            section: color(colors.secondary),
+            task: color(colors.primary),
+            active: color(colors.primary),
+            critical: color(colors.warning),
+            done: color(colors.muted),
           }),
         ),
         height: size.height,
@@ -186,8 +217,8 @@ function prepareDiagram(
       }
     }
     case "state": {
-      const grid = drawStateDiagramGrid(parseMermaidStateDiagram(source))
-      const size = grid.getTextSize({ trimBottom: true })
+      const grid = drawStateDiagramGrid(parseMermaidStateDiagram(source), { layoutMaxWidth })
+      const size = grid.getTextSize({ trimTop: true, trimBottom: true })
       return {
         kind,
         source,

@@ -1,5 +1,6 @@
 import { CurrentSessionTimelineStory } from "../storybook/current-session-story"
 import {
+  executeCodeDocument,
   expandedShellDocument,
   recoveryDocument,
   standaloneShellCompletedDocument,
@@ -79,6 +80,18 @@ export const ExpandedShell = {
       title="Expanded shell"
       description="The expanded shell separates the command from its output in a full-width card without a detail rail."
       document={expandedShellDocument}
+      width="786px"
+      shellToolDefaultOpen
+    />
+  ),
+}
+
+export const ExecuteCode = {
+  render: () => (
+    <CurrentSessionTimelineStory
+      title="Execute code"
+      description="A Code Mode execution shares the shell treatment: the code and its result split into a two-tone card."
+      document={executeCodeDocument}
       width="786px"
       shellToolDefaultOpen
     />

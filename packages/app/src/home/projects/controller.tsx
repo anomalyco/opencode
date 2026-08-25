@@ -61,6 +61,8 @@ export function createHomeProjectsController(home: HomeController) {
         serverManagement.defaults.set(conn ? ServerConnection.key(conn) : null),
       canRemove: (conn: ServerConnection.Any) => serverManagement.connection.canRemove(ServerConnection.key(conn)),
       remove: (conn: ServerConnection.Any) => serverManagement.connection.remove(ServerConnection.key(conn)),
+      canHide: (conn: ServerConnection.Any) => serverManagement.connection.canHide(ServerConnection.key(conn)),
+      hide: (conn: ServerConnection.Any) => serverManagement.connection.setHidden(ServerConnection.key(conn), true),
       edit: (conn: ServerConnection.Http) => {
         void import("@/servers/connect/dialog").then(({ DialogServer }) => {
           void dialog.show(() => <DialogServer mode="edit" server={conn} />)

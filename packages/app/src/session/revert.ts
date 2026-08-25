@@ -55,6 +55,28 @@ export function createSessionRevert(input: {
       await server.api.session.interrupt({ sessionID }).catch(() => undefined)
     }
     if (!(await request(() => server.api.session.revert.stage({ sessionID, messageID: message.id })))) return
+    // Reverting to a previous prompt discards the pending queue (and pending
+    // steers): they were written against the history being rewound. Cancel
+    // the authoritative inbox merged with the local snapshot, fire-and-forget
+    // so a slow request cannot delay restoring the composer. The cutoff keeps
+    // the asynchronous sweep away from prompts admitted after the revert; an
+    // old admission still in flight when the list is fetched can survive it,
+    // and fully closing that race needs a server-side revert-discards-inbox
+    // rule.
+    const cutoff = Date.now()
+    const local = data.session.pending
+      .list(sessionID)
+      .filter((item) => item.type === "user")
+      .map((item) => item.id)
+    void server.api.session.inbox
+      .list({ sessionID })
+      .then((rows) => rows.filter((row) => row.type === "user" && row.timeCreated <= cutoff).map((row) => row.id))
+      .catch(() => [])
+      .then((authoritative) => {
+        new Set([...local, ...authoritative]).forEach(
+          (inboxID) => void server.api.session.inbox.cancel({ sessionID, inboxID }).catch(() => undefined),
+        )
+      })
     restore(target, message)
     owner.run(() => input.setActiveMessage(previous))
   }

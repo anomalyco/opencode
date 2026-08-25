@@ -11,6 +11,7 @@ import type { Info } from "@opencode-ai/schema/tool"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { executeTool, toolDefinitions } from "./lib/tool"
 import { Cause, Deferred, Effect, Exit, Fiber, Layer, Schema, SchemaGetter, SchemaIssue, Scope } from "effect"
+import { z } from "zod"
 import { testEffect } from "./lib/effect"
 
 const imageStore = Layer.mock(Image.Service, {
@@ -511,7 +512,11 @@ describe("Tool", () => {
         }),
       ).toMatchObject({
         status: "error",
-        error: { type: "tool.execution", message: expect.stringContaining("Invalid tool input") },
+        error: {
+          type: "tool.execution",
+          message:
+            'Invalid arguments for tool "transformed":\n- value: Expected boolean\n\nArguments provided:\n{\n  "value": "yes"\n}\n\nUpdate the arguments and call the tool again.',
+        },
       })
       expect(executed).toEqual(["yes"])
 
@@ -549,6 +554,39 @@ describe("Tool", () => {
         status: "error",
         error: { type: "tool.execution", message: expect.stringContaining("invalid value for its output schema") },
       })
+    }),
+  )
+
+  it.effect("registers, advertises, and executes a Zod tool", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      yield* transform(
+        service,
+        {
+          zod: {
+            name: "zod",
+            description: "Increment a parsed number",
+            input: z.object({ count: z.string().transform(Number) }),
+            output: z.object({ count: z.number() }),
+            execute: ({ count }) => Effect.succeed({ output: { count: count + 1 } }),
+          },
+        },
+        { codemode: false },
+      )
+
+      const snapshot = yield* service.snapshot()
+      expect(snapshot.definitions.find((tool) => tool.name === "zod")?.inputSchema).toMatchObject({
+        type: "object",
+        properties: { count: { type: "string" } },
+        required: ["count"],
+      })
+      expect(
+        yield* snapshot.execute({
+          sessionID,
+          ...identity,
+          call: { type: "tool-call", id: "call-zod", name: "zod", input: { count: "41" } },
+        }),
+      ).toMatchObject({ output: { count: 42 } })
     }),
   )
 

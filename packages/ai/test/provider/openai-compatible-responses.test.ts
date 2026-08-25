@@ -52,7 +52,25 @@ describe("Open Responses-compatible route", () => {
           { role: "user", content: [{ type: "input_text", text: "Say hello." }] },
         ],
         stream: true,
+        store: false,
+        include: ["reasoning.encrypted_content"],
       })
+    }),
+  )
+
+  it.effect("allows callers to override stateless encrypted reasoning defaults", () =>
+    Effect.gen(function* () {
+      const model = configure({
+        apiKey: "test-key",
+        baseURL: "https://responses.example.test/v1",
+        provider: "example",
+      }).model("example-model")
+      const prepared = yield* compileRequest(
+        LLM.request({ model, prompt: "Say hello.", providerOptions: { store: true, include: [] } }),
+      )
+
+      expect(prepared.body.store).toBe(true)
+      expect(prepared.body.include).toBeUndefined()
     }),
   )
 
@@ -78,6 +96,45 @@ describe("Open Responses-compatible route", () => {
     }),
   )
 
+  it.effect("uses data URLs for embedded PDF messages and tool results", () =>
+    Effect.gen(function* () {
+      const model = configure({
+        apiKey: "test-key",
+        baseURL: "https://responses.example.test/v1",
+        provider: "example",
+      }).model("example-model")
+      const pdf = "data:application/pdf;base64,JVBERi0xLjQ="
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.user([{ type: "media", mediaType: "application/pdf", data: pdf, filename: "input.pdf" }]),
+            Message.assistant({ type: "tool-call", id: "call_1", name: "read", input: {} }),
+            Message.tool({
+              id: "call_1",
+              name: "read",
+              resultType: "content",
+              result: [{ type: "file", uri: pdf, mime: "application/pdf", name: "result.pdf" }],
+            }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.input).toEqual([
+        {
+          role: "user",
+          content: [{ type: "input_file", filename: "input.pdf", file_data: pdf }],
+        },
+        { type: "function_call", call_id: "call_1", name: "read", arguments: "{}" },
+        {
+          type: "function_call_output",
+          call_id: "call_1",
+          output: [{ type: "input_file", filename: "result.pdf", file_data: pdf }],
+        },
+      ])
+    }),
+  )
+
   it.effect("rejects OpenAI-native tools", () =>
     Effect.gen(function* () {
       const model = configure({
@@ -90,6 +147,112 @@ describe("Open Responses-compatible route", () => {
 
       expect(error.reason._tag).toBe("InvalidRequest")
       expect(error.message).toContain("Open Responses does not support provider-native tool image_generation")
+    }),
+  )
+
+  it.effect("lowers canonical parallel tool control", () =>
+    Effect.gen(function* () {
+      const model = configure({
+        apiKey: "test-key",
+        baseURL: "https://responses.example.test/v1",
+      }).model("example-model")
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          prompt: "Read the file.",
+          tools: [
+            ToolDefinition.make({
+              name: "read",
+              description: "Read a file.",
+              inputSchema: { type: "object" },
+            }),
+          ],
+          toolChoice: { type: "auto", disableParallelToolUse: true },
+        }),
+      )
+
+      expect(prepared.body.parallel_tool_calls).toBe(false)
+      expect(prepared.body.tools).toEqual([
+        {
+          type: "function",
+          name: "read",
+          description: "Read a file.",
+          parameters: { type: "object" },
+          strict: false,
+        },
+      ])
+    }),
+  )
+
+  it.effect("keeps foreign item id grammars but drops malformed ids", () =>
+    Effect.gen(function* () {
+      const model = configure({
+        apiKey: "test-key",
+        baseURL: "https://responses.example.test/v1",
+      }).model("example-model")
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([
+              // The baseline does not enforce a provider id grammar, so a
+              // non-OpenAI but well-formed token is resent as-is.
+              { type: "text", text: "Kept.", providerMetadata: { openresponses: { itemId: "history_1" } } },
+              // Shape violations are dropped even without a grammar policy.
+              {
+                type: "text",
+                text: "Dropped.",
+                providerMetadata: { openresponses: { itemId: `m${"a".repeat(64)}` } },
+              },
+            ]),
+          ],
+        }),
+      )
+
+      expect(prepared.body.input).toEqual([
+        {
+          type: "message",
+          id: "history_1",
+          role: "assistant",
+          content: [{ type: "output_text", text: "Kept." }],
+        },
+        {
+          type: "message",
+          role: "assistant",
+          content: [{ type: "output_text", text: "Dropped." }],
+        },
+      ])
+    }),
+  )
+
+  it.effect("reconciles raw reasoning finals without streamed deltas", () =>
+    Effect.gen(function* () {
+      const model = configure({
+        apiKey: "test-key",
+        baseURL: "https://responses.example.test/v1",
+      }).model("example-model")
+      const response = yield* LLMClient.generate(LLM.request({ model, prompt: "Think it through." })).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              {
+                type: "response.output_item.added",
+                item: { type: "reasoning", id: "rs_raw", encrypted_content: null },
+              },
+              // Raw reasoning finals carry no summary index; they reconcile
+              // into the item's first block.
+              { type: "response.reasoning.done", item_id: "rs_raw", text: "Raw chain of thought." },
+              {
+                type: "response.output_item.done",
+                item: { type: "reasoning", id: "rs_raw", encrypted_content: "raw-state" },
+              },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.reasoning).toBe("Raw chain of thought.")
     }),
   )
 
@@ -114,7 +277,12 @@ describe("Open Responses-compatible route", () => {
 
       expect(prepared.body).toMatchObject({
         input: [
-          { type: "message", role: "assistant", content: [{ type: "output_text", text: "Unclassified." }], phase: null },
+          {
+            type: "message",
+            role: "assistant",
+            content: [{ type: "output_text", text: "Unclassified." }],
+            phase: null,
+          },
         ],
       })
     }),
@@ -189,6 +357,7 @@ describe("Open Responses-compatible route", () => {
           streamOptions: { includeObfuscation: false },
           topLogprobs: 3,
           truncation: "auto",
+          serviceTier: "provider-tier",
           allowedTools: { toolNames: ["lookup"] },
           maxToolCalls: 2,
           parallelToolCalls: false,
@@ -213,6 +382,7 @@ describe("Open Responses-compatible route", () => {
         presence_penalty: 0.2,
         frequency_penalty: -0.1,
         truncation: "auto",
+        service_tier: "provider-tier",
         tool_choice: {
           type: "allowed_tools",
           mode: "auto",

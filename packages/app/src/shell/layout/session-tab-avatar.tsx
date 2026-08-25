@@ -15,7 +15,6 @@ export function SessionTabAvatar(props: {
 }) {
   const state = useSessionTabAvatarState(
     () => props.server,
-    () => props.directory,
     () => props.sessionId,
   )
   return (

@@ -11,6 +11,8 @@ import type {
   PluginListOutput,
   SessionListInput,
   SessionListOutput,
+  SessionStatsInput,
+  SessionStatsOutput,
   SessionCreateInput,
   SessionCreateOutput,
   SessionImportInput,
@@ -210,10 +212,16 @@ import type {
   WorktreeRemoveOutput,
   WorktreeRefreshInput,
   WorktreeRefreshOutput,
+  WorkspaceCreateInput,
+  WorkspaceCreateOutput,
+  WorkspaceDestroyInput,
+  WorkspaceDestroyOutput,
   VcsGetInput,
   VcsGetOutput,
   VcsStatusInput,
   VcsStatusOutput,
+  VcsBranchesInput,
+  VcsBranchesOutput,
   VcsDiffInput,
   VcsDiffOutput,
   DebugLocationListOutput,
@@ -456,6 +464,24 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
+      stats: (input?: SessionStatsInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: SessionStatsOutput }>(
+          {
+            method: "GET",
+            path: `/api/session/stats`,
+            query: {
+              from: input?.["from"],
+              to: input?.["to"],
+              project: input?.["project"],
+              timezone: input?.["timezone"],
+              tools: input?.["tools"],
+            },
+            successStatus: 200,
+            declaredStatuses: [400, 401],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
       create: (input?: SessionCreateInput, requestOptions?: RequestOptions) =>
         request<{ readonly data: SessionCreateOutput }>(
           {
@@ -613,28 +639,24 @@ export function make(options: ClientOptions) {
           requestOptions,
         ).then((value) => value.data),
       command: (input: SessionCommandInput, requestOptions?: RequestOptions) =>
-        request<{ readonly data: SessionCommandOutput }>(
+        request<SessionCommandOutput>(
           {
             method: "POST",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/command`,
             body: {
-              id: input["id"],
               command: input["command"],
-              arguments: input["arguments"],
-              agent: input["agent"],
-              model: input["model"],
+              text: input["text"],
               files: input["files"],
               agents: input["agents"],
               skills: input["skills"],
               delivery: input["delivery"],
-              resume: input["resume"],
             },
-            successStatus: 200,
-            declaredStatuses: [409, 400, 404, 500, 401],
-            empty: false,
+            successStatus: 204,
+            declaredStatuses: [404, 500, 400, 401],
+            empty: true,
           },
           requestOptions,
-        ).then((value) => value.data),
+        ),
       skill: (input: SessionSkillInput, requestOptions?: RequestOptions) =>
         request<SessionSkillOutput>(
           {
@@ -862,9 +884,9 @@ export function make(options: ClientOptions) {
             method: "POST",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/interrupt`,
             query: { continue: input["continue"] },
-            successStatus: 204,
+            successStatus: 200,
             declaredStatuses: [404, 400, 401],
-            empty: true,
+            empty: false,
           },
           requestOptions,
         ),
@@ -961,7 +983,6 @@ export function make(options: ClientOptions) {
           {
             method: "POST",
             path: `/api/generate`,
-            query: { location: input["location"] },
             body: { prompt: input["prompt"], model: input["model"] },
             successStatus: 200,
             declaredStatuses: [400, 503, 401],
@@ -1731,6 +1752,7 @@ export function make(options: ClientOptions) {
             body: {
               strategy: input["strategy"],
               from: input["from"],
+              branch: input["branch"],
               directory: input["directory"],
               name: input["name"],
             },
@@ -1764,6 +1786,31 @@ export function make(options: ClientOptions) {
           requestOptions,
         ),
     },
+    workspace: {
+      create: (input: WorkspaceCreateInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: WorkspaceCreateOutput }>(
+          {
+            method: "POST",
+            path: `/api/workspace`,
+            body: { id: input["id"], provider: input["provider"] },
+            successStatus: 200,
+            declaredStatuses: [409, 404, 401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      destroy: (input: WorkspaceDestroyInput, requestOptions?: RequestOptions) =>
+        request<WorkspaceDestroyOutput>(
+          {
+            method: "DELETE",
+            path: `/api/workspace/${encodeURIComponent(input.workspaceID)}`,
+            successStatus: 200,
+            declaredStatuses: [500, 401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+    },
     vcs: {
       get: (input?: VcsGetInput, requestOptions?: RequestOptions) =>
         request<VcsGetOutput>(
@@ -1783,6 +1830,18 @@ export function make(options: ClientOptions) {
             method: "GET",
             path: `/api/vcs/status`,
             query: { location: input?.["location"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      branches: (input?: VcsBranchesInput, requestOptions?: RequestOptions) =>
+        request<VcsBranchesOutput>(
+          {
+            method: "GET",
+            path: `/api/vcs/branches`,
+            query: { location: input?.["location"], search: input?.["search"], limit: input?.["limit"] },
             successStatus: 200,
             declaredStatuses: [401, 400],
             empty: false,

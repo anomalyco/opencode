@@ -21,15 +21,20 @@ export default function NewSessionPage(props: { draftId: string }) {
     tabs.store.find((tab): tab is DraftTab => tab.type === "draft" && tab.draftID === search.draftId),
   )
   const workspace = createNewSessionWorkspaceController({
-    selected: () => draftTab()?.worktree,
-    setSelected: (worktree) => {
+    selectedWorktree: () => draftTab()?.worktree,
+    selectedBranch: () => draftTab()?.branch,
+    setSelectedWorktree: (worktree) => {
       if (search.draftId) tabs.updateDraft(search.draftId, { worktree })
+    },
+    setSelectedBranch: (branch) => {
+      if (search.draftId) tabs.updateDraft(search.draftId, { branch })
     },
     onViewAll: openWorkspaces,
   })
   const composer = createNewSessionComposerAdapter({
     draftID: props.draftId,
     worktree: workspace.selection.value,
+    branch: workspace.bar.branch,
     submitted: workspace.selection.remember,
   })
   const model = createComposerModel(composer.adapter)

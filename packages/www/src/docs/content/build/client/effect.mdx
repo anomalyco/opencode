@@ -1,0 +1,101 @@
+---
+title: "Effect"
+---
+
+`@opencode-ai/client/effect` is the Effect-native client for the OpenCode HTTP API. It returns typed Effects and Streams
+and decodes responses into OpenCode schema values.
+
+```sh
+bun add @opencode-ai/client@beta effect
+```
+
+## Create a client
+
+Create a client with the server URL, then call methods grouped by API resource.
+
+```ts
+import { AbsolutePath, Location, OpenCode } from "@opencode-ai/client/effect"
+import { Effect } from "effect"
+import { FetchHttpClient } from "effect/unstable/http"
+
+const program = Effect.gen(function* () {
+  const client = yield* OpenCode.make({ baseUrl: "http://localhost:4096" })
+  const session = yield* client.session.create({
+    location: Location.Ref.make({ directory: AbsolutePath.make("/workspace") }),
+  })
+  yield* client.session.prompt({
+    sessionID: session.id,
+    text: "Review the current changes",
+  })
+  return session
+})
+
+const session = await Effect.runPromise(program.pipe(Effect.provide(FetchHttpClient.layer)))
+```
+
+## Headers and requests
+
+Pass default headers to `OpenCode.make`. Each operation also accepts request options for cancellation or per-request
+headers.
+
+```ts
+const client = yield* OpenCode.make({
+  baseUrl: "https://opencode.example.com",
+  headers: { authorization: `Bearer ${process.env.OPENCODE_TOKEN}` },
+})
+
+const sessions = yield* client.session.list(undefined, {
+  signal: AbortSignal.timeout(10_000),
+})
+```
+
+## Stream events
+
+Streaming operations such as `event.subscribe()` and `session.log()` return Effect Streams.
+
+```ts
+import { Effect, Stream } from "effect"
+
+yield* client.event.subscribe().pipe(
+  Stream.runForEach((event) => Effect.logInfo("OpenCode event", { type: event.type })),
+)
+```
+
+## Local background service
+
+The Node-only `@opencode-ai/client/effect/service` entrypoint discovers, starts, authenticates, and stops the local
+background service as Effects.
+
+```sh
+bun add @effect/platform-node
+```
+
+Create an authenticated client for the ensured service.
+
+```ts
+import { NodeFileSystem } from "@effect/platform-node"
+import { OpenCode } from "@opencode-ai/client/effect"
+import { Service } from "@opencode-ai/client/effect/service"
+import { Effect } from "effect"
+import { FetchHttpClient } from "effect/unstable/http"
+
+const program = Effect.gen(function* () {
+  const endpoint = yield* Service.ensure()
+  const client = yield* OpenCode.make({
+    baseUrl: endpoint.url,
+    headers: Service.headers(endpoint),
+  })
+  return yield* client.health.get()
+})
+
+const health = await Effect.runPromise(
+  program.pipe(Effect.provide(FetchHttpClient.layer), Effect.provide(NodeFileSystem.layer)),
+)
+```
+
+Discover without starting, or stop the exact registered service.
+
+```ts
+const endpoint = yield* Service.discover()
+yield* Service.stop()
+```

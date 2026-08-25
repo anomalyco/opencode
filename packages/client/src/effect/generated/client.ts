@@ -17,6 +17,8 @@ import type {
   PluginListOutput,
   SessionListInput,
   SessionListOutput,
+  SessionStatsInput,
+  SessionStatsOutput,
   SessionCreateInput,
   SessionCreateOutput,
   SessionImportInput,
@@ -214,10 +216,16 @@ import type {
   WorktreeRemoveOutput,
   WorktreeRefreshInput,
   WorktreeRefreshOutput,
+  WorkspaceCreateInput,
+  WorkspaceCreateOutput,
+  WorkspaceDestroyInput,
+  WorkspaceDestroyOutput,
   VcsGetInput,
   VcsGetOutput,
   VcsStatusInput,
   VcsStatusOutput,
+  VcsBranchesInput,
+  VcsBranchesOutput,
   VcsDiffInput,
   VcsDiffOutput,
   DebugLocationListOutput,
@@ -305,6 +313,22 @@ const EndpointSessionList = (raw: RawClient["server.session"]) => (input?: Sessi
         cursor: input?.["cursor"],
       },
     }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const EndpointSessionStats = (raw: RawClient["server.session"]) => (input?: SessionStatsInput) =>
+  preserveEffect<SessionStatsOutput>()(
+    raw["session.stats"]({
+      query: {
+        from: input?.["from"],
+        to: input?.["to"],
+        project: input?.["project"],
+        timezone: input?.["timezone"],
+        tools: input?.["tools"],
+      },
+    }).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((value) => value.data),
+    ),
   )
 
 const EndpointSessionCreate = (raw: RawClient["server.session"]) => (input?: SessionCreateInput) =>
@@ -424,21 +448,14 @@ const EndpointSessionCommand = (raw: RawClient["server.session"]) => (input: Ses
     raw["session.command"]({
       params: { sessionID: input["sessionID"] },
       payload: {
-        id: input["id"],
         command: input["command"],
-        arguments: input["arguments"],
-        agent: input["agent"],
-        model: input["model"],
+        text: input["text"],
         files: input["files"],
         agents: input["agents"],
         skills: input["skills"],
         delivery: input["delivery"],
-        resume: input["resume"],
       },
-    }).pipe(
-      Effect.mapError(mapClientError),
-      Effect.map((value) => value.data),
-    ),
+    }).pipe(Effect.mapError(mapClientError)),
   )
 
 const EndpointSessionSkill = (raw: RawClient["server.session"]) => (input: SessionSkillInput) =>
@@ -634,6 +651,7 @@ const EndpointSessionView = (raw: RawClient["server.session"]) => (input: Sessio
 
 const adaptGroupSession = (raw: RawClient["server.session"]) => ({
   list: EndpointSessionList(raw),
+  stats: EndpointSessionStats(raw),
   create: EndpointSessionCreate(raw),
   import: EndpointSessionImport(raw),
   export: EndpointSessionExport(raw),
@@ -707,10 +725,7 @@ const adaptGroupModel = (raw: RawClient["server.model"]) => ({
 
 const EndpointGenerateText = (raw: RawClient["server.generate"]) => (input: GenerateTextInput) =>
   preserveEffect<GenerateTextOutput>()(
-    raw["generate.text"]({
-      query: { location: input["location"] },
-      payload: { prompt: input["prompt"], model: input["model"] },
-    }).pipe(
+    raw["generate.text"]({ payload: { prompt: input["prompt"], model: input["model"] } }).pipe(
       Effect.mapError(mapClientError),
       Effect.map((value) => value.data),
     ),
@@ -1246,7 +1261,13 @@ const EndpointWorktreeCreate = (raw: RawClient["server.worktree"]) => (input: Wo
   preserveEffect<WorktreeCreateOutput>()(
     raw["worktree.create"]({
       params: { projectID: input["projectID"] },
-      payload: { strategy: input["strategy"], from: input["from"], directory: input["directory"], name: input["name"] },
+      payload: {
+        strategy: input["strategy"],
+        from: input["from"],
+        branch: input["branch"],
+        directory: input["directory"],
+        name: input["name"],
+      },
     }).pipe(Effect.mapError(mapClientError)),
   )
 
@@ -1270,6 +1291,24 @@ const adaptGroupWorktree = (raw: RawClient["server.worktree"]) => ({
   refresh: EndpointWorktreeRefresh(raw),
 })
 
+const EndpointWorkspaceCreate = (raw: RawClient["server.workspace"]) => (input: WorkspaceCreateInput) =>
+  preserveEffect<WorkspaceCreateOutput>()(
+    raw["workspace.create"]({ payload: { id: input["id"], provider: input["provider"] } }).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((value) => value.data),
+    ),
+  )
+
+const EndpointWorkspaceDestroy = (raw: RawClient["server.workspace"]) => (input: WorkspaceDestroyInput) =>
+  preserveEffect<WorkspaceDestroyOutput>()(
+    raw["workspace.destroy"]({ params: { workspaceID: input["workspaceID"] } }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const adaptGroupWorkspace = (raw: RawClient["server.workspace"]) => ({
+  create: EndpointWorkspaceCreate(raw),
+  destroy: EndpointWorkspaceDestroy(raw),
+})
+
 const EndpointVcsGet = (raw: RawClient["server.vcs"]) => (input?: VcsGetInput) =>
   preserveEffect<VcsGetOutput>()(
     raw["vcs.get"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
@@ -1278,6 +1317,13 @@ const EndpointVcsGet = (raw: RawClient["server.vcs"]) => (input?: VcsGetInput) =
 const EndpointVcsStatus = (raw: RawClient["server.vcs"]) => (input?: VcsStatusInput) =>
   preserveEffect<VcsStatusOutput>()(
     raw["vcs.status"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const EndpointVcsBranches = (raw: RawClient["server.vcs"]) => (input?: VcsBranchesInput) =>
+  preserveEffect<VcsBranchesOutput>()(
+    raw["vcs.branches"]({
+      query: { location: input?.["location"], search: input?.["search"], limit: input?.["limit"] },
+    }).pipe(Effect.mapError(mapClientError)),
   )
 
 const EndpointVcsDiff = (raw: RawClient["server.vcs"]) => (input: VcsDiffInput) =>
@@ -1290,6 +1336,7 @@ const EndpointVcsDiff = (raw: RawClient["server.vcs"]) => (input: VcsDiffInput) 
 const adaptGroupVcs = (raw: RawClient["server.vcs"]) => ({
   get: EndpointVcsGet(raw),
   status: EndpointVcsStatus(raw),
+  branches: EndpointVcsBranches(raw),
   diff: EndpointVcsDiff(raw),
 })
 
@@ -1360,6 +1407,7 @@ const adaptClient = (raw: RawClient) => ({
   shell: adaptGroupShell(raw["server.shell"]),
   reference: adaptGroupReference(raw["server.reference"]),
   worktree: adaptGroupWorktree(raw["server.worktree"]),
+  workspace: adaptGroupWorkspace(raw["server.workspace"]),
   vcs: adaptGroupVcs(raw["server.vcs"]),
   debug: adaptGroupDebug(raw["server.debug"]),
   migration: adaptGroupMigration(raw["server.migration"]),

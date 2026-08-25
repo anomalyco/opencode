@@ -126,8 +126,8 @@ export class CommandNotFoundError extends Schema.TaggedError<CommandNotFoundErro
   { httpApiStatus: 404 },
 ) {}
 
-export class CommandEvaluationError extends Schema.TaggedError<CommandEvaluationError>()(
-  "CommandEvaluationError",
+export class CommandExecutionError extends Schema.TaggedError<CommandExecutionError>()(
+  "CommandExecutionError",
   {
     command: Schema.String,
     message: Schema.String,

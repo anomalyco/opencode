@@ -21,17 +21,37 @@ describe("xAI Responses route", () => {
 
       const prepared = yield* compileRequest(LLM.request({ model, prompt: "Hello" }))
       expect(prepared.protocol).toBe("xai-responses")
+      expect(prepared.body.store).toBe(false)
+      expect(prepared.body.include).toEqual(["reasoning.encrypted_content"])
     }),
   )
 
-  it.effect("parses xAI reasoning text events", () =>
+  it.effect("allows callers to opt out of encrypted reasoning", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(LLM.request({ model, prompt: "Hello", providerOptions: { include: [] } }))
+
+      expect(prepared.body.store).toBe(false)
+      expect(prepared.body.include).toBeUndefined()
+    }),
+  )
+
+  it.effect("parses xAI reasoning summaries", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(LLM.request({ model, prompt: "Think" })).pipe(
         Effect.provide(
           fixedResponse(
             sseEvents(
-              { type: "response.reasoning_text.delta", item_id: "reasoning_1", delta: "Considering." },
-              { type: "response.reasoning_text.done", item_id: "reasoning_1" },
+              {
+                type: "response.output_item.added",
+                item: { type: "reasoning", id: "reasoning_1" },
+              },
+              // Grok streams reasoning with the standard summary event name.
+              {
+                type: "response.reasoning_summary_text.delta",
+                item_id: "reasoning_1",
+                summary_index: 0,
+                delta: "Considering.",
+              },
               {
                 type: "response.output_item.done",
                 item: { type: "reasoning", id: "reasoning_1", encrypted_content: "opaque" },

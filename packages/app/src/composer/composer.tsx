@@ -8,7 +8,7 @@ import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { ComposerEditor } from "./editor/editor"
 import { ModelSelectorPopover } from "@/providers/models/select-dialog"
 import { DialogSelectModelUnpaid } from "@/providers/models/unpaid"
-import { useCommand } from "@/shell/commands/command"
+import { formatKeybind, useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
 import type { ComposerModel } from "./model"
 
@@ -32,6 +32,7 @@ export function Composer(props: {
         modelControlsVisible={!props.model.model.loading}
         attachKeybind={command.keybindParts("file.attach")}
         attachShortcut={command.keybind("file.attach")}
+        alternateKeybind={[formatKeybind("mod", language.t), formatKeybind("enter", language.t)]}
         modelControl={
           <ComposerModelControl
             loading={props.model.model.loading}

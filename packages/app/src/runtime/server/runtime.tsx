@@ -8,9 +8,10 @@ import { createServerSdkContext } from "./client"
 import { createServerSyncContext } from "./sync"
 import { createData } from "@opencode-ai/client/solid"
 import type { ServerScope } from "@/runtime/server/scope"
-import { createServerPermissionState } from "@/session/requests/server-permission"
+import { createPermissionAutoApprover } from "@/session/requests/auto-approve"
 import { createServerNotificationState } from "@/shell/notifications/notification"
 import { Persist, persisted } from "@/runtime/persistence/storage"
+import { createDesktopData } from "./data"
 
 export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext({
   name: "Global",
@@ -134,7 +135,7 @@ function createServerController(
 ) {
   const connKey = ServerConnection.key(conn)
   const sdk = createServerSdkContext(conn, scope)
-  const data = createData({
+  const source = createData({
     api: () => sdk.api,
     event: {
       on: sdk.event.on,
@@ -143,8 +144,12 @@ function createServerController(
     connection: sdk.connection,
     directory: "",
   })
+  const data = createDesktopData({
+    data: source,
+    remove: (sessionID) => sdk.api.session.remove({ sessionID }),
+  })
   const sync = createServerSyncContext(sdk, data)
-  const permission = createServerPermissionState({ sdk, sync, data })
+  createPermissionAutoApprover({ sdk, data })
   const notification = createServerNotificationState({ sdk, data, key: connKey })
 
   function enrich(project: { worktree: string; expanded: boolean }) {
@@ -187,7 +192,6 @@ function createServerController(
       list: projectsList,
       recentlyClosed: recentlyClosedList,
     },
-    permission,
     notification,
   }
 }

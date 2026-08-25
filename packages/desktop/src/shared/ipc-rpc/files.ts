@@ -56,6 +56,9 @@ export const FilesRevealPath = Rpc.make("FilesRevealPath", {
 export const FilesReadClipboardImage = Rpc.make("FilesReadClipboardImage", {
   success: Schema.NullOr(ClipboardImage),
 })
+export const FilesWriteClipboardText = Rpc.make("FilesWriteClipboardText", {
+  payload: { text: Schema.String },
+})
 
 export const FileRpcs = RpcGroup.make(
   FilesOpenDirectoryPicker,
@@ -68,4 +71,5 @@ export const FileRpcs = RpcGroup.make(
   FilesOpenPath,
   FilesRevealPath,
   FilesReadClipboardImage,
+  FilesWriteClipboardText,
 )

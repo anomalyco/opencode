@@ -402,7 +402,10 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
       command: runtime.session.command,
       rename: runtime.session.rename,
       synthetic: runtime.session.synthetic,
-      interrupt: (input) => runtime.session.interrupt(input.sessionID),
+      interrupt: (input) =>
+        runtime.session
+          .interrupt(input.sessionID, { continue: input.continue })
+          .pipe(Effect.map((interrupted) => ({ interrupted }))),
       wait: (input) => runtime.session.wait(input.sessionID),
     },
   } satisfies Plugin.Context

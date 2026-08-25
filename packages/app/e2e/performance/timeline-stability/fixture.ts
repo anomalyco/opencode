@@ -899,8 +899,26 @@ function provider() {
         name: "OpenCode",
         models: { "claude-opus-4-6": { id: "claude-opus-4-6", name: "Claude Opus 4.6", limit: { context: 200_000 } } },
       },
+      {
+        id: "company-gateway",
+        name: "Company Gateway",
+        models: {
+          "fast-nano": {
+            id: "fast-nano",
+            api: { id: "openai/gpt-5.4-nano" },
+            name: "GPT-5.4 nano",
+            limit: { context: 128_000 },
+          },
+          "long-context": {
+            id: "long-context",
+            api: { id: "company/long-context" },
+            name: "Company Gateway Extra Long Context Model for Narrow Timeline Layouts",
+            limit: { context: 128_000 },
+          },
+        },
+      },
     ],
-    connected: ["opencode"],
+    connected: ["opencode", "company-gateway"],
     default: { providerID: "opencode", modelID: "claude-opus-4-6" },
   }
 }

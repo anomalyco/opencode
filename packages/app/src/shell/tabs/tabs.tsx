@@ -29,6 +29,7 @@ export type DraftTab = {
   server: ServerConnection.Key
   directory: string
   worktree?: string
+  branch?: string
 }
 
 export type Tab = SessionTab | DraftTab
@@ -51,11 +52,15 @@ export const tabKey = (tab: Tab) =>
   tab.type === "draft" ? `draft:${tab.draftID}` : `${tab.server}\n${sessionHref(tab.server, tab.sessionId)}`
 
 export function sessionHasOpenTab(tabs: Tab[], server: ServerConnection.Key, session: SessionInfo) {
+  return sessionIDHasOpenTab(tabs, server, session.id)
+}
+
+export function sessionIDHasOpenTab(tabs: Tab[], server: ServerConnection.Key, sessionID: string) {
   return tabs.some(
     (tab) =>
       tab.type === "session" &&
       tab.server === server &&
-      (tab.sessionId === session.id || tab.routeSessionId === session.id),
+      (tab.sessionId === sessionID || tab.routeSessionId === sessionID),
   )
 }
 

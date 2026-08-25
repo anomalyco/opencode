@@ -128,9 +128,22 @@ describe("SessionExecution lifecycle", () => {
       yield* Deferred.await(draining)
       expect((yield* claims(database))[sessionID]).toBe(true)
 
-      yield* execution.interrupt(sessionID)
+      expect(yield* execution.interrupt(sessionID)).toBeTrue()
       yield* execution.awaitIdle(sessionID)
       expect((yield* claims(database))[sessionID]).toBe(false)
+    }),
+  )
+
+  it.effect("reports an idle interrupt as a no-op", () =>
+    Effect.gen(function* () {
+      const sessionID = Session.ID.make("ses_idle_cancel")
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(scope, () => Effect.never)
+      const execution = Context.get(context, SessionExecution.Service)
+
+      expect(yield* execution.interrupt(sessionID)).toBeFalse()
+      expect(yield* execution.active).not.toContain(sessionID)
     }),
   )
 

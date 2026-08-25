@@ -119,7 +119,6 @@ export const protocol = Protocol.make({
             ...body,
             messages,
             ...bodyOptions(request.providerOptions),
-            ...(request.promptCacheKey ? { prompt_cache_key: request.promptCacheKey } : {}),
           } as OpenRouterBody
         }),
       ),

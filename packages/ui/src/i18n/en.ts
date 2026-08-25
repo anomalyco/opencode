@@ -131,6 +131,7 @@ const source = {
   "ui.promptInput.label": "Prompt",
   "ui.promptInput.placeholder.shell": "Enter shell command...",
   "ui.promptInput.placeholder.normal": "Ask anything, {{slash}} for commands, {{at}} for context...",
+  "ui.promptInput.placeholder.followUp": "Add follow-up, {{slash}} for commands, {{at}} for context...",
   "ui.promptInput.add": "Add images and files",
   "ui.promptInput.attachments": "Images and files",
   "ui.promptInput.context": "Context",
@@ -140,6 +141,9 @@ const source = {
   "ui.promptInput.chooseVariant": "Choose model variant",
   "ui.promptInput.send": "Send",
   "ui.promptInput.stop": "Stop",
+  "ui.promptInput.steer": "Steer",
+  "ui.promptInput.queue": "Queue",
+  "ui.promptInput.steerHint": "Send without interrupting",
 
   "ui.tabs.close": "Close tab",
 
@@ -211,6 +215,7 @@ const source = {
   "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",
   "ui.message.interrupted": "Interrupted",
   "ui.sessionTimeline.notice.model": "Model",
+  "ui.sessionTimeline.notice.modelSwitched": "Switched to {{model}}",
   "ui.sessionTimeline.notice.movedTo": "Moved to",
   "ui.sessionTimeline.notice.movedTooltip": "Session working directory changed",
   "ui.sessionTimeline.notice.failed": "{{actor}} failed",

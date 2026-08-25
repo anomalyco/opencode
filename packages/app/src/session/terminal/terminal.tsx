@@ -347,9 +347,9 @@ export const Terminal = (props: TerminalProps) => {
   const focusTerminal = () => {
     const t = term
     if (!t) return
-    t.focus()
-    t.textarea?.focus()
-    setTimeout(() => t.textarea?.focus(), 0)
+    const focus = () => (t.textarea ? t.textarea.focus({ preventScroll: true }) : t.focus())
+    focus()
+    setTimeout(focus, 0)
   }
   const handlePointerDown = () => {
     const activeElement = document.activeElement

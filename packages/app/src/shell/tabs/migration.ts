@@ -31,9 +31,19 @@ export function migrateTabs(value: unknown): Tab[] {
       tab.type === "draft" &&
       typeof tab.draftID === "string" &&
       typeof tab.directory === "string" &&
-      (tab.worktree === undefined || typeof tab.worktree === "string")
+      (tab.worktree === undefined || typeof tab.worktree === "string") &&
+      (tab.branch === undefined || typeof tab.branch === "string")
     ) {
-      return [{ type: tab.type, server, draftID: tab.draftID, directory: tab.directory, worktree: tab.worktree }]
+      return [
+        {
+          type: tab.type,
+          server,
+          draftID: tab.draftID,
+          directory: tab.directory,
+          worktree: tab.worktree,
+          branch: tab.branch,
+        },
+      ]
     }
     return []
   })

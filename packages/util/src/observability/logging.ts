@@ -60,7 +60,10 @@ export function fileLogger(target = file(), id: string = runID()) {
   })
 }
 
-const stderrLogger = Logger.make((options) => process.stderr.write(formatter().log(options) + "\n"))
+const stderrLogger = Logger.make((options) => {
+  if (process.env.OPENCODE_PRINT_LOGS !== "1") return
+  process.stderr.write(formatter().log(options) + "\n")
+})
 
 export function minimumLogLevel() {
   const value = process.env.OPENCODE_LOG_LEVEL?.toUpperCase()
@@ -74,8 +77,7 @@ export function minimumLogLevel() {
 }
 
 export function loggers(local = true, channel = "local") {
-  const logger = fileLogger(file(local, channel))
-  return process.env.OPENCODE_PRINT_LOGS === "1" ? [logger, stderrLogger] : [logger]
+  return [fileLogger(file(local, channel)), stderrLogger]
 }
 
 export * as Logging from "./logging.js"

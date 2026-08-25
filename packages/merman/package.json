@@ -5,9 +5,12 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./markdown": "./src/markdown.ts",
+    "./palette": "./src/palette.ts",
     "./plugin": "./src/plugin.ts"
   },
   "scripts": {
+    "audit:layouts": "bun run script/layout-audit.ts",
     "test": "bun test --timeout 30000 --only-failures",
     "typecheck": "tsgo --noEmit"
   },

@@ -2,7 +2,7 @@ export * as MCP from "./index.js"
 
 import { Mcp } from "@opencode-ai/schema/mcp"
 import { McpEvent } from "@opencode-ai/schema/mcp-event"
-import { Command } from "@opencode-ai/schema/command"
+import { ephemeral } from "@opencode-ai/schema/event"
 import { createHash } from "node:crypto"
 import { isDeepStrictEqual } from "node:util"
 import { Cause, Context, Effect, Exit, FiberSet, Latch, Layer, Schema, Scope, Stream, Types } from "effect"
@@ -19,6 +19,7 @@ import { State } from "../state.js"
 import type { MCPClient } from "./client.js"
 
 export const ServerName = Schema.String.pipe(Schema.brand("MCP.ServerName"))
+export const PromptsChanged = ephemeral({ type: "mcp.prompts.changed", schema: { server: Schema.String } })
 export type ServerName = typeof ServerName.Type
 
 // The status union is a public wire contract, so it lives in @opencode-ai/schema and is re-exported here.
@@ -273,28 +274,53 @@ export const layer = (options?: Options) =>
           return MCPOAuth.provider({ ...base, store: MCPOAuth.memoryStore() })
         const credentialID = found.id
         const methodID = found.value.methodID
-        let current: Credential.OAuth | undefined = found.value
+        const integrationID = entry.integrationID
+        // Tracks the refresh token this provider last presented, so invalidate can tell whether the SDK
+        // rejected the currently-stored credential or a snapshot another connection has already rotated past.
+        let presented = found.value.refresh
+        const readOAuthCredential = async () => {
+          const stored = await Effect.runPromise(credentials.list(integrationID))
+          const match = stored.find((credential) => credential.id === credentialID)
+          return match && match.value.type === "oauth" ? match.value : undefined
+        }
         return MCPOAuth.provider({
           ...base,
-          // Drop a credential the SDK rejected so the next connect cleanly reports needs_auth. Uses the raw
-          // credential service (no integration event) to avoid re-triggering the reconnect subscriber mid-connect.
+          // Drop a credential the SDK rejected so the next connect cleanly reports needs_auth — but only if it is
+          // still the stored one. Rotating servers hand out a fresh refresh token per use, so a concurrent
+          // connection may have already replaced ours; deleting then would discard the newer valid credential and
+          // strand every connection in needs_auth until a manual re-auth. Uses the raw credential service (no
+          // integration event) to avoid re-triggering the reconnect subscriber mid-connect.
           invalidate: async (scope) => {
             if (scope === "verifier" || scope === "discovery") return
-            current = undefined
+            const oauth = await readOAuthCredential()
+            if (!oauth || oauth.refresh !== presented) return
             await Effect.runPromise(credentials.remove(credentialID))
           },
+          // Always read the latest stored tokens instead of caching at connect time: with refresh-token rotation,
+          // a cached snapshot goes stale the moment another connection refreshes, and re-presenting the consumed
+          // token fails with invalid_grant.
           store: {
-            tokens: async () => (current ? MCPOAuth.toTokens(current) : undefined),
+            tokens: async () => {
+              const oauth = await readOAuthCredential()
+              if (!oauth) return undefined
+              presented = oauth.refresh
+              return MCPOAuth.toTokens(oauth)
+            },
             saveTokens: async (tokens) => {
-              current = MCPOAuth.toCredential({
+              const previous = await readOAuthCredential()
+              const value = MCPOAuth.toCredential({
                 methodID,
                 serverUrl: remote.url,
                 tokens,
-                client: current ? MCPOAuth.clientFromCredential(current) : undefined,
+                client: previous ? MCPOAuth.clientFromCredential(previous) : undefined,
               })
-              await Effect.runPromise(credentials.update(credentialID, { value: current }))
+              presented = value.refresh
+              await Effect.runPromise(credentials.update(credentialID, { value }))
             },
-            clientInformation: async () => (current ? MCPOAuth.clientFromCredential(current) : undefined),
+            clientInformation: async () => {
+              const oauth = await readOAuthCredential()
+              return oauth ? MCPOAuth.clientFromCredential(oauth) : undefined
+            },
             saveClientInformation: async () => {},
             codeVerifier: async () => undefined,
             saveCodeVerifier: async () => {},
@@ -428,7 +454,7 @@ export const layer = (options?: Options) =>
           Effect.map((defs) => {
             entry.prompts = defs.map((def) => toPrompt(name, def))
           }),
-          Effect.andThen(bus.publish(Command.Event.Updated, {})),
+          Effect.andThen(bus.publish(PromptsChanged, { server: name })),
         )
 
       // Runs a connection callback under the server lock, dropping it if the connection is no longer
@@ -547,7 +573,7 @@ export const layer = (options?: Options) =>
         yield* Scope.close(scope, Exit.void)
         yield* bus.publish(McpEvent.ToolsChanged, { server: name }).pipe(Effect.ignore)
         yield* bus.publish(McpEvent.ResourcesChanged, { server: name }).pipe(Effect.ignore)
-        yield* bus.publish(Command.Event.Updated, {}).pipe(Effect.ignore)
+        yield* bus.publish(PromptsChanged, { server: name }).pipe(Effect.ignore)
       })
 
       const disposeServer = Effect.fnUntraced(function* (name: ServerName, entry: ServerEntry) {

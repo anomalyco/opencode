@@ -101,7 +101,7 @@ describe("LLMClient tools", () => {
       const messages = Reflect.get(second, "messages")
       const tools = Reflect.get(second, "tools")
 
-      expect(Reflect.get(second, "max_tokens")).toBe(50)
+      expect(Reflect.get(second, "max_completion_tokens")).toBe(50)
       expect(Reflect.get(second, "tool_choice")).toBe("auto")
       expect(tools).toHaveLength(1)
       expect(
@@ -191,7 +191,7 @@ describe("LLMClient tools", () => {
         success: Schema.String,
         execute: () => Effect.succeed("hello"),
       })
-      const providerMetadata = { google: { functionCallId: "provider_call" } }
+      const providerMetadata = { google: { thoughtSignature: "provider_sig" } }
       const dispatched = yield* ToolRuntime.dispatch(
         { tool },
         LLMEvent.toolCall({ id: "call_1", name: "tool", input: {}, providerMetadata }),

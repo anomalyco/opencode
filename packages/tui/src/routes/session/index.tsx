@@ -109,6 +109,7 @@ import { generateThinkingSyntax } from "./thinking-syntax"
 import { createDelayedPresence } from "../../util/delayed-presence"
 import { SessionLocationMissing } from "./location-missing"
 import { isRecord } from "../../util/record"
+import { createHistoryPrepend } from "./history"
 
 addDefaultParsers(parsers.parsers)
 
@@ -281,11 +282,13 @@ export function Session(props: { verticalTabsWidth: number }) {
   const sessionTabs = useSessionTabs()
   const [awayFromBottom, setAwayFromBottom] = createSignal(false)
   const [latestHovered, setLatestHovered] = createSignal(false)
+  let ensureAllRowsPending: (() => void)[] | undefined
   createEffect(() => {
     if (!awayFromBottom()) setLatestHovered(false)
   })
 
   const clearMessageNavigation = () => {
+    ensureAllRowsPending?.splice(0)
     setNavigationSlack(0)
     setNavigationMessage(undefined)
   }
@@ -294,7 +297,9 @@ export function Session(props: { verticalTabsWidth: number }) {
     on(
       () => [dimensions().width, dimensions().height, props.verticalTabsWidth] as const,
       (_, previous) => {
-        if (previous) clearMessageNavigation()
+        if (!previous) return
+        clearMessageNavigation()
+        if (scroll && !scroll.isDestroyed) updateAwayFromBottom()
       },
     ),
   )
@@ -354,6 +359,7 @@ export function Session(props: { verticalTabsWidth: number }) {
   onCleanup(() => {
     if (awayTimer) clearTimeout(awayTimer)
     if (!scroll || scroll.isDestroyed) return
+    scroll.verticalScrollBar.off("change", updateAwayFromBottom)
     saveScrollAnchor()
   })
   const [prompt, setPrompt] = createSignal<PromptRef>()
@@ -376,31 +382,38 @@ export function Session(props: { verticalTabsWidth: number }) {
   }
 
   // Tail-first transcript mounting: only the newest rows mount when the session opens. Older rows
-  // mount on demand near the top, keeping inactive tabs cheap to tear down. Until the first chunk
-  // pins the count, the hidden span derives from the row count, so streaming appends remain visible.
+  // mount on demand near the top, keeping inactive tabs cheap to tear down. While the reader stays
+  // at the bottom the hidden span follows appends; leaving the bottom pins it to preserve the viewport.
   const [hiddenRows, setHiddenRows] = createSignal<number>()
   const [visibleRowsEnd, setVisibleRowsEnd] = createSignal<number>()
   const hidden = createMemo(() => Math.max(0, Math.min(hiddenRows() ?? Infinity, rows.length - TRANSCRIPT_TAIL_ROWS)))
   const visibleEnd = createMemo(() => Math.max(hidden(), Math.min(visibleRowsEnd() ?? rows.length, rows.length)))
   const visibleRows = createMemo(() => rows.slice(hidden(), visibleEnd()))
+  const prependHistory = createHistoryPrepend({
+    sessionID: () => route.sessionID,
+    more: (id) => data.session.message.more(id),
+    loadMore: (id) => data.session.message.loadMore(id),
+    height: () => scroll.scrollHeight,
+    afterLayout,
+    active: (id) => route.sessionID === id && Boolean(scroll && !scroll.isDestroyed),
+    scrollBy: (amount) => {
+      scroll.scrollBy(amount)
+      updateAwayFromBottom()
+    },
+  })
   let revealingOlderRows = false
   const revealOlderRows = (scrollBy = 0) => {
     const current = hidden()
-    if (
-      revealingOlderRows ||
-      current === 0 ||
-      !scroll ||
-      scroll.isDestroyed ||
-      scroll.scrollTop > scroll.viewport.height
-    )
-      return false
+    if (revealingOlderRows || !scroll || scroll.isDestroyed || scroll.scrollTop > scroll.viewport.height) return false
+    if (current === 0) return prependHistory(scrollBy)
     revealingOlderRows = true
     const before = scroll.scrollHeight
+    scroll.stickyScroll = false
     setHiddenRows(Math.max(0, current - TRANSCRIPT_BACKFILL_CHUNK))
     afterLayout(() => {
-      revealingOlderRows = false
       scroll.scrollBy(scroll.scrollHeight - before + scrollBy)
-      updateAwayFromBottom()
+      scroll.stickyScroll = !navigationMessage()
+      revealingOlderRows = false
     })
     return true
   }
@@ -427,23 +440,40 @@ export function Session(props: { verticalTabsWidth: number }) {
   }
   /** Message navigation needs the full transcript mounted before walking or jumping. */
   const ensureAllRows = (continuation: () => void) => {
-    if (hidden() === 0 && visibleEnd() === rows.length) return continuation()
+    if (!ensureAllRowsPending && hidden() === 0 && visibleEnd() === rows.length) return continuation()
+    if (ensureAllRowsPending) {
+      ensureAllRowsPending.push(continuation)
+      return
+    }
+    const pending = [continuation]
+    ensureAllRowsPending = pending
     setHiddenRows(0)
     setVisibleRowsEnd(undefined)
-    afterLayout(continuation)
+    afterLayout(() => {
+      if (ensureAllRowsPending === pending) ensureAllRowsPending = undefined
+      pending.forEach((continuation) => continuation())
+      updateAwayFromBottom()
+    })
   }
 
   function isAwayFromBottom() {
+    if (revealingOlderRows || revealingNewerRows || ensureAllRowsPending || navigationMessage()) return true
     if (visibleEnd() < rows.length) return true
     return scroll.scrollTop < Math.max(0, scroll.scrollHeight - scroll.viewport.height) - 1
   }
   function updateAwayFromBottom() {
+    const preserveWindow = revealingOlderRows || revealingNewerRows || !!ensureAllRowsPending
+    if (isAwayFromBottom()) setHiddenRows((current) => current ?? hidden())
     if (awayTimer) clearTimeout(awayTimer)
     awayTimer = setTimeout(() => {
       awayTimer = undefined
       if (!scroll || scroll.isDestroyed) return
-      const away = isAwayFromBottom()
+      const away = preserveWindow || isAwayFromBottom()
       setAwayFromBottom(away)
+      if (!away) {
+        if (!renderer.getSelection()) setHiddenRows(undefined)
+        scroll.stickyScroll = true
+      }
       saveScrollAnchor()
     })
   }
@@ -568,6 +598,7 @@ export function Session(props: { verticalTabsWidth: number }) {
   const alignMessage = (messageID: string, top: number) => {
     scroll.stickyScroll = false
     setNavigationMessage(messageID)
+    updateAwayFromBottom()
     setNavigationSlack(
       messageNavigationSlack({
         top,
@@ -594,7 +625,15 @@ export function Session(props: { verticalTabsWidth: number }) {
         userOnly,
       })
 
-      if (target) alignMessage(target.id, target.top)
+      if (target) {
+        alignMessage(target.id, target.top)
+        dialog.clear()
+        return
+      }
+      if (direction === "prev" && data.session.message.more(route.sessionID)) {
+        prependHistory(0, () => scrollToMessage(direction, dialog, userOnly))
+        return
+      }
       dialog.clear()
     })
 
@@ -609,6 +648,7 @@ export function Session(props: { verticalTabsWidth: number }) {
 
   function toBottom() {
     clearMessageNavigation()
+    ensureAllRowsPending = undefined
     if (awayTimer) clearTimeout(awayTimer)
     awayTimer = undefined
     setAwayFromBottom(false)
@@ -690,10 +730,16 @@ export function Session(props: { verticalTabsWidth: number }) {
       palette: undefined,
       run: () => {
         clearMessageNavigation()
-        ensureAllRows(() => {
-          scroll.scrollTo(0)
-          updateAwayFromBottom()
-        })
+        const first = () => {
+          if (data.session.message.more(route.sessionID)) {
+            prependHistory(0, first)
+            return
+          }
+          ensureAllRows(() => {
+            scroll.scrollTo(0)
+          })
+        }
+        first()
         dialog.clear()
       },
     },
@@ -1171,7 +1217,10 @@ export function Session(props: { verticalTabsWidth: number }) {
           <Show when={session()}>
             <box flexGrow={1} minHeight={0} position="relative">
               <scrollbox
-                ref={(r) => (scroll = r)}
+                ref={(r) => {
+                  scroll = r
+                  scroll.verticalScrollBar.on("change", updateAwayFromBottom)
+                }}
                 viewportOptions={{
                   paddingRight: showScrollbar() ? 1 : 0,
                 }}
@@ -3199,6 +3248,7 @@ function Subagent(props: ToolProps) {
   const data = useData()
   const sessionID = createMemo(() => stringValue(props.metadata.sessionID) ?? stringValue(props.metadata.sessionId))
   const description = createMemo(() => stringValue(props.input.description))
+  const continuation = createMemo(() => Boolean(stringValue(props.input.sessionID)))
   const isRunning = createMemo(() => {
     const id = sessionID()
     return props.part.state.status === "running" || Boolean(id && data.session.status(id) === "running")
@@ -3206,8 +3256,8 @@ function Subagent(props: ToolProps) {
 
   return (
     <InlineTool
-      icon={isRunning() ? "│" : props.part.state.status === "completed" ? "✓" : "│"}
-      spinner={isRunning()}
+      icon={continuation() ? "↳" : isRunning() ? "│" : props.part.state.status === "completed" ? "✓" : "│"}
+      spinner={!continuation() && isRunning()}
       complete={description()}
       pending="Delegating..."
       part={props.part}
@@ -3221,7 +3271,9 @@ function Subagent(props: ToolProps) {
         ) : undefined
       }
     >
-      {`${Locale.titlecase(stringValue(props.input.agent) ?? stringValue(props.input.subagent_type) ?? "General")} Subagent — ${description() ?? "Subagent"}`}
+      {continuation()
+        ? `Continue subagent — ${description() ?? "Subagent"}`
+        : `${Locale.titlecase(stringValue(props.input.agent) ?? stringValue(props.input.subagent_type) ?? "General")} Subagent — ${description() ?? "Subagent"}`}
     </InlineTool>
   )
 }

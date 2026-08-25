@@ -3,7 +3,6 @@ import { defineConfig } from "drizzle-kit"
 
 export default defineConfig({
   out: "./migrations/",
-  strict: true,
   schema: ["./src/**/*.sql.ts"],
   verbose: true,
   dialect: "mysql",

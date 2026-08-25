@@ -716,6 +716,7 @@ function App(props: { pair?: DialogPairCredentials }) {
         category: "Session",
         slash: { name: "new", aliases: ["clear"] },
         run: () => {
+          const model = local.model.current()
           const current =
             route.data.type === "session"
               ? (data.session.get(route.data.sessionID)?.location ?? location.ref)
@@ -729,6 +730,7 @@ function App(props: { pair?: DialogPairCredentials }) {
               location.error?.location,
             ),
           })
+          if (model) local.model.set(model)
           dialog.clear()
         },
       },
@@ -1282,7 +1284,9 @@ function App(props: { pair?: DialogPairCredentials }) {
         evt.preventDefault()
         evt.stopPropagation()
       }}
-      onMouseUp={copyOnSelectEnabled() ? () => Selection.copy(renderer, toast, clipboard) : undefined}
+      onMouseUp={
+        copyOnSelectEnabled() ? (event) => Selection.copyOnSelectRelease(event, renderer, toast, clipboard) : undefined
+      }
     >
       <box
         flexGrow={1}

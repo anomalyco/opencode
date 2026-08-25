@@ -9,10 +9,10 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { useSettings } from "@/settings/model"
 import { decode64 } from "@/runtime/persistence/base64"
 import { Persist, persisted } from "@/runtime/persistence/storage"
-import { playSoundById } from "@/shell/notifications/sound"
+import { playSoundByIdOnce } from "@/shell/notifications/sound"
 import { useGlobal } from "@/runtime/server/runtime"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
-import { type DraftTab, useTabs } from "@/shell/tabs/tabs"
+import { sessionIDHasOpenTab, useTabs } from "@/shell/tabs/tabs"
 import { requireServerKey, sessionHref } from "@/shell/routes/session"
 import type { ServerScope } from "@/runtime/server/scope"
 import { useServer } from "@/runtime/server/current"
@@ -49,6 +49,19 @@ type NotificationIndex = {
     unseenCount: Record<string, number>
     unseenHasError: Record<string, boolean>
   }
+}
+
+type NotificationTabs = Pick<ReturnType<typeof useTabs>, "addSessionTab" | "rememberSessionRoute" | "select">
+
+export function openNotificationSession(
+  tabs: NotificationTabs,
+  server: ServerConnection.Key,
+  sessionID: string,
+) {
+  const tab = tabs.addSessionTab({ server, sessionId: sessionID })
+  if (tab.type !== "session") return
+  tabs.rememberSessionRoute(tab, sessionID)
+  tabs.select(tab)
 }
 
 const MAX_NOTIFICATIONS = 500
@@ -112,6 +125,7 @@ export function createServerNotificationState(input: { sdk: ServerSDK; data: Dat
   const platform = usePlatform()
   const settings = useSettings()
   const language = useLanguage()
+  const tabs = useTabs()
   const empty: Notification[] = []
 
   const [store, setStore, _, ready] = persisted(
@@ -210,19 +224,17 @@ export function createServerNotificationState(input: { sdk: ServerSDK; data: Dat
     return typeof location !== "undefined" && location.pathname === sessionHref(input.key, sessionID)
   }
 
-  const navigate = (href: string) => {
-    history.pushState(null, "", href)
-    dispatchEvent(new PopStateEvent("popstate"))
-  }
-
-  const handleSessionIdle = (sessionID: string, time: number) => {
+  const handleSessionIdle = (sessionID: string, eventID: string, time: number) => {
     void lookup(sessionID).then((session) => {
       if (meta.disposed) return
       if (!session) return
       if (session.parentID) return
 
-      if (settings.sounds.agentEnabled()) {
-        void playSoundById(settings.sounds.agent())
+      if (
+        sessionIDHasOpenTab(tabs.store, input.key, sessionID) &&
+        settings.sounds.agentEnabled()
+      ) {
+        void playSoundByIdOnce(settings.sounds.agent(), `${input.key}\0${eventID}`)
       }
 
       append({
@@ -233,10 +245,9 @@ export function createServerNotificationState(input: { sdk: ServerSDK; data: Dat
         session: sessionID,
       })
 
-      const href = sessionHref(input.key, sessionID)
       if (settings.notifications.agent()) {
         void platform.notify(language.t("notification.session.responseReady.title"), session.title ?? sessionID, () =>
-          navigate(href),
+          openNotificationSession(tabs, input.key, sessionID),
         )
       }
     })
@@ -245,14 +256,18 @@ export function createServerNotificationState(input: { sdk: ServerSDK; data: Dat
   const handleSessionError = (
     sessionID: string,
     error: ErrorNotification["error"],
+    eventID: string,
     time: number,
   ) => {
     void lookup(sessionID).then((session) => {
       if (meta.disposed) return
       if (session?.parentID) return
 
-      if (settings.sounds.errorsEnabled()) {
-        void playSoundById(settings.sounds.errors())
+      if (
+        sessionIDHasOpenTab(tabs.store, input.key, sessionID) &&
+        settings.sounds.errorsEnabled()
+      ) {
+        void playSoundByIdOnce(settings.sounds.errors(), `${input.key}\0${eventID}`)
       }
 
       append({
@@ -266,9 +281,10 @@ export function createServerNotificationState(input: { sdk: ServerSDK; data: Dat
       const description =
         session?.title ??
         (typeof error === "string" ? error : language.t("notification.session.error.fallbackDescription"))
-      const href = sessionHref(input.key, sessionID)
       if (settings.notifications.errors()) {
-        void platform.notify(language.t("notification.session.error.title"), description, () => navigate(href))
+        void platform.notify(language.t("notification.session.error.title"), description, () =>
+          openNotificationSession(tabs, input.key, sessionID),
+        )
       }
     })
   }
@@ -278,10 +294,10 @@ export function createServerNotificationState(input: { sdk: ServerSDK; data: Dat
 
     const time = Date.now()
     if (event.type === "session.execution.failed") {
-      handleSessionError(event.data.sessionID, event.data.error, time)
+      handleSessionError(event.data.sessionID, event.data.error, event.id, time)
       return
     }
-    handleSessionIdle(event.data.sessionID, time)
+    handleSessionIdle(event.data.sessionID, event.id, time)
   })
   onCleanup(() => {
     meta.disposed = true

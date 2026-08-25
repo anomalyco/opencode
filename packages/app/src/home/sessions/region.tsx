@@ -12,6 +12,7 @@ export function HomeSessions(props: {
     <HomeSessionsView
       language={props.sessions.copy.language}
       groups={props.sessions.data.groups()}
+      loading={props.sessions.data.loading()}
       showProjectName={props.sessions.session.showProjectName()}
       server={props.sessions.session.server()}
       canCreateSession={props.sessions.session.canCreate()}
@@ -27,6 +28,9 @@ export function HomeSessions(props: {
       onCreateSession={props.sessions.session.create}
       onOpenSession={props.sessions.session.open}
       onArchiveSession={props.sessions.session.archive}
+      onRenameSession={props.sessions.session.rename}
+      onExportSession={props.sessions.session.export}
+      onDeleteSession={props.sessions.session.showDelete}
       onSetHoverTarget={props.scroll.viewport.setHoverTarget}
       onSetThumbTrack={props.scroll.viewport.setThumbTrack}
       onSetContent={props.scroll.header.setContent}

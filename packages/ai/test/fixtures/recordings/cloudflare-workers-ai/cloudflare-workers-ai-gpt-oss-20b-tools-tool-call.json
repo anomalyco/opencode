@@ -7,7 +7,13 @@
     "route": "cloudflare-workers-ai",
     "transport": "http",
     "model": "@cf/openai/gpt-oss-20b",
-    "tags": ["prefix:cloudflare-workers-ai", "provider:cloudflare-workers-ai", "tool", "tool-call", "golden"]
+    "tags": [
+      "prefix:cloudflare-workers-ai",
+      "provider:cloudflare-workers-ai",
+      "tool",
+      "tool-call",
+      "golden"
+    ]
   },
   "interactions": [
     {
@@ -18,7 +24,7 @@
         "headers": {
           "content-type": "application/json"
         },
-        "body": "{\"model\":\"@cf/openai/gpt-oss-20b\",\"messages\":[{\"role\":\"system\",\"content\":\"Call tools exactly as requested.\"},{\"role\":\"user\",\"content\":\"Call get_weather with city exactly Paris.\"}],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false}}}],\"tool_choice\":{\"type\":\"function\",\"function\":{\"name\":\"get_weather\"}},\"stream\":true,\"stream_options\":{\"include_usage\":true},\"max_tokens\":120,\"temperature\":0}"
+        "body": "{\"model\": \"@cf/openai/gpt-oss-20b\", \"messages\": [{\"role\": \"system\", \"content\": \"Call tools exactly as requested.\"}, {\"role\": \"user\", \"content\": \"Call get_weather with city exactly Paris.\"}], \"tools\": [{\"type\": \"function\", \"function\": {\"name\": \"get_weather\", \"description\": \"Get current weather for a city.\", \"parameters\": {\"type\": \"object\", \"properties\": {\"city\": {\"type\": \"string\"}}, \"required\": [\"city\"], \"additionalProperties\": false}, \"strict\": false}}], \"tool_choice\": {\"type\": \"function\", \"function\": {\"name\": \"get_weather\"}}, \"stream\": true, \"stream_options\": {\"include_usage\": true}, \"max_tokens\": 120, \"temperature\": 0}"
       },
       "response": {
         "status": 200,

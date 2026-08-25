@@ -23,7 +23,6 @@ import { ServerConnection, useServers } from "@/runtime/server/registry"
 import "@/settings/settings.css"
 
 export const DialogSettings: Component<{
-  sessionID?: string
   defaultValue?: string
 }> = (props) => {
   const language = useLanguage()
@@ -68,7 +67,7 @@ export const DialogSettings: Component<{
   })
 
   const showProviders = () => {
-    void dialog.show(() => <DialogSettings sessionID={props.sessionID} defaultValue="providers" />)
+    void dialog.show(() => <DialogSettings defaultValue="providers" />)
   }
 
   return (
@@ -144,7 +143,7 @@ export const DialogSettings: Component<{
         </Tabs.List>
 
         <Tabs.Content value="general" class="settings-panel">
-          <SettingsGeneral server={server()} sessionID={props.sessionID} />
+          <SettingsGeneral server={server()} />
         </Tabs.Content>
         <Tabs.Content value="appearance" class="settings-panel">
           <SettingsAppearance />

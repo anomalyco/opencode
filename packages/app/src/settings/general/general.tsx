@@ -7,17 +7,21 @@ import { TextInput } from "@opencode-ai/ui/text-input"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useUpdaterAction } from "@/shell/updates/action"
-import { type TerminalPlacement, type WorkspaceDefaultDestination, useSettings } from "@/settings/model"
+import {
+  type FollowUpBehavior,
+  type TerminalPlacement,
+  type WorkspaceDefaultDestination,
+  useSettings,
+} from "@/settings/model"
+import { formatKeybind } from "@/shell/commands/command"
 import { ExternalLink } from "@/runtime/platform/external-link"
 import { SettingsList } from "@/settings/list"
 import { SettingsRow } from "@/settings/row"
 import {
   createAppearanceSettingsController,
-  createPermissionScopeController,
   createShellOptions,
   createShellSettingsController,
   type AppearanceSettingsController,
-  type PermissionScopeController,
   type ShellSettingsController,
 } from "./controllers"
 import "@/settings/settings.css"
@@ -47,8 +51,9 @@ const fontSettings = {
     input: "setTerminal",
   },
 } as const
-const PermissionScopeSetting: Component<{ controller: PermissionScopeController }> = (props) => {
+const AutoApprovePermissionsSetting: Component = () => {
   const language = useLanguage()
+  const settings = useSettings()
   return (
     <SettingsRow
       title={language.t("command.permissions.autoaccept.enable")}
@@ -56,9 +61,8 @@ const PermissionScopeSetting: Component<{ controller: PermissionScopeController 
     >
       <div data-action="settings-auto-accept-permissions">
         <Switch
-          checked={props.controller.accepting()}
-          disabled={!props.controller.enabled()}
-          onChange={props.controller.set}
+          checked={settings.permissions.autoApprove()}
+          onChange={(checked) => settings.permissions.setAutoApprove(checked)}
         />
       </div>
     </SettingsRow>
@@ -145,6 +149,35 @@ const TerminalPlacementSetting: Component = () => {
         placement="bottom-end"
         gutter={6}
         onSelect={(option) => option && settings.general.setTerminalPlacement(option.value)}
+      />
+    </SettingsRow>
+  )
+}
+
+const FollowUpBehaviorSetting: Component = () => {
+  const language = useLanguage()
+  const settings = useSettings()
+  const options = createMemo((): { value: FollowUpBehavior; label: string }[] => [
+    { value: "queue", label: language.t("settings.general.row.followUpBehavior.queue") },
+    { value: "steer", label: language.t("settings.general.row.followUpBehavior.steer") },
+  ])
+
+  return (
+    <SettingsRow
+      title={language.t("settings.general.row.followUpBehavior.title")}
+      description={language.t("settings.general.row.followUpBehavior.description", {
+        keybind: formatKeybind("mod+enter", language.t),
+      })}
+    >
+      <Select
+        data-action="settings-follow-up-behavior"
+        options={options()}
+        current={options().find((option) => option.value === settings.general.followUpBehavior())}
+        value={(option) => option.value}
+        label={(option) => option.label}
+        placement="bottom-end"
+        gutter={6}
+        onSelect={(option) => option && settings.general.setFollowUpBehavior(option.value)}
       />
     </SettingsRow>
   )
@@ -262,7 +295,6 @@ const LanguageSetting = () => {
 }
 
 export const SettingsGeneral: Component<{
-  sessionID?: string
   server?: ServerConnection.Any
 }> = (props) => {
   const language = useLanguage()
@@ -270,10 +302,6 @@ export const SettingsGeneral: Component<{
   const settings = useSettings()
   const mobile = createMediaQuery("(max-width: 767px)")
   const updater = useUpdaterAction()
-  const permissionScope = createPermissionScopeController(
-    () => props.server,
-    () => props.sessionID,
-  )
   const shell = createShellSettingsController(() => props.server)
   const desktop = createMemo(() => platform.platform === "desktop")
 
@@ -297,10 +325,11 @@ export const SettingsGeneral: Component<{
         <LanguageSetting />
 
         <WorkspaceDestinationSetting />
-        <PermissionScopeSetting controller={permissionScope} />
+        <AutoApprovePermissionsSetting />
 
         <ShellSetting controller={shell} />
         <TerminalPlacementSetting />
+        <FollowUpBehaviorSetting />
 
         <SettingsRow
           title={language.t("settings.general.row.reasoningSummaries.title")}

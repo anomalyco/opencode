@@ -1,7 +1,6 @@
 import { createMemo, createResource, onMount, type Accessor } from "solid-js"
 import type { ColorScheme } from "@opencode-ai/ui/theme/context"
 import { useTheme } from "@opencode-ai/ui/theme/context"
-import { usePermission } from "@/session/requests/permission"
 import {
   monoDefault,
   monoFontFamily,
@@ -17,42 +16,10 @@ import {
 import { playSoundById, SOUND_OPTIONS } from "@/shell/notifications/sound"
 import { createSoundPreviewController, type ShellOption } from "./behavior"
 import { ServerConnection } from "@/runtime/server/registry"
-import { useGlobal, useServerCtx } from "@/runtime/server/runtime"
+import { useServerCtx } from "@/runtime/server/runtime"
 
 export { createShellOptions, createSoundPreviewController } from "./behavior"
 export type { ShellOption, ShellSelectOption } from "./behavior"
-
-export function createPermissionScopeController(
-  server: Accessor<ServerConnection.Any | undefined>,
-  sessionID: Accessor<string | undefined>,
-) {
-  const serverCtx = useServerCtx(server)
-  const permission = () => serverCtx()?.permission
-
-  const directory = createMemo(() => {
-    const s = server()
-    const id = sessionID()
-    if (!s || !id) return undefined
-    return serverCtx()?.data.session.get(id)?.location.directory
-  })
-
-  return {
-    accepting: createMemo(() => {
-      const id = sessionID()
-      const dir = directory()
-      if (!id || !dir) return false
-      return permission()?.isAutoAccepting(id, dir)
-    }),
-    enabled: createMemo(() => !!directory()),
-    set: (checked: boolean) => {
-      const id = sessionID()
-      const dir = directory()
-      if (!id || !dir) return
-      if (checked) return permission()?.enableAutoAccept(id, dir)
-      permission()?.disableAutoAccept(id, dir)
-    },
-  }
-}
 
 export function createShellSettingsController(server: Accessor<ServerConnection.Any | undefined>) {
   const serverCtx = useServerCtx(server)
@@ -172,7 +139,6 @@ export function createSoundSettingsController() {
   }
 }
 
-export type PermissionScopeController = ReturnType<typeof createPermissionScopeController>
 export type ShellSettingsController = ReturnType<typeof createShellSettingsController>
 export type AppearanceSettingsController = ReturnType<typeof createAppearanceSettingsController>
 export type SoundSettingsController = ReturnType<typeof createSoundSettingsController>

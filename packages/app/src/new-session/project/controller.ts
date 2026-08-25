@@ -39,6 +39,7 @@ export function createComposerProjectControls(props: { draftId: string }) {
       server: ServerConnection.key(connection),
       directory: worktree,
       worktree: undefined,
+      branch: undefined,
     })
   }
   const addProject = (title: string, serverKey?: string) => {

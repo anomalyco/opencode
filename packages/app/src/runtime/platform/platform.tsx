@@ -104,6 +104,9 @@ type PlatformBase = {
   /** Read image from clipboard (desktop only) */
   readClipboardImage?(): Promise<File | null>
 
+  /** Write text to the native clipboard (desktop only) */
+  writeClipboardText?(text: string): Promise<void>
+
   /** Export collected diagnostic logs (desktop only) */
   exportDebugLogs?(): Promise<string>
 
