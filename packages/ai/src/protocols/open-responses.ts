@@ -1118,7 +1118,11 @@ const onResponseFinish = Effect.fn("OpenResponses.onResponseFinish")(function* (
           event.response?.output ?? [],
           () => [state, NO_EVENTS] satisfies StepResult,
           ([current, events], item) => {
-            if (item.type !== "function_call" || !item.id || !current.tools[item.id])
+            if (
+              !item.id ||
+              ((item.type !== "function_call" || !current.tools[item.id]) &&
+                (item.type !== "reasoning" || !current.reasoningItems[item.id]))
+            )
               return Effect.succeed([current, events] satisfies StepResult)
             return onOutputItemDone(current, { type: "response.output_item.done", item }).pipe(
               Effect.map(([next, emitted]) => [next, [...events, ...emitted]] satisfies StepResult),

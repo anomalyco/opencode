@@ -267,6 +267,38 @@ describe("Open Responses-compatible route", () => {
     }),
   )
 
+  it.effect("preserves terminal reasoning metadata when item completion is missing", () =>
+    Effect.gen(function* () {
+      const model = configure({
+        apiKey: "test-key",
+        baseURL: "https://responses.example.test/v1",
+      }).model("example-model")
+      const response = yield* LLMClient.generate(LLM.request({ model, prompt: "Think it through." })).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              {
+                type: "response.output_item.added",
+                item: { type: "reasoning", id: "rs_raw", encrypted_content: null },
+              },
+              { type: "response.reasoning_summary_text.delta", item_id: "rs_raw", delta: "Thinking" },
+              {
+                type: "response.completed",
+                response: {
+                  output: [{ type: "reasoning", id: "rs_raw", encrypted_content: "raw-state" }],
+                },
+              },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.events.find((event) => event.type === "reasoning-end")).toMatchObject({
+        providerMetadata: { openresponses: { itemId: "rs_raw", reasoningEncryptedContent: "raw-state" } },
+      })
+    }),
+  )
+
   it.effect("reconciles raw reasoning finals without streamed deltas", () =>
     Effect.gen(function* () {
       const model = configure({

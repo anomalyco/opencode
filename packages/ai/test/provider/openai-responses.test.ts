@@ -2244,6 +2244,147 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("preserves terminal reasoning metadata when output item completion is missing", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(
+        LLMRequest.update(request, { providerOptions: { store: false } }),
+      ).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              {
+                type: "response.output_item.added",
+                item: { type: "reasoning", id: "rs_1", encrypted_content: null },
+              },
+              { type: "response.reasoning_summary_part.added", item_id: "rs_1", summary_index: 0 },
+              {
+                type: "response.reasoning_summary_text.delta",
+                item_id: "rs_1",
+                summary_index: 0,
+                delta: "Checked the diff.",
+              },
+              { type: "response.reasoning_summary_part.done", item_id: "rs_1", summary_index: 0 },
+              {
+                type: "response.completed",
+                response: {
+                  id: "resp_1",
+                  output: [
+                    {
+                      type: "reasoning",
+                      id: "rs_1",
+                      encrypted_content: "terminal-state",
+                      summary: [{ type: "summary_text", text: "Checked the diff." }],
+                    },
+                  ],
+                },
+              },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.reasoning).toBe("Checked the diff.")
+      expect(response.events.filter((event) => event.type === "reasoning-end")).toEqual([
+        {
+          type: "reasoning-end",
+          id: "rs_1:0",
+          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "terminal-state" } },
+        },
+      ])
+      expect(response.message.content).toContainEqual({
+        type: "reasoning",
+        text: "Checked the diff.",
+        providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "terminal-state" } },
+      })
+
+      const prepared = yield* compileRequest(
+        LLM.request({ model, messages: [response.message], providerOptions: { store: false } }),
+      )
+      expect(prepared.body.input).toEqual([
+        {
+          type: "reasoning",
+          id: "rs_1",
+          summary: [{ type: "summary_text", text: "Checked the diff." }],
+          encrypted_content: "terminal-state",
+        },
+      ])
+    }),
+  )
+
+  it.effect("does not repeat reasoning already finalized by an output item", () =>
+    Effect.gen(function* () {
+      const item = { type: "reasoning", id: "rs_1", encrypted_content: "encrypted-state" }
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "response.output_item.added", item: { ...item, encrypted_content: null } },
+              { type: "response.reasoning_summary_text.delta", item_id: "rs_1", delta: "Thinking" },
+              { type: "response.output_item.done", item },
+              { type: "response.completed", response: { output: [item] } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.events.filter((event) => event.type === "reasoning-start")).toHaveLength(1)
+      expect(response.events.filter((event) => event.type === "reasoning-end")).toHaveLength(1)
+      expect(response.message.content.filter((part) => part.type === "reasoning")).toHaveLength(1)
+      expect(response.reasoning).toBe("Thinking")
+    }),
+  )
+
+  it.effect("reconciles pending reasoning and function calls in completed output order", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(
+        LLMRequest.update(request, { providerOptions: { store: false } }),
+      ).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              {
+                type: "response.output_item.added",
+                item: { type: "reasoning", id: "rs_1", encrypted_content: null },
+              },
+              { type: "response.reasoning_summary_text.delta", item_id: "rs_1", delta: "Thinking" },
+              {
+                type: "response.output_item.added",
+                item: { type: "function_call", id: "fc_1", call_id: "call_1", name: "lookup", arguments: "" },
+              },
+              { type: "response.function_call_arguments.delta", item_id: "fc_1", delta: '{"query":"wea' },
+              {
+                type: "response.completed",
+                response: {
+                  output: [
+                    { type: "reasoning", id: "rs_1", encrypted_content: "terminal-state" },
+                    {
+                      type: "function_call",
+                      id: "fc_1",
+                      call_id: "call_1",
+                      name: "lookup",
+                      arguments: '{"query":"weather"}',
+                    },
+                  ],
+                },
+              },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.events.find((event) => event.type === "reasoning-end")).toMatchObject({
+        providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "terminal-state" } },
+      })
+      expect(response.events.filter(LLMEvent.is.toolCall)).toEqual([
+        expect.objectContaining({ id: "call_1", input: { query: "weather" } }),
+      ])
+      expect(response.events.findIndex((event) => event.type === "reasoning-end")).toBeLessThan(
+        response.events.findIndex(LLMEvent.is.toolCall),
+      )
+      expect(response.finishReason.normalized).toBe("tool-calls")
+    }),
+  )
+
   it.effect("streams each reasoning summary part as a separate block", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
