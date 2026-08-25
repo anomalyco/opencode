@@ -83,6 +83,7 @@ import { ProviderPlugins } from "./provider.js"
 import { WebSearchPlugins } from "./websearch/index.js"
 import { PluginRuntime } from "./runtime.js"
 import { SkillPlugin } from "./skill.js"
+import { VcsHgPlugin } from "./vcs/hg.js"
 import { SystemPromptPlugin } from "./system-prompt.js"
 import { VariantPlugin } from "./variant.js"
 import { WarmingPlugin } from "./warming.js"
@@ -239,6 +240,7 @@ const pre = [
   PlanPlugin.Plugin,
   CommandPlugin.Plugin,
   SkillPlugin.Plugin,
+  VcsHgPlugin.Plugin,
   ...SystemPromptPlugin.Plugins,
   ModelsDevPlugin,
   ...ProviderPlugins,
