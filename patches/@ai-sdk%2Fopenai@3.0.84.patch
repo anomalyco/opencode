@@ -1,0 +1,193 @@
+diff --git a/dist/index.js b/dist/index.js
+index d3ff1b8..965209a 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -2977,6 +2977,7 @@ async function convertToOpenAIResponsesInput({
+   fileIdPrefixes,
+   passThroughUnsupportedFiles = false,
+   store,
++  assistantTextContentType = "output_text",
+   hasConversation = false,
+   hasPreviousResponseId = false,
+   hasLocalShellTool = false,
+@@ -3126,7 +3127,7 @@ async function convertToOpenAIResponsesInput({
+               }
+               input.push({
+                 role: "assistant",
+-                content: [{ type: "output_text", text: part.text }],
++                content: [{ type: assistantTextContentType, text: part.text }],
+                 id,
+                 ...phase != null && { phase }
+               });
+@@ -4669,6 +4670,13 @@ var openaiLanguageModelResponsesOptionsSchema = (0, import_provider_utils28.lazy
+        * @see https://platform.openai.com/docs/api-reference/conversations/create
+        */
+       conversation: import_v423.z.string().nullish(),
++      /**
++       * The content type to use for assistant text parts when sending historical
++       * assistant messages via the Responses API. Defaults to `output_text`.
++       * OpenAI-compatible servers that reject `output_text` (e.g. some vLLM
++       * deployments) can set this to `input_text`.
++       */
++      assistantTextContentType: import_v423.z.string().nullish(),
+       /**
+        * The set of extra fields to include in the response (advanced, usually not needed).
+        * Example values: 'reasoning.encrypted_content', 'file_search_call.results', 'web_search_call.results', 'message.output_text.logprobs'.
+@@ -5294,6 +5302,7 @@ var OpenAIResponsesLanguageModel = class {
+       fileIdPrefixes: this.config.fileIdPrefixes,
+       passThroughUnsupportedFiles: (_d = openaiOptions == null ? void 0 : openaiOptions.passThroughUnsupportedFiles) != null ? _d : false,
+       store: (_e = openaiOptions == null ? void 0 : openaiOptions.store) != null ? _e : true,
++      assistantTextContentType: (_e = openaiOptions == null ? void 0 : openaiOptions.assistantTextContentType) != null ? _e : "output_text",
+       hasConversation: (openaiOptions == null ? void 0 : openaiOptions.conversation) != null,
+       hasPreviousResponseId: (openaiOptions == null ? void 0 : openaiOptions.previousResponseId) != null,
+       hasLocalShellTool: hasOpenAITool("openai.local_shell"),
+diff --git a/dist/index.mjs b/dist/index.mjs
+index 2644043..6079288 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -3072,6 +3072,7 @@ async function convertToOpenAIResponsesInput({
+   fileIdPrefixes,
+   passThroughUnsupportedFiles = false,
+   store,
++  assistantTextContentType = "output_text",
+   hasConversation = false,
+   hasPreviousResponseId = false,
+   hasLocalShellTool = false,
+@@ -3221,7 +3222,7 @@ async function convertToOpenAIResponsesInput({
+               }
+               input.push({
+                 role: "assistant",
+-                content: [{ type: "output_text", text: part.text }],
++                content: [{ type: assistantTextContentType, text: part.text }],
+                 id,
+                 ...phase != null && { phase }
+               });
+@@ -4770,6 +4771,13 @@ var openaiLanguageModelResponsesOptionsSchema = lazySchema21(
+        * @see https://platform.openai.com/docs/api-reference/conversations/create
+        */
+       conversation: z23.string().nullish(),
++      /**
++       * The content type to use for assistant text parts when sending historical
++       * assistant messages via the Responses API. Defaults to `output_text`.
++       * OpenAI-compatible servers that reject `output_text` (e.g. some vLLM
++       * deployments) can set this to `input_text`.
++       */
++      assistantTextContentType: z23.string().nullish(),
+       /**
+        * The set of extra fields to include in the response (advanced, usually not needed).
+        * Example values: 'reasoning.encrypted_content', 'file_search_call.results', 'web_search_call.results', 'message.output_text.logprobs'.
+@@ -5397,6 +5405,7 @@ var OpenAIResponsesLanguageModel = class {
+       fileIdPrefixes: this.config.fileIdPrefixes,
+       passThroughUnsupportedFiles: (_d = openaiOptions == null ? void 0 : openaiOptions.passThroughUnsupportedFiles) != null ? _d : false,
+       store: (_e = openaiOptions == null ? void 0 : openaiOptions.store) != null ? _e : true,
++      assistantTextContentType: (_e = openaiOptions == null ? void 0 : openaiOptions.assistantTextContentType) != null ? _e : "output_text",
+       hasConversation: (openaiOptions == null ? void 0 : openaiOptions.conversation) != null,
+       hasPreviousResponseId: (openaiOptions == null ? void 0 : openaiOptions.previousResponseId) != null,
+       hasLocalShellTool: hasOpenAITool("openai.local_shell"),
+diff --git a/dist/internal/index.js b/dist/internal/index.js
+index aedcfc7..39efefa 100644
+--- a/dist/internal/index.js
++++ b/dist/internal/index.js
+@@ -2925,6 +2925,7 @@ async function convertToOpenAIResponsesInput({
+   fileIdPrefixes,
+   passThroughUnsupportedFiles = false,
+   store,
++  assistantTextContentType = "output_text",
+   hasConversation = false,
+   hasPreviousResponseId = false,
+   hasLocalShellTool = false,
+@@ -3074,7 +3075,7 @@ async function convertToOpenAIResponsesInput({
+               }
+               input.push({
+                 role: "assistant",
+-                content: [{ type: "output_text", text: part.text }],
++                content: [{ type: assistantTextContentType, text: part.text }],
+                 id,
+                 ...phase != null && { phase }
+               });
+@@ -4617,6 +4618,13 @@ var openaiLanguageModelResponsesOptionsSchema = (0, import_provider_utils26.lazy
+        * @see https://platform.openai.com/docs/api-reference/conversations/create
+        */
+       conversation: import_v419.z.string().nullish(),
++      /**
++       * The content type to use for assistant text parts when sending historical
++       * assistant messages via the Responses API. Defaults to `output_text`.
++       * OpenAI-compatible servers that reject `output_text` (e.g. some vLLM
++       * deployments) can set this to `input_text`.
++       */
++      assistantTextContentType: import_v419.z.string().nullish(),
+       /**
+        * The set of extra fields to include in the response (advanced, usually not needed).
+        * Example values: 'reasoning.encrypted_content', 'file_search_call.results', 'web_search_call.results', 'message.output_text.logprobs'.
+@@ -5563,6 +5571,7 @@ var OpenAIResponsesLanguageModel = class {
+       fileIdPrefixes: this.config.fileIdPrefixes,
+       passThroughUnsupportedFiles: (_d = openaiOptions == null ? void 0 : openaiOptions.passThroughUnsupportedFiles) != null ? _d : false,
+       store: (_e = openaiOptions == null ? void 0 : openaiOptions.store) != null ? _e : true,
++      assistantTextContentType: (_e = openaiOptions == null ? void 0 : openaiOptions.assistantTextContentType) != null ? _e : "output_text",
+       hasConversation: (openaiOptions == null ? void 0 : openaiOptions.conversation) != null,
+       hasPreviousResponseId: (openaiOptions == null ? void 0 : openaiOptions.previousResponseId) != null,
+       hasLocalShellTool: hasOpenAITool("openai.local_shell"),
+diff --git a/dist/internal/index.mjs b/dist/internal/index.mjs
+index 40d83eb..4858f32 100644
+--- a/dist/internal/index.mjs
++++ b/dist/internal/index.mjs
+@@ -2968,6 +2968,7 @@ async function convertToOpenAIResponsesInput({
+   fileIdPrefixes,
+   passThroughUnsupportedFiles = false,
+   store,
++  assistantTextContentType = "output_text",
+   hasConversation = false,
+   hasPreviousResponseId = false,
+   hasLocalShellTool = false,
+@@ -3117,7 +3118,7 @@ async function convertToOpenAIResponsesInput({
+               }
+               input.push({
+                 role: "assistant",
+-                content: [{ type: "output_text", text: part.text }],
++                content: [{ type: assistantTextContentType, text: part.text }],
+                 id,
+                 ...phase != null && { phase }
+               });
+@@ -4666,6 +4667,13 @@ var openaiLanguageModelResponsesOptionsSchema = lazySchema17(
+        * @see https://platform.openai.com/docs/api-reference/conversations/create
+        */
+       conversation: z19.string().nullish(),
++      /**
++       * The content type to use for assistant text parts when sending historical
++       * assistant messages via the Responses API. Defaults to `output_text`.
++       * OpenAI-compatible servers that reject `output_text` (e.g. some vLLM
++       * deployments) can set this to `input_text`.
++       */
++      assistantTextContentType: z19.string().nullish(),
+       /**
+        * The set of extra fields to include in the response (advanced, usually not needed).
+        * Example values: 'reasoning.encrypted_content', 'file_search_call.results', 'web_search_call.results', 'message.output_text.logprobs'.
+@@ -5642,6 +5650,7 @@ var OpenAIResponsesLanguageModel = class {
+       fileIdPrefixes: this.config.fileIdPrefixes,
+       passThroughUnsupportedFiles: (_d = openaiOptions == null ? void 0 : openaiOptions.passThroughUnsupportedFiles) != null ? _d : false,
+       store: (_e = openaiOptions == null ? void 0 : openaiOptions.store) != null ? _e : true,
++      assistantTextContentType: (_e = openaiOptions == null ? void 0 : openaiOptions.assistantTextContentType) != null ? _e : "output_text",
+       hasConversation: (openaiOptions == null ? void 0 : openaiOptions.conversation) != null,
+       hasPreviousResponseId: (openaiOptions == null ? void 0 : openaiOptions.previousResponseId) != null,
+       hasLocalShellTool: hasOpenAITool("openai.local_shell"),
+diff --git a/src/responses/convert-to-openai-responses-input.ts b/src/responses/convert-to-openai-responses-input.ts
+index 9d393ee..fa2e859 100644
+--- a/src/responses/convert-to-openai-responses-input.ts
++++ b/src/responses/convert-to-openai-responses-input.ts
+@@ -66,6 +66,7 @@ export async function convertToOpenAIResponsesInput({
+   fileIdPrefixes,
+   passThroughUnsupportedFiles = false,
+   store,
++  assistantTextContentType = "output_text",
+   hasConversation = false,
+   hasPreviousResponseId = false,
+   hasLocalShellTool = false,
+@@ -271,7 +272,7 @@ export async function convertToOpenAIResponsesInput({
+ 
+               input.push({
+                 role: 'assistant',
+-                content: [{ type: 'output_text', text: part.text }],
++                content: [{ type: assistantTextContentType, text: part.text }],
+                 id,
+                 ...(phase != null && { phase }),
+               });

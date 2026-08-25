@@ -50,6 +50,19 @@ export const store = (request: LLMRequest): boolean | undefined => {
   return typeof value === "boolean" ? value : undefined
 }
 
+const ASSISTANT_TEXT_CONTENT_TYPES = new Set<string>(["input_text", "output_text"])
+export type OpenAIResponsesAssistantTextContentType = "input_text" | "output_text"
+
+// Assistant history content type sent back to the provider. Defaults to
+// `output_text` (the OpenAI-native shape); vLLM-compatible Responses
+// servers require `input_text` instead, opt in per model.
+export const assistantTextContentType = (request: LLMRequest): OpenAIResponsesAssistantTextContentType => {
+  const value = options(request)?.assistantTextContentType
+  return typeof value === "string" && ASSISTANT_TEXT_CONTENT_TYPES.has(value)
+    ? (value as OpenAIResponsesAssistantTextContentType)
+    : "output_text"
+}
+
 export const reasoningEffort = (request: LLMRequest): ReasoningEffort | undefined => {
   const value = options(request)?.reasoningEffort
   return isAnyReasoningEffort(value) ? value : undefined

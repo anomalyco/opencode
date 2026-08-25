@@ -158,6 +158,39 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("sends assistant text as output_text by default", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        LLM.request({
+          model,
+          messages: [Message.user("Before."), Message.assistant("After.")],
+        }),
+      )
+
+      expect(prepared.body.input).toEqual([
+        { role: "user", content: [{ type: "input_text", text: "Before." }] },
+        { role: "assistant", content: [{ type: "output_text", text: "After." }] },
+      ])
+    }),
+  )
+
+  it.effect("sends assistant text as input_text when opted in per model", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        LLM.request({
+          model,
+          messages: [Message.user("Before."), Message.assistant("After.")],
+          providerOptions: { openai: { assistantTextContentType: "input_text" } },
+        }),
+      )
+
+      expect(prepared.body.input).toEqual([
+        { role: "user", content: [{ type: "input_text", text: "Before." }] },
+        { role: "assistant", content: [{ type: "input_text", text: "After." }] },
+      ])
+    }),
+  )
+
   it.effect("prepares OpenAI Responses WebSocket target", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare(
