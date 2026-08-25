@@ -666,7 +666,7 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
 
 const lowerOptions = (request: LLMRequest) => {
   const options = OpenResponsesOptions.resolve(request)
-  const cacheKey = request.cache === "none" ? undefined : ProviderShared.clampPromptCacheKey(request.promptCacheKey)
+  const cacheKey = ProviderShared.promptCacheKey(request)
   const parallelToolCalls = resolveParallelToolCalls(request)
   return {
     ...(options.instructions ? { instructions: options.instructions } : {}),
