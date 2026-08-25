@@ -7,6 +7,7 @@ import { HttpTransport } from "../route/transport/index.js"
 import { Protocol } from "../route/protocol.js"
 import {
   AIError,
+  InvalidProviderOutputReason,
   LLMEvent,
   ProviderInternalReason,
   UnknownProviderReason,
@@ -1046,7 +1047,15 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
 
 const finishEvents = Effect.fn("OpenAIChat.finishEvents")(function* (state: ParserState) {
   if (state.finishReason === undefined && state.requireFinishReason)
-    return yield* ProviderShared.eventError(ADAPTER, "OpenAI Chat stream ended without finish_reason")
+    return yield* new AIError({
+      module: ADAPTER,
+      method: "stream",
+      reason: new InvalidProviderOutputReason({
+        classification: "incomplete-stream",
+        message: "OpenAI Chat stream ended without finish_reason",
+        route: ADAPTER,
+      }),
+    })
   const events: LLMEvent[] = []
   const toolCallEvents =
     state.finishReason === undefined && Object.keys(state.tools).length > 0
