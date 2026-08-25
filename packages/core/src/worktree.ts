@@ -18,6 +18,8 @@ import { canonical, DirectoryUnavailableError } from "./worktree/directory.js"
 import { WorktreeGit } from "./worktree/git.js"
 import type { EffectDrizzleSqlite } from "./database/drizzle.js"
 import { ProjectTable } from "./project/sql.js"
+import { AppProcess } from "@opencode-ai/util/process"
+import { ChildProcess } from "effect/unstable/process"
 
 export { DirectoryUnavailableError } from "./worktree/directory.js"
 
@@ -147,6 +149,7 @@ const layer = Layer.effect(
     const fs = yield* FSUtil.Service
     const db = (yield* Database.Service).db
     const bus = yield* Bus.Service
+    const proc = yield* AppProcess.Service
 
     const changed = Effect.fnUntraced(function* (projectID: ProjectSchema.ID, update: boolean) {
       if (update) yield* bus.publish(Event.Updated, { projectID })
@@ -260,6 +263,41 @@ const layer = Layer.effect(
           strategy: input.strategy,
         }),
       )
+      const project = yield* db
+        .select({ commands: ProjectTable.commands })
+        .from(ProjectTable)
+        .where(eq(ProjectTable.id, input.projectID))
+        .get()
+        .pipe(Effect.orDie)
+      const script = project?.commands?.start?.trim()
+      if (script) {
+        yield* proc
+          .run(
+            ChildProcess.make(
+              process.platform === "win32" ? "cmd" : "bash",
+              [process.platform === "win32" ? "/c" : "-lc", script],
+              {
+                cwd: result.directory,
+                extendEnv: true,
+                stdin: "ignore",
+              },
+            ),
+          )
+          .pipe(
+            Effect.flatMap((output) =>
+              output.exitCode === 0
+                ? Effect.void
+                : Effect.logError("worktree setup script failed", {
+                    directory: result.directory,
+                    exitCode: output.exitCode,
+                    stderr: output.stderr.toString("utf8"),
+                  }),
+            ),
+            Effect.catchCause((cause) =>
+              Effect.logError("worktree setup script failed", { directory: result.directory, cause }),
+            ),
+          )
+      }
       return result
     })
 
@@ -342,7 +380,7 @@ const layer = Layer.effect(
 export const node = makeGlobalNode({
   service: Service,
   layer: layer,
-  deps: [FSUtil.node, Git.node, Bus.node, Database.node],
+  deps: [FSUtil.node, Git.node, Bus.node, Database.node, AppProcess.node],
 })
 
 export const refreshNode = makeLocationNode({

@@ -9,7 +9,7 @@ import { type LocalProject } from "@/shell/state/layout"
 import { ServerConnection } from "@/runtime/server/registry"
 
 export function createEditProjectModel(props: { project: LocalProject; server: ServerConnection.Any }) {
-  const supported = !props.project.id || props.project.id === "global"
+  const supported = true
   const dialog = useDialog()
   const global = useGlobal()
   const serverCtx = createMemo(() => global.ensureServerCtx(props.server))
@@ -72,9 +72,18 @@ export function createEditProjectModel(props: { project: LocalProject; server: S
       const start = store.startup.trim()
 
       if (props.project.id && props.project.id !== "global") {
-        // TODO: Restore project edits when the V2 client exposes a project update API.
-        // await serverCtx().sdk.api.project.update({ projectID: props.project.id, name, icon, commands })
-        throw new Error(`Project ${props.project.id} cannot be updated`)
+        const project = await serverCtx().sdk.api.project.update({
+          projectID: props.project.id,
+          name,
+          icon: { color: store.color || "", override: store.iconOverride || "" },
+          commands: { start },
+        })
+        serverCtx().sync.set("project", (items) =>
+          items.map((item) => (item.id === project.id ? normalizeProjectInfo(project) : item)),
+        )
+        serverCtx().sync.project.icon(props.project.worktree, store.iconOverride || undefined)
+        dialog.close()
+        return
       }
 
       serverCtx().sync.project.meta(props.project.worktree, {

@@ -192,6 +192,34 @@ describe("Worktree", () => {
     }),
   )
 
+  it.live("runs the project setup script in a new worktree", () =>
+    Effect.gen(function* () {
+      const input = yield* setup()
+      const worktree = yield* Worktree.Service
+      const temp = yield* Effect.promise(() => fs.realpath(path.dirname(input.root.path)))
+      const parent = abs(path.join(temp, path.basename(input.root.path) + "-worktree-script"))
+      yield* Effect.addFinalizer(() =>
+        Effect.promise(() => fs.rm(parent, { recursive: true, force: true })).pipe(Effect.ignore),
+      )
+      yield* input.db
+        .update(ProjectTable)
+        .set({ commands: { start: "echo ready > setup.txt" } })
+        .where(eq(ProjectTable.id, input.projectID))
+        .run()
+        .pipe(Effect.orDie)
+
+      const created = yield* worktree.create({
+        projectID: input.projectID,
+        strategy: gitWorktree,
+        directory: parent,
+        name: "worktree",
+      })
+
+      expect(yield* Effect.promise(() => Bun.file(path.join(created.directory, "setup.txt")).text())).toContain("ready")
+      yield* worktree.remove({ projectID: input.projectID, directory: created.directory, force: true })
+    }),
+  )
+
   it.live("rejects a missing source directory", () =>
     Effect.gen(function* () {
       const input = yield* setup()
