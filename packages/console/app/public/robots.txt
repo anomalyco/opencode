@@ -1,9 +1,0 @@
-User-agent: *
-Allow: /
-
-# Disallow shared content pages
-Disallow: /s/
-Disallow: /share/
-
-Sitemap: https://pencode.ai/sitemap.xml
-Sitemap: https://pencode.ai/data/sitemap.xml

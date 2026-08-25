@@ -1,28 +1,20 @@
 .DS_Store
-node_modules
 .worktrees
-.sst
 .env
 .env.local
 .idea
 .vscode
-.codex
 *~
 playground
 tmp
 dist
-ts-dist
-.turbo
-**/.serena
-.serena/
-**/.omo
-.omo/
 /result
 refs
 Session.vim
 /pencode.json
 a.out
-target
+/target
+Cargo.lock.bak
 .scripts
 .direnv/
 
@@ -30,5 +22,3 @@ target
 pencode-dev
 UPCOMING_CHANGELOG.md
 logs/
-*.bun-build
-tsconfig.tsbuildinfo

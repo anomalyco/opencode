@@ -1,0 +1,14 @@
+[package]
+name = "pencode-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+pencode-protocol.workspace = true
+
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+dirs.workspace = true

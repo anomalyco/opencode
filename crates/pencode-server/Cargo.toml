@@ -1,0 +1,20 @@
+[package]
+name = "pencode-server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+pencode-protocol.workspace = true
+pencode-core.workspace = true
+
+anyhow.workspace = true
+axum.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tower.workspace = true
+
+[dev-dependencies]
+http-body-util = "0.1"

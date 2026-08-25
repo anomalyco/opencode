@@ -1,0 +1,13 @@
+[package]
+name = "pencode-client"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+pencode-protocol.workspace = true
+
+anyhow.workspace = true
+reqwest.workspace = true
+serde_json.workspace = true

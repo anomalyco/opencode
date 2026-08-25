@@ -1,0 +1,22 @@
+[package]
+name = "pencode"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "pencode"
+path = "src/main.rs"
+
+[dependencies]
+pencode-protocol.workspace = true
+pencode-core.workspace = true
+pencode-server.workspace = true
+pencode-client.workspace = true
+pencode-tui.workspace = true
+
+anyhow.workspace = true
+clap.workspace = true
+serde_json.workspace = true
+tokio.workspace = true

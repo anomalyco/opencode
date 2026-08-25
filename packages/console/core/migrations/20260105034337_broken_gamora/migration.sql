@@ -1,1 +1,0 @@
-CREATE INDEX `usage_time_created` ON `usage` (`workspace_id`,`time_created`);
