@@ -7,7 +7,7 @@ import config from "../../../../config.mjs"
 export const console = config.console
 export const email = `mailto:${config.email}`
 
-OpenCode Go คือการสมัครสมาชิกในราคาประหยัด — **$5 สำหรับเดือนแรก** จากนั้น **$10/เดือน** — ซึ่งให้คุณเข้าถึงโมเดลโอเพนซอร์สยอดนิยมสำหรับการเขียนโค้ดได้อย่างเสถียร
+OpenCode Go คือการสมัครสมาชิกในราคาประหยัด **$10/เดือน** ซึ่งให้คุณเข้าถึงโมเดลโอเพนซอร์สยอดนิยมสำหรับการเขียนโค้ดได้อย่างเสถียร
 
 Go ทำงานเหมือนกับผู้ให้บริการ (provider) รายอื่นๆ ใน OpenCode คุณสามารถสมัครสมาชิก OpenCode Go และรับ API key ของคุณ บริการนี้เป็น**ทางเลือกเพิ่มเติม** และคุณไม่จำเป็นต้องใช้มันเพื่อใช้งาน OpenCode
 
@@ -31,7 +31,7 @@ Go ทำงานเหมือนกับผู้ให้บริกา�
 2. จากนั้นเราได้ทำงานร่วมกับผู้ให้บริการบางรายเพื่อให้แน่ใจว่าการให้บริการเป็นไปอย่างถูกต้อง
 3. สุดท้าย เราได้ทำการวัดประสิทธิภาพ (benchmark) ของการทำงานร่วมกันระหว่างโมเดลและผู้ให้บริการ จนได้รายชื่อที่เรามั่นใจในการแนะนำ
 
-OpenCode Go ให้คุณเข้าถึงโมเดลเหล่านี้ได้ในราคา **$5 สำหรับเดือนแรก** จากนั้น **$10/เดือน**
+OpenCode Go ให้คุณเข้าถึงโมเดลเหล่านี้ได้ในราคา **$10/เดือน**
 
 ---
 
@@ -57,6 +57,7 @@ OpenCode Go ทำงานเหมือนกับผู้ให้บร�
 - **Kimi K3**
 - **Kimi K2.7 Code**
 - **Kimi K2.6**
+- **LongCat-2.0**
 - **MiMo-V2.5**
 - **MiMo-V2.5-Pro**
 - **MiniMax M3**
@@ -98,6 +99,7 @@ OpenCode Go มีขีดจำกัดดังต่อไปนี้:
 | Kimi K3                      | 110                    | 250                 | 490               |
 | Kimi K2.7 Code               | 1,350                  | 3,380               | 6,750             |
 | Kimi K2.6                    | 1,150                  | 2,880               | 5,750             |
+| LongCat-2.0                  | 11,400                 | 28,600              | 57,200            |
 | MiMo-V2.5                    | 30,100                 | 75,200              | 150,400           |
 | MiMo-V2.5-Pro                | 3,250                  | 8,150               | 16,300            |
 | MiniMax M3                   | 3,200                  | 8,000               | 16,000            |
@@ -120,6 +122,7 @@ OpenCode Go มีขีดจำกัดดังต่อไปนี้:
 - GPT 5.6 Luna — 1,000 input, 50,000 cached, 220 output tokens ต่อ request
 - Kimi K3 — 1,050 input, 76,500 cached, 300 output tokens ต่อ request
 - Kimi K2.7/K2.6 — 870 input, 55,000 cached, 200 output tokens ต่อ request
+- LongCat-2.0 — 920 input, 88,900 cached, 200 output tokens ต่อ request
 - DeepSeek V4 Pro — 750 input, 82,000 cached, 290 output tokens ต่อ request
 - DeepSeek V4 Flash — 410 input, 71,300 cached, 310 output tokens ต่อ request
 - DeepSeek V4 Flash Vision Exp — 410 input, 71,300 cached, 310 output tokens ต่อ request
@@ -147,6 +150,7 @@ OpenCode Go มีขีดจำกัดดังต่อไปนี้:
 | Kimi K3                                 | $3.00  | $15.00 | $0.30       | -            | $15   |
 | Kimi K2.7 Code                          | $0.95  | $4.00  | $0.19       | -            | $60   |
 | Kimi K2.6                               | $0.95  | $4.00  | $0.16       | -            | $60   |
+| LongCat-2.0                             | $0.30  | $1.20  | $0.006      | -            | $60   |
 | MiMo V2.5                               | $0.14  | $0.28  | $0.0028     | -            | $60   |
 | MiMo V2.5 Pro                           | $0.435 | $0.87  | $0.003625   | -            | $15   |
 | MiniMax M3                              | $0.30  | $1.20  | $0.06       | -            | $60   |
@@ -168,7 +172,7 @@ OpenCode Go มีขีดจำกัดดังต่อไปนี้:
 | Hy3                                     | $0.14  | $0.58  | $0.035      | -            | $60   |
 | Ox Alpha Free                           | -      | -      | -           | -            | -     |
 
-**DeepSeek V4 Flash / V4 Flash Vision Exp / V4 Pro:** ช่วงเวลา Peak คือ 01:00-04:00 และ 06:00-10:00 UTC ส่วนเวลาอื่นทั้งหมดเป็น Off-Peak [ดูข้อมูลเพิ่มเติม](https://api-docs.deepseek.com/quick_start/pricing/)
+**DeepSeek V4 Flash / V4 Flash Vision Exp / V4 Pro:** ช่วงเวลา Peak คือ 01:00-04:00 และ 06:00-10:00 UTC ตั้งแต่วันจันทร์ถึงวันศุกร์ ส่วนเวลาอื่นทั้งหมด รวมถึงวันหยุดสุดสัปดาห์ เป็น Off-Peak [ดูข้อมูลเพิ่มเติม](https://api-docs.deepseek.com/quick_start/pricing/)
 
 **DeepSeek V4 Flash Vision Exp:** รูปภาพจะถูกแปลงเป็น token ตามขนาด และคิดค่าบริการเป็น input token รวมกับ text token [ดูข้อมูลเพิ่มเติม](https://api-docs.deepseek.com/quick_start/pricing/)
 
@@ -216,6 +220,7 @@ OpenCode Go มีขีดจำกัดดังต่อไปนี้:
 | Kimi K3                      | kimi-k3                      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Kimi K2.7 Code               | kimi-k2.7-code               | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Kimi K2.6                    | kimi-k2.6                    | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| LongCat-2.0                  | longcat-2.0                  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Pro              | deepseek-v4-pro              | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Flash            | deepseek-v4-flash            | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Flash Vision Exp | deepseek-v4-flash-vision-exp | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
@@ -258,6 +263,7 @@ https://opencode.ai/zen/go/v1/models
 | Kimi K3                      | ไม่นำไปใช้  | 0 วัน              |
 | Kimi K2.7 Code               | ไม่นำไปใช้  | 0 วัน              |
 | Kimi K2.6                    | ไม่นำไปใช้  | 0 วัน              |
+| LongCat-2.0                  | ไม่นำไปใช้  | 0 วัน              |
 | MiMo-V2.5-Pro                | ไม่นำไปใช้  | 0 วัน              |
 | MiMo-V2.5                    | ไม่นำไปใช้  | 0 วัน              |
 | Qwen3.8 Max                  | ไม่นำไปใช้  | 0 วัน              |
