@@ -59,15 +59,13 @@ const inputStart = (tool: PendingTool) =>
     providerMetadata: tool.providerMetadata,
   })
 
-const inputDelta = (tool: PendingTool, text: string) => {
-  const input = parsePartialInput(tool.input)
-  return LLMEvent.toolInputDelta({
+const inputDelta = (tool: PendingTool, text: string) =>
+  LLMEvent.toolInputDelta({
     id: tool.id,
     name: tool.name,
     text,
-    ...(Option.isSome(input) ? { input: input.value } : {}),
+    input: Option.getOrElse(parsePartialInput(tool.input), () => ({})),
   })
-}
 
 const toolCall = (route: string, tool: PendingTool, inputOverride?: string) => {
   const raw = inputOverride ?? tool.input

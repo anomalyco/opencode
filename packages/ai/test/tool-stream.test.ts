@@ -59,7 +59,7 @@ describe("ToolStream", () => {
     }),
   )
 
-  it.effect("omits partial input when the accumulated value cannot be parsed", () =>
+  it.effect("defaults partial input to an empty object when the accumulated value cannot be parsed", () =>
     Effect.gen(function* () {
       const result = ToolStream.appendOrStart(
         ADAPTER,
@@ -72,7 +72,7 @@ describe("ToolStream", () => {
 
       expect(result.events).toEqual([
         { type: "tool-input-start", id: "call_1", name: "lookup" },
-        { type: "tool-input-delta", id: "call_1", name: "lookup", text: "x" },
+        { type: "tool-input-delta", id: "call_1", name: "lookup", text: "x", input: {} },
       ])
     }),
   )
