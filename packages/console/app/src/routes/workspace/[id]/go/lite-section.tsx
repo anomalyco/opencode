@@ -24,6 +24,7 @@ import { formatResetTime, liteResetTimeKeys } from "~/lib/format-reset-time"
 import { createReferralFromCookie } from "~/lib/referral-invite"
 import { getRequestEvent } from "solid-js/web"
 import { countryFromRequest } from "~/lib/request-country"
+import { checkCheckoutRateLimit } from "~/routes/zen/util/redis"
 
 import { IconAlipay, IconChevron, IconUpi } from "~/component/icon"
 import { buildLiteUsageBreakdown, getModelQuotaLimit, getUsagePercent } from "~/lib/lite-usage"
@@ -219,6 +220,7 @@ const createLiteCheckoutUrl = action(
     "use server"
     return json(
       await withActor(async () => {
+        await checkCheckoutRateLimit(Actor.account())
         const data = await Billing.generateLiteCheckoutUrl({ successUrl, cancelUrl, method })
         await createReferralFromCookie()
         return { error: undefined, data }
@@ -638,7 +640,7 @@ export function LiteSection(props: { lite: LiteSubscription | undefined }) {
           </p>
           <h3 data-slot="promo-models-title">{i18n.t("workspace.lite.promo.modelsTitle")}</h3>
           <ul data-slot="promo-models">
-            <li>Grok 4.5</li>
+            <li>Grok 4.6</li>
             <li>GPT 5.6 Luna</li>
             <li>GLM-5.3</li>
             <li>GLM-5.2</li>
