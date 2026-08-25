@@ -407,6 +407,7 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
   const itemStatus = (tab: SessionTab) => statuses().get(tab.sessionID)!
   let rail: { screenX: number; screenY: number } | undefined
   let scroll: ScrollBoxRenderable | undefined
+  let lastClick: { sessionID: string; time: number } | undefined
   let didDrag = false
   let addPressed = false
   // A captured drag ends with a synthetic up on its drop target; do not turn that into a click.
@@ -658,6 +659,11 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                       return
                     }
                     didDrag = false
+                    const now = Date.now()
+                    const doubleClick =
+                      tab.preview && lastClick?.sessionID === tab.sessionID && now - lastClick.time < 300
+                    if (doubleClick) tabs.promote?.(tab.sessionID)
+                    lastClick = tab.preview && !doubleClick ? { sessionID: tab.sessionID, time: now } : undefined
                     marquee.enter(tab.sessionID, title(), hoveredTitleWidth())
                     setDragging(tab.sessionID)
                   }}
@@ -919,6 +925,7 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
   const [contextMenu, setContextMenu] = createSignal<TabContextMenuState>()
   const [closeHold, setCloseHold] = createSignal<MouseCloseHold>()
   let strip: { screenX: number; screenY: number; width: number; height: number } | undefined
+  let lastClick: { sessionID: string; time: number } | undefined
   let didDrag = false
   let addPressed = false
   let closeHoldTimer: ReturnType<typeof setTimeout> | undefined
@@ -1287,6 +1294,10 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
                 }
                 didDrag = false
                 releaseCloseHold()
+                const now = Date.now()
+                const doubleClick = tab.preview && lastClick?.sessionID === tab.sessionID && now - lastClick.time < 300
+                if (doubleClick) tabs.promote?.(tab.sessionID)
+                lastClick = tab.preview && !doubleClick ? { sessionID: tab.sessionID, time: now } : undefined
                 marquee.enter(tab.sessionID, title(), hoveredTitleWidth())
                 setDragging(tab.sessionID)
               }}

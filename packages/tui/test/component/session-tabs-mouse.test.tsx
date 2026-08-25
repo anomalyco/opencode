@@ -121,6 +121,53 @@ test("the tab context menu keeps preview tabs open without offering promotion fo
   }
 })
 
+test("double-clicking a preview tab keeps it open without promoting permanent tabs", async () => {
+  const [active, setActive] = createSignal("first")
+  const promoted: string[] = []
+  const controller = {
+    tabs: () => [
+      { sessionID: "first", title: "First" },
+      { sessionID: "second", title: "Second", preview: true },
+    ],
+    current: active,
+    select: setActive,
+    close() {},
+    move() {},
+    promote: (sessionID: string) => promoted.push(sessionID),
+    status: () => EMPTY_SESSION_TAB_STATUS,
+  } satisfies SessionTabsController
+  const app = await testRender(
+    () => (
+      <TestTuiContexts>
+        <ConfigProvider config={createTuiResolvedConfig({ tabs: { enabled: true } })}>
+          <ThemeProvider mode="dark" source={emptyThemeSource}>
+            <SessionTabs controller={controller} animations={false} />
+          </ThemeProvider>
+        </ConfigProvider>
+      </TestTuiContexts>
+    ),
+    { width: 60, height: 8 },
+  )
+
+  try {
+    app.renderer.start()
+    await app.waitForFrame((frame) => frame.includes("Second"))
+
+    await app.mockMouse.click(5, 0)
+    await app.mockMouse.click(5, 0)
+    expect(promoted).toEqual([])
+
+    await app.mockMouse.click(40, 0)
+    expect(active()).toBe("second")
+    expect(promoted).toEqual([])
+
+    await app.mockMouse.click(40, 0)
+    expect(promoted).toEqual(["second"])
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 test("middle-click closes a session tab without selecting it", async () => {
   const [active, setActive] = createSignal("first")
   const closed: Array<string | undefined> = []
