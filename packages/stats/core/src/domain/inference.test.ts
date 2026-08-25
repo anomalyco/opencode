@@ -4,6 +4,7 @@ import { modelAuthor, normalizeInferenceModel, statModel, statProvider } from ".
 
 describe("inference stat normalization", () => {
   test("normalizes model suffixes used by router/provider variants", () => {
+    expect(normalizeInferenceModel("GPT-5-Free")).toBe("gpt-5")
     expect(normalizeInferenceModel("deepseek-v4-flash-free")).toBe("deepseek-v4-flash")
     expect(normalizeInferenceModel("deepseek-v4-flash:global")).toBe("deepseek-v4-flash")
     expect(normalizeInferenceModel("mimo-v2.5-free")).toBe("mimo-v2.5")
@@ -39,6 +40,17 @@ describe("inference stat normalization", () => {
     expect(statProvider("big-pickle", "gpt-5", "opencode")).toBe("openai")
     expect(statProvider("big-pickle", "", "opencode")).toBe("unknown")
     expect(statProvider("unknown", "", "custom-provider")).toBe("custom-provider")
+  })
+
+  test("merges renamed models under their current name", () => {
+    expect(statModel("x-preview-f", "")).toBe("ox-alpha")
+    expect(statModel("xiaomi/mimo-v2.5", "")).toBe("mimo-v2.5")
+    expect(toModelAggregate(aggregate("x-preview-f", "openai"))).toMatchObject([
+      {
+        provider: "openai",
+        model: "ox-alpha",
+      },
+    ])
   })
 
   test("model aggregates prefer provider.model and use normalized model", () => {
