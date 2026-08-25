@@ -261,13 +261,34 @@ function selectMethod(
   dialog.replace(() => (
     <DialogSelect
       title={`Connect ${integration.name}`}
-      options={methods.map((method) => ({
-        title: method.type === "key" ? (method.label ?? "API key") : method.label,
-        value: method.type === "key" ? "key" : method.id,
-        onSelect: () => openMethod(integration, method, dialog, onConnected),
-      }))}
+      options={methods
+        .map((method) => {
+          const title = method.type === "key" ? (method.label ?? "API key") : method.label
+          const unavailable =
+            integration.id === "azure" &&
+            method.type === "oauth" &&
+            method.id === "azure-cli" &&
+            !Bun.which("az", { PATH: process.env.PATH })
+          return {
+            title,
+            value: method.type === "key" ? "key" : method.id,
+            unavailable,
+            ...(unavailable
+              ? {
+                  titleView: <UnavailableMethod title={title} />,
+                  description: "requires Azure CLI",
+                }
+              : { onSelect: () => openMethod(integration, method, dialog, onConnected) }),
+          }
+        })
+        .toSorted((left, right) => Number(left.unavailable) - Number(right.unavailable))}
     />
   ))
+}
+
+function UnavailableMethod(props: { title: string }) {
+  const theme = useTheme("elevated")
+  return <span style={{ fg: theme.text.action.primary.disabled }}>{props.title}</span>
 }
 
 function openMethod(

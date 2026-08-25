@@ -35,6 +35,29 @@ test("renders account management with an uncategorized add row and marks the act
   }
 })
 
+test("shows Azure CLI authentication as unavailable when the CLI is missing", async () => {
+  const previous = process.env.PATH
+  process.env.PATH = "/nonexistent"
+  const fixture = await renderIntegration({ azure: true })
+
+  try {
+    const frame = fixture.app.captureCharFrame()
+    expect(frame).toContain("API key")
+    expect(frame).toContain("Microsoft Entra ID (Azure CLI)")
+    expect(frame).toContain("requires Azure CLI")
+    expect(frame.indexOf("API key")).toBeLessThan(frame.indexOf("Microsoft Entra ID (Azure CLI)"))
+
+    fixture.app.mockInput.pressArrow("down")
+    fixture.app.mockInput.pressEnter()
+    expect(fixture.app.captureCharFrame()).toContain("requires Azure CLI")
+    expect(fixture.requests).toEqual([])
+  } finally {
+    fixture.app.renderer.destroy()
+    if (previous === undefined) delete process.env.PATH
+    else process.env.PATH = previous
+  }
+})
+
 test("opens the key connection prompt from the initially focused add account row", async () => {
   const fixture = await renderIntegration()
 
@@ -203,14 +226,16 @@ test("hides account rename and delete actions while the add account row is selec
   }
 })
 
-async function renderIntegration() {
+async function renderIntegration(options: { azure?: boolean } = {}) {
   const events = createEventStream()
   const requests: Array<{ method: string; path: string; body?: { label: string } }> = []
   const reads = { integration: 0, model: 0, provider: 0 }
-  let accounts = [
-    { type: "credential" as const, id: "cred_personal", label: "Personal" },
-    { type: "credential" as const, id: "cred_work", label: "Work" },
-  ]
+  let accounts = options.azure
+    ? []
+    : [
+        { type: "credential" as const, id: "cred_personal", label: "Personal" },
+        { type: "credential" as const, id: "cred_work", label: "Work" },
+      ]
 
   const calls = createFetch(async (url, request) => {
     const location = {
@@ -224,10 +249,15 @@ async function renderIntegration() {
         location,
         data: [
           {
-            id: "openai",
-            name: "OpenAI",
-            methods: [{ type: "key", label: "API key" }],
-            connections: [...accounts, { type: "env", name: "OPENAI_API_KEY" }],
+            id: options.azure ? "azure" : "openai",
+            name: options.azure ? "Azure" : "OpenAI",
+            methods: options.azure
+              ? [
+                  { type: "key", label: "API key" },
+                  { id: "azure-cli", type: "oauth", label: "Microsoft Entra ID (Azure CLI)" },
+                ]
+              : [{ type: "key", label: "API key" }],
+            connections: options.azure ? [] : [...accounts, { type: "env", name: "OPENAI_API_KEY" }],
           },
         ],
       })
@@ -292,7 +322,9 @@ async function renderIntegration() {
     onMount(() => {
       void data.location.integration
         .sync()
-        .then(() => dialog.replace(() => <DialogIntegration integrationID="openai" autoConnect />))
+        .then(() =>
+          dialog.replace(() => <DialogIntegration integrationID={options.azure ? "azure" : "openai"} autoConnect />),
+        )
     })
     return null
   }
@@ -323,8 +355,10 @@ async function renderIntegration() {
   )
 
   app.renderer.start()
-  await app.waitForFrame(
-    (frame) => frame.includes("Add account") && frame.includes("Personal") && frame.includes("Work"),
+  await app.waitForFrame((frame) =>
+    options.azure
+      ? frame.includes("Connect Azure") && frame.includes("requires Azure CLI")
+      : frame.includes("Add account") && frame.includes("Personal") && frame.includes("Work"),
   )
   await app.waitFor(() => app.renderer.currentFocusedEditor instanceof InputRenderable)
 
