@@ -112,25 +112,13 @@ export const layer = (options?: Options) =>
                 yield* bus.publish(SessionEvent.Synthetic, {
                   sessionID: background.sessionID,
                   description: background.description,
-                  ...(background.type === "shell"
-                    ? {
-                        text: `<shell id="${background.id}" state="cancelled" command="${background.description}">\nCommand cancelled because the server restarted\n</shell>`,
-                        metadata: {
-                          source: "shell",
-                          jobID: background.id,
-                          shellID: background.shellID,
-                          state: "cancelled",
-                        },
-                      }
-                    : {
-                        text: `<subagent sessionID="${background.id}" state="cancelled" description="${background.description}">\nSubagent cancelled because the server restarted\n</subagent>`,
-                        metadata: {
-                          source: "subagent",
-                          childID: background.id,
-                          agent: background.agent,
-                          state: "cancelled",
-                        },
-                      }),
+                  text: `<shell id="${background.id}" state="cancelled" command="${background.description}">\nCommand cancelled because the server restarted\n</shell>`,
+                  metadata: {
+                    source: "shell",
+                    jobID: background.id,
+                    shellID: background.shellID,
+                    state: "cancelled",
+                  },
                 })
               }),
             { discard: true },

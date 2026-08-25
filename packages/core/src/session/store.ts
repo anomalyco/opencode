@@ -12,22 +12,13 @@ import { Session } from "@opencode-ai/schema/session"
 import { SessionInboxTable, SessionMessageTable, SessionTable } from "./sql.js"
 import { fromRow } from "./info.js"
 
-const Background = Schema.Union([
-  Schema.Struct({
-    type: Schema.tag("shell"),
-    sessionID: Session.ID,
-    id: Schema.String,
-    shellID: Schema.String,
-    description: Schema.String,
-  }),
-  Schema.Struct({
-    type: Schema.tag("subagent"),
-    sessionID: Session.ID,
-    id: Session.ID,
-    agent: Schema.String,
-    description: Schema.String,
-  }),
-])
+const Background = Schema.Struct({
+  type: Schema.tag("shell"),
+  sessionID: Session.ID,
+  id: Schema.String,
+  shellID: Schema.String,
+  description: Schema.String,
+})
 export type Background = typeof Background.Type
 
 export interface Interface {
@@ -118,18 +109,11 @@ const layer = Layer.effect(
                 SELECT 1 FROM ${SessionInboxTable}
                 WHERE ${SessionInboxTable.session_id} = ${SessionTable.id}
                   AND ${SessionInboxTable.type} = 'synthetic'
-                  AND json_extract(${SessionInboxTable.payload}, '$.metadata.source')
-                    = json_extract(${KVTable.value}, '$.type')
+                  AND json_extract(${SessionInboxTable.payload}, '$.metadata.source') = 'shell'
                   AND json_extract(${SessionInboxTable.payload}, '$.metadata.state')
                     IN ('completed', 'error', 'cancelled')
-                  AND (
-                    (json_extract(${KVTable.value}, '$.type') = 'shell'
-                      AND json_extract(${SessionInboxTable.payload}, '$.metadata.shellID')
-                        = json_extract(${KVTable.value}, '$.shellID'))
-                    OR (json_extract(${KVTable.value}, '$.type') = 'subagent'
-                      AND json_extract(${SessionInboxTable.payload}, '$.metadata.childID')
-                        = json_extract(${KVTable.value}, '$.id'))
-                  )
+                  AND json_extract(${SessionInboxTable.payload}, '$.metadata.shellID')
+                    = json_extract(${KVTable.value}, '$.shellID')
               )`,
             ),
           )

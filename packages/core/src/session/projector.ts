@@ -13,7 +13,6 @@ import { SessionEvent } from "./event.js"
 import { SessionMessage } from "./message.js"
 import { SessionMessageUpdater } from "./message-updater.js"
 import { SessionInbox } from "./inbox.js"
-import type { SessionStore } from "./store.js"
 import { Workspace } from "../workspace.js"
 import { InstructionState } from "./instruction-state.js"
 import { SessionInboxTable, SessionMessageTable, SessionTable } from "./sql.js"
@@ -24,7 +23,7 @@ import { Money } from "@opencode-ai/schema/money"
 import { Worktree } from "@opencode-ai/schema/worktree"
 import { Project } from "@opencode-ai/schema/project"
 import { AbsolutePath, RelativePath } from "../schema.js"
-import { SessionSchema } from "./schema.js"
+import type { SessionSchema } from "./schema.js"
 
 type DatabaseService = Database.Interface["db"]
 type CurrentDurableEvent = Extract<SessionEvent.Event, { readonly durable: object }>
@@ -397,19 +396,17 @@ function insertMessage(db: DatabaseService, event: SessionEvent.DurableEvent, me
     .pipe(Effect.orDie)
 }
 
-function backgroundKey(sessionID: SessionSchema.ID, type: "shell" | "subagent", id: string) {
-  return `session.background/${sessionID}/${type}/${id}`
+function backgroundKey(sessionID: SessionSchema.ID, shellID: string) {
+  return `session.background/${sessionID}/shell/${shellID}`
 }
 
 function settleBackground(db: DatabaseService, sessionID: SessionSchema.ID, metadata?: Record<string, unknown>) {
   if (metadata?.state !== "completed" && metadata?.state !== "error" && metadata?.state !== "cancelled")
     return Effect.void
-  if (metadata.source !== "shell" && metadata.source !== "subagent") return Effect.void
-  const id = metadata.source === "shell" ? metadata.shellID : metadata.childID
-  if (typeof id !== "string") return Effect.void
+  if (metadata.source !== "shell" || typeof metadata.shellID !== "string") return Effect.void
   return db
     .delete(KVTable)
-    .where(eq(KVTable.key, backgroundKey(sessionID, metadata.source, id)))
+    .where(eq(KVTable.key, backgroundKey(sessionID, metadata.shellID)))
     .run()
     .pipe(Effect.orDie, Effect.asVoid)
 }
@@ -436,45 +433,23 @@ const projectBackground = Effect.fn("SessionProjector.projectBackground")(functi
   const message = decodeMessage({ ...row.data, id: row.id, type: row.type })
   if (message.type !== "assistant") return
   const part = message.content.find((item) => item.type === "tool" && item.id === input.id)
-  if (!part || part.type !== "tool" || part.state.status !== "completed" || !part.state.metadata) return
-  const background: (SessionStore.Background & { readonly sequence: number }) | undefined =
-    part.name === "shell" &&
-    typeof part.state.metadata.shellID === "string" &&
-    typeof part.state.input.command === "string"
-      ? {
-          type: "shell" as const,
-          sessionID: input.sessionID,
-          id: input.id,
-          shellID: part.state.metadata.shellID,
-          description: part.state.input.command,
-          sequence: input.sequence,
-        }
-      : part.name === "subagent" &&
-          typeof part.state.metadata.sessionID === "string" &&
-          typeof part.state.input.agent === "string" &&
-          typeof part.state.input.description === "string"
-        ? {
-            type: "subagent" as const,
-            sessionID: input.sessionID,
-            id: SessionSchema.ID.make(part.state.metadata.sessionID),
-            agent: part.state.input.agent,
-            description: part.state.input.description,
-            sequence: input.sequence,
-          }
-        : undefined
-  if (!background) return
-  if (background.type === "subagent") {
-    const child = yield* db
-      .select({ id: SessionTable.id })
-      .from(SessionTable)
-      .where(and(eq(SessionTable.id, background.id), eq(SessionTable.parent_id, background.sessionID)))
-      .get()
-      .pipe(Effect.orDie)
-    if (!child) return
+  if (
+    !part ||
+    part.type !== "tool" ||
+    part.name !== "shell" ||
+    part.state.status !== "completed" ||
+    typeof part.state.metadata?.shellID !== "string" ||
+    typeof part.state.input.command !== "string"
+  )
+    return
+  const background = {
+    type: "shell" as const,
+    sessionID: input.sessionID,
+    id: input.id,
+    shellID: part.state.metadata.shellID,
+    description: part.state.input.command,
+    sequence: input.sequence,
   }
-
-  const identity = background.type === "shell" ? background.shellID : background.id
-  const path = background.type === "shell" ? "$.metadata.shellID" : "$.metadata.childID"
   const terminal = yield* db
     .get<{ found: number }>(
       sql`
@@ -483,9 +458,9 @@ const projectBackground = Effect.fn("SessionProjector.projectBackground")(functi
       WHERE ${SessionMessageTable.session_id} = ${background.sessionID}
         AND ${SessionMessageTable.type} = 'synthetic'
         AND ${SessionMessageTable.seq} > ${row.seq}
-        AND json_extract(${SessionMessageTable.data}, '$.metadata.source') = ${background.type}
+        AND json_extract(${SessionMessageTable.data}, '$.metadata.source') = 'shell'
         AND json_extract(${SessionMessageTable.data}, '$.metadata.state') IN ('completed', 'error', 'cancelled')
-        AND json_extract(${SessionMessageTable.data}, ${path}) = ${identity}
+        AND json_extract(${SessionMessageTable.data}, '$.metadata.shellID') = ${background.shellID}
       LIMIT 1
     `,
     )
@@ -493,7 +468,7 @@ const projectBackground = Effect.fn("SessionProjector.projectBackground")(functi
   if (terminal) return
   yield* db
     .insert(KVTable)
-    .values({ key: backgroundKey(background.sessionID, background.type, identity), value: background })
+    .values({ key: backgroundKey(background.sessionID, background.shellID), value: background })
     .onConflictDoUpdate({
       target: KVTable.key,
       set: { value: background, time_updated: input.created },
@@ -623,24 +598,13 @@ const layer = Layer.effectDiscard(
     )
     yield* bus.project(SessionEvent.Deleted, (event) =>
       Effect.gen(function* () {
-        const deleted = yield* db
-          .delete(SessionTable)
-          .where(eq(SessionTable.id, event.data.sessionID))
-          .returning({ parentID: SessionTable.parent_id })
-          .get()
-          .pipe(Effect.orDie)
+        yield* db.delete(SessionTable).where(eq(SessionTable.id, event.data.sessionID)).run().pipe(Effect.orDie)
         const prefix = `session.background/${event.data.sessionID}/`
         yield* db
           .delete(KVTable)
           .where(and(gte(KVTable.key, prefix), lt(KVTable.key, `${prefix}\uffff`)))
           .run()
           .pipe(Effect.orDie)
-        if (deleted?.parentID)
-          yield* db
-            .delete(KVTable)
-            .where(eq(KVTable.key, backgroundKey(deleted.parentID, "subagent", event.data.sessionID)))
-            .run()
-            .pipe(Effect.orDie)
       }),
     )
     yield* bus.project(SessionEvent.AgentSelected, (event) =>
@@ -847,19 +811,14 @@ const layer = Layer.effectDiscard(
           .pipe(Effect.orDie)
         if (!boundary) return yield* Effect.die(new Error(`Revert boundary message not found: ${event.data.to}`))
         const settled = yield* db
-          .all<{ type: string; id: string }>(
+          .all<{ id: string }>(
             sql`
-            SELECT
-              json_extract(${SessionMessageTable.data}, '$.metadata.source') AS type,
-              CASE json_extract(${SessionMessageTable.data}, '$.metadata.source')
-                WHEN 'shell' THEN json_extract(${SessionMessageTable.data}, '$.metadata.shellID')
-                WHEN 'subagent' THEN json_extract(${SessionMessageTable.data}, '$.metadata.childID')
-              END AS id
+            SELECT json_extract(${SessionMessageTable.data}, '$.metadata.shellID') AS id
             FROM ${SessionMessageTable}
             WHERE ${SessionMessageTable.session_id} = ${event.data.sessionID}
               AND ${SessionMessageTable.type} = 'synthetic'
               AND ${SessionMessageTable.seq} >= ${boundary.seq}
-              AND json_extract(${SessionMessageTable.data}, '$.metadata.source') IN ('shell', 'subagent')
+              AND json_extract(${SessionMessageTable.data}, '$.metadata.source') = 'shell'
               AND json_extract(${SessionMessageTable.data}, '$.metadata.state')
                 IN ('completed', 'error', 'cancelled')
           `,
@@ -905,7 +864,6 @@ const layer = Layer.effectDiscard(
           (item) =>
             Effect.gen(function* () {
               if (typeof item.id !== "string") return
-              const path = item.type === "shell" ? "$.state.metadata.shellID" : "$.state.metadata.sessionID"
               const launch = yield* db
                 .get<{ assistantMessageID: string; id: string; sequence: number }>(
                   sql`
@@ -918,10 +876,10 @@ const layer = Layer.effectDiscard(
                   WHERE message.session_id = ${event.data.sessionID}
                     AND message.type = 'assistant'
                     AND json_extract(part.value, '$.type') = 'tool'
-                    AND json_extract(part.value, '$.name') = ${item.type}
+                    AND json_extract(part.value, '$.name') = 'shell'
                     AND json_extract(part.value, '$.state.status') = 'completed'
                     AND json_extract(part.value, '$.state.metadata.status') = 'running'
-                    AND json_extract(part.value, ${path}) = ${item.id}
+                    AND json_extract(part.value, '$.state.metadata.shellID') = ${item.id}
                   ORDER BY message.seq DESC
                   LIMIT 1
                 `,
