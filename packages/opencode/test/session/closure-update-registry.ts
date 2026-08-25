@@ -108,8 +108,8 @@ export const EXCLUSIONS: readonly { readonly file: string; readonly line: number
     file: "server/routes/instance/httpapi/groups/session.ts",
     // Line-pinned, so any edit ABOVE this reference in that file moves it and fails K106. Gate 6's
     // §12.6 typed-500 declaration on the `abort` endpoint did exactly that, 435 -> 438; target route
-    // structure places the same descriptor at 433.
-    line: 433,
+    // structure plus the restored multi-line abort description places the same descriptor at 434.
+    line: 434,
     evidence:
       'HTTP route descriptor, not the Session service method: `HttpApiEndpoint.patch("updatePart", SessionPaths.updatePart, {...})`. `SessionPaths` is a route-path constant object; the endpoint it declares is handled by `handlers/session.ts::updatePart`, which IS registered below and carries the mutation lease.',
   },

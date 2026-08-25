@@ -259,7 +259,8 @@ export const SessionApi = HttpApi.make("session")
           OpenApi.annotations({
             identifier: "session.abort",
             summary: "Abort session",
-            description: "Abort an active session and stop any ongoing AI processing or command execution.",
+            description:
+              "Cancel a session's Task branch. Stops this session's AI processing or command execution together with any nested Task work below it, records the outcome in each affected transcript, and returns true only after the branch is closed and released. A missing session, or one with no work in progress, succeeds with no effect.",
           }),
         ),
         HttpApiEndpoint.post("init", SessionPaths.init, {
