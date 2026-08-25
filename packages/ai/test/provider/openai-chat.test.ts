@@ -85,6 +85,28 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("omits empty and whitespace-only assistant messages", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.user("Before."),
+            Message.assistant([]),
+            Message.assistant(""),
+            Message.assistant(" \n\t "),
+            Message.assistant("After."),
+          ],
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        { role: "user", content: "Before." },
+        { role: "assistant", content: "After." },
+      ])
+    }),
+  )
+
   it.effect("replays canonical reasoning as OpenAI-compatible reasoning_content", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(

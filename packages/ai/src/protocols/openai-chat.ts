@@ -526,6 +526,8 @@ const lowerMessages = Effect.fn("OpenAIChat.lowerMessages")(function* (request: 
         )
       continue
     }
+    if (message.role === "assistant" && message.content.every((part) => part.type === "text" && part.text.trim() === ""))
+      continue
     if (message.role === "tool") {
       const lowered = yield* lowerToolMessages(message, options)
       messages.push(...lowered.messages)
