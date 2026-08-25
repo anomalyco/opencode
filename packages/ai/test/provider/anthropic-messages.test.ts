@@ -779,9 +779,7 @@ describe("Anthropic Messages route", () => {
             sseEvents(
               { type: "message_start", message: { usage: { input_tokens: 5 } } },
               { type: "future_event", content_block: 42, delta: 42 },
-              { type: "content_block_start", index: 0 },
               { type: "content_block_start", index: 0, content_block: { type: "future_block", text: 42 } },
-              { type: "content_block_delta", index: 0 },
               { type: "content_block_delta", index: 0, delta: { text: "ignored" } },
               { type: "content_block_delta", index: 0, delta: { type: "future_delta", text: 42 } },
               { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "hidden" } },
@@ -850,7 +848,10 @@ describe("Anthropic Messages route", () => {
     Effect.gen(function* () {
       const events = [
         { type: "message_start", message: { usage: { input_tokens: 1 } }, delta: 42 },
+        { type: "content_block_start", index: 0 },
+        { type: "content_block_delta", index: 0 },
         { type: "content_block_stop", index: 0, content_block: { type: "text", text: 42 } },
+        { type: "message_delta" },
         { type: "message_delta", delta: { stop_reason: 42 } },
         { type: "message_stop", delta: { text: 42 } },
         { type: "error", error: { type: "overloaded_error", message: "busy" }, content_block: 42 },
