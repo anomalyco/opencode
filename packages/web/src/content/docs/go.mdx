@@ -7,7 +7,7 @@ import config from "../../../config.mjs"
 export const console = config.console
 export const email = `mailto:${config.email}`
 
-OpenCode Go is a low cost subscription — **$5 for your first month**, then **$10/month** — that gives you reliable access to popular open coding models.
+OpenCode Go is a low cost **$10/month subscription** that gives you reliable access to popular open coding models.
 
 Go works like any other provider in OpenCode. You subscribe to OpenCode Go and
 get your API key. It's **completely optional** and you don't need to use it to
@@ -39,7 +39,7 @@ To fix this, we did a couple of things:
 3. Finally, we benchmarked the combination of the model/provider and came up
    with a list that we feel good recommending.
 
-OpenCode Go gives you access to these models for **$5 for your first month**, then **$10/month**.
+OpenCode Go gives you access to these models for **$10/month**.
 
 ---
 
@@ -67,6 +67,7 @@ The current list of models includes:
 - **Kimi K3**
 - **Kimi K2.7 Code**
 - **Kimi K2.6**
+- **LongCat-2.0**
 - **MiMo-V2.5**
 - **MiMo-V2.5-Pro**
 - **MiniMax M3**
@@ -108,6 +109,7 @@ The table below provides an estimated request count based on typical Go usage pa
 | Kimi K3                      | 110                 | 250               | 490                |
 | Kimi K2.7 Code               | 1,350               | 3,380             | 6,750              |
 | Kimi K2.6                    | 1,150               | 2,880             | 5,750              |
+| LongCat-2.0                  | 11,400              | 28,600            | 57,200             |
 | MiMo-V2.5                    | 30,100              | 75,200            | 150,400            |
 | MiMo-V2.5-Pro                | 3,250               | 8,150             | 16,300             |
 | MiniMax M3                   | 3,200               | 8,000             | 16,000             |
@@ -130,6 +132,7 @@ The estimates are based on observed request patterns:
 - GPT 5.6 Luna — 1,000 input, 50,000 cached, 220 output tokens per request
 - Kimi K3 — 1,050 input, 76,500 cached, 300 output tokens per request
 - Kimi K2.7/K2.6 — 870 input, 55,000 cached, 200 output tokens per request
+- LongCat-2.0 — 920 input, 88,900 cached, 200 output tokens per request
 - DeepSeek V4 Pro — 750 input, 82,000 cached, 290 output tokens per request
 - DeepSeek V4 Flash — 410 input, 71,300 cached, 310 output tokens per request
 - DeepSeek V4 Flash Vision Exp — 410 input, 71,300 cached, 310 output tokens per request
@@ -157,6 +160,7 @@ The estimates are also based on the following prices per 1M tokens and the month
 | Kimi K3                                 | $3.00  | $15.00 | $0.30       | -            | $15   |
 | Kimi K2.7 Code                          | $0.95  | $4.00  | $0.19       | -            | $60   |
 | Kimi K2.6                               | $0.95  | $4.00  | $0.16       | -            | $60   |
+| LongCat-2.0                             | $0.30  | $1.20  | $0.006      | -            | $60   |
 | MiMo V2.5                               | $0.14  | $0.28  | $0.0028     | -            | $60   |
 | MiMo V2.5 Pro                           | $0.435 | $0.87  | $0.003625   | -            | $15   |
 | MiniMax M3                              | $0.30  | $1.20  | $0.06       | -            | $60   |
@@ -178,7 +182,7 @@ The estimates are also based on the following prices per 1M tokens and the month
 | Hy3                                     | $0.14  | $0.58  | $0.035      | -            | $60   |
 | Ox Alpha Free                           | -      | -      | -           | -            | -     |
 
-**DeepSeek V4 Flash / V4 Flash Vision Exp / V4 Pro:** Peak hours are 01:00-04:00 and 06:00-10:00 UTC; all other hours are Off-Peak. [Learn more](https://api-docs.deepseek.com/quick_start/pricing/).
+**DeepSeek V4 Flash / V4 Flash Vision Exp / V4 Pro:** Peak hours are 01:00-04:00 and 06:00-10:00 UTC, Monday through Friday; all other hours, including weekends, are Off-Peak. [Learn more](https://api-docs.deepseek.com/quick_start/pricing/).
 
 **DeepSeek V4 Flash Vision Exp:** Images are converted into tokens based on their dimensions and billed as input tokens alongside text tokens. [Learn more](https://api-docs.deepseek.com/quick_start/pricing/).
 
@@ -228,6 +232,7 @@ You can also access Go models through the following API endpoints.
 | Kimi K3                      | kimi-k3                      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Kimi K2.7 Code               | kimi-k2.7-code               | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Kimi K2.6                    | kimi-k2.6                    | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| LongCat-2.0                  | longcat-2.0                  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Pro              | deepseek-v4-pro              | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Flash            | deepseek-v4-flash            | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Flash Vision Exp | deepseek-v4-flash-vision-exp | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
@@ -272,6 +277,7 @@ https://opencode.ai/zen/go/v1/models
 | Kimi K3                      | Not used       | 0 days         |
 | Kimi K2.7 Code               | Not used       | 0 days         |
 | Kimi K2.6                    | Not used       | 0 days         |
+| LongCat-2.0                  | Not used       | 0 days         |
 | MiMo-V2.5-Pro                | Not used       | 0 days         |
 | MiMo-V2.5                    | Not used       | 0 days         |
 | Qwen3.8 Max                  | Not used       | 0 days         |
