@@ -1728,6 +1728,7 @@ test("refreshes integrations after integration updates", async () => {
                 id: "openai",
                 name: "OpenAI",
                 methods: [{ type: "key" }],
+                connections: [{ type: "credential", id: "cred_openai", label: "OpenAI" }],
               },
             ],
     })
@@ -1766,6 +1767,16 @@ test("refreshes integrations after integration updates", async () => {
     await wait(() => data.location.integration.list()?.length === 1)
     await wait(() => requests.model > before.model && requests.provider > before.provider)
     expect(data.location.integration.list()?.[0]).toMatchObject({ id: "openai", name: "OpenAI" })
+
+    const previous = { ...requests }
+    events.emit({
+      id: "evt_credential",
+      created: 0,
+      type: "credential.switched",
+      data: { credentialID: "cred_openai", integrationID: "openai" },
+    })
+    await wait(() => requests.model > previous.model && requests.provider > previous.provider)
+    expect(requests.integration).toBe(previous.integration)
   } finally {
     app.renderer.destroy()
   }

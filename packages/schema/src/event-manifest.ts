@@ -5,6 +5,7 @@ import { Agent } from "./agent.js"
 import { Catalog } from "./catalog.js"
 import { Command } from "./command.js"
 import { Config } from "./config.js"
+import { Credential } from "./credential.js"
 import { Durable } from "./durable-event-manifest.js"
 import { Event } from "./event.js"
 import { FileSystem } from "./filesystem.js"
@@ -39,6 +40,7 @@ const coreDefinitions = Event.inventory(...SessionEvent.Definitions)
 
 const foundationDefinitions = Event.inventory(
   ...ModelsDev.Event.Definitions,
+  ...Credential.Event.Definitions,
   ...Integration.Event.Definitions,
   ...Catalog.Event.Definitions,
   ...Agent.Event.Definitions,

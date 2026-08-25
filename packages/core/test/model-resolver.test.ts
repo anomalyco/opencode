@@ -312,6 +312,7 @@ describe("ModelResolver", () => {
         active: () => Effect.undefined,
         resolve: () => Effect.die("unused"),
         key: () => Effect.die("unused"),
+        activate: () => Effect.die("unused"),
         update: () => Effect.die("unused"),
         remove: () => Effect.die("unused"),
       },
@@ -885,12 +886,7 @@ describe("ModelResolver", () => {
           { reasoning: { effort: "high" } },
           { reasoning: { effort: "high" } },
         ],
-        [
-          "@ai-sdk/xai",
-          "@opencode-ai/ai/providers/xai",
-          { reasoningEffort: "high" },
-          { reasoningEffort: "high" },
-        ],
+        ["@ai-sdk/xai", "@opencode-ai/ai/providers/xai", { reasoningEffort: "high" }, { reasoningEffort: "high" }],
       ] as const
 
       yield* Effect.forEach(packages, ([catalogPackage, nativePackage, sourceOptions, providerOptions]) =>
@@ -939,11 +935,7 @@ describe("ModelResolver", () => {
         ["@ai-sdk/azure", "@opencode-ai/ai/providers/azure/responses", "api-model"],
         ["@ai-sdk/google", "@opencode-ai/ai/providers/google", "api-model"],
         ["@ai-sdk/google-vertex", "@opencode-ai/ai/providers/google-vertex", "api-model"],
-        [
-          "@ai-sdk/google-vertex/anthropic",
-          "@opencode-ai/ai/providers/google-vertex/messages",
-          "claude-sonnet-4-6",
-        ],
+        ["@ai-sdk/google-vertex/anthropic", "@opencode-ai/ai/providers/google-vertex/messages", "claude-sonnet-4-6"],
         ["@ai-sdk/openai", "@opencode-ai/ai/providers/openai", "api-model"],
         ["@ai-sdk/openai-compatible", "@opencode-ai/ai/providers/openai-compatible", "api-model"],
         ["@openrouter/ai-sdk-provider", "@opencode-ai/ai/providers/openrouter", "api-model"],

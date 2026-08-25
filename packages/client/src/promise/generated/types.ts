@@ -823,6 +823,24 @@ export type ModelsDevRefreshed = {
   data: {}
 }
 
+export type CredentialUpdated = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "credential.updated"
+  location?: LocationRef
+  data: {}
+}
+
+export type CredentialSwitched = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "credential.switched"
+  location?: LocationRef
+  data: { integrationID: string; credentialID: string | null }
+}
+
 export type IntegrationUpdated = {
   id: string
   created: number
@@ -830,15 +848,6 @@ export type IntegrationUpdated = {
   type: "integration.updated"
   location?: LocationRef
   data: {}
-}
-
-export type IntegrationConnectionUpdated = {
-  id: string
-  created: number
-  metadata?: { [x: string]: any }
-  type: "integration.connection.updated"
-  location?: LocationRef
-  data: { integrationID: string }
 }
 
 export type CatalogUpdated = {
@@ -2129,8 +2138,9 @@ export type IntegrationInfo = {
 
 export type V2Event =
   | ModelsDevRefreshed
+  | CredentialUpdated
+  | CredentialSwitched
   | IntegrationUpdated
-  | IntegrationConnectionUpdated
   | CatalogUpdated
   | AgentUpdated
   | SessionCreated
@@ -4370,6 +4380,15 @@ export type CredentialUpdateInput = {
 }
 
 export type CredentialUpdateOutput = void
+
+export type CredentialActivateInput = {
+  readonly credentialID: { readonly credentialID: string }["credentialID"]
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type CredentialActivateOutput = void
 
 export type CredentialRemoveInput = {
   readonly credentialID: { readonly credentialID: string }["credentialID"]

@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import { Agent } from "@opencode-ai/core/agent"
 import { Bus } from "@opencode-ai/core/bus"
+import { Credential } from "@opencode-ai/schema/credential"
 import { Event } from "@opencode-ai/schema/event"
+import { IntegrationID } from "@opencode-ai/schema/integration-id"
 import { Deferred, Effect, Exit, Fiber, Option, Schema, Stream } from "effect"
 import { it } from "../../core/test/lib/effect"
 import { EventFeed } from "../src/event-feed"
@@ -108,6 +110,27 @@ describe("EventFeed", () => {
       expect(Exit.isFailure(result)).toBeTrue()
       if (Exit.isSuccess(result)) return
       expect(Option.getOrUndefined(Exit.findErrorOption(result))).toBeInstanceOf(EventFeed.SubscriberOverflowError)
+    }),
+  )
+
+  it.effect("delivers global credential events to public subscribers", () =>
+    Effect.gen(function* () {
+      const source = makeSource()
+      const feed = yield* EventFeed.make(source.observe, { encode: (event) => event.type })
+      const stream = yield* feed.subscribe
+      const received = yield* stream.pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
+
+      yield* source.publish({
+        id: Event.ID.create(),
+        created: Date.now(),
+        type: Credential.Event.Switched.type,
+        data: {
+          credentialID: Credential.ID.make("cred_test"),
+          integrationID: IntegrationID.make("openai"),
+        },
+      })
+
+      expect(Array.from(yield* Fiber.join(received))).toEqual([Credential.Event.Switched.type])
     }),
   )
 

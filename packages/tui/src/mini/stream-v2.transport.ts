@@ -365,6 +365,7 @@ function messageIDFromEvent(id: string) {
 const catalogEvents = new Set([
   "catalog.updated",
   "integration.updated",
+  "credential.switched",
   "agent.updated",
   "command.updated",
   "skill.updated",

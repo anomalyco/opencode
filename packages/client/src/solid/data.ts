@@ -1048,6 +1048,36 @@ export function createData(config: CreateDataInput) {
         return
     }
 
+    if (event.type === "credential.updated" || event.type === "credential.switched") {
+      Object.keys(store.location).forEach((key) => {
+        const ref = JSON.parse(key) as [string, string | null]
+        const location = { directory: ref[0], workspaceID: ref[1] ?? undefined }
+        if (event.type === "credential.updated") {
+          result.location.integration.invalidate(location)
+          void result.location.integration.sync(location)
+          return
+        }
+        setStore("location", key, (data) => ({
+          ...data,
+          integration: data?.integration?.map((integration) => {
+            if (integration.id !== event.data.integrationID) return integration
+            const active = integration.connections.find(
+              (connection) => connection.type === "credential" && connection.id === event.data.credentialID,
+            )
+            if (!active) return integration
+            return {
+              ...integration,
+              connections: [active, ...integration.connections.filter((connection) => connection !== active)],
+            }
+          }),
+        }))
+        result.location.model.invalidate(location)
+        result.location.provider.invalidate(location)
+        void Promise.all([result.location.model.sync(location), result.location.provider.sync(location)])
+      })
+      return
+    }
+
     if (!event.location) return
     const location = event.location
     switch (event.type) {

@@ -243,6 +243,8 @@ export const Definitions = {
   "dialog.select.end": keybind("end", "Move to last dialog item"),
   "dialog.select.submit": keybind("return", "Submit selected dialog item"),
   "dialog.prompt.submit": keybind("return", "Submit dialog prompt"),
+  "dialog.integration.rename": keybind("ctrl+r", "Rename integration account"),
+  "dialog.integration.delete": keybind("ctrl+d", "Delete integration account"),
   "dialog.worktree.generate": keybind("tab", "Generate worktree name"),
   "dialog.move_session.new": keybind("ctrl+m", "New worktree"),
   "dialog.move_session.delete": keybind("ctrl+d", "Delete worktree"),

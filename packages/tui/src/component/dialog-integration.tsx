@@ -150,29 +150,101 @@ function manageConnections(
     const data = useData()
     const client = useClient()
     const toast = useToast()
+    const theme = useTheme("elevated")
+    const shortcuts = Keymap.useShortcuts()
+    const [deleting, setDeleting] = createSignal<string>()
+    const [selected, setSelected] = createSignal(methods.length ? "add" : credentialConnections(integration)[0]?.id)
+    const current = createMemo(() => data.location.integration.list()?.find((item) => item.id === integration.id))
+
     return (
       <DialogSelect
         title={integration.name}
+        current={credentialConnections(current() ?? integration)[0]?.id}
+        focusCurrent={false}
+        preserveSelection
+        onMove={(option) => {
+          setSelected(option.value)
+          setDeleting(undefined)
+        }}
         options={[
           ...(methods.length
             ? [
                 {
-                  title: "Add connection",
+                  title: "Add account",
                   value: "add",
-                  onSelect: () => selectMethod(integration, methods, dialog, onConnected),
+                  onSelect: () => selectMethod(current() ?? integration, methods, dialog, onConnected),
                 },
               ]
             : []),
-          ...credentialConnections(integration).map((connection) => ({
-            title: `Disconnect ${connection.label}`,
-            value: connection.id,
-            onSelect: () => {
-              void client.api.credential
-                .remove({ credentialID: connection.id, location: location(data) })
-                .then(() => disconnected(integration.name, data, dialog, toast))
-                .catch(toast.error)
+          ...credentialConnections(current() ?? integration)
+            .toSorted((a, b) => a.label.localeCompare(b.label) || a.id.localeCompare(b.id))
+            .map((connection) => {
+              const confirming = deleting() === connection.id
+              return {
+                title: confirming
+                  ? `Press ${shortcuts.get("dialog.integration.delete")} again to confirm`
+                  : connection.label,
+                value: connection.id,
+                category: "Connected accounts",
+                bg: confirming ? theme.background.action.destructive.focused : undefined,
+                fg: confirming ? theme.text.action.destructive.focused : undefined,
+                onSelect: () => {
+                  if (credentialConnections(current() ?? integration)[0]?.id === connection.id) return
+                  void client.api.credential
+                    .activate({ credentialID: connection.id, location: location(data) })
+                    .catch(toast.error)
+                },
+              }
+            }),
+        ]}
+        actions={[
+          {
+            command: "dialog.integration.rename",
+            title: "rename",
+            hidden: selected() === "add",
+            disabled: (option) => !option || option.value === "add",
+            onTrigger: (option) => {
+              dialog.replace(() => (
+                <DialogPrompt
+                  title="Rename account"
+                  placeholder="Account name"
+                  value={
+                    credentialConnections(current() ?? integration).find((item) => item.id === option.value)?.label
+                  }
+                  onConfirm={(value) => {
+                    const label = value.trim()
+                    if (!label) return
+                    void client.api.credential
+                      .update({ credentialID: option.value, label, location: location(data) })
+                      .then(() => manageConnections(integration, methods, dialog, onConnected))
+                      .catch(toast.error)
+                  }}
+                />
+              ))
             },
-          })),
+          },
+          {
+            command: "dialog.integration.delete",
+            title: "delete",
+            hidden: selected() === "add",
+            disabled: (option) => !option || option.value === "add",
+            onTrigger: (option) => {
+              if (deleting() !== option.value) return setDeleting(option.value)
+              const final = credentialConnections(current() ?? integration).length === 1
+              void client.api.credential
+                .remove({ credentialID: option.value, location: location(data) })
+                .then(() => {
+                  setDeleting(undefined)
+                  if (!final) return
+                  toast.show({ variant: "success", message: `Disconnected ${integration.name}` })
+                  dialog.clear()
+                })
+                .catch((error) => {
+                  setDeleting(undefined)
+                  toast.error(error)
+                })
+            },
+          },
         ]}
       />
     )
@@ -921,20 +993,6 @@ function providerID(data: ReturnType<typeof useData>, integrationID: string) {
       models.some((model) => model.providerID === provider.id && model.status !== "deprecated"),
     )?.id ?? matches[0]?.id
   )
-}
-
-async function disconnected(
-  name: string,
-  data: ReturnType<typeof useData>,
-  dialog: ReturnType<typeof useDialog>,
-  toast: ReturnType<typeof useToast>,
-) {
-  data.location.integration.invalidate()
-  data.location.model.invalidate()
-  data.location.provider.invalidate()
-  await Promise.all([data.location.integration.sync(), data.location.model.sync(), data.location.provider.sync()])
-  toast.show({ variant: "success", message: `Disconnected ${name}` })
-  dialog.clear()
 }
 
 function location(data: ReturnType<typeof useData>) {

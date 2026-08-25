@@ -89,6 +89,7 @@ export interface PublishOptions {
   readonly id?: Event.ID
   readonly metadata?: Record<string, unknown>
   readonly location?: Location.Ref
+  readonly global?: boolean
   /** Local operational projection committed atomically with a new durable event. Not replayed or serialized. */
   readonly commit?: (seq: number) => Effect.Effect<void>
 }
@@ -446,11 +447,12 @@ export function configured(options?: Options) {
         function publish<D extends Event.Definition>(definition: D, data: Event.Data<D>, options?: PublishOptions) {
           return Effect.gen(function* () {
             const serviceLocation = Option.getOrUndefined(yield* Effect.serviceOption(Location.Service))
-            const location =
-              options?.location ??
-              (serviceLocation
-                ? { directory: serviceLocation.directory, workspaceID: serviceLocation.workspaceID }
-                : undefined)
+            const location = options?.global
+              ? undefined
+              : (options?.location ??
+                (serviceLocation
+                  ? { directory: serviceLocation.directory, workspaceID: serviceLocation.workspaceID }
+                  : undefined))
             return yield* publishEvent(
               definition,
               {
@@ -480,11 +482,12 @@ export function configured(options?: Options) {
                     }),
                   )
                 }
-                const location =
-                  options?.location ??
-                  (serviceLocation
-                    ? { directory: serviceLocation.directory, workspaceID: serviceLocation.workspaceID }
-                    : undefined)
+                const location = options?.global
+                  ? undefined
+                  : (options?.location ??
+                    (serviceLocation
+                      ? { directory: serviceLocation.directory, workspaceID: serviceLocation.workspaceID }
+                      : undefined))
                 return {
                   definition,
                   aggregateID,

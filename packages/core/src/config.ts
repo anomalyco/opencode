@@ -16,7 +16,6 @@ import {
   type Entry,
   Event,
 } from "@opencode-ai/schema/config"
-import { Integration } from "@opencode-ai/schema/integration"
 import { isRecord } from "@opencode-ai/ai/utils/record"
 import { Credential } from "./credential.js"
 import { Bus } from "./bus.js"
@@ -159,9 +158,7 @@ export const layer = (options?: Options) =>
       const loadWellknownEntry = Effect.fnUntraced(function* (entry: WellKnown.Entry) {
         const auth = entry.manifest.auth
         if (!auth) return []
-        const credential = (yield* credentials.list(entry.integrationID)).findLast(
-          (credential) => credential.value.type === "key",
-        )
+        const credential = (yield* credentials.list(entry.integrationID)).at(-1)
         if (!credential || credential.value.type !== "key") return []
         const variables = { [auth.env]: credential.value.key }
         const configs = yield* wellknown
@@ -343,7 +340,7 @@ export const layer = (options?: Options) =>
         ),
         Effect.forkScoped({ startImmediately: true }),
       )
-      yield* bus.subscribe(Integration.Event.ConnectionUpdated).pipe(
+      yield* bus.subscribe(Credential.Event.Switched).pipe(
         Stream.filterEffect((event) =>
           wellknown.entries().pipe(
             Effect.map((entries) => entries.some((entry) => entry.integrationID === event.data.integrationID)),

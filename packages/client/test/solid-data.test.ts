@@ -154,6 +154,103 @@ test("updates authoritative cached project metadata from live events", async () 
   }
 })
 
+test("refreshes global credential events across every loaded location and workspace", async () => {
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  const requests: URL[] = []
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      const url = new URL(request.url)
+      requests.push(url)
+      const directory = url.searchParams.get("location[directory]") ?? "/project"
+      return Response.json({
+        location: {
+          directory,
+          workspaceID: url.searchParams.get("location[workspace]") ?? undefined,
+          project: { id: "project", directory, canonical: directory },
+        },
+        data: [],
+      })
+    },
+  })
+  const setup = createRoot((dispose) => ({
+    data: createData({
+      api: () => api,
+      directory: "/project",
+      event: {
+        on: () => () => {},
+        listen(handler) {
+          listeners.add(handler)
+          return () => listeners.delete(handler)
+        },
+      },
+      connection: { status: () => "connected" },
+    }),
+    dispose,
+  }))
+  const locations = [{ directory: "/project" }, { directory: "/other", workspaceID: "workspace-other" }]
+
+  try {
+    await Promise.all(
+      locations.flatMap((location) => [
+        setup.data.location.integration.sync(location),
+        setup.data.location.model.sync(location),
+        setup.data.location.provider.sync(location),
+      ]),
+    )
+    requests.length = 0
+
+    const updated: OpenCodeEvent = {
+      id: "evt_credential.updated",
+      created: 1,
+      type: "credential.updated",
+      data: {},
+    }
+    listeners.forEach((listener) => listener({ name: updated.type, details: updated }))
+    await wait(() => requests.length === 2)
+    expect(
+      requests.map((url) => [
+        url.pathname,
+        url.searchParams.get("location[directory]"),
+        url.searchParams.get("location[workspace]"),
+      ]),
+    ).toEqual([
+      ["/api/integration", "/project", null],
+      ["/api/integration", "/other", "workspace-other"],
+    ])
+    requests.length = 0
+
+    for (const credentialID of ["credential", null]) {
+      const switched: OpenCodeEvent = {
+        id: `evt_credential.switched.${credentialID}`,
+        created: 2,
+        type: "credential.switched",
+        data: { credentialID, integrationID: "integration" },
+      }
+      listeners.forEach((listener) => listener({ name: switched.type, details: switched }))
+      await wait(() => requests.length === 4)
+      expect(
+        requests.map((url) => [
+          url.pathname,
+          url.searchParams.get("location[directory]"),
+          url.searchParams.get("location[workspace]"),
+        ]),
+      ).toEqual(
+        expect.arrayContaining([
+          ["/api/model", "/project", null],
+          ["/api/provider", "/project", null],
+          ["/api/model", "/other", "workspace-other"],
+          ["/api/provider", "/other", "workspace-other"],
+        ]),
+      )
+      requests.length = 0
+    }
+  } finally {
+    setup.dispose()
+  }
+})
+
 test("reports optimistic sessions as creating until the request settles", async () => {
   const release = Promise.withResolvers<void>()
   const api = OpenCode.make({

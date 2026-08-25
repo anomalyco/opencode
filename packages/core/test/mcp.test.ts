@@ -234,6 +234,7 @@ function resourceMcpLayer(
             active: unusedIntegration,
             resolve: unusedIntegration,
             key: unusedIntegration,
+            activate: unusedIntegration,
             update: unusedIntegration,
             remove: unusedIntegration,
           },
@@ -1024,9 +1025,7 @@ test("restores runtime MCP config when a transform is disposed", async () => {
         yield* transformed.dispose
         expect(observed).toBe("original")
       }).pipe(
-        Effect.provide(
-          resourceMcpLayer(new ConfigMCP.Local({ type: "local", command: ["unused"], disabled: true })),
-        ),
+        Effect.provide(resourceMcpLayer(new ConfigMCP.Local({ type: "local", command: ["unused"], disabled: true }))),
       ),
     ),
   )

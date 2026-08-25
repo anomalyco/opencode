@@ -221,7 +221,7 @@ export const GithubCopilotPlugin = define({
       }
     })
     const refresh = () => loading.withPermit(load().pipe(Effect.andThen(ctx.catalog.reload())))
-    yield* bus.subscribe(Integration.Event.ConnectionUpdated).pipe(
+    yield* bus.subscribe(Credential.Event.Switched).pipe(
       Stream.filter((event) => event.data.integrationID === Integration.ID.make("github-copilot")),
       Stream.runForEach(refresh),
       Effect.forkScoped({ startImmediately: true }),
