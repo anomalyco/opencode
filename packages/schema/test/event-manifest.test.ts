@@ -6,6 +6,7 @@ import {
   Form,
   Integration,
   Permission,
+  PersistentPty,
   Project,
   Reference,
   Session,
@@ -63,6 +64,7 @@ describe("public event manifest", () => {
     expect(FileSystemV1.Event.Definitions).toEqual([FileSystemV1.Event.Edited])
     expect(Integration.Event.Definitions).toEqual([Integration.Event.Updated, Integration.Event.ConnectionUpdated])
     expect(Permission.Event.Definitions).toEqual([Permission.Event.Asked, Permission.Event.Replied])
+    expect(PersistentPty.Event.Definitions).toEqual([PersistentPty.Event.Added, PersistentPty.Event.Removed])
     expect(Form.Event.Definitions).toEqual([Form.Event.Created, Form.Event.Replied, Form.Event.Cancelled])
     expect(Reference.Event.Definitions).toEqual([Reference.Event.Updated])
     expect(Plugin.Event.Definitions).toEqual([Plugin.Event.Added, Plugin.Event.Updated])

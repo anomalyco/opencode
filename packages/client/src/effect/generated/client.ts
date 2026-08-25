@@ -192,6 +192,23 @@ import type {
   PtyRemoveOutput,
   PtyConnectTokenInput,
   PtyConnectTokenOutput,
+  ServerPersistentPtyListInput,
+  ServerPersistentPtyListOutput,
+  ServerPersistentPtyCreateInput,
+  ServerPersistentPtyCreateOutput,
+  ServerPersistentPtyShutdownOutput,
+  ServerPersistentPtyGetInput,
+  ServerPersistentPtyGetOutput,
+  ServerPersistentPtyUpdateInput,
+  ServerPersistentPtyUpdateOutput,
+  ServerPersistentPtySnapshotInput,
+  ServerPersistentPtySnapshotOutput,
+  ServerPersistentPtyRemoveInput,
+  ServerPersistentPtyRemoveOutput,
+  ServerPersistentPtyConnectTokenInput,
+  ServerPersistentPtyConnectTokenOutput,
+  ServerPersistentPtyConnectInput,
+  ServerPersistentPtyConnectOutput,
   ShellListInput,
   ShellListOutput,
   ShellCreateInput,
@@ -1180,6 +1197,102 @@ const adaptGroupPty = (raw: RawClient["server.pty"]) => ({
   connect: { token: EndpointPtyConnectToken(raw) },
 })
 
+const EndpointServerPersistentPtyList =
+  (raw: RawClient["server.persistentPty"]) => (input: ServerPersistentPtyListInput) =>
+    preserveEffect<ServerPersistentPtyListOutput>()(
+      raw["persistentPty.list"]({ params: { sessionID: input["sessionID"] } }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointServerPersistentPtyCreate =
+  (raw: RawClient["server.persistentPty"]) => (input: ServerPersistentPtyCreateInput) =>
+    preserveEffect<ServerPersistentPtyCreateOutput>()(
+      raw["persistentPty.create"]({
+        params: { sessionID: input["sessionID"] },
+        payload: {
+          command: input["command"],
+          args: input["args"],
+          cwd: input["cwd"],
+          title: input["title"],
+          env: input["env"],
+          size: input["size"],
+        },
+      }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointServerPersistentPtyShutdown = (raw: RawClient["server.persistentPty"]) => () =>
+  preserveEffect<ServerPersistentPtyShutdownOutput>()(
+    raw["persistentPty.shutdown"]({}).pipe(Effect.mapError(mapClientError)),
+  )
+
+const EndpointServerPersistentPtyGet =
+  (raw: RawClient["server.persistentPty"]) => (input: ServerPersistentPtyGetInput) =>
+    preserveEffect<ServerPersistentPtyGetOutput>()(
+      raw["persistentPty.get"]({ params: { ptyID: input["ptyID"] } }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointServerPersistentPtyUpdate =
+  (raw: RawClient["server.persistentPty"]) => (input: ServerPersistentPtyUpdateInput) =>
+    preserveEffect<ServerPersistentPtyUpdateOutput>()(
+      raw["persistentPty.update"]({
+        params: { ptyID: input["ptyID"] },
+        payload: { attachmentID: input["attachmentID"], size: input["size"] },
+      }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointServerPersistentPtySnapshot =
+  (raw: RawClient["server.persistentPty"]) => (input: ServerPersistentPtySnapshotInput) =>
+    preserveEffect<ServerPersistentPtySnapshotOutput>()(
+      raw["persistentPty.snapshot"]({ params: { ptyID: input["ptyID"] } }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointServerPersistentPtyRemove =
+  (raw: RawClient["server.persistentPty"]) => (input: ServerPersistentPtyRemoveInput) =>
+    preserveEffect<ServerPersistentPtyRemoveOutput>()(
+      raw["persistentPty.remove"]({ params: { ptyID: input["ptyID"] } }).pipe(Effect.mapError(mapClientError)),
+    )
+
+const EndpointServerPersistentPtyConnectToken =
+  (raw: RawClient["server.persistentPty"]) => (input: ServerPersistentPtyConnectTokenInput) =>
+    preserveEffect<ServerPersistentPtyConnectTokenOutput>()(
+      raw["persistentPty.connectToken"]({ params: { ptyID: input["ptyID"] } }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointServerPersistentPtyConnect =
+  (raw: RawClient["server.persistentPty"]) => (input: ServerPersistentPtyConnectInput) =>
+    preserveEffect<ServerPersistentPtyConnectOutput>()(
+      raw["persistentPty.connect"]({ params: { ptyID: input["ptyID"] } }).pipe(Effect.mapError(mapClientError)),
+    )
+
+const adaptGroupServerPersistentPty = (raw: RawClient["server.persistentPty"]) => ({
+  list: EndpointServerPersistentPtyList(raw),
+  create: EndpointServerPersistentPtyCreate(raw),
+  shutdown: EndpointServerPersistentPtyShutdown(raw),
+  get: EndpointServerPersistentPtyGet(raw),
+  update: EndpointServerPersistentPtyUpdate(raw),
+  snapshot: EndpointServerPersistentPtySnapshot(raw),
+  remove: EndpointServerPersistentPtyRemove(raw),
+  connectToken: EndpointServerPersistentPtyConnectToken(raw),
+  connect: EndpointServerPersistentPtyConnect(raw),
+})
+
 const EndpointShellList = (raw: RawClient["server.shell"]) => (input?: ShellListInput) =>
   preserveEffect<ShellListOutput>()(
     raw["shell.list"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
@@ -1367,6 +1480,7 @@ const adaptClient = (raw: RawClient) => ({
   skill: adaptGroupSkill(raw["server.skill"]),
   event: adaptGroupEvent(raw["server.event"]),
   pty: adaptGroupPty(raw["server.pty"]),
+  "server.persistentPty": adaptGroupServerPersistentPty(raw["server.persistentPty"]),
   shell: adaptGroupShell(raw["server.shell"]),
   reference: adaptGroupReference(raw["server.reference"]),
   worktree: adaptGroupWorktree(raw["server.worktree"]),

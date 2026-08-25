@@ -17,6 +17,7 @@ import { LspEvent } from "./lsp-event.js"
 import { McpEvent } from "./mcp-event.js"
 import { ModelsDev } from "./models-dev.js"
 import { Permission } from "./permission.js"
+import { PersistentPty } from "./persistent-pty.js"
 import { Plugin } from "./plugin.js"
 import { Project } from "./project.js"
 import { Worktree } from "./worktree.js"
@@ -54,6 +55,7 @@ const featureDefinitions = Event.inventory(
   ...Config.Event.Definitions,
   ...Skill.Event.Definitions,
   ...Pty.Event.Definitions,
+  ...PersistentPty.Event.Definitions,
   ...Shell.Event.Definitions,
   ...Form.Event.Definitions,
   ...WebSearch.Event.Definitions,

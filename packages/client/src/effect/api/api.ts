@@ -1586,6 +1586,151 @@ export interface PtyApi<E = never> {
   readonly connect: { readonly token: PtyConnectTokenOperation<E> }
 }
 
+export type ServerPersistentPtyListInput = { readonly sessionID: Session.ID }
+export type ServerPersistentPtyListOutput = ReadonlyArray<{
+  readonly id: Pty.ID
+  readonly title: string
+  readonly command: string
+  readonly args: ReadonlyArray<string>
+  readonly cwd: string
+  readonly status: "running" | "exited"
+  readonly pid: number
+  readonly exitCode?: number | undefined
+  readonly sessionID: Session.ID
+  readonly foregroundProcess: string | null
+  readonly size: { readonly cols: number; readonly rows: number }
+  readonly output: { readonly head: number; readonly tail: number }
+}>
+export type ServerPersistentPtyListOperation<E = never> = (
+  input: ServerPersistentPtyListInput,
+) => Effect.Effect<ServerPersistentPtyListOutput, E>
+
+export type ServerPersistentPtyCreateInput = {
+  readonly sessionID: Session.ID
+  readonly command: string
+  readonly args: ReadonlyArray<string>
+  readonly cwd: string
+  readonly title: string
+  readonly env: { readonly [x: string]: string }
+  readonly size?: { readonly cols: number; readonly rows: number } | undefined
+}
+export type ServerPersistentPtyCreateOutput = {
+  readonly id: Pty.ID
+  readonly title: string
+  readonly command: string
+  readonly args: ReadonlyArray<string>
+  readonly cwd: string
+  readonly status: "running" | "exited"
+  readonly pid: number
+  readonly exitCode?: number | undefined
+  readonly sessionID: Session.ID
+  readonly foregroundProcess: string | null
+  readonly size: { readonly cols: number; readonly rows: number }
+  readonly output: { readonly head: number; readonly tail: number }
+}
+export type ServerPersistentPtyCreateOperation<E = never> = (
+  input: ServerPersistentPtyCreateInput,
+) => Effect.Effect<ServerPersistentPtyCreateOutput, E>
+
+export type ServerPersistentPtyShutdownOutput = void
+export type ServerPersistentPtyShutdownOperation<E = never> = () => Effect.Effect<ServerPersistentPtyShutdownOutput, E>
+
+export type ServerPersistentPtyGetInput = { readonly ptyID: Pty.ID }
+export type ServerPersistentPtyGetOutput = {
+  readonly id: Pty.ID
+  readonly title: string
+  readonly command: string
+  readonly args: ReadonlyArray<string>
+  readonly cwd: string
+  readonly status: "running" | "exited"
+  readonly pid: number
+  readonly exitCode?: number | undefined
+  readonly sessionID: Session.ID
+  readonly foregroundProcess: string | null
+  readonly size: { readonly cols: number; readonly rows: number }
+  readonly output: { readonly head: number; readonly tail: number }
+}
+export type ServerPersistentPtyGetOperation<E = never> = (
+  input: ServerPersistentPtyGetInput,
+) => Effect.Effect<ServerPersistentPtyGetOutput, E>
+
+export type ServerPersistentPtyUpdateInput = {
+  readonly ptyID: Pty.ID
+  readonly attachmentID?: string | undefined
+  readonly size: { readonly cols: number; readonly rows: number }
+}
+export type ServerPersistentPtyUpdateOutput = {
+  readonly id: Pty.ID
+  readonly title: string
+  readonly command: string
+  readonly args: ReadonlyArray<string>
+  readonly cwd: string
+  readonly status: "running" | "exited"
+  readonly pid: number
+  readonly exitCode?: number | undefined
+  readonly sessionID: Session.ID
+  readonly foregroundProcess: string | null
+  readonly size: { readonly cols: number; readonly rows: number }
+  readonly output: { readonly head: number; readonly tail: number }
+}
+export type ServerPersistentPtyUpdateOperation<E = never> = (
+  input: ServerPersistentPtyUpdateInput,
+) => Effect.Effect<ServerPersistentPtyUpdateOutput, E>
+
+export type ServerPersistentPtySnapshotInput = { readonly ptyID: Pty.ID }
+export type ServerPersistentPtySnapshotOutput = {
+  readonly info: {
+    readonly id: Pty.ID
+    readonly title: string
+    readonly command: string
+    readonly args: ReadonlyArray<string>
+    readonly cwd: string
+    readonly status: "running" | "exited"
+    readonly pid: number
+    readonly exitCode?: number | undefined
+    readonly sessionID: Session.ID
+    readonly foregroundProcess: string | null
+    readonly size: { readonly cols: number; readonly rows: number }
+    readonly output: { readonly head: number; readonly tail: number }
+  }
+  readonly text: string
+  readonly checkpoint: globalThis.Uint8Array
+  readonly cursor: { readonly x: number; readonly y: number }
+}
+export type ServerPersistentPtySnapshotOperation<E = never> = (
+  input: ServerPersistentPtySnapshotInput,
+) => Effect.Effect<ServerPersistentPtySnapshotOutput, E>
+
+export type ServerPersistentPtyRemoveInput = { readonly ptyID: Pty.ID }
+export type ServerPersistentPtyRemoveOutput = void
+export type ServerPersistentPtyRemoveOperation<E = never> = (
+  input: ServerPersistentPtyRemoveInput,
+) => Effect.Effect<ServerPersistentPtyRemoveOutput, E>
+
+export type ServerPersistentPtyConnectTokenInput = { readonly ptyID: Pty.ID }
+export type ServerPersistentPtyConnectTokenOutput = PtyTicket.ConnectToken
+export type ServerPersistentPtyConnectTokenOperation<E = never> = (
+  input: ServerPersistentPtyConnectTokenInput,
+) => Effect.Effect<ServerPersistentPtyConnectTokenOutput, E>
+
+export type ServerPersistentPtyConnectInput = { readonly ptyID: Pty.ID }
+export type ServerPersistentPtyConnectOutput = boolean
+export type ServerPersistentPtyConnectOperation<E = never> = (
+  input: ServerPersistentPtyConnectInput,
+) => Effect.Effect<ServerPersistentPtyConnectOutput, E>
+
+export interface ServerPersistentPtyApi<E = never> {
+  readonly list: ServerPersistentPtyListOperation<E>
+  readonly create: ServerPersistentPtyCreateOperation<E>
+  readonly shutdown: ServerPersistentPtyShutdownOperation<E>
+  readonly get: ServerPersistentPtyGetOperation<E>
+  readonly update: ServerPersistentPtyUpdateOperation<E>
+  readonly snapshot: ServerPersistentPtySnapshotOperation<E>
+  readonly remove: ServerPersistentPtyRemoveOperation<E>
+  readonly connectToken: ServerPersistentPtyConnectTokenOperation<E>
+  readonly connect: ServerPersistentPtyConnectOperation<E>
+}
+
 export type ShellListInput = {
   readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
 }
@@ -1819,6 +1964,7 @@ export interface AppApi<E = never> {
   readonly skill: SkillApi<E>
   readonly event: EventApi<E>
   readonly pty: PtyApi<E>
+  readonly "server.persistentPty": ServerPersistentPtyApi<E>
   readonly shell: ShellApi<E>
   readonly reference: ReferenceApi<E>
   readonly worktree: WorktreeApi<E>
