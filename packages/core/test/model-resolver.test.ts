@@ -391,6 +391,7 @@ describe("ModelResolver", () => {
         model(Provider.aisdk("@ai-sdk/openai-compatible"), {
           compatibility: {
             reasoningField: "vendor_reasoning",
+            requireReasoning: true,
             maxTokensField: "max_completion_tokens",
             requireFinishReason: false,
             requireAssistantAfterTool: true,
@@ -417,6 +418,7 @@ describe("ModelResolver", () => {
       expect(headers.authorization).toBe("Bearer settings-secret")
       expect(resolved.route.id).toBe("openai-compatible-chat")
       expect(resolved.compatibility?.reasoningField).toBe("vendor_reasoning")
+      expect(resolved.compatibility?.requireReasoning).toBe(true)
       expect(resolved.compatibility?.maxTokensField).toBe("max_completion_tokens")
       expect(resolved.compatibility?.requireFinishReason).toBe(false)
       expect(resolved.compatibility?.requireAssistantAfterTool).toBe(true)

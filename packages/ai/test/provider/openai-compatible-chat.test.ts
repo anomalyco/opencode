@@ -317,6 +317,56 @@ describe("OpenAI-compatible Chat route", () => {
     }),
   )
 
+  it.effect("requires reasoning for DeepSeek models, providers, and endpoints unless explicitly overridden", () =>
+    Effect.gen(function* () {
+      const cases = [
+        { id: "DeepSeek-V3", provider: "custom", baseURL: "https://api.custom.test/v1", required: true },
+        { id: "custom-model", provider: "deepseek", baseURL: "https://api.custom.test/v1", required: true },
+        { id: "custom-model", provider: "custom", baseURL: "https://API.DeepSeek.COM/v1", required: true },
+        { id: "ordinary-model", provider: "custom", baseURL: "https://api.custom.test/v1", required: false },
+        {
+          id: "ordinary-model",
+          provider: "custom",
+          baseURL: "https://api.custom.test/v1",
+          compatibility: { requireReasoning: true, reasoningField: "reasoning" },
+          required: true,
+          field: "reasoning",
+        },
+        {
+          id: "deepseek-chat",
+          provider: "deepseek",
+          baseURL: "https://api.deepseek.com/v1",
+          compatibility: { requireReasoning: false },
+          required: false,
+        },
+      ] as const
+
+      yield* Effect.forEach(cases, (item) =>
+        Effect.gen(function* () {
+          const selected = OpenAICompatibleChat.route
+            .with({ provider: item.provider, endpoint: { baseURL: item.baseURL } })
+            .model({ id: item.id, compatibility: "compatibility" in item ? item.compatibility : undefined })
+          const prepared = yield* compileRequest(
+            LLM.request({
+              model: selected,
+              messages: [
+                Message.assistant("Hello"),
+                Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: {} })]),
+                Message.tool({ id: "call_1", name: "lookup", result: "Sunny" }),
+              ],
+            }),
+          )
+          const field = "field" in item ? item.field : "reasoning_content"
+
+          for (const message of prepared.body.messages.filter((message) => message.role === "assistant")) {
+            if (item.required) expect(message).toHaveProperty(field, "")
+            else expect(message).not.toHaveProperty(field)
+          }
+        }),
+      )
+    }),
+  )
+
   it.effect("posts to the configured compatible endpoint and parses text usage", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(request).pipe(

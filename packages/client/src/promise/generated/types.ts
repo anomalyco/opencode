@@ -1319,6 +1319,7 @@ export type ToolContent1 = ToolTextContent | ToolFileContent1
 
 export type ModelCompatibility = {
   reasoningField?: ModelReasoningField
+  requireReasoning?: boolean
   maxTokensField?: ModelMaxTokensField
   requireFinishReason?: boolean
   requireAssistantAfterTool?: boolean
