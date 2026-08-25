@@ -705,6 +705,12 @@ export function createData(config: CreateDataInput) {
           match.time.completed = event.created
         })
         return
+      case "session.message.content.updated":
+        message.update(event.data.sessionID, (draft, index) => {
+          const assistant = message.assistant(draft, index, event.data.messageID)
+          if (assistant) assistant.content = [...event.data.content]
+        })
+        return
       case "session.step.started":
         message.update(event.data.sessionID, (draft, index) => {
           const position = index.get(event.data.assistantMessageID)

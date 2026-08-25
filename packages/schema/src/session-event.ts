@@ -117,6 +117,17 @@ export const Viewed = Event.durable({
 })
 export type Viewed = typeof Viewed.Type
 
+export const MessageContentUpdated = Event.durable({
+  type: "session.message.content.updated",
+  ...options,
+  schema: {
+    ...Base,
+    messageID: SessionMessage.ID,
+    content: Schema.Array(SessionMessage.AssistantContentEncoded),
+  },
+})
+export type MessageContentUpdated = typeof MessageContentUpdated.Type
+
 export const UsageRecorded = Event.durable({
   type: "session.usage.recorded",
   ...options,
@@ -599,6 +610,7 @@ export const Definitions = Event.inventory(
   Moved,
   Renamed,
   Viewed,
+  MessageContentUpdated,
   UsageUpdated,
   Deleted,
   Forked,

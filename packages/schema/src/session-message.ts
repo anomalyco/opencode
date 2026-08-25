@@ -195,6 +195,11 @@ export const AssistantContent = Schema.Union([AssistantText, AssistantReasoning,
 )
 export type AssistantContent = AssistantText | AssistantReasoning | AssistantTool
 
+export const AssistantContentEncoded = Schema.toEncoded(AssistantContent).annotate({
+  identifier: "Session.Message.AssistantContent.Encoded",
+})
+export type AssistantContentEncoded = typeof AssistantContentEncoded.Type
+
 export interface AssistantRetry extends Schema.Schema.Type<typeof AssistantRetry> {}
 export const AssistantRetry = Schema.Struct({
   attempt: PositiveInt,

@@ -135,6 +135,64 @@ test("loads bounded message pages", async () => {
   }
 })
 
+test("projects assistant content replacement events into cached messages", async () => {
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async () =>
+      Response.json({
+        data: [
+          {
+            id: "msg_assistant",
+            type: "assistant",
+            agent: "build",
+            model: { id: "model", providerID: "provider" },
+            content: [{ type: "text", text: "original" }],
+            time: { created: 1, completed: 2 },
+          },
+        ],
+        cursor: {},
+      }),
+  })
+  const setup = createRoot((dispose) => ({
+    data: createData({
+      api: () => api,
+      directory: "/project",
+      event: {
+        on: () => () => {},
+        listen(handler) {
+          listeners.add(handler)
+          return () => listeners.delete(handler)
+        },
+      },
+    }),
+    dispose,
+  }))
+
+  try {
+    await setup.data.session.message.sync("ses_refresh")
+    const updated: OpenCodeEvent = {
+      id: "evt_message_updated",
+      created: 3,
+      type: "session.message.content.updated",
+      durable: { aggregateID: "ses_refresh", seq: 3, version: 1 },
+      data: {
+        sessionID: "ses_refresh",
+        messageID: "msg_assistant",
+        content: [
+          { type: "text", text: "replacement" },
+          { type: "reasoning", text: "reasoning", time: { created: 3 } },
+        ],
+      },
+    }
+    listeners.forEach((listener) => listener({ name: updated.type, details: updated }))
+
+    expect(setup.data.session.message.list("ses_refresh")[0]).toMatchObject({ content: updated.data.content })
+  } finally {
+    setup.dispose()
+  }
+})
+
 async function wait(check: () => boolean) {
   const started = Date.now()
   while (!check()) {

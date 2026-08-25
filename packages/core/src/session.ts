@@ -139,6 +139,11 @@ export class CompactionConflictError extends Schema.TaggedError<CompactionConfli
 export class BusyError extends Schema.TaggedError<BusyError>()("Session.BusyError", {
   sessionID: SessionSchema.ID,
 }) {}
+export class MessageUpdateError extends Schema.TaggedError<MessageUpdateError>()("Session.MessageUpdateError", {
+  sessionID: SessionSchema.ID,
+  messageID: SessionMessage.ID,
+  reason: Schema.Literals(["not_assistant", "incomplete"]),
+}) {}
 export class InboxConflictError extends Schema.TaggedError<InboxConflictError>()("Session.InboxConflictError", {
   sessionID: SessionSchema.ID,
   inboxID: SessionMessage.ID,
@@ -193,6 +198,11 @@ export interface Interface {
     sessionID: SessionSchema.ID
     messageID: SessionMessage.ID
   }) => Effect.Effect<SessionMessage.Info | undefined>
+  readonly updateMessage: (input: {
+    readonly sessionID: SessionSchema.ID
+    readonly messageID: SessionMessage.ID
+    readonly content: readonly SessionMessage.AssistantContent[]
+  }) => Effect.Effect<SessionMessage.Assistant, NotFoundError | MessageNotFoundError | BusyError | MessageUpdateError>
   readonly context: (
     sessionID: SessionSchema.ID,
   ) => Effect.Effect<SessionMessage.Info[], NotFoundError | MessageDecodeError>
@@ -559,6 +569,33 @@ const layer = Layer.effect(
       message: Effect.fn("Session.message")(function* (input) {
         const stored = yield* store.message(input.messageID)
         return stored?.sessionID === input.sessionID ? stored.message : undefined
+      }),
+      updateMessage: Effect.fn("Session.updateMessage")(function* (input) {
+        yield* result.get(input.sessionID)
+        const message = yield* result.message(input)
+        if (!message) return yield* new MessageNotFoundError({ sessionID: input.sessionID, messageID: input.messageID })
+        if (message.type !== "assistant")
+          return yield* new MessageUpdateError({
+            sessionID: input.sessionID,
+            messageID: input.messageID,
+            reason: "not_assistant",
+          })
+        if ((yield* execution.active).has(input.sessionID)) return yield* new BusyError({ sessionID: input.sessionID })
+        if (!message.time.completed)
+          return yield* new MessageUpdateError({
+            sessionID: input.sessionID,
+            messageID: input.messageID,
+            reason: "incomplete",
+          })
+        yield* bus.publish(SessionEvent.MessageContentUpdated, {
+          sessionID: input.sessionID,
+          messageID: input.messageID,
+          content: Schema.encodeSync(Schema.Array(SessionMessage.AssistantContent))(input.content),
+        })
+        const updated = yield* result.message(input)
+        if (updated?.type !== "assistant")
+          return yield* new MessageNotFoundError({ sessionID: input.sessionID, messageID: input.messageID })
+        return updated
       }),
       context: Effect.fn("Session.context")(function* (sessionID) {
         yield* result.get(sessionID)

@@ -711,6 +711,20 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
       ),
     )
     .add(
+      HttpApiEndpoint.patch("session.messageUpdate", "/api/session/:sessionID/message/:messageID", {
+        params: { sessionID: Session.ID, messageID: SessionMessage.ID },
+        payload: Schema.Struct({ content: Schema.Array(SessionMessage.AssistantContent) }),
+        success: Schema.Struct({ data: SessionMessage.Assistant }),
+        error: [SessionNotFoundError, MessageNotFoundError, InvalidRequestError, SessionBusyError, ConflictError],
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.session.messageUpdate",
+          summary: "Update assistant message content",
+          description: "Replace the content of a completed assistant message in an idle session.",
+        }),
+      ),
+    )
+    .add(
       HttpApiEndpoint.put("session.environment", "/api/session/:sessionID/environment", {
         params: { sessionID: Session.ID },
         payload: Schema.Struct({ variables: Schema.Record(Schema.String, Schema.String) }),
