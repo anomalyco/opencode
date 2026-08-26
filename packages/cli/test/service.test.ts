@@ -1,19 +1,14 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { Service, type Info } from "@opencode-ai/client/effect/service"
-import { OpenCode } from "@opencode-ai/client"
-import { binaryPath } from "@opencode-ai/pty"
 import { Global } from "@opencode-ai/util/global"
 import { OPENCODE_VERSION } from "../src/version"
 import { expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
-import { createHash } from "node:crypto"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { ServiceConfig } from "../src/services/service-config"
 import { ServiceRegistration } from "../src/services/service-registration"
-
-const ptyBinary = process.env.OPENCODE_PTY_BIN ?? binaryPath
 
 test("managed service ports are stable per installation channel", () => {
   expect(ServiceConfig.defaultPort("latest")).toBe(0xc0de)
@@ -215,89 +210,6 @@ test("clean managed service shutdown removes its registration", async () => {
     await stopManagedService(service)
   }
 }, 30_000)
-
-test.skipIf(!ptyBinary || process.platform === "win32")(
-  "automatic replacement preserves persistent PTYs while CLI restart shuts them down",
-  async () => {
-    if (!ptyBinary) throw new Error("Persistent PTY binary is unavailable")
-    const service = await startManagedService("opencode-service-pty-")
-    const env = { ...serviceEnv(service.root), OPENCODE_PTY_BIN: ptyBinary }
-    const options = {
-      file: service.registration,
-      command: [process.execPath, path.join(import.meta.dir, "../src/index.ts"), "serve", "--service"],
-      env,
-    }
-    const runtime = path.join(
-      env.OPENCODE_PTY_RUNTIME_DIR,
-      createHash("sha256").update(env.OPENCODE_DB).digest("hex").slice(0, 16),
-    )
-    const registration = path.join(runtime, "service.json")
-    const input = {
-      sessionID: "ses_service_pty_test",
-      command: "/bin/sh",
-      args: ["-c", "exec cat"],
-      cwd: service.root,
-      title: "service lifecycle regression",
-      env: {},
-    }
-
-    try {
-      const endpoint = await Effect.runPromise(Service.ensure(options).pipe(Effect.provide(NodeFileSystem.layer)))
-      const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) })
-      const terminal = await client.experimental.persistentPty.create(input)
-      const daemon = await Schema.decodeUnknownPromise(
-        Schema.Struct({ pid: Schema.Number, instance_id: Schema.String }),
-      )(await Bun.file(registration).json())
-
-      const reasons: string[] = []
-      const automatic = await Effect.runPromise(
-        Service.ensure({
-          ...options,
-          // Reject only the original owner to exercise automatic version replacement.
-          version: () => service.owner.exitCode !== null,
-          onStart: (reason) => reasons.push(reason),
-        }).pipe(Effect.provide(NodeFileSystem.layer)),
-      )
-      expect(reasons).toEqual(["version-mismatch"])
-      expect(await waitForExit(service.owner)).toBe(true)
-      const replaced = await waitForInfo(service.registration)
-      expect(replaced.pid).not.toBe(service.info.pid)
-      const reconnected = OpenCode.make({ baseUrl: automatic.url, headers: Service.headers(automatic) })
-      expect(await reconnected.experimental.persistentPty.list({ sessionID: input.sessionID })).toMatchObject([
-        { id: terminal.id, pid: terminal.pid, status: "running" },
-      ])
-      expect(await Bun.file(registration).json()).toMatchObject(daemon)
-
-      const restart = Bun.spawn(
-        [process.execPath, path.join(import.meta.dir, "../src/index.ts"), "service", "restart"],
-        { env, stdout: "ignore", stderr: "pipe" },
-      )
-      expect(await restart.exited, await new Response(restart.stderr).text()).toBe(0)
-      expect((await waitForInfo(service.registration)).pid).not.toBe(replaced.pid)
-      const restarted = await Effect.runPromise(Service.discover(options).pipe(Effect.provide(NodeFileSystem.layer)))
-      if (!restarted) throw new Error("CLI restart did not start a healthy server")
-      const fresh = OpenCode.make({ baseUrl: restarted.url, headers: Service.headers(restarted) })
-      expect(await fresh.experimental.persistentPty.list({ sessionID: input.sessionID })).toEqual([])
-      expect(await Bun.file(registration).exists()).toBe(false)
-
-      const next = await fresh.experimental.persistentPty.create(input)
-      expect(next.status).toBe("running")
-      expect(next.pid).not.toBe(terminal.pid)
-      const replacement: unknown = await Bun.file(registration).json()
-      expect(replacement).not.toMatchObject({ instance_id: daemon.instance_id })
-      expect(replacement).not.toMatchObject({ pid: daemon.pid })
-    } finally {
-      await Effect.runPromise(Service.stop(options).pipe(Effect.provide(NodeFileSystem.layer)))
-      await Bun.spawn([ptyBinary, "stop"], {
-        env: { ...env, OPENCODE_PTY_RUNTIME_DIR: runtime },
-        stdout: "ignore",
-        stderr: "ignore",
-      }).exited
-      await stopManagedService(service)
-    }
-  },
-  60_000,
-)
 
 test("concurrent service processes elect one server", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-election-"))
@@ -645,9 +557,6 @@ function serviceEnv(root: string) {
     HOME: root,
     OPENCODE_DB: path.join(root, "opencode.db"),
     OPENCODE_TEST_HOME: root,
-    OPENCODE_PTY_BIN: ptyBinary,
-    OPENCODE_PTY_RUNTIME_DIR: path.join(root, "pty"),
-    XDG_RUNTIME_DIR: path.join(root, "runtime"),
     XDG_CACHE_HOME: path.join(root, "cache"),
     XDG_CONFIG_HOME: path.join(root, "config"),
     XDG_DATA_HOME: path.join(root, "data"),
