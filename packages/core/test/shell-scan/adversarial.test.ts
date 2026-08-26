@@ -56,6 +56,7 @@ describe("ShellScan adversarial corpus", () => {
     ["Invoke-Expression 'Remove-Item victim.txt'", ["Invoke-Expression"]],
     [". ./deploy.ps1", ["./deploy.ps1"]],
     ["& git status", ["git"]],
+    ["Set-Location $HOME/$target; Get-ChildItem", ["Set-Location", "Get-ChildItem"]],
     ["Get-ChildItem | ForEach-Object { Remove-Item $_ }", ["Get-ChildItem", "ForEach-Object", "Remove-Item"]],
   ] as const)("scans visible PowerShell command positions: %s", (input, names) => {
     const result = ShellScan.scanPowerShell(input)
@@ -68,7 +69,6 @@ describe("ShellScan adversarial corpus", () => {
     "$Command status",
     "& $Command status",
     'Write-Output "$(Get-ChildItem)"',
-    "Set-Location $HOME/$target; Get-ChildItem",
     "Remove-`Item victim",
     "Remove-Item`\r\n victim",
     "Invoke-`\nExpression 'Remove-Item victim'",

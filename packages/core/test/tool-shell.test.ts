@@ -3,7 +3,7 @@ import { realpathSync } from "node:fs"
 import os from "os"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Deferred, Duration, Effect, Fiber, Layer, Scope, Stream } from "effect"
+import { Deferred, Duration, Effect, Fiber, Layer, Schema, Scope, Stream } from "effect"
 import { Money } from "@opencode-ai/schema/money"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
@@ -158,6 +158,13 @@ const replacements = [
 ] satisfies LayerNode.Replacements
 const productionIt = testEffect(AppNodeBuilder.build(nodes, replacements))
 const it = testEffect(AppNodeBuilder.build(nodes, [...replacements, [PluginSupervisor.node, shellPluginSupervisor]]))
+const authorizedIt = testEffect(
+  AppNodeBuilder.build(nodes, [
+    [SessionExecution.node, executionNode],
+    [Global.node, tempGlobalLayer],
+    [PluginSupervisor.node, shellPluginSupervisor],
+  ]),
+)
 
 const call = (input: typeof ShellTool.Input.Type, id = "call-shell") => ({
   sessionID,
@@ -213,6 +220,116 @@ const withSession = <A, E, R>(directory: string, body: (registry: Tool.Interface
   })
 
 describe("ShellTool", () => {
+  authorizedIt.live("opaque commands cannot execute through a configured prefix grant", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.gen(function* () {
+          if (isWindows) return
+          yield* Effect.promise(() =>
+            Bun.write(
+              path.join(tmp.path, "opencode.json"),
+              JSON.stringify({ experimental: { portable_shell_scanner: true } }),
+            ),
+          )
+          yield* withSession(tmp.path, (registry) =>
+            Effect.gen(function* () {
+              const agents = yield* Agent.Service
+              yield* agents.transform((draft) =>
+                draft.update(toolIdentity.agent, (agent) => {
+                  agent.permissions = [
+                    { action: "external_directory", resource: "*", effect: "allow" },
+                    { action: "shell", resource: "printf *", effect: "allow" },
+                  ]
+                }),
+              )
+              const permission = yield* Permission.Service
+              const bus = yield* Bus.Service
+              const asked = yield* Deferred.make<Permission.Request, Error>()
+              const unsubscribe = yield* bus.listen((event) =>
+                event.type === Permission.Event.Asked.type
+                  ? Deferred.succeed(
+                      asked,
+                      Schema.decodeUnknownSync(Schema.toType(Permission.Request))(event.data),
+                    ).pipe(Effect.asVoid)
+                  : Effect.void,
+              )
+              yield* Effect.addFinalizer(() => unsubscribe)
+              const command = "printf '%s' $((1)) > marker"
+              const execution = yield* executeTool(registry, call({ command }, "call-opaque-confirmation")).pipe(
+                Effect.tap((result) =>
+                  Deferred.fail(asked, new Error(`Tool settled before confirmation: ${JSON.stringify(result)}`)),
+                ),
+                Effect.forkScoped,
+              )
+              const request = yield* Deferred.await(asked).pipe(Effect.timeout("5 seconds"))
+              expect(request).toMatchObject({ action: "shell", resources: [command], save: [] })
+              expect(yield* Effect.promise(() => Bun.file(path.join(tmp.path, "marker")).exists())).toBe(false)
+              yield* permission.reply({ requestID: request.id, reply: "once" })
+              expect((yield* Fiber.join(execution)).status).toBe("completed")
+              expect(yield* Effect.promise(() => Bun.file(path.join(tmp.path, "marker")).text())).toBe("1")
+            }),
+          )
+        }),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+    ),
+  )
+
+  authorizedIt.live("preserves directory denies and redirect resources before spawning", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.gen(function* () {
+          if (isWindows) return
+          yield* Effect.promise(() =>
+            Bun.write(
+              path.join(tmp.path, "opencode.json"),
+              JSON.stringify({ experimental: { portable_shell_scanner: true } }),
+            ),
+          )
+          yield* withSession(tmp.path, (registry) =>
+            Effect.gen(function* () {
+              const agents = yield* Agent.Service
+              yield* agents.transform((draft) =>
+                draft.update(toolIdentity.agent, (agent) => {
+                  agent.permissions = [
+                    { action: "shell", resource: "*", effect: "allow" },
+                    { action: "external_directory", resource: "*", effect: "allow" },
+                    { action: "external_directory", resource: "/etc/*", effect: "deny" },
+                    { action: "external_directory", resource: "/tmp/*", effect: "ask" },
+                  ]
+                }),
+              )
+              const opaque = yield* executeTool(
+                registry,
+                call({ command: "printf '%s' $((1)) > marker" }, "call-unknown-directory"),
+              )
+              expect(opaque.status).toBe("error")
+              expect(yield* Effect.promise(() => Bun.file(path.join(tmp.path, "marker")).exists())).toBe(false)
+
+              yield* agents.transform((draft) =>
+                draft.update(toolIdentity.agent, (agent) => {
+                  agent.permissions = [
+                    { action: "external_directory", resource: "*", effect: "allow" },
+                    { action: "shell", resource: "true", effect: "allow" },
+                    { action: "shell", resource: "printf ok", effect: "allow" },
+                    { action: "shell", resource: "*marker*", effect: "deny" },
+                  ]
+                }),
+              )
+              const redirected = yield* executeTool(
+                registry,
+                call({ command: "true && printf ok > marker" }, "call-denied-redirect"),
+              )
+              expect(redirected.status).toBe("error")
+              expect(yield* Effect.promise(() => Bun.file(path.join(tmp.path, "marker")).exists())).toBe(false)
+            }),
+          )
+        }),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+    ),
+  )
+
   productionIt.live(
     "registers and returns real successful output from the active Location",
     () =>

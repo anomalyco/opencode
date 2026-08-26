@@ -4,16 +4,18 @@ import { ShellParse } from "../src/shell/parse.js"
 import { ShellScan } from "../src/shell/scan.js"
 
 describe("ShellParse portable parity", () => {
-  test("matches tree-sitter for generated supported syntax", async () => {
+  test("retains every scanner resource and only safe leading decoded tokens across generated syntax", async () => {
     for (const [shell, command] of generated()) {
       const scanned = shell === "pwsh" ? ShellScan.scanPowerShell(command) : ShellScan.scan(command)
-      const portable = await Effect.runPromise(ShellParse.scan(command, shell, "/workspace", { portable: true }))
+      const portable = await Effect.runPromise(
+        ShellParse.scan(command, shell, "/workspace", { portable: true, env: {} }),
+      )
 
       if (portable.analysis === "opaque") {
         expect({ command, portable }).toEqual({
           command,
           portable: {
-            commands: [{ resource: command, save: command }],
+            commands: [{ resource: command }],
             directories: [],
             analysis: "opaque",
             directoryUnknown: true,
@@ -23,22 +25,18 @@ describe("ShellParse portable parity", () => {
       }
       if (scanned.kind === "opaque") throw new Error(`Portable parse unexpectedly completed opaque input: ${command}`)
 
-      const legacy = await Effect.runPromise(ShellParse.scan(command, shell, "/workspace"))
-      if (shell === "pwsh" && /\r(?!\n)/.test(command)) {
-        expect(
-          portable.commands.length + portable.directories.length + Number(portable.directoryUnknown),
-          command,
-        ).toBeGreaterThan(0)
-        continue
-      }
-      expect({
+      // Legacy tree-sitter omitted cd and some redirected/PowerShell commands.
+      // Its resource subset is not the safety contract for the portable adapter.
+      expect(
+        portable.commands.map((item) => item.resource),
         command,
-        commandsCovered: portable.commands.every((item) =>
-          legacy.commands.some((candidate) => candidate.resource === item.resource),
-        ),
-      }).toEqual({ command, commandsCovered: true })
-      if (portable.commands.length !== legacy.commands.length)
-        expect(portable.directories.length + Number(portable.directoryUnknown), command).toBeGreaterThan(0)
+      ).toEqual(scanned.commands.map((item) => item.resource))
+      for (const [index, item] of portable.commands.entries()) {
+        if (item.save === undefined) continue
+        expect(item.save, command).toMatch(/^[A-Za-z0-9_./:@%+=,-]+(?: [A-Za-z0-9_./:@%+=,-]+)* \*$/)
+        const tokens = item.save.slice(0, -2).split(" ")
+        expect(scanned.commands[index].words.slice(0, tokens.length), command).toEqual(tokens)
+      }
     }
   })
 })

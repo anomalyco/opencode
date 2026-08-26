@@ -176,14 +176,18 @@ describe("ShellScan generated PowerShell properties", () => {
     }
   })
 
-  test("fails closed for dynamic location changes but accepts known directory variables", () => {
+  test("distinguishes unsupported expressions from directory variables left to policy", () => {
     const locations = ["Set-Location", "cd", "chdir", "sl", "Push-Location"]
-    const dynamic = ["$target", "$(Resolve-Path ..)", "(Resolve-Path ..)"]
-    const known = ["$PWD/project", "$HOME/project", "$PSHOME/Modules", "$env:TEMP/project"]
+    const expressions = ["$(Resolve-Path ..)", "(Resolve-Path ..)"]
+    const variables = ["$target", "$PWD/project", "$HOME/project", "$PSHOME/Modules", "$env:TEMP/project"]
 
     for (const location of locations) {
-      for (const target of dynamic) expect(ShellScan.scanPowerShell(`${location} ${target}`).kind).toBe("opaque")
-      for (const target of known) expect(ShellScan.scanPowerShell(`${location} ${target}`).kind).toBe("scanned")
+      for (const target of expressions) expect(ShellScan.scanPowerShell(`${location} ${target}`).kind).toBe("opaque")
+      for (const target of variables)
+        expect(ShellScan.scanPowerShell(`${location} ${target}`)).toEqual({
+          kind: "scanned",
+          commands: [{ resource: `${location} ${target}`, words: [location, target] }],
+        })
     }
   })
 })

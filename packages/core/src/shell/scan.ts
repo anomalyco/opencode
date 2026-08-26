@@ -4,7 +4,6 @@ export type OpaqueReason =
   | "command-substitution"
   | "compound-command"
   | "dynamic-command-name"
-  | "dynamic-directory"
   | "dynamic-execution"
   | "heredoc"
   | "invalid-redirect"
@@ -35,18 +34,8 @@ const BASH_COMPOUND_KEYWORDS = new Set([
   "coproc",
   "time",
 ])
-const POWERSHELL_LOCATIONS = new Set([
-  "set-location",
-  "cd",
-  "chdir",
-  "sl",
-  "push-location",
-  "pushd",
-  "pop-location",
-  "popd",
-])
 const BASH_REDIRECTS = ["&>>", "&>", "<<<", "<<-", "<<", "<>", "<&", ">&", ">|", ">>", ">", "<"]
-const MAX_BASH_INPUT_LENGTH = 64 * 1024
+const MAX_INPUT_LENGTH = 64 * 1024
 const MAX_SUBSTITUTION_DEPTH = 32
 
 export function scan(input: string): Result {
@@ -54,35 +43,32 @@ export function scan(input: string): Result {
 }
 
 function scanBash(input: string, depth: number): Result {
-  if (input.length > MAX_BASH_INPUT_LENGTH) return { kind: "opaque", reason: "invalid-structure" }
+  if (input.length > MAX_INPUT_LENGTH) return { kind: "opaque", reason: "invalid-structure" }
   const group = bashLeadingGroup(input)
   if (group) {
     if (depth >= MAX_SUBSTITUTION_DEPTH) return { kind: "opaque", reason: "invalid-structure" }
     const nested = scanBash(group.source, depth + 1)
     if (nested.kind === "opaque") return nested
-    const suffix = input.slice(group.end + 1).trim()
+    const suffix = input.slice(group.end + 1).replace(/^[ \t\n]+|[ \t\n]+$/g, "")
     if (!suffix) return nested
     const separator = /^(?:&&|\|\||\|&|[;&|])/.exec(suffix)?.[0]
-    const remaining = separator ? suffix.slice(separator.length).trim() : suffix
-    if (separator && !remaining) return nested
-    if (!separator && /^[<>]/.test(remaining)) return { kind: "opaque", reason: "invalid-structure" }
-    const prefixed = separator ? remaining : undefined
-    if (!prefixed) return { kind: "opaque", reason: "compound-command" }
-    const rest = scanBash(prefixed, depth + 1)
+    const remaining = separator ? suffix.slice(separator.length).replace(/^[ \t\n]+|[ \t\n]+$/g, "") : suffix
+    if (separator && !remaining)
+      return separator === ";" || separator === "&" ? nested : { kind: "opaque", reason: "invalid-structure" }
+    if (!separator) return { kind: "opaque", reason: "compound-command" }
+    const rest = scanBash(remaining, depth + 1)
     if (rest.kind === "opaque") return rest
     return {
       kind: "scanned",
-      commands: nested.commands.concat(rest.commands.filter((command) => command.words[0] !== ":")),
+      commands: nested.commands.concat(rest.commands),
     }
   }
   const commands: Array<{ resource: string; words: string[] }> = []
   const nestedCommands: Array<{ resource: string; words: string[] }> = []
   const words: string[] = []
   const assignmentWords: boolean[] = []
-  const quotedWords: boolean[] = []
   let word = ""
   let wordStarted = false
-  let wordQuoted = false
   let assignmentWord = false
   let assignmentHeadUnsafe = false
   let segment = 0
@@ -96,28 +82,25 @@ function scanBash(input: string, depth: number): Result {
   let redirectTarget = false
   let hasRedirect = false
   let terminalBackground = false
-  let parameterExpansion = 0
 
   const finishWord = () => {
     if (!wordStarted) return
     if (!redirectTarget) {
       words.push(word)
       assignmentWords.push(assignmentWord)
-      quotedWords.push(wordQuoted)
     }
     redirectTarget = false
     word = ""
     wordStarted = false
-    wordQuoted = false
     assignmentWord = false
     assignmentHeadUnsafe = false
   }
   const finishCommand = (end: number, boundary = false) => {
     finishWord()
-    const resource = input.slice(segment, end).trim()
+    const resource = input.slice(segment, end).replace(/^[ \t\n]+|[ \t\n]+$/g, "")
     const name = assignmentWords.findIndex((assignment) => !assignment)
-    if (name >= 0 && /[*?[]/.test(words[name])) compound = true
-    if (name >= 0 && quotedWords[name] && BASH_COMPOUND_KEYWORDS.has(words[name] ?? "")) invalidStructure = true
+    if (name >= 0 && !words[name]) invalidStructure = true
+    if (name >= 0 && /[*?[{}]/.test(words[name])) compound = true
     if (resource && name >= 0)
       commands.push({
         resource,
@@ -130,7 +113,6 @@ function scanBash(input: string, depth: number): Result {
     commands.push(...nestedCommands.splice(0))
     words.length = 0
     assignmentWords.length = 0
-    quotedWords.length = 0
     separated = true
     hasRedirect = false
   }
@@ -152,8 +134,6 @@ function scanBash(input: string, depth: number): Result {
           index++
           if (next !== "\n") word += next
         } else word += char
-      } else if (char === "$" && input[index + 1] === "{" && bashParameterUnsafe(input, index)) {
-        return { kind: "opaque", reason: "dynamic-execution" }
       } else if ((char === "$" && input[index + 1] === "(") || char === "`") {
         const substitution = bashSubstitution(input, index)
         if (!substitution || depth >= MAX_SUBSTITUTION_DEPTH) return { kind: "opaque", reason: "command-substitution" }
@@ -163,9 +143,12 @@ function scanBash(input: string, depth: number): Result {
         word += input.slice(index, substitution.end + 1)
         index = substitution.end
       } else {
-        if (char === "$" && /^\$\{[^}:@]+@P\}/.test(input.slice(index)))
-          return { kind: "opaque", reason: "dynamic-execution" }
-        if (char === "$" && /^\$\{\([^)]*e[^)]*\)/.test(input.slice(index)))
+        if (
+          char === "$" &&
+          (input[index + 1] === "[" ||
+            (input[index + 1] === "{" &&
+              !/^\$\{(?:[A-Za-z_][A-Za-z0-9_]*|[0-9]+|[@*#?$!-])\}/.test(input.slice(index))))
+        )
           return { kind: "opaque", reason: "dynamic-execution" }
         word += char
       }
@@ -174,23 +157,20 @@ function scanBash(input: string, depth: number): Result {
     if (char === "'") {
       quote = "single"
       wordStarted = true
-      wordQuoted = true
       if (!assignmentWord) assignmentHeadUnsafe = true
       continue
     }
     if (char === '"') {
       quote = "double"
       wordStarted = true
-      wordQuoted = true
       if (!assignmentWord) assignmentHeadUnsafe = true
       continue
     }
     if (char === "\\") {
       if (index + 1 >= input.length) return { kind: "opaque", reason: "unterminated-escape" }
-      wordStarted = true
       if (input[index + 1] === "\n") index++
       else {
-        wordQuoted = true
+        wordStarted = true
         if (!assignmentWord) assignmentHeadUnsafe = true
         word += input[++index]
       }
@@ -207,8 +187,6 @@ function scanBash(input: string, depth: number): Result {
       index = substitution.end
       continue
     }
-    if (char === "$" && input[index + 1] === "{" && bashParameterUnsafe(input, index))
-      return { kind: "opaque", reason: "dynamic-execution" }
     if ((char === "<" || char === ">") && input[index + 1] === "(") {
       const substitution = bashParenthesized(input, index + 1)
       if (!substitution || depth >= MAX_SUBSTITUTION_DEPTH) return { kind: "opaque", reason: "command-substitution" }
@@ -220,16 +198,18 @@ function scanBash(input: string, depth: number): Result {
       index = substitution.end
       continue
     }
-    if (char === "$" && input[index + 1] === "{" && /^\$\{[^}:@]+@P\}/.test(input.slice(index)))
+    // Parameter operators and subscripts have their own quoting and arithmetic evaluation rules.
+    if (
+      char === "$" &&
+      ("['\"".includes(input[index + 1] ?? "\0") ||
+        (input[index + 1] === "{" && !/^\$\{(?:[A-Za-z_][A-Za-z0-9_]*|[0-9]+|[@*#?$!-])\}/.test(input.slice(index))))
+    )
       return { kind: "opaque", reason: "dynamic-execution" }
-    if (char === "$" && /^\$\{\([^)]*e[^)]*\)/.test(input.slice(index)))
-      return { kind: "opaque", reason: "dynamic-execution" }
-    if (char === "$" && input[index + 1] === "[") return { kind: "opaque", reason: "dynamic-execution" }
     if (char === "<" && input[index + 1] === "<") heredoc = true
     if (char === "#" && !wordStarted) {
-      finishCommand(index)
-      comment = index
       const newline = input.indexOf("\n", index)
+      finishCommand(index, newline !== -1 && words.length > 0)
+      comment = index
       if (newline === -1) break
       index = newline
       segment = newline + 1
@@ -241,7 +221,7 @@ function scanBash(input: string, depth: number): Result {
     if (redirect) {
       hasRedirect = true
       if (redirectTarget) invalidRedirect = true
-      if (wordStarted && /^\d+$/.test(word)) {
+      if (wordStarted && !assignmentHeadUnsafe && /^\d+$/.test(word)) {
         word = ""
         wordStarted = false
       } else finishWord()
@@ -249,13 +229,9 @@ function scanBash(input: string, depth: number): Result {
       index += redirect.length - 1
       continue
     }
-    const emptyBrace = (char === "{" && input[index + 1] === "}") || (char === "}" && input[index - 1] === "{")
-    if (!emptyBrace) {
-      if (char === "{" && input[index - 1] === "$") parameterExpansion++
-      else if (char === "}" && parameterExpansion > 0) parameterExpansion--
-      else if ("(){}".includes(char) || (char === "!" && !wordStarted)) compound = true
-    }
-    if (/\s/.test(char) && char !== "\n") {
+    if ("()".includes(char) || (char === "!" && !wordStarted)) compound = true
+    if (/\s/.test(char) && !" \t\n".includes(char)) return { kind: "opaque", reason: "invalid-structure" }
+    if (char === " " || char === "\t") {
       finishWord()
       continue
     }
@@ -282,12 +258,16 @@ function scanBash(input: string, depth: number): Result {
 
   if (quote) return { kind: "opaque", reason: "unterminated-quote" }
   if (heredoc) return { kind: "opaque", reason: "heredoc" }
-  if (!terminalBackground && (comment === undefined || input.includes("\n", comment))) finishCommand(input.length)
+  if (
+    (!terminalBackground || wordStarted || words.length > 0 || hasRedirect) &&
+    (comment === undefined || input.includes("\n", comment))
+  )
+    finishCommand(input.length)
   if (redirectTarget) invalidRedirect = true
   if (separated && !terminalBackground && comment === undefined && !input.slice(segment).trim()) invalidStructure = true
   if (invalidStructure) return { kind: "opaque", reason: "invalid-structure" }
   if (invalidRedirect) return { kind: "opaque", reason: "invalid-redirect" }
-  const conditional = bashConditionalCommands(commands)
+  const conditional = bashConditionalCommands(commands, depth)
   if (conditional) commands.splice(0, commands.length, ...conditional)
   if (compound || commands.some((command) => BASH_COMPOUND_KEYWORDS.has(command.words[0] ?? "")))
     return { kind: "opaque", reason: "compound-command" }
@@ -298,7 +278,9 @@ function scanBash(input: string, depth: number): Result {
   return { kind: "scanned", commands }
 }
 
-function bashConditionalCommands(commands: Array<{ resource: string; words: string[] }>) {
+function bashConditionalCommands(input: Command[], depth: number) {
+  if (depth >= MAX_SUBSTITUTION_DEPTH) return
+  const commands = input.filter((command) => !command[Nested])
   if (commands[0]?.words[0] !== "if" || commands.at(-1)?.words[0] !== "fi") return
   const keywords = new Set(["if", "then", "elif", "else", "fi"])
   if (
@@ -312,20 +294,22 @@ function bashConditionalCommands(commands: Array<{ resource: string; words: stri
   for (const [index, command] of commands.entries()) {
     const keyword = command.words[0]
     if (!keywords.has(keyword ?? "")) {
-      normalized.push(command)
+      const result = scanBash(command.resource, depth + 1)
+      if (result.kind === "opaque") return
+      normalized.push(...result.commands)
       hasCommand = true
       continue
     }
-    const offset = command.resource.indexOf(keyword!) + keyword!.length
-    const trailing = command.resource.slice(offset).trim()
-    const inline =
-      command.words.length > 1 ? { resource: trailing, words: command.words.slice(1) } : undefined
-    if (!inline && trailing) return
+    if (!/^(?:if|then|elif|else|fi)(?:[ \t\n]|$)/.test(command.resource)) return
+    const source = command.resource.slice(keyword!.length).replace(/^[ \t\n]+|[ \t\n]+$/g, "")
+    const inline = source ? scanBash(source, depth + 1) : undefined
+    if (inline?.kind === "opaque") return
     if (index === 0) {
-      if (inline) normalized.push(inline)
+      if (inline) normalized.push(...inline.commands)
       hasCommand = Boolean(inline)
       continue
     }
+    if (keyword === "if") return
     if (keyword === "then") {
       if (phase !== "condition" || !hasCommand) return
       phase = "body"
@@ -346,22 +330,22 @@ function bashConditionalCommands(commands: Array<{ resource: string; words: stri
       if (index !== commands.length - 1 || phase === "condition" || !hasCommand || inline) return
       continue
     }
-    if (inline) normalized.push(inline)
+    if (inline) normalized.push(...inline.commands)
   }
   return normalized
 }
 
 function bashLeadingGroup(input: string) {
-  const start = input.search(/\S/)
+  const start = input.search(/[^ \t\n]/)
   if (start < 0) return
   if (input[start] === "{") {
     const group = bashBraced(input, start)
     if (!group) return
-    const source = group.source.trim()
+    const source = group.source.replace(/^[ \t\n]+|[ \t\n]+$/g, "")
     if (!source.endsWith(";")) return
     return { source: source.slice(0, -1), end: group.end }
   }
-  if (input[start] !== "(") return
+  if (input[start] !== "(" || input[start + 1] === "(") return
   return bashParenthesized(input, start)
 }
 
@@ -378,7 +362,7 @@ function bashBraced(input: string, start: number) {
       index++
       continue
     }
-    if (char === "'") {
+    if (char === "'" && quote !== "double") {
       quote = "single"
       continue
     }
@@ -386,15 +370,22 @@ function bashBraced(input: string, start: number) {
       quote = quote === "double" ? undefined : "double"
       continue
     }
+    if (char === "`" || (char === "$" && input[index + 1] === "(")) {
+      const nested = bashSubstitution(input, index)
+      if (!nested) return
+      index = nested.end
+      continue
+    }
+    if (char === "#" && quote !== "double" && /[ \t\n;&|{}]/.test(input[index - 1] ?? "")) return
     if (char === "{" && quote !== "double") level++
     if (char !== "}" || quote === "double" || --level) continue
     return { source: input.slice(start + 1, index), end: index }
   }
 }
 
-function bashParenthesized(input: string, start: number) {
+function bashParenthesized(input: string, start: number, depth = 0): { source: string; end: number } | undefined {
+  if (depth >= MAX_SUBSTITUTION_DEPTH) return
   let quote: "single" | "double" | undefined
-  let level = 1
   for (let index = start + 1; index < input.length; index++) {
     const char = input[index]
     if (quote === "single") {
@@ -405,7 +396,7 @@ function bashParenthesized(input: string, start: number) {
       index++
       continue
     }
-    if (char === "'") {
+    if (char === "'" && quote !== "double") {
       quote = "single"
       continue
     }
@@ -413,79 +404,36 @@ function bashParenthesized(input: string, start: number) {
       quote = quote === "double" ? undefined : "double"
       continue
     }
-    if (char === "(" && quote !== "double") level++
-    if (char !== ")" || quote === "double" || --level) continue
-    return { source: input.slice(start + 1, index), end: index }
-  }
-}
-
-function bashSubstitution(input: string, start: number) {
-  if (input[start] === "`") {
-    for (let index = start + 1; index < input.length; index++) {
-      if (input[index] === "\\") index++
-      else if (input[index] === "`") return { source: input.slice(start + 1, index).replaceAll("\\`", "`"), end: index }
-    }
-    return
-  }
-  if (input.slice(start, start + 3) === "$((") return
-  let quote: "single" | "double" | undefined
-  let level = 1
-  for (let index = start + 2; index < input.length; index++) {
-    const char = input[index]
-    if (char === "$" && input[index + 1] === "{") return
-    if (quote === "single") {
-      if (char === "'") quote = undefined
-      continue
-    }
-    if (char === "\\") {
-      index++
-      continue
-    }
-    if (char === "'") {
-      quote = "single"
-      continue
-    }
-    if (quote !== "double" && char === "#" && (index === start + 2 || /[\s;&|()]/.test(input[index - 1] ?? ""))) return
-    if (char === '"') {
-      quote = quote === "double" ? undefined : "double"
-      continue
-    }
-    if (char === "`" && quote !== "double") {
-      const nested = bashSubstitution(input, index)
+    if (char === "`" || (char === "$" && input[index + 1] === "(")) {
+      const nested = bashSubstitution(input, index, depth + 1)
       if (!nested) return
       index = nested.end
       continue
     }
-    if (quote === "double") {
-      if (char === "$" && input[index + 1] === "(") {
-        level++
-        index++
-      } else if (char === ")" && level > 1) level--
+    if (quote === "double") continue
+    if (char === "#" && /[ \t\n;&|()]/.test(input[index - 1] ?? "")) return
+    if (char === "(") {
+      const nested = bashParenthesized(input, index, depth + 1)
+      if (!nested) return
+      index = nested.end
       continue
     }
-    if (char === "(") level++
-    if (char !== ")" || --level) continue
-    return { source: input.slice(start + 2, index), end: index }
+    if (char === ")") return { source: input.slice(start + 1, index), end: index }
   }
 }
 
-function bashParameterUnsafe(input: string, start: number) {
-  for (let index = start + 2; index < input.length; index++) {
-    const char = input[index]
-    if (char === "\\") {
-      index++
-      continue
+function bashSubstitution(input: string, start: number, depth = 0): { source: string; end: number } | undefined {
+  if (depth >= MAX_SUBSTITUTION_DEPTH) return
+  if (input[start] === "`") {
+    for (let index = start + 1; index < input.length; index++) {
+      // Legacy substitution removes an escape layer before parsing its body.
+      if (input[index] === "\\") return
+      if (input[index] === "`") return { source: input.slice(start + 1, index), end: index }
     }
-    if (char === "$" && input[index + 1] === "{") return true
-    if (char !== "}") continue
-    const body = input.slice(start + 2, index)
-    if (/^[\s|!]/.test(body) || body.includes("[")) return true
-    const parameter = /^#?(?:[A-Za-z_][A-Za-z0-9_]*|[0-9]+|[-#$?*@])/.exec(body)?.[0]
-    if (!parameter) return true
-    const operator = body.slice(parameter.length)
-    return operator.startsWith(":") && !/^:[-=?+]/.test(operator)
+    return
   }
-  return true
+  if (input.slice(start, start + 3) === "$((") return
+  return bashParenthesized(input, start + 1, depth)
 }
 
 export function scanPowerShell(input: string): Result {
@@ -493,9 +441,10 @@ export function scanPowerShell(input: string): Result {
 }
 
 function scanPowerShellNested(input: string, depth: number): Result {
-  if (input.length > MAX_BASH_INPUT_LENGTH || depth >= MAX_SUBSTITUTION_DEPTH)
+  if (input.length > MAX_INPUT_LENGTH || depth >= MAX_SUBSTITUTION_DEPTH)
     return { kind: "opaque", reason: "invalid-structure" }
-  if (/[‘’“”]/.test(input)) return { kind: "opaque", reason: "invalid-structure" }
+  // PowerShell's Unicode quotes, dashes, and whitespace differ from JavaScript's token rules.
+  if (/[\0\u0085\u2013-\u2015\u2018-\u201e\ufeff]/.test(input)) return { kind: "opaque", reason: "invalid-structure" }
   const commands: Array<{ resource: string; words: string[] }> = []
   const nestedCommands: Array<{ resource: string; words: string[] }> = []
   const words: string[] = []
@@ -503,59 +452,84 @@ function scanPowerShellNested(input: string, depth: number): Result {
   let word = ""
   let started = false
   let quote: "single" | "double" | undefined
+  let standalone = false
   let dynamic = false
   let invalid = false
   let redirectTarget = false
   let comment = false
-  let separated = false
   let dangling = false
+  let invocation = false
 
   const finishWord = () => {
     if (!started) return
-    if (!redirectTarget) words.push(word)
+    // Stop-parsing is recognized by token value, including quoted or escaped spellings.
+    if (word === "--%") dynamic = true
+    if (!redirectTarget) {
+      words.push(word)
+      dangling = false
+    }
     redirectTarget = false
     word = ""
     started = false
   }
-  const finishCommand = (end: number, boundary = false) => {
+  const finishCommand = (end: number, required = false) => {
     finishWord()
     const resource = input.slice(segment, end).trim()
-    if (resource) commands.push({ resource, words: [...words] })
-    else if (boundary && separated) invalid = true
+    if (words.length) commands.push({ resource, words: [...words] })
+    else if (required || resource) invalid = true
+    if (redirectTarget) invalid = true
     commands.push(...nestedCommands.splice(0))
     words.length = 0
-    separated ||= Boolean(resource)
+    redirectTarget = false
+    invocation = false
   }
 
   for (let index = 0; index < input.length; index++) {
     const char = input[index]
-    if (quote) {
+    if (quote === "single") {
       started = true
-      if (quote === "single" && char === "'" && input[index + 1] === "'") {
+      if (char === "'" && input[index + 1] === "'") {
         word += "'"
         index++
-      } else if ((quote === "single" && char === "'") || (quote === "double" && char === '"')) quote = undefined
-      else if (quote === "double" && char === "`" && index + 1 < input.length) word += input[++index]
-      else {
-        if (quote === "double" && char === "$" && input[index + 1] === "(") dynamic = true
-        word += char
-      }
+      } else if (char === "'") {
+        quote = undefined
+        if (standalone) finishWord()
+      } else word += char
+      continue
+    }
+    if (quote === "double") {
+      if (char === '"' && input[index + 1] === '"') {
+        word += '"'
+        index++
+      } else if (char === '"') {
+        quote = undefined
+        if (standalone) finishWord()
+      } else if (char === "`") {
+        if (index + 1 >= input.length) return { kind: "opaque", reason: "unterminated-escape" }
+        if (words.length === 0 || /[0abefnrtuv\r\n]/.test(input[index + 1])) dynamic = true
+        word += input[++index]
+      } else if (char === "$" && input[index + 1] === "(") {
+        return { kind: "opaque", reason: "dynamic-execution" }
+      } else word += char
       continue
     }
     if (char === "'" || char === '"') {
+      if (!started && words.length === 0 && !invocation) return { kind: "opaque", reason: "dynamic-execution" }
       quote = char === "'" ? "single" : "double"
+      standalone = !started
       started = true
       continue
     }
     if (char === "`" && index + 1 < input.length) {
-      if (input[index + 1] === "\r" || input[index + 1] === "\n") return { kind: "opaque", reason: "invalid-structure" }
+      if (/[\s\u0085]/.test(input[index + 1])) return { kind: "opaque", reason: "invalid-structure" }
       if (";&|".includes(input[index + 1])) return { kind: "opaque", reason: "invalid-structure" }
-      if (words.length === 0) dynamic = true
+      if (words.length === 0 || /[0abefnrtuv]/.test(input[index + 1])) dynamic = true
       started = true
       word += input[++index]
       continue
     }
     if (char === "`") return { kind: "opaque", reason: "unterminated-escape" }
+    if (input.startsWith("--%", index)) return { kind: "opaque", reason: "dynamic-execution" }
     if (char === "<" && input[index + 1] === "#") return { kind: "opaque", reason: "dynamic-execution" }
     if (char === "#" && !started) {
       if (/^#requires\b/i.test(input.slice(index))) return { kind: "opaque", reason: "dynamic-execution" }
@@ -566,18 +540,22 @@ function scanPowerShellNested(input: string, depth: number): Result {
       if (newline === -1) break
       comment = false
       index = input[newline] === "\r" && input[newline + 1] === "\n" ? newline + 1 : newline
-      segment = newline + 1
+      segment = index + 1
       continue
     }
+    if (started && char === ">") return { kind: "opaque", reason: "invalid-redirect" }
     const redirect =
-      char === ">" || (!started && (char === "*" || /\d/.test(char))) ? powerShellRedirect(input, index) : undefined
+      !started && (char === ">" || char === "*" || /\d/.test(char)) ? powerShellRedirect(input, index) : undefined
+    if (redirect === false) return { kind: "opaque", reason: "invalid-redirect" }
     if (redirect) {
-      finishWord()
+      if (redirectTarget) return { kind: "opaque", reason: "invalid-redirect" }
+      if (words.length === 0) return { kind: "opaque", reason: "invalid-redirect" }
       redirectTarget = !redirect.includes("&")
       index += redirect.length - 1
       continue
     }
-    if (char === "{" && !started) {
+    if (char === "{") {
+      if (started || (words.length === 0 && !invocation)) return { kind: "opaque", reason: "dynamic-execution" }
       const block = powerShellBlock(input, index)
       if (!block) return { kind: "opaque", reason: "invalid-structure" }
       const result = scanPowerShellNested(block.source, depth + 1)
@@ -586,13 +564,21 @@ function scanPowerShellNested(input: string, depth: number): Result {
       started = true
       word += input.slice(index, block.end + 1)
       index = block.end
+      finishWord()
       continue
     }
     if (char === "}") return { kind: "opaque", reason: "invalid-structure" }
-    if (char === "&" && !started && words.length === 0) continue
-    if (char === "." && !started && words.length === 0 && (/\s/.test(input[index + 1] ?? "") || !input[index + 1]))
+    if (
+      !started &&
+      words.length === 0 &&
+      ((char === "&" && input[index + 1] !== "&") ||
+        (char === "." && (/\s/.test(input[index + 1] ?? "") || !input[index + 1])))
+    ) {
+      if (invocation) return { kind: "opaque", reason: "invalid-structure" }
+      invocation = true
       continue
-    if ("@()".includes(char)) dynamic = true
+    }
+    if ("@()".includes(char)) return { kind: "opaque", reason: "dynamic-execution" }
     if (/\s/.test(char) && char !== "\n" && char !== "\r") {
       finishWord()
       continue
@@ -607,11 +593,10 @@ function scanPowerShellNested(input: string, depth: number): Result {
             ? char
             : undefined
     if (separator) {
-      finishCommand(index, true)
-      if (redirectTarget) invalid = true
+      finishCommand(index, dangling || ![";", "\n", "\r", "\r\n"].includes(separator))
       dangling = ![";", "&", "\n", "\r", "\r\n"].includes(separator)
       index += separator.length - 1
-      segment = separator === "&" ? index : index + 1
+      segment = index + 1
       continue
     }
     started = true
@@ -634,41 +619,65 @@ function scanPowerShellNested(input: string, depth: number): Result {
 
 function powerShellBlock(input: string, start: number) {
   let quote: "single" | "double" | undefined
+  let standalone = false
   let level = 1
+  let started = false
   for (let index = start + 1; index < input.length; index++) {
     const char = input[index]
     if (quote === "single") {
       if (char === "'" && input[index + 1] === "'") index++
-      else if (char === "'") quote = undefined
+      else if (char === "'") {
+        quote = undefined
+        started = !standalone
+      }
+      continue
+    }
+    if (quote === "double") {
+      if (char === "`") index++
+      else if (char === '"' && input[index + 1] === '"') index++
+      else if (char === '"') {
+        quote = undefined
+        started = !standalone
+      } else if (char === "$" && input[index + 1] === "(") return
       continue
     }
     if (char === "`") {
+      if (/[\s\u0085]/.test(input[index + 1] ?? "")) return
+      started = true
       index++
       continue
     }
-    if (char === "#" && quote !== "double") {
-      const newline = input.indexOf("\n", index)
+    if (input.startsWith("--%", index)) return
+    if (char === "<" && input[index + 1] === "#") return
+    if (char === "#" && !started) {
+      const endings = [input.indexOf("\n", index), input.indexOf("\r", index)].filter((ending) => ending >= 0)
+      const newline = endings.length > 0 ? Math.min(...endings) : -1
       if (newline < 0) return
       index = newline
       continue
     }
-    if (char === "<" && input[index + 1] === "#" && quote !== "double") {
-      const end = input.indexOf("#>", index + 2)
-      if (end < 0) return
-      index = end + 1
+    if (char === "'" || char === '"') {
+      quote = char === "'" ? "single" : "double"
+      standalone = !started
+      started = true
       continue
     }
-    if (char === "'") {
-      quote = "single"
+    if (started && char === ">") return
+    const redirect =
+      !started && (char === ">" || char === "*" || /\d/.test(char)) ? powerShellRedirect(input, index) : undefined
+    if (redirect === false) return
+    if (redirect) {
+      index += redirect.length - 1
       continue
     }
-    if (char === '"') {
-      quote = quote === "double" ? undefined : "double"
+    if (char === "@") return
+    if (char === "{") level++
+    if (char === "}" && --level === 0) return { source: input.slice(start + 1, index), end: index }
+    if (/[\s;&|{}]/.test(char)) {
+      started = false
       continue
     }
-    if (char === "{" && quote !== "double") level++
-    if (char !== "}" || quote === "double" || --level) continue
-    return { source: input.slice(start + 1, index), end: index }
+    started = true
   }
 }
 
@@ -679,6 +688,8 @@ function shellCommandName(word: string | undefined) {
 
 function powerShellOpaqueReason(command: Command): OpaqueReason | undefined {
   const head = command.words[0] ?? ""
+  if (/^(?:[,+!\d-]|\.\d)/.test(head)) return "dynamic-execution"
+  if (!head || (head !== "?" && /[*?\[\]]/.test(head))) return "dynamic-command-name"
   if (
     (head.includes("\\") &&
       !/^[A-Za-z]:\\/.test(head) &&
@@ -691,24 +702,39 @@ function powerShellOpaqueReason(command: Command): OpaqueReason | undefined {
   const name = shellCommandName(head)
   if (["import-alias", "ipal", "new-alias", "nal", "sal", "set-alias"].includes(name)) return "dynamic-execution"
   if (command.words.some((word) => /^alias:/i.test(word))) return "dynamic-execution"
+  if (
+    [
+      "begin",
+      "catch",
+      "class",
+      "clean",
+      "configuration",
+      "data",
+      "do",
+      "dynamicparam",
+      "else",
+      "elseif",
+      "end",
+      "enum",
+      "filter",
+      "finally",
+      "for",
+      "function",
+      "if",
+      "in",
+      "param",
+      "process",
+      "switch",
+      "trap",
+      "try",
+      "until",
+      "using",
+      "while",
+    ].includes(name)
+  )
+    return "compound-command"
   if (["return", "throw", "exit", "break", "continue"].includes(name) && command.words.length > 1)
     return "dynamic-execution"
-  if (!POWERSHELL_LOCATIONS.has(name)) return
-  if (
-    command.words.some(
-      (word, index) =>
-        index > 0 &&
-        (word.includes("(") ||
-          (word.includes("$") && !knownPowerShellDirectory(word)) ||
-          (/^[A-Za-z]+:/.test(word) && !/^[A-Za-z]:[\\/]/.test(word))),
-    )
-  )
-    return "dynamic-directory"
-}
-
-function knownPowerShellDirectory(word: string) {
-  const variable = /^(?:\$(?:PWD|HOME|PSHOME)|\$env:[A-Za-z_][A-Za-z0-9_]*|\$\{env:[^}]+\})(?:[\\/]|$)/i.exec(word)
-  return Boolean(variable) && !word.slice(variable?.[0].length).includes("$")
 }
 
 function powerShellRedirect(input: string, index: number) {
@@ -722,7 +748,8 @@ function powerShellRedirect(input: string, index: number) {
     cursor++
     while (/\d/.test(input[cursor] ?? "")) cursor++
   }
-  return input.slice(index, cursor)
+  const redirect = input.slice(index, cursor)
+  return /^(?:(?:[1-6]|\*)?>>?|[2-6*]>&1)$/.test(redirect) ? redirect : false
 }
 
 function markNested(command: Command) {

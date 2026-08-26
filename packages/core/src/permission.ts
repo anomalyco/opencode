@@ -165,12 +165,16 @@ const layer = Layer.effect(
       rules: Permission.Ruleset,
     ) {
       if (input.resourceMode !== "exact") return evaluate(input.action, resource, rules)
+      let ask: Permission.Rule | undefined
       for (let index = rules.length - 1; index >= 0; index--) {
         const rule = rules[index]
         if (!Wildcard.match(input.action, rule.action)) continue
-        if (rule.resource === resource || rule.resource === "*" || rule.effect !== "allow") return rule
+        if (rule.effect === "deny") return rule
+        if (rule.resource === resource || rule.resource === "*") return ask ?? rule
+        // Scoped asks restrict earlier allows but cannot rule out a hidden denied resource.
+        if (rule.effect === "ask") ask ??= rule
       }
-      return { action: input.action, resource: "*", effect: "ask" as const }
+      return ask ?? { action: input.action, resource: "*", effect: "ask" as const }
     }
 
     function denied(input: Pick<AssertInput, "action" | "resources" | "resourceMode">, rules: Permission.Ruleset) {

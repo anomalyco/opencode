@@ -8,13 +8,13 @@ import { shellParserWasm } from "#shell-parser-wasm"
 import { ShellSelect } from "./select.js"
 
 type Part = { type: string; text: string }
-type SourceToken = { raw: string; value: string }
-const CWD = new Set(["cd", "chdir", "popd", "pushd", "sl", "pop-location", "push-location", "set-location"])
+const BASH_CWD = new Set(["cd", "popd", "pushd"])
+const POWERSHELL_CWD = new Set([...BASH_CWD, "chdir", "sl", "pop-location", "push-location", "set-location"])
 const POWERSHELL_PATH_FLAGS = new Set(["-literalpath", "-path"])
-const PORTABLE_BASH_SHELLS = new Set(["bash", "dash", "ksh", "sh"])
+const PORTABLE_BASH_SHELLS = new Set(["bash", "dash", "sh"])
 
 export type Result = {
-  commands: Array<{ resource: string; save: string }>
+  commands: Array<{ resource: string; save?: string }>
   directories: string[]
   analysis: "complete" | "opaque"
   directoryUnknown: boolean
@@ -166,8 +166,7 @@ export const scan = Effect.fnUntraced(function* (
   cwd: string,
   options?: { portable?: boolean; env?: Record<string, string | undefined> },
 ) {
-  if (options?.portable)
-    return yield* Effect.promise(() => scanPortable(command, shell, cwd, options.env ?? process.env))
+  if (options?.portable) return yield* Effect.promise(() => scanPortable(command, shell, options.env ?? process.env))
   return yield* scanLegacy(command, shell, cwd)
 })
 
@@ -188,7 +187,10 @@ const scanLegacy = Effect.fnUntraced(function* (command: string, shell: string, 
             const tokens = command.map((part) => part.text)
             if (tokens.length === 0) return result
             const name = powershell ? tokens[0].toLowerCase() : tokens[0]
-            if (CWD.has(name)) {
+            if (
+              (powershell ? POWERSHELL_CWD : BASH_CWD).has(name) ||
+              (ShellSelect.name(shell) === "zsh" && name === "chdir")
+            ) {
               result.directories.push(...directoryArgs(command, powershell, cwd, shell))
               return result
             }
@@ -206,537 +208,107 @@ const scanLegacy = Effect.fnUntraced(function* (command: string, shell: string, 
   return { ...result, analysis: "complete" as const, directoryUnknown: false }
 })
 
-async function scanPortable(
-  command: string,
-  shell: string,
-  cwd: string,
-  env: Record<string, string | undefined>,
-): Promise<Result> {
+async function scanPortable(command: string, shell: string, env: Record<string, string | undefined>): Promise<Result> {
   const powershell = ShellSelect.ps(shell)
   const shellName = ShellSelect.name(shell)
-  if ((!powershell && !PORTABLE_BASH_SHELLS.has(shellName)) || shellStartupUnknown(shellName, env))
-    return {
-      commands: [{ resource: command, save: command }],
-      directories: [],
-      analysis: "opaque" as const,
-      directoryUnknown: true,
-    }
-
+  const opaque: Result = {
+    commands: [{ resource: command }],
+    directories: [],
+    analysis: "opaque",
+    directoryUnknown: true,
+  }
+  // In particular, zsh loads .zshenv even for noninteractive invocations.
+  if ((!powershell && !PORTABLE_BASH_SHELLS.has(shellName)) || shellStartupUnknown(shellName, env)) return opaque
   const { ShellScan } = await import("./scan.js")
   const result = powershell ? ShellScan.scanPowerShell(command) : ShellScan.scan(command)
-  if (result.kind === "opaque")
-    return {
-      commands: [{ resource: command, save: command }],
-      directories: [],
-      analysis: "opaque" as const,
-      directoryUnknown: true,
-    }
+  if (result.kind === "opaque") return opaque
 
-  const parsed = result.commands.reduce(
-    (output, item) => {
-      const index = item[ShellScan.Nested] ? -1 : command.indexOf(item.resource, output.cursor)
-      const offset = item[ShellScan.Nested]
-        ? command.lastIndexOf(item.resource, output.cursor - 1)
-        : index < 0
-          ? command.indexOf(item.resource)
-          : index
-      if (index >= 0) output.cursor = index + item.resource.length
-      const before = command.slice(0, Math.max(0, offset))
-      const name = powershell ? powerShellCommandName(item.words[0]) : item.words[0]
-      if (!name) return output
-      if (powershell && name === "<") return output
-      if (
-        powershell &&
-        name === "foreach-object" &&
-        item.words.some((word) => word.startsWith("{")) &&
-        !/\|\s*$/.test(before)
-      )
-        return output
-      const tokens = powershell ? powerShellSourceTokens(item.resource) : sourceTokens(item.resource)
-      const location = directoryCommand(item.words, powershell)
-      if (location) {
-        output.opaque ||= /[<>]/.test(item.resource)
-        const directory = portableDirectoryArgs(location.words, tokens, powershell, cwd, shell, env, location.name)
-        output.directories.push(...directory.values)
-        output.directoryUnknown ||= directory.unknown || location.wrapped
-        output.directoryChanges++
-        return output
-      }
-      const save = powershell ? powerShellSourcePrefix(tokens, item.words) : bashSourcePrefix(tokens, item.words)
-      output.commands.push({
-        resource: powershell ? item.resource : bashResource(item.resource, before),
-        save: `${save} *`,
-      })
-      return output
-    },
-    {
-      commands: [] as Array<{ resource: string; save: string }>,
-      directories: [] as string[],
-      directoryUnknown: false,
-      directoryChanges: 0,
-      opaque: false,
-      cursor: 0,
-    },
-  )
-  const changesDirectoryEnvironment =
-    parsed.directoryChanges > 0 && result.commands.some((item) => mutatesDirectoryEnvironment(item.words, powershell))
-  if (parsed.opaque)
-    return {
-      commands: [{ resource: command, save: command }],
-      directories: [],
-      analysis: "opaque" as const,
-      directoryUnknown: true,
-    }
-  return {
-    commands: parsed.commands,
-    directories: parsed.directories,
-    analysis: "complete" as const,
-    directoryUnknown: parsed.directoryUnknown || parsed.directoryChanges > 1 || changesDirectoryEnvironment,
-  }
-}
-
-function bashResource(resource: string, before: string) {
-  if (!/(?:&&|\|\||\|&)\s*$|\|\s*$/.test(before)) return resource
-  const redirect = bashRedirect(resource)
-  return redirect < 0 ? resource : resource.slice(0, redirect).replace(/\d+$/, "").trim()
-}
-
-function bashRedirect(resource: string) {
-  let quote: "single" | "double" | undefined
-  for (let index = 0; index < resource.length; index++) {
-    const char = resource[index]
-    if (quote === "single") {
-      if (char === "'") quote = undefined
-      continue
-    }
-    if (char === "\\") {
-      index++
-      continue
-    }
-    if (char === '"') {
-      quote = quote === "double" ? undefined : "double"
-      continue
-    }
-    if (quote === "double") {
-      if (char === "$" && resource[index + 1] === "(") index = bashParenthesizedEnd(resource, index + 1)
-      else if (char === "`") index = bashBacktickEnd(resource, index)
-      continue
-    }
-    if (char === "'") {
-      quote = "single"
-      continue
-    }
-    if ((char === "$" || char === "<" || char === ">") && resource[index + 1] === "(") {
-      index = bashParenthesizedEnd(resource, index + 1)
-      continue
-    }
-    if (char === "`") {
-      index = bashBacktickEnd(resource, index)
-      continue
-    }
-    if (char === "<" || char === ">" || (char === "&" && resource[index + 1] === ">")) return index
-  }
-  return -1
-}
-
-function bashParenthesizedEnd(resource: string, start: number) {
-  let level = 1
-  let quote: "single" | "double" | undefined
-  for (let index = start + 1; index < resource.length; index++) {
-    const char = resource[index]
-    if (quote === "single") {
-      if (char === "'") quote = undefined
-      continue
-    }
-    if (char === "\\") {
-      index++
-      continue
-    }
-    if (char === '"') {
-      quote = quote === "double" ? undefined : "double"
-      continue
-    }
-    if (quote === "double") continue
-    if (char === "'") {
-      quote = "single"
-      continue
-    }
-    if (char === "(") level++
-    if (char === ")" && --level === 0) return index
-  }
-  return resource.length - 1
-}
-
-function bashBacktickEnd(resource: string, start: number) {
-  for (let index = start + 1; index < resource.length; index++) {
-    if (resource[index] === "\\") index++
-    else if (resource[index] === "`") return index
-  }
-  return resource.length - 1
-}
-
-function portableDirectoryArgs(
-  command: string[],
-  tokens: SourceToken[],
-  powershell: boolean,
-  cwd: string,
-  shell: string,
-  env: Record<string, string | undefined>,
-  name: string,
-) {
-  if (["popd", "pushd", "pop-location", "push-location"].includes(name)) return { values: [], unknown: true }
-  if (!powershell) {
-    const start = tokens.findIndex((token) => token.value === command[0])
-    if (start < 0) return { values: [], unknown: true }
-    const tokensAfterCommand = tokens.slice(start + 1)
-    const endOfOptions = tokensAfterCommand.findIndex((token) => token.value === "--")
-    const args = tokensAfterCommand.filter((token, index) =>
-      endOfOptions >= 0 ? index > endOfOptions : token.raw === "-" || !token.raw.startsWith("-"),
-    )
-    if (args.length === 0) {
-      const home = environment(env, "HOME")
-      if (["cd", "chdir"].includes(name) && home) return { values: [home], unknown: start > 0 }
-      return { values: [], unknown: true }
-    }
-    const values = args.map((token) => directoryArgument(token.value, false, cwd, shell, env))
-    return {
-      values: values.filter((value) => value !== undefined),
-      unknown:
-        start > 0 ||
-        args.length > 1 ||
-        values.some((value) => value === undefined) ||
-        (Boolean(environment(env, "CDPATH")) &&
-          values.some((value) => value !== undefined && !path.isAbsolute(value) && !value.startsWith("~"))),
-    }
-  }
-
-  const start = tokens.findIndex((token) => token.value.toLowerCase() === command[0]?.toLowerCase())
-  if (start < 0) return { values: [], unknown: true }
   const directories: string[] = []
-  let unknown = false
-  let expectsPath = false
-  let argumentsSeen = 0
-  for (const part of tokens.slice(start + 1).map((token) => token.raw)) {
-    if (expectsPath) {
-      const value = directoryArgument(part, true, cwd, shell, env)
-      if (value) directories.push(value)
-      else unknown = true
-      argumentsSeen++
-      expectsPath = false
+  let directoryUnknown = false
+  let directoryChanges = 0
+  for (const item of result.commands) {
+    const location = directoryCommand(item.words, powershell)
+    if (!location) continue
+    directoryChanges++
+    // Later changes may run in another branch, group, or directory stack.
+    if (
+      directoryChanges > 1 ||
+      location.wrapped ||
+      ["popd", "pushd", "pop-location", "push-location"].includes(location.name)
+    ) {
+      directoryUnknown = true
       continue
     }
-    if (part.startsWith("-")) {
-      const separator = part.indexOf(":")
-      if (separator > 0) {
-        const parameter = part.slice(1, separator).toLowerCase()
-        if (["literalpath", "path"].some((name) => name.startsWith(parameter))) {
-          const value = directoryArgument(part.slice(separator + 1), true, cwd, shell, env)
-          if (value) directories.push(value)
-          else unknown = true
-          argumentsSeen++
-          expectsPath = false
-          continue
-        }
-        unknown = true
+    const args = location.words.slice(1)
+    const first = command.trimStart().startsWith(item.resource) && /^cd(?:[ \t]|$)/.test(item.resource)
+    if (!powershell && args.length === 0) {
+      const home = environment(env, "HOME")
+      if (first && home && path.posix.isAbsolute(home)) directories.push(home)
+      else directoryUnknown = true
+      continue
+    }
+    const endOfOptions = !powershell && args[0] === "--"
+    if (!powershell && ["-L", "--"].includes(args[0])) args.shift()
+    if (powershell) {
+      if (POWERSHELL_PATH_FLAGS.has(args[0]?.toLowerCase())) args.shift()
+      else {
+        const parameter = /^-(?:literalpath|path):(.+)$/i.exec(args[0] ?? "")
+        if (parameter) args[0] = parameter[1]
       }
-      expectsPath = POWERSHELL_PATH_FLAGS.has(part.toLowerCase())
+    }
+    const directory = args[0]
+    // Decoded words do not retain quote provenance. Never guess whether a
+    // wildcard, variable, tilde, or provider path is literal or expanded.
+    if (
+      args.length !== 1 ||
+      !directory ||
+      directory === "-" ||
+      directory === "+" ||
+      (!endOfOptions && directory.startsWith("-")) ||
+      /[$`*?{}\[\]()~]/.test(directory) ||
+      (powershell && directory.includes(":") && !/^[A-Za-z]:[\\/]/.test(directory))
+    ) {
+      directoryUnknown = true
       continue
     }
-    const value = directoryArgument(part, true, cwd, shell, env)
-    if (value) directories.push(value)
-    else unknown = true
-    argumentsSeen++
+    // Bare relative Bash operands use CDPATH. Prior source or prefix assignments
+    // can change the lookup environment, including through printf -vHOME.
+    if (!powershell && !/^(?:\/|\.{1,2}(?:\/|$))/.test(directory) && (!first || environment(env, "CDPATH"))) {
+      directoryUnknown = true
+      continue
+    }
+    directories.push(directory)
   }
-  if (expectsPath) unknown = true
-  if (argumentsSeen === 0) {
-    const home = environment(env, "HOME")
-    if (["cd", "chdir", "set-location", "sl"].includes(name) && home) directories.push(home)
-    else unknown = true
+  return {
+    commands: result.commands.map((item) => {
+      const tokens = prefix(item.words)
+      // Saved permissions are globs, not shell strings. Validate each decoded
+      // token separately so quoting cannot introduce wildcards or word boundaries.
+      const save = tokens.length > 0 && tokens.every((token) => /^[A-Za-z0-9_./:@%+=,-]+$/.test(token))
+      return { resource: item.resource, ...(save ? { save: `${tokens.join(" ")} *` } : {}) }
+    }),
+    directories,
+    analysis: "complete",
+    directoryUnknown,
   }
-  return { values: directories, unknown }
 }
 
 function directoryCommand(words: string[], powershell: boolean) {
-  const name = powershell ? powerShellCommandName(words[0]) : words[0]
-  if (CWD.has(name)) return { name, words, wrapped: false }
-  if (powershell || !["builtin", "command"].includes(name ?? "")) return
-  const index = words.findIndex((word, index) => index > 0 && !word.startsWith("-"))
-  const wrapped = words[index]
-  if (!CWD.has(wrapped)) return
-  return { name: wrapped, words: words.slice(index), wrapped: true }
-}
-
-function mutatesDirectoryEnvironment(words: string[], powershell: boolean): boolean {
-  const powerShellName = powershell ? powerShellCommandName(words[0]) : undefined
-  if (powershell)
-    return (
-      ["clear-item", "move-item", "new-item", "remove-item", "rename-item", "set-item"].includes(
-        powerShellName ?? "",
-      ) &&
-      words.slice(1).some((word) => /^env:/i.test(word))
-    )
-
   let index = 0
-  while (["builtin", "command"].includes(words[index] ?? "")) {
-    const name = words[index]
-    const start = words.findIndex((word, offset) => offset > index && !word.startsWith("-"))
-    if (name === "command" && words.some((option, offset) => offset > index && offset < start && /[vV]/.test(option)))
-      return false
-    if (start < 0) return false
-    index = start
+  while (!powershell && ["builtin", "command"].includes(words[index] ?? "")) {
+    index = words.findIndex((word, offset) => offset > index && !word.startsWith("-"))
+    if (index < 0) return
   }
-
-  const name = words[index]
-  const variable = (word: string | undefined) => /^(?:CDPATH|HOME)(?:\+?=|$)/.test(word ?? "")
-  if (["declare", "export", "local", "read", "readonly", "typeset", "unset"].includes(name ?? ""))
-    return words.some((word, offset) => offset > index && variable(word))
-  const target =
-    name === "printf" ? words[words.findIndex((word, offset) => offset > index && word === "-v") + 1] : undefined
-  return variable(target)
+  const name = powershell ? powerShellCommandName(words[index]) : words[index]
+  if (!(powershell ? POWERSHELL_CWD : BASH_CWD).has(name)) return
+  return { name, words: words.slice(index), wrapped: index > 0 }
 }
 
 function shellStartupUnknown(shell: string, env: Record<string, string | undefined>) {
-  if (shell === "bash")
-    return Boolean(environment(env, "BASH_ENV")) || Object.keys(env).some((key) => key.startsWith("BASH_FUNC_"))
-  if (shell === "ksh") return Boolean(environment(env, "ENV"))
-  return false
-}
-
-function sourceTokens(resource: string) {
-  const tokens: SourceToken[] = []
-  let raw = ""
-  let value = ""
-  let quote: "single" | "double" | "backtick" | undefined
-  let substitution = 0
-  let redirect = false
-
-  const finish = () => {
-    if (!raw) return
-    if (!redirect) tokens.push({ raw, value })
-    raw = ""
-    value = ""
-    redirect = false
-  }
-
-  for (let index = 0; index < resource.length; index++) {
-    const char = resource[index]
-    if (quote === "single") {
-      raw += char
-      if (char === "'") quote = undefined
-      else value += char
-      continue
-    }
-    if (quote === "double") {
-      raw += char
-      if (char === '"') quote = undefined
-      else if (char === "\\" && index + 1 < resource.length) {
-        const next = resource[index + 1]
-        if ('$`"\\\n'.includes(next)) {
-          raw += resource[++index]
-          if (next !== "\n") value += next
-        } else value += char
-      } else value += char
-      continue
-    }
-    if (quote === "backtick") {
-      raw += char
-      value += char
-      if (char === "`" && resource[index - 1] !== "\\") quote = undefined
-      continue
-    }
-    if (char === "'") {
-      raw += char
-      quote = "single"
-      continue
-    }
-    if (char === '"') {
-      raw += char
-      quote = "double"
-      continue
-    }
-    if (char === "`") {
-      raw += char
-      value += char
-      quote = "backtick"
-      continue
-    }
-    if (char === "\\" && index + 1 < resource.length) {
-      if (resource[index + 1] === "\n") {
-        raw += char + resource[++index]
-        continue
-      }
-      raw += char + resource[++index]
-      value += resource[index]
-      continue
-    }
-    if ((char === "<" || char === ">") && resource[index + 1] === "(") {
-      const end = bashParenthesizedEnd(resource, index + 1)
-      if (raw) {
-        raw += resource.slice(index, end + 1)
-        value += resource.slice(index, end + 1)
-      }
-      index = end
-      continue
-    }
-    if (char === "$" && resource[index + 1] === "(") substitution++
-    if (char === ")" && substitution > 0) substitution--
-    if (substitution === 0 && /\s/.test(char)) {
-      finish()
-      continue
-    }
-    if (substitution === 0 && (char === "<" || char === ">" || (char === "&" && resource[index + 1] === ">"))) {
-      if (/^\d+$/.test(value)) {
-        raw = ""
-        value = ""
-      } else finish()
-      redirect = true
-      if (char === "&") index++
-      while (/[<>&|]/.test(resource[index + 1] ?? "")) index++
-      continue
-    }
-    raw += char
-    value += char
-  }
-  finish()
-
-  return tokens
-}
-
-function bashSourcePrefix(tokens: SourceToken[], words: string[]) {
-  const start = tokens.findIndex((token) => token.value === words[0])
-  if (start < 0) {
-    const command = tokens.findIndex((token) => !/^[A-Za-z_][A-Za-z0-9_]*\+?=/.test(token.raw))
-    return prefix(tokens.slice(Math.max(0, command)).map((token) => token.raw)).join(" ")
-  }
-  const source = tokens
-    .slice(start)
-    .map((token) => token.raw)
-    .filter((token) => !/^\$\([\s\S]*\)$/.test(token) && !/^`[\s\S]*`$/.test(token))
-  return prefix(source).join(" ")
-}
-
-function powerShellSourcePrefix(tokens: SourceToken[], words: string[]) {
-  const start = tokens.findIndex((token) => token.value.toLowerCase() === words[0]?.toLowerCase())
-  if (start < 0) return prefix(words).join(" ")
-  return prefix(tokens.slice(start).map((token) => token.raw)).join(" ")
-}
-
-function powerShellSourceTokens(resource: string) {
-  const tokens: SourceToken[] = []
-  let raw = ""
-  let value = ""
-  let quote: "single" | "double" | undefined
-  let redirect = false
-
-  const finish = () => {
-    if (!raw) return
-    if (!redirect) tokens.push({ raw, value })
-    raw = ""
-    value = ""
-    redirect = false
-  }
-
-  for (let index = 0; index < resource.length; index++) {
-    const char = resource[index]
-    if (quote === "single") {
-      raw += char
-      if (char === "'" && resource[index + 1] === "'") {
-        raw += resource[++index]
-        value += "'"
-      } else if (char === "'") quote = undefined
-      else value += char
-      continue
-    }
-    if (quote === "double") {
-      raw += char
-      if (char === '"') quote = undefined
-      else if (char === "`" && index + 1 < resource.length) {
-        raw += resource[++index]
-        value += resource[index]
-      } else value += char
-      continue
-    }
-    if (char === "'") {
-      raw += char
-      quote = "single"
-      continue
-    }
-    if (char === '"') {
-      raw += char
-      quote = "double"
-      continue
-    }
-    if (char === "`" && index + 1 < resource.length) {
-      raw += char + resource[++index]
-      if (resource[index] !== "\n" && resource[index] !== "\r") value += resource[index]
-      continue
-    }
-    if (char === "{" && !raw) {
-      const end = powerShellBracedEnd(resource, index)
-      raw = resource.slice(index, end + 1)
-      value = raw
-      index = end
-      continue
-    }
-    if (/\s/.test(char)) {
-      finish()
-      continue
-    }
-    if (char === ">") {
-      if (resource[index + 1] && !/[\s>&]/.test(resource[index + 1])) {
-        raw += char
-        value += char
-        continue
-      }
-      if (/^\d+$/.test(value)) {
-        raw = ""
-        value = ""
-      } else if (raw === "*") {
-        raw = ""
-        value = ""
-      } else finish()
-      redirect = true
-      while (/[>&\d]/.test(resource[index + 1] ?? "")) index++
-      continue
-    }
-    if ((char === "&" || char === ".") && !raw && tokens.length === 0) continue
-    raw += char
-    value += char
-  }
-  finish()
-  return tokens
-}
-
-function powerShellBracedEnd(resource: string, start: number) {
-  let level = 1
-  let quote: "single" | "double" | undefined
-  for (let index = start + 1; index < resource.length; index++) {
-    const char = resource[index]
-    if (char === "`" && quote !== "single") {
-      index++
-      continue
-    }
-    if (quote === "single") {
-      if (char === "'" && resource[index + 1] === "'") index++
-      else if (char === "'") quote = undefined
-      continue
-    }
-    if (quote === "double") {
-      if (char === '"') quote = undefined
-      continue
-    }
-    if (char === "'") {
-      quote = "single"
-      continue
-    }
-    if (char === '"') {
-      quote = "double"
-      continue
-    }
-    if (char === "{") level++
-    if (char === "}" && --level === 0) return index
-  }
-  return resource.length - 1
+  return (
+    shell === "bash" &&
+    (Boolean(environment(env, "BASH_ENV")) || Object.keys(env).some((key) => key.startsWith("BASH_FUNC_")))
+  )
 }
 
 function parts(node: Node) {

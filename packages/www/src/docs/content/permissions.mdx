@@ -141,11 +141,17 @@ permission scanner. The default remains the tree-sitter scanner.
 ```
 
 When enabled, the portable scanner is authoritative and tree-sitter is not
-consulted. It analyzes Bash-compatible shells (`bash`, `dash`, `ksh`, and `sh`)
-and PowerShell. Other shells and unsupported syntax, including heredocs, are
-treated as opaque. `zsh` is opaque because it always loads `.zshenv`; shell
-startup-hook environments such as `BASH_ENV` and `ENV` are also opaque because
-they can execute code outside the submitted command.
+consulted. It analyzes a conservative subset of Bash, Dash, `sh`, and PowerShell.
+Other shells and unsupported syntax, including heredocs and arithmetic
+expansions, are treated as opaque. `zsh` is opaque because it always loads
+`.zshenv`. Bash startup hooks (`BASH_ENV` and inherited shell functions) also
+make input opaque because they can execute code outside the submitted command.
+
+For supported syntax, every detected command is checked, including nested
+commands and directory changes. Redirections stay attached to their command.
+Reusable permission prefixes are proposed only when each required word is safe
+for the permission pattern language; expansions are never removed to make a
+broader prefix.
 
 Opaque input requests permission for the complete original command. A scoped
 wildcard allow such as `echo *` cannot authorize opaque input; only an exact
@@ -153,6 +159,17 @@ rule, a previously saved exact approval, or an unconditional action-wide allow
 can do so. Opaque prompts are one-time and cannot create a saved approval.
 Because opaque input may also hide a directory change, it requests unknown
 external-directory access without offering to save that broad access.
+
+Unresolved directory changes also require unknown external-directory access,
+even when the individual shell commands can be checked normally. Examples
+include directory stacks, dynamic paths, and directory lookup affected by
+earlier commands or `CDPATH`. An unrelated scoped `ask` rule cannot override a
+deny during this conservative evaluation. Restrictive directory policies can
+therefore block an opaque command rather than offer approval, and scoped allows
+cannot prevent repeated prompts when the destination remains unknown.
+
+Shell permission analysis is not a sandbox. Approving an invoked program,
+function, or delegated script such as `bash -c` still trusts its behavior.
 
 ## Defaults
 
@@ -230,7 +247,7 @@ When an `ask` rule matches, clients can reply with:
 Saved approvals are durable and project-scoped. They are additional `allow`
 rules, but they can never override a configured `deny`. The proposed saved
 pattern may be broader than the displayed resource: several tools propose `*`,
-shell proposes the exact command text, and skills and subagents propose their
+shell proposes command prefixes, and skills and subagents propose their
 IDs. Review the confirmation carefully and remove saved approvals that are no
 longer needed.
 
