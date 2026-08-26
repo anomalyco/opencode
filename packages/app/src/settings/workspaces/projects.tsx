@@ -1,13 +1,12 @@
 import { Component, For, Show, createMemo, createSignal } from "solid-js"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Icon } from "@opencode-ai/ui/icon"
-import { ProjectAvatar } from "@opencode-ai/ui/project-avatar"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useGlobal } from "@/runtime/server/runtime"
-import { getProjectAvatarVariant } from "@/shell/state/layout"
 import { ServerConnection, serverName } from "@/runtime/server/registry"
-import { displayName, getProjectAvatarSource } from "@/shell/layout/helpers"
+import { displayName } from "@/shell/layout/helpers"
+import { ProjectIcon } from "@/shell/layout/project-icon"
 import { InlineServerSelect } from "@/settings/server-select"
 import { DialogEditProject } from "./project-dialog"
 import "@/settings/settings.css"
@@ -40,19 +39,13 @@ export const SettingsProjects: Component = () => {
 
   const ProjectRow: Component<{ project: ProjectItem; server: ServerConnection.Any }> = (props) => {
     const name = () => displayName(props.project)
-    const color = () => getProjectAvatarVariant(props.project.icon?.color)
     return (
       <div
         class="group flex items-center justify-between gap-5 px-4 py-2.5 rounded-lg bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)] cursor-pointer transition-all hover:bg-v2-background-bg-layer-01"
         onClick={() => openProjectSettings(props.project, props.server)}
       >
         <div class="flex items-center gap-2.5 min-w-0 flex-1">
-          <ProjectAvatar
-            fallback={name()}
-            src={getProjectAvatarSource(props.project.id, props.project.icon)}
-            variant={color()}
-            class="shrink-0"
-          />
+          <ProjectIcon project={props.project} class="shrink-0" />
           <span class="text-13-medium text-v2-text-text-base truncate">{name()}</span>
         </div>
         <div class="flex items-center gap-2 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
