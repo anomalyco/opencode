@@ -1,4 +1,4 @@
-import { expect, story } from "./story"
+import { expect, story } from "../../storybook/playwright/story"
 
 const profiles = [
   { name: "summaries off no reasoning", id: "summaries-off-no-reasoning", thinking: true, body: false },

@@ -1,4 +1,4 @@
-import { expect, story } from "./story"
+import { expect, story } from "../../storybook/playwright/story"
 
 // Moved from packages/app/e2e/regression/review-line-comment.spec.ts
 story("opens the comment editor when code is clicked", async ({ mount }) => {
@@ -41,7 +41,7 @@ story("shows a comment button when a diff line is hovered", async ({ mount }) =>
   const line = review.getByText("export const first = 1", { exact: true })
   const comment = review.getByRole("button", { name: "Comment", exact: true, includeHidden: true })
   await expect(comment).toHaveCount(1)
-  await line.dispatchEvent("pointermove", { pointerType: "mouse", bubbles: true, composed: true })
+  await line.hover()
   await expect(comment).toBeVisible()
   await expect(comment).toHaveCSS("pointer-events", "auto")
   await comment.dispatchEvent("click")

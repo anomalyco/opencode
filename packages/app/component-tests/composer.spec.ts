@@ -1,4 +1,4 @@
-import { expect, story } from "./story"
+import { expect, story } from "../../storybook/playwright/story"
 
 // Moved from packages/app/e2e/regression/prompt-thinking-level.spec.ts
 story("shows the thinking level control while relevant", async ({ mount, page }) => {

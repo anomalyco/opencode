@@ -1,4 +1,4 @@
-import { expect, story } from "./story"
+import { expect, story } from "../../storybook/playwright/story"
 
 story("renders streamed reasoning without starting the app", async ({ mount }) => {
   const timeline = await mount("current-session-timeline-rows--streaming-reasoning-and-text")

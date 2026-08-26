@@ -1,4 +1,4 @@
-import { expect, story } from "./story"
+import { expect, story } from "../../storybook/playwright/story"
 
 // Moved from packages/app/e2e/regression/session-timeline-projection.spec.ts
 story("renders every admitted tool family and hides timeline-only exclusions", async ({ mount }) => {

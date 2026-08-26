@@ -1,4 +1,4 @@
-import { expect, story } from "./story"
+import { expect, story } from "../../storybook/playwright/story"
 
 for (const expanded of [false, true]) {
   // Moved from packages/app/e2e/regression/session-timeline-lifecycle-state.spec.ts

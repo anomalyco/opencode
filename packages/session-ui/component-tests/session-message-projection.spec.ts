@@ -1,4 +1,4 @@
-import { expect, story } from "./story"
+import { expect, story } from "../../storybook/playwright/story"
 
 // Moved from packages/app/e2e/regression/session-timeline-collapse-state.spec.ts
 story("keeps a manually collapsed tool collapsed when later assistant content streams", async ({ mount }) => {
