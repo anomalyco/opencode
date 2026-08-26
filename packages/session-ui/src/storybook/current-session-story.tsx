@@ -6,14 +6,21 @@ import type { SessionUserPresentation } from "../timeline/session-timeline"
 import { SessionTimeline } from "../timeline/session-timeline"
 import { FileComponentProvider } from "@opencode-ai/ui/context/file"
 import { Button } from "@opencode-ai/ui/button"
-import { Show, createSignal, type JSX } from "solid-js"
+import { Show, createSignal, type ComponentProps, type JSX } from "solid-js"
 import { CURRENT_SESSION_ID, STORY_TIME } from "./current-session-fixtures"
 
-export function CurrentSessionProviders(props: { document: SessionDocument; children: JSX.Element }) {
+export function CurrentSessionProviders(
+  props: { document: SessionDocument; children: JSX.Element } & Pick<
+    ComponentProps<typeof DataProvider>,
+    "shellRunning" | "shellOutput"
+  >,
+) {
   return (
     <DataProvider
       directory="C:/workspaces/opencode"
       sessionID={props.document.sessionID}
+      shellRunning={props.shellRunning}
+      shellOutput={props.shellOutput}
       data={{
         agent: [
           { name: "build", color: "blue" },

@@ -1396,31 +1396,47 @@ ToolRegistry.register({
     const i18n = useI18n()
     const data = useData()
     const streaming = () => props.status === "streaming"
-    const pending = () => streaming() || props.status === "running" || props.metadata.status === "running"
+    // Background tool metadata describes admission, not the live shell state.
+    const pending = createMemo(
+      () =>
+        streaming() ||
+        props.status === "running" ||
+        (typeof props.metadata.shellID === "string" && data.shellRunning?.(props.metadata.shellID) === true),
+    )
     const sawStreaming = streaming()
     const [streamed, setStreamed] = createSignal("")
     createEffect(() => {
       const id = props.metadata.shellID
       const shellOutput = data.shellOutput
-      if (typeof id !== "string" || !pending() || !shellOutput) return
+      if (typeof id !== "string" || !shellOutput) return
       const directory = data.directory
       let cursor = 0
-      let loading = false
-      let disposed = false
-      const load = async () => {
-        if (loading) return
-        loading = true
-        const response = await shellOutput({ id, location: { directory }, cursor }).catch(() => undefined)
-        if (disposed) return
-        if (response?.data.output) setStreamed((output) => output + response.data.output)
-        if (response) cursor = response.data.cursor
-        loading = false
-      }
-      void load()
-      const interval = setInterval(() => void load(), 1_000)
-      onCleanup(() => {
-        disposed = true
-        clearInterval(interval)
+      setStreamed("")
+      createEffect(() => {
+        const running = pending()
+        let loading = false
+        let disposed = false
+        const load = async () => {
+          if (loading) return
+          loading = true
+          do {
+            const response = await shellOutput({ id, location: { directory }, cursor }).catch(() => undefined)
+            if (disposed) return
+            if (!response) break
+            if (response.data.output) setStreamed((output) => output + response.data.output)
+            if (response.data.cursor <= cursor) break
+            cursor = response.data.cursor
+            if (cursor >= response.data.size) break
+          } while (!running)
+          loading = false
+        }
+        void load()
+        // Drain the remaining pages on completion without discarding already captured output.
+        const interval = running ? setInterval(() => void load(), 1_000) : undefined
+        onCleanup(() => {
+          disposed = true
+          clearInterval(interval)
+        })
       })
     })
     const command = () => {
@@ -1428,7 +1444,13 @@ ToolRegistry.register({
       if (typeof props.metadata.command === "string") return props.metadata.command
       return ""
     }
-    const output = createMemo(() => stripAnsi((pending() && streamed()) || props.output || "").replace(/\r\n?/g, "\n"))
+    const output = createMemo(() =>
+      stripAnsi(
+        (typeof props.metadata.shellID === "string"
+          ? streamed() || (props.metadata.status === "running" ? "" : props.output)
+          : props.output) ?? "",
+      ).replace(/\r\n?/g, "\n"),
+    )
     return (
       <BasicTool
         {...props}

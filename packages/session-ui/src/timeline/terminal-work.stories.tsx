@@ -1,5 +1,5 @@
 import type { SessionMessageAssistant } from "@opencode-ai/client/promise"
-import { createMemo } from "solid-js"
+import { createMemo, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { CurrentSessionProviders, CurrentSessionTimelineStory } from "../storybook/current-session-story"
 import {
@@ -87,6 +87,77 @@ export const TestsPassed = {
       shellToolDefaultOpen
     />
   ),
+}
+
+export const BackgroundCommand = {
+  args: { completed: false, paged: false, empty: false },
+  render: (args: { completed: boolean; paged: boolean; empty: boolean }) => {
+    const [state, setState] = createStore({ running: !args.completed, reads: 0, revision: 1 })
+    const document = storyDocument(
+      [
+        storyTool(
+          "tool_background_shell",
+          "shell",
+          "completed",
+          { command: "bun install", background: true },
+          {
+            metadata: { status: "running", shellID: "shell_background" },
+            output: "The command was moved to the background.",
+          },
+        ),
+      ],
+      true,
+    )
+    return (
+      <section class="mx-auto flex w-full max-w-[720px] flex-col gap-4 p-6">
+        <div class="flex gap-3">
+          <button type="button" onClick={() => setState("running", false)}>
+            Complete command
+          </button>
+          <button type="button" onClick={() => setState("revision", (value) => value + 1)}>
+            Remount command
+          </button>
+        </div>
+        <output aria-label="Output reads">{state.reads}</output>
+        <Show when={state.revision} keyed>
+          {() => (
+            <CurrentSessionProviders
+              document={document}
+              shellRunning={(id) => id === "shell_background" && state.running}
+              shellOutput={async (input) => {
+                await Promise.resolve()
+                setState("reads", (value) => value + 1)
+                const output = args.empty
+                  ? ""
+                  : state.running
+                    ? "Installing packages\n"
+                    : "Installing packages\n2528 packages installed\n"
+                const cursor = Math.min(output.length, (input.cursor ?? 0) + (args.paged ? 24 : output.length))
+                return {
+                  location: {
+                    directory: "C:/workspaces/opencode",
+                    project: {
+                      id: "project_story",
+                      directory: "C:/workspaces/opencode",
+                      canonical: "C:/workspaces/opencode",
+                    },
+                  },
+                  data: {
+                    output: output.slice(input.cursor ?? 0, cursor),
+                    cursor,
+                    size: output.length,
+                    truncated: false,
+                  },
+                }
+              }}
+            >
+              <SessionTimeline document={document} shellToolDefaultOpen />
+            </CurrentSessionProviders>
+          )}
+        </Show>
+      </section>
+    )
+  },
 }
 
 export const ExpandedShell = {
