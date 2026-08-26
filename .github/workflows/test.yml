@@ -42,7 +42,7 @@ jobs:
       - name: Find affected packages
         id: packages
         env:
-          TURBO_SCM_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          TURBO_SCM_BASE: ${{ github.event_name == 'pull_request' && format('{0}^1', github.sha) || github.event.before }}
           TURBO_SCM_HEAD: ${{ github.sha }}
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
@@ -119,7 +119,7 @@ jobs:
           GITHUB_ACTIONS=false bun turbo test --affected
         env:
           OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: ${{ runner.os == 'Windows' && 'true' || 'false' }}
-          TURBO_SCM_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          TURBO_SCM_BASE: ${{ github.event_name == 'pull_request' && format('{0}^1', github.sha) || github.event.before }}
           TURBO_SCM_HEAD: ${{ github.sha }}
 
       - name: Verify published codemode package
@@ -137,7 +137,7 @@ jobs:
           fi
           bun turbo verify:package --affected --filter=@opencode-ai/sdk
         env:
-          TURBO_SCM_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          TURBO_SCM_BASE: ${{ github.event_name == 'pull_request' && format('{0}^1', github.sha) || github.event.before }}
           TURBO_SCM_HEAD: ${{ github.sha }}
 
       - name: Verify compiled service lifecycle
