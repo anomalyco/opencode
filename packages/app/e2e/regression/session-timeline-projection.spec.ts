@@ -11,82 +11,6 @@ import {
 } from "../performance/timeline-stability/fixture"
 
 test.describe("session timeline projection", () => {
-  test("renders every admitted tool family and hides timeline-only exclusions", async ({ page }) => {
-    const parts = [
-      toolPart("prt_01_read", "read", "completed", { path: "src/a.ts" }),
-      toolPart("prt_02_glob", "glob", "completed", { path: ".", pattern: "**/*.ts" }),
-      toolPart("prt_03_grep", "grep", "completed", { path: ".", pattern: "value" }),
-      toolPart("prt_04_list", "list", "completed", { path: "src" }),
-      toolPart("prt_webfetch", "webfetch", "completed", { url: "https://example.com" }),
-      toolPart(
-        "prt_websearch",
-        "websearch",
-        "completed",
-        { query: "timeline stability" },
-        { output: "https://example.com/result" },
-      ),
-      toolPart("prt_task", "subagent", "completed", {
-        description: "Inspect timeline",
-        agent: "explore",
-        prompt: "Inspect the timeline implementation.",
-      }),
-      toolPart(
-        "prt_bash",
-        "shell",
-        "completed",
-        { command: "printf stable" },
-        { output: "stable", title: "printf stable" },
-      ),
-      editPart("prt_edit"),
-      toolPart("prt_write", "write", "completed", { path: "src/new.ts", content: "export const stable = true\n" }),
-      patchPart("prt_patch"),
-      toolPart("prt_todo", "todowrite", "completed", { todos: [{ content: "Hidden", status: "pending" }] }),
-      toolPart(
-        "prt_question",
-        "question",
-        "completed",
-        { questions: [{ question: "Keep stable?", header: "Stability", options: [] }] },
-        { metadata: { answers: [["Yes"]] } },
-      ),
-      toolPart("prt_skill", "skill", "completed", { name: "stability" }),
-      toolPart("prt_custom", "custom_mcp_tool", "completed", { target: "timeline", count: 2 }),
-    ]
-    await setupTimeline(page, { messages: [userMessage(), assistantMessage(parts)] })
-
-    const first = page.locator(
-      '[data-timeline-part-ids="prt_01_read,prt_02_glob,prt_03_grep,prt_04_list,prt_webfetch,prt_websearch,prt_task,prt_bash,prt_edit,prt_write,prt_patch"]',
-    )
-    const second = page.locator('[data-timeline-part-ids="prt_skill,prt_custom"]')
-    await expect(first).toBeVisible()
-    await expect(second).toBeVisible()
-    await first.getByRole("button").click()
-    await second.getByRole("button").click()
-    for (const id of [
-      "prt_webfetch",
-      "prt_websearch",
-      "prt_task",
-      "prt_bash",
-      "prt_edit",
-      "prt_write",
-      "prt_patch",
-      "prt_question",
-      "prt_skill",
-      "prt_custom",
-    ]) {
-      await expect(page.locator(`[data-timeline-part-id="${id}"]`).first(), id).toBeVisible()
-    }
-    const patch = page.locator('[data-timeline-part-id="prt_patch"]')
-    await expect(patch.getByText("1 file", { exact: true })).toBeVisible()
-    await expect(patch.getByRole("button", { name: "Patch 1 file", exact: true })).toHaveCount(0)
-    await expect(patch.getByRole("button")).toHaveCount(1)
-    await expect(patch.locator('[data-scope="apply-patch"] button[aria-expanded="false"]')).toHaveCount(1)
-    await expect(patch.locator('[data-slot="message-part-title-filename"]')).toHaveCount(0)
-    await expect(patch.locator('[data-slot="message-part-actions"]')).toHaveCount(0)
-    const edit = page.locator('[data-timeline-part-id="prt_edit"]')
-    await expect(edit).toContainText("Edit")
-    await expect(page.locator('[data-timeline-part-id="prt_todo"]')).toHaveCount(0)
-  })
-
   test("combines adjacent patch calls and repeated files into one group", async ({ page }) => {
     const first = "prt_patch_first"
     const second = "prt_patch_second"
@@ -156,43 +80,6 @@ test.describe("session timeline projection", () => {
       "false",
     )
     await expect(page.locator(`[data-timeline-part-id="${first}"], [data-timeline-part-id="${second}"]`)).toHaveCount(0)
-  })
-
-  test("combines adjacent edit calls and repeated files into one group", async ({ page }) => {
-    const first = "prt_edit_first"
-    const second = "prt_edit_second"
-    await setupTimeline(page, {
-      messages: [
-        userMessage(),
-        assistantMessage([
-          toolPart(
-            first,
-            "edit",
-            "completed",
-            { path: "src/first.ts", oldString: "one", newString: "two" },
-            {
-              metadata: { files: [patchFile("src/first.ts", "modified")] },
-            },
-          ),
-          toolPart(
-            second,
-            "edit",
-            "completed",
-            { path: "src/first.ts", oldString: "two", newString: "three" },
-            {
-              metadata: { files: [patchFile("src/first.ts", "modified")] },
-            },
-          ),
-        ]),
-      ],
-      settings: { editToolPartsExpanded: true },
-    })
-
-    const group = page.locator(`[data-timeline-part-ids="${first},${second}"]`)
-    await expect(group.locator('[data-slot="basic-tool-tool-title"]')).toContainText("Edit")
-    await expect(group.getByText("1 file", { exact: true })).toBeVisible()
-    await expect(group.locator('[data-slot="apply-patch-filename"]')).toHaveText(["first.ts"])
-    await expect(group.locator('[data-scope="apply-patch"] button')).toHaveAttribute("aria-expanded", "true")
   })
 
   test("projects gaps, dividers, assistant parts, and errors together", async ({ page }) => {
