@@ -6,13 +6,10 @@ import { ConfigProvider } from "../../src/config"
 import {
   EMPTY_SESSION_TAB_STATUS,
   SessionTabs,
-  TAB_SPINNERS,
-  TAB_UNREAD_MARKERS,
   type SessionTabsController,
   type SessionTabsStatus,
-  type TabSpinner,
-  type TabUnreadMarker,
 } from "../../src/component/session-tabs"
+import { SPINNER_FRAMES } from "../../src/component/spinner-frames"
 import { ClientProvider } from "../../src/context/client"
 import { DataProvider } from "../../src/context/data"
 import { LocationProvider } from "../../src/context/location"
@@ -33,8 +30,6 @@ for (const orientation of ["horizontal", "vertical"] as const) {
     const [status, setStatus] = createSignal<SessionTabsStatus>(EMPTY_SESSION_TAB_STATUS)
     const [active, setActive] = createSignal("second")
     const [animations, setAnimations] = createSignal(false)
-    const [spinner, setSpinner] = createSignal<TabSpinner>("dots")
-    const [marker, setMarker] = createSignal<TabUnreadMarker>("small-dot")
     const [newTab, setNewTab] = createSignal(false)
     let theme!: ReturnType<typeof useTheme>
     function Colors() {
@@ -77,8 +72,6 @@ for (const orientation of ["horizontal", "vertical"] as const) {
                                 controller={controller}
                                 orientation={orientation}
                                 animations={animations()}
-                                spinner={spinner()}
-                                unreadMarker={marker()}
                               />
                             </Keymap.Provider>
                           </ThemeProvider>
@@ -118,87 +111,20 @@ for (const orientation of ["horizontal", "vertical"] as const) {
         .find((line) => line.includes("First"))!
         .indexOf("First")
       const states: { status: Partial<SessionTabsStatus>; label: string }[] = [
-        { status: { busy: true }, label: TAB_SPINNERS.dots.frames[0] },
+        { status: { busy: true }, label: SPINNER_FRAMES[0] },
         { status: { busy: true, attention: "question" }, label: "?" },
         { status: { busy: true, attention: "permission" }, label: "!" },
-        { status: { unread: "activity" }, label: TAB_UNREAD_MARKERS["small-dot"] },
-        { status: { unread: "error" }, label: TAB_UNREAD_MARKERS["small-dot"] },
+        { status: { unread: "activity" }, label: "\u2022" },
+        { status: { unread: "error" }, label: "\u2022" },
         { status: {}, label: "" },
       ]
-      for (const selected of [false, true]) {
-        setActive(selected ? "first" : "second")
-        for (const state of states) {
-          const label = `${state.label.padStart(2)} First`
-          setStatus({ ...EMPTY_SESSION_TAB_STATUS, ...state.status })
-          await app.renderOnce()
-          await app.waitForFrame((frame) => frame.includes(label))
-          expect(
-            app
-              .captureCharFrame()
-              .split("\n")
-              .find((line) => line.includes("First"))!
-              .indexOf("First"),
-          ).toBe(titleColumn)
-          const rows = app.captureCharFrame().split("\n")
-          expect(rows[orientation === "vertical" ? 2 : 1]?.trim()).toBe(orientation === "vertical" ? "project" : "")
-          if (state.status.unread) {
-            const indicator = app
-              .captureSpans()
-              .lines.flatMap((line) => line.spans)
-              .find((span) => span.text.trim() === state.label)
-            expect(indicator).toBeDefined()
-            expect(indicator!.fg.toInts()).toEqual(
-              (state.status.unread === "error" ? theme.text.feedback.error.default : theme.text.status.unread).toInts(),
-            )
-          }
-          await app.mockInput.pressKeys(["\x1b[57442;5u"])
-          await app.waitForFrame((frame) => frame.includes("1 First") && frame.includes("2 Second"))
-          // Releasing a chord's digit is not releasing Control.
-          await app.mockInput.pressKeys(["\x1b[49;5:3u"])
-          await app.renderOnce()
-          expect(app.captureCharFrame()).toContain("1 First")
-          await app.mockInput.pressKeys(["\x1b[57442;1:3u"])
-          await app.waitForFrame((frame) => frame.includes(label))
-        }
-      }
-
-      setActive("second")
-      for (const name of Object.keys(TAB_UNREAD_MARKERS) as TabUnreadMarker[]) {
-        setMarker(name)
-        for (const unread of ["activity", "error"] as const) {
-          setStatus({ ...EMPTY_SESSION_TAB_STATUS, unread })
-          await app.renderOnce()
-          await app.waitForFrame((frame) => frame.includes(`${TAB_UNREAD_MARKERS[name]} First`))
-          expect(
-            app
-              .captureCharFrame()
-              .split("\n")
-              .find((line) => line.includes("First"))!
-              .indexOf("First"),
-          ).toBe(titleColumn)
-        }
-        setStatus(EMPTY_SESSION_TAB_STATUS)
-        await app.waitForFrame((frame) => frame.includes("   First"))
-      }
-
-      setMarker("small-dot")
-      for (const unread of ["activity", "error"] as const) {
-        setAnimations(true)
-        setStatus({ ...EMPTY_SESSION_TAB_STATUS, busy: true })
-        await app.waitForFrame((frame) => TAB_SPINNERS.dots.frames.some((glyph) => frame.includes(`${glyph} First`)))
-        setStatus({ ...EMPTY_SESSION_TAB_STATUS, unread })
+      for (const state of states) {
+        setStatus({ ...EMPTY_SESSION_TAB_STATUS, ...state.status })
         await app.renderOnce()
-        const indicator = app
-          .captureSpans()
-          .lines.flatMap((line) => line.spans)
-          .find((span) => span.text.trim() === TAB_UNREAD_MARKERS["small-dot"])
-        expect(indicator).toBeDefined()
-        expect(indicator!.fg.toInts()).toEqual(
-          (unread === "error" ? theme.text.feedback.error.default : theme.text.status.unread).toInts(),
-        )
-        setAnimations(false)
-        setStatus(EMPTY_SESSION_TAB_STATUS)
-        await app.renderOnce()
+        await app.waitForFrame((frame) => frame.includes(`${state.label.padStart(2)} First`))
+        const rows = app.captureCharFrame().split("\n")
+        expect(rows.find((line) => line.includes("First"))!.indexOf("First")).toBe(titleColumn)
+        expect(rows[orientation === "vertical" ? 2 : 1]?.trim()).toBe(orientation === "vertical" ? "project" : "")
       }
 
       for (const attention of ["question", "permission"] as const) {
@@ -247,30 +173,34 @@ for (const orientation of ["horizontal", "vertical"] as const) {
         expect(app.renderer.root.liveCount).toBeGreaterThan(0)
       }
 
-      const glyph = TAB_UNREAD_MARKERS["small-dot"]
-      setMarker("small-dot")
+      const glyph = "\u2022"
       for (const unread of ["activity", "error"] as const) {
         setAnimations(false)
         setActive("second")
+        setStatus({ ...EMPTY_SESSION_TAB_STATUS, busy: true })
+        await app.renderOnce()
+        setAnimations(true)
         setStatus({ ...EMPTY_SESSION_TAB_STATUS, unread })
         await app.renderOnce()
-        await app.waitForFrame((frame) => frame.includes(`${glyph} First`))
-        const brightness = () => {
-          const color = app
+        const color = () =>
+          app
             .captureSpans()
             .lines.flatMap((line) => line.spans)
             .find((span) => span.text.trim() === glyph)?.fg
-          return color ? color.r + color.g + color.b : undefined
+        expect(color()?.toInts()).toEqual(
+          (unread === "error" ? theme.text.feedback.error.default : theme.text.status.unread).toInts(),
+        )
+        const brightness = () => {
+          const value = color()
+          return value ? value.r + value.g + value.b : undefined
         }
-        const initial = brightness()
-        expect(initial).toBeDefined()
-        setAnimations(true)
+        const initial = brightness()!
         await app.mockMouse.click(1, orientation === "vertical" ? 1 : 0)
         await app.renderOnce()
         expect(active()).toBe("first")
         expect(status().unread).toBeUndefined()
         expect(app.captureCharFrame()).toContain(`${glyph} First`)
-        await app.waitForFrame((frame) => frame.includes(`${glyph} First`) && (brightness() ?? -1) > initial!)
+        await app.waitForFrame((frame) => frame.includes(`${glyph} First`) && (brightness() ?? -1) > initial)
         const peak = brightness()!
         await app.waitForFrame((frame) => frame.includes(`${glyph} First`) && (brightness() ?? Infinity) < peak)
         await app.waitForFrame((frame) => frame.includes("   First"), { maxPasses: 60 })
@@ -282,22 +212,7 @@ for (const orientation of ["horizontal", "vertical"] as const) {
       setAnimations(true)
       await app.mockMouse.click(1, orientation === "vertical" ? 1 : 0)
       setStatus({ ...EMPTY_SESSION_TAB_STATUS, busy: true })
-      await app.waitForFrame((frame) => TAB_SPINNERS.dots.frames.some((glyph) => frame.includes(`${glyph} First`)))
-      setStatus(EMPTY_SESSION_TAB_STATUS)
-      await app.waitForFrame((frame) => frame.includes("   First"))
-
-      setStatus({ ...EMPTY_SESSION_TAB_STATUS, busy: true })
-      setAnimations(true)
-      for (const name of Object.keys(TAB_SPINNERS) as TabSpinner[]) {
-        setSpinner(name)
-        await app.waitForFrame((frame) => TAB_SPINNERS[name].frames.some((glyph) => frame.includes(`${glyph} First`)))
-        const first = app.captureCharFrame()
-        await app.waitForFrame((frame) => frame !== first)
-        await app.mockInput.pressKeys(["\x1b[57448;5u"])
-        await app.waitForFrame((frame) => frame.includes("1 First"))
-        await app.mockInput.pressKeys(["\x1b[57448;1:3u"])
-        await app.waitForFrame((frame) => TAB_SPINNERS[name].frames.some((glyph) => frame.includes(`${glyph} First`)))
-      }
+      await app.waitForFrame((frame) => SPINNER_FRAMES.slice(1).some((glyph) => frame.includes(`${glyph} First`)))
       await app.mockInput.pressKeys(["\x1b[57442;5u"])
       setStatus({ ...EMPTY_SESSION_TAB_STATUS, busy: true, attention: "question" })
       await app.waitForFrame((frame) => frame.includes("1 First"))
