@@ -37,6 +37,30 @@ const staticIt = testEffect(
 )
 
 describe("PluginSupervisor config", () => {
+  it.live("reports local and builtin plugins as not updateable", () => {
+    const plugin = path.join(import.meta.dir, "../plugin/fixtures/config-promise-plugin.ts")
+    return withLocation(
+      { plugins: [plugin] },
+      Effect.gen(function* () {
+        yield* ready()
+        const supervisor = yield* PluginSupervisor.Service
+        const updates = yield* supervisor.check()
+
+        expect(updates.find((update) => update.name === plugin)).toEqual({
+          name: plugin,
+          source: { type: "local", path: plugin },
+          status: "not-updateable",
+        })
+        expect(updates.find((update) => update.source.type === "builtin")?.status).toBe("not-updateable")
+        expect(yield* supervisor.update(plugin)).toEqual({
+          name: plugin,
+          source: { type: "local", path: plugin },
+          status: "not-updateable",
+        })
+      }),
+    )
+  })
+
   it.live("applies selectors in order", () =>
     withLocation(
       { plugins: ["-opencode.provider.*", "opencode.provider.openai"] },

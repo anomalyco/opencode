@@ -25,13 +25,18 @@ import { host } from "../plugin/host"
 
 type WatcherEvent = { file: string; event: "add" | "change" | "unlink" }
 const describeNative = process.env.CI ? describe.skip : describe
+const pluginUpdates = {
+  check: () => Effect.succeed([]),
+  update: () => Effect.die("unused"),
+  updateAll: () => Effect.succeed([]),
+}
 
 const it = testEffect(AppNodeBuilder.build(LayerNode.group([FSUtil.node, Bus.node])))
 
 const configLayer = Config.testLayer()
 const pluginNode = makeLocationNode({
   service: PluginSupervisor.Service,
-  layer: Layer.succeed(PluginSupervisor.Service, PluginSupervisor.Service.of({ flush: Effect.void })),
+  layer: Layer.succeed(PluginSupervisor.Service, PluginSupervisor.Service.of({ ...pluginUpdates, flush: Effect.void })),
   deps: [],
 })
 
@@ -314,7 +319,7 @@ describe("LocationWatcher subscriptions", () => {
         Effect.gen(function* () {
           const policy = yield* LocationWatcherPolicy.Service
           yield* policy.transform((draft) => draft.add([".git"]))
-          return PluginSupervisor.Service.of({ flush: Effect.void })
+          return PluginSupervisor.Service.of({ ...pluginUpdates, flush: Effect.void })
         }),
       ),
       deps: [LocationWatcherPolicy.node],

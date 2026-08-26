@@ -32,6 +32,26 @@ export const Info = Schema.Union([
 ]).annotate({ identifier: "Plugin.Info" })
 export type Info = typeof Info.Type
 
+export interface UpdateInfo extends Schema.Schema.Type<typeof UpdateInfo> {}
+export const UpdateInfo = Schema.Struct({
+  name: Schema.String,
+  source: Source,
+  status: Schema.Literals(["not-updateable", "pinned", "up-to-date", "available", "failed"]),
+  currentVersion: Schema.String.pipe(optional),
+  latestVersion: Schema.String.pipe(optional),
+  error: Schema.String.pipe(optional),
+}).annotate({ identifier: "Plugin.UpdateInfo" })
+
+export interface UpdateResult extends Schema.Schema.Type<typeof UpdateResult> {}
+export const UpdateResult = Schema.Struct({
+  name: Schema.String,
+  source: Source,
+  status: Schema.Literals(["not-updateable", "pinned", "up-to-date", "updated", "failed"]),
+  previousVersion: Schema.String.pipe(optional),
+  version: Schema.String.pipe(optional),
+  error: Schema.String.pipe(optional),
+}).annotate({ identifier: "Plugin.UpdateResult" })
+
 const Added = ephemeral({
   type: "plugin.added",
   schema: { id: ID },

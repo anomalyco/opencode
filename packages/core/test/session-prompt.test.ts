@@ -76,12 +76,14 @@ const locations = Layer.effect(
             Layer.mock(Snapshot.Service, {
               capture: () =>
                 ready ? Effect.undefined : Effect.die(new Error("Snapshot used before plugins were ready")),
-              restore: () =>
-                ready ? Effect.void : Effect.die(new Error("Snapshot used before plugins were ready")),
+              restore: () => (ready ? Effect.void : Effect.die(new Error("Snapshot used before plugins were ready"))),
             }),
             Layer.succeed(
               PluginSupervisor.Service,
-              PluginSupervisor.Service.of({ flush: Effect.sync(() => (ready = true)) }),
+              PluginSupervisor.Service.of({
+                ...PluginSupervisor.noUpdates,
+                flush: Effect.sync(() => (ready = true)),
+              }),
             ),
           )
         }),

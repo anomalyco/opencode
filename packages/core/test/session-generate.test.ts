@@ -110,7 +110,7 @@ const discovery = Layer.mock(InstructionDiscovery.Service, {
 const skills = Layer.mock(SkillInstructions.Service, { load: () => Effect.succeed(Instructions.empty) })
 const references = Layer.mock(ReferenceInstructions.Service, { load: () => Effect.succeed(Instructions.empty) })
 const mcp = Layer.mock(McpInstructions.Service, { load: () => Effect.succeed(Instructions.empty) })
-const plugins = Layer.mock(PluginSupervisor.Service, { flush: Effect.void })
+const plugins = Layer.mock(PluginSupervisor.Service, { ...PluginSupervisor.noUpdates, flush: Effect.void })
 const tools = Layer.mock(Tool.Service, {
   snapshot: () =>
     Effect.succeed({

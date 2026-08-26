@@ -50,9 +50,12 @@ test("plugin readiness stays lazy and resolves the supervisor for every executio
     () => new ServiceUnavailableError({ message: "initialization timed out", service: "test" }),
   )
   const layer = Layer.succeed(PluginSupervisor.Service, {
+    check: () => Effect.succeed([]),
     flush: Effect.sync(() => {
       flushes++
     }),
+    update: () => Effect.die("unused"),
+    updateAll: () => Effect.succeed([]),
   })
 
   expect(flushes).toBe(0)

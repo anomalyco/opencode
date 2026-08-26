@@ -35,7 +35,9 @@ const npmLayer = Layer.succeed(
   Npm.Service,
   Npm.Service.of({
     add: () => Effect.succeed({ directory: "", entrypoint: undefined }),
+    check: () => Effect.succeed({ updateable: false, pinned: false, updateAvailable: false }),
     resolve: () => Effect.succeed({ directory: "", entrypoint: undefined }),
+    update: () => Effect.succeed({ updateable: false, pinned: false, updateAvailable: false, updated: false }),
     which: () => Effect.undefined,
   }),
 )

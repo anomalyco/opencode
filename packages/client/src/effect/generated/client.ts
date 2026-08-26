@@ -15,6 +15,12 @@ import type {
   AgentGetOutput,
   PluginListInput,
   PluginListOutput,
+  PluginCheckInput,
+  PluginCheckOutput,
+  PluginUpdateInput,
+  PluginUpdateOutput,
+  PluginUpdateAllInput,
+  PluginUpdateAllOutput,
   SessionListInput,
   SessionListOutput,
   SessionStatsInput,
@@ -313,7 +319,29 @@ const EndpointPluginList = (raw: RawClient["server.plugin"]) => (input?: PluginL
     raw["plugin.list"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
-const adaptGroupPlugin = (raw: RawClient["server.plugin"]) => ({ list: EndpointPluginList(raw) })
+const EndpointPluginCheck = (raw: RawClient["server.plugin"]) => (input?: PluginCheckInput) =>
+  preserveEffect<PluginCheckOutput>()(
+    raw["plugin.check"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const EndpointPluginUpdate = (raw: RawClient["server.plugin"]) => (input: PluginUpdateInput) =>
+  preserveEffect<PluginUpdateOutput>()(
+    raw["plugin.update"]({ query: { location: input["location"] }, payload: { name: input["name"] } }).pipe(
+      Effect.mapError(mapClientError),
+    ),
+  )
+
+const EndpointPluginUpdateAll = (raw: RawClient["server.plugin"]) => (input?: PluginUpdateAllInput) =>
+  preserveEffect<PluginUpdateAllOutput>()(
+    raw["plugin.updateAll"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const adaptGroupPlugin = (raw: RawClient["server.plugin"]) => ({
+  list: EndpointPluginList(raw),
+  check: EndpointPluginCheck(raw),
+  update: EndpointPluginUpdate(raw),
+  updateAll: EndpointPluginUpdateAll(raw),
+})
 
 const EndpointSessionList = (raw: RawClient["server.session"]) => (input?: SessionListInput) =>
   preserveEffect<SessionListOutput>()(

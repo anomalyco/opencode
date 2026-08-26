@@ -1,9 +1,9 @@
 export * as PluginSupervisor from "./supervisor.js"
-export { Service, type Interface } from "./supervisor-service.js"
+export { Service, type Interface, noUpdates } from "./supervisor-service.js"
 
 import type { Plugin as PluginDefinition } from "@opencode-ai/plugin/effect/plugin"
 import { Event } from "@opencode-ai/schema/config"
-import { Cause, Effect, Latch, Layer, Schema, Stream } from "effect"
+import { Cause, Effect, Latch, Layer, Schema, Semaphore, Stream } from "effect"
 import path from "path"
 import { pathToFileURL } from "url"
 import { ConfigPluginSource } from "../config/plugin/source.js"
@@ -106,25 +106,30 @@ const load = Effect.fn("PluginSupervisor.load")(function* (
   operation: Extract<ConfigPluginSource.Operation, { type: "add" }>,
 ) {
   const npm = yield* Npm.Service
-  const entrypoint = path.isAbsolute(operation.target)
-    ? pathToFileURL(operation.target).href
-    : (yield* npm.add(operation.target, { subpaths: ["server", ""] })).entrypoint
+  const local = path.isAbsolute(operation.target)
+  const installed = local
+    ? { entrypoint: pathToFileURL(operation.target).href, revision: operation.mtime?.toString() }
+    : yield* npm.add(operation.target, { subpaths: ["server", ""] })
+  const entrypoint = installed.entrypoint
   if (!entrypoint) return yield* Effect.fail(new Error(`Plugin entrypoint not found: ${operation.target}`))
   // Bun currently ignores query parameters when caching file:// imports.
-  const source =
-    operation.mtime === undefined
+  const source = local
+    ? operation.mtime === undefined
       ? entrypoint
       : typeof Bun !== "undefined"
         ? `${operation.target.replaceAll("\\", "/")}?mtime=${operation.mtime}`
         : `${entrypoint}?mtime=${operation.mtime}`
-  yield* Effect.log({ msg: "loading plugin", id: operation.target, entrypoint: source })
+    : installed.revision
+      ? `${entrypoint}?revision=${encodeURIComponent(installed.revision)}`
+      : entrypoint
+  yield* Effect.log({ msg: "loading plugin", local })
   const mod = yield* Effect.promise(() => importModule(source))
   const value = (yield* Schema.decodeUnknownEffect(PluginModule)(mod)).default
   const plugin = "effect" in value ? value : PluginPromise.fromPromise(value)
   return {
     id: plugin.id,
     tui: plugin.tui,
-    version: JSON.stringify(operation),
+    version: `${JSON.stringify(operation)}:${installed.revision ?? ""}`,
     source: pluginSource(operation.target),
     effect: (host) => plugin.effect({ ...host, options: operation.options }),
   } satisfies Plugin.Versioned
@@ -134,15 +139,16 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const registry = yield* Plugin.Service
+    const npm = yield* Npm.Service
     const sdk = yield* SdkPlugins.Service
     const sources = yield* ConfigPluginSource.Service
     const bus = yield* Bus.Service
     const ready = yield* Latch.make()
+    const activationLock = Semaphore.makeUnsafe(1)
+    const internal = yield* PluginInternal.list()
     let observed = 0
 
     const activate = Effect.fn("PluginSupervisor.activate")(function* () {
-      // Resolve OpenCode's internal plugins with their privileged Location services.
-      const internal = yield* PluginInternal.list()
       // Combine internal plugins with host-contributed SDK plugins in boot order.
       const pre = [
         ...internal.pre.map((plugin) => ({ ...plugin, version: "internal", source: { type: "builtin" as const } })),
@@ -159,6 +165,73 @@ export const layer = Layer.effect(
       // Replace the active generation in one scoped, batched activation.
       yield* registry.activate(resolved.plugins, resolved.failures)
     })
+    const checkOne = Effect.fn("PluginSupervisor.checkOne")(function* (info: Plugin.Info) {
+      const name = pluginName(info)
+      if (info.source.type !== "package") {
+        return { name, source: info.source, status: "not-updateable" } satisfies Plugin.UpdateInfo
+      }
+      const source = info.source
+      return yield* npm.check(source.package).pipe(
+        Effect.map(
+          (update): Plugin.UpdateInfo => ({
+            name,
+            source: info.source,
+            status: update.pinned
+              ? "pinned"
+              : !update.updateable
+                ? "not-updateable"
+                : update.updateAvailable
+                  ? "available"
+                  : "up-to-date",
+            currentVersion: update.currentVersion,
+            latestVersion: update.latestVersion,
+          }),
+        ),
+        Effect.catchCause(() =>
+          Effect.succeed({
+            name,
+            source: info.source,
+            status: "failed",
+            error: "Failed to check plugin update",
+          } satisfies Plugin.UpdateInfo),
+        ),
+      )
+    })
+    const check = Effect.fn("PluginSupervisor.check")(function* () {
+      return yield* Effect.forEach(yield* registry.list(), checkOne, { concurrency: "unbounded" })
+    })
+    const updateOne = Effect.fn("PluginSupervisor.updateOne")(function* (info: Plugin.Info) {
+      const name = pluginName(info)
+      if (info.source.type !== "package") {
+        return { name, source: info.source, status: "not-updateable" } satisfies Plugin.UpdateResult
+      }
+      const source = info.source
+      return yield* npm.update(source.package).pipe(
+        Effect.map(
+          (update): Plugin.UpdateResult => ({
+            name,
+            source: info.source,
+            status: update.pinned
+              ? "pinned"
+              : !update.updateable
+                ? "not-updateable"
+                : update.updated
+                  ? "updated"
+                  : "up-to-date",
+            previousVersion: update.previousVersion,
+            version: update.latestVersion ?? update.currentVersion,
+          }),
+        ),
+        Effect.catchCause(() =>
+          Effect.succeed({
+            name,
+            source: info.source,
+            status: "failed",
+            error: "Failed to update plugin",
+          } satisfies Plugin.UpdateResult),
+        ),
+      )
+    })
     const updates = Stream.merge(sources.changes(), bus.subscribe([Event.Updated, SdkPlugins.Updated])).pipe(
       // Make accepted work visible to flush before coalescing the burst.
       Stream.mapEffect(() =>
@@ -169,19 +242,43 @@ export const layer = Layer.effect(
         }),
       ),
     )
+    const reload = () =>
+      activationLock.withPermit(activate().pipe(Effect.scoped, Effect.provideService(Npm.Service, npm)))
     yield* Stream.concat(Stream.succeed(0), updates).pipe(
       // Keep observing updates while activation runs, retaining only the latest generation request.
       Stream.buffer({ capacity: 1, strategy: "sliding" }),
       Stream.debounce("100 millis"),
       Stream.runForEach((target) =>
         Effect.gen(function* () {
-          yield* activate()
+          yield* activationLock.withPermit(activate())
           if (observed === target) yield* ready.open
         }).pipe(Effect.catchCause((cause) => Effect.logError("failed to reload plugins", { cause }))),
       ),
       Effect.forkScoped({ startImmediately: true }),
     )
-    return Service.of({ flush: ready.await })
+    return Service.of({
+      flush: ready.await,
+      check,
+      update: Effect.fn("PluginSupervisor.update")(function* (name) {
+        const info = (yield* registry.list()).find((info) => pluginName(info) === name)
+        if (!info) {
+          return {
+            name,
+            source: { type: "package", package: name },
+            status: "failed",
+            error: "Plugin not found",
+          }
+        }
+        const result = yield* updateOne(info)
+        if (result.status === "updated") yield* reload()
+        return result
+      }),
+      updateAll: Effect.fn("PluginSupervisor.updateAll")(function* () {
+        const results = yield* Effect.forEach(yield* registry.list(), updateOne)
+        if (results.some((result) => result.status === "updated")) yield* reload()
+        return results
+      }),
+    })
   }),
 )
 
@@ -197,6 +294,12 @@ const nodeDeps = [
 function pluginSource(target: string): Plugin.Source {
   if (path.isAbsolute(target)) return { type: "local", path: target }
   return { type: "package", package: target }
+}
+
+function pluginName(info: Plugin.Info) {
+  if (info.source.type === "package") return info.source.package
+  if (info.source.type === "local") return info.source.path
+  return info.id ?? info.source.type
 }
 
 export const node = makeLocationNode({ service: Service, layer, deps: nodeDeps })

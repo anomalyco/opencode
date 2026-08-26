@@ -9,6 +9,12 @@ import type {
   AgentGetOutput,
   PluginListInput,
   PluginListOutput,
+  PluginCheckInput,
+  PluginCheckOutput,
+  PluginUpdateInput,
+  PluginUpdateOutput,
+  PluginUpdateAllInput,
+  PluginUpdateAllOutput,
   SessionListInput,
   SessionListOutput,
   SessionStatsInput,
@@ -450,6 +456,43 @@ export function make(options: ClientOptions) {
           {
             method: "GET",
             path: `/api/plugin`,
+            query: { location: input?.["location"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      check: (input?: PluginCheckInput, requestOptions?: RequestOptions) =>
+        request<PluginCheckOutput>(
+          {
+            method: "GET",
+            path: `/api/plugin/update`,
+            query: { location: input?.["location"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      update: (input: PluginUpdateInput, requestOptions?: RequestOptions) =>
+        request<PluginUpdateOutput>(
+          {
+            method: "POST",
+            path: `/api/plugin/update`,
+            query: { location: input["location"] },
+            body: { name: input["name"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      updateAll: (input?: PluginUpdateAllInput, requestOptions?: RequestOptions) =>
+        request<PluginUpdateAllOutput>(
+          {
+            method: "POST",
+            path: `/api/plugin/update-all`,
             query: { location: input?.["location"] },
             successStatus: 200,
             declaredStatuses: [401, 400],

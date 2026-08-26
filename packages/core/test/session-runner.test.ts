@@ -374,6 +374,7 @@ let pluginFlushHook = Effect.void
 const pluginSupervisor = Layer.succeed(
   PluginSupervisor.Service,
   PluginSupervisor.Service.of({
+    ...PluginSupervisor.noUpdates,
     flush: Effect.suspend(() => pluginFlushHook),
   }),
 )
