@@ -7,7 +7,7 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { useGlobal } from "@/runtime/server/runtime"
 import { getProjectAvatarVariant } from "@/shell/state/layout"
 import { ServerConnection, serverName } from "@/runtime/server/registry"
-import { displayName } from "@/shell/layout/helpers"
+import { displayName, getProjectAvatarSource } from "@/shell/layout/helpers"
 import { InlineServerSelect } from "@/settings/server-select"
 import { DialogEditProject } from "./project-dialog"
 import "@/settings/settings.css"
@@ -47,7 +47,12 @@ export const SettingsProjects: Component = () => {
         onClick={() => openProjectSettings(props.project, props.server)}
       >
         <div class="flex items-center gap-2.5 min-w-0 flex-1">
-          <ProjectAvatar fallback={name()} variant={color()} class="shrink-0" />
+          <ProjectAvatar
+            fallback={name()}
+            src={getProjectAvatarSource(props.project.id, props.project.icon)}
+            variant={color()}
+            class="shrink-0"
+          />
           <span class="text-13-medium text-v2-text-text-base truncate">{name()}</span>
         </div>
         <div class="flex items-center gap-2 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">

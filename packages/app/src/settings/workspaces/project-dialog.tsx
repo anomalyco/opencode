@@ -59,6 +59,7 @@ function ProjectSettingsDialog(props: { project: LocalProject; server: ServerCon
             <Tabs.Trigger value="general">
               <ProjectAvatar
                 fallback={projectName()}
+                src={getProjectAvatarSource(props.project.id, props.project.icon)}
                 variant={getProjectAvatarVariant(props.project.icon?.color)}
                 class="!size-4 shrink-0"
               />
