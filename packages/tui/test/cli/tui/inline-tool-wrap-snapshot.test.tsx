@@ -191,13 +191,13 @@ describe("TUI inline tool wrapping", () => {
         status: "completed",
         input: { sessionID: "ses_example", notify: true },
       }),
-    ).toBe("↳ session.prompt [sessionID=ses_example, notify=true]")
+    ).toBe("session.prompt [sessionID=ses_example, notify=true]")
     expect(executeCallSummary({ tool: "session.get", status: "error", input: { nested: { hidden: true } } })).toBe(
-      "↳ session.get (failed)",
+      "session.get",
     )
     expect(
       executeCallSummary({ tool: "session.prompt", status: "completed", input: { text: "first line\nsecond line" } }),
-    ).toBe("↳ session.prompt [text=first line second line]")
+    ).toBe("session.prompt [text=first line second line]")
   })
 
   test("summarizes generic tool arguments on one line", () => {

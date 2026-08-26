@@ -85,14 +85,77 @@ describe("Tool", () => {
   it.effect("rejects invalid and colliding normalized names", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service
-      const invalid = yield* transform(service, { "123": make() }, { codemode: false }).pipe(Effect.flip)
-      expect(invalid.message).toBe("Invalid tool name: 123")
+      for (const name of ["", "x".repeat(65)]) {
+        const invalid = yield* transform(service, { [name]: make() }, { codemode: false }).pipe(Effect.flip)
+        expect(invalid.message).toBe(`Invalid tool name: ${name}`)
+      }
 
       const collision = yield* transform(service, { "echo.tool": make(), echo_tool: make() }, { codemode: false }).pipe(
         Effect.flip,
       )
       expect(collision.message).toBe("Duplicate normalized tool name: echo_tool")
       expect((yield* service.snapshot()).definitions.map((tool) => tool.name)).toEqual(["execute"])
+    }),
+  )
+
+  it.effect("executes native tools without requiring letter-leading names or namespace segments", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      yield* transform(
+        service,
+        { "2d_get_scene": make(), "123": make(), _lookup: make(), "-lookup": make() },
+        { codemode: false },
+      )
+      yield* transform(service, { "2d_get_scene": make() }, { namespace: "123._private.-tools", codemode: false })
+
+      const snapshot = yield* service.snapshot()
+      expect(snapshot.definitions.map((tool) => tool.name)).toEqual([
+        "-lookup",
+        "123",
+        "123__private_-tools_2d_get_scene",
+        "2d_get_scene",
+        "_lookup",
+        "execute",
+      ])
+      for (const name of ["2d_get_scene", "123", "_lookup", "-lookup", "123__private_-tools_2d_get_scene"]) {
+        expect((yield* snapshot.execute(call(name))).output).toEqual({ text: name })
+      }
+    }),
+  )
+
+  it.effect("executes Code Mode tools without requiring letter-leading names or namespace segments", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      yield* transform(service, { "2d_get_scene": make(), "123": make(), _lookup: make(), "-lookup": make() })
+      yield* transform(service, { "2d_get_scene": make() }, { namespace: "123._private.-tools", codemode: true })
+
+      const snapshot = yield* service.snapshot()
+      expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["execute"])
+      expect(snapshot.codeModeCatalog?.map((tool) => tool.path)).toEqual([
+        "-lookup",
+        "123",
+        "123._private.-tools.2d_get_scene",
+        "2d_get_scene",
+        "_lookup",
+      ])
+      const result = yield* snapshot.execute({
+        ...call("execute"),
+        call: {
+          type: "tool-call",
+          id: "call-nonletter-names",
+          name: "execute",
+          input: {
+            code: `const results = await Promise.all([
+              tools["2d_get_scene"]({ text: "digit" }),
+              tools["123"]({ text: "numeric" }),
+              tools._lookup({ text: "underscore" }),
+              tools["-lookup"]({ text: "hyphen" }),
+              tools["123"]._private["-tools"]["2d_get_scene"]({ text: "namespaced" }),
+            ]); return results.map(result => result.text).join(",");`,
+          },
+        },
+      })
+      expect(result.content).toEqual([{ type: "text", text: "digit,numeric,underscore,hyphen,namespaced" }])
     }),
   )
 

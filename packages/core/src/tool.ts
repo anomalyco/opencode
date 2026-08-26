@@ -271,12 +271,12 @@ function schemaMakeError(error: unknown) {
 }
 
 const validateName = (name: string) =>
-  /^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(name)
+  /^[A-Za-z0-9_-]{1,64}$/.test(name)
     ? Effect.void
     : Effect.fail(new RegistrationError({ name, message: `Invalid tool name: ${name}` }))
 
 const validateNamespace = (namespace: string) =>
-  namespace.split(".").every((segment) => /^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(segment))
+  namespace.split(".").every((segment) => /^[A-Za-z0-9_-]{1,64}$/.test(segment))
     ? Effect.void
     : Effect.fail(
         new RegistrationError({
