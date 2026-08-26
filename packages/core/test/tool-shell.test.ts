@@ -3,7 +3,7 @@ import { realpathSync } from "node:fs"
 import os from "os"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Deferred, Duration, Effect, Fiber, Layer, Schema, Scope, Stream } from "effect"
+import { Deferred, Duration, Effect, Fiber, Layer, Scope, Stream } from "effect"
 import { Money } from "@opencode-ai/schema/money"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
@@ -246,15 +246,10 @@ describe("ShellTool", () => {
               const permission = yield* Permission.Service
               const bus = yield* Bus.Service
               const asked = yield* Deferred.make<Permission.Request, Error>()
-              const unsubscribe = yield* bus.listen((event) =>
-                event.type === Permission.Event.Asked.type
-                  ? Deferred.succeed(
-                      asked,
-                      Schema.decodeUnknownSync(Schema.toType(Permission.Request))(event.data),
-                    ).pipe(Effect.asVoid)
-                  : Effect.void,
+              yield* bus.subscribe(Permission.Event.Asked).pipe(
+                Stream.runForEach((event) => Deferred.succeed(asked, event.data)),
+                Effect.forkScoped({ startImmediately: true }),
               )
-              yield* Effect.addFinalizer(() => unsubscribe)
               const command = "printf '%s' $((1)) > marker"
               const execution = yield* executeTool(registry, call({ command }, "call-opaque-confirmation")).pipe(
                 Effect.tap((result) =>

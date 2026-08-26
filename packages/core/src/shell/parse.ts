@@ -159,6 +159,7 @@ const ARITY: Record<string, number> = {
   "yarn dlx": 3,
   "yarn run": 3,
 }
+const PREFIX_LENGTH = Math.max(...Object.keys(ARITY).map((command) => command.split(" ").length))
 
 export const scan = Effect.fnUntraced(function* (
   command: string,
@@ -225,21 +226,20 @@ async function scanPortable(command: string, shell: string, env: Record<string, 
 
   const directories: string[] = []
   let directoryUnknown = false
-  let directoryChanges = 0
   for (const item of result.commands) {
+    if (directoryUnknown) break
     const location = directoryCommand(item.words, powershell)
     if (!location) continue
-    directoryChanges++
     // Later changes may run in another branch, group, or directory stack.
     if (
-      directoryChanges > 1 ||
+      directories.length > 0 ||
       location.wrapped ||
       ["popd", "pushd", "pop-location", "push-location"].includes(location.name)
     ) {
       directoryUnknown = true
       continue
     }
-    const args = location.words.slice(1)
+    const args = item.words.slice(1)
     const first = command.trimStart().startsWith(item.resource) && /^cd(?:[ \t]|$)/.test(item.resource)
     if (!powershell && args.length === 0) {
       const home = environment(env, "HOME")
@@ -301,7 +301,7 @@ function directoryCommand(words: string[], powershell: boolean) {
   }
   const name = powershell ? powerShellCommandName(words[index]) : words[index]
   if (!(powershell ? POWERSHELL_CWD : BASH_CWD).has(name)) return
-  return { name, words: words.slice(index), wrapped: index > 0 }
+  return { name, wrapped: index > 0 }
 }
 
 function shellStartupUnknown(shell: string, env: Record<string, string | undefined>) {
@@ -354,33 +354,27 @@ function directoryArgs(command: Part[], powershell: boolean, cwd: string, shell:
   return directories
 }
 
-function directoryArgument(
-  value: string,
-  powershell: boolean,
-  cwd: string,
-  shell: string,
-  env: Record<string, string | undefined> = process.env,
-) {
+function directoryArgument(value: string, powershell: boolean, cwd: string, shell: string) {
   const quote = value[0]
   const text = (quote === '"' || quote === "'") && value.at(-1) === quote ? value.slice(1, -1) : value
-  if (!powershell) return expandKnownDirectory(text, env)
+  if (!powershell) return expandKnownDirectory(text, process.env)
 
   // PowerShell exposes environment variables through $env:NAME and provides these
   // automatic directory variables. Expand only values we can determine without executing code.
   return expandKnownDirectory(
     text
-      .replace(/\$\{env:([^}]+)\}/gi, (_, key: string) => environment(env, key) ?? "")
-      .replace(/\$env:([A-Za-z_][A-Za-z0-9_]*)/gi, (_, key: string) => environment(env, key) ?? "")
+      .replace(/\$\{env:([^}]+)\}/gi, (_, key: string) => environment(process.env, key) ?? "")
+      .replace(/\$env:([A-Za-z_][A-Za-z0-9_]*)/gi, (_, key: string) => environment(process.env, key) ?? "")
       .replace(/\$(HOME|PWD|PSHOME)(?=$|[\\/])/gi, (_, key: string) => {
-        if (key.toUpperCase() === "HOME") return environment(env, "HOME") ?? ""
+        if (key.toUpperCase() === "HOME") return environment(process.env, "HOME") ?? ""
         if (key.toUpperCase() === "PWD") return cwd
         return path.dirname(shell)
       }),
-    env,
+    process.env,
   )
 }
 
-function expandKnownDirectory(value: string, env: Record<string, string | undefined> = process.env) {
+function expandKnownDirectory(value: string, env: Record<string, string | undefined>) {
   // Unknown shell expressions cannot be resolved safely during permission analysis.
   if (value.includes("$") || value.includes("`") || value.startsWith("(") || value === "-") return
   if (value === "~") return environment(env, "HOME")
@@ -407,7 +401,7 @@ function powerShellCommandName(value: string | undefined) {
 }
 
 function prefix(tokens: string[]) {
-  for (let length = tokens.length; length > 0; length--) {
+  for (let length = Math.min(tokens.length, PREFIX_LENGTH); length > 0; length--) {
     const arity = ARITY[tokens.slice(0, length).join(" ")]
     if (arity !== undefined) return tokens.slice(0, arity)
   }

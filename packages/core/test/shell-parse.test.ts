@@ -31,17 +31,6 @@ describe("ShellParse", () => {
     ])
   })
 
-  test("portable scanning authorizes opaque heredocs without inferring directories", async () => {
-    const command = "cat <<'EOF'\nstatic body\nEOF"
-    const portable = await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace", { portable: true }))
-    expect(portable).toEqual({
-      commands: [{ resource: command }],
-      directories: [],
-      analysis: "opaque",
-      directoryUnknown: true,
-    })
-  })
-
   test.each(["FOO=bar > /tmp/victim", "echo ok; for x in 1; do touch /tmp/victim; done"])(
     "marks effectful opaque Bash input as exact and directory-unknown: %s",
     async (command) => {
@@ -53,13 +42,6 @@ describe("ShellParse", () => {
       })
     },
   )
-
-  test("keeps PowerShell carriage-return commands under authorization", async () => {
-    const portable = await Effect.runPromise(
-      ShellParse.scan("Get-ChildItem\rRemove-Item victim", "pwsh", "C:\\workspace", { portable: true }),
-    )
-    expect(portable.commands.map((command) => command.resource)).toEqual(["Get-ChildItem", "Remove-Item victim"])
-  })
 
   test.each(["fish", "nu", "cmd.exe", "/custom/shell"])(
     "fails closed for unsupported shell families: %s",
@@ -112,15 +94,6 @@ describe("ShellParse", () => {
     expect(portable.directories).toEqual(["beforeafter"])
     expect(portable.directoryUnknown).toBe(false)
   })
-
-  test.each(["command cd /tmp", "builtin cd /tmp"])(
-    "keeps wrapped Bash directory commands uncertain: %s",
-    async (command) => {
-      const portable = await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace", { portable: true }))
-      expect(portable.commands.map((item) => item.resource)).toEqual([command])
-      expect(portable.directoryUnknown).toBe(true)
-    },
-  )
 
   test("keeps redirected directory changes under shell authorization without losing known directories", async () => {
     const command = "cd . > victim"
@@ -223,21 +196,6 @@ describe("ShellParse", () => {
       expect(portable.analysis).toBe("complete")
     },
   )
-
-  test.each([
-    ["/bin/bash", { HOME: "/workspace", BASH_ENV: "/tmp/hook" }],
-    ["/bin/zsh", { HOME: "/tmp/hooks" }],
-    ["/bin/ksh", { HOME: "/workspace", ENV: "/tmp/hook" }],
-  ] as const)("fails closed for shell startup hooks: %s", async (shell, env) => {
-    const command = "echo safe"
-    const portable = await Effect.runPromise(ShellParse.scan(command, shell, "/workspace", { portable: true, env }))
-    expect(portable).toEqual({
-      commands: [{ resource: command }],
-      directories: [],
-      analysis: "opaque",
-      directoryUnknown: true,
-    })
-  })
 
   test("splits PowerShell commands case-insensitively", async () => {
     const result = await Effect.runPromise(

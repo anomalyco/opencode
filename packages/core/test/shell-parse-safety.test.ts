@@ -3,6 +3,12 @@ import { Effect } from "effect"
 import { ShellParse } from "../src/shell/parse.js"
 
 describe("portable shell authorization", () => {
+  test("derives a bounded prefix for long argument lists", async () => {
+    const command = `echo ${"x ".repeat(16_000)}`.trimEnd()
+    const result = await Effect.runPromise(ShellParse.scan(command, "bash", "/workspace", { portable: true, env: {} }))
+    expect(result.commands).toEqual([{ resource: command, save: "echo *" }])
+  })
+
   test("preserves legacy Zsh chdir directory authorization", async () => {
     const result = await Effect.runPromise(ShellParse.scan("chdir /outside; pwd", "zsh", "/workspace"))
     expect(result.directories).toEqual(["/outside"])

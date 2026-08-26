@@ -39,15 +39,17 @@ const MAX_INPUT_LENGTH = 64 * 1024
 const MAX_SUBSTITUTION_DEPTH = 32
 
 export function scan(input: string): Result {
-  return scanBash(input, 0)
+  return scanBash(input, 0, { remaining: MAX_INPUT_LENGTH * MAX_SUBSTITUTION_DEPTH })
 }
 
-function scanBash(input: string, depth: number): Result {
-  if (input.length > MAX_INPUT_LENGTH) return { kind: "opaque", reason: "invalid-structure" }
+function scanBash(input: string, depth: number, budget: { remaining: number }): Result {
+  // Conditional normalization rescans substitutions, so depth alone does not bound total work.
+  budget.remaining -= input.length
+  if (input.length > MAX_INPUT_LENGTH || budget.remaining < 0) return { kind: "opaque", reason: "invalid-structure" }
   const group = bashLeadingGroup(input)
   if (group) {
     if (depth >= MAX_SUBSTITUTION_DEPTH) return { kind: "opaque", reason: "invalid-structure" }
-    const nested = scanBash(group.source, depth + 1)
+    const nested = scanBash(group.source, depth + 1, budget)
     if (nested.kind === "opaque") return nested
     const suffix = input.slice(group.end + 1).replace(/^[ \t\n]+|[ \t\n]+$/g, "")
     if (!suffix) return nested
@@ -56,7 +58,7 @@ function scanBash(input: string, depth: number): Result {
     if (separator && !remaining)
       return separator === ";" || separator === "&" ? nested : { kind: "opaque", reason: "invalid-structure" }
     if (!separator) return { kind: "opaque", reason: "compound-command" }
-    const rest = scanBash(remaining, depth + 1)
+    const rest = scanBash(remaining, depth + 1, budget)
     if (rest.kind === "opaque") return rest
     return {
       kind: "scanned",
@@ -137,7 +139,7 @@ function scanBash(input: string, depth: number): Result {
       } else if ((char === "$" && input[index + 1] === "(") || char === "`") {
         const substitution = bashSubstitution(input, index)
         if (!substitution || depth >= MAX_SUBSTITUTION_DEPTH) return { kind: "opaque", reason: "command-substitution" }
-        const result = scanBash(substitution.source, depth + 1)
+        const result = scanBash(substitution.source, depth + 1, budget)
         if (result.kind === "opaque") return result
         nestedCommands.push(...result.commands.map(markNested))
         word += input.slice(index, substitution.end + 1)
@@ -179,7 +181,7 @@ function scanBash(input: string, depth: number): Result {
     if ((char === "$" && input[index + 1] === "(") || char === "`") {
       const substitution = bashSubstitution(input, index)
       if (!substitution || depth >= MAX_SUBSTITUTION_DEPTH) return { kind: "opaque", reason: "command-substitution" }
-      const result = scanBash(substitution.source, depth + 1)
+      const result = scanBash(substitution.source, depth + 1, budget)
       if (result.kind === "opaque") return result
       nestedCommands.push(...result.commands.map(markNested))
       wordStarted = true
@@ -190,7 +192,7 @@ function scanBash(input: string, depth: number): Result {
     if ((char === "<" || char === ">") && input[index + 1] === "(") {
       const substitution = bashParenthesized(input, index + 1)
       if (!substitution || depth >= MAX_SUBSTITUTION_DEPTH) return { kind: "opaque", reason: "command-substitution" }
-      const result = scanBash(substitution.source, depth + 1)
+      const result = scanBash(substitution.source, depth + 1, budget)
       if (result.kind === "opaque") return result
       nestedCommands.push(...result.commands.map(markNested))
       wordStarted = true
@@ -267,7 +269,7 @@ function scanBash(input: string, depth: number): Result {
   if (separated && !terminalBackground && comment === undefined && !input.slice(segment).trim()) invalidStructure = true
   if (invalidStructure) return { kind: "opaque", reason: "invalid-structure" }
   if (invalidRedirect) return { kind: "opaque", reason: "invalid-redirect" }
-  const conditional = bashConditionalCommands(commands, depth)
+  const conditional = bashConditionalCommands(commands, depth, budget)
   if (conditional) commands.splice(0, commands.length, ...conditional)
   if (compound || commands.some((command) => BASH_COMPOUND_KEYWORDS.has(command.words[0] ?? "")))
     return { kind: "opaque", reason: "compound-command" }
@@ -278,7 +280,7 @@ function scanBash(input: string, depth: number): Result {
   return { kind: "scanned", commands }
 }
 
-function bashConditionalCommands(input: Command[], depth: number) {
+function bashConditionalCommands(input: Command[], depth: number, budget: { remaining: number }) {
   if (depth >= MAX_SUBSTITUTION_DEPTH) return
   const commands = input.filter((command) => !command[Nested])
   if (commands[0]?.words[0] !== "if" || commands.at(-1)?.words[0] !== "fi") return
@@ -294,7 +296,7 @@ function bashConditionalCommands(input: Command[], depth: number) {
   for (const [index, command] of commands.entries()) {
     const keyword = command.words[0]
     if (!keywords.has(keyword ?? "")) {
-      const result = scanBash(command.resource, depth + 1)
+      const result = scanBash(command.resource, depth + 1, budget)
       if (result.kind === "opaque") return
       normalized.push(...result.commands)
       hasCommand = true
@@ -302,7 +304,7 @@ function bashConditionalCommands(input: Command[], depth: number) {
     }
     if (!/^(?:if|then|elif|else|fi)(?:[ \t\n]|$)/.test(command.resource)) return
     const source = command.resource.slice(keyword!.length).replace(/^[ \t\n]+|[ \t\n]+$/g, "")
-    const inline = source ? scanBash(source, depth + 1) : undefined
+    const inline = source ? scanBash(source, depth + 1, budget) : undefined
     if (inline?.kind === "opaque") return
     if (index === 0) {
       if (inline) normalized.push(...inline.commands)

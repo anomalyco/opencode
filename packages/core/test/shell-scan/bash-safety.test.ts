@@ -107,6 +107,22 @@ describe("Bash execution safety", () => {
     })
   })
 
+  test("bounds repeated conditional scans with a fresh budget for each input", () => {
+    const source = Array.from({ length: 16 }).reduce<string>(
+      (source) => `if true; then echo $(${source}); fi`,
+      `printf ${"x".repeat(1024)}`,
+    )
+    expect(ShellScan.scan(source).kind).toBe("opaque")
+    expect(ShellScan.scan("if true; then echo $(printf safe); fi")).toEqual({
+      kind: "scanned",
+      commands: [
+        { resource: "true", words: ["true"] },
+        { resource: "echo $(printf safe)", words: ["echo", "$(printf safe)"] },
+        { resource: "printf safe", words: ["printf", "safe"] },
+      ],
+    })
+  })
+
   test.each([
     "(printf safe # ) ignored\nscan_probe)",
     "{ printf safe; # } ignored\nscan_probe; }",

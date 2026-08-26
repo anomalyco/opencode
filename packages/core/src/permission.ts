@@ -43,6 +43,8 @@ export const AssertInput = Schema.Struct({
   id: ID.pipe(Schema.optional),
   ...RequestFields,
   agent: Agent.ID.pipe(Schema.optional),
+  // Exact mode restricts allows to literal or action-wide grants, while retaining
+  // scoped denies and asks conservatively when affected resources are unknown.
   resourceMode: Schema.Literals(["wildcard", "exact"]).pipe(Schema.optional),
 }).annotate({ identifier: "Permission.AssertInput" })
 export type AssertInput = typeof AssertInput.Type
