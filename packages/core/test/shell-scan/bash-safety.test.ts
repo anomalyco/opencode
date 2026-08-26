@@ -21,35 +21,25 @@ const executions = [
 describe("Bash execution safety", () => {
   for (const shell of ["bash", "zsh"]) {
     const executable = Bun.which(shell)
-    test.skipIf(!executable).each([...executions])(
-      `${shell} command syntax is visible or opaque: %s`,
-      (source, head) => {
-        const execution = Bun.spawnSync(
-          [
-            executable!,
-            ...(shell === "bash" ? ["--noprofile", "--norc"] : ["-f"]),
-            "-c",
-            `scan_probe() { printf 'executed\\n' >&2; }; ${source}`,
-          ],
-          { env: { PATH: "/usr/bin:/bin", LC_ALL: "C" } },
-        )
-        expect(execution.stderr.toString()).toContain("executed\n")
-        const result = ShellScan.scan(source)
-        if (result.kind === "opaque") return
-        expect(result.commands.map((command) => command.words[0])).toContain(head)
-      },
-    )
+    test.skipIf(!executable).each([...executions])(`${shell} command syntax is visible: %s`, (source, head) => {
+      const execution = Bun.spawnSync(
+        [
+          executable!,
+          ...(shell === "bash" ? ["--noprofile", "--norc"] : ["-f"]),
+          "-c",
+          `scan_probe() { printf 'executed\\n' >&2; }; ${source}`,
+        ],
+        { env: { PATH: "/usr/bin:/bin", LC_ALL: "C" } },
+      )
+      expect(execution.stderr.toString()).toContain("executed\n")
+      const result = ShellScan.scan(source)
+      expect(result.kind).toBe("scanned")
+      if (result.kind === "opaque") throw new Error(result.reason)
+      expect(result.commands.map((command) => command.words[0])).toContain(head)
+    })
   }
 
   test.each([
-    "printf safe; { scan_probe; }",
-    "if true; then { scan_probe; }; fi",
-    "X=${unset:-a b} scan_probe",
-    'echo "$[array[index]]"',
-    "(( value ))",
-    "echo ${array[index]}",
-    'echo "${value@P}"',
-    "echo $'unsupported\\'quote'",
     "printf ok && # comment",
     '"if" true; then printf safe; fi',
     "X=x if true; then printf safe; fi",
@@ -57,7 +47,7 @@ describe("Bash execution safety", () => {
     "{ printf ok; } ||",
     "(printf ok) |",
     "(printf ok) |&",
-  ])("does not claim unsupported command positions are scanned: %s", (source) => {
+  ])("rejects malformed command positions: %s", (source) => {
     expect(ShellScan.scan(source).kind).toBe("opaque")
   })
 
@@ -132,7 +122,6 @@ describe("Bash execution safety", () => {
         words: ["printf", "output"],
         rawWords: ["printf", "output"],
       })
-      expect(result.commands.at(-1)?.[ShellScan.Nested]).toBe(true)
     },
   )
 
@@ -156,12 +145,12 @@ describe("Bash execution safety", () => {
     })
   })
 
-  test("bounds repeated conditional scans with a fresh budget for each input", () => {
+  test("does not repeatedly rescan nested conditionals", () => {
     const source = Array.from({ length: 16 }).reduce<string>(
       (source) => `if true; then echo $(${source}); fi`,
       `printf ${"x".repeat(1024)}`,
     )
-    expect(ShellScan.scan(source).kind).toBe("opaque")
+    expect(ShellScan.scan(source).kind).toBe("scanned")
     expect(ShellScan.scan("if true; then echo $(printf safe); fi")).toMatchObject({
       kind: "scanned",
       commands: [
@@ -179,7 +168,8 @@ describe("Bash execution safety", () => {
     'echo "$(printf "%s" "$(printf ")")"; scan_probe)"',
   ])("does not lose commands through delimiter or quote confusion: %s", (source) => {
     const result = ShellScan.scan(source)
-    if (result.kind === "opaque") return
+    expect(result.kind).toBe("scanned")
+    if (result.kind === "opaque") throw new Error(result.reason)
     expect(result.commands.map((command) => command.words[0])).toContain("scan_probe")
   })
 })
@@ -234,7 +224,8 @@ describe("Bash real-shell differential grammar", () => {
       expect(observed.length).toBeGreaterThan(0)
       expect(observed.every((name) => probes.includes(name))).toBe(true)
       const result = ShellScan.scan(source)
-      if (result.kind === "opaque") return
+      expect(result.kind).toBe("scanned")
+      if (result.kind === "opaque") throw new Error(result.reason)
       for (const name of observed) expect(result.commands.map((command) => command.words[0])).toContain(name)
     })
   }

@@ -7,6 +7,7 @@ import path from "path"
 import type { Node } from "web-tree-sitter"
 import { shellParserWasm } from "#shell-parser-wasm"
 import { ShellSelect } from "./select.js"
+import { Wildcard } from "../util/wildcard.js"
 
 type Part = { type: string; text: string }
 const CWD = new Set(["cd", "chdir", "popd", "pushd", "push-location", "set-location"])
@@ -214,11 +215,16 @@ export const scanPortable = Effect.fnUntraced(function* (command: string, shell:
 
   const output: Result = { commands: [], directories: [] }
   for (const item of result.commands) {
-    const name = powershell ? item.rawWords[0]?.toLowerCase() : item.rawWords[0]
+    // The legacy command walk skips declarations, not the substitutions within them.
+    if (item.declaration) continue
+    const words = item.redirectWordCount === undefined ? item.rawWords : item.rawWords.slice(0, item.redirectWordCount)
+    // The shipped PowerShell grammar treats bare statement-head foreach prefixes as control flow.
+    if (powershell && item.statementHead && /^foreach(?:-|$)/i.test(words[0] ?? "")) continue
+    const name = powershell ? words[0]?.toLowerCase() : words[0]
     if (CWD.has(name)) {
       output.directories.push(
         ...directoryArgs(
-          item.rawWords.flatMap((text): Part[] => {
+          words.flatMap((text): Part[] => {
             const parameter = powershell ? /^(-(?:literalpath|path)):(.*)$/i.exec(text) : undefined
             if (parameter)
               return [
@@ -234,9 +240,24 @@ export const scanPortable = Effect.fnUntraced(function* (command: string, shell:
       )
       continue
     }
+    const selected = prefix(words.slice(0, PREFIX_LENGTH))
+    const conventional = `${selected.join(" ")} *`
+    const end = item.wordEnds?.[selected.length - 1]
+    // Keep existing grants stable unless normalized spacing loses the original source boundary.
+    const save =
+      !powershell || end === undefined || Wildcard.match(item.resource, conventional)
+        ? conventional
+        : (() => {
+            const boundary =
+              item.wordEnds?.find(
+                (value) => value >= end && (value >= item.resource.length || /\s/.test(item.resource[value])),
+              ) ?? end
+            const separator = /^\s+(?:`(?:\r\n|\r|\n)\s*)?/.exec(item.resource.slice(boundary))?.[0]
+            return `${item.resource.slice(0, boundary)}${separator ?? " "}*`
+          })()
     output.commands.push({
       resource: item.resource,
-      save: `${prefix(item.rawWords.slice(0, PREFIX_LENGTH)).join(" ")} *`,
+      save,
     })
   }
   return output

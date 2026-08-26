@@ -3,6 +3,8 @@
 ---
 
 Make the experimental portable shell scanner authoritative, with no Tree-sitter
-fallback. Preserve the existing permission policy, handle arithmetic expansions
-natively, and report unsupported syntax as scanner errors. The default
-Tree-sitter path is unchanged.
+fallback. Scan common Bash and PowerShell control flow, heredocs, functions,
+expressions, quoting, and substitutions natively. Preserve existing redirect and
+declaration permission matching, and make PowerShell saved approvals cover the
+original command spelling. Parser failures remain visible without changing the
+permission engine. The default Tree-sitter path is unchanged.

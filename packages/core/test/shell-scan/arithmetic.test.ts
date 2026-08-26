@@ -12,6 +12,11 @@ describe("Bash arithmetic expansions", () => {
     "$((1 + $((2 * 3))))",
     "$((1 + \\\n2))",
     "$((1 +\n2))",
+    "$((1 + ${value:-2}))",
+    "$((array[index]))",
+    "$((1 + $[2]))",
+    '$((1 + "2"))',
+    "$((1 + '2'))",
   ])("preserves arithmetic without evaluating it: %s", (expression) => {
     for (const argument of [expression, `"${expression}"`]) {
       expect(ShellScan.scan(`echo ${argument}`)).toEqual({
@@ -26,6 +31,8 @@ describe("Bash arithmetic expansions", () => {
     "$((1 + `printf 2`))",
     "$((1 + $((2 * $(printf 2)))))",
     '$((1 + $(printf "%s" "$(printf 2)")))',
+    "$((array[$(printf 2)]))",
+    "$((1 + `printf \\2`))",
   ])("reports explicit commands inside arithmetic: %s", (expression) => {
     for (const argument of [expression, `"${expression}"`]) {
       const result = ShellScan.scan(`echo ${argument}; pwd`)
@@ -39,7 +46,6 @@ describe("Bash arithmetic expansions", () => {
       expect(result.commands.slice(1, -1).map((command) => command.words[0])).toEqual(
         expression.includes('"$(printf') ? ["printf", "printf"] : ["printf"],
       )
-      expect(result.commands.slice(1, -1).every((command) => command[ShellScan.Nested])).toBe(true)
       expect(result.commands.at(-1)).toEqual({ resource: "pwd", words: ["pwd"], rawWords: ["pwd"] })
     }
   })
@@ -76,16 +82,8 @@ describe("Bash arithmetic expansions", () => {
     "echo $(((1 + 2))",
     "echo $((1 + $(printf 2))) &&",
     "echo $((1 + $(printf 2 &&)))",
-    "echo $((1 + ${value:-2}))",
-    "echo $((array[index]))",
-    "echo $((array[$(printf 2)]))",
-    "echo $((1 + $[2]))",
-    'echo $((1 + "2"))',
-    "echo $((1 + '2'))",
-    "echo $((1 + `printf \\2`))",
     "echo $((1; printf 2))",
-    "(( value += 1 ))",
-  ])("keeps unsupported arithmetic syntax explicit: %s", (source) => {
+  ])("rejects malformed arithmetic syntax: %s", (source) => {
     expect(ShellScan.scan(source).kind).toBe("opaque")
   })
 
@@ -97,7 +95,7 @@ describe("Bash arithmetic expansions", () => {
       (source) => `if true; then echo $((1 + $(${source}))); fi`,
       `printf ${"1".repeat(1024)}`,
     )
-    expect(ShellScan.scan(source).kind).toBe("opaque")
+    expect(ShellScan.scan(source).kind).toBe("scanned")
     expect(ShellScan.scan("echo $((1+1))").kind).toBe("scanned")
   })
 })

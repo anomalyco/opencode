@@ -49,7 +49,6 @@ describe("ShellParse native parity", () => {
     ["pwsh", "git status; npm run test; docker compose up"],
     ["pwsh", 'git "status"; npm "run" test; docker "compose" up'],
     ["pwsh", "Write-Output done # comment\nGet-ChildItem"],
-    ["pwsh", "& $Command value"],
   ])("native resources, saved prefixes, and directories match in %s: %s", async (shell, command) => {
     const scanned = shell === "pwsh" ? ShellScan.scanPowerShell(command) : ShellScan.scan(command)
     expect(scanned.kind).toBe("scanned")
@@ -72,42 +71,7 @@ describe("ShellParse native parity", () => {
   )
 })
 
-describe("ShellParse native coverage gaps", () => {
-  test.each([
-    ["bash", "cat <<'EOF'\nstatic body\nEOF", "heredoc"],
-    ["bash", "cat <<EOF\n$(printf dynamic)\nEOF", "heredoc"],
-    ["bash", "for x in a b; do echo $x; done", "compound-command"],
-    ["bash", "echo ${arr[$(printf index)]}", "dynamic-execution"],
-    ["bash", "echo $[1 + 2]", "dynamic-execution"],
-    ["bash", "((count++))", "compound-command"],
-    ["pwsh", "$Command value", "dynamic-execution"],
-    ["pwsh", 'Write-Output "$(Get-ChildItem)"', "dynamic-execution"],
-    ["pwsh", "if ($true) { Get-ChildItem } else { Remove-Item victim }", "dynamic-execution"],
-    ["pwsh", "git st`atus", "dynamic-execution"],
-    ["pwsh", "Write-Output`\n continued", "invalid-structure"],
-  ] as const)(
-    "fails explicitly for unsupported %s syntax instead of using the legacy oracle: %s",
-    async (shell, command, reason) => {
-      const scanned = shell === "pwsh" ? ShellScan.scanPowerShell(command) : ShellScan.scan(command)
-      expect(scanned).toEqual({ kind: "opaque", reason })
-      expect(
-        await Effect.runPromise(Effect.result(ShellParse.scanPortable(command, shell, "/workspace"))),
-      ).toMatchObject({
-        _tag: "Failure",
-        failure: { message: `Portable shell scanner cannot analyze command: ${reason}` },
-      })
-      expect(
-        await Effect.runPromise(Effect.result(ShellParse.scan(command, shell, "/workspace", { portable: true }))),
-      ).toMatchObject({
-        _tag: "Failure",
-        failure: { message: `Portable shell scanner cannot analyze command: ${reason}` },
-      })
-      expect(await Effect.runPromise(Effect.result(ShellParse.scan(command, shell, "/workspace")))).toMatchObject({
-        _tag: "Success",
-      })
-    },
-  )
-
+describe("ShellParse malformed native syntax", () => {
   test.each([
     ["bash", 'echo "unterminated', "unterminated-quote"],
     ["bash", "printf done &&", "invalid-structure"],

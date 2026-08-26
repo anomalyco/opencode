@@ -27,10 +27,14 @@ describe("portable shell parser compatibility", () => {
     ["bash", "CDPATH=/outside cd child", {}],
     ["bash", "cd child; pwd", { CDPATH: "/outside" }],
     ["bash", "cd /workspace > output", {}],
+    ["bash", "export X=value; unset X; git status", {}],
+    ["bash", "printf ok && git status > output", {}],
+    ["bash", "printf ok | cat < input > output", {}],
     ["bash", "cd -- -/../../../etc; pwd", {}],
     ["bash", "cd -; pushd; popd; pwd", {}],
     ["bash", "command cd /outside; builtin cd /elsewhere", {}],
     ["pwsh", "Get-ChildItem | ForEach-Object { Write-Output $_ }", {}],
+    ["pwsh", "ForEach-Object { Remove-Item victim }", {}],
     ["pwsh", "Set-Location -LiteralPath '../outside'; Get-ChildItem", {}],
     ["pwsh", "Set-Location -LiteralPath:/outside", {}],
     ["pwsh", "Set-Location -LiteralPath:'/outside path'", {}],
@@ -122,20 +126,6 @@ describe("current native and legacy parity gaps", () => {
       native: { commands: [{ resource: "printf value", save: "printf *" }], directories: [] },
     },
     {
-      name: "native includes declaration and unset commands omitted by the legacy AST",
-      shell: "bash",
-      command: "export X=value; unset X; git status",
-      legacy: { commands: [{ resource: "git status", save: "git status *" }], directories: [] },
-      native: {
-        commands: [
-          { resource: "export X=value", save: "export *" },
-          { resource: "unset X", save: "unset *" },
-          { resource: "git status", save: "git status *" },
-        ],
-        directories: [],
-      },
-    },
-    {
       name: "native keeps numeric arguments in saved prefixes",
       shell: "bash",
       command: "git 2 status",
@@ -169,62 +159,11 @@ describe("current native and legacy parity gaps", () => {
       },
     },
     {
-      name: "native retains redirects on the last command in a conditional list",
-      shell: "bash",
-      command: "printf ok && git status > output",
-      legacy: {
-        commands: [
-          { resource: "printf ok", save: "printf *" },
-          { resource: "git status", save: "git status *" },
-        ],
-        directories: [],
-      },
-      native: {
-        commands: [
-          { resource: "printf ok", save: "printf *" },
-          { resource: "git status > output", save: "git status *" },
-        ],
-        directories: [],
-      },
-    },
-    {
-      name: "native retains redirects on the last command in a pipeline",
-      shell: "bash",
-      command: "printf ok | cat < input > output",
-      legacy: {
-        commands: [
-          { resource: "printf ok", save: "printf *" },
-          { resource: "cat", save: "cat *" },
-        ],
-        directories: [],
-      },
-      native: {
-        commands: [
-          { resource: "printf ok", save: "printf *" },
-          { resource: "cat < input > output", save: "cat *" },
-        ],
-        directories: [],
-      },
-    },
-    {
       name: "directory line continuations remain unresolved source rather than legacy split operands",
       shell: "bash",
       command: "cd before\\\nafter",
       legacy: { commands: [], directories: ["before", "after"] },
       native: { commands: [], directories: ["before\\\nafter"] },
-    },
-    {
-      name: "native includes a standalone PowerShell scriptblock caller omitted by the legacy AST",
-      shell: "pwsh",
-      command: "ForEach-Object { Remove-Item victim }",
-      legacy: { commands: [{ resource: "Remove-Item victim", save: "Remove-Item *" }], directories: [] },
-      native: {
-        commands: [
-          { resource: "ForEach-Object { Remove-Item victim }", save: "ForEach-Object *" },
-          { resource: "Remove-Item victim", save: "Remove-Item *" },
-        ],
-        directories: [],
-      },
     },
     {
       name: "native recognizes PowerShell carriage-return separators omitted by the legacy AST",
@@ -244,7 +183,7 @@ describe("current native and legacy parity gaps", () => {
       shell: "pwsh",
       command: "git\tstatus",
       legacy: { commands: [], directories: [] },
-      native: { commands: [{ resource: "git\tstatus", save: "git status *" }], directories: [] },
+      native: { commands: [{ resource: "git\tstatus", save: "git\tstatus *" }], directories: [] },
     },
     {
       name: "native preserves complete PowerShell flag=value resources",

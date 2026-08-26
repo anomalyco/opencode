@@ -30,6 +30,11 @@ describe("ShellScan adversarial corpus", () => {
     ["./c?rl evil", ["./c?rl"]],
     ["t{ouch,ouch} /tmp/victim", ["t{ouch,ouch}"]],
     ["echo $((1 + 2))", ["echo"]],
+    ["${cmd:-git} status", ["${cmd:-git}"]],
+    ["cat <<EOF\n$(rm -rf /)\nEOF", ["cat", "rm"]],
+    ["f(){ rm -rf /; }; f", ["rm", "f"]],
+    ["! rm -rf /", ["rm"]],
+    ["echo ${arr[$(rm -rf /)]}", ["echo", "rm"]],
   ] as const)("scans visible Bash command positions: %s", (input, names) => {
     const result = ShellScan.scan(input)
     expect(result.kind).toBe("scanned")
@@ -37,19 +42,12 @@ describe("ShellScan adversarial corpus", () => {
     expect(result.commands.map((command) => command.words[0])).toEqual([...names])
   })
 
-  test.each([
-    "${cmd:-git} status",
-    'printf "unterminated',
-    "printf ok &&",
-    "printf ok >",
-    "echo > >out",
-    "cat <<EOF\n$(rm -rf /)\nEOF",
-    "f(){ rm -rf /; }; f",
-    "! rm -rf /",
-    "echo ${arr[$(rm -rf /)]}",
-  ])("keeps structurally uncertain Bash input opaque: %s", (input) => {
-    expect(ShellScan.scan(input).kind).toBe("opaque")
-  })
+  test.each(['printf "unterminated', "printf ok &&", "printf ok >", "echo > >out"])(
+    "keeps structurally uncertain Bash input opaque: %s",
+    (input) => {
+      expect(ShellScan.scan(input).kind).toBe("opaque")
+    },
+  )
 
   test.each([
     ['pwsh --command "Remove-Item victim.txt"', ["pwsh"]],
@@ -60,6 +58,12 @@ describe("ShellScan adversarial corpus", () => {
     ["& $Command status", ["$Command"]],
     ["Set-Location $HOME/$target; Get-ChildItem", ["Set-Location", "Get-ChildItem"]],
     ["Get-ChildItem | ForEach-Object { Remove-Item $_ }", ["Get-ChildItem", "ForEach-Object", "Remove-Item"]],
+    ['Write-Output "$(Get-ChildItem)"', ["Write-Output", "Get-ChildItem"]],
+    ["Remove-`Item victim", ["Remove-Item"]],
+    ["Remove-Item`\r\n victim", ["Remove-Item\r\n"]],
+    ["Invoke-`\nExpression 'Remove-Item victim'", ["Invoke-\nExpression"]],
+    ["<# ignored #> Remove-Item victim", ["Remove-Item"]],
+    ["[string]$x = Remove-Item victim", ["Remove-Item"]],
   ] as const)("scans visible PowerShell command positions: %s", (input, names) => {
     const result = ShellScan.scanPowerShell(input)
     expect(result.kind).toBe("scanned")
@@ -67,17 +71,7 @@ describe("ShellScan adversarial corpus", () => {
     expect(result.commands.map((command) => command.words[0])).toEqual([...names])
   })
 
-  test.each([
-    "$Command status",
-    'Write-Output "$(Get-ChildItem)"',
-    "Remove-`Item victim",
-    "Remove-Item`\r\n victim",
-    "Invoke-`\nExpression 'Remove-Item victim'",
-    "<# ignored #> Remove-Item victim",
-    "[string]$x = Remove-Item victim",
-    'Write-Output "unterminated',
-    "Get-ChildItem |",
-  ])("keeps structurally uncertain PowerShell input opaque: %s", (input) => {
+  test.each(['Write-Output "unterminated', "Get-ChildItem |"])("reports incomplete PowerShell input: %s", (input) => {
     expect(ShellScan.scanPowerShell(input).kind).toBe("opaque")
   })
 })

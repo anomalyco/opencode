@@ -95,7 +95,7 @@ describe("ShellScan generated properties", () => {
 
     for (const prefix of prefixes) {
       for (const command of wrapped) expect(ShellScan.scan(prefix + command).kind).toBe("scanned")
-      expect(ShellScan.scan(`${prefix}time git status`).kind).toBe("opaque")
+      expect(ShellScan.scan(`${prefix}time git status`).kind).toBe("scanned")
     }
   })
 })
@@ -133,13 +133,6 @@ describe("ShellScan generated PowerShell properties", () => {
     ])
 
     for (const form of forms) {
-      if (form.source.startsWith("left`") && ";|&".includes(form.word[4] ?? "")) {
-        expect(ShellScan.scanPowerShell(`Write-Output ${form.source}`)).toEqual({
-          kind: "opaque",
-          reason: "invalid-structure",
-        })
-        continue
-      }
       expect(ShellScan.scanPowerShell(`Write-Output ${form.source}`)).toMatchObject({
         kind: "scanned",
         commands: [{ resource: `Write-Output ${form.source}`, words: ["Write-Output", form.word] }],
@@ -160,8 +153,8 @@ describe("ShellScan generated PowerShell properties", () => {
     for (const command of mutations) expect(ShellScan.scanPowerShell(command).kind).toBe("opaque")
   })
 
-  test("distinguishes dynamic heads from delegated execution", () => {
-    const dynamic = ["$Command status", "${Command} status"]
+  test("distinguishes variable expressions from delegated execution", () => {
+    const expressions = ["$Command", "${Command}"]
     const delegated = [
       "& git status",
       "& $Command status",
@@ -174,7 +167,8 @@ describe("ShellScan generated PowerShell properties", () => {
     const shells = ["powershell", "powershell.exe", "pwsh", "pwsh.exe"]
     const switches = ["-Command", "-c", "-EncodedCommand", "-e", "-File", "-f"]
 
-    for (const command of dynamic) expect(ShellScan.scanPowerShell(command).kind).toBe("opaque")
+    for (const command of expressions)
+      expect(ShellScan.scanPowerShell(command)).toEqual({ kind: "scanned", commands: [] })
     for (const command of delegated) expect(ShellScan.scanPowerShell(command).kind).toBe("scanned")
     for (const shell of shells) {
       for (const flag of switches) {
@@ -183,13 +177,20 @@ describe("ShellScan generated PowerShell properties", () => {
     }
   })
 
-  test("distinguishes unsupported expressions from directory variables left to policy", () => {
+  test("extracts nested commands in directory expressions without evaluating variables", () => {
     const locations = ["Set-Location", "cd", "chdir", "sl", "Push-Location"]
     const expressions = ["$(Resolve-Path ..)", "(Resolve-Path ..)"]
     const variables = ["$target", "$PWD/project", "$HOME/project", "$PSHOME/Modules", "$env:TEMP/project"]
 
     for (const location of locations) {
-      for (const target of expressions) expect(ShellScan.scanPowerShell(`${location} ${target}`).kind).toBe("opaque")
+      for (const target of expressions)
+        expect(ShellScan.scanPowerShell(`${location} ${target}`)).toMatchObject({
+          kind: "scanned",
+          commands: [
+            { resource: `${location} ${target}`, words: [location, target] },
+            { resource: "Resolve-Path ..", words: ["Resolve-Path", ".."] },
+          ],
+        })
       for (const target of variables)
         expect(ShellScan.scanPowerShell(`${location} ${target}`)).toMatchObject({
           kind: "scanned",
