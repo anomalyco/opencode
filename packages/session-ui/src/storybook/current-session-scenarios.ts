@@ -7,11 +7,11 @@ export function storyTool(
   name: string,
   status: "streaming" | "running" | "completed" | "error",
   input: Record<string, JsonValue>,
-  options: { metadata?: Record<string, JsonValue>; output?: string; error?: string } = {},
+  options: { metadata?: Record<string, JsonValue>; output?: string; error?: string; raw?: string } = {},
 ): SessionMessageAssistantTool {
   const state =
     status === "streaming"
-      ? { status, input: JSON.stringify(input) }
+      ? { status, input: options.raw ?? JSON.stringify(input) }
       : status === "running"
         ? { status, input, metadata: { ...options.metadata, ...(options.output ? { output: options.output } : {}) } }
         : status === "error"

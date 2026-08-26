@@ -7,6 +7,41 @@ import {
   userMessage,
 } from "../performance/timeline-stability/fixture"
 
+test("transitions shell and question through running error outcomes", async ({ page }) => {
+  const shellID = "prt_transition_error_shell"
+  const questionID = "prt_transition_error_question"
+  const timeline = await setupTimeline(page, {
+    settings: { shellToolPartsExpanded: true },
+    messages: [
+      userMessage(),
+      assistantMessage(
+        [
+          toolPart(shellID, "shell", "streaming", { command: "exit 1" }),
+          toolPart(questionID, "question", "streaming", questionInput()),
+        ],
+        { completed: false },
+      ),
+    ],
+  })
+  await expect(page.locator(`[data-timeline-part-id="${questionID}"]`)).toHaveCount(0)
+  await timeline.send(partUpdated(toolPart(shellID, "shell", "running", { command: "exit 1" })), 120)
+  await timeline.send(partUpdated(toolPart(questionID, "question", "running", questionInput())), 180)
+  await expect(page.locator(`[data-timeline-part-id="${questionID}"]`)).toHaveCount(0)
+  await timeline.send(
+    partUpdated(toolPart(shellID, "shell", "error", { command: "exit 1" }, { error: "Command exited 1" })),
+    180,
+  )
+  await timeline.send(
+    partUpdated(
+      toolPart(questionID, "question", "error", questionInput(), { error: "The user dismissed this question" }),
+    ),
+    250,
+  )
+
+  await expect(page.locator(`[data-timeline-part-id="${shellID}"] [data-kind="tool-error-card"]`)).toBeVisible()
+  await expect(page.locator(`[data-timeline-part-id="${questionID}"]`)).toContainText(/dismissed/i)
+})
+
 test("preserves surviving grouped patch state when its first patch fails", async ({ page }) => {
   const failed = "prt_grouped_patch_failed"
   const surviving = "prt_grouped_patch_surviving"
@@ -123,3 +158,7 @@ test("groups only consecutive successful skill tools", async ({ page }) => {
   await expect(loaded.nth(0)).toHaveAttribute("aria-label", "Loaded ocpr, effect, ui-pr-screenshots skills")
   await expect(loaded.nth(1)).toHaveAttribute("aria-label", "Loaded opencode skill")
 })
+
+function questionInput() {
+  return { questions: [{ header: "Stability", question: "Keep it stable?", options: [] }] }
+}

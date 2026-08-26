@@ -55,3 +55,7 @@ story("preserves collapsed state while a tool completes", async ({ mount }) => {
 The story ID is the Storybook component ID followed by `--` and the kebab-cased story export. Open the same story in Storybook to inspect exactly the scenario covered by the browser test. Preserve an original-source-path comment for every migrated E2E case.
 
 Keep cross-route navigation, remote-server ownership, persistent session state, full-app virtualization, and workflows spanning independent surfaces in `packages/app/e2e/`.
+
+Component rendering and integration coverage can be complementary. A local story control that installs a completed message does not test event delivery, production reducer cleanup, or a live stream. Keep those original checks in E2E, including stream/chunk identity, compaction and retry events, independent lifecycle transitions, and the real app scroll owner. A provenance comment records the source of a component assertion; it is not evidence that its integration counterpart can be deleted.
+
+When moving an assertion, preserve its discriminating fixture: file status kinds, empty/single-variant inputs, singleton groups, live message state, and the order of intermediate updates. Verify the actual scroll container overflows before asserting that keyboard activation does not scroll it.

@@ -1,3 +1,4 @@
+import { createTwoFilesPatch } from "diff"
 import { createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
 import { CurrentSessionProviders, CurrentSessionTimelineStory } from "../storybook/current-session-story"
@@ -107,15 +108,17 @@ function EditSiblingUpdateStory() {
   const [state, setState] = createStore({ sibling: false })
   const document = createMemo(() => ({
     ...editThenTestDocument,
+    status: { type: "busy" as const },
     messages: editThenTestDocument.messages
       .filter((message) => message.id === "msg_user_edit" || message.id === "msg_assistant_edit")
       .map((message) => {
-        if (message.type !== "assistant" || !state.sibling) return message
+        if (message.type !== "assistant") return message
         return {
           ...message,
+          time: { created: message.time.created },
           content: [
             ...message.content,
-            { type: "text" as const, text: "Streaming added a later assistant text part." },
+            ...(state.sibling ? [{ type: "text" as const, text: "Streaming added a later assistant text part." }] : []),
           ],
         }
       }),
@@ -134,7 +137,67 @@ function EditSiblingUpdateStory() {
 
 const EditWithStreamedSibling = { render: () => <EditSiblingUpdateStory /> }
 
-const fileScenarios = { repeated: RepeatedEdits, streaming: EditWithStreamedSibling }
+const ThreeFilePatch = {
+  render: () => {
+    const source = (changed: boolean) =>
+      Array.from({ length: 12 }, (_, index) => `export const value${index} = ${changed ? index + 1 : index}\n`).join("")
+    const files = [
+      { file: "src/a.ts", status: "modified" },
+      { file: "src/b.ts", status: "added" },
+      { file: "src/old.ts", status: "deleted" },
+    ].map(({ file, status }) => ({
+      file,
+      status,
+      patch: createTwoFilesPatch(
+        `a/${file}`,
+        `b/${file}`,
+        status === "added" ? "" : source(false),
+        status === "deleted" ? "" : source(true),
+      ),
+      additions: status === "deleted" ? 0 : 4,
+      deletions: status === "added" ? 0 : 3,
+    }))
+    return (
+      <CurrentSessionTimelineStory
+        title="Update, create, and remove files"
+        description="Each changed file can be opened and closed independently."
+        document={storyDocument([
+          storyTool(
+            "prt_nested_patch",
+            "patch",
+            "completed",
+            { patchText: "Update three files" },
+            { metadata: { files } },
+          ),
+        ])}
+        editToolDefaultOpen
+      />
+    )
+  },
+}
+
+const WrittenSource = {
+  render: () => (
+    <CurrentSessionTimelineStory
+      title="Create a source file"
+      description="A completed TypeScript write renders its generated source."
+      document={storyDocument([
+        storyTool("prt_file_projection_write", "write", "completed", {
+          path: "src/write.ts",
+          content: "export const written = true\n",
+        }),
+      ])}
+      editToolDefaultOpen
+    />
+  ),
+}
+
+const fileScenarios = {
+  repeated: RepeatedEdits,
+  streaming: EditWithStreamedSibling,
+  patch: ThreeFilePatch,
+  write: WrittenSource,
+}
 
 export const ChangingFiles = {
   args: { scenario: "streaming" },

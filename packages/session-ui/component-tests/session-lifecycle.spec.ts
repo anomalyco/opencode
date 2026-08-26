@@ -4,15 +4,19 @@ for (const expanded of [false, true]) {
   // Moved from packages/app/e2e/regression/session-timeline-lifecycle-state.spec.ts
   story(`preserves shell user intent from a ${expanded ? "expanded" : "collapsed"} default`, async ({ mount }) => {
     const timeline = await mount("current-session-terminal-work--terminal-commands", { args: { expanded } })
-    const trigger = timeline.locator('[data-timeline-part-id="tool_shell_lifecycle"] [data-slot="collapsible-trigger"]')
+    const trigger = expanded
+      ? timeline.locator('[data-timeline-part-id="tool_shell_lifecycle"] [data-slot="collapsible-trigger"]')
+      : timeline.getByRole("button", { name: "Used Shell", exact: true })
     await expect(trigger).toHaveAttribute("aria-expanded", String(expanded))
     await trigger.click()
     await expect(trigger).toHaveAttribute("aria-expanded", String(!expanded))
     await timeline.getByRole("button", { name: "Update output" }).click()
+    await expect(trigger).toHaveAttribute("aria-expanded", String(!expanded))
+    await timeline.getByRole("button", { name: "Append sibling" }).click()
     await expect(timeline.getByText("Sibling content", { exact: true })).toBeVisible()
     await expect(trigger).toHaveAttribute("aria-expanded", String(!expanded))
-    await timeline.getByRole("button", { name: "Run command" }).click()
-    await timeline.getByRole("button", { name: "Complete command" }).click()
+    await timeline.getByRole("button", { name: "Mark session busy" }).click()
+    await timeline.getByRole("button", { name: "Mark session idle" }).click()
     await expect(trigger).toHaveAttribute("aria-expanded", String(!expanded))
   })
 }
@@ -41,11 +45,18 @@ story("transitions a streaming shell from writing through command execution", as
   await expect(subtitle).toHaveCSS("font-weight", "440")
   await expect(subtitle).toHaveCSS("line-height", "16px")
   await expect(subtitle).toHaveCSS("color", "rgb(92, 92, 92)")
+  await timeline.getByRole("button", { name: "Complete input" }).click()
+  await expect(shimmer).toHaveAttribute("data-active", "true")
+  await expect(subtitle).toHaveText("printf ready")
+  await expect(tool).not.toContainText("Writing command...")
   await timeline.getByRole("button", { name: "Run command" }).click()
   await expect(shimmer).toHaveAttribute("data-active", "true")
   await expect(subtitle).toHaveText("printf ready")
   await expect(tool).not.toContainText("Writing command...")
   await timeline.getByRole("button", { name: "Complete command" }).click()
+  const summary = timeline.getByRole("button", { name: "Used Shell", exact: true })
+  await expect(summary).toHaveAttribute("aria-expanded", "false")
+  await summary.click()
   await expect(subtitle).toHaveText("printf ready")
 })
 
@@ -99,20 +110,18 @@ story("moves busy through retry and recovery to final idle content", async ({ mo
   )
 })
 
-for (const profile of [
-  { locale: "de", label: "Erkundung abgeschlossen" },
-  { locale: "ar", label: "تم الاستكشاف" },
-] as const) {
+for (const locale of ["de", "ar"] as const) {
   // Moved from packages/app/e2e/regression/session-timeline-locale-projection.spec.ts
-  story(`projects translated context status in ${profile.locale}`, async ({ mount, page }) => {
+  story(`projects localized tool names with an English fallback in ${locale}`, async ({ mount, page }) => {
     const timeline = await mount("current-session-research-agents--agent-research", {
       args: { scenario: "exploration" },
-      globals: { locale: profile.locale },
+      globals: { locale },
     })
     await timeline.getByRole("button", { name: "Complete read" }).click()
     await timeline.getByRole("button", { name: "Complete glob" }).click()
     const group = timeline.locator('[data-timeline-part-ids="tool_context_read,tool_context_glob"]')
-    await expect(group.locator('[data-component="tool-status-title"]')).toHaveAttribute("aria-label", profile.label)
-    await expect(page.locator("html")).toHaveAttribute("lang", profile.locale)
+    await expect(group.getByRole("button")).toHaveAccessibleName(/^Used /)
+    await expect(group.locator('[data-component="tag"]')).toHaveText("2")
+    await expect(page.locator("html")).toHaveAttribute("lang", locale)
   })
 }

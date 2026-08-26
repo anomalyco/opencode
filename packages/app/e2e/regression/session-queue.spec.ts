@@ -201,11 +201,13 @@ test("editing restores the existing draft and replaces only the original queue p
   await view.input.fill("my in-progress draft")
   await original.click()
   await expect(view.input).toHaveText("tighten the error copy")
+  await expect(view.input).toBeFocused()
   await view.input.press("Escape")
   await expect(view.input).toHaveText("my in-progress draft")
 
   await original.click()
   await expect(view.input).toHaveText("tighten the error copy")
+  await expect(view.input).toBeFocused()
   await view.input.fill("tighten the error copy and add a retry hint")
   await expect(view.input).toHaveText("tighten the error copy and add a retry hint")
   await view.input.press("Enter")

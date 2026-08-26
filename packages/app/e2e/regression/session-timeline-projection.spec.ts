@@ -121,6 +121,43 @@ test.describe("session timeline projection", () => {
     await scroller.evaluate((element) => (element.scrollTop = element.scrollHeight))
     await expect(page.locator('[data-timeline-row="TurnGap"]')).toBeVisible()
   })
+
+  test("renders aliased and long custom model notices", async ({ page }) => {
+    const shortName = "GPT-5.4 nano"
+    const longName = "Company Gateway Extra Long Context Model for Narrow Timeline Layouts"
+    await setupTimeline(page, {
+      viewport: { width: 420, height: 700 },
+      sessionMessages: [
+        {
+          id: "msg_model_fast_nano",
+          type: "model-switched",
+          time: { created: 1700000000000 },
+          model: { providerID: "company-gateway", id: "fast-nano", variant: "xhigh" },
+        },
+        {
+          id: "msg_model_long_context",
+          type: "model-switched",
+          time: { created: 1700000001000 },
+          model: { providerID: "company-gateway", id: "long-context" },
+        },
+        userMessage(),
+        assistantMessage(),
+      ],
+    })
+
+    const shortNotice = page.locator('[data-slot="session-timeline-notice"]').filter({ hasText: shortName })
+    const longNotice = page.locator('[data-slot="session-timeline-notice"]').filter({ hasText: longName })
+    await expect(shortNotice).toBeVisible()
+    await expect(shortNotice.getByText(`Switched to ${shortName}`, { exact: true })).toBeVisible()
+    await expect(shortNotice.locator('[data-slot="session-timeline-notice-variant"]')).toHaveText("xhigh")
+    await expect(page.getByText("fast-nano", { exact: true })).toHaveCount(0)
+    await expect(shortNotice.locator('[data-component="provider-icon"]')).toBeVisible()
+    await expect(longNotice).toBeVisible()
+    await expect(longNotice.locator('[data-component="provider-icon"]')).toBeVisible()
+    await expect(longNotice.locator('[data-slot="session-timeline-notice-variant"]')).toHaveCount(0)
+    await expect(longNotice.locator("[title]")).toHaveAttribute("title", `Switched to ${longName}`)
+    await expect.poll(() => longNotice.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true)
+  })
 })
 
 function patchFile(file: string, status: "added" | "modified" | "deleted") {

@@ -566,7 +566,7 @@ const RichUserAttachments = {
                 data: "",
                 mime: "text/plain",
                 name: "a.ts",
-                source: { type: "path", path: "src/a.ts" },
+                source: { type: "uri", uri: "src/a.ts" },
                 mention: { text: "@src/a.ts", start: 18, end: 27 },
               },
             ],

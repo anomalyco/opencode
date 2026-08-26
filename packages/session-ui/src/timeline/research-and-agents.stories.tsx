@@ -177,6 +177,16 @@ const SearchResultsAndFiles = {
   ),
 }
 
+const ReadOneFile = {
+  render: () => (
+    <CurrentSessionTimelineStory
+      title="Read one source file"
+      description="A single read opens its own file label without neighboring tool calls."
+      document={storyDocument([storyTool("prt_read_path", "read", "completed", { path: "src/a.ts" })])}
+    />
+  ),
+}
+
 const LoadingSpecializedSkills = {
   render: () => (
     <CurrentSessionTimelineStory
@@ -244,12 +254,12 @@ const CompleteAgentWorkflow = {
           "tool_family_patch",
           "patch",
           "completed",
-          { patchText: "Update src/b.ts" },
+          { patchText: "Update the projected files" },
           {
-            metadata: { files: [storyPatchFile("src/b.ts")] },
+            metadata: { files: [storyPatchFile("src/a.ts")] },
           },
         ),
-        storyTool("tool_family_todo", "todowrite", "completed", { todos: [] }),
+        storyTool("tool_family_todo", "todowrite", "completed", { todos: [{ content: "Hidden", status: "pending" }] }),
         storyTool("tool_family_question", "question", "completed", questions, { metadata: { answers: [["Yes"]] } }),
         storyTool("tool_family_skill", "skill", "completed", { name: "stability" }),
         storyTool("tool_family_custom", "custom_mcp_tool", "completed", { target: "timeline" }),
@@ -319,7 +329,7 @@ function FailedCommandAndQuestionStory() {
         Fail running tools
       </button>
       <CurrentSessionProviders document={document()}>
-        <SessionTimeline document={document()} />
+        <SessionTimeline document={document()} shellToolDefaultOpen />
       </CurrentSessionProviders>
     </section>
   )
@@ -332,7 +342,7 @@ const DelegatingAnAgent = {
     <CurrentSessionTimelineStory
       title="Delegating an agent"
       description="The assistant shows its compact delegation status while preparing a focused task."
-      document={storyDocument([storyTool("tool_notice_delegation", "subagent", "streaming", {})], true)}
+      document={storyDocument([storyTool("tool_notice_delegation", "subagent", "streaming", {}, { raw: "" })], true)}
     />
   ),
 }
@@ -365,6 +375,7 @@ const researchScenarios = {
   exploration: ExploreTheCodebase,
   providers: CompareSearchProviders,
   results: SearchResultsAndFiles,
+  read: ReadOneFile,
   skills: LoadingSpecializedSkills,
   steps: ResearchAcrossSteps,
   failures: RecoverFromToolFailures,

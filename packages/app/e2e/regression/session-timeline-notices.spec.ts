@@ -1,10 +1,24 @@
 import { expect, test } from "@playwright/test"
 import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode-ai/client/promise"
-import { session, sessionID, setupTimeline } from "../performance/timeline-stability/fixture"
+import {
+  compactionDelta,
+  compactionEnded,
+  compactionFailed,
+  compactionStarted,
+  event,
+  session,
+  sessionID,
+  setupTimeline,
+} from "../performance/timeline-stability/fixture"
 
 const user = { id: "msg_user", type: "user", text: "Run it", time: { created: 1 } } satisfies SessionMessageInfo
 
-const assistant = (completed: boolean, tool = false, childID?: string): SessionMessageAssistant => ({
+const assistant = (
+  completed: boolean,
+  tool = false,
+  childID?: string,
+  background = false,
+): SessionMessageAssistant => ({
   id: "msg_assistant",
   type: "assistant",
   agent: "build",
@@ -17,7 +31,7 @@ const assistant = (completed: boolean, tool = false, childID?: string): SessionM
           name: "subagent",
           state: {
             status: "running",
-            input: { description: "Inspect code" },
+            input: { description: "Inspect code", ...(background ? { background: true } : {}) },
             metadata: { status: "running", ...(childID ? { sessionID: childID } : {}) },
           },
           time: { created: 2 },
@@ -25,6 +39,124 @@ const assistant = (completed: boolean, tool = false, childID?: string): SessionM
       ]
     : [{ type: "text", text: "Working" }],
   time: { created: 2, ...(completed ? { completed: 3 } : {}) },
+})
+
+test("renders current protocol notices in CLI order", async ({ page }) => {
+  const ownerWarnings: string[] = []
+  page.on("console", (message) => {
+    if (message.text().includes("computations created outside a `createRoot` or `render`"))
+      ownerWarnings.push(message.text())
+  })
+  await setupTimeline(page, {
+    sessionMessages: [
+      user,
+      { id: "msg_agent", type: "agent-switched", agent: "explore", time: { created: 2 } },
+      assistant(true),
+      {
+        id: "msg_subagent",
+        type: "synthetic",
+        text: "done",
+        description: "Search code",
+        metadata: { source: "subagent", agent: "explore", state: "completed" },
+        time: { created: 4 },
+      },
+      {
+        id: "msg_restart",
+        type: "synthetic",
+        text: "continue",
+        description: "Continuing after restart",
+        time: { created: 5 },
+      },
+      { id: "msg_skill", type: "skill", skill: "review", name: "Review", text: "instructions", time: { created: 6 } },
+    ],
+  })
+
+  const notices = page.locator('[data-slot="session-timeline-notice"]')
+  await expect(notices).toHaveCount(4)
+  await expect(notices.nth(0)).toContainText("Agent · explore")
+  await expect(notices.nth(1)).toContainText("explore finished · Search code")
+  await expect(notices.nth(2)).toContainText("Continuing after restart")
+  await expect(notices.nth(3)).toContainText("Skill · Review")
+  await expect(notices).toHaveClass([/text-text-weak/, /text-text-weak/, /text-text-weak/, /text-text-weak/])
+  await expect(notices.locator(".text-text-strong")).toHaveCount(0)
+  expect(ownerWarnings).toEqual([])
+})
+
+test("renders a compaction summary while it streams and after completion", async ({ page }) => {
+  const timeline = await setupTimeline(page, { sessionMessages: [user, assistant(true)] })
+
+  await timeline.send(
+    compactionStarted({
+      sessionID,
+      reason: "manual",
+      recent: "",
+    }),
+  )
+
+  const compaction = page.locator('[data-component="session-compaction-message"]')
+  await expect(compaction.getByText("Session compacted", { exact: true })).toBeVisible()
+
+  await timeline.send(
+    compactionDelta({
+      sessionID,
+      text: "## Checkpoint\n\nStreamed implementation details.",
+    }),
+  )
+  await expect(compaction.getByRole("heading", { name: "Checkpoint" })).toBeVisible()
+  await expect(compaction).toContainText("Streamed implementation details.")
+
+  await timeline.send(
+    compactionEnded({
+      sessionID,
+      reason: "manual",
+      text: "## Checkpoint\n\nFinal implementation details.",
+      recent: "",
+    }),
+  )
+  await expect(compaction).toContainText("Final implementation details.")
+  await expect(compaction).not.toContainText("Streamed implementation details.")
+})
+
+test("updates running compactions to failed and cancelled boundaries", async ({ page }) => {
+  const timeline = await setupTimeline(page, { sessionMessages: [user, assistant(true)] })
+
+  await timeline.send(compactionStarted({ sessionID, reason: "auto", recent: "" }))
+  await timeline.send(compactionDelta({ sessionID, text: "Partial summary that should be discarded." }))
+  await expect(page.getByText("Partial summary that should be discarded.", { exact: true })).toBeVisible()
+  await timeline.send(
+    compactionFailed({
+      sessionID,
+      reason: "auto",
+      error: {
+        type: "compaction.failed",
+        message: 'Error: {"error":{"type":"ProviderError","message":"The provider rejected the summary."}}',
+      },
+    }),
+  )
+
+  const compactions = page.locator('[data-component="session-compaction-message"]')
+  const failed = compactions.filter({ hasText: "The provider rejected the summary." })
+  await expect(failed.getByText("Session compacted", { exact: true })).toBeVisible()
+  await expect(failed.getByText("ProviderError: The provider rejected the summary.", { exact: true })).toBeVisible()
+  await expect(failed).not.toContainText("Partial summary that should be discarded.")
+
+  await timeline.send(compactionStarted({ sessionID, reason: "manual", recent: "" }))
+  await expect(compactions).toHaveCount(2)
+  await timeline.send(compactionDelta({ sessionID, text: "Summary before cancellation." }))
+  await expect(page.getByText("Summary before cancellation.", { exact: true })).toBeVisible()
+  await timeline.send(
+    compactionFailed({
+      sessionID,
+      reason: "manual",
+      error: { type: "aborted", message: "Cancellation detail should stay hidden." },
+    }),
+  )
+
+  await expect(compactions).toHaveCount(2)
+  const cancelled = compactions.filter({ hasNotText: "The provider rejected the summary." })
+  await expect(cancelled.getByText("Session compacted", { exact: true })).toBeVisible()
+  await expect(cancelled).not.toContainText("Cancellation detail should stay hidden.")
+  await expect(cancelled).not.toContainText("Summary before cancellation.")
 })
 
 test("moves blocking work to the background with Ctrl+B", async ({ page }) => {
