@@ -790,6 +790,53 @@ describe("ShellTool", () => {
     ),
   )
 
+  it.live("persists a silent background command's exit code before notification admission", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        return withSession(tmp.path, (registry) =>
+          Effect.gen(function* () {
+            const bus = yield* Bus.Service
+            const jobs = yield* Job.Service
+            const persisted = yield* Deferred.make<readonly Job.Background[]>()
+            yield* bus.project(SessionEvent.InboxEnqueued, (event) =>
+              event.data.sessionID === sessionID && event.data.item.type === "synthetic"
+                ? jobs.pendingBackground.pipe(
+                    Effect.flatMap((background) => Deferred.succeed(persisted, background)),
+                    Effect.asVoid,
+                  )
+                : Effect.void,
+            )
+            const release = path.join(tmp.path, "release")
+            yield* executeTool(
+              registry,
+              call(
+                {
+                  command: isWindows
+                    ? `while (!(Test-Path -LiteralPath '${release}')) { Start-Sleep -Milliseconds 50 }; exit 7`
+                    : `while [ ! -e '${release}' ]; do sleep 0.05; done; exit 7`,
+                  background: true,
+                },
+                "call-background-silent-nonzero",
+              ),
+            )
+            yield* Effect.promise(() => Bun.write(release, ""))
+
+            expect(yield* Deferred.await(persisted)).toMatchObject([
+              {
+                id: "call-background-silent-nonzero",
+                status: "completed",
+                output: "(no output)\n\nCommand exited with code 7.",
+              },
+            ])
+          }),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+    ),
+  )
+
   it.live(
     "updates and clears a running shell timeout",
     () =>

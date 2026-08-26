@@ -88,27 +88,24 @@ export const Plugin = {
       const key = `${childID}:${startedAt}`
       if (notifications.has(key)) return
       notifications.add(key)
-      yield* runtime.job.wait({ id: childID }).pipe(
-        Effect.flatMap((result) =>
-          Effect.gen(function* () {
-            const info = result.info
-            if (!info || info.status === "running") return
-            const text =
-              info.status === "completed"
-                ? (info.output ?? NO_TEXT)
-                : info.status === "error"
-                  ? (info.error ?? "Subagent failed")
-                  : "Subagent cancelled"
-            yield* runtime.session.synthetic({
-              ...(info.notificationID ? { id: info.notificationID } : {}),
-              sessionID: parentID,
-              text: `<subagent sessionID="${childID}" state="${info.status}" description="${description}">\n${text}\n</subagent>`,
-              description,
-              metadata: { source: "subagent", childID, agent, state: info.status },
-            })
-            if (info.notificationID) yield* runtime.job.completeBackground(info.notificationID)
-          }),
-        ),
+      yield* Effect.gen(function* () {
+        const info = (yield* runtime.job.wait({ id: childID })).info
+        if (!info || info.status === "running") return
+        const text =
+          info.status === "completed"
+            ? (info.output ?? NO_TEXT)
+            : info.status === "error"
+              ? (info.error ?? "Subagent failed")
+              : "Subagent cancelled"
+        yield* runtime.session.synthetic({
+          ...(info.notificationID ? { id: info.notificationID } : {}),
+          sessionID: parentID,
+          text: `<subagent sessionID="${childID}" state="${info.status}" description="${description}">\n${text}\n</subagent>`,
+          description,
+          metadata: { source: "subagent", childID, agent, state: info.status },
+        })
+        if (info.notificationID) yield* runtime.job.completeBackground(info.notificationID)
+      }).pipe(
         Effect.ensuring(Effect.sync(() => notifications.delete(key))),
         Effect.forkIn(scope, { startImmediately: true }),
       )
@@ -235,11 +232,6 @@ export const Plugin = {
                   ),
                 )
 
-              const run = Effect.gen(function* () {
-                yield* runtime.session.resume(child.id)
-                return yield* latestAssistantText(child.id)
-              })
-
               const info = yield* runtime.job.start({
                 id: child.id,
                 type: name,
@@ -252,7 +244,7 @@ export const Plugin = {
                   agent: agent.name,
                   description: input.description,
                 },
-                run,
+                run: runtime.session.resume(child.id).pipe(Effect.andThen(latestAssistantText(child.id))),
               })
 
               if (background) {

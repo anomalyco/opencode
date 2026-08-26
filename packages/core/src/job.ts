@@ -163,7 +163,7 @@ function decrementSession(input: Map<SessionSchema.ID, number>, sessionID: Sessi
 
 /**
  * Makes one scoped, process-local registry. Explicitly recoverable background
- * work also owns a durable notification marker until its delivery is acknowledged.
+ * work also owns a durable notification marker until its notification is admitted.
  */
 export const make = Effect.gen(function* () {
   const kv = yield* KV.Service

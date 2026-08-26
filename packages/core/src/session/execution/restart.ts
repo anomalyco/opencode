@@ -47,6 +47,9 @@ export interface Interface {
  * process: crash, SIGKILL, isolate eviction, and graceful restart all leave
  * the same durable signature.
  *
+ * Recovery is at-least-once: local coordination prevents concurrent drains,
+ * not repeated external side effects after a crash.
+ *
  * The sweep assumes every orphaned claim's owner is dead. The managed-server
  * protocol guarantees this: a successor is only spawned after the previous
  * process is confirmed dead (client service `kill`/`evict` poll the PID), the
@@ -96,11 +99,6 @@ export const layer = (options?: Options) =>
         background: Job.Background,
         recovery: Extract<Job.Recovery, { kind: "shell" }>,
       ) {
-        if (!(yield* store.get(recovery.sessionID))) {
-          yield* jobs.completeBackground(background.notificationID)
-          return
-        }
-
         const state = background.status === "running" ? "cancelled" : background.status
         const text =
           background.status === "running"
@@ -125,13 +123,17 @@ export const layer = (options?: Options) =>
             },
             resume: false,
           })
-          .pipe(Effect.orDie)
+          .pipe(
+            Effect.catchTag("Session.NotFoundError", () => Effect.void),
+            Effect.orDie,
+          )
         yield* jobs.completeBackground(background.notificationID)
       })
 
       const recoverSubagent = Effect.fnUntraced(function* (
         background: Job.Background,
         recovery: Extract<Job.Recovery, { kind: "subagent" }>,
+        suspended: ReadonlySet<SessionSchema.ID>,
       ) {
         const child = yield* store.get(recovery.childSessionID)
         if (!child || child.parentID !== recovery.parentSessionID || !(yield* store.get(recovery.parentSessionID))) {
@@ -151,6 +153,7 @@ export const layer = (options?: Options) =>
             .synthetic({
               id: background.notificationID,
               sessionID: recovery.parentSessionID,
+              ...(suspended.has(recovery.parentSessionID) ? { resume: false } : {}),
               description: recovery.description,
               text: `<subagent sessionID="${recovery.childSessionID}" state="${result.status}" description="${recovery.description}">\n${text}\n</subagent>`,
               metadata: {
@@ -207,6 +210,9 @@ export const layer = (options?: Options) =>
 
       return Service.of({
         resumeSuspendedSessions: Effect.gen(function* () {
+          const active = yield* execution.active
+          // Early notices wait for root recovery's accounting, including roots that exhaust their budget.
+          const suspended = new Set((yield* store.listSuspended()).filter((sessionID) => !active.has(sessionID)))
           const pending = yield* jobs.pendingBackground
           yield* store.releaseChildClaims(
             pending.flatMap((background) =>
@@ -222,7 +228,7 @@ export const layer = (options?: Options) =>
               const recovery = background.recovery
               yield* recovery.kind === "shell"
                 ? recoverShell(background, recovery)
-                : recoverSubagent(background, recovery)
+                : recoverSubagent(background, recovery, suspended)
             }),
             { discard: true },
           )
@@ -237,6 +243,8 @@ export const layer = (options?: Options) =>
                 .pipe(Effect.ignore, Effect.forkIn(scope), Effect.when(prepareResume(sessionID))),
             { concurrency: "unbounded", discard: true },
           )
+          // Async observers consult this set at delivery; later completions wake parents normally.
+          suspended.clear()
         }),
       })
     }),

@@ -152,7 +152,7 @@ export const Plugin = {
         })
         if (info.notificationID) yield* runtime.job.completeBackground(info.notificationID)
       },
-      (effect) => Effect.forkIn(scope, { startImmediately: true })(effect),
+      Effect.forkIn(scope, { startImmediately: true }),
     )
 
     yield* ctx.tool
@@ -275,7 +275,7 @@ export const Plugin = {
               const settled = yield* Deferred.make<Output>()
               const run = settleShell().pipe(
                 Effect.tap((output) => Deferred.succeed(settled, output)),
-                Effect.map((output) => output.output),
+                Effect.map((output) => resultMessages(output).join("\n\n")),
                 Effect.onInterrupt(() => shell.remove(info.id).pipe(Effect.ignore)),
               )
               const job = yield* runtime.job.start({
