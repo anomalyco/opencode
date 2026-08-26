@@ -39,6 +39,7 @@ import { createLLMEventPublisher } from "./publish-llm-event"
 import { toLLMMessages } from "./to-llm-message"
 import { MAX_STEPS_PROMPT } from "./max-steps"
 import { containsHedge } from "./hedge"
+import { ReflectionState } from "./reflection-state"
 import { Snapshot } from "../../snapshot"
 import { makeLocationNode } from "../../effect/app-node"
 import { llmClient } from "../../effect/app-node-platform"
@@ -114,6 +115,7 @@ const layer = Layer.effect(
     const reflectiveReasoning = Config.latest(configEntries, "reflective_reasoning")
     const maxReflectionBudget = Math.max(0, reflectiveReasoning?.maxReflectionBudget ?? 1)
     const approxTcaTolerance = Math.max(0, reflectiveReasoning?.approxTcaTolerance ?? 0)
+    const preActionProjection = reflectiveReasoning?.preActionProjection ?? true
     const getSession = Effect.fn("SessionRunner.getSession")(function* (sessionID: SessionSchema.ID) {
       const session = yield* store.get(sessionID)
       if (!session) return yield* Effect.die(`Session not found: ${sessionID}`)
@@ -249,7 +251,10 @@ const layer = Layer.effect(
           promoted += Number(yield* SessionInput.promoteNextQueued(db, events, session.id))
           promoted += yield* SessionInput.promoteSteers(db, events, session.id, cutoff)
         }
-        if (promoted > 0) currentStep = 1
+        if (promoted > 0) {
+          currentStep = 1
+          ReflectionState.clear(session.id)
+        }
       }
       const system =
         initialized ?? (yield* SessionContextEpoch.prepare(db, events, loadSystemContext(agent), session.id))
@@ -269,7 +274,7 @@ const layer = Layer.effect(
           },
         },
         providerOptions: { openai: { promptCacheKey } },
-        system: [agent.info?.system, system.baseline]
+        system: [agent.info?.system, system.baseline, ReflectionState.getReflectionText(session.id)]
           .filter((part): part is string => part !== undefined && part.length > 0)
           .map(SystemPart.make),
         messages: [...toLLMMessages(context, model), ...(isLastStep ? [Message.assistant(MAX_STEPS_PROMPT)] : [])],
@@ -292,6 +297,54 @@ const layer = Layer.effect(
       const withPublication = Semaphore.makeUnsafe(1).withPermit
       const publish = (event: LLMEvent, outputPaths: ReadonlyArray<string> = []) =>
         withPublication(publisher.publish(event, outputPaths))
+
+      if (preActionProjection && step === 1 && promotion === undefined && !ReflectionState.get(session.id).directionConfirmed) {
+        const recentMsgs = entries.slice(-6).map((e) => e.message)
+        const hasDecision = recentMsgs.some(
+          (m) => m.type === "assistant" && m.content.some((p) => p.type === "text"),
+        )
+        if (hasDecision && entries.length >= 2) {
+          const projectionModel = yield* models.resolveReflection(session).pipe(Effect.option)
+          if (Option.isSome(projectionModel)) {
+            const projectionMsgs = [
+              ...toLLMMessages(recentMsgs, projectionModel.value),
+              Message.user(
+                "You are about to act. Given the current state, identify any risks or contradictions in the planned approach in 1-2 sentences. If the approach is sound, output exactly 'Proceed.'",
+              ),
+            ]
+            const preReq = LLM.request({
+              model: projectionModel.value,
+              messages: projectionMsgs,
+              tools: [],
+              generation: { maxTokens: 256 },
+            })
+            const preChunks: string[] = []
+            let preFailed = false
+            yield* llm.stream(preReq).pipe(
+              Stream.runForEach((event) => {
+                if (LLMEvent.is.providerError(event)) preFailed = true
+                if (LLMEvent.is.textDelta(event)) preChunks.push(event.text)
+                return Effect.void
+              }),
+              Effect.option,
+            )
+            if (!preFailed && preChunks.length > 0) {
+              const projection = preChunks.join("").trim()
+              if (!/^proceed/i.test(projection) && projection.length > 20) {
+                const steerID = SessionMessage.ID.create()
+                yield* SessionInput.admit(db, events, {
+                  id: steerID,
+                  sessionID: session.id,
+                  prompt: Prompt.fromUserMessage({ text: `[Pre-action check]\n${projection}` }),
+                  delivery: "steer",
+                }).pipe(Effect.option)
+                return yield* Effect.die(continueAfterCompaction(currentStep))
+              }
+            }
+          }
+        }
+      }
+
       let overflowFailure: ProviderErrorEvent | undefined
       const providerStream = llm.stream(request).pipe(
         Stream.runForEach((event) =>
@@ -343,7 +396,17 @@ const layer = Layer.effect(
                     whyLoopBudget--
                     const whyResult = yield* whyLoop(session.id).pipe(Effect.option)
                     if (Option.isNone(whyResult)) return
-                    if (whyResult.value.steered) needsContinuation = true
+                    if (whyResult.value.steered) {
+                      needsContinuation = true
+                      ReflectionState.clear(session.id)
+                    } else if (whyResult.value.converged) {
+                      const prev = ReflectionState.get(session.id)
+                      ReflectionState.set(session.id, {
+                        ...prev,
+                        lastWhyConverged: true,
+                        directionConfirmed: false,
+                      })
+                    }
                   }),
                 ),
               ),
@@ -722,13 +785,30 @@ const layer = Layer.effect(
                 thenLoopBudget--
                 needsContinuation = true
                 step = 1
+                ReflectionState.clear(input.sessionID)
                 if (thenResult.extensionsDetected > 0) {
                   const extendedWhy = yield* whyLoop(input.sessionID)
                   if (extendedWhy.steered) {
                     needsContinuation = true
                     step = 1
+                    ReflectionState.clear(input.sessionID)
+                  } else if (extendedWhy.converged) {
+                    const prev = ReflectionState.get(input.sessionID)
+                    ReflectionState.set(input.sessionID, {
+                      ...prev,
+                      lastWhyConverged: true,
+                      directionConfirmed: false,
+                    })
                   }
                 }
+              } else if (thenResult.converged) {
+                const prev = ReflectionState.get(input.sessionID)
+                ReflectionState.set(input.sessionID, {
+                  ...prev,
+                  lastThenConverged: true,
+                  directionConfirmed: true,
+                  confirmedAt: new Date(),
+                })
               }
             }
             if (!needsContinuation) needsContinuation = yield* SessionInput.hasPending(db, input.sessionID, "steer")
