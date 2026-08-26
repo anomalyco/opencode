@@ -442,6 +442,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
       generate: (input) => runtime.session.generate(input).pipe(Effect.map((text) => ({ text }))),
       command: runtime.session.command,
       rename: runtime.session.rename,
+      move: runtime.session.move,
       synthetic: runtime.session.synthetic,
       interrupt: (input) =>
         runtime.session

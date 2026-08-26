@@ -20,6 +20,7 @@ export interface Interface {
     | "generate"
     | "command"
     | "rename"
+    | "move"
     | "resume"
     | "switchAgent"
     | "switchModel"
@@ -76,6 +77,7 @@ export const layerWithCell = (cell: Cell) =>
         generate: (input) => require(cell, (runtime) => runtime.session.generate(input)),
         command: (input) => require(cell, (runtime) => runtime.session.command(input)),
         rename: (input) => require(cell, (runtime) => runtime.session.rename(input)),
+        move: (input) => require(cell, (runtime) => runtime.session.move(input)),
         resume: (sessionID) => require(cell, (runtime) => runtime.session.resume(sessionID)),
         switchAgent: (input) => require(cell, (runtime) => runtime.session.switchAgent(input)),
         switchModel: (input) => require(cell, (runtime) => runtime.session.switchModel(input)),

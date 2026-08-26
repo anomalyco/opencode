@@ -366,6 +366,7 @@ export function fromPromise(plugin: Plugin) {
             synthetic: adaptApiMethod(SessionEndpoints["session.synthetic"], host.session.synthetic),
             interrupt: adaptApiMethod(SessionEndpoints["session.interrupt"], host.session.interrupt),
             rename: adaptApiMethod(SessionEndpoints["session.rename"], host.session.rename),
+            move: adaptApiMethod(SessionEndpoints["session.move"], host.session.move),
             wait: adaptApiMethod(SessionEndpoints["session.wait"], host.session.wait),
             context: adaptApiMethod(SessionEndpoints["session.context"], host.session.context),
           },
