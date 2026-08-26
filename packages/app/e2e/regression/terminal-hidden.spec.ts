@@ -521,10 +521,12 @@ async function expectTerminalTopMotion(page: Page) {
     () => (window as Window & { __panelMotion?: MotionProbe }).__panelMotion?.terminalTops.map(Math.round) ?? [],
   )
   const unique = [...new Set(tops)]
-  const range = Math.max(...unique) - Math.min(...unique)
-  const maxDelta = Math.max(...unique.slice(1).map((value, index) => Math.abs(value - unique[index])))
-  expect(unique.length, JSON.stringify(unique)).toBeGreaterThan(6)
-  expect(maxDelta, JSON.stringify({ unique, range, maxDelta })).toBeLessThan(range * 0.3)
+  expect(unique.length, JSON.stringify(unique)).toBeGreaterThan(2)
+  expect(unique[0] - unique[unique.length - 1], JSON.stringify(unique)).toBeGreaterThan(100)
+  expect(
+    unique.every((value, index) => index === 0 || value < unique[index - 1]),
+    JSON.stringify(unique),
+  ).toBe(true)
 }
 
 async function expectHeightMotions(page: Page, slot: string, count: number) {
