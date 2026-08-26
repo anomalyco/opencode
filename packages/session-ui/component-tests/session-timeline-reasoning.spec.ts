@@ -50,8 +50,8 @@ const profiles = [
 for (const profile of profiles) {
   // Moved from packages/app/e2e/regression/session-timeline-reasoning-projection.spec.ts
   story(`projects busy reasoning profile ${profile.name}`, async ({ mount }) => {
-    const timeline = await mount("current-session-timeline-rows--agent-reasoning", {
-      args: { summaries: profile.summaries, reasoning: profile.reasoning, tool: profile.tool },
+    const timeline = await mount("current-session-timeline-rows--conversation", {
+      args: { scenario: "reasoning", summaries: profile.summaries, reasoning: profile.reasoning, tool: profile.tool },
     })
     await expect(timeline.locator('[data-timeline-row="Thinking"]')).toHaveCount(profile.thinking ? 1 : 0)
     await expect(timeline.locator('[data-timeline-part-id="msg_projection_assistant:reasoning:0"]')).toHaveCount(
@@ -65,8 +65,8 @@ for (const profile of profiles) {
 
 // Moved from packages/app/e2e/regression/session-timeline-reasoning-projection.spec.ts
 story("does not infer reasoning visibility from provider identity", async ({ mount }) => {
-  const timeline = await mount("current-session-timeline-rows--agent-reasoning", {
-    args: { reasoning: "none", text: "No reasoning payload" },
+  const timeline = await mount("current-session-timeline-rows--conversation", {
+    args: { scenario: "reasoning", reasoning: "none", text: "No reasoning payload" },
   })
   await expect(timeline.locator('[data-timeline-row="Thinking"]')).toHaveCount(0)
   await expect(timeline.locator('[data-timeline-part-id*="reasoning"]')).toHaveCount(0)

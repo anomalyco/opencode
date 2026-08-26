@@ -73,7 +73,7 @@ export const PatchedTwoFiles = {
   ),
 }
 
-export const RepeatedEdits = {
+const RepeatedEdits = {
   render: () => (
     <CurrentSessionTimelineStory
       title="Repeated edits of one file"
@@ -132,7 +132,15 @@ function EditSiblingUpdateStory() {
   )
 }
 
-export const EditWithStreamedSibling = { render: () => <EditSiblingUpdateStory /> }
+const EditWithStreamedSibling = { render: () => <EditSiblingUpdateStory /> }
+
+const fileScenarios = { repeated: RepeatedEdits, streaming: EditWithStreamedSibling }
+
+export const ChangingFiles = {
+  args: { scenario: "streaming" },
+  argTypes: { scenario: { control: "select", options: Object.keys(fileScenarios) } },
+  render: (args: { scenario: string }) => fileScenarios[args.scenario as keyof typeof fileScenarios].render(),
+}
 
 export const CreatedANewFile = {
   render: () => (

@@ -3,7 +3,7 @@ import { expect, story } from "../../storybook/playwright/story"
 for (const expanded of [false, true]) {
   // Moved from packages/app/e2e/regression/session-timeline-lifecycle-state.spec.ts
   story(`preserves shell user intent from a ${expanded ? "expanded" : "collapsed"} default`, async ({ mount }) => {
-    const timeline = await mount("current-session-terminal-work--run-a-command", { args: { expanded } })
+    const timeline = await mount("current-session-terminal-work--terminal-commands", { args: { expanded } })
     const trigger = timeline.locator('[data-timeline-part-id="tool_shell_lifecycle"] [data-slot="collapsible-trigger"]')
     await expect(trigger).toHaveAttribute("aria-expanded", String(expanded))
     await trigger.click()
@@ -19,7 +19,7 @@ for (const expanded of [false, true]) {
 
 // Moved from packages/app/e2e/regression/session-timeline-lifecycle-state.spec.ts
 story("transitions a streaming shell from writing through command execution", async ({ mount }) => {
-  const timeline = await mount("current-session-terminal-work--run-a-command", { args: { streaming: true } })
+  const timeline = await mount("current-session-terminal-work--terminal-commands", { args: { streaming: true } })
   const tool = timeline.locator('[data-timeline-part-id="tool_shell_lifecycle"]')
   const title = tool.locator('[data-slot="basic-tool-tool-title"]')
   const shimmer = title.locator('[data-component="text-shimmer"]')
@@ -51,7 +51,7 @@ story("transitions a streaming shell from writing through command execution", as
 
 // Moved from packages/app/e2e/regression/session-timeline-lifecycle-state.spec.ts
 story("shimmers and expands a running shell command", async ({ mount }) => {
-  const timeline = await mount("current-session-terminal-work--run-a-command", { args: { streaming: true } })
+  const timeline = await mount("current-session-terminal-work--terminal-commands", { args: { streaming: true } })
   await timeline.getByRole("button", { name: "Run command" }).click()
   const tool = timeline.locator('[data-timeline-part-id="tool_shell_lifecycle"]')
   const trigger = tool.locator('[data-slot="collapsible-trigger"]')
@@ -68,7 +68,7 @@ story("shimmers and expands a running shell command", async ({ mount }) => {
 
 // Moved from packages/app/e2e/regression/session-timeline-lifecycle-state.spec.ts
 story("transitions thinking and hidden reasoning through busy to idle", async ({ mount }) => {
-  const timeline = await mount("current-session-timeline-rows--working-without-reasoning-details")
+  const timeline = await mount("current-session-timeline-rows--conversation", { args: { scenario: "hidden" } })
   const reasoning = timeline.locator('[data-timeline-part-id="msg_hidden_reasoning_lifecycle:reasoning:0"]')
   await expect(timeline.locator('[data-timeline-row="Thinking"]')).toBeVisible()
   await expect(timeline.getByText("Inspecting stability", { exact: true })).toBeVisible()
@@ -83,7 +83,7 @@ story("transitions thinking and hidden reasoning through busy to idle", async ({
 
 // Moved from packages/app/e2e/regression/session-timeline-lifecycle-state.spec.ts
 story("moves busy through retry and recovery to final idle content", async ({ mount }) => {
-  const timeline = await mount("current-session-timeline-rows--retry-and-recover")
+  const timeline = await mount("current-session-timeline-rows--conversation", { args: { scenario: "retry" } })
   await expect(timeline.locator('[data-timeline-row="Thinking"]')).toBeVisible()
   await expect(timeline.locator('[data-timeline-row="DiffSummary"]')).toHaveCount(0)
   await timeline.getByRole("button", { name: "Retry request" }).click()
@@ -105,7 +105,8 @@ for (const profile of [
 ] as const) {
   // Moved from packages/app/e2e/regression/session-timeline-locale-projection.spec.ts
   story(`projects translated context status in ${profile.locale}`, async ({ mount, page }) => {
-    const timeline = await mount("current-session-research-agents--explore-the-codebase", {
+    const timeline = await mount("current-session-research-agents--agent-research", {
+      args: { scenario: "exploration" },
       globals: { locale: profile.locale },
     })
     await timeline.getByRole("button", { name: "Complete read" }).click()

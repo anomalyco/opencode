@@ -129,9 +129,9 @@ function CodebaseExplorationStory() {
   )
 }
 
-export const ExploreTheCodebase = { render: () => <CodebaseExplorationStory /> }
+const ExploreTheCodebase = { render: () => <CodebaseExplorationStory /> }
 
-export const CompareSearchProviders = {
+const CompareSearchProviders = {
   render: () => (
     <CurrentSessionTimelineStory
       title="Compare web search providers"
@@ -151,7 +151,7 @@ export const CompareSearchProviders = {
   ),
 }
 
-export const SearchResultsAndFiles = {
+const SearchResultsAndFiles = {
   render: () => (
     <CurrentSessionTimelineStory
       title="Search results and opened files"
@@ -177,7 +177,7 @@ export const SearchResultsAndFiles = {
   ),
 }
 
-export const LoadingSpecializedSkills = {
+const LoadingSpecializedSkills = {
   render: () => (
     <CurrentSessionTimelineStory
       title="Loading specialized skills"
@@ -190,7 +190,7 @@ export const LoadingSpecializedSkills = {
   ),
 }
 
-export const ResearchAcrossSteps = {
+const ResearchAcrossSteps = {
   render: () => (
     <CurrentSessionTimelineStory
       title="Research across separate steps"
@@ -209,7 +209,7 @@ export const ResearchAcrossSteps = {
 
 const questions = { questions: [{ header: "Stability", question: "Keep it stable?", options: [] }] }
 
-export const CompleteAgentWorkflow = {
+const CompleteAgentWorkflow = {
   render: () => (
     <CurrentSessionTimelineStory
       title="Complete agent workflow"
@@ -259,7 +259,7 @@ export const CompleteAgentWorkflow = {
   ),
 }
 
-export const RecoverFromToolFailures = {
+const RecoverFromToolFailures = {
   render: () => {
     const names = ["shell", "edit", "write", "patch", "webfetch", "websearch", "subagent", "skill", "mcp_probe"]
     const input = (name: string): Record<string, JsonValue> => {
@@ -325,9 +325,9 @@ function FailedCommandAndQuestionStory() {
   )
 }
 
-export const FailedCommandAndQuestion = { render: () => <FailedCommandAndQuestionStory /> }
+const FailedCommandAndQuestion = { render: () => <FailedCommandAndQuestionStory /> }
 
-export const DelegatingAnAgent = {
+const DelegatingAnAgent = {
   render: () => (
     <CurrentSessionTimelineStory
       title="Delegating an agent"
@@ -337,7 +337,7 @@ export const DelegatingAnAgent = {
   ),
 }
 
-export const StartingBackgroundWork = {
+const StartingBackgroundWork = {
   render: () => (
     <CurrentSessionTimelineStory
       title="Starting background work"
@@ -358,4 +358,23 @@ export const StartingBackgroundWork = {
       )}
     />
   ),
+}
+
+const researchScenarios = {
+  workflow: CompleteAgentWorkflow,
+  exploration: ExploreTheCodebase,
+  providers: CompareSearchProviders,
+  results: SearchResultsAndFiles,
+  skills: LoadingSpecializedSkills,
+  steps: ResearchAcrossSteps,
+  failures: RecoverFromToolFailures,
+  transition: FailedCommandAndQuestion,
+  delegation: DelegatingAnAgent,
+  background: StartingBackgroundWork,
+}
+
+export const AgentResearch = {
+  args: { scenario: "workflow" },
+  argTypes: { scenario: { control: "select", options: Object.keys(researchScenarios) } },
+  render: (args: { scenario: string }) => researchScenarios[args.scenario as keyof typeof researchScenarios].render(),
 }

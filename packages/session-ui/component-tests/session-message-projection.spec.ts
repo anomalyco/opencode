@@ -2,7 +2,7 @@ import { expect, story } from "../../storybook/playwright/story"
 
 // Moved from packages/app/e2e/regression/session-timeline-collapse-state.spec.ts
 story("keeps a manually collapsed tool collapsed when later assistant content streams", async ({ mount }) => {
-  const timeline = await mount("current-session-file-changes--edit-with-streamed-sibling")
+  const timeline = await mount("current-session-file-changes--changing-files", { args: { scenario: "streaming" } })
   const tool = timeline.locator('[data-timeline-part-id="tool_edit_status"]')
   const trigger = tool.locator('[data-scope="apply-patch"] button')
   await expect(trigger).toHaveAttribute("aria-expanded", "true")
@@ -21,7 +21,7 @@ story("keeps a manually collapsed tool collapsed when later assistant content st
 
 // Moved from packages/app/e2e/regression/session-timeline-projection.spec.ts
 story("renders interruption independently when the turn is not compacted", async ({ mount }) => {
-  const timeline = await mount("current-session-timeline-rows--interrupted-turn")
+  const timeline = await mount("current-session-timeline-rows--conversation", { args: { scenario: "interruption" } })
   await expect(timeline.getByText("Interrupted", { exact: true })).toBeVisible()
   await expect(timeline.getByText("Before", { exact: true })).toBeVisible()
   await expect(timeline.getByText("After", { exact: true })).toBeVisible()
@@ -34,7 +34,7 @@ story("renders interruption independently when the turn is not compacted", async
 // Moved from packages/app/e2e/regression/session-timeline-projection.spec.ts
 story("renders aliased and long custom model notices", async ({ mount, page }) => {
   await page.setViewportSize({ width: 420, height: 700 })
-  const timeline = await mount("current-session-timeline-rows--aliased-model-notices")
+  const timeline = await mount("current-session-timeline-rows--conversation", { args: { scenario: "models" } })
   const shortName = "GPT-5.4 nano"
   const longName = "Company Gateway Extra Long Context Model for Narrow Timeline Layouts"
   const short = timeline.locator('[data-slot="session-timeline-notice"]').filter({ hasText: shortName })
@@ -53,7 +53,7 @@ story("renders aliased and long custom model notices", async ({ mount, page }) =
 
 // Moved from packages/app/e2e/regression/session-timeline-projection.spec.ts
 story("renders user image, file attachment, file reference, and agent reference", async ({ mount }) => {
-  const timeline = await mount("current-session-timeline-rows--rich-user-attachments")
+  const timeline = await mount("current-session-timeline-rows--conversation", { args: { scenario: "attachments" } })
   await expect(timeline.getByAltText("pixel.png")).toBeVisible()
   await expect(timeline.getByText("tsconfig.json")).toBeVisible()
   await expect(timeline.getByText("@src/a.ts", { exact: true })).toBeVisible()

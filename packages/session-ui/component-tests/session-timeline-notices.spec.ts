@@ -4,7 +4,7 @@ import { expect, story } from "../../storybook/playwright/story"
 story("renders the moved location notice in its compact timeline style", async ({ mount, page }) => {
   const directory = `/Users/usrnk1/Developer/opencode/${"nested-directory/".repeat(24)}session`
   await page.setViewportSize({ width: 480, height: 720 })
-  const timeline = await mount("current-session-timeline-rows--moved-location")
+  const timeline = await mount("current-session-timeline-rows--conversation", { args: { scenario: "location" } })
   const notice = timeline.locator('[data-slot="session-timeline-notice"][data-type="location-switched"]')
   const label = notice.locator('[data-slot="session-timeline-notice-label"]')
   const value = notice.locator('[data-slot="session-timeline-notice-value"]')

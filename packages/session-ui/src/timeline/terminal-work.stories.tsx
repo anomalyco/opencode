@@ -66,7 +66,7 @@ export const UserCommandCompleted = {
   ),
 }
 
-export const CollapsedShell = {
+const CollapsedShell = {
   render: () => (
     <CurrentSessionTimelineStory
       title="Collapsed completed shell"
@@ -158,9 +158,16 @@ function InteractiveCommandStory(props: { expanded?: boolean; streaming?: boolea
   )
 }
 
-export const RunACommand = {
+const RunACommand = {
   args: { expanded: false, streaming: false },
   render: (args: { expanded: boolean; streaming: boolean }) => <InteractiveCommandStory {...args} />,
+}
+
+export const TerminalCommands = {
+  args: { scenario: "command", expanded: false, streaming: false },
+  argTypes: { scenario: { control: "select", options: ["command", "collapsed"] } },
+  render: (args: { scenario: string; expanded: boolean; streaming: boolean }) =>
+    args.scenario === "collapsed" ? CollapsedShell.render() : RunACommand.render(args),
 }
 
 export const FixedAndPassed = {

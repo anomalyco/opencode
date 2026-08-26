@@ -41,7 +41,9 @@ import { expect, story } from "../../storybook/playwright/story"
 
 // Moved from packages/app/e2e/regression/session-timeline-context-state.spec.ts
 story("preserves collapsed state while a tool completes", async ({ mount }) => {
-  const component = await mount("current-session-research-agents--explore-the-codebase")
+  const component = await mount("current-session-research-agents--agent-research", {
+    args: { scenario: "exploration" },
+  })
   const trigger = component.locator('[data-slot="collapsible-trigger"]')
 
   await expect(trigger).toHaveAttribute("aria-expanded", "false")

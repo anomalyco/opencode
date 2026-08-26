@@ -7,7 +7,7 @@ story("renders current protocol notices in CLI order", async ({ mount, page }) =
     if (message.text().includes("computations created outside a `createRoot` or `render`"))
       warnings.push(message.text())
   })
-  const timeline = await mount("current-session-timeline-rows--agent-activity-notices")
+  const timeline = await mount("current-session-timeline-rows--conversation", { args: { scenario: "notices" } })
   const notices = timeline.locator('[data-slot="session-timeline-notice"]')
   await expect(notices).toHaveCount(4)
   await expect(notices.nth(0)).toContainText("Agent · explore")
@@ -21,7 +21,7 @@ story("renders current protocol notices in CLI order", async ({ mount, page }) =
 
 // Moved from packages/app/e2e/regression/session-timeline-notices.spec.ts
 story("renders a compaction summary while it streams and after completion", async ({ mount }) => {
-  const timeline = await mount("current-session-timeline-rows--compact-session")
+  const timeline = await mount("current-session-timeline-rows--conversation", { args: { scenario: "compaction" } })
   const compaction = timeline.locator('[data-component="session-compaction-message"]')
   await expect(compaction.getByText("Session compacted", { exact: true })).toBeVisible()
   await timeline.getByRole("button", { name: "Stream summary" }).click()
@@ -34,7 +34,7 @@ story("renders a compaction summary while it streams and after completion", asyn
 
 // Moved from packages/app/e2e/regression/session-timeline-notices.spec.ts
 story("updates running compactions to failed and cancelled boundaries", async ({ mount }) => {
-  const timeline = await mount("current-session-timeline-rows--compact-session")
+  const timeline = await mount("current-session-timeline-rows--conversation", { args: { scenario: "compaction" } })
   await timeline.getByRole("button", { name: "Stream summary" }).click()
   await timeline.getByRole("button", { name: "Fail compaction" }).click()
   const compactions = timeline.locator('[data-component="session-compaction-message"]')
@@ -51,7 +51,7 @@ story("updates running compactions to failed and cancelled boundaries", async ({
 
 // Moved from packages/app/e2e/regression/session-timeline-notices.spec.ts
 story("shows a delegating row while subagent input streams", async ({ mount }) => {
-  const timeline = await mount("current-session-research-agents--delegating-an-agent")
+  const timeline = await mount("current-session-research-agents--agent-research", { args: { scenario: "delegation" } })
   const delegating = timeline.locator('[data-component="task-tool-delegating"]')
   await expect(delegating).toBeVisible()
   const shimmer = delegating.locator('[data-component="text-shimmer"]')
@@ -66,7 +66,7 @@ story("shows a delegating row while subagent input streams", async ({ mount }) =
 
 // Moved from packages/app/e2e/regression/session-timeline-notices.spec.ts
 story("waits for completion before labeling requested background work", async ({ mount }) => {
-  const timeline = await mount("current-session-research-agents--starting-background-work")
+  const timeline = await mount("current-session-research-agents--agent-research", { args: { scenario: "background" } })
   await expect(timeline.locator('[data-component="task-tool-card"]')).toContainText("Inspect code")
   await expect(timeline.locator('[data-component="task-tool-card"]')).not.toContainText("(background)")
 })

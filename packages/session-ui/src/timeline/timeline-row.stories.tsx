@@ -109,7 +109,7 @@ function AgentReasoningStory(props: { summaries: boolean; reasoning: string; too
   )
 }
 
-export const AgentReasoning = {
+const AgentReasoning = {
   args: { summaries: true, reasoning: "heading", tool: false, text: "" },
   argTypes: { reasoning: { control: "select", options: ["none", "blank", "heading"] } },
   render: (args: { summaries: boolean; reasoning: string; tool: boolean; text: string }) => (
@@ -180,7 +180,7 @@ function HiddenReasoningStory() {
   )
 }
 
-export const WorkingWithoutReasoningDetails = { render: () => <HiddenReasoningStory /> }
+const WorkingWithoutReasoningDetails = { render: () => <HiddenReasoningStory /> }
 
 function RetryAndRecoverStory() {
   const [state, setState] = createStore({ phase: "thinking" })
@@ -233,7 +233,7 @@ function RetryAndRecoverStory() {
   )
 }
 
-export const RetryAndRecover = { render: () => <RetryAndRecoverStory /> }
+const RetryAndRecover = { render: () => <RetryAndRecoverStory /> }
 
 export const ProviderRetry = {
   render: () => (
@@ -256,7 +256,7 @@ const noticeAssistant = {
   time: { created: STORY_TIME + 1, completed: STORY_TIME + 2 },
 } satisfies SessionMessageInfo
 
-export const AgentActivityNotices = {
+const AgentActivityNotices = {
   render: () => (
     <CurrentSessionTimelineStory
       title="Agent activity and Session notices"
@@ -360,7 +360,7 @@ function CompactSessionStory() {
   )
 }
 
-export const CompactSession = { render: () => <CompactSessionStory /> }
+const CompactSession = { render: () => <CompactSessionStory /> }
 
 export const CompactionInProgress = {
   render: () => (
@@ -454,7 +454,7 @@ export const MixedDirectionRtl = {
   ),
 }
 
-export const MovedLocation = {
+const MovedLocation = {
   render: () => (
     <CurrentSessionTimelineStory
       title="Moved Session location"
@@ -477,7 +477,7 @@ export const MovedLocation = {
   ),
 }
 
-export const InterruptedTurn = {
+const InterruptedTurn = {
   render: () => (
     <CurrentSessionTimelineStory
       title="Interrupted assistant turn"
@@ -511,7 +511,7 @@ export const InterruptedTurn = {
   ),
 }
 
-export const AliasedModelNotices = {
+const AliasedModelNotices = {
   render: () => (
     <CurrentSessionTimelineStory
       title="Aliased model notices"
@@ -540,7 +540,7 @@ export const AliasedModelNotices = {
   ),
 }
 
-export const RichUserAttachments = {
+const RichUserAttachments = {
   render: () => (
     <CurrentSessionTimelineStory
       title="Prompt with rich attachments"
@@ -577,6 +577,30 @@ export const RichUserAttachments = {
       width="620px"
     />
   ),
+}
+
+const conversationScenarios = {
+  reasoning: AgentReasoning,
+  hidden: WorkingWithoutReasoningDetails,
+  retry: RetryAndRecover,
+  notices: AgentActivityNotices,
+  compaction: CompactSession,
+  location: MovedLocation,
+  interruption: InterruptedTurn,
+  models: AliasedModelNotices,
+  attachments: RichUserAttachments,
+}
+
+export const Conversation = {
+  args: { scenario: "notices", summaries: true, reasoning: "heading", tool: false, text: "" },
+  argTypes: {
+    scenario: { control: "select", options: Object.keys(conversationScenarios) },
+    reasoning: { control: "select", options: ["none", "blank", "heading"] },
+  },
+  render: (args: { scenario: string; summaries: boolean; reasoning: string; tool: boolean; text: string }) => {
+    if (args.scenario === "reasoning") return <AgentReasoningStory {...args} />
+    return conversationScenarios[args.scenario as Exclude<keyof typeof conversationScenarios, "reasoning">].render()
+  },
 }
 
 export const InstructionsUpdatedSingle = {
