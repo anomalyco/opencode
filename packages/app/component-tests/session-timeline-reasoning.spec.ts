@@ -33,6 +33,7 @@ const profiles = [
 ] as const
 
 for (const profile of profiles) {
+  // Moved from packages/app/e2e/regression/session-timeline-reasoning-projection.spec.ts
   story(`projects busy reasoning profile ${profile.name}`, async ({ mount }) => {
     const timeline = await mount(`current-session-reasoning-projection--${profile.id}`)
     await expect(timeline.locator('[data-timeline-row="Thinking"]')).toHaveCount(profile.thinking ? 1 : 0)
@@ -45,6 +46,7 @@ for (const profile of profiles) {
   })
 }
 
+// Moved from packages/app/e2e/regression/session-timeline-reasoning-projection.spec.ts
 story("does not infer reasoning visibility from provider identity", async ({ mount }) => {
   const timeline = await mount("current-session-reasoning-projection--provider-without-reasoning")
   await expect(timeline.locator('[data-timeline-row="Thinking"]')).toHaveCount(0)

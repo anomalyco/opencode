@@ -1,5 +1,6 @@
 import { expect, story } from "./story"
 
+// Moved from packages/app/e2e/regression/session-timeline-notices.spec.ts
 story("renders the moved location notice in its compact timeline style", async ({ mount, page }) => {
   const directory = `/Users/usrnk1/Developer/opencode/${"nested-directory/".repeat(24)}session`
   await page.setViewportSize({ width: 480, height: 720 })

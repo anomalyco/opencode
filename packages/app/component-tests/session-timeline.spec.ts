@@ -6,6 +6,7 @@ story("renders streamed reasoning without starting the app", async ({ mount }) =
   await expect(timeline.getByText("Checking the current contract", { exact: true })).toBeVisible()
 })
 
+// Moved from packages/app/e2e/regression/session-timeline-context-state.spec.ts
 story("preserves a collapsed context group through count and status updates", async ({ mount }) => {
   const timeline = await mount("current-session-context-projection--collapsed-during-status-updates")
   const group = timeline.locator('[data-timeline-part-ids="tool_context_read,tool_context_glob"]')
@@ -17,6 +18,7 @@ story("preserves a collapsed context group through count and status updates", as
   await expect(trigger).toHaveAttribute("aria-expanded", "false")
 })
 
+// Moved from packages/app/e2e/regression/session-timeline-accessibility.spec.ts
 story("space activates a focused timeline button instead of scrolling", async ({ mount, page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" })
   const timeline = await mount("current-session-terminal-work--collapsed-shell")
@@ -29,11 +31,13 @@ story("space activates a focused timeline button instead of scrolling", async ({
   expect(await page.evaluate(() => window.scrollY)).toBe(before)
 })
 
+// Moved from packages/app/e2e/regression/session-timeline-file-projection.spec.ts
 story("renders a completed write through the production file component", async ({ mount }) => {
   const timeline = await mount("current-session-file-changes--created-a-new-file")
   await expect(timeline.locator('[data-component="write-content"]')).toBeVisible()
 })
 
+// Moved from packages/app/e2e/regression/session-timeline-file-state.spec.ts
 story("keeps patch file disclosures independent", async ({ mount }) => {
   const timeline = await mount("current-session-file-changes--patched-two-files")
   const files = timeline.locator('[data-scope="apply-patch"] button')

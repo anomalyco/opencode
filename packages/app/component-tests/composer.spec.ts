@@ -1,5 +1,6 @@
 import { expect, story } from "./story"
 
+// Moved from packages/app/e2e/regression/prompt-thinking-level.spec.ts
 story("shows the thinking level control while relevant", async ({ mount, page }) => {
   const component = await mount("opencode-composer-flow--model-and-variant")
   const composer = component.locator('[data-component="composer"]')
