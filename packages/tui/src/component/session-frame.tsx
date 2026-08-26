@@ -42,7 +42,9 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
   createEffect(
     on(
       () => selectedTerminal()?.id,
-      () => setSidebarSelected(false),
+      (id) => {
+        if (id) setSidebarSelected(false)
+      },
       { defer: true },
     ),
   )
@@ -56,7 +58,7 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
     if (sidebarOpen()) return true
     return (config.data.session?.sidebar ?? "auto") === "auto" && wide()
   })
-  const showSidebar = () => sidebarVisible() && (!selectedTerminal() || sidebarSelected())
+  const showSidebar = () => sidebarVisible() && (sidebarSelected() || (!selectedTerminal() && !session()?.hidden))
   const showTerminal = () => !!selectedTerminal() && !showSidebar()
   const overlaySidebar = () => showSidebar() && !wide()
   const rightVisible = () => showTerminal() || (showSidebar() && !overlaySidebar())
@@ -83,6 +85,7 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
         .catch(toast.error)
       setSidebarOpen(!visible)
       setSidebarSelected(!visible)
+      if (!visible && selectedTerminal()) void sessions.hideTerminal(props.sessionID).catch(toast.error)
     })
   }
   createEffect(() => {
