@@ -29,6 +29,15 @@ export const SettingsModels: Component = () => {
     createStore({ collapsed: {} as Record<string, boolean> }),
   )
 
+  const providerList = (providerID: string) => models.list().filter((x) => x.provider.id === providerID)
+  const providerVisible = (providerID: string) =>
+    providerList(providerID).every((x) => models.visible({ modelID: x.id, providerID: x.provider.id }))
+  const setProviderVisibility = (providerID: string, checked: boolean) => {
+    providerList(providerID).forEach((x) => {
+      models.setVisibility({ modelID: x.id, providerID: x.provider.id }, checked)
+    })
+  }
+
   const list = useFilteredList<ModelItem>({
     items: (_filter) => models.list(),
     key: (x) => `${x.provider.id}:${x.id}`,
@@ -119,7 +128,7 @@ export const SettingsModels: Component = () => {
                     data-component="settings-models-provider"
                     data-expanded={expanded() ? "" : undefined}
                   >
-                    <h3 class="settings-models-group-header">
+                    <div class="settings-models-group-header justify-between">
                       <button
                         type="button"
                         class="settings-models-group-trigger"
@@ -157,7 +166,17 @@ export const SettingsModels: Component = () => {
                           <span class="settings-section-title">{group.items[0].provider.name}</span>
                         </span>
                       </button>
-                    </h3>
+                      <Switch
+                        class="me-6"
+                        checked={providerVisible(group.category)}
+                        onChange={(checked) => setProviderVisibility(group.category, checked)}
+                        hideLabel
+                      >
+                        {language.t("dialog.model.manage.provider.toggle", {
+                          provider: group.items[0].provider.name,
+                        })}
+                      </Switch>
+                    </div>
                     <Show when={expanded()}>
                       <SettingsList>
                         <For each={group.items}>

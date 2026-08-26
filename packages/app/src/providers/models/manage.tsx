@@ -158,7 +158,9 @@ export const DialogManageModels: Component = () => {
                             onChange={(checked) => setProviderVisibility(group.category, checked)}
                             hideLabel
                           >
-                            {group.items[0].provider.name}
+                            {language.t("dialog.model.manage.provider.toggle", {
+                              provider: group.items[0].provider.name,
+                            })}
                           </Switch>
                         </div>
                         <Show when={expanded()}>
