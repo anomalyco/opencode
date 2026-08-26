@@ -490,3 +490,41 @@ test("remaps fallback oauth model urls to the enterprise host", async () => {
   expect(models.claude.api.url).toBe("https://copilot-api.ghe.example.com")
   expect(models.claude.api.npm).toBe("@ai-sdk/github-copilot")
 })
+
+test("uses the public Copilot host for github.com OAuth accounts", async () => {
+  const urls: string[] = []
+  globalThis.fetch = mock((input: RequestInfo | URL) => {
+    urls.push(input instanceof URL ? input.href : typeof input === "string" ? input : input.url)
+    return Promise.resolve(new Response(JSON.stringify({ data: [] }), { status: 200 }))
+  }) as unknown as typeof fetch
+
+  const hooks = await CopilotAuthPlugin({
+    client: {} as never,
+    project: {} as never,
+    directory: "",
+    worktree: "",
+    experimental_workspace: {
+      register() {},
+    },
+    serverUrl: new URL("https://example.com"),
+    $: {} as never,
+  })
+
+  await hooks.provider!.models!(
+    {
+      id: "github-copilot",
+      models: {},
+    } as never,
+    {
+      auth: {
+        type: "oauth",
+        refresh: "token",
+        access: "token",
+        expires: Date.now() + 60_000,
+        enterpriseUrl: "github.com",
+      } as never,
+    },
+  )
+
+  expect(urls).toEqual(["https://api.githubcopilot.com/models"])
+})

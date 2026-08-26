@@ -24,7 +24,10 @@ function getUrls(domain: string) {
 }
 
 function base(enterpriseUrl?: string) {
-  return enterpriseUrl ? `https://copilot-api.${normalizeDomain(enterpriseUrl)}` : "https://api.githubcopilot.com"
+  const domain = enterpriseUrl ? normalizeDomain(enterpriseUrl) : undefined
+  return !domain || domain.toLowerCase() === "github.com"
+    ? "https://api.githubcopilot.com"
+    : `https://copilot-api.${domain}`
 }
 
 // Check if a message is a synthetic user msg used to attach an image from a tool call
