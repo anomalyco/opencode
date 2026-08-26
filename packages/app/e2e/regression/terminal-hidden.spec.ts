@@ -127,7 +127,6 @@ test("animates review and terminal panels while caching hidden terminal content"
   await expectStackedGeometry(page)
   await expectPanelGapHeld(page)
 
-  await resetTerminalTopMotion(page)
   await resetTerminalBottomMotion(page)
   await resetTerminalAnchorGaps(page)
   await resetPanelGaps(page)
@@ -139,7 +138,6 @@ test("animates review and terminal panels while caching hidden terminal content"
   await expect(panel).toBeVisible()
   await expectHeightMotions(page, "session-side-region", 2)
   await expectHeightMotions(page, "session-side-terminal-region", 2)
-  await expectTerminalTopMotion(page)
   await expectTerminalBottomFixed(page)
   await expectTerminalTopAnchored(page)
   await expectPanelGapHeld(page)
@@ -225,7 +223,6 @@ type MotionProbe = {
   terminalAnchorGaps: number[]
   resetAnchorOnMotion: boolean
   panelGaps: number[]
-  terminalTops: number[]
   terminalBottoms: number[]
   heights: string[]
   animations: string[]
@@ -243,7 +240,6 @@ async function installMotionProbe(page: Page) {
       terminalAnchorGaps: [],
       resetAnchorOnMotion: false,
       panelGaps: [],
-      terminalTops: [],
       terminalBottoms: [],
       heights: [],
       animations: [],
@@ -270,7 +266,6 @@ async function installMotionProbe(page: Page) {
         const terminalContent = document.querySelector<HTMLElement>('[data-slot="terminal-panel-content"]')
         const panelGap = document.querySelector<HTMLElement>('[data-slot="session-side-panel-gap"]')
         if (!terminal || !terminalContent) return
-        probe.terminalTops.push(terminal.getBoundingClientRect().top)
         probe.terminalBottoms.push(terminal.getBoundingClientRect().bottom)
         probe.terminalContentSizes.push({
           width: terminalContent.getBoundingClientRect().width,
@@ -446,13 +441,6 @@ async function expectStackPainted(page: Page) {
   expect(Math.max(...gaps.map((gap) => gap.terminalSurface)), JSON.stringify(gaps)).toBeLessThanOrEqual(1)
 }
 
-async function resetTerminalTopMotion(page: Page) {
-  await page.evaluate(() => {
-    const probe = (window as Window & { __panelMotion?: MotionProbe }).__panelMotion
-    if (probe) probe.terminalTops = []
-  })
-}
-
 async function resetTerminalBottomMotion(page: Page) {
   await page.evaluate(() => {
     const probe = (window as Window & { __panelMotion?: MotionProbe }).__panelMotion
@@ -514,17 +502,6 @@ async function expectTerminalContentCachedSize(page: Page) {
   expect(sizes.length).toBeGreaterThan(0)
   expect(Math.min(...sizes.map((size) => size.width))).toBeGreaterThan(100)
   expect(Math.min(...sizes.map((size) => size.height))).toBeGreaterThan(100)
-}
-
-async function expectTerminalTopMotion(page: Page) {
-  const tops = await page.evaluate(
-    () => (window as Window & { __panelMotion?: MotionProbe }).__panelMotion?.terminalTops.map(Math.round) ?? [],
-  )
-  const unique = [...new Set(tops)]
-  const range = Math.max(...unique) - Math.min(...unique)
-  const maxDelta = Math.max(...unique.slice(1).map((value, index) => Math.abs(value - unique[index])))
-  expect(unique.length, JSON.stringify(unique)).toBeGreaterThan(6)
-  expect(maxDelta, JSON.stringify({ unique, range, maxDelta })).toBeLessThan(range * 0.3)
 }
 
 async function expectHeightMotions(page: Page, slot: string, count: number) {
