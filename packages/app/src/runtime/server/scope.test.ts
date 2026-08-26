@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { ScopedKey, ServerScope, SessionIdentityKey, SessionRouteKey, SessionStateKey } from "./scope"
+import { ScopedKey, ServerScope, SessionRouteKey, SessionStateKey } from "./scope"
 
 describe("ServerScope", () => {
   test("uses a stable local scope for the canonical sidecar", () => {
@@ -17,28 +17,6 @@ describe("ServerScope", () => {
   test("uses a stable local scope for an explicit canonical web server", () => {
     const key = "http://localhost:4096" as Parameters<typeof ServerScope.fromServerKey>[0]
     expect(String(ServerScope.fromServerKey(key, key))).toBe("local")
-  })
-})
-
-describe("SessionIdentityKey", () => {
-  test("stays stable when a session changes worktrees", () => {
-    const before = SessionStateKey.from(ServerScope.local, SessionRouteKey.fromRoute("b2xk", "session-1"))
-    const after = SessionStateKey.from(ServerScope.local, SessionRouteKey.fromRoute("bmV3", "session-1"))
-
-    expect(SessionIdentityKey.fromState(before)).toBe(SessionIdentityKey.fromState(after))
-    expect(String(SessionIdentityKey.fromState(before))).toBe("local\0session-1")
-  })
-
-  test("keeps sessions and servers distinct", () => {
-    const first = SessionStateKey.from(ServerScope.local, SessionRouteKey.fromRoute("cmVwbw", "session-1"))
-    const second = SessionStateKey.from(ServerScope.local, SessionRouteKey.fromRoute("cmVwbw", "session-2"))
-    const remote = SessionStateKey.from(
-      "https://remote.example" as ServerScope,
-      SessionRouteKey.fromRoute("cmVwbw", "session-1"),
-    )
-
-    expect(SessionIdentityKey.fromState(first)).not.toBe(SessionIdentityKey.fromState(second))
-    expect(SessionIdentityKey.fromState(first)).not.toBe(SessionIdentityKey.fromState(remote))
   })
 })
 

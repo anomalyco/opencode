@@ -389,6 +389,7 @@ function MessageTimelineView(
   const messageByID = projection.messageByID
   const virtualized = createTimelineVirtualizer({
     sessionKey: props.data.sessionKey,
+    sessionID: props.data.sessionID,
     projection,
     showHeader,
     pinned,

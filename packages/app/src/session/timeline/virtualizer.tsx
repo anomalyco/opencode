@@ -2,7 +2,7 @@ import { createVirtualizer, defaultRangeExtractor, elementScroll, type VirtualIt
 import { isScrollKeyTarget, scrollKey, scrollKeyOwner, ScrollView } from "@opencode-ai/ui/scroll-view"
 import { TimelineRow } from "@opencode-ai/session-ui/timeline/projection"
 import { useLanguage } from "@/runtime/i18n/language"
-import { SessionIdentityKey, type SessionStateKey } from "@/runtime/server/scope"
+import { ScopedKey, SessionStateKey } from "@/runtime/server/scope"
 import {
   createEffect,
   createMemo,
@@ -34,7 +34,8 @@ type Projection = Pick<
 >
 
 type Input = {
-  sessionKey: Accessor<SessionStateKey>
+  sessionKey: Accessor<string>
+  sessionID: Accessor<string | undefined>
   projection: Projection
   showHeader: Accessor<boolean>
   /** True while the timeline follows the newest content. Drives every anchoring decision. */
@@ -63,7 +64,9 @@ type ViewProps = {
 
 export function createTimelineVirtualizer(input: Input) {
   const language = useLanguage()
-  const sessionIdentity = createMemo(() => SessionIdentityKey.fromState(input.sessionKey()))
+  const sessionIdentity = createMemo(() =>
+    ScopedKey.from(SessionStateKey.scope(input.sessionKey()), input.sessionID() ?? ""),
+  )
   const ownerSessionKey = sessionIdentity()
   const cached = cache.get(ownerSessionKey)
   const initialMeasurements = cached?.measurements
