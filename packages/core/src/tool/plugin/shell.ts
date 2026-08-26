@@ -115,14 +115,17 @@ export const Plugin = {
     const permission = yield* Permission.Service
     const config = yield* Config.Service
 
+    // Notify session when a backgrounded job finishes. `jobID` tracks the process-global job registry entry,
+    // while `id` retains the model-facing tool call ID for synthetic XML and metadata.
     const notifyWhenDone = Effect.fn("ShellTool.notifyWhenDone")(function* (
       sessionID: SessionSchema.ID,
       id: string,
       shellID: string,
       command: string,
       settled: Deferred.Deferred<Output>,
+      jobID = id,
     ) {
-      yield* runtime.job.wait({ id: id }).pipe(
+      yield* runtime.job.wait({ id: jobID }).pipe(
         Effect.flatMap((result) =>
           Effect.gen(function* () {
             const info = result.info
@@ -289,8 +292,10 @@ export const Plugin = {
                 Effect.map((output) => output.output),
                 Effect.onInterrupt(() => shell.remove(info.id).pipe(Effect.ignore)),
               )
+              // Do not key the process-global job registry by raw model-provided tool call IDs (context.id).
+              // Duplicate IDs from models or proxies (e.g. `tool_0`) would collide in the job registry and cause
+              // subsequent commands to deadlock on stale running jobs. Omitting `id` lets Job.start generate a unique ID.
               const job = yield* runtime.job.start({
-                id: context.id,
                 type: name,
                 title: info.command,
                 metadata: { sessionID: context.sessionID, shellID: info.id },
@@ -299,7 +304,7 @@ export const Plugin = {
 
               if (input.background === true) {
                 yield* runtime.job.background(job.id)
-                yield* notifyWhenDone(context.sessionID, context.id, info.id, info.command, settled)
+                yield* notifyWhenDone(context.sessionID, context.id, info.id, info.command, settled, job.id)
                 return backgroundResult(info.id)
               }
 
@@ -308,7 +313,7 @@ export const Plugin = {
                 .pipe(Effect.onInterrupt(() => runtime.job.cancel(job.id).pipe(Effect.ignore)))
               if (result?.type === "backgrounded") {
                 yield* shell.timeout(info.id, 0)
-                yield* notifyWhenDone(context.sessionID, context.id, info.id, info.command, settled)
+                yield* notifyWhenDone(context.sessionID, context.id, info.id, info.command, settled, job.id)
                 return backgroundResult(info.id)
               }
               if (result?.info.status === "error")

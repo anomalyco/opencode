@@ -995,7 +995,7 @@ describe("Gemini route", () => {
       })
       expect(toolCall).toMatchObject({
         id: "provider_call",
-        providerMetadata: { google: { thoughtSignature: "tool_sig" } },
+        providerMetadata: { google: { functionCallId: "provider_call", thoughtSignature: "tool_sig" } },
       })
       expect(response.events.findIndex((event) => event.type === "reasoning-end")).toBeLessThan(
         response.events.findIndex((event) => event.type === "tool-call"),
@@ -1359,6 +1359,7 @@ describe("Gemini route", () => {
         id: "call_0",
         name: "lookup",
         input: { query: "weather" },
+        providerMetadata: { google: { functionCallId: "call_0" } },
       })
       expect(response.toolCalls[1]).toMatchObject({
         type: "tool-call",
@@ -1398,7 +1399,7 @@ describe("Gemini route", () => {
 
       expect(response.toolCalls[0]).toMatchObject({
         id: "dup_call",
-        providerMetadata: undefined,
+        providerMetadata: { google: { functionCallId: "dup_call" } },
       })
       expect(response.toolCalls[1].id).toMatch(/^tool_[0-9a-zA-Z]+$/)
       expect(response.toolCalls[1].id).not.toBe(response.toolCalls[0].id)
@@ -1429,7 +1430,6 @@ describe("Gemini route", () => {
       expect(first.toolCalls[0].id).not.toBe(second.toolCalls[0].id)
     }),
   )
-
   it.effect("maps length and content-filter finish reasons", () =>
     Effect.gen(function* () {
       const length = yield* LLMClient.generate(request).pipe(

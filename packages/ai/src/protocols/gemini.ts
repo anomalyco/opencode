@@ -1,4 +1,5 @@
 import { Effect, Option, Schema } from "effect"
+import { create } from "@opencode-ai/schema/identifier"
 import { Tool } from "@opencode-ai/schema/tool"
 import { Route } from "../route/client.js"
 import { Auth } from "../route/auth.js"
@@ -662,7 +663,11 @@ const step = (state: ParserState, event: GeminiEvent) => {
       const supplied = part.functionCall.id ?? undefined
       const duplicate = supplied !== undefined && seenCallIds.has(supplied)
       if (supplied !== undefined) seenCallIds.add(supplied)
-      const id = supplied !== undefined && !duplicate ? supplied : `tool_${crypto.randomUUID().replaceAll("-", "")}`
+      const id = supplied !== undefined && !duplicate ? supplied : `tool_${create(false)}`
+      const metadata = {
+        ...(supplied !== undefined && !duplicate ? { functionCallId: supplied } : {}),
+        ...(part.thoughtSignature === undefined ? {} : { thoughtSignature: part.thoughtSignature }),
+      }
       lifecycle = Lifecycle.reasoningEnd(
         lifecycle,
         events,
@@ -675,8 +680,7 @@ const step = (state: ParserState, event: GeminiEvent) => {
           id,
           name: part.functionCall.name,
           input,
-          providerMetadata:
-            part.thoughtSignature ? googleMetadata({ thoughtSignature: part.thoughtSignature }) : undefined,
+          providerMetadata: Object.keys(metadata).length === 0 ? undefined : googleMetadata(metadata),
         }),
       )
       hasToolCalls = true
