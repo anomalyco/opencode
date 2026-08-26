@@ -1,4 +1,5 @@
-import { Component, createEffect, createMemo, createSignal, onCleanup, onMount, startTransition } from "solid-js"
+import { createEffect, createMemo, onMount } from "solid-js"
+import { useLocation, useNavigate } from "@solidjs/router"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { Icon } from "@opencode-ai/ui/icon"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -14,50 +15,55 @@ import { SettingsProjects } from "./workspaces/projects"
 import { SettingsExtensions } from "./providers/extensions"
 import { SettingsServerScope } from "./server-scope"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { useLayout } from "@/shell/state/layout"
-import { useTabs } from "@/shell/tabs/tabs"
-import { useGlobal, useServerCtx } from "@/runtime/server/runtime"
+import { useGlobal } from "@/runtime/server/runtime"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
-import { useCommand } from "@/shell/commands/command"
-import { useSettingsSurface } from "./surface"
+import { useSettingsNavigation } from "./navigation"
+import { useSettingsCommand } from "./command"
 import "@/settings/settings.css"
 
-export const SettingsScreen: Component<{
-  defaultValue?: string
-}> = (props) => {
+export function SettingsScreen() {
   const language = useLanguage()
   const dialog = useDialog()
-  const command = useCommand()
-  const surface = useSettingsSurface()
-  const layout = useLayout()
+  const navigation = useSettingsNavigation()
+  const location = useLocation()
+  const navigate = useNavigate()
   const servers = useServers()
-  const tabs = useTabs()
   const global = useGlobal()
-  const [tab, setTab] = createSignal(props.defaultValue ?? "general")
+  useSettingsCommand()
+  const tab = () => {
+    const value = location.query.tab
+    return typeof value === "string" &&
+      [
+        "general",
+        "appearance",
+        "notifications",
+        "shortcuts",
+        "servers",
+        "projects",
+        "workspaces",
+        "providers",
+        "models",
+        "extensions",
+      ].includes(value)
+      ? value
+      : "general"
+  }
+  const setTab = (value: string) => {
+    const query = new URLSearchParams(location.search)
+    query.set("tab", value)
+    navigate(`/settings?${query}`, { replace: true, scroll: false })
+  }
   let root: HTMLDivElement | undefined
 
   onMount(() => {
-    command.keybinds(false)
     root?.focus({ preventScroll: true })
   })
-  onCleanup(() => command.keybinds(true))
 
-  createEffect(() => setTab(props.defaultValue ?? "general"))
-
-  const server = createMemo(() => {
-    const route = layout.route()
-    switch (route.type) {
-      case "draft": {
-        const draft = tabs.store.find((item) => item.type === "draft" && item.draftID === route.draftID)
-        return servers.list.find((item) => ServerConnection.key(item) === draft?.server)
-      }
-      case "session":
-        return servers.list.find((item) => ServerConnection.key(item) === route.server)
-      case "home":
-        return servers.list.find((item) => ServerConnection.key(item) === layout.home.selection().server)
-    }
-  })
-  const serverCtx = useServerCtx(server)
+  const server = createMemo(
+    () =>
+      servers.list.find((item) => ServerConnection.key(item) === location.query.server) ??
+      global.settings.server.selected(),
+  )
 
   createEffect(() => {
     const current = server()
@@ -68,13 +74,8 @@ export const SettingsScreen: Component<{
     const selected = global.settings.server.selected()
     const current = server()
     if (!selected || !current || ServerConnection.key(selected) !== ServerConnection.key(current)) return
-    const route = layout.route()
-    if (route.type === "draft") {
-      const draft = tabs.store.find((item) => item.type === "draft" && item.draftID === route.draftID)
-      return draft?.type === "draft" ? draft.directory : undefined
-    }
-    if (route.type === "session") return serverCtx()?.data.session.get(route.sessionId)?.location.directory
-    return undefined
+    if (location.query.server !== ServerConnection.key(current)) return
+    return typeof location.query.directory === "string" ? location.query.directory : undefined
   })
 
   const showProviders = () => {
@@ -91,19 +92,13 @@ export const SettingsScreen: Component<{
       onKeyDown={(event) => {
         if (event.key !== "Escape" || event.defaultPrevented || dialog.active) return
         event.preventDefault()
-        surface.close()
+        navigation.close()
       }}
     >
-      <Tabs
-        orientation="vertical"
-        variant="settings"
-        value={tab()}
-        onChange={(value) => void startTransition(() => setTab(value))}
-        class="settings"
-      >
+      <Tabs orientation="vertical" variant="settings" value={tab()} onChange={setTab} class="settings">
         <Tabs.List>
           <div class="settings-nav">
-            <button type="button" class="settings-back" onClick={surface.close}>
+            <button type="button" class="settings-back" onClick={navigation.close}>
               <Icon name="arrow-left" size="small" class="settings-back-icon" />
               <span>{language.t("settings.backToApp")}</span>
             </button>

@@ -62,6 +62,7 @@ export type ReviewPanelSource = "context-button" | "other"
 
 export type LayoutRoute =
   | { type: "home" }
+  | { type: "settings" }
   | { type: "draft"; draftID: string }
   | { type: "session"; sessionId: string; server: ServerConnection.Key }
 
@@ -100,6 +101,7 @@ const normalizeStoredSessionTabs = (key: string, tabs: SessionTabs) => {
 export const currentRoute = (pathname: string, search: string): LayoutRoute => {
   const parts = pathname.split("/").filter(Boolean)
   if (parts.length === 0) return { type: "home" }
+  if (parts.length === 1 && parts[0] === "settings") return { type: "settings" }
 
   if (parts[0] === "new-session") {
     const draftID = new URLSearchParams(search).get("draftId")

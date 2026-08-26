@@ -1,63 +1,44 @@
 import { describe, expect, test } from "bun:test"
-import { applyPath, backPath, forwardPath, type TitlebarHistory } from "./history"
-
-function history(): TitlebarHistory {
-  return { stack: [], index: 0, action: undefined }
-}
+import { applyPath, type TitlebarHistory } from "./history"
 
 describe("titlebar history", () => {
+  test("starts with only the actual entry", () => {
+    expect(applyPath({ stack: [], index: 0 }, "/settings")).toEqual({ stack: ["/settings"], index: 0 })
+  })
+
   test("append and trim keeps max bounded", () => {
-    let state = history()
-    state = applyPath(state, "/", 3)
-    state = applyPath(state, "/a", 3)
-    state = applyPath(state, "/b", 3)
-    state = applyPath(state, "/c", 3)
-
-    expect(state.stack).toEqual(["/a", "/b", "/c"])
-    expect(state.stack.length).toBe(3)
-    expect(state.index).toBe(2)
+    const state = ["/", "/a", "/b", "/c"].reduce<TitlebarHistory>((state, path) => applyPath(state, path, {}, 3), {
+      stack: [],
+      index: 0,
+    })
+    expect(state).toEqual({ stack: ["/a", "/b", "/c"], index: 2 })
+    expect(applyPath(state, "/b", -1).index).toBe(1)
   })
 
-  test("back and forward indexes stay correct after trimming", () => {
-    let state = history()
-    state = applyPath(state, "/", 3)
-    state = applyPath(state, "/a", 3)
-    state = applyPath(state, "/b", 3)
-    state = applyPath(state, "/c", 3)
-
-    expect(state.stack).toEqual(["/a", "/b", "/c"])
-    expect(state.index).toBe(2)
-
-    const back = backPath(state)
-    expect(back?.to).toBe("/b")
-    expect(back?.state.index).toBe(1)
-
-    const afterBack = applyPath(back!.state, back!.to, 3)
-    expect(afterBack.stack).toEqual(["/a", "/b", "/c"])
-    expect(afterBack.index).toBe(1)
-
-    const forward = forwardPath(afterBack)
-    expect(forward?.to).toBe("/c")
-    expect(forward?.state.index).toBe(2)
-
-    const afterForward = applyPath(forward!.state, forward!.to, 3)
-    expect(afterForward.stack).toEqual(["/a", "/b", "/c"])
-    expect(afterForward.index).toBe(2)
+  test("replacing settings tabs keeps the forward entries", () => {
+    const state = { stack: ["/session", "/settings?tab=general", "/other"], index: 1 }
+    const next = applyPath(state, "/settings?tab=models", { replace: true })
+    expect(next).toEqual({ stack: ["/session", "/settings?tab=models", "/other"], index: 1 })
+    expect(applyPath(next, "/session", -1).index).toBe(0)
+    expect(applyPath(next, "/other", 1).index).toBe(2)
   })
 
-  test("action-driven navigation does not push duplicate history entries", () => {
-    const state: TitlebarHistory = {
-      stack: ["/", "/a", "/b"],
-      index: 2,
-      action: undefined,
-    }
+  test("native traversal does not append entries", () => {
+    const state = { stack: ["/session", "/settings?tab=models"], index: 1 }
+    const back = applyPath(state, "/session", -1)
+    expect(back).toEqual({ ...state, index: 0 })
+    expect(applyPath(back, "/settings?tab=models", 1)).toEqual(state)
+  })
 
-    const back = backPath(state)
-    expect(back?.to).toBe("/a")
+  test("memory history traversal without a leave event preserves the stack", () => {
+    const state = { stack: ["/session", "/settings?tab=models"], index: 1 }
+    const back = applyPath(state, "/session")
+    expect(back).toEqual({ ...state, index: 0 })
+    expect(applyPath(back, "/settings?tab=models")).toEqual(state)
+  })
 
-    const next = applyPath(back!.state, back!.to, 10)
-    expect(next.stack).toEqual(["/", "/a", "/b"])
-    expect(next.index).toBe(1)
-    expect(next.action).toBeUndefined()
+  test("pushing a previously visited path is not mistaken for traversal", () => {
+    const state = { stack: ["/session", "/settings", "/other"], index: 1 }
+    expect(applyPath(state, "/session", {})).toEqual({ stack: ["/session", "/settings", "/session"], index: 2 })
   })
 })

@@ -1,9 +1,9 @@
 import { useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
-import { useSettingsSurface } from "./surface"
+import { useSettingsNavigation } from "./navigation"
 
 export function useSettingsDialog(defaultValue?: string) {
-  const settings = useSettingsSurface()
+  const settings = useSettingsNavigation()
   return () => settings.open(defaultValue)
 }
 

@@ -174,7 +174,12 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       if (!tab) return
       const key = tabKey(tab)
       const draftID = tab.type === "draft" ? tab.draftID : undefined
-      const nextTab = nextTabAfterClose(store, index, recentKey() === key && location.pathname !== "/")
+      const route = currentRoute()
+      const nextTab = nextTabAfterClose(
+        store,
+        index,
+        recentKey() === key && (route.type === "session" || route.type === "draft"),
+      )
       closing.add(key)
       void startTransition(() => {
         setStore(

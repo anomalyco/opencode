@@ -1,7 +1,6 @@
-import { createEffect, createMemo, createResource, Match, createSignal, Show, Switch, untrack } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createEffect, createMemo, createResource, Match, createSignal, Show, Switch } from "solid-js"
 import { Portal } from "solid-js/web"
-import { useLocation, useNavigate } from "@solidjs/router"
+import { useLocation } from "@solidjs/router"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Keybind } from "@opencode-ai/ui/keybind"
@@ -12,16 +11,15 @@ import { usePlatform } from "@/runtime/platform/platform"
 import { useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useSettings } from "@/settings/model"
-import { useSettingsSurface } from "@/settings/surface"
 import { WindowsAppMenu } from "./windows-menu"
-import { applyPath, backPath, forwardPath } from "./history"
+import { useTitlebarHistory } from "./history-context"
 import { TitlebarTabStrip } from "@/shell/titlebar/tab-strip"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createMediaQuery } from "@solid-primitives/media"
 import { readSessionTabsRemovedDetail, SESSION_TABS_REMOVED_EVENT } from "@/shell/titlebar/session-events"
 import { useGlobal } from "@/runtime/server/runtime"
 import { ServerConnection } from "@/runtime/server/registry"
-import { tabKey, useTabs } from "@/shell/tabs/tabs"
+import { tabHref, tabKey, useTabs } from "@/shell/tabs/tabs"
 import type { ComposerState } from "@/composer/persistence"
 import "./titlebar.css"
 import { newTabTooltipKeybind } from "@/shell/commands/tooltip-keybind"
@@ -47,8 +45,7 @@ export function Titlebar(props: {
   const command = useCommand()
   const language = useLanguage()
   const settings = useSettings()
-  const surface = useSettingsSurface()
-  const navigate = useNavigate()
+  const history = useTitlebarHistory()
   const location = useLocation()
   const mobile = createMediaQuery("(max-width: 767px)")
   const bottom = createMemo(() => mobile() && settings.general.mobileTitlebarPosition() === "bottom")
@@ -66,24 +63,6 @@ export function Titlebar(props: {
   }
   const windowsControlsWidth = () => `${windowsControlsBaseWidth / Math.max(titlebarZoom(), 1)}px`
 
-  const [history, setHistory] = createStore({
-    stack: [] as string[],
-    index: 0,
-    action: undefined as "back" | "forward" | undefined,
-  })
-
-  const path = () => `${location.pathname}${location.search}${location.hash}`
-
-  createEffect(() => {
-    const current = path()
-
-    untrack(() => {
-      const next = applyPath(history, current)
-      if (next === history) return
-      setHistory(next)
-    })
-  })
-
   const updateState = createMemo<TitlebarUpdatePillState>(() => {
     const installing = props.update?.installing ?? false
     const version = props.update?.version
@@ -100,34 +79,20 @@ export function Titlebar(props: {
     update: updateState(),
   }))
 
-  const back = () => {
-    const next = backPath(history)
-    if (!next) return
-    setHistory(next.state)
-    navigate(next.to)
-  }
-
-  const forward = () => {
-    const next = forwardPath(history)
-    if (!next) return
-    setHistory(next.state)
-    navigate(next.to)
-  }
-
   command.register(() => [
     {
       id: "common.goBack",
       title: language.t("common.goBack"),
       category: language.t("command.category.view"),
       keybind: "mod+[",
-      onSelect: back,
+      onSelect: history.back,
     },
     {
       id: "common.goForward",
       title: language.t("common.goForward"),
       category: language.t("command.category.view"),
       keybind: "mod+]",
-      onSelect: forward,
+      onSelect: history.forward,
     },
   ])
 
@@ -201,11 +166,11 @@ export function Titlebar(props: {
               }
             }
 
-            const currentTab = () => (surface.store.open ? undefined : matchRoute(layout.route()))
+            const currentTab = () => matchRoute(layout.route())
 
             createEffect(() => {
               const route = layout.route()
-              if (!tabs.ready() || surface.store.open) return
+              if (!tabs.ready()) return
               const tab = currentTab()
               if (tab) {
                 const current = session()
@@ -263,8 +228,12 @@ export function Titlebar(props: {
                   void tabs.newDraft({ server: activeTab.server, directory: activeTab.directory }, "", model)
                   return
                 }
-                case "home": {
-                  const selection = layout.home.selection()
+                case "home":
+                case "settings": {
+                  const selection =
+                    route.type === "settings"
+                      ? { server: location.query.server, directory: location.query.directory }
+                      : layout.home.selection()
                   const conn =
                     global.servers.list().find((item) => ServerConnection.key(item) === selection.server) ??
                     global.servers.list()[0]
@@ -273,8 +242,17 @@ export function Titlebar(props: {
                     projects?.list().find((item) => item.worktree === selection.directory) ??
                     projects?.list().find((item) => item.worktree === projects.last()) ??
                     projects?.list()[0]
-                  if (conn && project) {
-                    void tabs.newDraft({ server: ServerConnection.key(conn), directory: project.worktree }, "")
+                  const directory =
+                    route.type === "settings" && typeof selection.directory === "string"
+                      ? selection.directory
+                      : project?.worktree
+                  if (conn && directory) {
+                    const origin =
+                      route.type === "settings"
+                        ? tabsStore.find((tab) => tabHref(tab) === location.query.from)
+                        : undefined
+                    const model = origin ? tabs.stateValue<ComposerState>(origin, "prompt")?.model.current() : undefined
+                    void tabs.newDraft({ server: ServerConnection.key(conn), directory }, "", model)
                     return
                   }
                 }
@@ -374,7 +352,6 @@ export function Titlebar(props: {
                         forceTruncate={tabsAreOverflowing()}
                         onOverflowChange={setTabsAreOverflowing}
                         onNavigate={(tab, el) => {
-                          surface.close()
                           tabs.select(tab)
                           el?.scrollIntoView({ behavior: "instant" })
                         }}
@@ -417,7 +394,6 @@ export function Titlebar(props: {
                             forceTruncate={false}
                             onOverflowChange={setTabsAreOverflowing}
                             onNavigate={(tab, el) => {
-                              surface.close()
                               tabs.select(tab)
                               el?.scrollIntoView({ behavior: "instant", block: "nearest" })
                             }}

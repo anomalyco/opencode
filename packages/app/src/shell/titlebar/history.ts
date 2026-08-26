@@ -1,26 +1,39 @@
 export const MAX_TITLEBAR_HISTORY = 100
 
-export type TitlebarAction = "back" | "forward" | undefined
+export type TitlebarAction = number | { replace?: boolean }
 
 export type TitlebarHistory = {
   stack: string[]
   index: number
-  action: TitlebarAction
 }
 
-export function applyPath(state: TitlebarHistory, current: string, max = MAX_TITLEBAR_HISTORY): TitlebarHistory {
-  if (!state.stack.length) {
-    const stack = current === "/" ? ["/"] : ["/", current]
-    return { stack, index: stack.length - 1, action: undefined }
+export function applyPath(
+  state: TitlebarHistory,
+  current: string,
+  action?: TitlebarAction,
+  max = MAX_TITLEBAR_HISTORY,
+): TitlebarHistory {
+  if (!state.stack.length) return { stack: [current], index: 0 }
+
+  if (typeof action === "number") {
+    const index = state.index + action
+    if (state.stack[index] === current) return { ...state, index }
+    return { stack: [current], index: 0 }
   }
 
-  const active = state.stack[state.index]
-  if (current === active) {
-    if (!state.action) return state
-    return { ...state, action: undefined }
+  if (action?.replace) {
+    return { ...state, stack: state.stack.map((path, index) => (index === state.index ? current : path)) }
   }
 
-  if (state.action) return { ...state, action: undefined }
+  if (current === state.stack[state.index]) return state
+
+  // MemoryRouter history traversal does not notify useBeforeLeave.
+  if (!action) {
+    const before = state.stack.findLastIndex((path, index) => index < state.index && path === current)
+    const after = state.stack.findIndex((path, index) => index > state.index && path === current)
+    const index = before < 0 ? after : after < 0 || state.index - before <= after - state.index ? before : after
+    if (index >= 0) return { ...state, index }
+  }
 
   return pushPath(state, current, max)
 }
@@ -28,7 +41,7 @@ export function applyPath(state: TitlebarHistory, current: string, max = MAX_TIT
 export function pushPath(state: TitlebarHistory, path: string, max = MAX_TITLEBAR_HISTORY): TitlebarHistory {
   const stack = state.stack.slice(0, state.index + 1).concat(path)
   const next = trimHistory(stack, stack.length - 1, max)
-  return { ...state, ...next, action: undefined }
+  return { ...state, ...next }
 }
 
 export function trimHistory(stack: string[], index: number, max = MAX_TITLEBAR_HISTORY) {
@@ -38,20 +51,4 @@ export function trimHistory(stack: string[], index: number, max = MAX_TITLEBAR_H
     stack: stack.slice(cut),
     index: Math.max(0, index - cut),
   }
-}
-
-export function backPath(state: TitlebarHistory) {
-  if (state.index <= 0) return
-  const index = state.index - 1
-  const to = state.stack[index]
-  if (!to) return
-  return { state: { ...state, index, action: "back" as const }, to }
-}
-
-export function forwardPath(state: TitlebarHistory) {
-  if (state.index >= state.stack.length - 1) return
-  const index = state.index + 1
-  const to = state.stack[index]
-  if (!to) return
-  return { state: { ...state, index, action: "forward" as const }, to }
 }

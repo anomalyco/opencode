@@ -17,7 +17,7 @@ export function setLastActiveUrl(windowID: string, value: string) {
 export function acceptedLastActiveUrl(value: string | null | undefined) {
   if (value === "/") return value
   const path = value?.split(/[?#]/, 1)[0]
-  if (path === "/new-session") return value ?? "/"
+  if (path === "/new-session" || path === "/settings") return value ?? "/"
   if (/^\/server\/[^/]+\/session\/[^/]+$/.test(path ?? "")) return value ?? "/"
   return "/"
 }
