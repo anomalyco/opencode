@@ -1,4 +1,4 @@
-import type { PluginInfo, PluginSource } from "@opencode-ai/client"
+import type { PluginInfo, PluginUpdateInfo, PluginUpdateResult } from "@opencode-ai/client"
 import { Plugin } from "@opencode-ai/plugin/tui"
 import { createEffect, createMemo, createResource, createSignal, onMount, Show } from "solid-js"
 import { DialogErrorDetails } from "../../component/dialog-error-details"
@@ -7,24 +7,6 @@ import { DialogSelect, type DialogSelectOption } from "../../ui/dialog-select"
 import { useDialog } from "../../ui/dialog"
 
 const id = "opencode.plugins"
-
-export type PluginUpdateInfo = {
-  readonly name: string
-  readonly source: PluginSource
-  readonly status: "not-updateable" | "pinned" | "up-to-date" | "available" | "failed"
-  readonly currentVersion?: string
-  readonly latestVersion?: string
-  readonly error?: string
-}
-
-export type PluginUpdateResult = {
-  readonly name: string
-  readonly source: PluginSource
-  readonly status: "not-updateable" | "pinned" | "up-to-date" | "updated" | "failed"
-  readonly previousVersion?: string
-  readonly version?: string
-  readonly error?: string
-}
 
 type UpdateEntry = PluginUpdateInfo | PluginUpdateResult
 
@@ -49,16 +31,6 @@ export type PluginRegistry = Pick<ReturnType<typeof usePlugin>, "registered" | "
 
 type ServerEntry = Extract<Entry, { runtime: "server" }>
 
-type PendingPluginClient = Plugin.Context["client"]["plugin"] & {
-  check(input: { location: NonNullable<Plugin.Context["location"]> }): Promise<{ data: PluginUpdateInfo[] }>
-  update(input: { name: string; location: NonNullable<Plugin.Context["location"]> }): Promise<{
-    data: PluginUpdateResult
-  }>
-  updateAll(input: { location: NonNullable<Plugin.Context["location"]> }): Promise<{
-    data: PluginUpdateResult[]
-  }>
-}
-
 export function PluginsDialog(props: {
   context: Plugin.Context
   plugins: PluginRegistry
@@ -75,11 +47,10 @@ export function PluginsDialog(props: {
   const [updateEntries, setUpdateEntries] = createSignal<readonly UpdateEntry[]>([])
   const [updating, setUpdating] = createSignal<string>()
   const location = () => props.context.location ?? props.context.data.location.default()
-  const pending = props.context.client.plugin as PendingPluginClient
   const operations: PluginUpdateOperations = props.updates ?? {
-    check: () => pending.check({ location: location() }).then((result) => result.data),
-    update: (name) => pending.update({ name, location: location() }).then((result) => result.data),
-    updateAll: () => pending.updateAll({ location: location() }).then((result) => result.data),
+    check: () => props.context.client.plugin.check({ location: location() }).then((result) => result.data),
+    update: (name) => props.context.client.plugin.update({ name, location: location() }).then((result) => result.data),
+    updateAll: () => props.context.client.plugin.updateAll({ location: location() }).then((result) => result.data),
   }
   const [server, { refetch: refetchServer }] = createResource(
     () => (props.server ? undefined : location()),

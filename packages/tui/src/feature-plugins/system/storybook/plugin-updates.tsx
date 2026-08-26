@@ -1,8 +1,8 @@
-import type { PluginInfo } from "@opencode-ai/client"
+import type { PluginInfo, PluginUpdateInfo, PluginUpdateResult } from "@opencode-ai/client"
 import type { Plugin } from "@opencode-ai/plugin/tui"
 import { useTerminalDimensions } from "@opentui/solid"
 import { onMount } from "solid-js"
-import { PluginsDialog, type PluginRegistry, type PluginUpdateInfo, type PluginUpdateResult } from "../plugins"
+import { PluginsDialog, type PluginRegistry } from "../plugins"
 import type { Story } from "./index"
 import { StoryFooter } from "./footer"
 
