@@ -1,7 +1,6 @@
 import { describe, expect } from "bun:test"
 import path from "path"
 import { mkdir, rm } from "fs/promises"
-import { $ } from "bun"
 import { Effect, Layer, LayerMap } from "effect"
 import { Worktree } from "@opencode-ai/schema/worktree"
 import { Bus } from "@opencode-ai/core/bus"
@@ -47,108 +46,8 @@ const itWithUnavailableDestination = testEffect(
     ],
   ),
 )
-const liveIt = testEffect(
-  AppNodeBuilder.build(
-    LayerNode.group([Database.node, Bus.node, Project.node, SessionProjector.node, SessionStore.node, Session.node]),
-    [[SessionExecution.node, SessionExecution.noopLayer]],
-  ),
-)
 
 describe("Session.move", () => {
-  liveIt.live("reconciles a queued markerless move through an unborn repository", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ).pipe(
-      Effect.flatMap((tmp) =>
-        Effect.gen(function* () {
-          const session = yield* Session.Service
-          const projects = yield* Project.Service
-          const source = path.join(tmp.path, "source")
-          const root = path.join(tmp.path, "destination")
-          const destination = AbsolutePath.make(path.join(root, "packages", "app"))
-          yield* Effect.promise(() => Promise.all([mkdir(source), mkdir(destination, { recursive: true })]))
-          const created = yield* session.create({
-            location: Location.Ref.make({ directory: AbsolutePath.make(source) }),
-          })
-
-          yield* session.move({ sessionID: created.id, directory: destination, delivery: "queue" })
-          const queued = (yield* session.inbox(created.id))[0]
-          if (queued?.type !== "move") return yield* Effect.die(new Error("queued move not found"))
-
-          yield* Effect.promise(async () => {
-            await $`git init -q`.cwd(root)
-            await $`git config user.email test@example.com`.cwd(root)
-            await $`git config user.name Test`.cwd(root)
-          })
-          const unborn = yield* projects.resolve(destination)
-          const provisional = (yield* session.inbox(created.id))[0]
-          expect(unborn.id).toBe(Project.ID.global)
-          expect(provisional).toMatchObject({ type: "move", payload: { projectID: Project.ID.global } })
-
-          yield* Effect.promise(() => $`git commit --allow-empty -qm initial`.cwd(root).quiet())
-          const project = yield* projects.resolve(destination)
-          const reconciled = (yield* session.inbox(created.id))[0]
-
-          expect(queued.payload.projectID).not.toBe(project.id)
-          expect(reconciled).toMatchObject({
-            type: "move",
-            payload: { projectID: project.id, subpath: "packages/app" },
-          })
-        }),
-      ),
-    ),
-  )
-
-  liveIt.live("does not retarget a queued move from a nested repository to its repository ancestor", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ).pipe(
-      Effect.flatMap((tmp) =>
-        Effect.gen(function* () {
-          const session = yield* Session.Service
-          const projects = yield* Project.Service
-          const source = path.join(tmp.path, "source")
-          const root = path.join(tmp.path, "outer")
-          const nested = path.join(root, "nested")
-          const destination = AbsolutePath.make(path.join(nested, "packages", "app"))
-          yield* Effect.promise(() => Promise.all([mkdir(source), mkdir(destination, { recursive: true })]))
-          yield* Effect.promise(async () => {
-            await $`git init -q`.cwd(nested)
-            await $`git config user.email test@example.com`.cwd(nested)
-            await $`git config user.name Test`.cwd(nested)
-            await $`git commit --allow-empty -qm initial`.cwd(nested)
-            await $`git remote add origin git@example.test:nested/repository.git`.cwd(nested)
-          })
-          const created = yield* session.create({
-            location: Location.Ref.make({ directory: AbsolutePath.make(source) }),
-          })
-
-          yield* session.move({ sessionID: created.id, directory: destination, delivery: "queue" })
-          const queued = (yield* session.inbox(created.id))[0]
-          if (queued?.type !== "move") return yield* Effect.die(new Error("queued move not found"))
-
-          yield* Effect.promise(async () => {
-            await $`git init -q`.cwd(root)
-            await $`git config user.email test@example.com`.cwd(root)
-            await $`git config user.name Test`.cwd(root)
-            await $`git commit --allow-empty -qm initial`.cwd(root)
-            await $`git remote add origin git@example.test:outer/repository.git`.cwd(root)
-          })
-          const outer = yield* projects.resolve(AbsolutePath.make(root))
-          const preserved = (yield* session.inbox(created.id))[0]
-
-          expect(queued.payload.projectID).not.toBe(outer.id)
-          expect(preserved).toMatchObject({
-            type: "move",
-            payload: { projectID: queued.payload.projectID, subpath: "packages/app" },
-          })
-        }),
-      ),
-    ),
-  )
-
   itWithUnavailableDestination.effect("rejects an unavailable destination before admitting the move", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),

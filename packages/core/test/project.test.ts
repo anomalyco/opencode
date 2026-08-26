@@ -441,6 +441,48 @@ describe("Project.resolve", () => {
     }),
   )
 
+  it.live("prefers the nearest mercurial marker over an outer git repository", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      const nested = path.join(tmp.path, "nested")
+      yield* Effect.promise(async () => {
+        await initRepo(tmp.path, { commit: true })
+        await fs.mkdir(path.join(nested, ".hg"), { recursive: true })
+        await fs.mkdir(path.join(nested, "app"))
+      })
+      const project = yield* Project.Service
+
+      const result = yield* project.resolve(abs(path.join(nested, "app")))
+
+      expect(result.vcs?.type).toBe("hg")
+      expect(result.directory).toBe(yield* real(nested))
+    }),
+  )
+
+  it.live("prefers the nearest git marker over an outer mercurial repository", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      const nested = path.join(tmp.path, "nested")
+      yield* Effect.promise(async () => {
+        await fs.mkdir(path.join(tmp.path, ".hg"))
+        await fs.mkdir(path.join(nested, "app"), { recursive: true })
+        await initRepo(nested, { commit: true })
+      })
+      const project = yield* Project.Service
+
+      const result = yield* project.resolve(abs(path.join(nested, "app")))
+
+      expect(result.vcs?.type).toBe("git")
+      expect(result.directory).toBe(yield* real(nested))
+    }),
+  )
+
   it.live("returns global id for unreadable mercurial metadata", () =>
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireRelease(

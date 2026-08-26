@@ -2,7 +2,7 @@ export * as Project from "./project.js"
 
 import { Context, Effect, Layer, Schema } from "effect"
 import { ChildProcess } from "effect/unstable/process"
-import { and, asc, desc, eq } from "drizzle-orm"
+import { and, asc, desc, eq, isNull } from "drizzle-orm"
 import path from "path"
 import { AbsolutePath } from "./schema.js"
 import { Bus } from "./bus.js"
@@ -104,7 +104,12 @@ const layer = Layer.effect(
         .pipe(Effect.orDie)
       yield* upsertProject(db, project).pipe(Effect.orDie)
       if (previous && previous.canonical !== project.canonical) {
-        const row = yield* db.select().from(ProjectTable).where(eq(ProjectTable.id, project.id)).get().pipe(Effect.orDie)
+        const row = yield* db
+          .select()
+          .from(ProjectTable)
+          .where(eq(ProjectTable.id, project.id))
+          .get()
+          .pipe(Effect.orDie)
         if (row) yield* bus.publish(ProjectSchema.Event.Updated, fromRow(row))
       }
       if (!project.vcs) return project
@@ -135,9 +140,33 @@ const layer = Layer.effect(
             .get()
             .pipe(Effect.orDie)
           if (stored) return
+          const directory = AbsolutePath.make(yield* fs.resolve(item.directory))
+          const markerless = yield* db
+            .select({ id: ProjectTable.id, directory: ProjectTable.worktree })
+            .from(ProjectTable)
+            .where(isNull(ProjectTable.vcs))
+            .all()
+            .pipe(Effect.orDie)
+          const adopted = yield* Effect.filter(markerless, (candidate) =>
+            Effect.gen(function* () {
+              if (candidate.id === item.projectID) return false
+              const canonical = AbsolutePath.make(yield* fs.resolve(candidate.directory))
+              if (!FSUtil.contains(directory, canonical)) return false
+              const markers = yield* fs
+                .up({ targets: [".git", ".hg"], start: canonical, stop: directory, mode: "first" })
+                .pipe(Effect.orElseSucceed(() => []))
+              if (!markers[0]) return false
+              return (yield* fs.resolve(path.dirname(markers[0]))) === directory
+            }),
+          )
           yield* bus.publish(
             Worktree.Event.Resolved,
-            { projectID: item.projectID, directory: item.directory, previous: project.previous ?? ID.global },
+            {
+              projectID: item.projectID,
+              directory: item.directory,
+              previous: project.previous ?? ID.global,
+              ...(adopted.length ? { adopted: adopted.map((candidate) => candidate.id) } : {}),
+            },
             {
               commit: () =>
                 db
@@ -275,7 +304,12 @@ const layer = Layer.effect(
     })
 
     const resolve = Effect.fn("Project.resolve")(function* (input: AbsolutePath) {
-      const repo = yield* git.repo.discover(input)
+      const directory = AbsolutePath.make(yield* fs.resolve(input))
+      const marker = yield* fs.up({ targets: [".git", ".hg"], start: directory, mode: "first" }).pipe(
+        Effect.map((matches) => matches[0]),
+        Effect.orElseSucceed(() => undefined),
+      )
+      const repo = marker && path.basename(marker) === ".git" ? yield* git.repo.discover(directory) : undefined
       if (repo) {
         const previous = yield* cached(repo.commonDirectory)
         const id = (yield* remote(repo)) ?? previous ?? (yield* rootCommit(repo))
@@ -295,9 +329,8 @@ const layer = Layer.effect(
         })
       }
 
-      const hg = yield* hgDiscover(input)
+      const hg = marker && path.basename(marker) === ".hg" ? yield* hgDiscover(directory) : undefined
       if (hg) return yield* persist({ ...hg, canonical: hg.directory })
-      const directory = AbsolutePath.make(yield* fs.resolve(input))
       return yield* persist({
         id: ID.make(Hash.fast(`directory:${directory}`)),
         directory,

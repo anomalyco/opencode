@@ -147,6 +147,14 @@ describe("Session.create", () => {
         expect(unbornRoot).toMatchObject({ projectID: Project.ID.global, subpath: undefined })
         expect(unbornNested).toMatchObject({ projectID: Project.ID.global, subpath: "packages/app" })
         expect(unbornAlias).toMatchObject({ projectID: Project.ID.global, subpath: "packages/app" })
+        expect(
+          yield* db
+            .select({ data: EventTable.data })
+            .from(EventTable)
+            .where(eq(EventTable.aggregate_id, Project.ID.global))
+            .get()
+            .pipe(Effect.orDie),
+        ).toMatchObject({ data: { adopted: expect.arrayContaining([created.projectID, child.projectID]) } })
         expect(project.id).toBe(Project.ID.make(Hash.fast("git-remote:github.com/owner/adopted")))
         expect(repeat.id).toBe(project.id)
         expect(page.data.map((item) => item.id)).toEqual(expect.arrayContaining([created.id, child.id]))
@@ -193,6 +201,46 @@ describe("Session.create", () => {
           .all()
           .pipe(Effect.orDie)
         expect(announced.map((event) => event.type)).toEqual(["worktree.resolved.1"])
+      }),
+    ),
+  )
+
+  liveIt.live("does not adopt nested repositories or sessions in another workspace", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const session = yield* Session.Service
+        const projects = yield* Project.Service
+        const outer = path.join(directory, "outer")
+        const nested = path.join(outer, "nested")
+        const child = AbsolutePath.make(path.join(nested, "app"))
+        yield* Effect.promise(() => fs.mkdir(child, { recursive: true }))
+
+        const local = yield* session.create({ location: Location.Ref.make({ directory: AbsolutePath.make(outer) }) })
+        const inside = yield* session.create({ location: Location.Ref.make({ directory: child }) })
+        const remote = yield* session.create({
+          location: Location.Ref.make({
+            directory: AbsolutePath.make(outer),
+            workspaceID: Workspace.ID.make("wrk_remote"),
+          }),
+        })
+
+        yield* Effect.promise(async () => {
+          for (const root of [nested, outer]) {
+            await $`git init -q`.cwd(root)
+            await $`git config user.email test@example.com`.cwd(root)
+            await $`git config user.name Test`.cwd(root)
+            await $`git commit --allow-empty -qm initial`.cwd(root)
+          }
+        })
+
+        const parent = yield* projects.resolve(AbsolutePath.make(outer))
+        expect((yield* session.get(local.id)).projectID).toBe(parent.id)
+        expect((yield* session.get(inside.id)).projectID).toBe(inside.projectID)
+        expect((yield* session.get(remote.id)).projectID).toBe(remote.projectID)
+
+        const repository = yield* projects.resolve(AbsolutePath.make(nested))
+        expect((yield* session.get(inside.id)).projectID).toBe(repository.id)
+        expect((yield* session.get(remote.id)).projectID).toBe(remote.projectID)
       }),
     ),
   )

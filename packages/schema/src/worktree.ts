@@ -57,16 +57,28 @@ const Resolved = durable({
     projectID: Project.ID,
     directory: AbsolutePath,
     previous: Project.ID,
+    adopted: optional(Schema.Array(Project.ID)),
   },
 })
 
 export const Event = { Updated, Resolved, Definitions: inventory(Updated, Resolved) }
 
 export function adopt(
-  session: { readonly projectID: string; readonly directory: string },
-  event: { readonly projectID: string; readonly directory: string; readonly previous: string },
+  session: { readonly projectID: string; readonly directory: string; readonly workspaceID?: string },
+  event: {
+    readonly projectID: string
+    readonly directory: string
+    readonly previous: string
+    readonly adopted?: ReadonlyArray<string>
+  },
 ) {
-  if (session.projectID !== event.previous && session.projectID !== Project.ID.global) return
+  if (session.workspaceID) return
+  if (
+    session.projectID !== event.previous &&
+    session.projectID !== Project.ID.global &&
+    !event.adopted?.includes(session.projectID)
+  )
+    return
   if (session.projectID === event.projectID) return
   const inside =
     session.directory === event.directory ||

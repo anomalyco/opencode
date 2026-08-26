@@ -479,39 +479,32 @@ const layer = Layer.effectDiscard(
     // are untouched: the session did not move, its directory got identified.
     yield* bus.project(Worktree.Event.Resolved, (event) =>
       Effect.gen(function* () {
-        const stale = [event.data.previous, Project.ID.global].filter((id) => id !== event.data.projectID)
-        const markerless = yield* db
-          .select({ id: ProjectTable.id })
-          .from(ProjectTable)
-          .where(
-            and(
-              isNull(ProjectTable.vcs),
-              gte(ProjectTable.worktree, event.data.directory),
-              lte(ProjectTable.worktree, AbsolutePath.make(event.data.directory + "\uffff")),
+        const candidates = [
+          ...new Set(
+            [event.data.previous, Project.ID.global, ...(event.data.adopted ?? [])].filter(
+              (id) => id !== event.data.projectID,
             ),
-          )
-          .all()
-          .pipe(Effect.orDie)
-        const candidates = [...new Set([...stale, ...markerless.map((item) => item.id)])]
+          ),
+        ]
         if (candidates.length === 0) return
         const rows = yield* db
-          .select({ id: SessionTable.id, directory: SessionTable.directory })
+          .select({
+            id: SessionTable.id,
+            directory: SessionTable.directory,
+            projectID: SessionTable.project_id,
+            canonical: ProjectTable.worktree,
+          })
           .from(SessionTable)
-          .where(
-            and(
-              inArray(SessionTable.project_id, candidates),
-              // Lexicographic range narrows ownership to prefix neighbors;
-              // FSUtil.contains below decides containment exactly.
-              gte(SessionTable.directory, event.data.directory),
-              lte(SessionTable.directory, AbsolutePath.make(event.data.directory + "\uffff")),
-            ),
-          )
+          .innerJoin(ProjectTable, eq(SessionTable.project_id, ProjectTable.id))
+          .where(and(inArray(SessionTable.project_id, candidates), isNull(SessionTable.workspace_id)))
           .all()
           .pipe(Effect.orDie)
         yield* Effect.forEach(
           rows,
           (row) => {
-            const directory = AbsolutePath.make(FSUtil.resolve(row.directory))
+            const directory = event.data.adopted?.includes(row.projectID)
+              ? row.canonical
+              : AbsolutePath.make(path.resolve(row.directory))
             if (!FSUtil.contains(event.data.directory, directory)) return Effect.void
             return db
               .update(SessionTable)
@@ -522,38 +515,6 @@ const layer = Layer.effectDiscard(
                 time_updated: sql`${SessionTable.time_updated}`,
               })
               .where(eq(SessionTable.id, row.id))
-              .run()
-              .pipe(Effect.orDie)
-          },
-          { discard: true },
-        )
-        const moves = yield* db
-          .select({ id: SessionInboxTable.id, payload: SessionInboxTable.payload })
-          .from(SessionInboxTable)
-          .where(
-            and(
-              eq(SessionInboxTable.type, "move"),
-              inArray(sql<string>`json_extract(${SessionInboxTable.payload}, '$.projectID')`, candidates),
-            ),
-          )
-          .all()
-          .pipe(Effect.orDie)
-        yield* Effect.forEach(
-          moves,
-          (row) => {
-            const payload = Schema.decodeUnknownSync(SessionInbox.MovePayload)(row.payload)
-            const directory = AbsolutePath.make(FSUtil.resolve(payload.location.directory))
-            if (!FSUtil.contains(event.data.directory, directory)) return Effect.void
-            return db
-              .update(SessionInboxTable)
-              .set({
-                payload: {
-                  ...payload,
-                  projectID: event.data.projectID,
-                  subpath: RelativePath.make(path.relative(event.data.directory, directory).replaceAll("\\", "/")),
-                },
-              })
-              .where(eq(SessionInboxTable.id, row.id))
               .run()
               .pipe(Effect.orDie)
           },

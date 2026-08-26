@@ -974,7 +974,7 @@ export type WorktreeResolved = {
   type: "worktree.resolved"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
-  data: { projectID: string; directory: string; previous: string }
+  data: { projectID: string; directory: string; previous: string; adopted?: Array<string> }
 }
 
 export type CommandUpdated = {

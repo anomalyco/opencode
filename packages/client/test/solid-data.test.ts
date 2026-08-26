@@ -154,6 +154,66 @@ test("updates authoritative cached project metadata from live events", async () 
   }
 })
 
+test("adopts cached directory-project sessions when their repository is resolved", () => {
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  const api = OpenCode.make({ baseUrl: "http://opencode.local" })
+  const setup = createRoot((dispose) => ({
+    data: createData({
+      api: () => api,
+      directory: "/repo",
+      event: {
+        on: () => () => {},
+        listen(handler) {
+          listeners.add(handler)
+          return () => listeners.delete(handler)
+        },
+      },
+    }),
+    dispose,
+  }))
+
+  try {
+    const sessions: SessionInfo[] = [
+      { ...session(0), id: "ses_root", projectID: "directory-root", location: { directory: "/repo" } },
+      { ...session(0), id: "ses_nested", projectID: "directory-nested", location: { directory: "/repo/app" } },
+      { ...session(0), id: "ses_global", projectID: "global", location: { directory: "/repo/legacy" } },
+      { ...session(0), id: "ses_other", projectID: "other-repository", location: { directory: "/repo/vendor" } },
+      { ...session(0), id: "ses_sibling", projectID: "global", location: { directory: "/repo-other" } },
+      {
+        ...session(0),
+        id: "ses_remote",
+        projectID: "directory-root",
+        location: { directory: "/repo", workspaceID: "workspace-remote" },
+      },
+    ]
+    sessions.forEach((item) => setup.data.session.remember(item))
+
+    const resolved: OpenCodeEvent = {
+      id: "evt_repository_resolved",
+      created: 1,
+      type: "worktree.resolved",
+      durable: { aggregateID: "repository", seq: 0, version: 1 },
+      data: {
+        projectID: "repository",
+        directory: "/repo",
+        previous: "global",
+        adopted: ["directory-root", "directory-nested"],
+      },
+    }
+    listeners.forEach((listener) => listener({ name: resolved.type, details: resolved }))
+
+    expect(setup.data.session.get("ses_root")?.projectID).toBe("repository")
+    expect(setup.data.session.get("ses_root")?.subpath).toBeUndefined()
+    expect(setup.data.session.get("ses_nested")).toMatchObject({ projectID: "repository", subpath: "app" })
+    expect(setup.data.session.get("ses_global")).toMatchObject({ projectID: "repository", subpath: "legacy" })
+    expect(setup.data.session.get("ses_other")?.projectID).toBe("other-repository")
+    expect(setup.data.session.get("ses_sibling")?.projectID).toBe("global")
+    expect(setup.data.session.get("ses_remote")?.projectID).toBe("directory-root")
+  } finally {
+    setup.dispose()
+  }
+})
+
 test("refreshes global credential events across every loaded location and workspace", async () => {
   const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
   const requests: URL[] = []
