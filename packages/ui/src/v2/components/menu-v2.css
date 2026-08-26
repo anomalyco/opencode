@@ -14,7 +14,7 @@
   pointer-events: auto;
 
   background: var(--v2-background-bg-layer-01);
-  border-radius: 6px;
+  border-radius: var(--v2-radius-popover);
   box-shadow: var(--v2-elevation-floating);
 
   outline: none;
@@ -24,7 +24,7 @@
   text-rendering: geometricPrecision;
 
   transform-origin: var(--kb-menu-content-transform-origin);
-  animation: menu-v2-in 120ms ease-out;
+  animation: menu-v2-in var(--v2-motion-duration-base) var(--v2-motion-ease-enter);
 
   &:focus-visible {
     outline: none;
@@ -53,10 +53,13 @@
   height: 28px;
   padding: 0 12px;
   background: transparent;
-  border-radius: 4px;
+  border-radius: var(--v2-radius-compact);
   outline: none;
   cursor: default;
   user-select: none;
+  transition:
+    background-color var(--v2-motion-duration-fast) var(--v2-motion-ease-standard),
+    color var(--v2-motion-duration-fast) var(--v2-motion-ease-standard);
 
   font-variation-settings: "slnt" 0;
   font-variant-numeric: tabular-nums;
@@ -104,7 +107,7 @@
 
     background: var(--menu-v2-badge-bg);
     border: 0.5px solid var(--menu-v2-badge-border);
-    border-radius: 2px;
+    border-radius: var(--v2-radius-micro);
 
     font-size: 11px;
     font-weight: 530;
@@ -181,10 +184,10 @@
 @keyframes menu-v2-in {
   from {
     opacity: 0;
-    transform: scale(0.96);
+    transform: scale(0.96) translateY(2px);
   }
   to {
     opacity: 1;
-    transform: scale(1);
+    transform: scale(1) translateY(0);
   }
 }

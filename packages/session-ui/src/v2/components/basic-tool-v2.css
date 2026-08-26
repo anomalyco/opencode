@@ -42,7 +42,7 @@
   [data-slot="basic-tool-v2-trigger"]:focus-visible {
     outline: 2px solid var(--v2-border-border-focus);
     outline-offset: 2px;
-    border-radius: 2px;
+    border-radius: var(--v2-radius-micro);
   }
 
   [data-slot="basic-tool-v2-labels"] {
@@ -128,7 +128,7 @@
     width: 20px;
     height: 20px;
     padding: 2px;
-    border-radius: 4px;
+    border-radius: var(--v2-radius-micro);
     color: var(--bt-chevron);
     user-select: none;
   }
@@ -138,7 +138,7 @@
     flex-shrink: 0;
     width: 16px;
     height: 16px;
-    transition: transform 0.15s ease-out;
+    transition: transform var(--v2-motion-duration-fast) var(--v2-motion-ease-standard);
   }
 
   &[data-expanded] [data-slot="basic-tool-v2-chevron"] {

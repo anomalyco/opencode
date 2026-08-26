@@ -17,7 +17,7 @@
 
   background: var(--v2-background-bg-layer-01);
   box-shadow: var(--v2-elevation-floating);
-  border-radius: 4px;
+  border-radius: var(--v2-radius-control);
 
   font-style: normal;
   font-weight: 530;
@@ -31,11 +31,11 @@
   user-select: none;
   pointer-events: none;
 
-  animation: tooltipV2In 120ms ease-out;
+  animation: tooltipV2In var(--v2-motion-duration-fast) var(--v2-motion-ease-standard);
   transform-origin: var(--kb-tooltip-content-transform-origin);
 
   &[data-closed] {
-    animation: tooltipV2Out 80ms ease-in forwards;
+    animation: tooltipV2Out var(--v2-motion-duration-fast) var(--v2-motion-ease-standard) forwards;
   }
 }
 

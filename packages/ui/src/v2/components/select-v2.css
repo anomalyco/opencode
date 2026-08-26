@@ -14,14 +14,14 @@
   z-index: 60;
   pointer-events: auto;
   background: var(--v2-background-bg-layer-01);
-  border-radius: 6px;
+  border-radius: var(--v2-radius-popover);
   box-shadow: var(--v2-elevation-floating);
   transform-origin: top center;
-  animation: select-v2-content-in 120ms ease-out;
+  animation: select-v2-content-in var(--v2-motion-duration-base) var(--v2-motion-ease-enter);
 }
 
 [data-component="menu-v2-content"][data-slot="select-v2-content"][data-closed] {
-  animation: select-v2-content-out 80ms ease-in forwards;
+  animation: select-v2-content-out var(--v2-motion-duration-fast) var(--v2-motion-ease-standard) forwards;
 }
 
 @keyframes select-v2-content-in {
@@ -58,7 +58,7 @@
   width: 280px;
   height: 28px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--v2-radius-control);
   outline: 1px solid transparent;
   outline-offset: 0;
   background:
@@ -68,9 +68,9 @@
   align-self: stretch;
   user-select: none;
   transition:
-    background 85ms ease-out,
-    outline-color 85ms ease-out,
-    box-shadow 85ms ease-out;
+    background var(--v2-motion-duration-fast) var(--v2-motion-ease-standard),
+    outline-color var(--v2-motion-duration-fast) var(--v2-motion-ease-standard),
+    box-shadow var(--v2-motion-duration-fast) var(--v2-motion-ease-standard);
 }
 
 [data-component="select-v2"][data-appearance="large"] {
@@ -95,8 +95,8 @@
 }
 
 [data-component="select-v2"]:where(:focus-within):not([data-disabled], [data-invalid]):not([data-expanded]) {
-  outline-color: var(--v2-border-border-focus);
-  box-shadow: none;
+  outline-color: transparent;
+  box-shadow: var(--v2-elevation-control-focus);
 }
 
 [data-component="select-v2"]:where([data-invalid]):not([data-disabled]) {
@@ -169,7 +169,7 @@
   padding: 2px;
   gap: 3px;
   border: 0;
-  border-radius: 4px;
+  border-radius: var(--v2-radius-micro);
   background: transparent;
   color: var(--v2-icon-icon-muted);
   pointer-events: none;
@@ -180,6 +180,7 @@
   flex: none;
   transform: rotate(180deg);
   transform-origin: 50% 50%;
+  transition: transform var(--v2-motion-duration-fast) var(--v2-motion-ease-standard);
 }
 
 [data-component="select-v2"][data-expanded] [data-slot="select-v2-chevron"] svg {
@@ -194,7 +195,7 @@
   padding-block: 4px;
   padding-inline: 8px 4px;
   gap: 4px;
-  border-radius: 4px;
+  border-radius: var(--v2-radius-micro);
   background: transparent;
   box-shadow: none;
   outline: none;

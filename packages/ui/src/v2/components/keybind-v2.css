@@ -30,7 +30,7 @@
   gap: 4px;
   min-width: 14px;
   height: 14px;
-  border-radius: 2px;
+  border-radius: var(--v2-radius-micro);
   flex: none;
   flex-grow: 0;
 }

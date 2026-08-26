@@ -9,7 +9,7 @@
   padding: 0 4px;
   user-select: none;
 
-  border-radius: 2px;
+  border-radius: var(--v2-radius-micro);
   border: 0.5px solid var(--v2-border-border-base);
   background: var(--v2-background-bg-layer-02);
 

@@ -13,7 +13,7 @@
   height: 28px;
   background: var(--v2-background-bg-layer-01);
   border: none;
-  border-radius: 6px;
+  border-radius: var(--v2-radius-control);
   box-shadow: 0 0 0 0.5px var(--v2-border-border-base);
   flex: none;
 }
@@ -30,7 +30,7 @@
   height: 28px;
   margin: 0;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--v2-radius-compact);
   background: transparent;
   box-shadow: none;
   cursor: pointer;
@@ -43,9 +43,9 @@
   font-variation-settings: "slnt" 0;
   color: var(--v2-text-text-muted);
   transition:
-    background-color 0.12s ease,
-    color 0.12s ease,
-    box-shadow 0.12s ease;
+    background-color var(--v2-motion-duration-fast) var(--v2-motion-ease-standard),
+    color var(--v2-motion-duration-fast) var(--v2-motion-ease-standard),
+    box-shadow var(--v2-motion-duration-fast) var(--v2-motion-ease-standard);
 }
 
 [data-slot="segmented-control-v2-item"]:where(:disabled) {

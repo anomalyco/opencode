@@ -3,7 +3,7 @@
   align-items: stretch;
   flex-shrink: 0;
   height: 28px;
-  border-radius: 6px;
+  border-radius: var(--v2-radius-control);
   background-color: transparent;
   box-shadow: none;
   overflow: hidden;
@@ -26,6 +26,10 @@
   color: var(--v2-icon-icon-base);
   cursor: default;
   outline: none;
+  transition:
+    background-color var(--v2-motion-duration-fast) var(--v2-motion-ease-standard),
+    color var(--v2-motion-duration-fast) var(--v2-motion-ease-standard),
+    transform var(--v2-motion-duration-fast) var(--v2-motion-ease-standard);
 }
 
 [data-component="split-button-v2-action"] {
@@ -39,6 +43,7 @@
 
 [data-component="split-button-v2-action"]:is(:active, [data-pressed]):not(:disabled) {
   background-color: var(--v2-overlay-simple-overlay-pressed);
+  transform: scale(0.94);
 }
 
 [data-component="split-button-v2-action"]:is(:focus-visible, [data-focus]) {
@@ -63,6 +68,7 @@
 
 [data-component="split-button-v2-menu-trigger"]:is(:active, [data-pressed]):not(:disabled) {
   background-color: var(--v2-overlay-simple-overlay-pressed);
+  transform: scale(0.94);
 }
 
 [data-component="split-button-v2-menu-trigger"]:is(:focus-visible, [data-focus]) {

@@ -67,7 +67,7 @@
 [data-component="field-v2"] [data-slot="field-v2-label-info"]:focus-visible {
   outline: 2px solid var(--v2-border-border-focus);
   outline-offset: 1px;
-  border-radius: 2px;
+  border-radius: var(--v2-radius-micro);
 }
 
 [data-component="field-v2"] [data-slot="field-v2-prefix"],

@@ -7,7 +7,7 @@
   width: 280px;
   min-height: 80px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--v2-radius-control);
   outline: 1px solid transparent;
   outline-offset: 0;
   background:
@@ -16,9 +16,9 @@
   flex: none;
   align-self: stretch;
   transition:
-    background 85ms ease-out,
-    outline-color 85ms ease-out,
-    box-shadow 85ms ease-out;
+    background var(--v2-motion-duration-fast) var(--v2-motion-ease-standard),
+    outline-color var(--v2-motion-duration-fast) var(--v2-motion-ease-standard),
+    box-shadow var(--v2-motion-duration-fast) var(--v2-motion-ease-standard);
 }
 
 [data-component="textarea-v2"]:where(:hover):not([data-disabled], [data-invalid]):not(:focus-within) {
@@ -28,8 +28,8 @@
 }
 
 [data-component="textarea-v2"]:where(:focus-within):not([data-disabled], [data-invalid]) {
-  outline-color: var(--v2-border-border-focus);
-  box-shadow: none;
+  outline-color: transparent;
+  box-shadow: var(--v2-elevation-control-focus);
 }
 
 [data-component="textarea-v2"]:where([data-invalid]):not([data-disabled]) {

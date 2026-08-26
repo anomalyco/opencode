@@ -7,6 +7,16 @@
   user-select: none;
   aspect-ratio: 1;
   flex-shrink: 0;
+  transition:
+    background-color 160ms cubic-bezier(0.22, 1, 0.36, 1),
+    color 160ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 160ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 160ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 130ms cubic-bezier(0.22, 1, 0.36, 1);
+
+  &:active:not(:disabled) {
+    transform: scale(0.94);
+  }
 
   &[data-variant="primary"] {
     background-color: var(--icon-strong-base);

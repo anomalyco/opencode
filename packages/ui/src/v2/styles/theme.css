@@ -89,6 +89,21 @@
     --v2-agent-review-solid: var(--v2-green-800);
     --v2-agent-writer-solid: var(--v2-purple-700);
 
+    /* ── Shape & motion ── */
+    --v2-radius-micro: 4px;
+    --v2-radius-compact: 6px;
+    --v2-radius-control: 8px;
+    --v2-radius-popover: 10px;
+    --v2-radius-surface: 12px;
+    --v2-radius-panel: 14px;
+    --v2-radius-composer: 20px;
+    --v2-motion-duration-fast: 120ms;
+    --v2-motion-duration-base: 180ms;
+    --v2-motion-duration-slow: 220ms;
+    --v2-motion-ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
+    --v2-motion-ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
+    --v2-focus-ring-color: color-mix(in srgb, var(--v2-border-border-focus) 24%, transparent);
+
     /* ── Project avatar (fixed; theme-independent) ── */
     --v2-avatar-fg: #ffffffff;
     --v2-avatar-bg-orange: #ee7330ff;
@@ -127,6 +142,9 @@
       0px 1px 1.5px 0px var(--v2-alpha-dark-20), 0px 0px 0px 0.5px var(--v2-grey-800),
       inset 0px 1px 2px 0px var(--v2-alpha-light-14), inset 0px -1px 2px 0px var(--v2-alpha-dark-6),
       0px 0px 0px 0px var(--v2-alpha-dark-0);
+    --v2-elevation-control-focus:
+      var(--v2-elevation-button-neutral), 0px 0px 0px 1px var(--v2-border-border-focus),
+      0px 0px 0px 4px var(--v2-focus-ring-color);
     --v2-elevation-elements: 0px 0.5px 0.5px 0px var(--v2-alpha-dark-40);
     --v2-elevation-switch-off:
       inset 0px 1px 1px 0px var(--v2-alpha-dark-8), inset 0px 0.5px 0.5px 0px var(--v2-alpha-dark-8),
@@ -142,6 +160,14 @@
 
     --font-family-text: "Inter", sans-serif;
     --v2-font-family-sans: "Inter", sans-serif;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :root {
+      --v2-motion-duration-fast: 0ms;
+      --v2-motion-duration-base: 0ms;
+      --v2-motion-duration-slow: 0ms;
+    }
   }
 
   /* OS preference fallback (no JS needed) */

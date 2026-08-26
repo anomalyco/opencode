@@ -32,7 +32,7 @@
     text-align: left;
     color: inherit;
     outline: none;
-    border-radius: 2px;
+    border-radius: var(--v2-radius-micro);
   }
 
   [data-slot="tool-error-card-trigger"]:focus-visible {
@@ -169,7 +169,7 @@
     width: 14px;
     height: 14px;
     color: var(--tec-chevron);
-    transition: transform 0.15s ease-out;
+    transition: transform var(--v2-motion-duration-fast) var(--v2-motion-ease-standard);
   }
 
   &[data-expanded] [data-slot="tool-error-card-chevron"] {

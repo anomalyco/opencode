@@ -21,7 +21,7 @@
 
 [data-component="line-comment-v2"] [data-slot="line-comment-v2-shell"] {
   background: var(--v2-background-bg-layer-01);
-  border-radius: 6px;
+  border-radius: var(--v2-radius-control);
   box-shadow: var(--v2-elevation-raised);
 }
 
@@ -83,7 +83,7 @@
   gap: 3px;
   margin: 0;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--v2-radius-micro);
   background: transparent;
   color: var(--v2-icon-icon-muted);
   cursor: pointer;
@@ -153,7 +153,7 @@
   margin: 0;
   resize: vertical;
   border: 1px solid var(--v2-border-border-base);
-  border-radius: 6px;
+  border-radius: var(--v2-radius-control);
   background:
     linear-gradient(180deg, var(--v2-alpha-light-2) 0%, var(--v2-alpha-light-0) 100%), var(--v2-background-bg-base);
   font-size: 13px;
@@ -213,7 +213,7 @@
   margin-top: 8px;
   padding: 4px;
   border: 0.5px solid var(--v2-border-border-muted);
-  border-radius: 6px;
+  border-radius: var(--v2-radius-control);
   background: var(--v2-background-bg-layer-02);
 }
 
@@ -225,7 +225,7 @@
   min-width: 0;
   padding: 6px 8px;
   border: 0;
-  border-radius: 4px;
+  border-radius: var(--v2-radius-micro);
   background: transparent;
   color: var(--v2-text-text-base);
   text-align: start;

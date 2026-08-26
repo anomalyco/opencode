@@ -7,10 +7,14 @@
   min-width: 160px;
   max-width: 160px;
   padding: 8px;
-  border-radius: 6px;
+  border-radius: var(--v2-radius-control);
   background: var(--v2-overlay-simple-overlay-hover);
   box-shadow: inset 0 0 0 0.5px var(--v2-border-border-base);
   cursor: default;
+  transition:
+    background-color var(--v2-motion-duration-fast) var(--v2-motion-ease-standard),
+    box-shadow var(--v2-motion-duration-fast) var(--v2-motion-ease-standard),
+    transform var(--v2-motion-duration-fast) var(--v2-motion-ease-standard);
 
   &[data-wide] {
     width: 100%;
@@ -28,6 +32,10 @@
 
   &[data-clickable] {
     cursor: pointer;
+  }
+
+  &[data-clickable]:active {
+    transform: scale(0.98);
   }
 
   [data-slot="attachment-card-v2-title"],

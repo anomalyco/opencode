@@ -104,7 +104,7 @@ export function SessionRevertDock(props: {
     >
       <div
         data-component="session-revert-dock"
-        class="w-full overflow-hidden rounded-xl border-[0.5px] border-v2-border-border-base bg-v2-background-bg-layer-01"
+        class="w-full overflow-hidden rounded-[var(--v2-radius-surface)] border-[0.5px] border-v2-border-border-base bg-v2-background-bg-layer-01"
       >
         <div
           class="flex h-[42px] items-center gap-2 pl-4 pr-2"

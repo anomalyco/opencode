@@ -10,7 +10,7 @@ import type { FatalRendererError, ServerReadyData, TitlebarTheme } from "../prel
 import { runDesktopMenuAction } from "./desktop-menu-actions"
 import { setForceFocus } from "./debug"
 import { assertAttachmentBudget, createPickedFileAuthorizations } from "./attachment-picker"
-import { getStore, removeStoreFileIfEmpty } from "./store"
+import { getStore } from "./store"
 import {
   getPinchZoomEnabled,
   getWindowID,
@@ -126,11 +126,9 @@ export function registerIpcHandlers(deps: Deps) {
   })
   ipcMain.handle("store-delete", (_event: IpcMainInvokeEvent, name: string, key: string) => {
     getStore(name).delete(key)
-    void removeStoreFileIfEmpty(name)
   })
   ipcMain.handle("store-clear", (_event: IpcMainInvokeEvent, name: string) => {
     getStore(name).clear()
-    void removeStoreFileIfEmpty(name)
   })
   ipcMain.handle("store-keys", (_event: IpcMainInvokeEvent, name: string) => {
     const store = getStore(name)

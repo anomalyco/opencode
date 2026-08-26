@@ -98,7 +98,7 @@ export function SessionTodoDock(props: {
       component={settings.general.newLayoutDesigns() ? "div" : DockTray}
       data-component="session-todo-dock"
       classList={{
-        "w-full overflow-hidden rounded-xl border-[0.5px] border-v2-border-border-base bg-v2-background-bg-layer-01":
+        "w-full overflow-hidden rounded-[var(--v2-radius-surface)] border-[0.5px] border-v2-border-border-base bg-v2-background-bg-layer-01":
           settings.general.newLayoutDesigns(),
       }}
       style={{

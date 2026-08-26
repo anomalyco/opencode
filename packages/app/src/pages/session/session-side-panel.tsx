@@ -303,7 +303,8 @@ export function SessionSidePanel(props: {
           "pointer-events-none": !open(),
           "transition-[width] duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
             !props.size.active() && !props.reviewSnap,
-          "rounded-[12px] shadow-[var(--v2-elevation-raised)] overflow-hidden": settings.general.newLayoutDesigns(),
+          "rounded-[var(--v2-radius-panel)] shadow-[var(--v2-elevation-raised)] overflow-hidden":
+            settings.general.newLayoutDesigns(),
           "flex-1": reviewOpen(),
         }}
         style={{ width: panelWidth() }}
@@ -451,7 +452,7 @@ export function SessionSidePanel(props: {
                                     icon="plus-small"
                                     variant="ghost"
                                     iconSize="large"
-                                    class="!rounded-md"
+                                    class="!rounded-[var(--v2-radius-compact)]"
                                     onClick={() => {
                                       void import("@/components/dialog-select-file").then((x) => {
                                         dialog.show(() => <x.DialogSelectFile mode="files" onOpenFile={showAllFiles} />)

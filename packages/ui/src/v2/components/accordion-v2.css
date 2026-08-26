@@ -11,7 +11,7 @@
 
   width: 100%;
   background: var(--accordion-v2-bg);
-  border-radius: 6px;
+  border-radius: var(--v2-radius-control);
   box-shadow: 0 0 0 0.5px var(--accordion-v2-border);
   overflow: hidden;
 
@@ -81,7 +81,7 @@
   width: 14px;
   height: 14px;
   color: var(--accordion-v2-icon);
-  transition: transform 150ms ease;
+  transition: transform var(--v2-motion-duration-fast) var(--v2-motion-ease-standard);
 }
 
 [data-component="accordion-v2-trigger"][data-expanded] [data-slot="accordion-v2-chevron"] {
@@ -105,11 +105,11 @@
 }
 
 [data-component="accordion-v2-content"][data-expanded] {
-  animation: accordion-v2-down 180ms ease-out;
+  animation: accordion-v2-down var(--v2-motion-duration-base) var(--v2-motion-ease-enter);
 }
 
 [data-component="accordion-v2-content"][data-closed] {
-  animation: accordion-v2-up 180ms ease-out;
+  animation: accordion-v2-up var(--v2-motion-duration-fast) var(--v2-motion-ease-standard);
 }
 
 [data-component="accordion-v2-content"] [data-slot="accordion-v2-content-inner"] {

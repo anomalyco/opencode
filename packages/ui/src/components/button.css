@@ -10,6 +10,17 @@
   cursor: default;
   outline: none;
   white-space: nowrap;
+  transition:
+    background-color 160ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 160ms cubic-bezier(0.22, 1, 0.36, 1),
+    color 160ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 160ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 160ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 130ms cubic-bezier(0.22, 1, 0.36, 1);
+
+  &:active:not(:disabled) {
+    transform: scale(0.97);
+  }
 
   &[data-variant="primary"] {
     background-color: var(--button-primary-base);

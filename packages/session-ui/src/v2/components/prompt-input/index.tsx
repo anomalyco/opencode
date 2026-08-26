@@ -61,7 +61,7 @@ export function PromptInputV2(props: PromptInputV2Props) {
   const buttons = createMemo(() => ({
     opacity: mode() === "normal" ? 1 : 0,
     "pointer-events": mode() === "normal" ? ("auto" as const) : ("none" as const),
-    transition: "opacity 200ms ease",
+    transition: "opacity var(--v2-motion-duration-base) var(--v2-motion-ease-standard)",
   }))
 
   createEffect(() => {
@@ -111,7 +111,7 @@ export function PromptInputV2(props: PromptInputV2Props) {
       <form
         data-component="prompt-input-v2"
         data-dock-border-underlay={props.borderUnderlay ? "v2" : undefined}
-        class="group/prompt-input relative min-h-[96px] w-full overflow-clip rounded-2xl bg-v2-background-bg-base"
+        class="group/prompt-input relative min-h-[96px] w-full overflow-clip rounded-[var(--v2-radius-composer)] bg-v2-background-bg-base transition-shadow duration-[var(--v2-motion-duration-base)] ease-[var(--v2-motion-ease-standard)] focus-within:shadow-[var(--v2-elevation-raised),inset_0_0_0_1px_var(--v2-border-border-focus),0_0_0_4px_var(--v2-focus-ring-color)]"
         classList={{
           "shadow-[var(--v2-elevation-raised)]": !props.borderUnderlay,
           "border border-v2-icon-icon-info border-dashed": state.drag === "active",
@@ -126,7 +126,7 @@ export function PromptInputV2(props: PromptInputV2Props) {
         onDrop={props.controller.onDrop}
       >
         <Show when={state.drag === "active"}>
-          <div class="pointer-events-none absolute inset-0 z-20 grid place-items-center rounded-2xl bg-v2-background-bg-base/90 text-v2-text-text-base">
+          <div class="pointer-events-none absolute inset-0 z-20 grid place-items-center rounded-[var(--v2-radius-composer)] bg-v2-background-bg-base/90 text-v2-text-text-base">
             {i18n.t("ui.promptInput.dropFiles")}
           </div>
         </Show>
@@ -440,10 +440,10 @@ export function PromptInputV2Attachments(props: {
                     <img
                       src={attachment.blob.url}
                       alt={attachment.filename}
-                      class="w-[58px] h-[46px] rounded-[6px] object-cover"
+                      class="w-[58px] h-[46px] rounded-[var(--v2-radius-compact)] object-cover"
                       onClick={() => props.onAttachmentClick?.(attachment)}
                     />
-                    <div class="absolute inset-0 rounded-[6px] shadow-[inset_0_0_0_0.5px_var(--v2-border-border-base)] pointer-events-none" />
+                    <div class="absolute inset-0 rounded-[var(--v2-radius-compact)] shadow-[inset_0_0_0_0.5px_var(--v2-border-border-base)] pointer-events-none" />
                   </Show>
                 </TooltipV2>
                 <button
@@ -622,7 +622,7 @@ export function PromptInputV2Popover(props: {
 }) {
   return (
     <div
-      class="absolute inset-x-0 -top-2 z-40 flex max-h-80 -translate-y-full flex-col overflow-auto rounded-xl bg-v2-background-bg-base p-2 shadow-[var(--v2-elevation-raised)] no-scrollbar"
+      class="absolute inset-x-0 -top-2 z-40 flex max-h-80 -translate-y-full flex-col overflow-auto rounded-[var(--v2-radius-popover)] bg-v2-background-bg-base p-2 shadow-[var(--v2-elevation-floating)] no-scrollbar"
       onMouseDown={(event) => event.preventDefault()}
     >
       <Show when={props.search}>
@@ -650,7 +650,7 @@ export function PromptInputV2Popover(props: {
             <button
               type="button"
               data-suggestion-id={item.id}
-              class="flex w-full items-center gap-2 rounded-md px-2 py-1 text-start hover:bg-v2-overlay-simple-overlay-hover"
+              class="flex w-full items-center gap-2 rounded-[var(--v2-radius-compact)] px-2 py-1 text-start transition-colors duration-[var(--v2-motion-duration-fast)] ease-[var(--v2-motion-ease-standard)] hover:bg-v2-overlay-simple-overlay-hover"
               classList={{ "bg-v2-overlay-simple-overlay-hover": props.activeID === item.id }}
               onPointerMove={() => props.onActiveChange(item)}
               onClick={() => props.onSelect(item)}
@@ -695,7 +695,7 @@ export function PromptInputV2SubmitButton(props: {
         tabIndex={props.mode === "normal" ? undefined : -1}
         icon={props.stopping ? "stop" : props.mode === "shell" ? "arrow-undo-down" : "arrow-up"}
         variant="primary"
-        class="size-7 rounded-full p-[6px] text-v2-icon-icon-muted shadow-[var(--v2-elevation-button-contrast)] disabled:opacity-50"
+        class="size-7 rounded-full p-[6px] text-v2-icon-icon-muted shadow-[var(--v2-elevation-button-contrast)] transition-[transform,opacity] duration-[var(--v2-motion-duration-fast)] ease-[var(--v2-motion-ease-standard)] hover:scale-[1.03] active:scale-[0.96] disabled:opacity-50"
         style={{
           "background-image":
             "linear-gradient(180deg,var(--v2-alpha-light-20) 0%,var(--v2-alpha-light-0) 100%),linear-gradient(90deg,var(--v2-background-bg-contrast) 0%,var(--v2-background-bg-contrast) 100%)",

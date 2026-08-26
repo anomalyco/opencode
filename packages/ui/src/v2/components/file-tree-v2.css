@@ -16,15 +16,15 @@
   padding-inline-end: 8px;
   overflow: visible;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--v2-radius-compact);
   background-color: transparent;
   color: var(--v2-text-text-muted);
   text-align: start;
   cursor: pointer;
   scroll-margin-block: 8px;
   transition:
-    background-color 120ms ease,
-    color 120ms ease;
+    background-color var(--v2-motion-duration-fast) var(--v2-motion-ease-standard),
+    color var(--v2-motion-duration-fast) var(--v2-motion-ease-standard);
 }
 
 [data-component="file-tree-v2"] [data-slot="file-tree-v2-row"][data-ignored] {
@@ -80,7 +80,7 @@
 }
 
 [data-component="file-tree-v2"] [data-slot="file-tree-v2-chevron"] svg {
-  transition: transform 120ms ease;
+  transition: transform var(--v2-motion-duration-fast) var(--v2-motion-ease-standard);
 }
 
 [data-component="file-tree-v2"] [data-slot="file-tree-v2-chevron"]:not([data-expanded]) svg {
