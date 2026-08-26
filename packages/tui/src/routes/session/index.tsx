@@ -3360,7 +3360,7 @@ function executeCalls(value: unknown): ExecuteCall[] {
 
 export function executeCallSummary(call: ExecuteCall) {
   const args = primitiveInputSummary(call.input ?? {}).replace(/\s+/g, " ")
-  return `↳ ${call.tool}${call.status === "error" ? " (failed)" : ""}${args ? ` ${args}` : ""}`
+  return `${call.tool}${args ? ` ${args}` : ""}`
 }
 
 function ExecuteCallView(props: { call: Accessor<ExecuteCall> }) {
@@ -3370,11 +3370,16 @@ function ExecuteCallView(props: { call: Accessor<ExecuteCall> }) {
   const [hover, setHover] = createSignal(false)
   const input = createMemo(() => Object.entries(props.call().input ?? {}))
   const expandable = createMemo(() => input().length > 0)
-  const title = createMemo(() => `↳ ${props.call().tool}${props.call().status === "error" ? " (failed)" : ""}`)
+  const expandedColor = createMemo(() => theme.raise(theme.text.subdued))
+  const color = createMemo(() => {
+    if (props.call().status === "error") return theme.text.feedback.error.default
+    if (hover()) return theme.text.default
+    return expanded() ? expandedColor() : theme.text.subdued
+  })
 
   return (
     <box
-      paddingLeft={3 + INLINE_TOOL_ICON_WIDTH}
+      paddingLeft={3}
       onMouseOver={() => expandable() && setHover(true)}
       onMouseOut={() => setHover(false)}
       onMouseUp={() => {
@@ -3382,21 +3387,16 @@ function ExecuteCallView(props: { call: Accessor<ExecuteCall> }) {
         setExpanded((value) => !value)
       }}
     >
-      <text
-        wrapMode="none"
-        truncate
-        fg={
-          props.call().status === "error"
-            ? theme.text.feedback.error.default
-            : hover()
-              ? theme.text.default
-              : theme.text.subdued
-        }
-      >
-        {expanded() ? title() : executeCallSummary(props.call())}
-      </text>
+      <box flexDirection="row">
+        <box width={INLINE_TOOL_ICON_WIDTH} flexShrink={0}>
+          <text fg={color()}>{props.call().status === "error" ? "✗" : "›"}</text>
+        </box>
+        <text flexGrow={1} wrapMode="none" truncate fg={color()}>
+          {expanded() ? props.call().tool : executeCallSummary(props.call())}
+        </text>
+      </box>
       <Show when={expanded()}>
-        <box paddingLeft={2}>
+        <box paddingLeft={1} border={["left"]} borderColor={expandedColor()}>
           <For each={input()}>
             {([key, value]) => (
               <box flexDirection="row">

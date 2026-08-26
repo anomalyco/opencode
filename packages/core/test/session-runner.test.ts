@@ -76,7 +76,7 @@ import { SessionSystemPrompt } from "@opencode-ai/core/session/system-prompt"
 import { ID } from "@opencode-ai/core/model"
 import { Location } from "@opencode-ai/core/location"
 import { Provider } from "@opencode-ai/core/provider"
-import { Cause, Deferred, Effect, Exit, Fiber, Layer, Schema, Scope, Stream } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Layer, Queue, Schema, Scope, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { asc, desc, eq } from "drizzle-orm"
@@ -419,7 +419,7 @@ const execution = Layer.effect(
         .drain({ sessionID, force, continuation })
         .pipe(
           Effect.flatMap((result) =>
-            result.type === "complete" ? Effect.void : drain(sessionID, false, result.continuation),
+            result._tag === "Complete" ? Effect.void : drain(sessionID, false, result.continuation),
           ),
         )
     }
@@ -2926,25 +2926,41 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("records the stream boundary before local tools complete", () =>
+  it.effect("consumes the full provider stream before recording its boundary and settling local tools", () =>
     Effect.gen(function* () {
       const session = yield* setup
       const bus = yield* Bus.Service
       yield* admit(session, "Echo this")
-      yield* TestLLM.push(TestLLM.tool("call-streamed", "echo", { text: "hello" }), TestLLM.stop())
+      const tail = yield* Deferred.make<void>()
+      const complete = yield* Deferred.make<void>()
+      const finished = yield* Deferred.make<void>()
+      yield* TestLLM.push(
+        Stream.fromIterable(TestLLM.tool("call-streamed", "echo", { text: "hello" })).pipe(
+          Stream.concat(
+            Stream.fromEffect(Deferred.succeed(tail, undefined).pipe(Effect.andThen(Deferred.await(complete)))).pipe(
+              Stream.drain,
+            ),
+          ),
+          Stream.onEnd(Deferred.succeed(finished, undefined)),
+        ),
+        TestLLM.stop(),
+      )
       const tools = yield* blockTools()
-      const streamed = yield* bus
-        .subscribe(SessionEvent.Step.Streamed)
-        .pipe(
-          Stream.filter((event) => event.data.sessionID === sessionID),
-          Stream.take(1),
-          Stream.runDrain,
-          Effect.forkScoped({ startImmediately: true }),
-        )
+      const streamed = yield* bus.subscribe(SessionEvent.Step.Streamed).pipe(
+        Stream.filter((event) => event.data.sessionID === sessionID),
+        Stream.runHead,
+        Effect.forkScoped({ startImmediately: true }),
+      )
       const run = yield* Effect.forkChild(session.resume(sessionID))
 
       yield* tools.started
+      yield* Deferred.await(tail)
+      expect(requests).toHaveLength(1)
+      expect(yield* recordedEventTypes(sessionID)).not.toContain("session.step.streamed.1")
+      expect(requireAssistant(yield* session.context(sessionID)).time.completed).toBeUndefined()
+      yield* Deferred.succeed(complete, undefined)
       yield* Fiber.join(streamed)
+      expect(yield* Deferred.isDone(finished)).toBe(true)
       const assistant = requireAssistant(yield* session.context(sessionID))
       expect(assistant.time.streamed).toBeDefined()
       expect(assistant.time.completed).toBeUndefined()
@@ -2952,6 +2968,10 @@ describe("SessionRunnerLLM", () => {
 
       yield* tools.release
       yield* Fiber.join(run)
+      const events = yield* recordedEventTypes(sessionID)
+      expect(events.indexOf("session.step.streamed.1")).toBeLessThan(events.indexOf("session.tool.success.2"))
+      expect(events.indexOf("session.tool.success.2")).toBeLessThan(events.indexOf("session.step.ended.1"))
+      expect(events.filter((type) => type === "session.step.streamed.1")).toHaveLength(2)
     }),
   )
 
@@ -4265,16 +4285,24 @@ describe("SessionRunnerLLM", () => {
   it.effect("durably fails blocked local tools when interrupted while awaiting settlement", () =>
     Effect.gen(function* () {
       const session = yield* setup
+      const bus = yield* Bus.Service
       yield* admit(session, "Interrupt tool settlement")
       const tools = yield* blockTools()
       yield* TestLLM.push(TestLLM.tool("call-await-interrupt", "echo", { text: "blocked" }))
+      const streamed = yield* bus.subscribe(SessionEvent.Step.Streamed).pipe(
+        Stream.filter((event) => event.data.sessionID === sessionID),
+        Stream.runHead,
+        Effect.forkScoped({ startImmediately: true }),
+      )
 
       const runner = yield* SessionRunner.Service
       const run = yield* runner.drain({ sessionID, force: true }).pipe(Effect.forkChild)
       yield* tools.started
+      yield* Fiber.join(streamed)
       yield* Fiber.interrupt(run)
 
-      expect(yield* Fiber.await(run)).toMatchObject({ _tag: "Failure" })
+      const exit = yield* Fiber.await(run)
+      expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBe(true)
       expect(yield* session.context(sessionID)).toMatchObject([
         { type: "user", text: "Interrupt tool settlement" },
         {
@@ -4291,8 +4319,11 @@ describe("SessionRunnerLLM", () => {
         },
       ])
       const eventTypes = yield* recordedEventTypes(sessionID)
-      expect(eventTypes).toContain("session.step.failed.1")
+      expect(eventTypes.filter((type) => type === "session.tool.failed.2")).toHaveLength(1)
+      expect(eventTypes.filter((type) => type === "session.step.failed.1")).toHaveLength(1)
       expect(eventTypes).not.toContain("session.step.ended.1")
+      expect(eventTypes).not.toContain("session.retry.scheduled.1")
+      expect(requests).toHaveLength(1)
     }),
   )
 
@@ -4569,6 +4600,30 @@ describe("SessionRunnerLLM", () => {
       ])
       yield* replaySessionProjection(sessionID)
       expect((yield* session.context(sessionID)).filter((message) => message.type === "assistant")).toHaveLength(1)
+    }),
+  )
+
+  it.effect("does not start another physical attempt after interruption during retry backoff", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      const bus = yield* Bus.Service
+      yield* admit(session, "Interrupt retry backoff")
+      yield* TestLLM.push(Stream.fail(providerUnavailable()), TestLLM.text("Must not run", "unused-retry"))
+      const scheduled = yield* bus.subscribe(SessionEvent.RetryScheduled).pipe(
+        Stream.filter((event) => event.data.sessionID === sessionID),
+        Stream.runHead,
+        Effect.forkScoped({ startImmediately: true }),
+      )
+      const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      yield* Fiber.join(scheduled)
+      yield* session.interrupt(sessionID)
+      const exit = yield* Fiber.await(run)
+      expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBe(true)
+      yield* TestClock.adjust("1 minute")
+      expect(requests).toHaveLength(1)
+      const events = yield* recordedEventTypes(sessionID)
+      expect(events.filter((type) => type === "session.retry.scheduled.1")).toHaveLength(1)
+      expect(events).not.toContain("session.synthetic.1")
     }),
   )
 
@@ -4918,6 +4973,45 @@ describe("SessionRunnerLLM", () => {
         { type: "synthetic", text: INCOMPLETE_STREAM_CONTINUATION },
         { type: "assistant", finish: "stop", content: [{ type: "text", text: "Recovered" }] },
       ])
+    }),
+  )
+
+  it.effect("shares retry accounting and assistant identity across transparent retries and partial continuations", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      const bus = yield* Bus.Service
+      const scheduled = yield* Queue.unbounded<SessionMessage.ID>()
+      yield* bus.subscribe(SessionEvent.RetryScheduled).pipe(
+        Stream.filter((event) => event.data.sessionID === sessionID),
+        Stream.runForEach((event) => Queue.offer(scheduled, event.data.assistantMessageID)),
+        Effect.forkScoped({ startImmediately: true }),
+      )
+      yield* admit(session, "Mix retry paths")
+      const failure = incompleteStream()
+      const partial = TestLLM.failAfter(
+        failure,
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.textStart({ id: "mixed-partial" }),
+        LLMEvent.textDelta({ id: "mixed-partial", text: "Partial" }),
+      )
+      yield* TestLLM.push(Stream.fail(failure), partial, Stream.fail(failure), partial, partial)
+      const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      const identities: SessionMessage.ID[] = []
+      for (const delay of [2_400, 4_800, 9_600, 19_200]) {
+        identities.push(yield* Queue.take(scheduled))
+        yield* TestClock.adjust(delay)
+      }
+      expect(yield* Fiber.join(run).pipe(Effect.flip)).toBe(failure)
+      expect(requests).toHaveLength(5)
+      expect(identities[0]).toBe(identities[1])
+      expect(identities[2]).toBe(identities[3])
+      expect(identities[0]).not.toBe(identities[2])
+      const messages = yield* session.context(sessionID)
+      expect(messages.filter((message) => message.type === "assistant")).toHaveLength(3)
+      expect(messages.filter((message) => message.type === "synthetic")).toHaveLength(2)
+      const events = yield* recordedEventTypes(sessionID)
+      expect(events.filter((type) => type === "session.retry.scheduled.1")).toHaveLength(4)
+      expect(events.filter((type) => type === "session.step.failed.1")).toHaveLength(3)
     }),
   )
 
