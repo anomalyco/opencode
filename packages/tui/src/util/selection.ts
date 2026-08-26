@@ -1,3 +1,4 @@
+import type { SelectionBehavior } from "@opentui/core"
 import type { ClipboardService } from "../context/clipboard"
 
 type Toast = {
@@ -15,6 +16,7 @@ type Renderer = {
     getSelectedText: () => string
     selectedRenderables: FocusableSelectionTarget[]
     isStart: boolean
+    behavior: SelectionBehavior
   } | null
   clearSelection: () => void
   currentFocusedRenderable?: FocusableSelectionTarget | null
@@ -34,13 +36,16 @@ export function copyOnSelectRelease(
   clipboard: ClipboardService,
 ): boolean {
   if (!event.isDragging) return false
+  // Clearing a click-only or empty release also resets OpenTUI's multi-click counter.
+  const selection = renderer.getSelection()
+  if (!selection || (selection.isStart && selection.behavior === "cell") || !selection.getSelectedText()) return false
   return copy(renderer, toast, clipboard)
 }
 
 export function copy(renderer: Renderer, toast: Toast, clipboard: ClipboardService): boolean {
   const selection = renderer.getSelection()
   if (!selection) return false
-  if (selection.isStart) {
+  if (selection.isStart && selection.behavior === "cell") {
     renderer.clearSelection()
     return false
   }
