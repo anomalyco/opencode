@@ -590,7 +590,7 @@ Set `hidden: true` to remove an agent from interactive selectors. For `subagent`
 }
 ```
 
-Hidden agents remain available for programmatic use. Hidden subagents can still be invoked through the Task tool when permissions allow, and hidden primary-capable agents can still be selected explicitly with `opencode run --agent <name>`.
+Hidden agents cannot be used as the `default_agent`, but they remain available for explicit programmatic use. Hidden subagents can still be invoked through the Task tool when permissions allow, and hidden primary-capable agents can still be selected explicitly with `opencode run --agent <name>`.
 
 ---
 
