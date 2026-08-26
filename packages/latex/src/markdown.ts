@@ -1,4 +1,3 @@
-import { Plugin } from "@opencode-ai/plugin/tui"
 import {
   CodeRenderable,
   RenderableEvents,
@@ -11,9 +10,9 @@ import {
   type MarkdownCodeBlockRenderer,
   type RenderContext,
 } from "@opentui/core"
-import { renderLatex } from "./latex/render"
-import { LatexParseError, type MathLayout } from "./latex/types"
-import { stringWidth } from "../../util/string-width"
+import stringWidth from "string-width"
+import { renderLatex } from "./render"
+import { LatexParseError, type MathLayout } from "./types"
 
 export type LatexOptions = {
   text: ColorInput
@@ -24,18 +23,6 @@ type LatexFrame = {
   source: string
   layout: MathLayout
 }
-
-export default Plugin.define({
-  id: "opencode.latex",
-  setup(context) {
-    const render = createLatexCodeBlockRenderer(context.renderer, () => ({
-      text: context.theme.text.default,
-      subdued: context.theme.text.subdued,
-    }))
-    context.markdown.registerCodeBlockRenderer("latex", render)
-    context.markdown.registerCodeBlockRenderer("math", render)
-  },
-})
 
 export function createLatexCodeBlockRenderer(
   context: RenderContext,

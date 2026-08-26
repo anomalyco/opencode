@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { renderLatex, renderLatexToString } from "../../src/feature-plugins/system/latex/render"
+import { renderLatex, renderLatexToString } from "./render"
 
 describe("renderLatexToString", () => {
   test("renders a fraction with a centered rule", () => {

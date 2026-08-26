@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { parseLatex } from "../../src/feature-plugins/system/latex/parser"
-import { LatexParseError } from "../../src/feature-plugins/system/latex/types"
+import { parseLatex } from "./parser"
+import { LatexParseError } from "./types"
 
 describe("parseLatex", () => {
   test("parses fractions and scripts structurally", () => {

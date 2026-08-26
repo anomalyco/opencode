@@ -10,8 +10,8 @@ import {
   createMarkdownCodeBlockRenderer,
 } from "@opentui/core"
 import { createTestRenderer } from "@opentui/core/testing"
-import { renderLatex } from "../src/feature-plugins/system/latex/render"
-import { createLatexCodeBlockRenderer } from "../src/feature-plugins/system/latex"
+import { renderLatex } from "./render"
+import { createLatexCodeBlockRenderer } from "./markdown"
 
 const renderers: Awaited<ReturnType<typeof createTestRenderer>>["renderer"][] = []
 const syntaxStyle = SyntaxStyle.fromStyles({ default: { fg: "#ffffff" } })
@@ -84,10 +84,10 @@ test("renders the next valid formula after an incomplete streaming prefix", asyn
   expect(output.markdown.getChildren()[0]?.getChildren()[0]).toBeInstanceOf(TextRenderable)
 })
 
-test("renders the final formula when completion is applied before the last text update", async () => {
+test("renders the final formula when the last text update is applied before completion", async () => {
   const output = await setup("```latex\n\\frac{1}{")
-  output.markdown.streaming = false
   output.markdown.content += "2}\n```"
+  output.markdown.streaming = false
   await output.renderOnce()
   expect(output.markdown.getChildren().filter((child) => child instanceof ScrollBoxRenderable).length).toBe(1)
   expect(output.captureCharFrame()).not.toContain("\\frac")

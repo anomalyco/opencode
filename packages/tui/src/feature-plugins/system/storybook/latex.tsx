@@ -3,7 +3,7 @@ import { createMarkdownCodeBlockRenderer } from "@opentui/core"
 import { useTerminalDimensions } from "@opentui/solid"
 import { createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import { useTheme, useThemes } from "../../../context/theme"
-import { createLatexCodeBlockRenderer } from "../latex"
+import { createLatexCodeBlockRenderer } from "@opencode-ai/latex/markdown"
 import type { Story } from "./index"
 import { StoryFooter } from "./footer"
 
