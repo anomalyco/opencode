@@ -595,29 +595,26 @@ const layer = Layer.effect(
         return stored?.sessionID === input.sessionID ? stored.message : undefined
       }),
       updateMessage: Effect.fn("Session.updateMessage")(function* (input) {
-        yield* result.get(input.sessionID)
-        if ((yield* execution.active).has(input.sessionID)) return yield* new BusyError({ sessionID: input.sessionID })
-        const message = yield* result.message(input)
-        if (!message) return yield* new MessageNotFoundError({ sessionID: input.sessionID, messageID: input.messageID })
-        if (message.type !== "assistant")
-          return yield* new MessageNotAssistantError({ sessionID: input.sessionID, messageID: input.messageID })
-        if (!message.time.completed)
-          return yield* new MessageIncompleteError({ sessionID: input.sessionID, messageID: input.messageID })
+        const ref = { sessionID: input.sessionID, messageID: input.messageID }
+        yield* result.get(ref.sessionID)
+        if ((yield* execution.active).has(ref.sessionID)) return yield* new BusyError({ sessionID: ref.sessionID })
+        const message = yield* result.message(ref)
+        if (!message) return yield* new MessageNotFoundError(ref)
+        if (message.type !== "assistant") return yield* new MessageNotAssistantError(ref)
+        if (!message.time.completed) return yield* new MessageIncompleteError(ref)
         if (
           input.content.some(
             (content) =>
               content.type === "tool" && (content.state.status === "streaming" || content.state.status === "running"),
           )
         )
-          return yield* new MessageToolIncompleteError({ sessionID: input.sessionID, messageID: input.messageID })
+          return yield* new MessageToolIncompleteError(ref)
         yield* bus.publish(SessionEvent.MessageContentUpdated, {
-          sessionID: input.sessionID,
-          messageID: input.messageID,
+          ...ref,
           content: Schema.encodeSync(Schema.Array(SessionMessage.AssistantContent))(input.content),
         })
-        const updated = yield* result.message(input)
-        if (updated?.type !== "assistant")
-          return yield* new MessageNotFoundError({ sessionID: input.sessionID, messageID: input.messageID })
+        const updated = yield* result.message(ref)
+        if (updated?.type !== "assistant") return yield* new MessageNotFoundError(ref)
         return updated
       }),
       context: Effect.fn("Session.context")(function* (sessionID) {
