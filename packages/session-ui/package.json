@@ -38,6 +38,7 @@
   },
   "dependencies": {
     "@kobalte/core": "catalog:",
+    "@noble/hashes": "2.2.0",
     "@opencode-ai/client": "file:../app/vendor/opencode-ai-client-1.17.13-v2.tgz",
     "@opencode-ai/core": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
