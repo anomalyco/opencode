@@ -1,4 +1,7 @@
-import { CurrentSessionTimelineStory } from "../storybook/current-session-story"
+import type { SessionMessageAssistant } from "@opencode-ai/client/promise"
+import { createMemo } from "solid-js"
+import { createStore } from "solid-js/store"
+import { CurrentSessionProviders, CurrentSessionTimelineStory } from "../storybook/current-session-story"
 import {
   executeCodeDocument,
   expandedShellDocument,
@@ -9,6 +12,7 @@ import {
   terminalPassedDocument,
   terminalRunningDocument,
 } from "../storybook/current-session-fixtures"
+import { storyDocument, storyTool } from "../storybook/current-session-scenarios"
 import { SessionTimeline } from "./session-timeline"
 
 export default {
@@ -119,6 +123,44 @@ export const TestFailed = {
       shellToolDefaultOpen
     />
   ),
+}
+
+function InteractiveCommandStory(props: { expanded?: boolean; streaming?: boolean }) {
+  const [state, setState] = createStore({ phase: props.streaming ? "streaming" : "completed", revision: 0 })
+  const document = createMemo(() => {
+    const phase = state.phase as "streaming" | "running" | "completed"
+    const command = phase === "streaming" ? "" : "printf ready"
+    const content: SessionMessageAssistant["content"] = [
+      storyTool("tool_shell_lifecycle", "shell", phase, command ? { command } : {}, {
+        output: phase === "running" ? "still running" : `line ${state.revision + 1}`,
+      }),
+      ...(state.revision ? [{ type: "text" as const, text: "Sibling content" }] : []),
+    ]
+    return storyDocument(content, phase !== "completed")
+  })
+  return (
+    <section class="mx-auto flex w-full max-w-[720px] flex-col gap-4 p-6">
+      <div class="flex gap-3">
+        <button type="button" onClick={() => setState("phase", "running")}>
+          Run command
+        </button>
+        <button type="button" onClick={() => setState("phase", "completed")}>
+          Complete command
+        </button>
+        <button type="button" onClick={() => setState("revision", (value) => value + 1)}>
+          Update output
+        </button>
+      </div>
+      <CurrentSessionProviders document={document()}>
+        <SessionTimeline document={document()} shellToolDefaultOpen={props.expanded} />
+      </CurrentSessionProviders>
+    </section>
+  )
+}
+
+export const RunACommand = {
+  args: { expanded: false, streaming: false },
+  render: (args: { expanded: boolean; streaming: boolean }) => <InteractiveCommandStory {...args} />,
 }
 
 export const FixedAndPassed = {

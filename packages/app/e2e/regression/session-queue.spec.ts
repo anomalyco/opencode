@@ -207,6 +207,7 @@ test("editing restores the existing draft and replaces only the original queue p
   await original.click()
   await expect(view.input).toHaveText("tighten the error copy")
   await view.input.fill("tighten the error copy and add a retry hint")
+  await expect(view.input).toHaveText("tighten the error copy and add a retry hint")
   await view.input.press("Enter")
 
   await expect(view.rows.locator('[data-action="session-queue-edit"]')).toHaveText([

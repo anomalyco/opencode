@@ -1,6 +1,13 @@
+import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode-ai/client/promise"
+import { createMemo } from "solid-js"
+import { createStore } from "solid-js/store"
+import type { SessionDocument } from "../document"
 import { SessionTimeline } from "./session-timeline"
-import { CurrentSessionTimelineStory } from "../storybook/current-session-story"
+import { CurrentSessionProviders, CurrentSessionTimelineStory } from "../storybook/current-session-story"
 import {
+  CURRENT_SESSION_ID,
+  STORY_MODEL,
+  STORY_TIME,
   attachmentsAndCommentsDocument,
   attachmentsAndCommentsPresentation,
   compactionCancelledDocument,
@@ -53,6 +60,181 @@ export const StreamingReasoningAndText = {
   ),
 }
 
+function AgentReasoningStory(props: { summaries: boolean; reasoning: string; tool: boolean; text: string }) {
+  const content = [
+    ...(props.reasoning === "none"
+      ? []
+      : [
+          {
+            type: "reasoning" as const,
+            text: props.reasoning === "blank" ? "   " : "## Inspecting stability",
+            time: { created: STORY_TIME + 100 },
+          },
+        ]),
+    ...(props.tool
+      ? [
+          {
+            type: "tool" as const,
+            id: "tool_reasoning_projection_skill",
+            name: "skill",
+            state: { status: "running" as const, input: { name: "inspect" }, metadata: {} },
+            time: { created: STORY_TIME + 200, ran: STORY_TIME + 250 },
+          },
+        ]
+      : []),
+    ...(props.text ? [{ type: "text" as const, text: props.text }] : []),
+  ] satisfies SessionMessageAssistant["content"]
+  const document = {
+    sessionID: CURRENT_SESSION_ID,
+    messages: [
+      ...thinkingDocument.messages,
+      {
+        id: "msg_projection_assistant",
+        type: "assistant",
+        agent: "build",
+        model: STORY_MODEL,
+        content,
+        time: { created: STORY_TIME },
+      },
+    ],
+    status: { type: "busy" },
+    diffs: [],
+  } satisfies SessionDocument
+  return (
+    <section class="mx-auto w-full max-w-[720px] p-6">
+      <CurrentSessionProviders document={document}>
+        <SessionTimeline document={document} showReasoningSummaries={props.summaries} />
+      </CurrentSessionProviders>
+    </section>
+  )
+}
+
+export const AgentReasoning = {
+  args: { summaries: true, reasoning: "heading", tool: false, text: "" },
+  argTypes: { reasoning: { control: "select", options: ["none", "blank", "heading"] } },
+  render: (args: { summaries: boolean; reasoning: string; tool: boolean; text: string }) => (
+    <AgentReasoningStory {...args} />
+  ),
+}
+
+function HiddenReasoningStory() {
+  const [state, setState] = createStore({ phase: "thinking" })
+  const document = createMemo(() => {
+    const finished = state.phase === "idle"
+    const running = state.phase === "running"
+    return {
+      sessionID: CURRENT_SESSION_ID,
+      messages: [
+        ...thinkingDocument.messages,
+        {
+          id: "msg_hidden_reasoning_lifecycle",
+          type: "assistant",
+          agent: "build",
+          model: STORY_MODEL,
+          content: [
+            { type: "reasoning", text: "## Inspecting stability", time: { created: STORY_TIME + 100 } },
+            ...(running || finished
+              ? [
+                  {
+                    type: "tool" as const,
+                    id: "tool_hidden_reasoning_shell",
+                    name: "shell",
+                    state: finished
+                      ? {
+                          status: "completed" as const,
+                          input: { command: "printf done" },
+                          content: [{ type: "text" as const, text: "done" }],
+                          metadata: {},
+                        }
+                      : { status: "running" as const, input: { command: "printf done" }, metadata: {} },
+                    time: {
+                      created: STORY_TIME + 200,
+                      ran: STORY_TIME + 250,
+                      ...(finished ? { completed: STORY_TIME + 300 } : {}),
+                    },
+                  },
+                ]
+              : []),
+          ],
+          time: { created: STORY_TIME, ...(finished ? { completed: STORY_TIME + 400 } : {}) },
+        },
+      ],
+      status: { type: finished ? "idle" : "busy" },
+      diffs: [],
+    } satisfies SessionDocument
+  })
+  return (
+    <section class="mx-auto flex w-full max-w-[720px] flex-col gap-4 p-6">
+      <div class="flex gap-3">
+        <button type="button" onClick={() => setState("phase", "running")}>
+          Start shell
+        </button>
+        <button type="button" onClick={() => setState("phase", "idle")}>
+          Finish session
+        </button>
+      </div>
+      <CurrentSessionProviders document={document()}>
+        <SessionTimeline document={document()} showReasoningSummaries={false} />
+      </CurrentSessionProviders>
+    </section>
+  )
+}
+
+export const WorkingWithoutReasoningDetails = { render: () => <HiddenReasoningStory /> }
+
+function RetryAndRecoverStory() {
+  const [state, setState] = createStore({ phase: "thinking" })
+  const document = createMemo(() => {
+    const retry = state.phase === "retry"
+    const finished = state.phase === "idle"
+    return {
+      sessionID: CURRENT_SESSION_ID,
+      messages: [
+        ...thinkingDocument.messages,
+        {
+          id: "msg_retry_recovery_lifecycle",
+          type: "assistant",
+          agent: "build",
+          model: STORY_MODEL,
+          content: finished ? [{ type: "text" as const, text: "Recovered response" }] : [],
+          ...(retry
+            ? {
+                retry: {
+                  attempt: 2,
+                  at: 1_900_000_000_000,
+                  error: { type: "ProviderRateLimitError", message: "Rate limit reached. Retrying with backoff." },
+                },
+              }
+            : {}),
+          time: { created: STORY_TIME, ...(finished ? { completed: STORY_TIME + 300 } : {}) },
+        },
+      ],
+      status: { type: finished ? "idle" : "busy" },
+      diffs: [],
+    } satisfies SessionDocument
+  })
+  return (
+    <section class="mx-auto flex w-full max-w-[720px] flex-col gap-4 p-6">
+      <div class="flex gap-3">
+        <button type="button" onClick={() => setState("phase", "retry")}>
+          Retry request
+        </button>
+        <button type="button" onClick={() => setState("phase", "thinking")}>
+          Recover request
+        </button>
+        <button type="button" onClick={() => setState("phase", "idle")}>
+          Finish response
+        </button>
+      </div>
+      <CurrentSessionProviders document={document()}>
+        <SessionTimeline document={document()} />
+      </CurrentSessionProviders>
+    </section>
+  )
+}
+
+export const RetryAndRecover = { render: () => <RetryAndRecoverStory /> }
+
 export const ProviderRetry = {
   render: () => (
     <CurrentSessionTimelineStory
@@ -63,6 +245,122 @@ export const ProviderRetry = {
     />
   ),
 }
+
+const noticeUser = { id: "msg_notice_user", type: "user", text: "Run it", time: { created: STORY_TIME } } as const
+const noticeAssistant = {
+  id: "msg_notice_assistant",
+  type: "assistant",
+  agent: "build",
+  model: STORY_MODEL,
+  content: [{ type: "text", text: "Working" }],
+  time: { created: STORY_TIME + 1, completed: STORY_TIME + 2 },
+} satisfies SessionMessageInfo
+
+export const AgentActivityNotices = {
+  render: () => (
+    <CurrentSessionTimelineStory
+      title="Agent activity and Session notices"
+      description="Agent changes, delegated work, restarted Sessions, and loaded skills appear in their original order."
+      document={{
+        sessionID: CURRENT_SESSION_ID,
+        status: { type: "idle" },
+        diffs: [],
+        messages: [
+          noticeUser,
+          { id: "msg_notice_agent", type: "agent-switched", agent: "explore", time: { created: STORY_TIME + 1 } },
+          noticeAssistant,
+          {
+            id: "msg_notice_subagent",
+            type: "synthetic",
+            text: "done",
+            description: "Search code",
+            metadata: { source: "subagent", agent: "explore", state: "completed" },
+            time: { created: STORY_TIME + 3 },
+          },
+          {
+            id: "msg_notice_restart",
+            type: "synthetic",
+            text: "continue",
+            description: "Continuing after restart",
+            time: { created: STORY_TIME + 4 },
+          },
+          {
+            id: "msg_notice_skill",
+            type: "skill",
+            skill: "review",
+            name: "Review",
+            text: "instructions",
+            time: { created: STORY_TIME + 5 },
+          },
+        ],
+      }}
+      width="720px"
+    />
+  ),
+}
+
+function CompactSessionStory() {
+  const [state, setState] = createStore({ phase: "running", summary: "", second: false })
+  const document = createMemo(() => {
+    const failed = state.phase === "failed"
+    const completed = state.phase === "completed"
+    const message = {
+      id: "msg_notice_compaction",
+      type: "compaction" as const,
+      status: failed ? ("failed" as const) : completed ? ("completed" as const) : ("running" as const),
+      reason: "auto" as const,
+      ...(failed
+        ? {
+            error: {
+              type: "compaction.failed",
+              message: 'Error: {"error":{"type":"ProviderError","message":"The provider rejected the summary."}}',
+            },
+          }
+        : { summary: state.summary, recent: "" }),
+      time: { created: STORY_TIME + 10 },
+    }
+    const cancelled = {
+      id: "msg_notice_compaction_cancelled",
+      type: "compaction" as const,
+      status: "failed" as const,
+      reason: "manual" as const,
+      error: { type: "aborted", message: "Cancellation detail should stay hidden." },
+      time: { created: STORY_TIME + 20 },
+    }
+    return {
+      sessionID: CURRENT_SESSION_ID,
+      messages: [noticeUser, noticeAssistant, message, ...(state.second ? [cancelled] : [])],
+      status: { type: completed || failed ? "idle" : "busy" },
+      diffs: [],
+    } satisfies SessionDocument
+  })
+  return (
+    <section class="mx-auto flex w-full max-w-[760px] flex-col gap-4 p-6">
+      <div class="flex flex-wrap gap-3">
+        <button type="button" onClick={() => setState("summary", "## Checkpoint\n\nStreamed implementation details.")}>
+          Stream summary
+        </button>
+        <button
+          type="button"
+          onClick={() => setState({ phase: "completed", summary: "## Checkpoint\n\nFinal implementation details." })}
+        >
+          Complete summary
+        </button>
+        <button type="button" onClick={() => setState("phase", "failed")}>
+          Fail compaction
+        </button>
+        <button type="button" onClick={() => setState("second", true)}>
+          Cancel next compaction
+        </button>
+      </div>
+      <CurrentSessionProviders document={document()}>
+        <SessionTimeline document={document()} />
+      </CurrentSessionProviders>
+    </section>
+  )
+}
+
+export const CompactSession = { render: () => <CompactSessionStory /> }
 
 export const CompactionInProgress = {
   render: () => (

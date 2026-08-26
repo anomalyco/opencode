@@ -8,6 +8,7 @@ import {
   multiFilePatchDocument,
   writeFileDocument,
 } from "../storybook/current-session-fixtures"
+import { storyDocument, storyPatchFile, storyTool } from "../storybook/current-session-scenarios"
 import { SessionTimeline } from "./session-timeline"
 
 export default {
@@ -67,6 +68,36 @@ export const PatchedTwoFiles = {
       description="A common implementation step updates one component and adds its focused test."
       document={multiFilePatchDocument}
       width="860px"
+      editToolDefaultOpen
+    />
+  ),
+}
+
+export const RepeatedEdits = {
+  render: () => (
+    <CurrentSessionTimelineStory
+      title="Repeated edits of one file"
+      description="Consecutive improvements to the same source file remain together in one expanded change."
+      document={storyDocument([
+        storyTool(
+          "tool_grouped_edit_first",
+          "edit",
+          "completed",
+          { path: "src/first.ts", oldString: "one", newString: "two" },
+          {
+            metadata: { files: [storyPatchFile("src/first.ts")] },
+          },
+        ),
+        storyTool(
+          "tool_grouped_edit_second",
+          "edit",
+          "completed",
+          { path: "src/first.ts", oldString: "two", newString: "three" },
+          {
+            metadata: { files: [storyPatchFile("src/first.ts")] },
+          },
+        ),
+      ])}
       editToolDefaultOpen
     />
   ),

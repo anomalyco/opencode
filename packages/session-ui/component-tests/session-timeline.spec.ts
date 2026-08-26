@@ -8,7 +8,7 @@ story("renders streamed reasoning without starting the app", async ({ mount }) =
 
 // Moved from packages/app/e2e/regression/session-timeline-context-state.spec.ts
 story("preserves a collapsed context group through count and status updates", async ({ mount }) => {
-  const timeline = await mount("current-session-context-projection--collapsed-during-status-updates")
+  const timeline = await mount("current-session-research-agents--explore-the-codebase")
   const group = timeline.locator('[data-timeline-part-ids="tool_context_read,tool_context_glob"]')
   const trigger = group.locator('[data-slot="collapsible-trigger"]')
   await expect(trigger).toHaveAttribute("aria-expanded", "false")
