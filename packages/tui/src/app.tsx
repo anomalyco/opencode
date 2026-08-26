@@ -646,11 +646,6 @@ function App(props: { pair?: DialogPairCredentials }) {
           sessionID: args.sessionID,
           prompt: startupPrompt,
         })
-      } else if (!args.sessionID && !args.continue && !args.fork && !startup.initialRoute && sessionTabs.enabled()) {
-        const sessionID = sessionTabs.selected()
-        if (sessionID && sessionTabs.tabs().some((tab) => tab.sessionID === sessionID)) {
-          route.navigate({ type: "session", sessionID })
-        }
       }
     })
   })
