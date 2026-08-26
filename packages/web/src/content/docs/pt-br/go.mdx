@@ -60,6 +60,7 @@ Apenas um membro por workspace pode assinar o OpenCode Go.
 A lista atual de modelos inclui:
 
 - **Grok 4.6**
+- **GLM-5.3-Flash**
 - **GLM-5.3**
 - **GLM-5.2**
 - **GLM-5.1**
@@ -81,7 +82,6 @@ A lista atual de modelos inclui:
 - **DeepSeek V4 Flash**
 - **DeepSeek V4 Flash Vision Exp**
 - **Hy3**
-- **Ox Alpha Free** (por tempo limitado)
 
 A lista de modelos pode mudar conforme testamos e adicionamos novos.
 
@@ -103,6 +103,7 @@ A tabela abaixo fornece uma contagem estimada de requisições com base nos padr
 | ---------------------------- | ----------------------- | ---------------------- | ------------------- |
 | Grok 4.6                     | 169                     | 423                    | 845                 |
 | GPT 5.6 Luna                 | 2,050                   | 5,100                  | 10,250              |
+| GLM-5.3-Flash                | 1,580                   | 3,950                  | 7,900               |
 | GLM-5.3                      | 220                     | 540                    | 1,080               |
 | GLM-5.2                      | 880                     | 2,150                  | 4,300               |
 | GLM-5.1                      | 880                     | 2,150                  | 4,300               |
@@ -123,11 +124,11 @@ A tabela abaixo fornece uma contagem estimada de requisições com base nos padr
 | DeepSeek V4 Flash            | 7,600                   | 18,900                 | 37,800              |
 | DeepSeek V4 Flash Vision Exp | 3,800                   | 9,450                  | 18,900              |
 | Hy3                          | 4,300                   | 10,750                 | 21,500              |
-| Ox Alpha Free                | -                       | -                      | -                   |
 
 As estimativas se baseiam nos padrões de requisições observados:
 
 - Grok 4.6 — 390 tokens de entrada, 32.500 em cache, 120 tokens de saída por requisição
+- GLM-5.3-Flash — 1.000 tokens de entrada, 55.000 em cache, 200 tokens de saída por requisição
 - GLM-5.3/5.2/5.1 — 700 tokens de entrada, 52.000 em cache, 150 tokens de saída por requisição
 - GPT 5.6 Luna — 1.000 tokens de entrada, 50.000 em cache, 220 tokens de saída por requisição
 - Kimi K3 — 1.050 tokens de entrada, 76.500 em cache, 300 tokens de saída por requisição
@@ -155,6 +156,7 @@ As estimativas também se baseiam nos seguintes preços por 1M tokens e no uso m
 | Grok 4.6 (> 200K tokens)                | $4.00   | $12.00 | $1.00            | -                | $15 |
 | GPT 5.6 Luna (≤ 272K tokens)            | $0.20   | $1.20  | $0.02            | $0.25            | $15 |
 | GPT 5.6 Luna (> 272K tokens)            | $0.40   | $1.80  | $0.04            | $0.50            | $15 |
+| GLM-5.3-Flash                           | $0.15   | $0.50  | $0.03            | -                | $15 |
 | GLM-5.3                                 | $1.40   | $4.40  | $0.26            | -                | $15 |
 | GLM-5.2                                 | $1.40   | $4.40  | $0.26            | -                | $60 |
 | GLM-5.1                                 | $1.40   | $4.40  | $0.26            | -                | $60 |
@@ -181,13 +183,10 @@ As estimativas também se baseiam nos seguintes preços por 1M tokens e no uso m
 | DeepSeek V4 Flash Vision Exp (Off-Peak) | $0.22   | $0.66  | $0.007           | -                | $15 |
 | DeepSeek V4 Flash Vision Exp (Peak)     | $0.44   | $1.32  | $0.014           | -                | $15 |
 | Hy3                                     | $0.14   | $0.58  | $0.035           | -                | $60 |
-| Ox Alpha Free                           | -       | -      | -                | -                | -   |
 
 **DeepSeek V4 Flash / V4 Flash Vision Exp / V4 Pro:** Os horários Peak são 01:00-04:00 e 06:00-10:00 UTC, de segunda a sexta-feira; todos os demais horários, incluindo os fins de semana, são Off-Peak. [Saiba mais](https://api-docs.deepseek.com/quick_start/pricing/).
 
 **DeepSeek V4 Flash Vision Exp:** As imagens são convertidas em tokens com base em suas dimensões e cobradas como tokens de entrada junto com os tokens de texto. [Saiba mais](https://api-docs.deepseek.com/quick_start/pricing/).
-
-**Ox Alpha Free:** Gratuito por tempo limitado.
 
 Você pode acompanhar o seu uso atual no **<a href={console}>console</a>**.
 
@@ -227,6 +226,7 @@ Você também pode acessar os modelos do Go através dos seguintes endpoints de 
 | ---------------------------- | ---------------------------- | ------------------------------------------------ | --------------------------- |
 | Grok 4.6                     | grok-4.6                     | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | GPT 5.6 Luna                 | gpt-5.6-luna                 | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
+| GLM-5.3-Flash                | glm-5.3-flash                | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5.3                      | glm-5.3                      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5.2                      | glm-5.2                      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5.1                      | glm-5.1                      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
@@ -248,7 +248,6 @@ Você também pode acessar os modelos do Go através dos seguintes endpoints de 
 | Qwen3.7 Plus                 | qwen3.7-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus                 | qwen3.6-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Hy3                          | hy3                          | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| Ox Alpha Free                | ox-alpha-free                | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 
 O [ID do modelo](/docs/config/#models) na sua configuração do OpenCode
 usa o formato `opencode-go/<model-id>`. Por exemplo, para o Kimi K3, você usaria
@@ -272,6 +271,7 @@ https://opencode.ai/zen/go/v1/models
 | ---------------------------- | ---------------------- | ----------------- |
 | Grok 4.6                     | Não usado              | 30 dias           |
 | GPT 5.6 Luna                 | Não usado              | 30 dias           |
+| GLM-5.3-Flash                | Não usado              | 0 dias            |
 | GLM-5.3                      | Não usado              | 0 dias            |
 | GLM-5.2                      | Não usado              | 0 dias            |
 | GLM-5.1                      | Não usado              | 0 dias            |
@@ -292,7 +292,6 @@ https://opencode.ai/zen/go/v1/models
 | DeepSeek V4 Flash            | Não usado              | 0 dias            |
 | DeepSeek V4 Flash Vision Exp | Não usado              | 0 dias            |
 | Hy3                          | Não usado              | 0 dias            |
-| Ox Alpha Free                | Não usado              | 0 dias            |
 
 - **Grok 4.6:** O ZDR desativa recursos importantes da API que dependem de dados armazenados, incluindo a Responses API com estado, Files and Collections e a Batch API. [Saiba mais](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
 - **GPT 5.6 Luna:** Logs de monitoramento de abuso são gerados para todo uso de recursos da API e retidos por até 30 dias. [Saiba mais](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).
