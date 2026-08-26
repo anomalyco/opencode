@@ -14,6 +14,7 @@ import {
   type JSX,
 } from "solid-js"
 import stripAnsi from "strip-ansi"
+import { createTwoFilesPatch } from "diff"
 import { Dynamic } from "solid-js/web"
 import { type SessionSummary, useData } from "../context"
 import { useFileComponent } from "@opencode-ai/ui/context/file"
@@ -574,8 +575,23 @@ export function CurrentFileToolGroup(props: {
   const files = createMemo((previous: { key: string; value: unknown }[]) => {
     const next = props.tools.flatMap((tool) => {
       const files = currentToolMetadata(tool).files
-      if (!Array.isArray(files)) return []
-      return files.map((value, index) => ({ key: `${tool.id}:${index}`, value }))
+      if (Array.isArray(files) && files.length > 0)
+        return files.map((value, index) => ({ key: `${tool.id}:${index}`, value }))
+      if (tool.name !== "write") return []
+      const input = currentToolInput(tool)
+      if (typeof input.path !== "string" || typeof input.content !== "string" || !input.content) return []
+      return [
+        {
+          key: `${tool.id}:0`,
+          value: {
+            file: input.path,
+            patch: createTwoFilesPatch(input.path, input.path, "", input.content),
+            additions: input.content.split("\n").length - Number(input.content.endsWith("\n")),
+            deletions: 0,
+            status: "modified",
+          },
+        },
+      ]
     })
     const updates = new Map(next.map((entry) => [entry.key, entry.value]))
     const existing = new Set(previous.map((entry) => entry.key))
@@ -1512,60 +1528,30 @@ ToolRegistry.register({
 ToolRegistry.register({
   name: "write",
   render(props) {
-    const i18n = useI18n()
     const fileComponent = useFileComponent()
     const path = createMemo(() => (typeof props.input.path === "string" ? props.input.path : ""))
     const content = createMemo(() => (typeof props.input.content === "string" ? props.input.content : ""))
     const diagnostics = createMemo(() => getDiagnostics(props.metadata.diagnostics, path()))
-    const filename = () => getFilename(path())
-    const pending = () => props.status === "streaming" || props.status === "running"
     return (
       <div data-component="write-tool">
-        <BasicTool
-          {...props}
-          icon="code-lines"
-          rail={false}
-          defer={props.deferContent !== false}
-          trigger={
-            <div data-component="write-trigger">
-              <div data-slot="message-part-title-area">
-                <div data-slot="message-part-title">
-                  <span data-slot="message-part-title-text">
-                    <TextShimmer text={i18n.t("ui.messagePart.title.write")} active={pending()} />
-                  </span>
-                  <Show when={!pending()}>
-                    <span data-slot="message-part-title-filename">{filename()}</span>
-                  </Show>
-                </div>
-                <Show when={!pending() && path().includes("/")}>
-                  <div data-slot="message-part-path">
-                    <span data-slot="message-part-directory">{displayDirectory(path())}</span>
-                  </div>
-                </Show>
-              </div>
-              <div data-slot="message-part-actions">{/* <DiffChanges diff={diff} /> */}</div>
+        <Show when={content() && path()}>
+          <ToolFileAccordion path={path()}>
+            <div data-component="write-content">
+              <Dynamic
+                component={fileComponent}
+                mode="text"
+                file={{
+                  name: path(),
+                  contents: content(),
+                  cacheKey: checksum(content()),
+                }}
+                overflow="scroll"
+                onRendered={props.onContentRendered}
+              />
             </div>
-          }
-        >
-          <Show when={content() && path()}>
-            <ToolFileAccordion path={path()}>
-              <div data-component="write-content">
-                <Dynamic
-                  component={fileComponent}
-                  mode="text"
-                  file={{
-                    name: path(),
-                    contents: content(),
-                    cacheKey: checksum(content()),
-                  }}
-                  overflow="scroll"
-                  onRendered={props.onContentRendered}
-                />
-              </div>
-            </ToolFileAccordion>
-          </Show>
-          <DiagnosticsDisplay diagnostics={diagnostics()} />
-        </BasicTool>
+          </ToolFileAccordion>
+        </Show>
+        <DiagnosticsDisplay diagnostics={diagnostics()} />
       </div>
     )
   },
@@ -1578,9 +1564,6 @@ ToolRegistry.register({
     const fileComponent = useFileComponent()
     const files = createMemo(() => patchFileGroups(props.metadata.files))
     const [expanded, setExpanded] = createSignal<string[]>([])
-    const title = createMemo(() =>
-      props.tool === "edit" ? i18n.t("ui.messagePart.title.edit") : i18n.t("ui.tool.patch"),
-    )
     const open = createMemo(() => {
       if (!props.fileOpen) return expanded()
       return files().flatMap((file) => (props.fileOpen?.(file.path) === true ? [file.path] : []))
@@ -1594,116 +1577,96 @@ ToolRegistry.register({
       files().forEach((file) => props.onFileOpenChange?.(file.path, next.includes(file.path)))
     }
 
-    const subtitle = createMemo(() => {
-      const count = files().length
-      if (count === 0) return ""
-      return `${count} ${i18n.plural("ui.common.file", count)}`
-    })
-
     return (
       <div data-component="apply-patch-tool">
-        <BasicTool
-          {...props}
-          open
-          onOpenChange={undefined}
-          locked
-          icon="code-lines"
-          defer={false}
-          rail={false}
-          trigger={{
-            title: title(),
-            subtitle: subtitle(),
-          }}
-        >
-          <Show when={files().length > 0}>
-            <Accordion
-              multiple
-              data-scope="apply-patch"
-              style={{ "--sticky-accordion-offset": "calc(32px + var(--tool-content-gap))" }}
-              value={open()}
-              onChange={change}
-            >
-              <Index each={files()}>
-                {(file) => {
-                  const value = () => file().path
-                  const active = createMemo(() => open().includes(value()))
-                  const [visible, setVisible] = createSignal(false)
+        <Show when={files().length > 0}>
+          <Accordion
+            multiple
+            data-scope="apply-patch"
+            style={{ "--sticky-accordion-offset": "calc(32px + var(--tool-content-gap))" }}
+            value={open()}
+            onChange={change}
+          >
+            <Index each={files()}>
+              {(file) => {
+                const value = () => file().path
+                const active = createMemo(() => open().includes(value()))
+                const [visible, setVisible] = createSignal(false)
 
-                  createEffect(() => {
-                    if (!active()) {
-                      setVisible(false)
-                      return
-                    }
+                createEffect(() => {
+                  if (!active()) {
+                    setVisible(false)
+                    return
+                  }
 
-                    requestAnimationFrame(() => {
-                      if (!active()) return
-                      setVisible(true)
-                    })
+                  requestAnimationFrame(() => {
+                    if (!active()) return
+                    setVisible(true)
                   })
+                })
 
-                  return (
-                    <Accordion.Item value={value()} data-type={file().type}>
-                      <StickyAccordionHeader>
-                        <Accordion.Trigger>
-                          <div data-slot="apply-patch-trigger-content">
-                            <div data-slot="apply-patch-file-info">
-                              <FileIcon node={{ path: file().path, type: "file" }} />
-                              <div data-slot="apply-patch-file-name-container">
-                                <Show when={file().path.includes("/")}>
-                                  <span data-slot="apply-patch-directory">{`\u202A${displayDirectory(file().path)}\u202C`}</span>
-                                </Show>
-                                <span data-slot="apply-patch-filename">{getFilename(file().path)}</span>
-                              </div>
-                            </div>
-                            <div data-slot="apply-patch-trigger-actions">
-                              <Switch>
-                                <Match when={file().type === "add"}>
-                                  <span data-slot="apply-patch-change" data-type="added">
-                                    {i18n.t("ui.patch.action.created")}
-                                  </span>
-                                </Match>
-                                <Match when={file().type === "delete"}>
-                                  <span data-slot="apply-patch-change" data-type="removed">
-                                    {i18n.t("ui.patch.action.deleted")}
-                                  </span>
-                                </Match>
-                                <Match when={true}>
-                                  <DiffChanges
-                                    appearance="standard"
-                                    changes={{ additions: file().additions, deletions: file().deletions }}
-                                  />
-                                </Match>
-                              </Switch>
-                              <Icon name="chevron-grabber-vertical" size="small" />
+                return (
+                  <Accordion.Item value={value()} data-type={file().type}>
+                    <StickyAccordionHeader>
+                      <Accordion.Trigger>
+                        <div data-slot="apply-patch-trigger-content">
+                          <div data-slot="apply-patch-file-info">
+                            <FileIcon node={{ path: file().path, type: "file" }} />
+                            <div data-slot="apply-patch-file-name-container">
+                              <Show when={file().path.includes("/")}>
+                                <span data-slot="apply-patch-directory">{`\u202A${displayDirectory(file().path)}\u202C`}</span>
+                              </Show>
+                              <span data-slot="apply-patch-filename">{getFilename(file().path)}</span>
                             </div>
                           </div>
-                        </Accordion.Trigger>
-                      </StickyAccordionHeader>
-                      <Accordion.Content>
-                        <Show when={props.deferContent === false || visible()}>
-                          <For each={file().views}>
-                            {(view) => (
-                              <div data-component="apply-patch-file-diff">
-                                <Dynamic
-                                  component={fileComponent}
-                                  mode="diff"
-                                  virtualize={props.virtualizeDiff}
-                                  fileDiff={view.fileDiff}
-                                  hunkSeparators={view.fileDiff.isPartial ? "simple" : "line-info-basic"}
-                                  onRendered={props.onContentRendered}
+                          <div data-slot="apply-patch-trigger-actions">
+                            <Switch>
+                              <Match when={file().type === "add"}>
+                                <span data-slot="apply-patch-change" data-type="added">
+                                  {i18n.t("ui.patch.action.created")}
+                                </span>
+                              </Match>
+                              <Match when={file().type === "delete"}>
+                                <span data-slot="apply-patch-change" data-type="removed">
+                                  {i18n.t("ui.patch.action.deleted")}
+                                </span>
+                              </Match>
+                              <Match when={true}>
+                                <DiffChanges
+                                  appearance="standard"
+                                  changes={{ additions: file().additions, deletions: file().deletions }}
                                 />
-                              </div>
-                            )}
-                          </For>
-                        </Show>
-                      </Accordion.Content>
-                    </Accordion.Item>
-                  )
-                }}
-              </Index>
-            </Accordion>
-          </Show>
-        </BasicTool>
+                              </Match>
+                            </Switch>
+                            <Icon name="chevron-grabber-vertical" size="small" />
+                          </div>
+                        </div>
+                      </Accordion.Trigger>
+                    </StickyAccordionHeader>
+                    <Accordion.Content>
+                      <Show when={props.deferContent === false || visible()}>
+                        <For each={file().views}>
+                          {(view) => (
+                            <div data-component="apply-patch-file-diff">
+                              <Dynamic
+                                component={fileComponent}
+                                mode="diff"
+                                virtualize={props.virtualizeDiff}
+                                fileDiff={view.fileDiff}
+                                hunkSeparators={view.fileDiff.isPartial ? "simple" : "line-info-basic"}
+                                onRendered={props.onContentRendered}
+                              />
+                            </div>
+                          )}
+                        </For>
+                      </Show>
+                    </Accordion.Content>
+                  </Accordion.Item>
+                )
+              }}
+            </Index>
+          </Accordion>
+        </Show>
       </div>
     )
   },

@@ -590,6 +590,13 @@ describe("current session timeline rows", () => {
             state: { status: "running", input: {}, metadata: { files: [] } },
             time: { created: 10 },
           },
+          {
+            type: "tool",
+            id: "tool_write_1",
+            name: "write",
+            state: { status: "running", input: {}, metadata: { files: [] } },
+            time: { created: 11 },
+          },
         ],
         time: { created: 2, completed: 8 },
       },
@@ -615,14 +622,11 @@ describe("current session timeline rows", () => {
       {
         type: "file",
         key: "part:msg_assistant:tool_patch_3",
-        refs: [{ messageID: "msg_assistant", partID: "tool_patch_3" }],
-      },
-      {
-        type: "file",
-        key: "part:msg_assistant:tool_edit_1",
         refs: [
+          { messageID: "msg_assistant", partID: "tool_patch_3" },
           { messageID: "msg_assistant", partID: "tool_edit_1" },
           { messageID: "msg_assistant", partID: "tool_edit_2" },
+          { messageID: "msg_assistant", partID: "tool_write_1" },
         ],
       },
     ])

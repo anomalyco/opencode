@@ -464,7 +464,7 @@ function renderable(content: Content, showReasoning: boolean) {
 
 function groupContent(items: { messageID: string; partID: string; content: Content }[]): PartGroup[] {
   const groups: PartGroup[] = []
-  let adjacent: { type: "context" | "patch" | "edit"; refs: PartRef[] } | undefined
+  let adjacent: { type: "context" | "file"; refs: PartRef[] } | undefined
   const flush = () => {
     const current = adjacent
     const first = current?.refs[0]
@@ -484,11 +484,11 @@ function groupContent(items: { messageID: string; partID: string; content: Conte
     const type =
       item.content.type === "tool" && contextTools.has(item.content.name) && !hasLoadedFiles(item.content)
         ? "context"
-        : item.content.type === "tool" && item.content.name === "patch" && item.content.state.status !== "error"
-          ? "patch"
-          : item.content.type === "tool" && item.content.name === "edit" && item.content.state.status !== "error"
-            ? "edit"
-            : undefined
+        : item.content.type === "tool" &&
+            (item.content.name === "patch" || item.content.name === "edit" || item.content.name === "write") &&
+            item.content.state.status !== "error"
+          ? "file"
+          : undefined
     if (type) {
       if (adjacent?.type !== type) flush()
       adjacent ??= { type, refs: [] }
