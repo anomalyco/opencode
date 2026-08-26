@@ -228,6 +228,8 @@ export const Assistant = Schema.Struct({
   retry: AssistantRetry.pipe(optional),
   time: Schema.Struct({
     created: DateTimeUtcFromMillis,
+    /** When the provider response body ended, before tool settlement. */
+    streamed: DateTimeUtcFromMillis.pipe(optional),
     completed: DateTimeUtcFromMillis.pipe(optional),
   }),
 }).annotate({ identifier: "Session.Message.Assistant" })

@@ -27,6 +27,7 @@ test("validates the session tabs setting", () => {
   expect(() => decode({ tabs: { enabled: "on" } })).toThrow()
   expect(decode({ prompt: { image_preview: true } })).toEqual({ prompt: { image_preview: true } })
   expect(decode({ session: { image_preview: true } })).toEqual({ session: { image_preview: true } })
+  expect(decode({ session: { tps: false } })).toEqual({ session: { tps: false } })
   expect(decode({ session: { new_location: "inherit" } })).toEqual({ session: { new_location: "inherit" } })
   expect(() => decode({ session: { new_location: "current" } })).toThrow()
 })
@@ -50,6 +51,7 @@ test("resolves nested config and keybind defaults", () => {
   expect(config.debug).toEqual({ devtools: true })
   expect(config.tabs).toEqual({ enabled: true, scope: "cwd", layout: "horizontal" })
   expect(config.session.new_location).toBe("launch")
+  expect(config.session.tps).toBe(true)
 })
 
 test("shows resolved tab defaults in settings", () => {
@@ -60,6 +62,12 @@ test("shows resolved tab defaults in settings", () => {
 
 test("shows the new session location default in settings", () => {
   expect(settings.find((setting) => setting.path.join(".") === "session.new_location")?.default).toBe("launch")
+})
+
+test("shows the TPS default in session settings", () => {
+  const setting = settings.find((setting) => setting.path.join(".") === "session.tps")
+  expect(setting?.category).toBe("Session")
+  expect(setting?.default).toBe(true)
 })
 
 test("validates terminal copy behavior", () => {

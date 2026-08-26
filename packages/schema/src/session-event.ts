@@ -316,6 +316,17 @@ export namespace Step {
   })
   export type Started = typeof Started.Type
 
+  /** Records the provider response-body boundary independently of tool settlement. */
+  export const Streamed = Event.durable({
+    type: "session.step.streamed",
+    ...options,
+    schema: {
+      ...Base,
+      assistantMessageID: SessionMessage.ID,
+    },
+  })
+  export type Streamed = typeof Streamed.Type
+
   export const Ended = Event.durable({
     type: "session.step.ended",
     ...options,
@@ -628,6 +639,7 @@ export const Definitions = Event.inventory(
   Shell.Started,
   Shell.Ended,
   Step.Started,
+  Step.Streamed,
   Step.Ended,
   Step.Failed,
   Text.Started,

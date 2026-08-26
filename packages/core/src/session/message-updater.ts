@@ -210,6 +210,7 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
                 draft.finish = undefined
                 draft.rawFinish = undefined
                 draft.providerState = undefined
+                draft.time.streamed = undefined
                 draft.time.completed = undefined
                 if (event.data.snapshot) draft.snapshot = { ...draft.snapshot, start: event.data.snapshot }
               }),
@@ -238,6 +239,11 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
             }),
           )
         }),
+      "session.step.streamed": (event) => {
+        return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
+          draft.time.streamed = created
+        })
+      },
       "session.step.ended": (event) => {
         return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
           draft.time.completed = created

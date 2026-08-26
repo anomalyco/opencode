@@ -750,6 +750,7 @@ export function createData(config: CreateDataInput) {
             existing.finish = undefined
             existing.rawFinish = undefined
             existing.providerState = undefined
+            existing.time.streamed = undefined
             existing.time.completed = undefined
             if (event.data.snapshot) existing.snapshot = { ...existing.snapshot, start: event.data.snapshot }
             return
@@ -769,6 +770,12 @@ export function createData(config: CreateDataInput) {
             snapshot: event.data.snapshot ? { start: event.data.snapshot } : undefined,
             time: { created: event.created },
           })
+        })
+        return
+      case "session.step.streamed":
+        message.update(event.data.sessionID, (draft, index) => {
+          const currentAssistant = message.assistant(draft, index, event.data.assistantMessageID)
+          if (currentAssistant) currentAssistant.time.streamed = event.created
         })
         return
       case "session.step.ended": {

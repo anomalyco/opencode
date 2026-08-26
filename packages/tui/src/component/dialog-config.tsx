@@ -94,6 +94,15 @@ export const settings: Setting[] = [
     keywords: ["attachments", "images", "tool output"],
   },
   {
+    title: "TPS",
+    category: "Session",
+    path: ["session", "tps"],
+    default: true,
+    values: [false, true],
+    labels: ["off", "on"],
+    keywords: ["tokens per second", "throughput"],
+  },
+  {
     title: "New session location",
     category: "Session",
     path: ["session", "new_location"],

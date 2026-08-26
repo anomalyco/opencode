@@ -489,6 +489,7 @@ const layer = Layer.effect(
           // Note: Exit.hasInterrupts is a type guard whose false branch unsoundly narrows
           // away non-interrupt failures, so both interrupt checks stay Cause-based.
           const streamInterrupted = stream._tag === "Failure" && Cause.hasInterrupts(stream.cause)
+          if (!overflowFailure && publisher.hasStarted()) yield* publisher.streamed()
 
           // Join every owned tool run first: await all exits, not just the first failure.
           // Afterwards no fiber is alive, settlement is the only writer, and the record

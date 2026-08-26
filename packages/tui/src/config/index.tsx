@@ -136,6 +136,9 @@ export const Info = Schema.Struct({
       image_preview: Schema.optional(Schema.Boolean).annotate({
         description: "Show user attachment and tool-result images in the session transcript",
       }),
+      tps: Schema.optional(Schema.Boolean).annotate({
+        description: "Show output tokens per second in assistant footers",
+      }),
       markdown: Schema.optional(Schema.Literals(["source", "rendered"])).annotate({
         description: "Show Markdown syntax markers or conceal them in rendered transcript content",
       }),
@@ -219,8 +222,9 @@ export type Resolved = Omit<Info, "attention" | "cursor" | "keybinds" | "leader"
     style: "block" | "underline" | "line" | "default"
     blinking: boolean
   }
-  session: Omit<NonNullable<Info["session"]>, "new_location"> & {
+  session: Omit<NonNullable<Info["session"]>, "new_location" | "tps"> & {
     new_location: "launch" | "inherit"
+    tps: boolean
   }
   tabs: {
     enabled: boolean
@@ -265,6 +269,7 @@ export function resolve(input: Info, options: { terminalSuspend: boolean }): Res
     session: {
       ...input.session,
       new_location: input.session?.new_location ?? "launch",
+      tps: input.session?.tps ?? true,
     },
     tabs: {
       ...input.tabs,

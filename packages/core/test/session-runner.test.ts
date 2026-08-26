@@ -2926,6 +2926,35 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("records the stream boundary before local tools complete", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      const bus = yield* Bus.Service
+      yield* admit(session, "Echo this")
+      yield* TestLLM.push(TestLLM.tool("call-streamed", "echo", { text: "hello" }), TestLLM.stop())
+      const tools = yield* blockTools()
+      const streamed = yield* bus
+        .subscribe(SessionEvent.Step.Streamed)
+        .pipe(
+          Stream.filter((event) => event.data.sessionID === sessionID),
+          Stream.take(1),
+          Stream.runDrain,
+          Effect.forkScoped({ startImmediately: true }),
+        )
+      const run = yield* Effect.forkChild(session.resume(sessionID))
+
+      yield* tools.started
+      yield* Fiber.join(streamed)
+      const assistant = requireAssistant(yield* session.context(sessionID))
+      expect(assistant.time.streamed).toBeDefined()
+      expect(assistant.time.completed).toBeUndefined()
+      expect(assistant.content).toMatchObject([{ type: "tool", state: { status: "running" } }])
+
+      yield* tools.release
+      yield* Fiber.join(run)
+    }),
+  )
+
   it.effect("restores durable reasoning provider metadata in the next request", () =>
     Effect.gen(function* () {
       const session = yield* setup

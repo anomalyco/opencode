@@ -103,6 +103,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
   let stepFailed = false
   let providerFailed = false
   let outputStarted = false
+  let stepStreamed = false
   let stepFailure: SessionError.Error | undefined
   let stepSettlement: StepRecord["finish"]
 
@@ -120,6 +121,14 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
   })
   const currentAssistantMessageID = () =>
     stepStarted ? Effect.succeed(assistantMessageID) : Effect.die(new Error("Tool event before assistant step start"))
+  const streamed = Effect.fnUntraced(function* () {
+    if (stepStreamed) return
+    stepStreamed = true
+    yield* bus.publish(SessionEvent.Step.Streamed, {
+      sessionID: input.sessionID,
+      assistantMessageID: yield* startAssistant(),
+    })
+  })
   const providerState = (metadata: ProviderMetadata | undefined) => metadata?.[input.providerMetadataKey]
   const fragments = (
     name: string,
@@ -583,6 +592,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     publishStepFailure,
     failUnsettledTools,
     hasProviderError: () => providerFailed,
+    hasStarted: () => stepStarted,
     /** Immutable snapshot of everything recorded for this step so far. */
     record: (): StepRecord => ({
       outputStarted,
@@ -598,6 +608,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
       })),
     }),
     startAssistant,
+    streamed,
     assistantMessageID: assistantMessageIDForTool,
   }
 }

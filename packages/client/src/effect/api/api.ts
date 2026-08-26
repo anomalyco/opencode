@@ -667,6 +667,15 @@ export type SessionLogOutput =
           readonly id: Event.ID
           readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
+          readonly type: "session.step.streamed"
+          readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
+          readonly location?: Location.Ref | undefined
+          readonly data: { readonly sessionID: Session.ID; readonly assistantMessageID: SessionMessage.ID }
+        }
+      | {
+          readonly id: Event.ID
+          readonly created: number
+          readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.step.ended"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
           readonly location?: Location.Ref | undefined
