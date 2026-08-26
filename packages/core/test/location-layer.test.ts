@@ -81,6 +81,28 @@ const itWithActivity = testEffect(
 )
 
 describe("LocationServiceMap", () => {
+  itWithActivity.effect("does not refresh lifetime from inferred Session routing", () =>
+    Effect.gen(function* () {
+      const locations = yield* LocationServiceMap.Service
+      const bus = yield* Bus.Service
+      const ref = Location.Ref.make({ directory: AbsolutePath.make("/project") })
+      const sessionID = Session.ID.make("ses_routing_activity")
+      yield* Location.Service.pipe(Effect.provide(locations.get(ref)), Effect.scoped)
+      yield* bus.publish(SessionEvent.Created, {
+        sessionID,
+        location: ref,
+        projectID: Project.ID.global,
+        slug: "routing",
+        version: "test",
+      })
+      yield* TestClock.adjust("59 minutes")
+      const event = yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID })
+      expect(event).not.toHaveProperty("location")
+      yield* TestClock.adjust("2 minutes")
+      expect(Array.from(yield* RcMap.keys(locations.rcMap))).toEqual([])
+    }),
+  )
+
   itWithActivity.effect("refreshes lifetime from Session events only", () =>
     Effect.gen(function* () {
       const locations = yield* LocationServiceMap.Service
