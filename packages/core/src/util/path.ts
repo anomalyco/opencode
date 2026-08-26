@@ -9,6 +9,7 @@ export function getDirectory(path: string | undefined) {
   if (!path) return ""
   const trimmed = path.replace(/[/\\]+$/, "")
   const parts = trimmed.split(/[/\\]/)
+  if (parts.length < 2) return ""
   return parts.slice(0, parts.length - 1).join("/") + "/"
 }
 
@@ -21,6 +22,7 @@ export function getFileExtension(path: string | undefined) {
 export function getFilenameTruncated(path: string | undefined, maxLength: number = 20) {
   const filename = getFilename(path)
   if (filename.length <= maxLength) return filename
+  if (maxLength <= 0) return ""
   const lastDot = filename.lastIndexOf(".")
   const ext = lastDot <= 0 ? "" : filename.slice(lastDot)
   const available = maxLength - ext.length - 1 // -1 for ellipsis
@@ -30,8 +32,10 @@ export function getFilenameTruncated(path: string | undefined, maxLength: number
 
 export function truncateMiddle(text: string, maxLength: number = 20) {
   if (text.length <= maxLength) return text
+  if (maxLength <= 0) return ""
   const available = maxLength - 1 // -1 for ellipsis
   const start = Math.ceil(available / 2)
   const end = Math.floor(available / 2)
+  if (end === 0) return text.slice(0, start) + "…"
   return text.slice(0, start) + "…" + text.slice(-end)
 }
