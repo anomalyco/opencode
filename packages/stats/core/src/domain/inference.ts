@@ -12,6 +12,7 @@ import {
   statProvider,
 } from "./model-normalization"
 import type { ProviderStatAggregate } from "./provider"
+import type { RetentionStatAggregate } from "./retention"
 import {
   normalizeCountry,
   normalizeTier,
@@ -23,6 +24,7 @@ import {
 
 export type StatDimension = "model" | "provider" | "geo" | "geo_model"
 export type StatsQuerySource = { namespace: string; table: string; dataset: string }
+export type RetentionQuery = { cohortDates: string[]; query: string }
 type StatsQueryFamily = "usage" | "geo"
 
 const DAY_MS = 86_400_000
@@ -44,6 +46,141 @@ export function buildStatsQueries(periodStart: Date, periodEnd: Date, input?: St
   return [...statPeriods("week", periodStart, periodEnd), ...statPeriods("day", periodStart, periodEnd)].flatMap(
     (period) => [buildStatsQuery(period, source, "usage"), buildStatsQuery(period, source, "geo")],
   )
+}
+
+export function buildRetentionQueries(periodStart: Date, periodEnd: Date, input?: StatsQuerySource): RetentionQuery[] {
+  const source = input ?? {
+    namespace: Resource.R2Sql.namespace,
+    table: Resource.R2Sql.table,
+    dataset: Resource.StatsSyncConfig.dataset,
+  }
+  const periods = retentionPeriods(periodStart, periodEnd)
+  if (periods.length === 0) return []
+  return [
+    {
+      cohortDates: periods.map((period) => period.start.toISOString().slice(0, 10)),
+      query: buildRetentionQuery(periods, source),
+    },
+  ]
+}
+
+function buildRetentionQuery(
+  periods: { start: Date; end: Date; returnStart: Date; returnEnd: Date }[],
+  source: StatsQuerySource,
+) {
+  const first = periods[0]
+  const last = periods.at(-1)!
+  const scanStartValue = sqlString(first.start.toISOString())
+  const scanEndValue = sqlString(last.returnEnd.toISOString())
+  const ingestEndValue = sqlString(new Date(last.returnEnd.getTime() + DAY_MS).toISOString())
+  const sourceTable = [source.namespace, source.table].map(sqlIdentifier).join(".")
+  const activityDates = [
+    ...new Map(
+      periods.flatMap((period) => [period.start, period.returnStart]).map((date) => [date.toISOString(), date]),
+    ).values(),
+  ].toSorted((a, b) => a.getTime() - b.getTime())
+  const activityDateSql = `CASE
+${activityDates
+  .map(
+    (date) =>
+      `      WHEN started_at >= ${sqlString(date.toISOString())} AND started_at < ${sqlString(new Date(date.getTime() + DAY_MS).toISOString())} THEN ${sqlString(date.toISOString().slice(0, 10))}`,
+  )
+  .join("\n")}
+      ELSE null
+    END`
+  const cohortDates = periods.map((period) => sqlString(period.start.toISOString().slice(0, 10))).join(", ")
+  const returnDates = periods.map((period) => sqlString(period.returnStart.toISOString().slice(0, 10))).join(", ")
+  const returnCohortSql = `CASE activity_date
+${periods
+  .map(
+    (period) =>
+      `      WHEN ${sqlString(period.returnStart.toISOString().slice(0, 10))} THEN ${sqlString(period.start.toISOString().slice(0, 10))}`,
+  )
+  .join("\n")}
+    END`
+
+  return `
+WITH normalized AS (
+  SELECT
+    ${activityDateSql} AS activity_date,
+    ${statModelSql("model_requested", "route_model")} AS model,
+    COALESCE(NULLIF(route_model, ''), '') AS provider_model,
+    COALESCE(NULLIF(provider_id, ''), '') AS raw_provider,
+    COALESCE(NULLIF(user_id, ''), NULLIF(workspace_id, ''), NULLIF(service_api_key_id, '')) AS user_key,
+    COALESCE(tokens_cache_read, 0) + COALESCE(tokens_cache_write, 0) + COALESCE(tokens_input, 0) + COALESCE(tokens_output, 0) AS tokens_total
+  FROM ${sourceTable}
+  WHERE event_type = 'generation.completed'
+    AND source IN ('inference', 'inference-legacy')
+    AND (
+      (source = 'inference-legacy' AND started_at < ${sqlString(LIVE_SOURCE_START)})
+      OR (source = 'inference' AND started_at >= ${sqlString(LIVE_SOURCE_START)})
+    )
+    AND (product = 'go' OR (${freeTierSql("model_tier", "model_requested")}))
+    AND model_requested IS NOT NULL
+    AND model_requested <> ''
+    AND __ingest_ts >= ${scanStartValue}
+    AND __ingest_ts < ${ingestEndValue}
+    AND started_at >= ${scanStartValue}
+    AND started_at < ${scanEndValue}
+), filtered AS (
+  SELECT
+    activity_date,
+    ${statProviderSql("model", "provider_model", "raw_provider")} AS provider,
+    model,
+    user_key,
+    tokens_total
+  FROM normalized
+  WHERE activity_date IS NOT NULL
+    AND user_key <> ''
+    AND lower(model) NOT IN (${[...EXCLUDED_MODELS].map(sqlString).join(", ")})
+), model_usage AS (
+  SELECT
+    activity_date AS cohort_date,
+    user_key,
+    provider,
+    model,
+    SUM(tokens_total) AS total_tokens,
+    COUNT(*) AS requests
+  FROM filtered
+  WHERE activity_date IN (${cohortDates})
+  GROUP BY activity_date, user_key, provider, model
+), ranked_models AS (
+  SELECT
+    cohort_date,
+    user_key,
+    provider,
+    model,
+    ROW_NUMBER() OVER (
+      PARTITION BY cohort_date, user_key
+      ORDER BY total_tokens DESC, requests DESC, model ASC
+    ) AS model_rank
+  FROM model_usage
+), primary_models AS (
+  SELECT cohort_date, user_key, provider, model
+  FROM ranked_models
+  WHERE model_rank = 1
+), returned AS (
+  SELECT
+    ${returnCohortSql} AS cohort_date,
+    user_key
+  FROM filtered
+  WHERE activity_date IN (${returnDates})
+  GROUP BY ${returnCohortSql}, user_key
+)
+SELECT
+  primary_models.cohort_date,
+  ${sqlString(source.dataset)} AS dataset,
+  'all' AS tier,
+  primary_models.provider,
+  primary_models.model,
+  COUNT(*) AS eligible_users,
+  SUM(CASE WHEN returned.user_key IS NULL THEN 0 ELSE 1 END) AS retained_users
+FROM primary_models
+LEFT JOIN returned ON primary_models.user_key = returned.user_key
+  AND primary_models.cohort_date = returned.cohort_date
+GROUP BY primary_models.cohort_date, primary_models.provider, primary_models.model
+LIMIT 10000
+`
 }
 
 function buildStatsQuery(
@@ -223,6 +360,21 @@ export function toGeoAggregate(data: R2SqlData): GeoStatAggregate[] {
   ])
 }
 
+export function toRetentionAggregate(data: R2SqlData): RetentionStatAggregate[] {
+  if (!data.cohort_date || !data.model) return []
+  return [
+    {
+      cohortDate: data.cohort_date,
+      dataset: data.dataset || Resource.StatsSyncConfig.dataset,
+      tier: data.tier || "all",
+      provider: statProvider(data.model, "", data.provider) || "unknown",
+      model: statModel(data.model, undefined),
+      eligibleUsers: integer(data, "eligible_users"),
+      retainedUsers: integer(data, "retained_users"),
+    },
+  ]
+}
+
 function toStatBaseAggregate(data: R2SqlData): StatBaseAggregate[] {
   const grain = data.grain === "day" || data.grain === "week" ? data.grain : undefined
   if (!grain || !data.period_key) return []
@@ -297,6 +449,18 @@ function statPeriods(grain: "day" | "week", periodStart: Date, periodEnd: Date) 
       start,
       end: new Date(Math.min(start.getTime() + interval, periodEnd.getTime())),
     }
+  })
+}
+
+function retentionPeriods(periodStart: Date, periodEnd: Date) {
+  const first = startOfUtcDay(periodStart)
+  const last = new Date(startOfUtcDay(periodEnd).getTime() - WEEK_MS)
+  const count = Math.max(0, Math.floor((last.getTime() - first.getTime()) / DAY_MS))
+  return Array.from({ length: count }, (_, index) => {
+    const start = new Date(first.getTime() + index * DAY_MS)
+    const end = new Date(start.getTime() + DAY_MS)
+    const returnStart = new Date(start.getTime() + WEEK_MS)
+    return { start, end, returnStart, returnEnd: new Date(returnStart.getTime() + DAY_MS) }
   })
 }
 
