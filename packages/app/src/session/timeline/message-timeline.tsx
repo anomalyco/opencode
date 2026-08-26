@@ -342,12 +342,19 @@ function MessageTimelineView(
   const projection = props.data.projection
   const sessionDirectory = createMemo(() => props.session.data.info()?.location.directory ?? sdk().directory)
   const project = createMemo(() => {
-    const projectID = props.session.data.info()?.projectID
-    const value = projectID
-      ? data.project.get(projectID)
-      : data.project.list().find((item) => containsDirectory(item.canonical, sessionDirectory()))
-    if (!value) return undefined
-    return { ...value, worktree: value.canonical, worktrees: [] }
+    const session = props.session.data.info()
+    const projects = server.ctx.projects.list()
+    const value = session
+      ? projectForSession(session, projects)
+      : projects.find((item) => containsDirectory(item.worktree, sessionDirectory()))
+    if (!value?.id || !value.time) return undefined
+    return {
+      ...value,
+      id: value.id,
+      time: value.time,
+      sandboxes: value.sandboxes ?? [],
+      worktrees: value.worktrees ?? [],
+    }
   })
   const workspaceSession = createMemo(() => isWorkspaceDirectory(project(), sessionDirectory()))
   const showProjectIcon = () =>
