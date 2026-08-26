@@ -84,6 +84,8 @@ function sdkKey(npm: string): string | undefined {
       return "gateway"
     case "@openrouter/ai-sdk-provider":
       return "openrouter"
+    case "merge-gateway-ai-sdk-provider":
+      return "mergeGateway"
     case "ai-gateway-provider":
       // ai-gateway-provider/unified wraps createOpenAICompatible({ name: "Unified" }),
       // and @ai-sdk/openai-compatible parses compatibleOptions from one of
@@ -526,7 +528,6 @@ const GEMINI_MODELS_WITH_SAMPLING_DEFAULTS = [
 export function temperature(model: Provider.Model) {
   const id = model.api.id.toLowerCase()
   if (id.includes("north-mini-code")) return 1.0
-  if (id.includes("qwen")) return 0.55
   if (id.includes("claude")) return undefined
   if (id.includes("gemini"))
     return GEMINI_MODELS_WITH_SAMPLING_DEFAULTS.some((model) => model.test(id)) ? 1.0 : undefined
@@ -545,10 +546,15 @@ export function temperature(model: Provider.Model) {
 
 export function topP(model: Provider.Model) {
   const id = model.api.id.toLowerCase()
-  if (id.includes("qwen")) return 1
   if (id.includes("gemini"))
     return GEMINI_MODELS_WITH_SAMPLING_DEFAULTS.some((model) => model.test(id)) ? 0.95 : undefined
   if (["minimax-m2", "kimi-k2.5", "kimi-k2p5", "kimi-k2-5"].some((s) => id.includes(s))) {
+    return 0.95
+  }
+  if (
+    ["deepseek-v4-flash-0731", "deepseek-v4-flash:0731"].some((name) => id.includes(name)) ||
+    (id.includes("deepseek-v4-flash") && (model.providerID === "deepseek" || model.providerID.startsWith("opencode")))
+  ) {
     return 0.95
   }
   return undefined
@@ -1270,8 +1276,14 @@ export function options(input: {
     result["gateway"] = { caching: "auto" }
   }
 
-  if (input.model.api.npm === "@ai-sdk/azure" && input.model.api.id.includes("gpt-5.5")) {
-    result["reasoningSummary"] = "auto"
+  // Any gpt version above 5.4 in combination with azure does not support reasoningEffort
+  // so we should return early here.
+  const [, gptMajorVersion, gptMinorVersion] = input.model.api.id.match(/gpt-(\d+)\.(\d+)/) ?? []
+  const isGpt55OrNewer = Number(gptMajorVersion) > 5 || (Number(gptMajorVersion) === 5 && Number(gptMinorVersion) >= 5)
+  if (input.model.api.npm === "@ai-sdk/azure" && input.providerOptions?.useCompletionUrls) {
+    if (!isGpt55OrNewer) {
+      result["reasoningEffort"] = "medium"
+    }
     return result
   }
 
@@ -1291,13 +1303,13 @@ export function options(input: {
       }
     }
 
-    // Only set textVerbosity for non-chat gpt-5.x models
-    // Chat models (e.g. gpt-5.2-chat-latest) only support "medium" verbosity
+    // Generic OpenAI-compatible APIs do not necessarily support OpenAI's verbosity parameter.
+    // Only enable the default for integrations known to implement it.
     if (
       input.model.api.id.includes("gpt-5.") &&
       !input.model.api.id.includes("codex") &&
       !input.model.api.id.includes("-chat") &&
-      input.model.providerID !== "azure"
+      (input.model.api.npm === "@ai-sdk/openai" || input.model.api.npm === "@ai-sdk/amazon-bedrock/mantle")
     ) {
       result["textVerbosity"] = "low"
     }
@@ -1760,6 +1772,7 @@ function reasoningEffort(model: Provider.Model, effort: string) {
     case "@ai-sdk/togetherai":
     case "venice-ai-sdk-provider":
     case "ai-gateway-provider":
+    case "merge-gateway-ai-sdk-provider":
       return { reasoningEffort: effort }
     case "@ai-sdk/cohere":
     case "@ai-sdk/perplexity":

@@ -287,7 +287,7 @@
 }
 
 .settings-v2-provider-env-hint {
-  padding-right: 12px;
+  padding-inline-end: 12px;
   font-size: 13px;
   font-weight: 440;
   line-height: 1;
@@ -311,7 +311,7 @@
   line-height: 1;
   color: var(--v2-text-text-accent);
   cursor: pointer;
-  text-align: left;
+  text-align: start;
 }
 
 .settings-v2-providers-view-all:hover {
@@ -361,13 +361,13 @@
 }
 
 .settings-v2-tab-search [data-slot="text-input-v2-input"] {
-  padding-right: 28px;
+  padding-inline-end: 28px;
 }
 
 .settings-v2-tab-search-clear {
   position: absolute;
   top: 50%;
-  right: 6px;
+  inset-inline-end: 6px;
   z-index: 1;
   transform: translateY(-50%);
 }
