@@ -146,6 +146,30 @@ describe("session.retry.delay", () => {
       expect(attempts).toStrictEqual([1, 2, 3, 4, 5])
     }),
   )
+
+  it.instance("policy can reject retries before parsing or updating status", () =>
+    Effect.gen(function* () {
+      const calls: string[] = []
+      const step = yield* Schedule.toStepWithMetadata(
+        SessionRetry.policy({
+          provider: "test",
+          canRetry: () => false,
+          parse: (error) => {
+            calls.push("parse")
+            return Schema.decodeUnknownSync(SessionV1.APIError.Schema)(error)
+          },
+          set: () =>
+            Effect.sync(() => {
+              calls.push("set")
+            }),
+        }),
+      )
+
+      yield* Effect.ignore(step(apiError({ "retry-after-ms": "0" })))
+
+      expect(calls).toEqual([])
+    }),
+  )
 })
 
 describe("session.retry.retryable", () => {

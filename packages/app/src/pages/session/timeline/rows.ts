@@ -29,7 +29,12 @@ export type TimelineRowMap = {
   Thinking: { userMessageID: string; reasoningHeading?: string }
   Retry: { userMessageID: string }
   DiffSummary: { userMessageID: string; diffs: SummaryDiff[] }
-  Error: { userMessageID: string; text: string }
+  Error: {
+    userMessageID: string
+    text: string
+    details: string
+    model: { modelID: string; providerID: string }
+  }
 }
 
 export namespace Timeline {
@@ -218,11 +223,23 @@ export namespace Timeline {
 
     if (error) {
       const data = error.data?.message
+      const assistant = assistantMessages.at(-1)!
       rows.push(
         new TimelineRow.Error({
           userMessageID: userMessage.id,
+          model: { modelID: assistant.modelID, providerID: assistant.providerID },
           text: unwrapErrorMessage(
             typeof data === "string" ? data : data === undefined || data === null ? "" : String(data),
+          ),
+          details: JSON.stringify(
+            {
+              providerID: assistant.providerID,
+              modelID: assistant.modelID,
+              messageID: assistant.id,
+              error,
+            },
+            null,
+            2,
           ),
         }),
       )

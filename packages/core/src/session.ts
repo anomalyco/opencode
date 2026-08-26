@@ -363,7 +363,8 @@ const layer = Layer.effect(
             yield* result.get(input.sessionID)
             const prompt = resolvePrompt(input.prompt)
             const messageID = input.id ?? SessionMessage.ID.create()
-            const delivery = input.delivery ?? "steer"
+            const recorded = input.id === undefined ? undefined : yield* SessionInput.find(db, messageID)
+            const delivery = input.delivery ?? recorded?.delivery ?? "steer"
             const expected = { sessionID: input.sessionID, messageID, prompt, delivery }
             const admitted = yield* SessionInput.admit(db, events, {
               id: messageID,
@@ -379,7 +380,10 @@ const layer = Layer.effect(
             )
             if (!SessionInput.equivalent(admitted, expected))
               return yield* new PromptConflictError({ sessionID: input.sessionID, messageID })
-            if (input.resume !== false) yield* execution.wake(admitted.sessionID)
+            if (input.resume === true && admitted.promotedSeq !== undefined)
+              yield* execution.wake(admitted.sessionID, { force: true })
+            if (input.resume !== false && !(input.resume === true && admitted.promotedSeq !== undefined))
+              yield* execution.wake(admitted.sessionID)
             return admitted
           }),
         ),

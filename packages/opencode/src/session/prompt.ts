@@ -1110,6 +1110,7 @@ const layer = Layer.effect(
 
           if (
             lastAssistant?.finish &&
+            !lastAssistant.error &&
             !["tool-calls", "unknown"].includes(lastAssistant.finish) &&
             !hasToolCalls &&
             lastAssistant.parentID === lastUser.id

@@ -604,7 +604,7 @@ it.live("session.processor effect tests retry recognized structured json errors"
   ),
 )
 
-it.live("session.processor effect tests retry OpenAI-compatible midstream server errors", () =>
+it.live("session.processor effect tests do not replay OpenAI-compatible midstream server errors", () =>
   provideTmpdirServer(
     ({ dir, llm }) =>
       Effect.gen(function* () {
@@ -642,16 +642,16 @@ it.live("session.processor effect tests retry OpenAI-compatible midstream server
 
         const parts = yield* MessageV2.parts(msg.id)
 
-        expect(value).toBe("continue")
-        expect(yield* llm.calls).toBe(2)
-        expect(parts.some((part) => part.type === "text" && part.text === "after")).toBe(true)
-        expect(handle.message.error).toBeUndefined()
+        expect(value).toBe("stop")
+        expect(yield* llm.calls).toBe(1)
+        expect(parts.some((part) => part.type === "text" && part.text === "after")).toBe(false)
+        expect(handle.message.error).toBeDefined()
       }),
     { config: (url) => providerCfg(url) },
   ),
 )
 
-it.live("session.processor effect tests retry network_error finish reasons", () =>
+it.live("session.processor effect tests do not replay network_error finish reasons", () =>
   provideTmpdirServer(
     ({ dir, llm }) =>
       Effect.gen(function* () {
@@ -699,10 +699,10 @@ it.live("session.processor effect tests retry network_error finish reasons", () 
 
         const parts = yield* MessageV2.parts(msg.id)
 
-        expect(value).toBe("continue")
-        expect(yield* llm.calls).toBe(2)
-        expect(parts.some((part) => part.type === "text" && part.text === "after retry")).toBe(true)
-        expect(handle.message.error).toBeUndefined()
+        expect(value).toBe("stop")
+        expect(yield* llm.calls).toBe(1)
+        expect(parts.some((part) => part.type === "text" && part.text === "after retry")).toBe(false)
+        expect(handle.message.error).toBeDefined()
       }),
     { config: (url) => providerCfg(url) },
   ),
