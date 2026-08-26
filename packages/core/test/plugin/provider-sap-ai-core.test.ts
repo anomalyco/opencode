@@ -1,11 +1,11 @@
 import { AISDK } from "@opencode-ai/core/aisdk"
-import { describe, expect } from "bun:test"
+import { describe, expect, it as bun_it } from "bun:test"
 import { Effect } from "effect"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { Npm } from "@opencode-ai/core/npm"
-import { SapAICorePlugin } from "@opencode-ai/core/plugin/provider/sap-ai-core"
+import { SapAICorePlugin, sapAICoreFetch } from "@opencode-ai/core/plugin/provider/sap-ai-core"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
@@ -157,3 +157,41 @@ describe("SapAICorePlugin", () => {
     ),
   )
 })
+
+type FetchLike = (url: string | URL | Request, init?: RequestInit) => Promise<Response>
+
+describe("sapAICoreFetch", () => {
+  bun_it("normalizes finish_reason: null to finish_reason: 'stop' in SSE stream", async () => {
+    const chunk = `data: {"choices":[{"delta":{"content":"Hello!"},"finish_reason":null,"index":0}]}\n\n`
+    const upstream: FetchLike = async () =>
+      new Response(
+        new ReadableStream({
+          start: (ctrl) => {
+            ctrl.enqueue(new TextEncoder().encode(chunk))
+            ctrl.close()
+          },
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "text/event-stream" },
+        },
+      )
+    const response = await sapAICoreFetch(upstream)("https://test", {})
+    const text = await response.text()
+    expect(text).toContain('"finish_reason":"stop"')
+    expect(text).not.toContain('"finish_reason":null')
+  })
+
+  bun_it("passes through non-SSE responses unchanged", async () => {
+    const upstream: FetchLike = async () =>
+      new Response(JSON.stringify({ result: "ok" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })
+    const response = await sapAICoreFetch(upstream)("https://test", {})
+    expect(response.status).toBe(200)
+    const data = await response.json()
+    expect(data).toEqual({ result: "ok" })
+  })
+})
+
