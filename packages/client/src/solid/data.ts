@@ -617,10 +617,18 @@ export function createData(config: CreateDataInput) {
       }
       case "worktree.resolved": {
         for (const [sessionID, info] of Object.entries(store.session.info)) {
+          const explicit = event.data.adopted?.includes(info.projectID)
+          const directory = explicit ? store.project.info[info.projectID]?.canonical : info.location.directory
+          if (!directory) {
+            if (info.location.workspaceID) continue
+            result.session.invalidate(sessionID)
+            void result.session.sync(sessionID)
+            continue
+          }
           const adopted = Worktree.adopt(
             {
               projectID: info.projectID,
-              directory: info.location.directory,
+              directory,
               workspaceID: info.location.workspaceID,
             },
             event.data,

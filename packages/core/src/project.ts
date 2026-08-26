@@ -2,7 +2,7 @@ export * as Project from "./project.js"
 
 import { Context, Effect, Layer, Schema } from "effect"
 import { ChildProcess } from "effect/unstable/process"
-import { and, asc, desc, eq, isNull } from "drizzle-orm"
+import { and, asc, desc, eq, gte, isNull, lte } from "drizzle-orm"
 import path from "path"
 import { AbsolutePath } from "./schema.js"
 import { Bus } from "./bus.js"
@@ -144,16 +144,21 @@ const layer = Layer.effect(
           const markerless = yield* db
             .select({ id: ProjectTable.id, directory: ProjectTable.worktree })
             .from(ProjectTable)
-            .where(isNull(ProjectTable.vcs))
+            .where(
+              and(
+                isNull(ProjectTable.vcs),
+                gte(ProjectTable.worktree, directory),
+                lte(ProjectTable.worktree, AbsolutePath.make(directory + "\uffff")),
+              ),
+            )
             .all()
             .pipe(Effect.orDie)
           const adopted = yield* Effect.filter(markerless, (candidate) =>
             Effect.gen(function* () {
               if (candidate.id === item.projectID) return false
-              const canonical = AbsolutePath.make(yield* fs.resolve(candidate.directory))
-              if (!FSUtil.contains(directory, canonical)) return false
+              if (!FSUtil.contains(directory, candidate.directory)) return false
               const markers = yield* fs
-                .up({ targets: [".git", ".hg"], start: canonical, stop: directory, mode: "first" })
+                .up({ targets: [".git", ".hg"], start: candidate.directory, stop: directory, mode: "first" })
                 .pipe(Effect.orElseSucceed(() => []))
               if (!markers[0]) return false
               return (yield* fs.resolve(path.dirname(markers[0]))) === directory
@@ -285,12 +290,7 @@ const layer = Layer.effect(
       return node ? ID.make(node) : undefined
     })
 
-    const hgDiscover = Effect.fnUntraced(function* (input: AbsolutePath) {
-      const dotHg = yield* fs.up({ targets: [".hg"], start: input, mode: "first" }).pipe(
-        Effect.map((matches) => matches[0]),
-        Effect.orElseSucceed(() => undefined),
-      )
-      if (!dotHg) return undefined
+    const hgDiscover = Effect.fnUntraced(function* (dotHg: AbsolutePath) {
       const worktree = AbsolutePath.make(path.dirname(dotHg))
       const store = AbsolutePath.make(dotHg)
       const previous = yield* cached(store)
@@ -309,7 +309,10 @@ const layer = Layer.effect(
         Effect.map((matches) => matches[0]),
         Effect.orElseSucceed(() => undefined),
       )
-      const repo = marker && path.basename(marker) === ".git" ? yield* git.repo.discover(directory) : undefined
+      const repo =
+        marker && path.basename(marker) === ".git"
+          ? yield* git.repo.discover(AbsolutePath.make(path.dirname(marker)))
+          : undefined
       if (repo) {
         const previous = yield* cached(repo.commonDirectory)
         const id = (yield* remote(repo)) ?? previous ?? (yield* rootCommit(repo))
@@ -329,7 +332,7 @@ const layer = Layer.effect(
         })
       }
 
-      const hg = marker && path.basename(marker) === ".hg" ? yield* hgDiscover(directory) : undefined
+      const hg = marker && path.basename(marker) === ".hg" ? yield* hgDiscover(AbsolutePath.make(marker)) : undefined
       if (hg) return yield* persist({ ...hg, canonical: hg.directory })
       return yield* persist({
         id: ID.make(Hash.fast(`directory:${directory}`)),

@@ -154,9 +154,23 @@ test("updates authoritative cached project metadata from live events", async () 
   }
 })
 
-test("adopts cached directory-project sessions when their repository is resolved", () => {
+test("adopts cached directory-project sessions when their repository is resolved", async () => {
   const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
-  const api = OpenCode.make({ baseUrl: "http://opencode.local" })
+  const refreshed: SessionInfo = {
+    ...session(0),
+    id: "ses_uncached",
+    projectID: "repository",
+    location: { directory: "/unknown-alias" },
+    subpath: "app",
+  }
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      if (!request.url.endsWith("/api/session/ses_uncached")) throw new Error(`Unexpected request: ${request.url}`)
+      return Response.json({ data: refreshed })
+    },
+  })
   const setup = createRoot((dispose) => ({
     data: createData({
       api: () => api,
@@ -176,7 +190,16 @@ test("adopts cached directory-project sessions when their repository is resolved
     const sessions: SessionInfo[] = [
       { ...session(0), id: "ses_root", projectID: "directory-root", location: { directory: "/repo" } },
       { ...session(0), id: "ses_nested", projectID: "directory-nested", location: { directory: "/repo/app" } },
+      {
+        ...session(0),
+        id: "ses_alias",
+        projectID: "directory-nested",
+        location: { directory: "/repo/alias/../app" },
+      },
+      { ...session(0), id: "ses_symlink", projectID: "directory-nested", location: { directory: "/shortcut" } },
+      { ...refreshed, projectID: "directory-uncached" },
       { ...session(0), id: "ses_global", projectID: "global", location: { directory: "/repo/legacy" } },
+      { ...session(0), id: "ses_escaped", projectID: "global", location: { directory: "/repo/../other" } },
       { ...session(0), id: "ses_other", projectID: "other-repository", location: { directory: "/repo/vendor" } },
       { ...session(0), id: "ses_sibling", projectID: "global", location: { directory: "/repo-other" } },
       {
@@ -187,6 +210,18 @@ test("adopts cached directory-project sessions when their repository is resolved
       },
     ]
     sessions.forEach((item) => setup.data.session.remember(item))
+    for (const project of [
+      { id: "directory-root", canonical: "/repo" },
+      { id: "directory-nested", canonical: "/repo/app" },
+    ]) {
+      const updated: OpenCodeEvent = {
+        id: `evt_${project.id}`,
+        created: 0,
+        type: "project.updated",
+        data: { ...project, time: { created: 0, updated: 0 }, sandboxes: [] },
+      }
+      listeners.forEach((listener) => listener({ name: updated.type, details: updated }))
+    }
 
     const resolved: OpenCodeEvent = {
       id: "evt_repository_resolved",
@@ -197,7 +232,7 @@ test("adopts cached directory-project sessions when their repository is resolved
         projectID: "repository",
         directory: "/repo",
         previous: "global",
-        adopted: ["directory-root", "directory-nested"],
+        adopted: ["directory-root", "directory-nested", "directory-uncached"],
       },
     }
     listeners.forEach((listener) => listener({ name: resolved.type, details: resolved }))
@@ -205,10 +240,15 @@ test("adopts cached directory-project sessions when their repository is resolved
     expect(setup.data.session.get("ses_root")?.projectID).toBe("repository")
     expect(setup.data.session.get("ses_root")?.subpath).toBeUndefined()
     expect(setup.data.session.get("ses_nested")).toMatchObject({ projectID: "repository", subpath: "app" })
+    expect(setup.data.session.get("ses_alias")).toMatchObject({ projectID: "repository", subpath: "app" })
+    expect(setup.data.session.get("ses_symlink")).toMatchObject({ projectID: "repository", subpath: "app" })
     expect(setup.data.session.get("ses_global")).toMatchObject({ projectID: "repository", subpath: "legacy" })
+    expect(setup.data.session.get("ses_escaped")?.projectID).toBe("global")
     expect(setup.data.session.get("ses_other")?.projectID).toBe("other-repository")
     expect(setup.data.session.get("ses_sibling")?.projectID).toBe("global")
     expect(setup.data.session.get("ses_remote")?.projectID).toBe("directory-root")
+    await wait(() => setup.data.session.get("ses_uncached")?.projectID === "repository")
+    expect(setup.data.session.get("ses_uncached")?.subpath).toBe("app")
   } finally {
     setup.dispose()
   }

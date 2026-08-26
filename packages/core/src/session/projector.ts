@@ -1,6 +1,6 @@
 export * as SessionProjector from "./projector.js"
 
-import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, lte, sql } from "drizzle-orm"
+import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, lte, or, sql } from "drizzle-orm"
 import { DateTime, Effect, Layer, Schema, Stream } from "effect"
 import path from "path"
 import { Database } from "../database/database.js"
@@ -496,7 +496,19 @@ const layer = Layer.effectDiscard(
           })
           .from(SessionTable)
           .innerJoin(ProjectTable, eq(SessionTable.project_id, ProjectTable.id))
-          .where(and(inArray(SessionTable.project_id, candidates), isNull(SessionTable.workspace_id)))
+          .where(
+            and(
+              inArray(SessionTable.project_id, candidates),
+              isNull(SessionTable.workspace_id),
+              or(
+                event.data.adopted?.length ? inArray(SessionTable.project_id, event.data.adopted) : undefined,
+                and(
+                  gte(SessionTable.directory, event.data.directory),
+                  lte(SessionTable.directory, AbsolutePath.make(event.data.directory + "\uffff")),
+                ),
+              ),
+            ),
+          )
           .all()
           .pipe(Effect.orDie)
         yield* Effect.forEach(

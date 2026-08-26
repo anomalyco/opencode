@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { Worktree } from "../src/worktree.js"
+import { Schema } from "effect"
+import { Worktree } from "@opencode-ai/schema/worktree"
 
 describe("Worktree.adopt", () => {
   const event = {
@@ -47,5 +48,33 @@ describe("Worktree.adopt", () => {
         { ...event, directory: "C:\\repo" },
       ),
     ).toEqual({ projectID: "repository", subpath: "packages/app" })
+    expect(
+      Worktree.adopt(
+        { projectID: "directory-nested", directory: "c:/Repo/packages/App" },
+        { ...event, directory: "C:\\repo" },
+      ),
+    ).toEqual({ projectID: "repository", subpath: "packages/App" })
+  })
+
+  test("normalizes aliases and rejects paths that leave the repository", () => {
+    expect(Worktree.adopt({ projectID: "directory-nested", directory: "/repo/alias/../packages/app" }, event)).toEqual({
+      projectID: "repository",
+      subpath: "packages/app",
+    })
+    expect(Worktree.adopt({ projectID: "global", directory: "/repo/../other" }, event)).toBeUndefined()
+    expect(Worktree.adopt({ projectID: "global", directory: "/app" }, { ...event, directory: "/" })).toEqual({
+      projectID: "repository",
+      subpath: "app",
+    })
+  })
+
+  test("decodes existing durable events without adopted project IDs", () => {
+    expect(
+      Schema.decodeUnknownSync(Worktree.Event.Resolved.data)({
+        projectID: "repository",
+        directory: "/repo",
+        previous: "global",
+      }),
+    ).toEqual({ projectID: "repository", directory: "/repo", previous: "global" })
   })
 })
