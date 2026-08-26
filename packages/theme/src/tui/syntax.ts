@@ -13,9 +13,8 @@ export function generateSyntax(theme: ResolvedThemeTokens, mode: Mode) {
     rule(["extmark.file"], feedback.warning.default, { bold: true }),
     rule(["extmark.agent"], theme.categorical[0][step], { bold: true }),
     rule(["extmark.skill"], (theme.categorical[1] ?? theme.categorical[0])[step], { bold: true }),
-    // V1 migration preserves its selected/inverse foreground in this action state.
-    rule(["extmark.paste"], theme.text.action.primary.focused, {
-      background: feedback.warning.default,
+    rule(["extmark.paste"], feedback.warning.default, {
+      background: theme.background.feedback.warning.default,
       bold: true,
     }),
     rule(["comment", "comment.documentation"], syntax.comment, { italic: true }),
