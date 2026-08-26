@@ -7,7 +7,7 @@ import config from "../../../../config.mjs"
 export const console = config.console
 export const email = `mailto:${config.email}`
 
-OpenCode Go는 인기 있는 오픈 코딩 모델에 안정적으로 액세스할 수 있게 해주는 저비용 구독 서비스입니다. **첫 달은 $5**, 이후에는 **월 $10**입니다.
+OpenCode Go는 인기 있는 오픈 코딩 모델에 안정적으로 액세스할 수 있게 해주는 **월 $10**의 저비용 구독 서비스입니다.
 
 Go는 OpenCode의 다른 제공자와 똑같이 작동합니다. OpenCode Go를 구독하고 API 키를 발급받으면 됩니다. 이는 **완전히 선택 사항**이며, OpenCode를 사용하기 위해 꼭 필요하지는 않습니다.
 
@@ -31,7 +31,7 @@ OpenCode와 잘 맞는 선별된 모델과 제공자 그룹을 테스트했습�
 2. 그런 다음 몇몇 제공자와 협력해, 이 모델들이 올바르게 서비스되도록 했습니다.
 3. 마지막으로 모델/제공자 조합을 벤치마킹해, 자신 있게 추천할 수 있는 목록을 만들었습니다.
 
-OpenCode Go를 사용하면 **첫 달은 $5**, 이후에는 **월 $10**으로 이러한 모델에 액세스할 수 있습니다.
+OpenCode Go를 사용하면 **월 $10**으로 이러한 모델에 액세스할 수 있습니다.
 
 ---
 
@@ -49,7 +49,7 @@ workspace당 한 명의 멤버만 OpenCode Go를 구독할 수 있습니다.
 
 현재 모델 목록에는 다음이 포함됩니다.
 
-- **Grok 4.5**
+- **Grok 4.6**
 - **GLM-5.3**
 - **GLM-5.2**
 - **GLM-5.1**
@@ -57,6 +57,7 @@ workspace당 한 명의 멤버만 OpenCode Go를 구독할 수 있습니다.
 - **Kimi K3**
 - **Kimi K2.7 Code**
 - **Kimi K2.6**
+- **LongCat-2.0**
 - **MiMo-V2.5**
 - **MiMo-V2.5-Pro**
 - **MiniMax M3**
@@ -90,7 +91,7 @@ OpenCode Go에는 다음과 같은 한도가 포함됩니다.
 
 | Model                        | 5시간당 요청 횟수 | 주간 요청 횟수 | 월간 요청 횟수 |
 | ---------------------------- | ----------------- | -------------- | -------------- |
-| Grok 4.5                     | 120               | 300            | 600            |
+| Grok 4.6                     | 169               | 423            | 845            |
 | GPT 5.6 Luna                 | 2,050             | 5,100          | 10,250         |
 | GLM-5.3                      | 220               | 540            | 1,080          |
 | GLM-5.2                      | 880               | 2,150          | 4,300          |
@@ -98,6 +99,7 @@ OpenCode Go에는 다음과 같은 한도가 포함됩니다.
 | Kimi K3                      | 110               | 250            | 490            |
 | Kimi K2.7 Code               | 1,350             | 3,380          | 6,750          |
 | Kimi K2.6                    | 1,150             | 2,880          | 5,750          |
+| LongCat-2.0                  | 11,400            | 28,600         | 57,200         |
 | MiMo-V2.5                    | 30,100            | 75,200         | 150,400        |
 | MiMo-V2.5-Pro                | 3,250             | 8,150          | 16,300         |
 | MiniMax M3                   | 3,200             | 8,000          | 16,000         |
@@ -115,11 +117,12 @@ OpenCode Go에는 다음과 같은 한도가 포함됩니다.
 
 이 예상치는 관찰된 요청 패턴을 기준으로 합니다.
 
-- Grok 4.5 — 요청당 입력 1,100, 캐시 71,500, 출력 토큰 220
+- Grok 4.6 — 요청당 입력 390, 캐시 32,500, 출력 토큰 120
 - GLM-5.3/5.2/5.1 — 요청당 입력 700, 캐시 52,000, 출력 토큰 150
 - GPT 5.6 Luna — 요청당 입력 토큰 1,000개, 캐시 토큰 50,000개, 출력 토큰 220개
 - Kimi K3 — 요청당 입력 1,050, 캐시 76,500, 출력 토큰 300
 - Kimi K2.7/K2.6 — 요청당 입력 870, 캐시 55,000, 출력 토큰 200
+- LongCat-2.0 — 요청당 입력 920, 캐시 88,900, 출력 토큰 200
 - DeepSeek V4 Pro — 요청당 입력 750, 캐시 82,000, 출력 토큰 290
 - DeepSeek V4 Flash — 요청당 입력 410, 캐시 71,300, 출력 토큰 310
 - DeepSeek V4 Flash Vision Exp — 요청당 입력 410, 캐시 71,300, 출력 토큰 310
@@ -138,7 +141,8 @@ OpenCode Go에는 다음과 같은 한도가 포함됩니다.
 
 | Model                                   | Input  | Output | Cached Read | Cached Write | Usage |
 | --------------------------------------- | ------ | ------ | ----------- | ------------ | ----- |
-| Grok 4.5                                | $2.00  | $6.00  | $0.30       | -            | $15   |
+| Grok 4.6 (≤ 200K tokens)                | $2.00  | $6.00  | $0.50       | -            | $15   |
+| Grok 4.6 (> 200K tokens)                | $4.00  | $12.00 | $1.00       | -            | $15   |
 | GPT 5.6 Luna (≤ 272K tokens)            | $0.20  | $1.20  | $0.02       | $0.25        | $15   |
 | GPT 5.6 Luna (> 272K tokens)            | $0.40  | $1.80  | $0.04       | $0.50        | $15   |
 | GLM-5.3                                 | $1.40  | $4.40  | $0.26       | -            | $15   |
@@ -147,6 +151,7 @@ OpenCode Go에는 다음과 같은 한도가 포함됩니다.
 | Kimi K3                                 | $3.00  | $15.00 | $0.30       | -            | $15   |
 | Kimi K2.7 Code                          | $0.95  | $4.00  | $0.19       | -            | $60   |
 | Kimi K2.6                               | $0.95  | $4.00  | $0.16       | -            | $60   |
+| LongCat-2.0                             | $0.30  | $1.20  | $0.006      | -            | $60   |
 | MiMo V2.5                               | $0.14  | $0.28  | $0.0028     | -            | $60   |
 | MiMo V2.5 Pro                           | $0.435 | $0.87  | $0.003625   | -            | $15   |
 | MiniMax M3                              | $0.30  | $1.20  | $0.06       | -            | $60   |
@@ -168,7 +173,7 @@ OpenCode Go에는 다음과 같은 한도가 포함됩니다.
 | Hy3                                     | $0.14  | $0.58  | $0.035      | -            | $60   |
 | Ox Alpha Free                           | -      | -      | -           | -            | -     |
 
-**DeepSeek V4 Flash / V4 Flash Vision Exp / V4 Pro:** Peak 시간은 01:00-04:00 및 06:00-10:00 UTC이며, 그 외 모든 시간은 Off-Peak입니다. [자세히 알아보기](https://api-docs.deepseek.com/quick_start/pricing/).
+**DeepSeek V4 Flash / V4 Flash Vision Exp / V4 Pro:** Peak 시간은 월요일부터 금요일까지 01:00-04:00 및 06:00-10:00 UTC이며, 주말을 포함한 그 외 모든 시간은 Off-Peak입니다. [자세히 알아보기](https://api-docs.deepseek.com/quick_start/pricing/).
 
 **DeepSeek V4 Flash Vision Exp:** 이미지는 크기에 따라 토큰으로 변환되며 텍스트 토큰과 함께 입력 토큰으로 청구됩니다. [자세히 알아보기](https://api-docs.deepseek.com/quick_start/pricing/).
 
@@ -208,7 +213,7 @@ Go에서는 월 $10를 지불하며, 저희는 그 6배의 사용량을 제공�
 
 | 모델                         | 모델 ID                      | 엔드포인트                                       | AI SDK 패키지               |
 | ---------------------------- | ---------------------------- | ------------------------------------------------ | --------------------------- |
-| Grok 4.5                     | grok-4.5                     | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
+| Grok 4.6                     | grok-4.6                     | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | GPT 5.6 Luna                 | gpt-5.6-luna                 | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | GLM-5.3                      | glm-5.3                      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5.2                      | glm-5.2                      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
@@ -216,6 +221,7 @@ Go에서는 월 $10를 지불하며, 저희는 그 6배의 사용량을 제공�
 | Kimi K3                      | kimi-k3                      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Kimi K2.7 Code               | kimi-k2.7-code               | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Kimi K2.6                    | kimi-k2.6                    | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| LongCat-2.0                  | longcat-2.0                  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Pro              | deepseek-v4-pro              | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Flash            | deepseek-v4-flash            | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Flash Vision Exp | deepseek-v4-flash-vision-exp | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
@@ -250,7 +256,7 @@ https://opencode.ai/zen/go/v1/models
 
 | 모델                         | 모델 학습     | 데이터 보존 |
 | ---------------------------- | ------------- | ----------- |
-| Grok 4.5                     | 사용되지 않음 | 30일        |
+| Grok 4.6                     | 사용되지 않음 | 30일        |
 | GPT 5.6 Luna                 | 사용되지 않음 | 30일        |
 | GLM-5.3                      | 사용되지 않음 | 0일         |
 | GLM-5.2                      | 사용되지 않음 | 0일         |
@@ -258,6 +264,7 @@ https://opencode.ai/zen/go/v1/models
 | Kimi K3                      | 사용되지 않음 | 0일         |
 | Kimi K2.7 Code               | 사용되지 않음 | 0일         |
 | Kimi K2.6                    | 사용되지 않음 | 0일         |
+| LongCat-2.0                  | 사용되지 않음 | 0일         |
 | MiMo-V2.5-Pro                | 사용되지 않음 | 0일         |
 | MiMo-V2.5                    | 사용되지 않음 | 0일         |
 | Qwen3.8 Max                  | 사용되지 않음 | 0일         |
@@ -273,7 +280,7 @@ https://opencode.ai/zen/go/v1/models
 | Hy3                          | 사용되지 않음 | 0일         |
 | Ox Alpha Free                | 사용되지 않음 | 0일         |
 
-- **Grok 4.5:** ZDR은 저장된 데이터에 의존하는 중요한 API 기능(상태 저장형 Responses API, Files and Collections, Batch API 포함)을 비활성화합니다. [자세히 알아보기](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
+- **Grok 4.6:** ZDR은 저장된 데이터에 의존하는 중요한 API 기능(상태 저장형 Responses API, Files and Collections, Batch API 포함)을 비활성화합니다. [자세히 알아보기](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
 - **GPT 5.6 Luna:** 모든 API 기능 사용에 대해 악용 모니터링 로그가 생성되며 최대 30일 동안 보존됩니다. [자세히 알아보기](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).
 - **Muse Spark 1.2 Contributor:** 향후 Meta 모델 학습에 사용자의 프롬프트와 생성 결과를 사용할 수 있도록 허용하는 대신 토큰 가격이 대폭 할인됩니다. Meta의 [지역별 사용 정책](https://ai.developer.meta.com/legal/geographic-use-policy)에서 허용하는 지역에서만 이용할 수 있습니다. [자세히 알아보기](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
 - **DeepSeek V4 Flash:** ZDR 계약은 매월 갱신됩니다. 현재 계약은 2026년 8월 31일까지 유효합니다.

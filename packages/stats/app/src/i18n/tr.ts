@@ -109,7 +109,6 @@ export const dict = {
   "home.marketChart": "Model yazarına göre pazar payı",
   "home.noData": "Veri yok",
   "home.geoTitle": "Coğrafi Dağılım",
-  "home.geoDescription": "Ülkeye göre kullanılan tokenlar.",
   "home.noGeoTitle": "Coğrafi veri yok",
   "home.noGeoDescription": "Bu aralıkla eşleşen coğrafi satır yok.",
   "home.worldMap": "Ülkeye göre token kullanımının dünya haritası",

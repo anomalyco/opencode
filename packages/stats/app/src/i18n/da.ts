@@ -109,7 +109,6 @@ export const dict = {
   "home.marketChart": "Markedsandel efter modelforfatter",
   "home.noData": "Ingen data",
   "home.geoTitle": "Geografisk opdeling",
-  "home.geoDescription": "Tokens brugt efter land.",
   "home.noGeoTitle": "Ingen geodata",
   "home.noGeoDescription": "Ingen georækker matchede dette interval.",
   "home.worldMap": "Verdenskort over tokenbrug efter land",

@@ -7,7 +7,7 @@ import config from "../../../../config.mjs"
 export const console = config.console
 export const email = `mailto:${config.email}`
 
-OpenCode Go est un abonnement à bas coût — **5 $ pour votre premier mois**, puis **10 $/mois** — qui vous donne un accès fiable aux modèles de codage ouverts populaires.
+OpenCode Go est un abonnement à bas coût à **10 $/mois** qui vous donne un accès fiable aux modèles de codage ouverts populaires.
 
 Go fonctionne comme n'importe quel autre fournisseur dans OpenCode. Vous vous abonnez à OpenCode Go et obtenez votre clé d'API. C'est **totalement facultatif** et vous n'avez pas besoin de l'utiliser pour utiliser OpenCode.
 
@@ -31,7 +31,7 @@ Pour remédier à cela, nous avons fait plusieurs choses :
 2. Nous avons ensuite travaillé avec quelques fournisseurs pour nous assurer qu'ils étaient correctement servis.
 3. Enfin, nous avons évalué les performances de la combinaison modèle/fournisseur et avons dressé une liste que nous nous sentons à l'aise de recommander.
 
-OpenCode Go vous donne accès à ces modèles pour **5 $ pour votre premier mois**, puis **10 $/mois**.
+OpenCode Go vous donne accès à ces modèles pour **10 $/mois**.
 
 ---
 
@@ -49,7 +49,7 @@ Un seul membre par espace de travail peut s'abonner à OpenCode Go.
 
 La liste actuelle des modèles comprend :
 
-- **Grok 4.5**
+- **Grok 4.6**
 - **GLM-5.3**
 - **GLM-5.2**
 - **GLM-5.1**
@@ -57,6 +57,7 @@ La liste actuelle des modèles comprend :
 - **Kimi K3**
 - **Kimi K2.7 Code**
 - **Kimi K2.6**
+- **LongCat-2.0**
 - **MiMo-V2.5**
 - **MiMo-V2.5-Pro**
 - **MiniMax M3**
@@ -90,7 +91,7 @@ Le tableau ci-dessous fournit une estimation du nombre de requêtes basée sur d
 
 | Model                        | requêtes par 5 heures | requêtes par semaine | requêtes par mois |
 | ---------------------------- | --------------------- | -------------------- | ----------------- |
-| Grok 4.5                     | 120                   | 300                  | 600               |
+| Grok 4.6                     | 169                   | 423                  | 845               |
 | GPT 5.6 Luna                 | 2,050                 | 5,100                | 10,250            |
 | GLM-5.3                      | 220                   | 540                  | 1,080             |
 | GLM-5.2                      | 880                   | 2,150                | 4,300             |
@@ -98,6 +99,7 @@ Le tableau ci-dessous fournit une estimation du nombre de requêtes basée sur d
 | Kimi K3                      | 110                   | 250                  | 490               |
 | Kimi K2.7 Code               | 1,350                 | 3,380                | 6,750             |
 | Kimi K2.6                    | 1,150                 | 2,880                | 5,750             |
+| LongCat-2.0                  | 11,400                | 28,600               | 57,200            |
 | MiMo-V2.5                    | 30,100                | 75,200               | 150,400           |
 | MiMo-V2.5-Pro                | 3,250                 | 8,150                | 16,300            |
 | MiniMax M3                   | 3,200                 | 8,000                | 16,000            |
@@ -115,11 +117,12 @@ Le tableau ci-dessous fournit une estimation du nombre de requêtes basée sur d
 
 Les estimations sont basées sur les schémas de requêtes observés :
 
-- Grok 4.5 — 1,100 tokens en entrée, 71,500 en cache, 220 tokens en sortie par requête
+- Grok 4.6 — 390 tokens en entrée, 32,500 en cache, 120 tokens en sortie par requête
 - GLM-5.3/5.2/5.1 — 700 tokens en entrée, 52,000 en cache, 150 tokens en sortie par requête
 - GPT 5.6 Luna — 1,000 tokens en entrée, 50,000 en cache, 220 tokens en sortie par requête
 - Kimi K3 — 1,050 tokens en entrée, 76,500 en cache, 300 tokens en sortie par requête
 - Kimi K2.7/K2.6 — 870 tokens en entrée, 55,000 en cache, 200 tokens en sortie par requête
+- LongCat-2.0 — 920 tokens en entrée, 88,900 en cache, 200 tokens en sortie par requête
 - DeepSeek V4 Pro — 750 tokens en entrée, 82,000 en cache, 290 tokens en sortie par requête
 - DeepSeek V4 Flash — 410 tokens en entrée, 71,300 en cache, 310 tokens en sortie par requête
 - DeepSeek V4 Flash Vision Exp — 410 tokens en entrée, 71,300 en cache, 310 tokens en sortie par requête
@@ -138,7 +141,8 @@ Les estimations sont également basées sur les prix suivants par 1M tokens et s
 
 | Modèle                                  | Input  | Output | Cached Read | Cached Write | Utilisation |
 | --------------------------------------- | ------ | ------ | ----------- | ------------ | ----------- |
-| Grok 4.5                                | $2.00  | $6.00  | $0.30       | -            | $15         |
+| Grok 4.6 (≤ 200K tokens)                | $2.00  | $6.00  | $0.50       | -            | $15         |
+| Grok 4.6 (> 200K tokens)                | $4.00  | $12.00 | $1.00       | -            | $15         |
 | GPT 5.6 Luna (≤ 272K tokens)            | $0.20  | $1.20  | $0.02       | $0.25        | $15         |
 | GPT 5.6 Luna (> 272K tokens)            | $0.40  | $1.80  | $0.04       | $0.50        | $15         |
 | GLM-5.3                                 | $1.40  | $4.40  | $0.26       | -            | $15         |
@@ -147,6 +151,7 @@ Les estimations sont également basées sur les prix suivants par 1M tokens et s
 | Kimi K3                                 | $3.00  | $15.00 | $0.30       | -            | $15         |
 | Kimi K2.7 Code                          | $0.95  | $4.00  | $0.19       | -            | $60         |
 | Kimi K2.6                               | $0.95  | $4.00  | $0.16       | -            | $60         |
+| LongCat-2.0                             | $0.30  | $1.20  | $0.006      | -            | $60         |
 | MiMo V2.5                               | $0.14  | $0.28  | $0.0028     | -            | $60         |
 | MiMo V2.5 Pro                           | $0.435 | $0.87  | $0.003625   | -            | $15         |
 | MiniMax M3                              | $0.30  | $1.20  | $0.06       | -            | $60         |
@@ -168,7 +173,7 @@ Les estimations sont également basées sur les prix suivants par 1M tokens et s
 | Hy3                                     | $0.14  | $0.58  | $0.035      | -            | $60         |
 | Ox Alpha Free                           | -      | -      | -           | -            | -           |
 
-**DeepSeek V4 Flash / V4 Flash Vision Exp / V4 Pro:** Les heures Peak sont 01:00-04:00 et 06:00-10:00 UTC ; toutes les autres heures sont Off-Peak. [En savoir plus](https://api-docs.deepseek.com/quick_start/pricing/).
+**DeepSeek V4 Flash / V4 Flash Vision Exp / V4 Pro:** Les heures Peak sont 01:00-04:00 et 06:00-10:00 UTC, du lundi au vendredi ; toutes les autres heures, y compris le week-end, sont Off-Peak. [En savoir plus](https://api-docs.deepseek.com/quick_start/pricing/).
 
 **DeepSeek V4 Flash Vision Exp:** Les images sont converties en tokens selon leurs dimensions et facturées comme tokens d’entrée avec les tokens de texte. [En savoir plus](https://api-docs.deepseek.com/quick_start/pricing/).
 
@@ -208,7 +213,7 @@ Vous pouvez également accéder aux modèles Go via les points de terminaison d'
 
 | Modèle                       | ID de modèle                 | Point de terminaison                             | Package AI SDK              |
 | ---------------------------- | ---------------------------- | ------------------------------------------------ | --------------------------- |
-| Grok 4.5                     | grok-4.5                     | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
+| Grok 4.6                     | grok-4.6                     | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | GPT 5.6 Luna                 | gpt-5.6-luna                 | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | GLM-5.3                      | glm-5.3                      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5.2                      | glm-5.2                      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
@@ -216,6 +221,7 @@ Vous pouvez également accéder aux modèles Go via les points de terminaison d'
 | Kimi K3                      | kimi-k3                      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Kimi K2.7 Code               | kimi-k2.7-code               | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Kimi K2.6                    | kimi-k2.6                    | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| LongCat-2.0                  | longcat-2.0                  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Pro              | deepseek-v4-pro              | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Flash            | deepseek-v4-flash            | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Flash Vision Exp | deepseek-v4-flash-vision-exp | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
@@ -250,7 +256,7 @@ https://opencode.ai/zen/go/v1/models
 
 | Modèle                       | Entraînement des modèles | Conservation des données |
 | ---------------------------- | ------------------------ | ------------------------ |
-| Grok 4.5                     | Non utilisé              | 30 jours                 |
+| Grok 4.6                     | Non utilisé              | 30 jours                 |
 | GPT 5.6 Luna                 | Non utilisé              | 30 jours                 |
 | GLM-5.3                      | Non utilisé              | 0 jour                   |
 | GLM-5.2                      | Non utilisé              | 0 jour                   |
@@ -258,6 +264,7 @@ https://opencode.ai/zen/go/v1/models
 | Kimi K3                      | Non utilisé              | 0 jour                   |
 | Kimi K2.7 Code               | Non utilisé              | 0 jour                   |
 | Kimi K2.6                    | Non utilisé              | 0 jour                   |
+| LongCat-2.0                  | Non utilisé              | 0 jour                   |
 | MiMo-V2.5-Pro                | Non utilisé              | 0 jour                   |
 | MiMo-V2.5                    | Non utilisé              | 0 jour                   |
 | Qwen3.8 Max                  | Non utilisé              | 0 jour                   |
@@ -273,7 +280,7 @@ https://opencode.ai/zen/go/v1/models
 | Hy3                          | Non utilisé              | 0 jour                   |
 | Ox Alpha Free                | Non utilisé              | 0 jour                   |
 
-- **Grok 4.5:** Le ZDR désactive d’importantes fonctionnalités API qui dépendent des données stockées, notamment Responses API avec état, Files and Collections et Batch API. [En savoir plus](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
+- **Grok 4.6:** Le ZDR désactive d’importantes fonctionnalités API qui dépendent des données stockées, notamment Responses API avec état, Files and Collections et Batch API. [En savoir plus](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
 - **GPT 5.6 Luna:** Des journaux de surveillance des abus sont générés pour toute utilisation des fonctionnalités API et conservés pendant un maximum de 30 jours. [En savoir plus](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).
 - **Muse Spark 1.2 Contributor:** Des tarifs de tokens fortement réduits en échange de l’autorisation d’utiliser vos prompts et vos complétions pour entraîner de futurs modèles Meta. La disponibilité est limitée aux régions autorisées par la [Politique d’utilisation géographique](https://ai.developer.meta.com/legal/geographic-use-policy) de Meta. [En savoir plus](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
 - **DeepSeek V4 Flash:** L’accord ZDR est renouvelé chaque mois. L’accord actuel est valable jusqu’au 31 août 2026.

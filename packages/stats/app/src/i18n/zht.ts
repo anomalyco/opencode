@@ -110,7 +110,6 @@ export const dict = {
   "home.marketChart": "按模型作者顯示的市場佔有率",
   "home.noData": "無數據",
   "home.geoTitle": "地理分布",
-  "home.geoDescription": "按國家/地區統計的 token 使用量。",
   "home.noGeoTitle": "無地理數據",
   "home.noGeoDescription": "沒有符合該時間範圍的地理列。",
   "home.worldMap": "按國家/地區顯示 token 使用量的世界地圖",
