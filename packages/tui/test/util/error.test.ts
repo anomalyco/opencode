@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { Cause } from "effect"
 import { errorData, errorFormat, errorMessage } from "../../src/util/error"
 
 describe("util.error", () => {
@@ -45,5 +46,14 @@ describe("util.error", () => {
     const data = errorData(err)
     expect(data.message).toBe("ResolveMessage: Cannot resolve module")
     expect(String(data.formatted)).toContain("ResolveMessage")
+  })
+
+  test("formats Effect causes without exposing raw internals", () => {
+    const cause = Cause.fail(new Error("MCP transport closed"))
+    const formatted = errorFormat(cause)
+
+    expect(formatted).toContain("MCP transport closed")
+    expect(formatted).not.toContain('"_id"')
+    expect(formatted).not.toContain('"Cause"')
   })
 })
