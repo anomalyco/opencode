@@ -1,3 +1,5 @@
+import { displaySlice, promptOffsetWidth } from "../prompt/display"
+
 export function titlecase(str: string) {
   return str.replace(/\b\w/g, (c) => c.toUpperCase())
 }
@@ -58,24 +60,38 @@ export function duration(input: number) {
   return `${days}d ${hours}h`
 }
 
+const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" })
+
+// Longest prefix that fits the column budget; never splits a grapheme (emoji, CJK).
+function fitWidth(str: string, budget: number) {
+  let width = 0
+  for (const part of graphemes.segment(str)) {
+    const next = width + (part.segment === "\n" ? 1 : Bun.stringWidth(part.segment))
+    if (next > budget) return str.slice(0, part.index)
+    width = next
+  }
+  return str
+}
+
 export function truncate(str: string, len: number): string {
-  if (str.length <= len) return str
-  return str.slice(0, len - 1) + "…"
+  if (promptOffsetWidth(str) <= len) return str
+  return fitWidth(str, len - 1) + "…"
 }
 
 export function truncateLeft(str: string, len: number): string {
-  if (str.length <= len) return str
-  return "…" + str.slice(-(len - 1))
+  const width = promptOffsetWidth(str)
+  if (width <= len) return str
+  return "…" + displaySlice(str, width - (len - 1))
 }
 
 export function truncateMiddle(str: string, maxLength: number = 35): string {
-  if (str.length <= maxLength) return str
+  const width = promptOffsetWidth(str)
+  if (width <= maxLength) return str
 
-  const ellipsis = "…"
-  const keepStart = Math.ceil((maxLength - ellipsis.length) / 2)
-  const keepEnd = Math.floor((maxLength - ellipsis.length) / 2)
+  const keepStart = Math.ceil((maxLength - 1) / 2)
+  const keepEnd = Math.floor((maxLength - 1) / 2)
 
-  return str.slice(0, keepStart) + ellipsis + str.slice(-keepEnd)
+  return displaySlice(str, 0, keepStart) + "…" + displaySlice(str, width - keepEnd)
 }
 
 export function pluralize(count: number, singular: string, plural: string): string {
