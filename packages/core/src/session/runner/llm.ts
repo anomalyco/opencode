@@ -62,8 +62,7 @@ const isDecline = (
   error._tag === "Permission.DeclinedError" || error._tag === "QuestionTool.CancelledError"
 
 const isInterruptedStream = (failure: AIError) => {
-  if (failure.reason._tag === "InvalidProviderOutput")
-    return failure.reason.classification === "incomplete-stream"
+  if (failure.reason._tag === "InvalidProviderOutput") return failure.reason.classification === "incomplete-stream"
   if (failure.reason._tag === "Transport") return failure.reason.operation === "read"
   return false
 }
@@ -233,8 +232,7 @@ const layer = Layer.effect(
       while (true) {
         if (yield* runPendingCompaction(sessionID, "steer")) continue
         if (yield* runPendingMove(sessionID, "steer")) return { type: "moved" as const, continuation: next }
-        if (!first && !next && !(yield* SessionInbox.has(db, sessionID, "steer")))
-          return { type: "complete" as const }
+        if (!first && !next && !(yield* SessionInbox.has(db, sessionID, "steer"))) return { type: "complete" as const }
         const result = yield* runStep(sessionID, promotable, step)
         first = false
         promotable = "steer"
@@ -706,11 +704,18 @@ const layer = Layer.effect(
         if (message.type !== "assistant") continue
         for (const tool of message.content) {
           if (tool.type !== "tool" || (tool.state.status !== "streaming" && tool.state.status !== "running")) continue
+          const metadata = tool.state.status === "running" ? tool.state.metadata : undefined
+          const childID =
+            tool.name === "subagent" && typeof metadata?.sessionID === "string" ? metadata.sessionID : undefined
           yield* bus.publish(SessionEvent.Tool.Failed, {
             sessionID,
             assistantMessageID: message.id,
             id: tool.id,
-            error: { type: "aborted", message: `Tool execution interrupted: ${tool.name}` },
+            error: {
+              type: "aborted",
+              message: `Tool execution interrupted: ${tool.name}${childID ? ` (sessionID: ${childID})` : ""}`,
+            },
+            ...(metadata && Object.keys(metadata).length > 0 ? { metadata } : {}),
             executed: tool.executed === true,
           })
         }

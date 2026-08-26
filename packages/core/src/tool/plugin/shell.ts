@@ -115,58 +115,45 @@ export const Plugin = {
     const permission = yield* Permission.Service
     const config = yield* Config.Service
 
-    const notifyWhenDone = Effect.fn("ShellTool.notifyWhenDone")(function* (
-      sessionID: SessionSchema.ID,
-      id: string,
-      shellID: string,
-      command: string,
-      settled: Deferred.Deferred<Output>,
-    ) {
-      yield* runtime.job.wait({ id: id }).pipe(
-        Effect.flatMap((result) =>
-          Effect.gen(function* () {
-            const info = result.info
-            if (!info) return
-            const state =
-              info.status === "completed"
-                ? "completed"
-                : info.status === "error"
-                  ? "error"
-                  : info.status === "cancelled"
-                    ? "cancelled"
-                    : undefined
-            if (state === undefined) return
-            const output = state === "completed" ? yield* Deferred.await(settled) : undefined
-            const text = output
-              ? resultMessages(output).join("\n\n")
-              : state === "error"
-                ? (info.error ?? "Command failed")
-                : "Command cancelled"
-            yield* runtime.session.synthetic({
-              ...(info.notificationID ? { id: info.notificationID } : {}),
-              sessionID,
-              text: `<shell id="${id}" state="${state}" command="${command}">\n${text}\n</shell>`,
-              description: command,
-              metadata: {
-                source: "shell",
-                jobID: id,
-                shellID,
-                state,
-                ...(output
-                  ? {
-                      truncated: output.truncated,
-                      ...(output.exit !== undefined ? { exit: output.exit } : {}),
-                      ...(output.timeout !== undefined ? { timeout: output.timeout } : {}),
-                    }
-                  : {}),
-              },
-            })
-            if (info.notificationID) yield* runtime.job.completeBackground(info.notificationID)
-          }),
-        ),
-        Effect.forkIn(scope, { startImmediately: true }),
-      )
-    })
+    const notifyWhenDone = Effect.fn("ShellTool.notifyWhenDone")(
+      function* (
+        sessionID: SessionSchema.ID,
+        id: string,
+        shellID: string,
+        command: string,
+        settled: Deferred.Deferred<Output>,
+      ) {
+        const info = (yield* runtime.job.wait({ id })).info
+        if (!info || info.status === "running") return
+        const output = info.status === "completed" ? yield* Deferred.await(settled) : undefined
+        const text = output
+          ? resultMessages(output).join("\n\n")
+          : info.status === "error"
+            ? (info.error ?? "Command failed")
+            : "Command cancelled"
+        yield* runtime.session.synthetic({
+          ...(info.notificationID ? { id: info.notificationID } : {}),
+          sessionID,
+          text: `<shell id="${id}" state="${info.status}" command="${command}">\n${text}\n</shell>`,
+          description: command,
+          metadata: {
+            source: "shell",
+            jobID: id,
+            shellID,
+            state: info.status,
+            ...(output
+              ? {
+                  truncated: output.truncated,
+                  ...(output.exit !== undefined ? { exit: output.exit } : {}),
+                  ...(output.timeout !== undefined ? { timeout: output.timeout } : {}),
+                }
+              : {}),
+          },
+        })
+        if (info.notificationID) yield* runtime.job.completeBackground(info.notificationID)
+      },
+      (effect) => Effect.forkIn(scope, { startImmediately: true })(effect),
+    )
 
     yield* ctx.tool
       .transform((draft) =>

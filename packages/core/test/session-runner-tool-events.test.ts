@@ -128,6 +128,35 @@ test("interrupted progress metadata remains in the terminal failure snapshot", a
   })
 })
 
+test("interrupted subagent failures expose their existing child session to the model", async () => {
+  const { published, publisher } = capture("anthropic", { interruptProgress: true })
+  const subagent = LLMEvent.toolCall({
+    id: "call-subagent",
+    name: "subagent",
+    input: { agent: "general", description: "Recover child", prompt: "Continue working" },
+  })
+  await Effect.runPromise(publisher.publish(subagent))
+  await Effect.runPromiseExit(publisher.progress(subagent.id, { sessionID: "ses_existing_child", status: "running" }))
+  await Effect.runPromise(publisher.failUnsettledTools({ type: "aborted", message: "Tool execution interrupted" }))
+
+  expect(published.find((event) => event.type === "session.tool.failed.2")?.data).toMatchObject({
+    error: { type: "aborted", message: "Tool execution interrupted (sessionID: ses_existing_child)" },
+    metadata: { sessionID: "ses_existing_child", status: "running" },
+  })
+})
+
+test("interrupted non-subagent failures do not expose their progress session IDs", async () => {
+  const { published, publisher } = capture()
+  await Effect.runPromise(publisher.publish(call))
+  await Effect.runPromise(publisher.progress(call.id, { sessionID: "ses_private", status: "running" }))
+  await Effect.runPromise(publisher.failUnsettledTools({ type: "aborted", message: "Tool execution interrupted" }))
+
+  expect(published.find((event) => event.type === "session.tool.failed.2")?.data).toMatchObject({
+    error: { type: "aborted", message: "Tool execution interrupted" },
+    metadata: { sessionID: "ses_private", status: "running" },
+  })
+})
+
 test("local failure metadata completes the progress snapshot", async () => {
   const { published, publisher } = capture()
   await Effect.runPromise(publisher.publish(call))

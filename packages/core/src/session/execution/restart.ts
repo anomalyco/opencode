@@ -132,7 +132,6 @@ export const layer = (options?: Options) =>
       const recoverSubagent = Effect.fnUntraced(function* (
         background: Job.Background,
         recovery: Extract<Job.Recovery, { kind: "subagent" }>,
-        active: ReadonlySet<SessionSchema.ID>,
       ) {
         const child = yield* store.get(recovery.childSessionID)
         if (!child || child.parentID !== recovery.parentSessionID || !(yield* store.get(recovery.parentSessionID))) {
@@ -174,7 +173,7 @@ export const layer = (options?: Options) =>
           yield* notify(background)
           return
         }
-        if (active.has(recovery.childSessionID)) return
+        if ((yield* execution.active).has(recovery.childSessionID)) return
         if (!(yield* prepareResume(recovery.childSessionID))) {
           yield* notify({ status: "error", error: RESUME_EXHAUSTED.message })
           return
@@ -221,17 +220,15 @@ export const layer = (options?: Options) =>
                 : [],
             ),
           )
-          const active = yield* execution.active
           yield* Effect.forEach(
             pending,
-            (background) =>
-              Effect.gen(function* () {
-                if ((yield* jobs.get(background.id))?.status === "running") return
-                const recovery = background.recovery
-                yield* recovery.kind === "shell"
-                  ? recoverShell(background, recovery)
-                  : recoverSubagent(background, recovery, active)
-              }),
+            Effect.fnUntraced(function* (background) {
+              if ((yield* jobs.get(background.id))?.status === "running") return
+              const recovery = background.recovery
+              yield* recovery.kind === "shell"
+                ? recoverShell(background, recovery)
+                : recoverSubagent(background, recovery)
+            }),
             { discard: true },
           )
 
@@ -240,11 +237,9 @@ export const layer = (options?: Options) =>
           yield* Effect.forEach(
             (yield* store.listSuspended()).filter((sessionID) => !resumed.has(sessionID)),
             (sessionID) =>
-              prepareResume(sessionID).pipe(
-                Effect.flatMap((resume) =>
-                  resume ? execution.resume(sessionID).pipe(Effect.ignore, Effect.forkIn(scope)) : Effect.void,
-                ),
-              ),
+              execution
+                .resume(sessionID)
+                .pipe(Effect.ignore, Effect.forkIn(scope), Effect.when(prepareResume(sessionID))),
             { concurrency: "unbounded", discard: true },
           )
         }),

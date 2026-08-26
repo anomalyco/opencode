@@ -79,7 +79,7 @@ import { Provider } from "@opencode-ai/core/provider"
 import { Cause, Deferred, Effect, Exit, Fiber, Layer, Schema, Scope, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
-import { asc, desc, eq } from "drizzle-orm"
+import { asc, desc, eq, sql } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
 import { agentHost, catalogHost, host } from "./plugin/host"
@@ -3588,6 +3588,81 @@ describe("SessionRunnerLLM", () => {
           ],
         },
       ])
+    }),
+  )
+
+  it.effect("preserves a stale subagent child session in its model-visible failure", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      const bus = yield* Bus.Service
+      const database = yield* Database.Service
+      yield* admit(session, "Recover interrupted subagent")
+      yield* SessionInbox.promote(database.db, bus, sessionID, "steer")
+      const assistantMessageID = SessionMessage.ID.create()
+      yield* bus.publish(SessionEvent.Step.Started, {
+        sessionID,
+        assistantMessageID,
+        agent: Agent.ID.make("build"),
+        model: { id: ID.make("fake-model"), providerID: Provider.ID.make("fake") },
+      })
+      yield* bus.publish(SessionEvent.Tool.Input.Started, {
+        sessionID,
+        assistantMessageID,
+        id: "call-interrupted-subagent",
+        name: "subagent",
+      })
+      yield* bus.publish(SessionEvent.Tool.Input.Ended, {
+        sessionID,
+        assistantMessageID,
+        id: "call-interrupted-subagent",
+        text: '{"agent":"general"}',
+      })
+      yield* bus.publish(SessionEvent.Tool.Called, {
+        sessionID,
+        assistantMessageID,
+        id: "call-interrupted-subagent",
+        input: { agent: "general" },
+        executed: false,
+      })
+      yield* database.db
+        .update(SessionMessageTable)
+        .set({
+          data: sql`json_set(
+            ${SessionMessageTable.data},
+            '$.content[0].state.metadata',
+            json('{"sessionID":"ses_existing_child","status":"running","internal":"private"}')
+          )`,
+        })
+        .where(eq(SessionMessageTable.id, assistantMessageID))
+        .run()
+        .pipe(Effect.orDie)
+      requests.length = 0
+      yield* TestLLM.push([])
+      yield* session.resume(sessionID)
+
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Recover interrupted subagent" },
+        {
+          type: "assistant",
+          content: [
+            {
+              type: "tool",
+              id: "call-interrupted-subagent",
+              state: {
+                status: "error",
+                error: {
+                  type: "aborted",
+                  message: "Tool execution interrupted: subagent (sessionID: ses_existing_child)",
+                },
+                metadata: { sessionID: "ses_existing_child", status: "running", internal: "private" },
+              },
+            },
+          ],
+        },
+      ])
+      const modelResult = JSON.stringify(requests[0]?.messages.at(-1))
+      expect(modelResult).toContain("ses_existing_child")
+      expect(modelResult).not.toContain("private")
     }),
   )
 

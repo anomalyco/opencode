@@ -326,7 +326,10 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
       sessionID: input.sessionID,
       assistantMessageID: tool.assistantMessageID,
       id,
-      error,
+      error:
+        tool.name === "subagent" && error.type === "aborted" && typeof tool.progress?.sessionID === "string"
+          ? { ...error, message: `${error.message} (sessionID: ${tool.progress.sessionID})` }
+          : error,
       ...failureSnapshot(tool, metadata),
       executed: tool.providerExecuted,
     })
