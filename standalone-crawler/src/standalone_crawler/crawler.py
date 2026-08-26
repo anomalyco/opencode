@@ -104,6 +104,11 @@ class Crawler:
             images = (
                 self._extractor.extract_images(document, base_url) if config.extract_images else []
             )
+            videos = self._extractor.extract_videos(document, base_url)
+            tables = self._extractor.extract_tables(document)
+            lists = self._extractor.extract_lists(document)
+            structured_data = self._extractor.extract_structured_data(document)
+            breadcrumbs = self._extractor.extract_breadcrumbs(document)
         except CrawlerError as exc:
             logger.warning("Extraction failed for %s: %s", url, exc)
             return self._failure_result(request_info, exc, response=response_info)
@@ -120,10 +125,20 @@ class Crawler:
             language=language,
             canonical_url=canonical or base_url,
         )
-        content_info = ContentInfo(text=main_text, headings=headings, paragraphs=paragraphs)
+        content_info = ContentInfo(
+            text=main_text,
+            headings=headings,
+            paragraphs=paragraphs,
+            lists=lists,
+            tables=tables,
+        )
 
         logger.info("Extracted %d links", len(links))
         logger.info("Extracted %d paragraphs", len(paragraphs))
+        logger.info("Extracted %d tables", len(tables))
+        logger.info("Extracted %d list items", len(lists))
+        logger.info("Extracted %d videos", len(videos))
+        logger.info("Extracted %d structured data items", len(structured_data))
 
         return CrawlResult(
             success=True,
@@ -133,7 +148,10 @@ class Crawler:
             content=content_info,
             links=links,
             images=images,
+            videos=videos,
             metadata=metadata if metadata else {},
+            structured_data=structured_data,
+            breadcrumbs=breadcrumbs,
             error=None,
             raw_html=page.html,
         )

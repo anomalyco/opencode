@@ -108,6 +108,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Keep browser open for N seconds after page load (headed mode only).",
     )
     parser.add_argument(
+        "--scroll",
+        action="store_true",
+        default=False,
+        help="Auto-scroll the page incrementally to load lazy content (browser/stealth modes).",
+    )
+    parser.add_argument(
         "--indent",
         type=int,
         default=2,
@@ -142,6 +148,7 @@ def main(argv: list[str] | None = None) -> int:
         browser_profile=args.browser_profile,
         headed=args.headed,
         hold_open_seconds=args.hold_open_seconds,
+        scroll=args.scroll,
     )
 
     crawler = Crawler()
