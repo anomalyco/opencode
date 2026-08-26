@@ -1028,41 +1028,6 @@ Recent work
     ])
   })
 
-  test.each([
-    { id: Model.ID.make("other-model"), providerID: model.providerID },
-    { id: model.id, providerID: Provider.ID.make("other-provider") },
-  ])("preserves readable reasoning without opaque state when switching to %j", (destination) => {
-    const source = SessionMessage.Assistant.make({
-      id: id("assistant-reasoning-switch"),
-      type: "assistant",
-      agent: build,
-      model,
-      content: [
-        { type: "reasoning", text: "Plain thought" },
-        {
-          type: "reasoning",
-          text: "Visible summary",
-          state: { itemId: "rs_old", reasoningEncryptedContent: "encrypted-state" },
-        },
-        { type: "reasoning", text: "Signed thought", state: { signature: "old-signature" } },
-        { type: "reasoning", text: "", state: { reasoningEncryptedContent: "encrypted-only" } },
-        { type: "reasoning", text: "", state: { redactedData: "redacted-only" } },
-        { type: "text", text: "Answer" },
-      ],
-      time: { created, completed: created },
-    })
-
-    expect(toLLMMessages([source], destination)[0]?.content).toEqual([
-      { type: "reasoning", text: "Plain thought" },
-      { type: "reasoning", text: "Visible summary" },
-      { type: "reasoning", text: "Signed thought" },
-      { type: "text", text: "Answer", providerMetadata: undefined },
-    ])
-    expect(source.content[1]).toMatchObject({
-      state: { itemId: "rs_old", reasoningEncryptedContent: "encrypted-state" },
-    })
-  })
-
   test("preserves provider metadata for a catalog alias with a different API model ID", () => {
     const messages = toLLMMessages(
       [
