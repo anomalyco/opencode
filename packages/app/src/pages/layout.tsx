@@ -973,17 +973,6 @@ export default function LegacyLayout(props: ParentProps) {
         onSelect: () => navigateSessionByUnseen(1),
       },
       {
-        id: "session.archive",
-        title: language.t("command.session.archive"),
-        category: language.t("command.category.session"),
-        keybind: "mod+shift+backspace",
-        disabled: !params.dir || !params.id,
-        onSelect: () => {
-          const session = currentSessions().find((s) => s.id === params.id)
-          if (session) void archiveSession(session)
-        },
-      },
-      {
         id: "workspace.new",
         title: language.t("workspace.new"),
         category: language.t("command.category.workspace"),
