@@ -179,6 +179,108 @@ export const MovedLocation = {
   ),
 }
 
+export const InterruptedTurn = {
+  render: () => (
+    <CurrentSessionTimelineStory
+      title="Interrupted assistant turn"
+      description="The interruption divider stays between the original response and its continuation."
+      document={{
+        ...thinkingDocument,
+        status: { type: "idle" },
+        messages: [
+          ...thinkingDocument.messages,
+          {
+            id: "msg_story_interrupted_before",
+            type: "assistant",
+            agent: "build",
+            model: { id: "claude-sonnet-4", providerID: "anthropic" },
+            content: [{ type: "text", text: "Before" }],
+            error: { type: "MessageAbortedError", message: "Stopped" },
+            time: { created: 1_735_689_633_000, completed: 1_735_689_634_000 },
+          },
+          {
+            id: "msg_story_interrupted_after",
+            type: "assistant",
+            agent: "build",
+            model: { id: "claude-sonnet-4", providerID: "anthropic" },
+            content: [{ type: "text", text: "After" }],
+            time: { created: 1_735_689_635_000, completed: 1_735_689_636_000 },
+          },
+        ],
+      }}
+      width="560px"
+    />
+  ),
+}
+
+export const AliasedModelNotices = {
+  render: () => (
+    <CurrentSessionTimelineStory
+      title="Aliased model notices"
+      description="Provider display names, model variants, and long-name truncation use the production notice component."
+      document={{
+        ...thinkingDocument,
+        status: { type: "idle" },
+        messages: [
+          {
+            id: "msg_story_fast_nano",
+            type: "model-switched",
+            model: { providerID: "company-gateway", id: "fast-nano", variant: "xhigh" },
+            time: { created: 1_735_689_590_000 },
+          },
+          {
+            id: "msg_story_long_context",
+            type: "model-switched",
+            model: { providerID: "company-gateway", id: "long-context" },
+            time: { created: 1_735_689_591_000 },
+          },
+          ...thinkingDocument.messages,
+        ],
+      }}
+      width="420px"
+    />
+  ),
+}
+
+export const RichUserAttachments = {
+  render: () => (
+    <CurrentSessionTimelineStory
+      title="Prompt with rich attachments"
+      description="An image, JSON attachment, source-file reference, and agent mention remain individually visible."
+      document={{
+        ...thinkingDocument,
+        status: { type: "idle" },
+        messages: [
+          {
+            id: "msg_story_rich_user",
+            type: "user",
+            text: "Use @explore with @src/a.ts and inspect the attachments",
+            agents: [{ name: "explore", mention: { text: "@explore", start: 4, end: 12 } }],
+            files: [
+              {
+                data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+                mime: "image/png",
+                name: "pixel.png",
+                source: { type: "inline" },
+              },
+              { data: "e30=", mime: "application/json", name: "tsconfig.json", source: { type: "inline" } },
+              {
+                data: "",
+                mime: "text/plain",
+                name: "a.ts",
+                source: { type: "path", path: "src/a.ts" },
+                mention: { text: "@src/a.ts", start: 18, end: 27 },
+              },
+            ],
+            time: { created: 1_735_689_633_000 },
+          },
+        ],
+      }}
+      width="620px"
+    />
+  ),
+}
+
 export const InstructionsUpdatedSingle = {
   render: () => (
     <CurrentSessionTimelineStory

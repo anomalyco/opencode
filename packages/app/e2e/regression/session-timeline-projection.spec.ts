@@ -7,7 +7,6 @@ import {
   toolPart,
   userMessage,
   userText,
-  type PartSeed,
 } from "../performance/timeline-stability/fixture"
 
 test.describe("session timeline projection", () => {
@@ -122,132 +121,7 @@ test.describe("session timeline projection", () => {
     await scroller.evaluate((element) => (element.scrollTop = element.scrollHeight))
     await expect(page.locator('[data-timeline-row="TurnGap"]')).toBeVisible()
   })
-
-  test("renders interruption independently when the turn is not compacted", async ({ page }) => {
-    const user = userMessage()
-    const before = assistantMessage([{ id: "prt_before", type: "text", text: "Before" }], {
-      id: "msg_1001_before",
-      error: { type: "MessageAbortedError", message: "Stopped" },
-    })
-    const after = assistantMessage([{ id: "prt_after", type: "text", text: "After" }], {
-      id: "msg_1002_after",
-      created: 1700000003000,
-    })
-    await setupTimeline(page, { messages: [user, before, after] })
-
-    await expect(page.getByText("Interrupted", { exact: true })).toBeVisible()
-    const rows = await page
-      .locator('[data-timeline-row="AssistantPart"], [data-timeline-row="TurnDivider"]')
-      .evaluateAll((elements) => elements.map((element) => element.getAttribute("data-timeline-row")))
-    expect(rows).toEqual(["AssistantPart", "TurnDivider", "AssistantPart"])
-  })
-
-  test("renders aliased and long custom model notices", async ({ page }) => {
-    const shortName = "GPT-5.4 nano"
-    const longName = "Company Gateway Extra Long Context Model for Narrow Timeline Layouts"
-    await setupTimeline(page, {
-      viewport: { width: 420, height: 700 },
-      sessionMessages: [
-        {
-          id: "msg_model_fast_nano",
-          type: "model-switched",
-          time: { created: 1700000000000 },
-          model: { providerID: "company-gateway", id: "fast-nano", variant: "xhigh" },
-        },
-        {
-          id: "msg_model_long_context",
-          type: "model-switched",
-          time: { created: 1700000001000 },
-          model: { providerID: "company-gateway", id: "long-context" },
-        },
-        userMessage(),
-        assistantMessage(),
-      ],
-    })
-
-    const shortNotice = page.locator('[data-slot="session-timeline-notice"]').filter({ hasText: shortName })
-    const longNotice = page.locator('[data-slot="session-timeline-notice"]').filter({ hasText: longName })
-    await expect(shortNotice).toBeVisible()
-    await expect(shortNotice.getByText(`Switched to ${shortName}`, { exact: true })).toBeVisible()
-    await expect(shortNotice.locator('[data-slot="session-timeline-notice-variant"]')).toHaveText("xhigh")
-    await expect(page.getByText("fast-nano", { exact: true })).toHaveCount(0)
-    await expect(shortNotice.locator('[data-component="provider-icon"]')).toBeVisible()
-    await expect(longNotice).toBeVisible()
-    await expect(longNotice.locator('[data-component="provider-icon"]')).toBeVisible()
-    await expect(longNotice.locator('[data-slot="session-timeline-notice-variant"]')).toHaveCount(0)
-    await expect(longNotice.locator("[title]")).toHaveAttribute("title", `Switched to ${longName}`)
-    await expect.poll(() => longNotice.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true)
-  })
-
-  test("renders user image, file attachment, file reference, and agent reference", async ({ page }) => {
-    const text = "Use @explore with @src/a.ts and inspect the attachments"
-    const parts: PartSeed<"user">[] = [
-      userText(text, { id: "prt_user_rich" }),
-      {
-        id: "prt_user_image",
-        type: "file",
-        mime: "image/png",
-        filename: "pixel.png",
-        url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
-      },
-      {
-        id: "prt_user_attachment",
-        type: "file",
-        mime: "application/json",
-        filename: "tsconfig.json",
-        url: "data:application/json;base64,e30=",
-      },
-      {
-        id: "prt_user_reference",
-        type: "file",
-        mime: "text/plain",
-        filename: "a.ts",
-        url: "src/a.ts",
-        source: { type: "file", path: "src/a.ts", text: { value: "@src/a.ts", start: 18, end: 27 } },
-      },
-      {
-        id: "prt_user_agent",
-        type: "agent",
-        name: "explore",
-        source: { value: "@explore", start: 4, end: 12 },
-      },
-    ]
-    await setupTimeline(page, { messages: [userMessage(parts), assistantMessage()] })
-
-    await expect(page.getByAltText("pixel.png")).toBeVisible()
-    await expect(page.getByText("tsconfig.json")).toBeVisible()
-    await expect(page.getByText("@src/a.ts", { exact: true })).toBeVisible()
-    await expect(page.getByText("@explore", { exact: true })).toBeVisible()
-  })
 })
-
-function editPart(id: string) {
-  return toolPart(
-    id,
-    "edit",
-    "completed",
-    { path: "src/a.ts", oldString: "export const value = 1", newString: "export const value = 2" },
-    {
-      metadata: {
-        files: [patchFile("src/a.ts", "modified")],
-      },
-    },
-  )
-}
-
-function patchPart(id: string) {
-  return toolPart(
-    id,
-    "patch",
-    "completed",
-    { patchText: "Update the projected files" },
-    {
-      metadata: {
-        files: [patchFile("src/a.ts", "modified")],
-      },
-    },
-  )
-}
 
 function patchFile(file: string, status: "added" | "modified" | "deleted") {
   return {

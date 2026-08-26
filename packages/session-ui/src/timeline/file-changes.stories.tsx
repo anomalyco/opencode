@@ -1,4 +1,6 @@
-import { CurrentSessionTimelineStory } from "../storybook/current-session-story"
+import { createMemo } from "solid-js"
+import { createStore } from "solid-js/store"
+import { CurrentSessionProviders, CurrentSessionTimelineStory } from "../storybook/current-session-story"
 import {
   editThenTestDocument,
   fileChangeLoadingDocument,
@@ -69,6 +71,37 @@ export const PatchedTwoFiles = {
     />
   ),
 }
+
+function EditSiblingUpdateStory() {
+  const [state, setState] = createStore({ sibling: false })
+  const document = createMemo(() => ({
+    ...editThenTestDocument,
+    messages: editThenTestDocument.messages
+      .filter((message) => message.id === "msg_user_edit" || message.id === "msg_assistant_edit")
+      .map((message) => {
+        if (message.type !== "assistant" || !state.sibling) return message
+        return {
+          ...message,
+          content: [
+            ...message.content,
+            { type: "text" as const, text: "Streaming added a later assistant text part." },
+          ],
+        }
+      }),
+  }))
+  return (
+    <section class="mx-auto flex w-full max-w-[860px] flex-col gap-4 p-6">
+      <button type="button" onClick={() => setState("sibling", true)}>
+        Stream sibling content
+      </button>
+      <CurrentSessionProviders document={document()}>
+        <SessionTimeline document={document()} editToolDefaultOpen />
+      </CurrentSessionProviders>
+    </section>
+  )
+}
+
+export const EditWithStreamedSibling = { render: () => <EditSiblingUpdateStory /> }
 
 export const CreatedANewFile = {
   render: () => (

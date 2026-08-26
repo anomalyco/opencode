@@ -68,6 +68,39 @@ story("shimmers and expands a running shell command", async ({ mount }) => {
   await expect(tool.locator('[data-slot="bash-pre"]')).toContainText("still running")
 })
 
+// Moved from packages/app/e2e/regression/session-timeline-lifecycle-state.spec.ts
+story("transitions thinking and hidden reasoning through busy to idle", async ({ mount }) => {
+  const timeline = await mount("current-session-reasoning-projection--hidden-reasoning-lifecycle")
+  const reasoning = timeline.locator('[data-timeline-part-id="msg_hidden_reasoning_lifecycle:reasoning:0"]')
+  await expect(timeline.locator('[data-timeline-row="Thinking"]')).toBeVisible()
+  await expect(timeline.getByText("Inspecting stability", { exact: true })).toBeVisible()
+  await expect(reasoning).toHaveCount(0)
+  await timeline.getByRole("button", { name: "Start shell" }).click()
+  await expect(timeline.locator('[data-timeline-row="Thinking"]')).toBeVisible()
+  await expect(timeline.locator('[data-timeline-part-id="tool_hidden_reasoning_shell"]')).toBeVisible()
+  await timeline.getByRole("button", { name: "Finish session" }).click()
+  await expect(timeline.locator('[data-timeline-row="Thinking"]')).toHaveCount(0)
+  await expect(reasoning).toHaveCount(0)
+})
+
+// Moved from packages/app/e2e/regression/session-timeline-lifecycle-state.spec.ts
+story("moves busy through retry and recovery to final idle content", async ({ mount }) => {
+  const timeline = await mount("current-session-reasoning-projection--retry-recovery-lifecycle")
+  await expect(timeline.locator('[data-timeline-row="Thinking"]')).toBeVisible()
+  await expect(timeline.locator('[data-timeline-row="DiffSummary"]')).toHaveCount(0)
+  await timeline.getByRole("button", { name: "Retry request" }).click()
+  await expect(timeline.locator('[data-timeline-row="Retry"]')).toBeVisible()
+  await expect(timeline.locator('[data-timeline-row="Thinking"]')).toHaveCount(0)
+  await timeline.getByRole("button", { name: "Recover request" }).click()
+  await expect(timeline.locator('[data-timeline-row="Retry"]')).toHaveCount(0)
+  await expect(timeline.locator('[data-timeline-row="Thinking"]')).toBeVisible()
+  await timeline.getByRole("button", { name: "Finish response" }).click()
+  await expect(timeline.locator('[data-timeline-row="Thinking"]')).toHaveCount(0)
+  await expect(timeline.locator('[data-timeline-part-id="msg_retry_recovery_lifecycle:text:0"]')).toContainText(
+    "Recovered response",
+  )
+})
+
 for (const profile of [
   { locale: "de", story: "completed-german", label: "Erkundung abgeschlossen" },
   { locale: "ar", story: "completed-arabic", label: "تم الاستكشاف" },

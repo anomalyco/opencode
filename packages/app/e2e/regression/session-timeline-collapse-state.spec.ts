@@ -1,4 +1,4 @@
-import { expect, test, type Locator, type Page } from "@playwright/test"
+import { expect, test, type Page } from "@playwright/test"
 import type { JsonValue, OpenCodeEvent, SessionMessageAssistant, SessionMessageInfo } from "@opencode-ai/client/promise"
 import { mockOpenCodeServer } from "../utils/mock-server"
 import { expectAppVisible, expectSessionTitle } from "../utils/waits"
@@ -10,7 +10,6 @@ const sessionID = "ses_timeline_state_regression"
 const userMessageID = "msg_user_regression"
 const assistantMessageID = "msg_assistant_regression"
 const editPartID = "prt_0001_edit"
-const textPartID = `${assistantMessageID}:text:0`
 const title = "Timeline collapse state regression"
 const model = { providerID: "opencode", modelID: "claude-opus-4-6", variant: "max" }
 
@@ -84,37 +83,6 @@ const assistantMessage = {
 } satisfies SessionMessageInfo
 
 test.describe("regression: session timeline local row state", () => {
-  test("keeps a manually collapsed tool collapsed when later assistant content streams", async ({ page }) => {
-    const events: EventPayload[] = []
-    await mockServer(page, events)
-    await configurePage(page)
-
-    await page.goto(sessionHref())
-    await expectSessionTitle(page, title)
-
-    const wrapper = page.locator(`[data-timeline-part-id="${editPartID}"]`).first()
-    await expectAppVisible(wrapper)
-    await expectExpanded(wrapper, true)
-
-    await wrapper.evaluate((element) => {
-      ;(element as HTMLElement).dataset.regressionMarker = "before-stream"
-    })
-    await wrapper.locator('[data-scope="apply-patch"] button').click()
-    await expectExpanded(wrapper, false)
-
-    events.push(...textEvents())
-
-    await expect(page.locator(`[data-timeline-part-id="${assistantMessageID}:text:0"]`).first()).toBeVisible({
-      timeout: 10_000,
-    })
-
-    expect(await readToolState(page)).toEqual({
-      expanded: false,
-      row: "AssistantPart",
-      streamedTextVisible: true,
-    })
-  })
-
   test("does not remount an edit diff when a sibling part arrives", async ({ page }) => {
     const events: EventPayload[] = []
     await installDiffProbe(page)
@@ -223,38 +191,6 @@ async function configurePage(page: Page) {
   })
 }
 
-async function expectExpanded(locator: Locator, expected: boolean) {
-  await expect.poll(() => locator.evaluate(readExpanded)).toBe(expected)
-}
-
-async function readToolState(page: Page) {
-  return page
-    .locator(`[data-timeline-part-id="${editPartID}"]`)
-    .first()
-    .evaluate(
-      (element, textPartID) => ({
-        expanded: (() => {
-          const trigger =
-            element.querySelector('[data-scope="apply-patch"] button') ??
-            element.querySelector('[data-slot="collapsible-trigger"]')
-          const aria = trigger?.getAttribute("aria-expanded")
-          if (aria === "true") return true
-          if (aria === "false") return false
-
-          const root = element.querySelector('[data-component="collapsible"]')
-          if (root?.hasAttribute("data-expanded")) return true
-          if (root?.hasAttribute("data-closed")) return false
-
-          const content = element.querySelector<HTMLElement>('[data-slot="collapsible-content"]')
-          return !!content && content.getBoundingClientRect().height > 0
-        })(),
-        row: element.closest("[data-timeline-row]")?.getAttribute("data-timeline-row"),
-        streamedTextVisible: !!document.querySelector(`[data-timeline-part-id="${textPartID}"]`),
-      }),
-      `${assistantMessageID}:text:0`,
-    )
-}
-
 async function installDiffProbe(page: Page) {
   await page.addInitScript(() => {
     let shadowRootCount = 0
@@ -346,54 +282,6 @@ function textEvents(): OpenCodeEvent[] {
   ]
 }
 
-function toolEvents(part: typeof editPart): OpenCodeEvent[] {
-  return [
-    eventValue(
-      "session.tool.input.started",
-      {
-        sessionID,
-        assistantMessageID,
-        id: part.callID,
-        name: part.tool,
-      },
-      1,
-    ),
-    eventValue(
-      "session.tool.input.ended",
-      {
-        sessionID,
-        assistantMessageID,
-        id: part.callID,
-        text: JSON.stringify(part.state.input),
-      },
-      1,
-    ),
-    eventValue(
-      "session.tool.called",
-      {
-        sessionID,
-        assistantMessageID,
-        id: part.callID,
-        input: part.state.input,
-        executed: true,
-      },
-      1,
-    ),
-    eventValue(
-      "session.tool.success",
-      {
-        sessionID,
-        assistantMessageID,
-        id: part.callID,
-        content: [{ type: "text", text: part.state.output }],
-        metadata: part.state.metadata as Record<string, JsonValue>,
-        executed: true,
-      },
-      2,
-    ),
-  ]
-}
-
 function eventValue<Type extends OpenCodeEvent["type"]>(
   type: Type,
   data: Extract<OpenCodeEvent, { type: Type }>["data"],
@@ -408,22 +296,6 @@ function eventValue<Type extends OpenCodeEvent["type"]>(
     location: { directory },
     durable: { aggregateID: sessionID, seq: eventSequence, version },
   } as unknown as Extract<OpenCodeEvent, { type: Type }>
-}
-
-function readExpanded(element: Element) {
-  const trigger =
-    element.querySelector('[data-scope="apply-patch"] button') ??
-    element.querySelector('[data-slot="collapsible-trigger"]')
-  const aria = trigger?.getAttribute("aria-expanded")
-  if (aria === "true") return true
-  if (aria === "false") return false
-
-  const root = element.querySelector('[data-component="collapsible"]')
-  if (root?.hasAttribute("data-expanded")) return true
-  if (root?.hasAttribute("data-closed")) return false
-
-  const content = element.querySelector<HTMLElement>('[data-slot="collapsible-content"]')
-  return !!content && content.getBoundingClientRect().height > 0
 }
 
 async function mockServer(
