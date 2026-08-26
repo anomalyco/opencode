@@ -507,9 +507,11 @@ const layer = Layer.effect(
       from: TreeID
       to: TreeID
     }) {
+      // Undo needs both paths of a rename, not only its destination.
       return (yield* repositoryOperation("list_files", input.repository, [
         "diff",
         "--name-only",
+        "--no-renames",
         "-z",
         input.from,
         input.to,
