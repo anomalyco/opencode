@@ -1,11 +1,11 @@
 import type { IntegrationOAuthMethodRegistration } from "@opencode-ai/plugin/effect/integration"
 import { define } from "@opencode-ai/plugin/effect/plugin"
-import { Deferred, Effect, Option, Schema, Semaphore, Stream } from "effect"
+import { Deferred, Effect, Option, Schema } from "effect"
 import type { Server } from "node:http"
 import { App } from "../../app.js"
 import { Credential } from "../../credential.js"
-import { Bus } from "../../bus.js"
 import { Integration } from "../../integration.js"
+import type { Info } from "../../model.js"
 import { OauthCallbackPage } from "../../oauth/page.js"
 import { Provider } from "../../provider.js"
 import type { PluginInternal } from "../internal.js"
@@ -20,8 +20,27 @@ const pollingSafetyMargin = 3000
 const codexBaseURL = "https://chatgpt.com/backend-api/codex"
 const browserMethodID = Integration.MethodID.make("chatgpt-browser")
 const headlessMethodID = Integration.MethodID.make("chatgpt-headless")
-const codexAllowed = new Set(["gpt-5.5", "gpt-5.3-codex-spark", "gpt-5.4", "gpt-5.4-mini"])
-const codexDisallowed = new Set(["gpt-5.5-pro", "gpt-5.6"])
+
+export function applyCredentialTransport(model: Info, credential: Credential.Value | undefined): Info {
+  if (model.providerID !== Provider.ID.openai || !isChatGPTCredential(credential)) return model
+  const account = credential.metadata?.accountID
+  return {
+    ...model,
+    // ChatGPT OAuth access tokens are valid only for Codex, never a configured proxy endpoint.
+    settings: Provider.mergeOverlay(model.settings, { baseURL: codexBaseURL }),
+    headers: Provider.mergeHeaders(model.headers, {
+      originator: "opencode",
+      ...(typeof account === "string" ? { "chatgpt-account-id": account } : {}),
+    }),
+  }
+}
+
+function isChatGPTCredential(credential: Credential.Value | undefined): credential is Credential.OAuth {
+  return (
+    credential?.type === "oauth" &&
+    (credential.methodID === browserMethodID || credential.methodID === headlessMethodID)
+  )
+}
 
 type Pkce = {
   verifier: string
@@ -229,27 +248,10 @@ const headless = (app: App.Info) =>
 export const OpenAIPlugin = define({
   id: "opencode.provider.openai",
   effect: Effect.fn(function* (ctx) {
-    const bus = yield* Bus.Service
-    const loading = Semaphore.makeUnsafe(1)
-    let chatgpt: Credential.OAuth | undefined
-
-    const load = Effect.fn("OpenAIPlugin.load")(function* () {
-      const connection = yield* ctx.integration.connection.active("openai")
-      const credential = connection
-        ? yield* ctx.integration.connection.resolve(connection).pipe(Effect.orElseSucceed(() => undefined))
-        : undefined
-      chatgpt =
-        credential?.type === "oauth" &&
-        (credential.methodID === browserMethodID || credential.methodID === headlessMethodID)
-          ? credential
-          : undefined
-    })
-
     yield* ctx.integration.transform((draft) => {
       draft.method.update(browser(ctx.app))
       draft.method.update(headless(ctx.app))
     })
-    yield* load()
     yield* ctx.catalog.transform((evt) => {
       const item = evt.provider.get(Provider.ID.openai)
       if (!item) return
@@ -258,53 +260,15 @@ export const OpenAIPlugin = define({
           draft.capabilities.responsesWebsockets = true
         })
       }
-      if (!chatgpt) return
-      item.provider.settings = Provider.mergeOverlay(item.provider.settings, { baseURL: codexBaseURL })
-      const account = chatgpt.metadata?.accountID
-      item.provider.headers = Provider.mergeHeaders(item.provider.headers, {
-        originator: "opencode",
-        ...(typeof account === "string" ? { "chatgpt-account-id": account } : {}),
-      })
-      for (const model of item.models.values()) {
-        // ChatGPT-plan tokens only authorize codex-eligible models, and the
-        // subscription covers usage, so hide the rest and zero the cost.
-        evt.model.update(item.provider.id, model.id, (draft) => {
-          if (Schema.is(Schema.Struct({ mode: Schema.Literal("pro") }))(draft.body?.reasoning)) {
-            draft.enabled = false
-            return
-          }
-          const apiID = draft.modelID ?? draft.id
-          const match = apiID.match(/^gpt-(\d+\.\d+)/)
-          if (
-            !codexAllowed.has(apiID) &&
-            (codexDisallowed.has(apiID) || !match || Number.parseFloat(match[1]) <= 5.4)
-          ) {
-            draft.enabled = false
-            return
-          }
-          draft.cost = []
-          // Match Codex CLI so context consumption and subscription usage stay consistent between clients.
-          draft.limit = { ...draft.limit, context: 400_000, input: 272_000 }
-        })
-      }
     })
     yield* ctx.session.hook(
       "model.request",
       (evt) =>
         Effect.sync(() => {
-          if (!chatgpt) return
-          if (evt.baseURL && URL.canParse(evt.baseURL) && new URL(evt.baseURL).origin === "https://api.openai.com")
-            evt.baseURL = codexBaseURL
-          evt.headers.originator = "opencode"
+          if (evt.baseURL !== codexBaseURL) return
           evt.headers["session-id"] = evt.sessionID
         }),
       { providerID: Provider.ID.openai },
-    )
-    const refresh = () => loading.withPermit(load().pipe(Effect.andThen(ctx.catalog.reload())))
-    yield* bus.subscribe(Credential.Event.Switched).pipe(
-      Stream.filter((event) => event.data.integrationID === Integration.ID.make("openai")),
-      Stream.runForEach(refresh),
-      Effect.forkScoped({ startImmediately: true }),
     )
   }),
 } satisfies PluginInternal.InternalPlugin)

@@ -12,6 +12,7 @@ import { Credential } from "./credential.js"
 import { Integration } from "./integration.js"
 import { Capabilities, ID, Info, Ref, VariantID } from "./model.js"
 import { Npm } from "@opencode-ai/util/npm"
+import { applyCredentialTransport } from "./plugin/provider/openai.js"
 import { Provider } from "./provider.js"
 
 export class VariantUnavailableError extends Schema.TaggedError<VariantUnavailableError>()(
@@ -277,7 +278,8 @@ export const layer = Layer.effect(
         provider?.integrationID ?? Integration.ID.make(selected.providerID),
       )
       const credential = connection ? yield* integrations.connection.resolve(connection) : undefined
-      const runtimeInfo = yield* withVariant(selected, variant)
+      // A ChatGPT OAuth-to-OpenAI API-key switch must not split a request between credential and route snapshots.
+      const runtimeInfo = applyCredentialTransport(yield* withVariant(selected, variant), credential)
       const model = yield* fromCatalogModel(runtimeInfo, credential, {
         loadPackage: (specifier) => Provider.loadPackage(specifier, npm),
         loadAISDK: (model) => aisdk.model(model),
