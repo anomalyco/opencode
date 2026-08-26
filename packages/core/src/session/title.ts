@@ -101,14 +101,15 @@ export const layer = Layer.effect(
       const session = yield* store.get(sessionID)
       if (!session) return
       const firstUser = yield* SessionHistory.firstUserMessage(db, session.id)
-      if (!firstUser) return
+      const firstPrompt = firstUser ?? (yield* SessionHistory.firstSyntheticMessage(db, session.id))
+      if (!firstPrompt) return
       const text = !isUntitled(session)
         ? yield* store.context(session.id).pipe(
             Effect.map((messages) => {
-              const original = `Original request:\n${firstUser.text.slice(0, MAX_FIRST_MESSAGE_LENGTH)}`
+              const original = `Original request:\n${firstPrompt.text.slice(0, MAX_FIRST_MESSAGE_LENGTH)}`
               const recent = messages
                 .flatMap((message) => {
-                  if (message.type === "user" && message.id !== firstUser.id) return [`User: ${message.text.trim()}`]
+                  if (message.type === "user" && message.id !== firstPrompt.id) return [`User: ${message.text.trim()}`]
                   if (message.type !== "assistant") return []
                   const text = message.content
                     .flatMap((part) => (part.type === "text" ? [part.text.trim()] : []))
@@ -121,9 +122,9 @@ export const layer = Layer.effect(
               const prefix = `${original}\n\nRecent conversation:\n`
               return `${prefix}${recent.slice(-(MAX_CONTEXT_LENGTH - prefix.length))}`
             }),
-            Effect.orElseSucceed(() => firstUser.text),
+            Effect.orElseSucceed(() => firstPrompt.text),
           )
-        : firstUser.text
+        : firstPrompt.text
       const selection = yield* context.selectTitle(session)
       if (!selection) return
       const title =

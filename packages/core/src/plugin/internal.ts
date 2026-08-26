@@ -87,6 +87,7 @@ import { AgentPlugin } from "./agent.js"
 import BrowserPlugin from "@opencode/plugin-browser"
 import { CommandPlugin } from "./command.js"
 import { NativeCompactionPlugin } from "./compaction.js"
+import { GoalPlugin } from "./goal.js"
 import { IdentityPlugin } from "./identity.js"
 import { PlanPlugin } from "./plan.js"
 import { ModelsDevPlugin } from "./models-dev.js"
@@ -216,6 +217,7 @@ const pre = [
   AgentPlugin.Plugin,
   PlanPlugin.Plugin,
   CommandPlugin.Plugin,
+  GoalPlugin.Plugin,
   SkillPlugin.Plugin,
   VcsHgPlugin.Plugin,
   ModelsDevPlugin,
