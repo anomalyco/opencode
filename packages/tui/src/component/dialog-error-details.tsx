@@ -3,13 +3,22 @@ import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import { useConfig } from "../config"
 import { useClipboard } from "../context/clipboard"
+import { useData } from "../context/data"
 import { Keymap } from "../context/keymap"
+import { useLocation } from "../context/location"
+import { useRoute } from "../context/route"
 import { getScrollAcceleration } from "../util/scroll"
 import { useTheme } from "../context/theme"
+import { emptyPrompt } from "../prompt/history"
+import { useDialog } from "../ui/dialog"
 import { useToast } from "../ui/toast"
 
 export function DialogErrorDetails(props: { title: string; error: string; onBack: () => void }) {
   const clipboard = useClipboard()
+  const data = useData()
+  const dialog = useDialog()
+  const location = useLocation()
+  const route = useRoute()
   const toast = useToast()
   const theme = useTheme("elevated")
   const overlayTheme = useTheme("overlay")
@@ -49,11 +58,25 @@ export function DialogErrorDetails(props: { title: string; error: string; onBack
       .catch(toast.error)
   }
 
+  const investigate = () => {
+    const target = location.ref ?? data.location.default()
+    route.navigate({
+      type: "home",
+      location: target,
+      prompt: {
+        ...emptyPrompt(),
+        text: `Investigate this OpenCode failure in ${target.directory}.\n\n${props.title}\n${props.error}\n\nInspect the relevant configuration and logs, identify the root cause, and suggest a fix.`,
+      },
+    })
+    dialog.clear()
+  }
+
   Keymap.createLayer(() => ({
     mode: "modal",
     commands: [
       { bind: "escape", title: "Back", group: "Dialog", run: props.onBack },
       { bind: "c", title: "Copy details", group: "Dialog", run: copy },
+      { bind: "i", title: "Investigate error", group: "Dialog", run: investigate },
     ],
   }))
 
@@ -102,12 +125,20 @@ export function DialogErrorDetails(props: { title: string; error: string; onBack
           </span>
           <span style={{ fg: theme.text.subdued }}>{scrollable() ? " scroll" : ""}</span>
         </text>
-        <text onMouseUp={copy}>
-          <span style={{ fg: copied() ? theme.text.feedback.success.default : theme.text.default }}>
-            <b>{copied() ? "✓ copied" : "c"}</b>
-          </span>
-          <span style={{ fg: theme.text.subdued }}>{copied() ? "" : " copy details"}</span>
-        </text>
+        <box flexDirection="row" gap={3}>
+          <text onMouseUp={investigate}>
+            <span style={{ fg: theme.text.default }}>
+              <b>i</b>
+            </span>
+            <span style={{ fg: theme.text.subdued }}> investigate</span>
+          </text>
+          <text onMouseUp={copy}>
+            <span style={{ fg: copied() ? theme.text.feedback.success.default : theme.text.default }}>
+              <b>{copied() ? "✓ copied" : "c"}</b>
+            </span>
+            <span style={{ fg: theme.text.subdued }}>{copied() ? "" : " copy details"}</span>
+          </text>
+        </box>
       </box>
     </box>
   )
