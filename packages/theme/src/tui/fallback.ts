@@ -1,4 +1,5 @@
 import type { Mode, ThemeTokensDefinition } from "./index.js"
+import { DEFAULT_THEME } from "./defaults.js"
 import { ActionVariant, FeedbackKind } from "./schema.js"
 
 export function fallback(mode: Mode): ThemeTokensDefinition {
@@ -9,12 +10,7 @@ export function fallback(mode: Mode): ThemeTokensDefinition {
       default: red,
       action: Object.fromEntries(ActionVariant.literals.map((variant) => [variant, { default: red }])),
       formfield: { default: red },
-      status: {
-        running: mode === "light" ? "$hue.interactive.800" : "$hue.interactive.200",
-        question: "$text.feedback.info.default",
-        permission: "$text.feedback.warning.default",
-        unread: mode === "light" ? "$hue.interactive.800" : "$hue.interactive.200",
-      },
+      status: DEFAULT_THEME[mode].text.status,
       feedback: Object.fromEntries(FeedbackKind.literals.map((kind) => [kind, { default: red }])),
     },
     background: {

@@ -125,7 +125,7 @@ export const DEFAULT_THEME = {
         running: "$hue.interactive.800",
         question: "$text.feedback.info.default",
         permission: "$text.feedback.warning.default",
-        unread: "$hue.interactive.800",
+        unread: "$hue.accent.800",
       },
       feedback: {
         error: { default: "$hue.red.700", subdued: "$hue.red.600" },
@@ -346,7 +346,7 @@ export const DEFAULT_THEME = {
         running: "$hue.interactive.200",
         question: "$text.feedback.info.default",
         permission: "$text.feedback.warning.default",
-        unread: "$hue.interactive.200",
+        unread: "$hue.accent.200",
       },
       feedback: {
         error: { default: "$hue.red.300", subdued: "$hue.red.400" },

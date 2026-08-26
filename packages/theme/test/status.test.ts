@@ -19,7 +19,7 @@ test.each(["light", "dark"] as const)("resolves built-in %s status colors", (mod
   expect(theme.text.status.question).toBe(theme.hue.cyan[mode === "light" ? 700 : 300])
   expect(theme.text.status.permission).toBe(theme.text.feedback.warning.default)
   expect(theme.text.status.permission).toBe(theme.hue.yellow[mode === "light" ? 800 : 200])
-  expect(theme.text.status.unread).toBe(theme.hue.interactive[mode === "light" ? 800 : 200])
+  expect(theme.text.status.unread).toBe(theme.hue.accent[mode === "light" ? 800 : 200])
   expect(theme.contextual.elevated.text.status).toEqual(theme.text.status)
   expect(theme.contextual.overlay.text.status).toEqual(theme.text.status)
 })
@@ -37,8 +37,8 @@ test.each(["light", "dark"] as const)("custom %s themes inherit status colors fr
   expect(theme.text.status.running.equals(theme.hue.purple[mode === "light" ? 800 : 200])).toBeTrue()
   expect(theme.text.status.question.equals(RGBA.fromHex("#123456"))).toBeTrue()
   expect(theme.text.status.permission.equals(RGBA.fromHex("#654321"))).toBeTrue()
-  expect(theme.text.status.unread).toBe(theme.hue.interactive[mode === "light" ? 800 : 200])
-  expect(theme.text.status.unread.equals(theme.hue.purple[mode === "light" ? 800 : 200])).toBeTrue()
+  expect(theme.text.status.unread).toBe(theme.hue.accent[mode === "light" ? 800 : 200])
+  expect(theme.text.status.unread.equals(theme.hue.orange[mode === "light" ? 800 : 200])).toBeTrue()
 })
 
 test("decodes partial status overrides and resolves colors and references", () => {
@@ -57,7 +57,7 @@ test("decodes partial status overrides and resolves colors and references", () =
   expect(dark.text.status.running).toBe(dark.hue.purple[300])
   expect(dark.text.status.question).toBe(dark.text.feedback.info.default)
   expect(dark.text.status.permission.toInts()).toEqual([0, 0, 0, 0])
-  expect(dark.text.status.unread).toBe(dark.hue.interactive[200])
+  expect(dark.text.status.unread).toBe(dark.hue.accent[200])
   expect(() =>
     Schema.decodeUnknownSync(ThemeDocument)({ version: 2, light: { text: { status: { running: "opaque" } } } }),
   ).toThrow()
@@ -105,8 +105,8 @@ test.each(["light", "dark"] as const)(
     expect(theme.text.status.running.equals(theme.hue.purple[mode === "light" ? 800 : 200])).toBeTrue()
     expect(theme.text.status.question.equals(RGBA.fromHex("#22d3ee"))).toBeTrue()
     expect(theme.text.status.permission.equals(RGBA.fromHex("#eab308"))).toBeTrue()
-    expect(theme.text.status.unread).toBe(theme.hue.interactive[mode === "light" ? 800 : 200])
-    expect(theme.text.status.unread.equals(theme.hue.purple[mode === "light" ? 800 : 200])).toBeTrue()
+    expect(theme.text.status.unread).toBe(theme.hue.accent[mode === "light" ? 800 : 200])
+    expect(theme.text.status.unread.equals(theme.hue.orange[mode === "light" ? 800 : 200])).toBeTrue()
     expect(theme.text.default.toInts()).toEqual([255, 0, 0, 255])
     expect(theme.contextual.elevated.text.status).toEqual(theme.text.status)
     expect(overridden.text.status.question.equals(RGBA.fromHex("#123456"))).toBeTrue()
@@ -130,7 +130,7 @@ test.each(["light", "dark"] as const)(
     expect(theme.text.status.running).toBe(theme.hue.interactive[mode === "light" ? 800 : 200])
     expect(theme.text.status.question.equals(theme.text.feedback.info.default)).toBeTrue()
     expect(theme.text.status.permission.equals(theme.text.feedback.warning.default)).toBeTrue()
-    expect(theme.text.status.unread).toBe(theme.hue.interactive[mode === "light" ? 800 : 200])
+    expect(theme.text.status.unread).toBe(theme.hue.accent[mode === "light" ? 800 : 200])
     expect(Object.values(theme.text.status).every((color) => !color.equals(RGBA.fromHex("#ff0000")))).toBeTrue()
   },
 )

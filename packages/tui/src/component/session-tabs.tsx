@@ -52,6 +52,14 @@ export const TAB_SPINNERS = {
 }
 export type TabSpinner = keyof typeof TAB_SPINNERS
 
+export const TAB_UNREAD_MARKERS = {
+  "small-dot": "•",
+  dot: "●",
+  square: "▪",
+  "large-square": "■",
+}
+export type TabUnreadMarker = keyof typeof TAB_UNREAD_MARKERS
+
 // A long title fades out over its last cells instead of cutting hard.
 const FADE_WIDTH = 4
 // The add button renders as " + " at the end of the strip, so the tab layout leaves it room.
@@ -112,26 +120,54 @@ function TabIndicator(props: {
   label: string
   width: number
   color: RGBA
+  unreadColor: RGBA
+  backgroundColor: RGBA
+  flashColor: RGBA
   animations: boolean
   numbers: boolean
   spinner?: TabSpinner
+  unreadMarker?: TabUnreadMarker
   attributes?: number
 }) {
   const runs = () => props.status.busy && !props.status.attention
+  const pending = createMemo(() => props.status.busy || Boolean(props.status.attention))
+  const unread = createMemo(() => Boolean(props.status.unread) && !pending())
+  const unreadColor = createMemo<RGBA>((previous) => (unread() ? props.unreadColor : previous), props.unreadColor)
+  const fade = createAnimatable(
+    { opacity: unread() ? 1 : 0 },
+    { enabled: () => props.animations, transition: tween({ duration: 0.18 }) },
+  )
+  createComputed(() => {
+    if (unread()) return fade.jump({ opacity: 1 })
+    if (pending()) return fade.jump({ opacity: 0 })
+    fade.animate({ opacity: 0 })
+  })
+  const fading = () => !props.status.unread && fade.value().opacity > 0
+  const color = () => {
+    if (props.numbers) return props.color
+    if (unread()) return props.unreadColor
+    if (!fading()) return props.color
+    const opacity = fade.value().opacity
+    // Brighten during the first fifth, then dissolve into the tab background.
+    const flash = Math.max(0, 1 - Math.abs(opacity - 0.8) / 0.2)
+    return tint(props.backgroundColor, tint(unreadColor(), props.flashColor, flash * 0.3), Math.min(1, opacity / 0.8))
+  }
   const spinner = () => TAB_SPINNERS[props.spinner ?? "dots"]
   const label = () => {
     if (props.numbers) return props.label
     if (props.status.attention === "permission") return "!"
     if (props.status.attention === "question") return "?"
     if (runs()) return spinner().frames[0]
-    return props.label === "+" ? "+" : "▪"
+    if (props.label === "+") return "+"
+    if (props.status.unread || fading()) return TAB_UNREAD_MARKERS[props.unreadMarker ?? "small-dot"]
+    return ""
   }
   return (
     <box width={props.width + 1} flexShrink={0} flexDirection="row" justifyContent="flex-end" paddingRight={1}>
       <Show
         when={runs() && props.animations && !props.numbers}
         fallback={
-          <text fg={props.color} selectable={false} attributes={props.attributes}>
+          <text fg={color()} selectable={false} attributes={props.attributes}>
             {label()}
           </text>
         }
@@ -157,6 +193,15 @@ function createPreviewDoubleClick(tabs: SessionTabsController) {
     }
     previous = { sessionID, time: now }
   }
+}
+
+function createGlowLevel(dimmed: () => boolean, animations: () => boolean) {
+  const motion = createAnimatable(
+    { level: dimmed() ? 0.7 : 1 },
+    { enabled: animations, transition: tween({ duration: 0.2 }) },
+  )
+  createEffect(() => motion.animate({ level: dimmed() ? 0.7 : 1 }))
+  return () => motion.value().level
 }
 
 function createNumberIgnition(runs: () => boolean, prompt: () => number, animations: () => boolean) {
@@ -414,6 +459,7 @@ export function SessionTabs(
     controller?: SessionTabsController
     animations?: boolean
     spinner?: TabSpinner
+    unreadMarker?: TabUnreadMarker
     orientation?: "horizontal" | "vertical"
     width?: number
   } = {},
@@ -426,7 +472,7 @@ export function SessionTabs(
       return
     }
     // Brief Control chords should not flash the tab numbers.
-    const timeout = setTimeout(() => setNumbers(true), 150)
+    const timeout = setTimeout(() => setNumbers(true), 300)
     onCleanup(() => clearTimeout(timeout))
   })
 
@@ -437,6 +483,7 @@ export function SessionTabs(
           controller={props.controller}
           animations={props.animations}
           spinner={props.spinner}
+          unreadMarker={props.unreadMarker}
           numbers={numbers()}
           width={props.width}
         />
@@ -446,6 +493,7 @@ export function SessionTabs(
           controller={props.controller}
           animations={props.animations}
           spinner={props.spinner}
+          unreadMarker={props.unreadMarker}
           numbers={numbers()}
         />
       </Match>
@@ -458,6 +506,7 @@ function VerticalSessionTabs(props: {
   animations?: boolean
   numbers: boolean
   spinner?: TabSpinner
+  unreadMarker?: TabUnreadMarker
   width?: number
 }) {
   const contextTabs = useSessionTabs()
@@ -503,9 +552,9 @@ function VerticalSessionTabs(props: {
               ...status,
               complete: sessionTabComplete(status.unread, status.busy),
               runs: status.busy && !status.attention,
-              glows:
-                tab.sessionID !== activeID() &&
-                Boolean(status.attention || (!status.busy && status.unread !== undefined)),
+              glows: Boolean(
+                status.attention || (tab.sessionID !== activeID() && !status.busy && status.unread !== undefined),
+              ),
             },
           ] as const
         }),
@@ -667,10 +716,11 @@ function VerticalSessionTabs(props: {
               }
               const pulseColor = createMemo(() => tint(pulseBackground(), theme.text.default, 0.25))
               const flashColor = createMemo(() => tint(pulseBackground(), theme.text.default, 0.7))
-              const glowColor = createMemo(() => tint(pulseBackground(), glowHue(), 0.45))
+              const glowLevel = createGlowLevel(() => selected() && Boolean(status().attention), animations)
+              const glowColor = createMemo(() => tint(pulseBackground(), glowHue(), 0.45 * glowLevel()))
               const detailPulseColor = createMemo(() => tint(pulseBackground(), theme.text.default, 0.13))
               const detailFlashColor = createMemo(() => tint(pulseBackground(), theme.text.default, 0.42))
-              const detailGlowColor = createMemo(() => tint(pulseBackground(), glowHue(), 0.25))
+              const detailGlowColor = createMemo(() => tint(pulseBackground(), glowHue(), 0.25 * glowLevel()))
               const detailColor = createMemo(() => tint(theme.text.subdued, pulseBackground(), 0.35))
               const detailTextColor = (index: number) =>
                 detailFades()
@@ -701,6 +751,10 @@ function VerticalSessionTabs(props: {
               })
               const previousGlows = () => previousStatus().glows
               const previousRuns = () => previousStatus().runs
+              const previousGlowLevel = createGlowLevel(
+                () => previous()?.sessionID === activeID() && Boolean(previousStatus().attention),
+                animations,
+              )
               const indicatorWidth = 10
               let lastPreviousGlowHue: RGBA | undefined
               const previousGlowHue = () => {
@@ -709,8 +763,12 @@ function VerticalSessionTabs(props: {
                 if (previousStatus().unread !== undefined) return (lastPreviousGlowHue = unreadColor())
                 return lastPreviousGlowHue ?? unreadColor()
               }
-              const separatorUpperColor = createMemo(() => tint(theme.background.default, previousGlowHue(), 0.1))
-              const separatorLowerColor = createMemo(() => tint(theme.background.default, glowHue(), 0.12))
+              const separatorUpperColor = createMemo(() =>
+                tint(theme.background.default, previousGlowHue(), 0.1 * previousGlowLevel()),
+              )
+              const separatorLowerColor = createMemo(() =>
+                tint(theme.background.default, glowHue(), 0.12 * glowLevel()),
+              )
               const titleColor = (index: number, separator: boolean) => {
                 const level = titleGlow.value().level
                 const color =
@@ -810,11 +868,11 @@ function VerticalSessionTabs(props: {
                       outerColor={tint(theme.background.default, theme.text.default, 0.006)}
                       flashColor={tint(theme.background.default, theme.text.default, 0.18)}
                       flashTail={8}
-                      glowColor={tint(theme.background.default, glowHue(), 0.1)}
+                      glowColor={tint(theme.background.default, glowHue(), 0.1 * glowLevel())}
                       outerGlowColor={theme.background.default}
                       glowTail={8}
                       outerGlowTail={5}
-                      completionColor={tint(theme.background.default, glowHue(), 0.1)}
+                      completionColor={tint(theme.background.default, glowHue(), 0.1 * glowLevel())}
                       outerCompletionColor={theme.background.default}
                       backgroundColor={theme.background.default}
                     />
@@ -841,9 +899,13 @@ function VerticalSessionTabs(props: {
                         label={sessionTabNumberLabel(index())}
                         width={numberWidth()}
                         color={numberColor()}
+                        unreadColor={tabFeedbackColor(status(), theme) ?? unreadColor()}
+                        backgroundColor={pulseBackground()}
+                        flashColor={theme.text.default}
                         animations={animations()}
                         numbers={props.numbers}
                         spinner={props.spinner}
+                        unreadMarker={props.unreadMarker}
                         attributes={selected() ? TextAttributes.BOLD : undefined}
                       />
                       <text
@@ -1010,6 +1072,7 @@ function HorizontalSessionTabs(props: {
   controller?: SessionTabsController
   animations?: boolean
   spinner?: TabSpinner
+  unreadMarker?: TabUnreadMarker
   numbers: boolean
 }) {
   const tabs = props.controller ?? useSessionTabs()
@@ -1298,9 +1361,10 @@ function HorizontalSessionTabs(props: {
           // so it reads as a lift of the pulse color rather than a different hue.
           const flashColor = () => tint(background(), theme.text.default, 0.65)
           const feedbackColor = () => tabFeedbackColor(status(), theme)
-          const glowColor = () => feedbackColor() ?? unreadColor()
+          const glowLevel = createGlowLevel(() => selected() && Boolean(status().attention), animations)
+          const glowColor = createMemo(() => tint(background(), feedbackColor() ?? unreadColor(), glowLevel()))
           const glows = () =>
-            !selected() && Boolean(status().attention || (!status().busy && status().unread !== undefined))
+            Boolean(status().attention || (!selected() && !status().busy && status().unread !== undefined))
           const title = () => tab.title ?? "Untitled session"
           const tabNumber = createMemo(() => items().findIndex((item) => item.sessionID === tab.sessionID) + 1)
           const numberWidth = () => Math.max(2, String(items().length).length)
@@ -1420,9 +1484,13 @@ function HorizontalSessionTabs(props: {
                   label={tab === NEW_SESSION_TAB ? "+" : sessionTabNumberLabel(tabNumber() - 1)}
                   width={numberWidth()}
                   color={numberColor()}
+                  unreadColor={feedbackColor() ?? unreadColor()}
+                  backgroundColor={background()}
+                  flashColor={theme.text.default}
                   animations={animations()}
                   numbers={props.numbers}
                   spinner={props.spinner}
+                  unreadMarker={props.unreadMarker}
                   attributes={bold()}
                 />
                 <text

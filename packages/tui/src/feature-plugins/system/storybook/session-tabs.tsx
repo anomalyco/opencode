@@ -6,8 +6,10 @@ import {
   EMPTY_SESSION_TAB_STATUS,
   SessionTabs,
   TAB_SPINNERS,
+  TAB_UNREAD_MARKERS,
   type SessionTabsController,
   type TabSpinner,
+  type TabUnreadMarker,
 } from "../../../component/session-tabs"
 import { closeSessionTab, cycleSessionTab, moveSessionTab } from "../../../context/session-tabs-model"
 import { StoryFooter } from "./footer"
@@ -65,6 +67,8 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
   const [orientation, setOrientation] = createSignal<"horizontal" | "vertical">("vertical")
   const spinners = Object.keys(TAB_SPINNERS) as TabSpinner[]
   const [spinner, setSpinner] = createSignal<TabSpinner>("dots")
+  const markers = Object.keys(TAB_UNREAD_MARKERS) as TabUnreadMarker[]
+  const [marker, setMarker] = createSignal<TabUnreadMarker>("small-dot")
   const [animations, setAnimations] = createSignal(true)
   // Unread clears on select, so the transcript remembers how each session's last run ended.
   const [outcomes, setOutcomes] = createSignal<Record<string, "completed" | "failed">>(FIXTURE_OUTCOMES)
@@ -260,6 +264,7 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
       setOutcomes(showcase ? FIXTURE_OUTCOMES : {})
       setActive("fixture-1")
       setSpinner("dots")
+      setMarker("small-dot")
       setAnimations(true)
       setOrientation("vertical")
     })
@@ -383,6 +388,12 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
         group: "Storybook",
         run: () => setSpinner((value) => spinners[(spinners.indexOf(value) + 1) % spinners.length]),
       },
+      {
+        bind: "u",
+        title: "Cycle unread marker",
+        group: "Storybook",
+        run: () => setMarker((value) => markers[(markers.indexOf(value) + 1) % markers.length]),
+      },
       { bind: "m", title: "Toggle animations", group: "Storybook", run: () => setAnimations((value) => !value) },
       { bind: "t", title: "Add tab", group: "Storybook", run: addTab },
       { bind: "d", title: "Close tab", group: "Storybook", run: () => controller.close() },
@@ -411,6 +422,7 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
           controller={controller}
           orientation={orientation()}
           spinner={spinner()}
+          unreadMarker={marker()}
           animations={animations()}
         />
         <box flexGrow={1} paddingLeft={2} paddingRight={2} paddingTop={1} flexDirection="column">
@@ -429,6 +441,7 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
         details={[
           orientation() === "vertical" ? "left rail" : "top strip",
           spinner(),
+          `${TAB_UNREAD_MARKERS[marker()]} ${marker()}`,
           animations() ? "animated" : "still",
         ]}
         status={stateSummary()}
@@ -440,6 +453,7 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
           { shortcut: "i", label: "idle" },
           { shortcut: "f/x", label: "complete/fail" },
           { shortcut: "c", label: "spinner" },
+          { shortcut: "u", label: "unread marker" },
           { shortcut: "hold ctrl", label: "numbers" },
           { shortcut: "m", label: "motion" },
           { shortcut: "↑/↓", label: "select" },
