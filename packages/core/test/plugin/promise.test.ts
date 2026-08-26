@@ -343,6 +343,8 @@ describe("fromPromise", () => {
             await ctx.session.hook("context", (event) => {
               event.system.push(SystemPart.make("Promise hook"))
               delete event.tools.echo
+              event.generation.temperature = 0.4
+              event.providerOptions.reasoning = { effort: "medium" }
             })
           },
         }),
@@ -354,12 +356,16 @@ describe("fromPromise", () => {
         system: [SystemPart.make("Initial")],
         messages: [Message.user("Hello")],
         tools: { echo: { description: "Echo", input: { type: "object" } } },
+        generation: {},
+        providerOptions: {},
       }
 
       yield* hooks.trigger("session", "context", event)
 
       expect(event.system.map((part) => part.text)).toEqual(["Initial", "Promise hook"])
       expect(event.tools).toEqual({})
+      expect(event.generation).toEqual({ temperature: 0.4 })
+      expect(event.providerOptions).toEqual({ reasoning: { effort: "medium" } })
     }),
   )
 

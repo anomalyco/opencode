@@ -1,5 +1,5 @@
 import type { SessionApi } from "@opencode-ai/client/promise/api"
-import type { Message, SystemPart } from "@opencode-ai/ai"
+import type { GenerationOptionsFields, Message, SystemPart } from "@opencode-ai/ai"
 import type { Agent } from "@opencode-ai/schema/agent"
 import type { Model } from "@opencode-ai/schema/model"
 import type { Session } from "@opencode-ai/schema/session"
@@ -13,6 +13,8 @@ export interface SessionContext {
   system: Array<SystemPart>
   messages: Array<Message>
   tools: Record<string, { description: string; input: JsonSchema.JsonSchema }>
+  generation: { -readonly [Key in keyof GenerationOptionsFields]: GenerationOptionsFields[Key] }
+  providerOptions: Record<string, unknown>
 }
 
 export interface SessionModelRequest {

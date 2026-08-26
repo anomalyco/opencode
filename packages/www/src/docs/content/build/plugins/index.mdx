@@ -966,12 +966,16 @@ await registration.dispose()
 
 ### Sessions
 
-Modify assembled system instructions, messages, or tools immediately before model dispatch.
+Modify assembled system instructions, messages, tools, generation settings, or provider options immediately before model
+dispatch.
 
 ```ts
 await ctx.session.hook("context", (event) => {
   event.system.push("Keep the review focused on correctness.")
   delete event.tools.write
+  event.generation.temperature = 0.2
+  event.generation.maxTokens = 8_000
+  event.providerOptions.reasoning = { effort: "high" }
 })
 ```
 
@@ -1007,6 +1011,26 @@ interface SessionHooks {
   "model.request": SessionModelRequestHook
   "http.request": SessionHttpRequestHook
   "http.response": SessionHttpResponseHook
+}
+
+interface SessionContextHook {
+  readonly sessionID: string
+  readonly agent: string
+  readonly model: { providerID: string; id: string }
+  system: SystemPart[]
+  messages: Message[]
+  tools: Record<string, { description: string; input: JsonSchema }>
+  generation: {
+    maxTokens?: number
+    temperature?: number
+    topP?: number
+    topK?: number
+    frequencyPenalty?: number
+    presencePenalty?: number
+    seed?: number
+    stop?: readonly string[]
+  }
+  providerOptions: Record<string, unknown>
 }
 
 interface SessionHookContext {

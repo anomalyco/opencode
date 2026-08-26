@@ -299,7 +299,13 @@ export const layer = Layer.effect(
       const definitions = Object.fromEntries(Array.from(given, ([definition, tool]) => [tool.name, definition]))
       const context =
         input.contextHooks === false
-          ? { system: input.transcript.system, messages: input.transcript.messages, tools: definitions }
+          ? {
+              system: input.transcript.system,
+              messages: input.transcript.messages,
+              tools: definitions,
+              generation: {},
+              providerOptions: {},
+            }
           : yield* hooks.trigger("session", "context", {
               sessionID: session.id,
               agent: input.scope.agentID,
@@ -307,6 +313,8 @@ export const layer = Layer.effect(
               system: input.transcript.system,
               messages: input.transcript.messages,
               tools: definitions,
+              generation: {},
+              providerOptions: {},
             })
       // Match each surviving entry back to its tool, by recognizing a moved definition or
       // by key. Identity wins so a definition moved onto another tool's name still executes
@@ -333,6 +341,8 @@ export const layer = Layer.effect(
           messages: boundImages(unsupportedParts(context.messages, resolved.capabilities)),
           tools: Array.from(hooked, ([name, tool]) => ({ ...tool, name })),
           toolChoice: input.toolChoice,
+          ...(Object.keys(context.generation).length === 0 ? {} : { generation: context.generation }),
+          ...(Object.keys(context.providerOptions).length === 0 ? {} : { providerOptions: context.providerOptions }),
         }),
       )
       const hasHttpHooks =
