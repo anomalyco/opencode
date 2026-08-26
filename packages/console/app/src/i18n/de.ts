@@ -256,7 +256,7 @@ export const dict = {
   "zen.privacy.exceptionsLink": "folgenden Ausnahmen",
 
   "go.title": "OpenCode Go | Kostengünstige Coding-Modelle für alle",
-  "go.banner.text": "Ox Alpha Free ist für begrenzte Zeit auf Go verfügbar",
+  "go.banner.text": "GLM-5.3-Flash erhält für begrenzte Zeit 2x Nutzungslimits",
   "go.meta.description":
     "Go kostet $10/Monat, mit großzügigen Nutzungslimits und zuverlässigem Zugang zu führenden Coding-Modellen.",
   "go.hero.title": "Kostengünstige Coding-Modelle für alle",

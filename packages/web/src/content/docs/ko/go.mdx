@@ -50,6 +50,7 @@ workspace당 한 명의 멤버만 OpenCode Go를 구독할 수 있습니다.
 현재 모델 목록에는 다음이 포함됩니다.
 
 - **Grok 4.6**
+- **GLM-5.3-Flash**
 - **GLM-5.3**
 - **GLM-5.2**
 - **GLM-5.1**
@@ -71,7 +72,6 @@ workspace당 한 명의 멤버만 OpenCode Go를 구독할 수 있습니다.
 - **DeepSeek V4 Flash**
 - **DeepSeek V4 Flash Vision Exp**
 - **Hy3**
-- **Ox Alpha Free** (한정된 기간)
 
 새로운 모델을 테스트하고 추가함에 따라 이 목록은 변경될 수 있습니다.
 
@@ -93,6 +93,7 @@ OpenCode Go에는 다음과 같은 한도가 포함됩니다.
 | ---------------------------- | ----------------- | -------------- | -------------- |
 | Grok 4.6                     | 169               | 423            | 845            |
 | GPT 5.6 Luna                 | 2,050             | 5,100          | 10,250         |
+| GLM-5.3-Flash                | 1,580             | 3,950          | 7,900          |
 | GLM-5.3                      | 220               | 540            | 1,080          |
 | GLM-5.2                      | 880               | 2,150          | 4,300          |
 | GLM-5.1                      | 880               | 2,150          | 4,300          |
@@ -113,11 +114,11 @@ OpenCode Go에는 다음과 같은 한도가 포함됩니다.
 | DeepSeek V4 Flash            | 7,600             | 18,900         | 37,800         |
 | DeepSeek V4 Flash Vision Exp | 3,800             | 9,450          | 18,900         |
 | Hy3                          | 4,300             | 10,750         | 21,500         |
-| Ox Alpha Free                | -                 | -              | -              |
 
 이 예상치는 관찰된 요청 패턴을 기준으로 합니다.
 
 - Grok 4.6 — 요청당 입력 390, 캐시 32,500, 출력 토큰 120
+- GLM-5.3-Flash — 요청당 입력 1,000, 캐시 55,000, 출력 토큰 200
 - GLM-5.3/5.2/5.1 — 요청당 입력 700, 캐시 52,000, 출력 토큰 150
 - GPT 5.6 Luna — 요청당 입력 토큰 1,000개, 캐시 토큰 50,000개, 출력 토큰 220개
 - Kimi K3 — 요청당 입력 1,050, 캐시 76,500, 출력 토큰 300
@@ -145,6 +146,7 @@ OpenCode Go에는 다음과 같은 한도가 포함됩니다.
 | Grok 4.6 (> 200K tokens)                | $4.00  | $12.00 | $1.00       | -            | $15   |
 | GPT 5.6 Luna (≤ 272K tokens)            | $0.20  | $1.20  | $0.02       | $0.25        | $15   |
 | GPT 5.6 Luna (> 272K tokens)            | $0.40  | $1.80  | $0.04       | $0.50        | $15   |
+| GLM-5.3-Flash                           | $0.15  | $0.50  | $0.03       | -            | $15   |
 | GLM-5.3                                 | $1.40  | $4.40  | $0.26       | -            | $15   |
 | GLM-5.2                                 | $1.40  | $4.40  | $0.26       | -            | $60   |
 | GLM-5.1                                 | $1.40  | $4.40  | $0.26       | -            | $60   |
@@ -171,13 +173,10 @@ OpenCode Go에는 다음과 같은 한도가 포함됩니다.
 | DeepSeek V4 Flash Vision Exp (Off-Peak) | $0.22  | $0.66  | $0.007      | -            | $15   |
 | DeepSeek V4 Flash Vision Exp (Peak)     | $0.44  | $1.32  | $0.014      | -            | $15   |
 | Hy3                                     | $0.14  | $0.58  | $0.035      | -            | $60   |
-| Ox Alpha Free                           | -      | -      | -           | -            | -     |
 
 **DeepSeek V4 Flash / V4 Flash Vision Exp / V4 Pro:** Peak 시간은 월요일부터 금요일까지 01:00-04:00 및 06:00-10:00 UTC이며, 주말을 포함한 그 외 모든 시간은 Off-Peak입니다. [자세히 알아보기](https://api-docs.deepseek.com/quick_start/pricing/).
 
 **DeepSeek V4 Flash Vision Exp:** 이미지는 크기에 따라 토큰으로 변환되며 텍스트 토큰과 함께 입력 토큰으로 청구됩니다. [자세히 알아보기](https://api-docs.deepseek.com/quick_start/pricing/).
-
-**Ox Alpha Free:** 한정된 기간 동안 무료입니다.
 
 현재 사용량은 **<a href={console}>console</a>**에서 확인할 수 있습니다.
 
@@ -215,6 +214,7 @@ Go에서는 월 $10를 지불하며, 저희는 그 6배의 사용량을 제공�
 | ---------------------------- | ---------------------------- | ------------------------------------------------ | --------------------------- |
 | Grok 4.6                     | grok-4.6                     | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | GPT 5.6 Luna                 | gpt-5.6-luna                 | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
+| GLM-5.3-Flash                | glm-5.3-flash                | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5.3                      | glm-5.3                      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5.2                      | glm-5.2                      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5.1                      | glm-5.1                      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
@@ -236,7 +236,6 @@ Go에서는 월 $10를 지불하며, 저희는 그 6배의 사용량을 제공�
 | Qwen3.7 Plus                 | qwen3.7-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus                 | qwen3.6-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Hy3                          | hy3                          | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| Ox Alpha Free                | ox-alpha-free                | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 
 OpenCode config의 [model id](/docs/config/#models)는 `opencode-go/<model-id>` 형식을 사용합니다. 예를 들어 Kimi K3의 경우 config에서 `opencode-go/kimi-k3`를 사용하면 됩니다.
 
@@ -258,6 +257,7 @@ https://opencode.ai/zen/go/v1/models
 | ---------------------------- | ------------- | ----------- |
 | Grok 4.6                     | 사용되지 않음 | 30일        |
 | GPT 5.6 Luna                 | 사용되지 않음 | 30일        |
+| GLM-5.3-Flash                | 사용되지 않음 | 0일         |
 | GLM-5.3                      | 사용되지 않음 | 0일         |
 | GLM-5.2                      | 사용되지 않음 | 0일         |
 | GLM-5.1                      | 사용되지 않음 | 0일         |
@@ -278,7 +278,6 @@ https://opencode.ai/zen/go/v1/models
 | DeepSeek V4 Flash            | 사용되지 않음 | 0일         |
 | DeepSeek V4 Flash Vision Exp | 사용되지 않음 | 0일         |
 | Hy3                          | 사용되지 않음 | 0일         |
-| Ox Alpha Free                | 사용되지 않음 | 0일         |
 
 - **Grok 4.6:** ZDR은 저장된 데이터에 의존하는 중요한 API 기능(상태 저장형 Responses API, Files and Collections, Batch API 포함)을 비활성화합니다. [자세히 알아보기](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
 - **GPT 5.6 Luna:** 모든 API 기능 사용에 대해 악용 모니터링 로그가 생성되며 최대 30일 동안 보존됩니다. [자세히 알아보기](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).
