@@ -43,12 +43,8 @@ export const load = Effect.fn("PluginModule.load")(function* (
     : (yield* npm.add(operation.target, { subpaths: ["server", ""] })).entrypoint
   if (!entrypoint) return yield* Effect.fail(new Error(`Plugin entrypoint not found: ${operation.target}`))
   // Bun currently ignores query parameters when caching file:// imports.
-  const source =
-    operation.mtime === undefined
-      ? entrypoint
-      : typeof Bun !== "undefined"
-        ? `${operation.target.replaceAll("\\", "/")}?mtime=${operation.mtime}`
-        : `${entrypoint}?mtime=${operation.mtime}`
+  const target = typeof Bun !== "undefined" ? operation.target.replaceAll("\\", "/") : entrypoint
+  const source = operation.mtime === undefined ? entrypoint : `${target}?mtime=${operation.mtime}`
   yield* Effect.log({ msg: "loading plugin", id: operation.target, entrypoint: source })
   const mod = yield* Effect.promise(() => importModule(source))
   const value = (yield* Schema.decodeUnknownEffect(Definition)(mod)).default

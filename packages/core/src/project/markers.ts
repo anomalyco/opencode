@@ -80,7 +80,12 @@ const layer = Layer.effect(
       for (const operation of operations) {
         if (operation.type === "remove") {
           for (const id of declarations.keys()) {
-            if (matches(operation.target, id)) declarations.delete(id)
+            if (
+              operation.target === "*" ||
+              (operation.target.endsWith(".*") ? id.startsWith(operation.target.slice(0, -1)) : operation.target === id)
+            ) {
+              declarations.delete(id)
+            }
           }
           continue
         }
@@ -141,29 +146,27 @@ function read(fs: FSUtil.Interface, file: string): Effect.Effect<ConfigPluginSou
     if (errors.length || typeof document !== "object" || document === null || !("plugins" in document)) return []
     if (!Array.isArray(document.plugins)) return []
     return document.plugins.flatMap<ConfigPluginSource.Operation>((entry) => {
-      if (typeof entry === "string") {
-        if (entry.startsWith("-")) return [{ type: "remove" as const, target: entry.slice(1) }]
-        return [{ type: "add" as const, target: resolve(entry, file), options: {} }]
+      if (typeof entry === "string" && entry.startsWith("-")) {
+        return [{ type: "remove", target: entry.slice(1) }]
       }
-      if (typeof entry !== "object" || entry === null || !("package" in entry) || typeof entry.package !== "string")
+      if (
+        typeof entry !== "string" &&
+        (typeof entry !== "object" || entry === null || !("package" in entry) || typeof entry.package !== "string")
+      ) {
         return []
+      }
+      const target = typeof entry === "string" ? entry : entry.package
       const options =
-        "options" in entry && typeof entry.options === "object" && entry.options !== null
+        typeof entry !== "string" && "options" in entry && typeof entry.options === "object" && entry.options !== null
           ? Object.fromEntries(Object.entries(entry.options))
           : {}
-      return [{ type: "add" as const, target: resolve(entry.package, file), options }]
+      if (target.startsWith("file://")) return [{ type: "add", target: fileURLToPath(target), options }]
+      if (target.startsWith("./") || target.startsWith("../")) {
+        return [{ type: "add", target: path.resolve(path.dirname(file), target), options }]
+      }
+      return [{ type: "add", target, options }]
     })
   })
-}
-
-function resolve(target: string, file: string) {
-  if (target.startsWith("file://")) return fileURLToPath(target)
-  if (target.startsWith("./") || target.startsWith("../")) return path.resolve(path.dirname(file), target)
-  return target
-}
-
-function matches(selector: string, id: string) {
-  return selector === "*" || (selector.endsWith(".*") ? id.startsWith(selector.slice(0, -1)) : selector === id)
 }
 
 export const node = makeGlobalNode({
