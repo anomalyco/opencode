@@ -50,10 +50,13 @@ function ContextStatusStory() {
             agent: "build",
             model: STORY_MODEL,
             content: [tool("read", state.read), tool("glob", state.glob)],
-            time: { created: STORY_TIME },
+            time: {
+              created: STORY_TIME,
+              ...(state.read && state.glob ? { completed: STORY_TIME + 300 } : {}),
+            },
           } satisfies SessionMessageAssistant,
         ],
-        status: { type: "busy" },
+        status: { type: state.read && state.glob ? "idle" : "busy" },
         diffs: [],
       }) satisfies SessionDocument,
   )
@@ -76,3 +79,5 @@ function ContextStatusStory() {
 }
 
 export const CollapsedDuringStatusUpdates = { render: () => <ContextStatusStory /> }
+export const CompletedGerman = { globals: { locale: "de" }, render: () => <ContextStatusStory /> }
+export const CompletedArabic = { globals: { locale: "ar" }, render: () => <ContextStatusStory /> }
