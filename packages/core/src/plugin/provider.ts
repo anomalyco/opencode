@@ -11,7 +11,6 @@ import { GatewayPlugin } from "./provider/gateway.js"
 import { GithubCopilotPlugin } from "./provider/github-copilot.js"
 import { GitLabPlugin } from "./provider/gitlab.js"
 import { GoogleVertexPlugin } from "./provider/google-vertex.js"
-import { GroqPlugin } from "./provider/groq.js"
 import { KiloPlugin } from "./provider/kilo.js"
 import { LLMGatewayPlugin } from "./provider/llmgateway.js"
 import { LMStudioPlugin } from "./provider/lmstudio.js"
@@ -45,7 +44,6 @@ export const ProviderPlugins: PluginInternal.InternalPlugin[] = [
   GithubCopilotPlugin,
   GitLabPlugin,
   GoogleVertexPlugin,
-  GroqPlugin,
   KiloPlugin,
   LLMGatewayPlugin,
   LMStudioPlugin,

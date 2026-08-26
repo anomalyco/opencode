@@ -105,7 +105,6 @@
     "@ai-sdk/cohere": "3.0.27",
     "@ai-sdk/gateway": "3.0.104",
     "@ai-sdk/google-vertex": "4.0.128",
-    "@ai-sdk/groq": "3.0.31",
     "@ai-sdk/mistral": "3.0.51",
     "@ai-sdk/openai-compatible": "2.0.41",
     "@ai-sdk/perplexity": "3.0.26",

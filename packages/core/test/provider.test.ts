@@ -12,6 +12,7 @@ describe("Provider", () => {
       "@opencode-ai/ai/providers/google-vertex/chat",
       "@opencode-ai/ai/providers/google-vertex/responses",
       "@opencode-ai/ai/providers/google-vertex/messages",
+      "@opencode-ai/ai/providers/groq",
       "@opencode-ai/ai/providers/togetherai",
     ]
 
