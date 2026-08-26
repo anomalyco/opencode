@@ -22,6 +22,7 @@ import { UI } from "../ui"
 import { effectCmd } from "../effect-cmd"
 import { EOL } from "os"
 import { Filesystem } from "@/util/filesystem"
+import { withTimeout } from "@/util/timeout"
 import { createOpencodeClient, type OpencodeClient, type ToolPart } from "@opencode-ai/sdk/v2"
 import { FormatError, FormatUnknownError } from "../error"
 import { INTERACTIVE_INPUT_ERROR, resolveInteractiveStdin } from "./run/runtime.stdin"
@@ -466,6 +467,7 @@ export const RunCommand = effectCmd({
       // ones from interactive mode. Deletion is best-effort promptness: the
       // server hides ephemeral sessions from lists and sweeps abandoned ones
       // on startup, so uncovered exits (kill -9, crashes) only delay cleanup.
+      // The timeout keeps a hung delete from wedging the process at exit.
       const ephemeralSessions = new Map<string, OpencodeClient>()
       let ephemeralCleanup: Promise<void> | undefined
       const removeEphemeral = () => {
@@ -473,7 +475,7 @@ export const RunCommand = effectCmd({
         if (ephemeralCleanup) return ephemeralCleanup
         ephemeralCleanup = Promise.all(
           [...ephemeralSessions].map(([sessionID, sdk]) =>
-            sdk.session.delete({ sessionID }).then(
+            withTimeout(sdk.session.delete({ sessionID }), 5000).then(
               () => undefined,
               () => {
                 process.stderr.write(`failed to delete ephemeral session ${sessionID}\n`)

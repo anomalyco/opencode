@@ -328,7 +328,7 @@ export const TuiThreadCommand = cmd({
           })
           await Promise.all(
             [...ephemeralSessions].map((sessionID) =>
-              sdk.session.delete({ sessionID }).then(
+              withTimeout(sdk.session.delete({ sessionID }), 5000).then(
                 () => undefined,
                 () => {
                   process.stderr.write(`failed to delete ephemeral session ${sessionID}\n`)

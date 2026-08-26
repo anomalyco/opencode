@@ -628,7 +628,7 @@ describe("SessionProjector", () => {
         .from(SessionTable)
         .all()
       const byID = new Map(rows.map((row) => [row.id, row]))
-      expect(byID.get(ephemeral)?.time_updated).toBeGreaterThan(0)
+      expect(byID.get(ephemeral)?.time_updated).toBe(1)
       expect(byID.get(durable)?.time_updated).toBe(0)
       expect(byID.get(ephemeral)?.cost).toBeCloseTo(0.01)
       expect(byID.get(durable)?.cost).toBeCloseTo(0.01)

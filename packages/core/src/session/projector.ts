@@ -91,8 +91,9 @@ function applyUsage(
   db: DatabaseService,
   sessionID: (typeof SessionV1.Event.MessageUpdated.Type)["data"]["sessionID"],
   value: Usage,
-  sign = 1,
+  options?: { sign?: -1; heartbeat?: number },
 ) {
+  const sign = options?.sign ?? 1
   return db
     .update(SessionTable)
     .set({
@@ -104,9 +105,14 @@ function applyUsage(
       tokens_cache_write: sql`${SessionTable.tokens_cache_write} + ${value.tokens.cache.write * sign}`,
       // Usage updates preserve time_updated so streaming activity does not
       // reorder session lists. Ephemeral sessions are excluded from lists and
-      // reaped by staleness, so for them this acts as a liveness heartbeat
+      // reaped by staleness, so for them new usage acts as a liveness
+      // heartbeat (stamped with the event time to keep projection replayable)
       // that keeps long active runs ahead of the startup sweep.
-      time_updated: sql`CASE WHEN ${SessionTable.ephemeral} THEN ${Date.now()} ELSE ${SessionTable.time_updated} END`,
+      ...(options?.heartbeat !== undefined
+        ? {
+            time_updated: sql`CASE WHEN ${SessionTable.ephemeral} THEN ${options.heartbeat} ELSE ${SessionTable.time_updated} END`,
+          }
+        : { time_updated: sql`${SessionTable.time_updated}` }),
     })
     .where(eq(SessionTable.id, sessionID))
     .run()
@@ -286,7 +292,7 @@ const layer = Layer.effectDiscard(
           .pipe(Effect.orDie)
         for (const row of rows) {
           const previous = usage(row.data)
-          if (previous) yield* applyUsage(db, event.data.sessionID, previous, -1)
+          if (previous) yield* applyUsage(db, event.data.sessionID, previous, { sign: -1 })
         }
         yield* db
           .delete(MessageTable)
@@ -304,7 +310,7 @@ const layer = Layer.effectDiscard(
           .get()
           .pipe(Effect.orDie)
         const previous = row && usage(row.data)
-        if (previous) yield* applyUsage(db, event.data.sessionID, previous, -1)
+        if (previous) yield* applyUsage(db, event.data.sessionID, previous, { sign: -1 })
         yield* db
           .delete(PartTable)
           .where(and(eq(PartTable.id, event.data.partID), eq(PartTable.session_id, event.data.sessionID)))
@@ -327,8 +333,8 @@ const layer = Layer.effectDiscard(
           .pipe(Effect.orDie)
         const previous = row && usage(row.data)
         const next = usage(event.data.part)
-        if (previous) yield* applyUsage(db, row.session_id, previous, -1)
-        if (next) yield* applyUsage(db, sessionID, next)
+        if (previous) yield* applyUsage(db, row.session_id, previous, { sign: -1 })
+        if (next) yield* applyUsage(db, sessionID, next, { heartbeat: event.data.time })
       }),
     )
     yield* events.project(SessionEvent.AgentSwitched, (event) =>

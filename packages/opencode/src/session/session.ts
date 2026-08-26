@@ -38,7 +38,7 @@ import { SessionID, MessageID, PartID } from "./schema"
 
 import type { Provider } from "@/provider/provider"
 import { Global } from "@opencode-ai/core/global"
-import { Effect, Layer, Option, Context, Schema, Scope, Types } from "effect"
+import { Effect, Layer, Option, Context, Duration, Schedule, Schema, Scope, Types } from "effect"
 import { NonNegativeInt, optional } from "@opencode-ai/core/schema"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderV2 } from "@opencode-ai/core/provider"
@@ -502,6 +502,13 @@ const layer: Layer.Layer<
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
 
+    // Ephemeral sessions created by this process. While the owner lives it
+    // heartbeats them past the staleness sweep, covering runs that produce no
+    // usage for long stretches (pending permission asks, humans stepping away
+    // from an open ephemeral TUI). Beats stop with the process, which is what
+    // lets the sweep judge abandonment by staleness at all.
+    const ephemeralOwned = new Set<SessionID>()
+
     const createNext = Effect.fn("Session.createNext")(function* (input: {
       id?: SessionID
       title?: string
@@ -542,6 +549,7 @@ const layer: Layer.Layer<
 
       yield* events.publish(SessionV1.Event.Created, { sessionID: result.id, info: result })
 
+      if (result.ephemeral) ephemeralOwned.add(result.id)
       return result
     })
 
@@ -615,6 +623,7 @@ const layer: Layer.Layer<
 
     const remove: Interface["remove"] = Effect.fnUntraced(function* (sessionID: SessionID) {
       const session = yield* get(sessionID)
+      ephemeralOwned.delete(sessionID)
       try {
         // `remove` needs to work in all cases, such as broken sessions that
         // run cleanup without instance state.
@@ -955,6 +964,10 @@ const layer: Layer.Layer<
     })
 
     yield* sweepEphemeral(db, service).pipe(Effect.forkIn(scope))
+    yield* Effect.suspend(() => heartbeatEphemeral(db, ephemeralOwned)).pipe(
+      Effect.repeat(Schedule.spaced(Duration.minutes(10))),
+      Effect.forkIn(scope),
+    )
 
     return service
   }),
@@ -999,6 +1012,23 @@ export const sweepEphemeral = (
       { discard: true },
     )
   }).pipe(Effect.withSpan("Session.sweepEphemeral"))
+}
+
+/**
+ * Bumps time_updated for the ephemeral sessions this process owns so the
+ * startup sweep never reaps a session whose owner is alive but quiet. This is
+ * a direct projection-table write on purpose: liveness is process state, not
+ * domain history, and routing beats through the event journal would grow it
+ * unboundedly for long-lived instances.
+ */
+export const heartbeatEphemeral = (db: Database.Interface["db"], owned: ReadonlySet<SessionID>) => {
+  if (owned.size === 0) return Effect.void
+  return db
+    .update(SessionTable)
+    .set({ time_updated: Date.now() })
+    .where(and(eq(SessionTable.ephemeral, true), inArray(SessionTable.id, [...owned])))
+    .run()
+    .pipe(Effect.orDie, Effect.asVoid, Effect.withSpan("Session.heartbeatEphemeral"))
 }
 
 const cancelBackgroundJobs = Effect.fn("Session.cancelBackgroundJobs")(function* (

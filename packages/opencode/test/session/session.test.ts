@@ -289,6 +289,37 @@ describe("Session", () => {
 })
 
 describe("ephemeral sessions", () => {
+  it.instance("heartbeat refreshes owned ephemeral sessions only", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionNs.Service
+      const { db } = yield* Database.Service
+      const stale = Date.now() - 60_000
+      const backdate = (id: SessionID) =>
+        db.update(SessionTable).set({ time_updated: stale }).where(eq(SessionTable.id, id)).run()
+      const updated = (id: SessionID) =>
+        db
+          .select({ time_updated: SessionTable.time_updated })
+          .from(SessionTable)
+          .where(eq(SessionTable.id, id))
+          .get()
+          .pipe(Effect.map((row) => row!.time_updated))
+      const ephemeral = yield* Effect.acquireRelease(session.create({ ephemeral: true }), (info) =>
+        session.remove(info.id).pipe(Effect.ignore),
+      )
+      const durable = yield* Effect.acquireRelease(session.create({}), (info) =>
+        session.remove(info.id).pipe(Effect.ignore),
+      )
+      yield* backdate(ephemeral.id)
+      yield* backdate(durable.id)
+
+      yield* SessionNs.heartbeatEphemeral(db, new Set([ephemeral.id, durable.id]))
+
+      // Only ephemeral sessions beat; durable ones keep list-ordering time.
+      expect(yield* updated(ephemeral.id)).toBeGreaterThan(stale)
+      expect(yield* updated(durable.id)).toBe(stale)
+    }),
+  )
+
   it.instance("are excluded from lists but retrievable by id", () =>
     Effect.gen(function* () {
       const session = yield* SessionNs.Service
