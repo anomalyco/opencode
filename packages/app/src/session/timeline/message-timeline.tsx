@@ -388,8 +388,7 @@ function MessageTimelineView(
   const pinned = createMemo(() => props.pinned)
   const messageByID = projection.messageByID
   const virtualized = createTimelineVirtualizer({
-    sessionKey: props.data.sessionKey,
-    sessionID: props.data.sessionID,
+    sessionKey: () => `${server.key}/${props.data.sessionID()}`,
     projection,
     showHeader,
     pinned,
