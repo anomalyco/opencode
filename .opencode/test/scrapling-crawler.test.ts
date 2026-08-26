@@ -31,10 +31,13 @@ def success(url=url, status=200, title="Stub Title"):
         "request": {"url": url, "fetch_mode": mode},
         "response": {"status_code": status, "final_url": url, "content_type": "text/html", "response_time_ms": 1.0},
         "page": {"title": title, "description": None, "language": "en", "canonical_url": url},
-        "content": {"text": "body \\u25bc \\u00a9 text", "headings": [{"level": 1, "text": "H"}], "paragraphs": ["p1"]},
+        "content": {"text": "body \\u25bc \\u00a9 text", "headings": [{"level": 1, "text": "H"}], "paragraphs": ["p1"], "lists": [], "tables": []},
         "links": [{"text": "next", "url": url + "/2", "rel": [], "external": False}],
         "images": [],
+        "videos": [],
         "metadata": {},
+        "structured_data": [],
+        "breadcrumbs": [],
         "error": None,
     }
 

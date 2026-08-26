@@ -65,6 +65,39 @@ class Image(BaseModel):
     title: str | None = None
 
 
+class Video(BaseModel):
+    src: str
+    title: str | None = None
+    poster: str | None = None
+    type: str | None = None
+
+
+class Table(BaseModel):
+    """An extracted HTML table."""
+    headers: list[str] = Field(default_factory=list)
+    rows: list[list[str]] = Field(default_factory=list)
+
+
+class ListItem(BaseModel):
+    """An item from an ordered or unordered list."""
+    text: str
+    level: int = 0
+    nested: list["ListItem"] = Field(default_factory=list)
+
+
+class Breadcrumb(BaseModel):
+    """A single breadcrumb entry."""
+    text: str
+    url: str | None = None
+
+
+class StructuredDataItem(BaseModel):
+    """A parsed JSON-LD or Schema.org structured data block."""
+    type: str | None = None
+    name: str | None = None
+    data: dict[str, Any] = Field(default_factory=dict)
+
+
 class OpenGraphMetadata(BaseModel):
     title: str | None = None
     description: str | None = None
@@ -88,6 +121,8 @@ class PageMetadata(BaseModel):
     canonical: str | None = None
     robots: str | None = None
     author: str | None = None
+    published_time: str | None = None
+    modified_time: str | None = None
     og: OpenGraphMetadata = Field(default_factory=OpenGraphMetadata)
     twitter: TwitterCardMetadata = Field(default_factory=TwitterCardMetadata)
 
@@ -115,6 +150,8 @@ class ContentInfo(BaseModel):
     text: str = ""
     headings: list[Heading] = Field(default_factory=list)
     paragraphs: list[str] = Field(default_factory=list)
+    lists: list[ListItem] = Field(default_factory=list)
+    tables: list[Table] = Field(default_factory=list)
 
 
 class ErrorInfo(BaseModel):
@@ -136,7 +173,10 @@ class CrawlResult(BaseModel):
     content: ContentInfo | None = None
     links: list[Link] = Field(default_factory=list)
     images: list[Image] = Field(default_factory=list)
+    videos: list[Video] = Field(default_factory=list)
     metadata: PageMetadata | dict = Field(default_factory=dict)
+    structured_data: list[StructuredDataItem] = Field(default_factory=list)
+    breadcrumbs: list[Breadcrumb] = Field(default_factory=list)
     error: ErrorInfo | None = None
     raw_html: str = Field(
         default="",

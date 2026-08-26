@@ -27,18 +27,26 @@ def success(status=200, title="Stub Page"):
         "response": {"status_code": status, "final_url": url + "/final", "content_type": "text/html", "response_time_ms": 2},
         "page": {"title": title, "description": "Stub description", "language": "en", "canonical_url": url},
         "content": {
-            "text": "Café ☕ body — “quoted” \\u25bc",
+            "text": "Caf\u00e9 \u2615 body \u2014 \u201Cquoted\u201D \\u25bc",
             "headings": [{"level": 1, "text": "Top"}],
             "paragraphs": ["para one"],
+            "lists": [{"text": "List item 1", "level": 0}],
+            "tables": [{"headers": ["Key", "Value"], "rows": [["A", "1"], ["B", "2"]]}],
         },
         "links": [{"text": "next", "url": url + "/next", "rel": [], "external": False}],
         "images": [{"src": url + "/img.png", "alt": "logo", "title": None}],
+        "videos": [{"src": "https://www.youtube.com/embed/test", "title": "Video", "poster": None, "type": "iframe"}],
         "metadata": {
             "description": "Meta description",
             "keywords": None,
+            "author": "Test Author",
+            "published_time": "2024-02-15",
+            "modified_time": "2024-08-01",
             "og": {"title": "OG T", "description": None, "image": None, "type": None, "site_name": "StubCo", "url": None},
-            "twitter": {"card": None, "title": None, "description": None, "image": None, "site": None},
+            "twitter": {"card": "summary_large_image", "title": None, "description": None, "image": None, "site": "@stubco"},
         },
+        "structured_data": [{"type": "Organization", "name": "StubCo", "data": {"@type": "Organization", "name": "StubCo"}}],
+        "breadcrumbs": [{"text": "Home", "url": url}],
         "error": None,
     }
 
@@ -86,9 +94,25 @@ describe("researchPage application use case", () => {
     expect(f.paragraphs).toEqual(["para one"])
     expect(f.links[0]).toEqual({ text: "next", url: "https://good.example/page/next", external: false })
     expect(f.images[0]).toEqual({ src: "https://good.example/page/img.png", alt: "logo" })
+    expect(f.videos[0]).toEqual({ src: "https://www.youtube.com/embed/test", title: "Video", poster: null })
     expect(f.metadata.description).toBe("Meta description")
+    expect(f.metadata.author).toBe("Test Author")
+    expect(f.metadata.publishedTime).toBe("2024-02-15")
+    expect(f.metadata.modifiedTime).toBe("2024-08-01")
     expect(f.metadata.ogSiteName).toBe("StubCo")
+    expect(f.metadata.twitterCard).toBe("summary_large_image")
+    expect(f.metadata.twitterSite).toBe("@stubco")
     expect(f.metadata.keywords).toBeNull()
+    expect(f.lists.length).toBe(1)
+    expect(f.lists[0].text).toBe("List item 1")
+    expect(f.tables.length).toBe(1)
+    expect(f.tables[0].headers).toEqual(["Key", "Value"])
+    expect(f.tables[0].rows).toEqual([["A", "1"], ["B", "2"]])
+    expect(f.structuredData.length).toBe(1)
+    expect(f.structuredData[0].type).toBe("Organization")
+    expect(f.structuredData[0].name).toBe("StubCo")
+    expect(f.breadcrumbs.length).toBe(1)
+    expect(f.breadcrumbs[0].text).toBe("Home")
     expect(f.crawlerError).toBeNull()
     expect(f.digest).toContain("== MAIN CONTENT ==")
   })
@@ -97,7 +121,8 @@ describe("researchPage application use case", () => {
     const f = await researchPage({ url: "https://good.example/page" })
     for (const key of [
       "requestedUrl", "title", "finalUrl", "httpStatus", "ok", "fetchMode",
-      "mainContent", "headings", "paragraphs", "links", "images", "metadata",
+      "mainContent", "headings", "paragraphs", "lists", "tables",
+      "links", "images", "videos", "metadata", "structuredData", "breadcrumbs",
       "crawlerError", "objective", "digest",
     ]) {
       expect(f).toHaveProperty(key)
@@ -138,10 +163,10 @@ describe("researchPage application use case", () => {
 
   test("Unicode is preserved across all finding fields", async () => {
     const f = await researchPage({ url: "https://unicode.example/a" })
-    expect(f.title).toBe("Résumé ▼©")
-    expect(f.mainContent).toContain("Café ☕")
-    expect(f.mainContent).toContain("“quoted”")
-    expect(f.mainContent).toContain("▼")
+    expect(f.title).toBe("R\u00e9sum\u00e9 \u25bc\u00a9")
+    expect(f.mainContent).toContain("Caf\u00e9 \u2615")
+    expect(f.mainContent).toContain("\u201Cquoted\u201D")
+    expect(f.mainContent).toContain("\u25bc")
   })
 
   test("objective is carried into the finding and digest", async () => {

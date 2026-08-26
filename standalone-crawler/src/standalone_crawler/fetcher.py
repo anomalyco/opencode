@@ -155,6 +155,54 @@ def check_ssrf_safe(url: str, config: CrawlerConfig) -> None:
 class PageFetcher:
     """Fetches a single page using the Scrapling fetcher selected by config."""
 
+    @staticmethod
+    def _scroll_page_action(config: CrawlerConfig):
+        """Return a page_action callback that incrementally scrolls the page.
+
+        Scrolls in viewport-sized steps, waiting for lazy-loaded content to
+        appear after each step. Stops when the scroll height stabilizes for
+        several iterations or the bottom of the page is reached.
+        """
+        import time as _time
+
+        def _scroll(page):
+            max_stable_iterations = 3
+            scroll_step_ms = 800
+
+            previous_height = 0
+            stable_iterations = 0
+
+            for _ in range(100):  # hard cap at 100 iterations
+                current_height = page.evaluate("document.body.scrollHeight")
+                scroll_position = page.evaluate("window.scrollY + window.innerHeight")
+
+                if current_height == previous_height:
+                    stable_iterations += 1
+                else:
+                    stable_iterations = 0
+
+                if stable_iterations >= max_stable_iterations:
+                    logger.info(
+                        "Scroll stabilized after %s iterations (height=%s)",
+                        _,
+                        current_height,
+                    )
+                    break
+
+                if scroll_position >= current_height and previous_height > 0:
+                    logger.info("Reached page bottom at iteration %s", _)
+                    _time.sleep(scroll_step_ms / 1000)
+                    new_height = page.evaluate("document.body.scrollHeight")
+                    if new_height <= current_height:
+                        logger.info("No additional content loaded at bottom")
+                        break
+
+                page.evaluate("window.scrollBy(0, window.innerHeight)")
+                _time.sleep(scroll_step_ms / 1000)
+                previous_height = current_height
+
+        return _scroll
+
     def fetch(self, url: str, config: CrawlerConfig) -> PageResponse:
         """Fetch ``url`` according to ``config`` and return a PageResponse.
 
@@ -414,7 +462,9 @@ class PageFetcher:
             kwargs["page_setup"] = self._browser_ssrf_page_setup(config)
         if config.browser_profile:
             kwargs["user_data_dir"] = config.browser_profile
-        if config.hold_open_seconds is not None:
+        if config.scroll:
+            kwargs["page_action"] = self._scroll_page_action(config)
+        elif config.hold_open_seconds is not None:
             import time as _time
 
             def _wait_after_load(page):
@@ -437,7 +487,9 @@ class PageFetcher:
             kwargs["page_setup"] = self._browser_ssrf_page_setup(config)
         if config.browser_profile:
             kwargs["user_data_dir"] = config.browser_profile
-        if config.hold_open_seconds is not None:
+        if config.scroll:
+            kwargs["page_action"] = self._scroll_page_action(config)
+        elif config.hold_open_seconds is not None:
             import time as _time
 
             def _wait_after_load(page):

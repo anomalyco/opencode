@@ -25,16 +25,26 @@ export interface ResearchFinding {
   mainContent: string
   headings: Array<{ level: number; text: string }>
   paragraphs: string[]
+  lists: Array<{ text: string; level: number }>
+  tables: Array<{ headers: string[]; rows: string[][] }>
   links: Array<{ text: string; url: string; external: boolean | null }>
   images: Array<{ src: string; alt: string | null }>
+  videos: Array<{ src: string; title: string | null; poster: string | null }>
   metadata: {
     description: string | null
     keywords: string | null
+    author: string | null
+    publishedTime: string | null
+    modifiedTime: string | null
     ogTitle: string | null
     ogDescription: string | null
     ogSiteName: string | null
+    ogType: string | null
     twitterCard: string | null
+    twitterSite: string | null
   }
+  structuredData: Array<{ type: string | null; name: string | null }>
+  breadcrumbs: Array<{ text: string; url: string | null }>
   crawlerError: { type: string; message: string } | null
   objective: string | null
   /** Human-readable research digest produced by the page-research formatter. */
@@ -91,8 +101,11 @@ export async function researchPage(request: ResearchRequest): Promise<ResearchFi
     | {
         description?: string | null
         keywords?: string | null
-        og?: { title?: string | null; description?: string | null; site_name?: string | null }
-        twitter?: { card?: string | null }
+        author?: string | null
+        published_time?: string | null
+        modified_time?: string | null
+        og?: { title?: string | null; description?: string | null; site_name?: string | null; type?: string | null }
+        twitter?: { card?: string | null; site?: string | null }
       }
     | undefined
 
@@ -108,16 +121,26 @@ export async function researchPage(request: ResearchRequest): Promise<ResearchFi
     mainContent: str(crawl.content?.text) ?? "",
     headings: crawl.content?.headings ?? [],
     paragraphs: crawl.content?.paragraphs ?? [],
+    lists: (crawl.content?.lists ?? []).map((l) => ({ text: l.text, level: l.level })),
+    tables: crawl.content?.tables ?? [],
     links: (crawl.links ?? []).map((l) => ({ text: l.text, url: l.url, external: l.external ?? null })),
     images: (crawl.images ?? []).map((i) => ({ src: i.src, alt: i.alt ?? null })),
+    videos: (crawl.videos ?? []).map((v) => ({ src: v.src, title: v.title ?? null, poster: v.poster ?? null })),
     metadata: {
       description: str(meta?.description),
       keywords: str(meta?.keywords),
+      author: str(meta?.author),
+      publishedTime: str(meta?.published_time),
+      modifiedTime: str(meta?.modified_time),
       ogTitle: str(meta?.og?.title),
       ogDescription: str(meta?.og?.description),
       ogSiteName: str(meta?.og?.site_name),
+      ogType: str(meta?.og?.type),
       twitterCard: str(meta?.twitter?.card),
+      twitterSite: str(meta?.twitter?.site),
     },
+    structuredData: (crawl.structured_data ?? []).map((s) => ({ type: s.type ?? null, name: s.name ?? null })),
+    breadcrumbs: (crawl.breadcrumbs ?? []).map((b) => ({ text: b.text, url: b.url ?? null })),
     crawlerError: crawl.error ? { type: crawl.error.type, message: crawl.error.message } : null,
     objective: str(request.objective),
     digest: toolResult.output,

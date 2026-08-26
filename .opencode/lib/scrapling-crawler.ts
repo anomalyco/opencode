@@ -16,6 +16,8 @@ export interface ScraplingCrawlOptions {
   url: string
   mode?: CrawlerMode
   timeoutMs?: number
+  /** When true, auto-scroll the page incrementally to load lazy content. */
+  scroll?: boolean
 }
 
 /** Parsed shape of the Python CrawlResult (models.py section 13). */
@@ -24,10 +26,19 @@ export interface ScraplingCrawlResult {
   request?: { url?: string; fetch_mode?: string | null }
   response?: { status_code?: number | null; final_url?: string | null; content_type?: string | null; response_time_ms?: number | null }
   page?: { title?: string | null; description?: string | null; language?: string | null; canonical_url?: string | null } | null
-  content?: { text?: string; headings?: Array<{ level: number; text: string }>; paragraphs?: string[] } | null
+  content?: {
+    text?: string
+    headings?: Array<{ level: number; text: string }>
+    paragraphs?: string[]
+    lists?: Array<{ text: string; level: number; nested?: Array<{ text: string; level: number }> }>
+    tables?: Array<{ headers: string[]; rows: string[][] }>
+  } | null
   links?: Array<{ text: string; url: string; rel?: string[]; external?: boolean | null }>
   images?: Array<{ src: string; alt?: string | null; title?: string | null }>
+  videos?: Array<{ src: string; title?: string | null; poster?: string | null; type?: string | null }>
   metadata?: Record<string, unknown>
+  structured_data?: Array<{ type?: string | null; name?: string | null; data?: Record<string, unknown> }>
+  breadcrumbs?: Array<{ text: string; url?: string | null }>
   error?: { type: string; message: string } | null
 }
 
@@ -88,7 +99,7 @@ function stderrTail(stderr: string): string {
  * Throws CrawlerError with a typed `kind` on any failure.
  */
 export async function crawlWithScrapling(options: ScraplingCrawlOptions): Promise<ScraplingCrawlResult> {
-  const { url, mode = "stealth", timeoutMs = DEFAULT_TIMEOUT_MS } = options
+  const { url, mode = "stealth", timeoutMs = DEFAULT_TIMEOUT_MS, scroll = false } = options
 
   if (!isValidCrawlUrl(url)) {
     throw new CrawlerError("invalid-url", `Invalid URL: ${url}. Only http:// and https:// URLs are supported.`)
@@ -110,11 +121,16 @@ export async function crawlWithScrapling(options: ScraplingCrawlOptions): Promis
     }
   }
 
-  debug(`Spawning: ${python} ${script} "${url}" --mode ${mode}`)
+  const args = [python, script, url, "--mode", mode]
+  if (scroll) {
+    args.push("--scroll")
+  }
+
+  debug(`Spawning: ${args.join(" ")}`)
 
   let proc: Bun.Subprocess<"ignore", "pipe", "pipe">
   try {
-    proc = Bun.spawn([python, script, url, "--mode", mode], {
+    proc = Bun.spawn(args, {
       stdin: "ignore",
       stdout: "pipe",
       stderr: "pipe",

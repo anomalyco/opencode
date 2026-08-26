@@ -2,6 +2,7 @@
 import { access, mkdir } from "node:fs/promises"
 import { constants } from "node:fs"
 import path from "node:path"
+import { detectLoginWall, formatHighSecurityResult, type HighSecurityScrapeResult } from "../lib/high-security-scraper"
 
 type CrawlResult = {
   success?: boolean
@@ -23,8 +24,9 @@ type CrawlResult = {
   content?: {
     paragraphs?: unknown[]
     text?: string
-    headings?: unknown[]
+    headings?: Array<{ level: number; text: string }>
   }
+  links?: Array<{ text: string; url: string }>
   error?: {
     type?: string
     message?: string
@@ -298,6 +300,55 @@ function buildMarkdown(
   return lines.join("\n")
 }
 
+/**
+ * Convert a raw CrawlResult from the plugin's Python invocation
+ * into a HighSecurityScrapeResult with metadata format.
+ */
+function toHighSecurityResult(
+  data: CrawlResult,
+  url: string,
+): HighSecurityScrapeResult {
+  const loginWall = detectLoginWall(data as any)
+  const text = data.content?.text ?? ""
+
+  return {
+    metadata: {
+      url,
+      domain: (() => {
+        try { return new URL(url).hostname } catch { return "unknown" }
+      })(),
+      scraper: "Scrapling",
+      mode: "Browser",
+      securityLevel: "High",
+      rendered: true,
+      autoScroll: true,
+      contentType: "Visible Page",
+      source: "TUI",
+    },
+    details: {
+      initialHtmlFetch: false,
+      browserNavigation: true,
+      scrollIterations: -1,
+      dynamicContentLoaded: text.length > 1000,
+      finalScrollHeight: -1,
+      status: loginWall.detected
+        ? "Restricted"
+        : data.success === false
+          ? "Failed"
+          : "Success",
+      error: data.error
+        ? `${data.error.type}: ${data.error.message}`
+        : undefined,
+      loginWall,
+    },
+    title: data.page?.title ?? "LinkedIn Profile",
+    content: text,
+    headings: data.content?.headings ?? [],
+    links: (data.links ?? []).map((l) => ({ text: l.text, url: l.url })),
+    raw: data as any,
+  }
+}
+
 export const ScraplingPlugin: Plugin =
   async ({ $ }) => {
     const crawlerRoot =
@@ -319,7 +370,7 @@ export const ScraplingPlugin: Plugin =
       tool: {
         scrapling_crawl: tool({
           description:
-            "Crawl a URL using the standalone Scrapling crawler. For LinkedIn profiles, use the authenticated browser profile and save a unique structured Markdown report.",
+            "Crawl a URL using the standalone Scrapling crawler. For LinkedIn profiles, use the authenticated browser profile and save a unique structured Markdown report. Returns a clean metadata format with Scrapling browser flow details.",
 
           args: {
             url: tool.schema
@@ -328,30 +379,26 @@ export const ScraplingPlugin: Plugin =
           },
 
           async execute(args) {
+            const url = args.url
+
             try {
               const raw =
-                await $`${python} ${cli} ${args.url} --mode browser --browser-profile ${browserProfile} --json --indent 2`
+                await $`${python} ${cli} ${url} --mode browser --browser-profile ${browserProfile} --json --indent 2`
                   .text()
 
               const data =
                 JSON.parse(raw) as CrawlResult
 
               if (data.success === false) {
-                return JSON.stringify(
-                  {
-                    integration:
-                      "SCRAPLING_PLUGIN_V2",
-                    success: false,
-                    error: data.error ?? null,
-                  },
-                  null,
-                  2,
-                )
+                // Still return metadata format even on failure
+                const result = toHighSecurityResult(data, url)
+                return formatHighSecurityResult(result)
               }
 
               const fields =
                 extractProfileFields(data)
 
+              // Save Markdown report
               const markdownPath =
                 await uniqueMarkdownPath(
                   outputDir,
@@ -367,42 +414,73 @@ export const ScraplingPlugin: Plugin =
                 markdown,
               )
 
-              return JSON.stringify(
-                {
-                  integration:
-                    "SCRAPLING_PLUGIN_V2",
-                  success: true,
-                  profile: fields,
-                  markdown_file: markdownPath,
-                  crawl: {
-                    status_code:
-                      data.response?.status_code,
-                    fetch_mode:
-                      data.request?.fetch_mode,
-                    final_url:
-                      data.response?.final_url,
-                    response_time_ms:
-                      data.response
-                        ?.response_time_ms,
-                  },
-                },
-                null,
-                2,
-              )
+              // Return metadata format + profile fields
+              const result = toHighSecurityResult(data, url)
+              const formatted = formatHighSecurityResult(result)
+
+              // Append profile-specific info
+              const lines = [
+                formatted,
+                "",
+                "## Extracted Profile Fields",
+                "",
+              ]
+
+              const orderedFields: Array<[keyof ProfileFields, string]> = [
+                ["name", "Name"],
+                ["headline", "Headline"],
+                ["pronouns", "Pronouns"],
+                ["current_company", "Company"],
+                ["education", "Education"],
+                ["location", "Location"],
+                ["connections", "Connections"],
+                ["open_to_work", "Open to Work"],
+                ["profile_url", "Profile URL"],
+              ]
+
+              for (const [key, label] of orderedFields) {
+                const value = fields[key]
+                if (value) {
+                  lines.push(`- **${label}:** ${value}`)
+                }
+              }
+
+              lines.push("")
+              lines.push(`- **Markdown Report:** ${markdownPath}`)
+
+              return lines.join("\n")
             } catch (error) {
-              return JSON.stringify(
-                {
-                  integration:
-                    "SCRAPLING_PLUGIN_V2",
-                  success: false,
-                  error:
-                    error instanceof Error
-                      ? error.message
-                      : String(error),
+              // Return metadata format for errors too
+              const errorResult: HighSecurityScrapeResult = {
+                metadata: {
+                  url,
+                  domain: (() => {
+                    try { return new URL(url).hostname } catch { return "unknown" }
+                  })(),
+                  scraper: "Scrapling",
+                  mode: "Browser",
+                  securityLevel: "High",
+                  rendered: true,
+                  autoScroll: true,
+                  contentType: "Visible Page",
+                  source: "TUI",
                 },
-                null,
-                2,
-              )
+                details: {
+                  initialHtmlFetch: false,
+                  browserNavigation: true,
+                  scrollIterations: 0,
+                  dynamicContentLoaded: false,
+                  finalScrollHeight: -1,
+                  status: "Failed",
+                  error: error instanceof Error ? error.message : String(error),
+                },
+                title: "Error",
+                content: "",
+                headings: [],
+                links: [],
+                raw: { success: false } as any,
+              }
+              return formatHighSecurityResult(errorResult)
             }
           },
         }),

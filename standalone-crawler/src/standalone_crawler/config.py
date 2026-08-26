@@ -99,6 +99,14 @@ class CrawlerConfig(BaseModel):
             "interaction such as logging in."
         ),
     )
+    scroll: bool = Field(
+        default=False,
+        description=(
+            "When True, automatically scroll the page incrementally after "
+            "load to trigger lazy-loaded content. Uses viewport-sized scroll "
+            "steps with stabilization detection. Only effective in browser/stealth modes."
+        ),
+    )
 
     # --- Extraction toggles ---
     extract_links: bool = Field(default=True)

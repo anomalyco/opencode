@@ -1,7 +1,8 @@
 """Extraction layer.
 
 Converts a parsed Scrapling ``Selector`` document into structured content:
-title, headings, paragraphs, main text, links, images, and metadata.
+title, headings, paragraphs, main text, links, images, videos, tables,
+lists, structured data (JSON-LD), breadcrumbs, and metadata.
 
 This layer has no knowledge of the CLI and no knowledge of how the page
 was fetched -- it operates purely on the parsed document (spec section 27).
@@ -9,18 +10,25 @@ was fetched -- it operates purely on the parsed document (spec section 27).
 
 from __future__ import annotations
 
+import json
+from typing import Any
 from urllib.parse import urljoin, urlparse
 
 from standalone_crawler.cleaners import clean_paragraphs, clean_text_block, dedupe_preserve_order
 from standalone_crawler.exceptions import ExtractionError
 from standalone_crawler.logging_config import get_logger
 from standalone_crawler.models import (
+    Breadcrumb,
     Heading,
     Image,
     Link,
+    ListItem,
     OpenGraphMetadata,
     PageMetadata,
+    StructuredDataItem,
+    Table,
     TwitterCardMetadata,
+    Video,
 )
 
 logger = get_logger("extractor")
@@ -141,6 +149,75 @@ class ContentExtractor:
         """
         return self.extract_visible_text(document, clean=clean)
 
+    def extract_tables(self, document) -> list[Table]:
+        """Extract HTML tables into structured Table objects."""
+        tables: list[Table] = []
+        try:
+            for table_node in document.css("table"):
+                headers: list[str] = []
+                rows: list[list[str]] = []
+
+                # Extract headers from <thead> or first <tr> with <th> elements.
+                th_nodes = table_node.css("thead th") or table_node.css("tr:first-child th")
+                if not th_nodes:
+                    # Fallback: first row th elements.
+                    first_tr = table_node.css("tr")
+                    if first_tr:
+                        th_nodes = first_tr[0].css("th")
+                for th in th_nodes:
+                    headers.append(_text_of(th).strip())
+
+                # Extract body rows.
+                tbody_rows = table_node.css("tbody tr") or table_node.css("tr")
+                for tr in tbody_rows:
+                    cells = tr.css("td")
+                    if not cells:
+                        continue
+                    row = [_text_of(cell).strip() for cell in cells]
+                    if any(row):
+                        rows.append(row)
+
+                if headers or rows:
+                    tables.append(Table(headers=headers, rows=rows))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Failed to extract tables: %s", exc)
+        return tables
+
+    def _extract_list_node(self, node, level: int = 0) -> list[ListItem]:
+        """Recursively extract items from a <ul> or <ol> node."""
+        items: list[ListItem] = []
+        for li in node.css(":scope > li"):
+            text = _text_of(li).strip()
+            # Remove nested list text from the parent item text.
+            nested_items: list[ListItem] = []
+            for child_list in li.css("ul, ol"):
+                nested_items.extend(self._extract_list_node(child_list, level + 1))
+            if nested_items:
+                nested_texts = " ".join(n.text for n in nested_items)
+                text = text.replace(nested_texts, "").strip()
+            if text:
+                items.append(ListItem(text=text, level=level, nested=nested_items))
+        return items
+
+    def extract_lists(self, document) -> list[ListItem]:
+        """Extract ordered and unordered lists."""
+        all_lists: list[ListItem] = []
+        try:
+            body = document.css("body")
+            target = body[0] if body else document
+            for list_node in target.css("ul, ol"):
+                # Skip lists that are likely navigation or footer lists.
+                parent_tag = getattr(list_node, "parent", None)
+                parent_class = ""
+                if parent_tag is not None:
+                    parent_class = (getattr(parent_tag, "attrib", {}) or {}).get("class", "")
+                items = self._extract_list_node(list_node)
+                if items:
+                    all_lists.extend(items)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Failed to extract lists: %s", exc)
+        return all_lists
+
     def extract_links(self, document, base_url: str) -> list[Link]:
         links: list[Link] = []
         base_host = urlparse(base_url).netloc.lower()
@@ -199,6 +276,136 @@ class ContentExtractor:
             raise ExtractionError(f"Failed to extract images: {exc}") from exc
         return images
 
+    def extract_videos(self, document, base_url: str) -> list[Video]:
+        """Extract video elements (HTML5 <video>, <source>, and iframe embeds)."""
+        videos: list[Video] = []
+        try:
+            # HTML5 <video> elements.
+            for node in document.css("video"):
+                src = node.attrib.get("src")
+                poster = node.attrib.get("poster")
+                # Check child <source> elements if no direct src.
+                if not src:
+                    source_node = node.css("source")
+                    if source_node:
+                        src = source_node[0].attrib.get("src")
+                if src:
+                    videos.append(
+                        Video(
+                            src=_absolutize(base_url, src),
+                            title=node.attrib.get("title"),
+                            poster=_absolutize(base_url, poster) if poster else None,
+                            type=None,
+                        )
+                    )
+
+            # <iframe> embeds from known video platforms.
+            video_iframe_domains = {"youtube.com", "www.youtube.com", "youtu.be", "vimeo.com", "player.vimeo.com"}
+            for node in document.css("iframe"):
+                src = node.attrib.get("src") or node.attrib.get("data-src")
+                if not src:
+                    continue
+                try:
+                    parsed = urlparse(src)
+                    if parsed.netloc in video_iframe_domains:
+                        videos.append(
+                            Video(
+                                src=src,
+                                title=node.attrib.get("title"),
+                                poster=None,
+                                type="iframe",
+                            )
+                        )
+                except Exception:  # noqa: BLE001
+                    pass
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Failed to extract videos: %s", exc)
+        return videos
+
+    def extract_structured_data(self, document) -> list[StructuredDataItem]:
+        """Extract JSON-LD structured data blocks from <script type='application/ld+json'>."""
+        items: list[StructuredDataItem] = []
+        try:
+            for script_node in document.css("script[type='application/ld+json']"):
+                raw = _text_of(script_node).strip()
+                if not raw:
+                    continue
+                try:
+                    data = json.loads(raw)
+                except (json.JSONDecodeError, ValueError):
+                    continue
+
+                # Handle both single objects and arrays.
+                entries = data if isinstance(data, list) else [data]
+                for entry in entries:
+                    if not isinstance(entry, dict):
+                        continue
+                    item_type = entry.get("@type")
+                    name = entry.get("name")
+                    items.append(
+                        StructuredDataItem(
+                            type=str(item_type) if item_type else None,
+                            name=str(name) if name else None,
+                            data=entry,
+                        )
+                    )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Failed to extract structured data: %s", exc)
+        return items
+
+    def extract_breadcrumbs(self, document) -> list[Breadcrumb]:
+        """Extract breadcrumb navigation from common patterns.
+
+        Looks for:
+        - <nav aria-label='breadcrumb'> or <nav class='breadcrumb'>
+        - <ol class='breadcrumb'> / <ul class='breadcrumb'>
+        - Schema.org BreadcrumbList structured data (if already extracted).
+        """
+        breadcrumbs: list[Breadcrumb] = []
+        try:
+            # Pattern 1: <nav> with breadcrumb aria-label or class.
+            nav_selectors = [
+                "nav[aria-label='breadcrumb'] a",
+                "nav[aria-label='Breadcrumb'] a",
+                "nav.breadcrumb a",
+                "nav.breadcrumbs a",
+                "[itemtype*='BreadcrumbList'] a",
+            ]
+            for selector in nav_selectors:
+                nodes = document.css(selector)
+                if nodes:
+                    for node in nodes:
+                        text = _text_of(node).strip()
+                        href = node.attrib.get("href")
+                        url = _absolutize(document.css("html")[0].attrib.get("base", ""), href) if href else None
+                        if text:
+                            breadcrumbs.append(Breadcrumb(text=text, url=url))
+                    if breadcrumbs:
+                        return breadcrumbs
+
+            # Pattern 2: <ol> or <ul> with breadcrumb class.
+            list_selectors = [
+                "ol.breadcrumb li a",
+                "ul.breadcrumb li a",
+                "ol.breadcrumbs li a",
+                "ul.breadcrumbs li a",
+                "[class*='breadcrumb'] li a",
+            ]
+            for selector in list_selectors:
+                nodes = document.css(selector)
+                if nodes:
+                    for node in nodes:
+                        text = _text_of(node).strip()
+                        href = node.attrib.get("href")
+                        url = _absolutize(document.css("html")[0].attrib.get("base", ""), href) if href else None
+                        if text:
+                            breadcrumbs.append(Breadcrumb(text=text, url=url))
+                    if breadcrumbs:
+                        return breadcrumbs
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Failed to extract breadcrumbs: %s", exc)
+        return breadcrumbs
+
     def extract_metadata(self, document) -> PageMetadata:
         try:
             og = OpenGraphMetadata(
@@ -216,15 +423,30 @@ class ContentExtractor:
                 image=_meta_content(document, "meta[name='twitter:image']"),
                 site=_meta_content(document, "meta[name='twitter:site']"),
             )
+
+            # Publication and modification dates from meta tags.
+            published_time = (
+                _meta_content(document, "meta[property='article:published_time']")
+                or _meta_content(document, "meta[name='date']")
+                or _meta_content(document, "meta[name='publish_date']")
+                or _meta_content(document, "meta[name='pubdate']")
+            )
+            modified_time = (
+                _meta_content(document, "meta[property='article:modified_time']")
+                or _meta_content(document, "meta[name='last-modified']")
+                or _meta_content(document, "meta[name='updated']")
+            )
+
             return PageMetadata(
                 description=_meta_content(document, "meta[name='description']"),
                 keywords=_meta_content(document, "meta[name='keywords']"),
                 canonical=_first_attr(document, "link[rel='canonical']", "href"),
                 robots=_meta_content(document, "meta[name='robots']"),
                 author=_meta_content(document, "meta[name='author']"),
+                published_time=published_time,
+                modified_time=modified_time,
                 og=og,
                 twitter=twitter,
             )
         except Exception as exc:  # noqa: BLE001
             raise ExtractionError(f"Failed to extract metadata: {exc}") from exc
-        
