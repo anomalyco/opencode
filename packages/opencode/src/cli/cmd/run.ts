@@ -30,7 +30,7 @@ type ModelInput = Parameters<OpencodeClient["session"]["prompt"]>[0]["model"]
 
 function pick(value: string | undefined): ModelInput | undefined {
   if (!value) return undefined
-  const [providerID, ...rest] = value.split("/")
+  const [providerID, ...rest] = value.replace(/\/+$/, "").split("/")
   return {
     providerID,
     modelID: rest.join("/"),

@@ -6,4 +6,8 @@ describe("util.model", () => {
     expect(parse("provider/org/model")).toEqual({ providerID: "provider", modelID: "org/model" })
     expect(parse("invalid")).toEqual({ providerID: "invalid", modelID: "" })
   })
+
+  test("strips trailing slash", () => {
+    expect(parse("provider/org/model/")).toEqual({ providerID: "provider", modelID: "org/model" })
+  })
 })
