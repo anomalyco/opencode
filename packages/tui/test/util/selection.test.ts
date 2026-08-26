@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test"
+import type { SelectionBehavior } from "@opentui/core"
 import type { ClipboardService } from "../../src/context/clipboard"
 import { Selection, copy, copyOnSelectRelease } from "../../src/util/selection"
 
@@ -8,12 +9,13 @@ function renderer() {
       getSelectedText: () => "beta",
       selectedRenderables: [],
       isStart: false,
+      behavior: "cell" as const,
     }),
     clearSelection: () => {},
   }
 }
 
-function setup(text: string, isStart: boolean) {
+function setup(text: string, isStart: boolean, behavior: SelectionBehavior = "cell") {
   const writes: string[] = []
   let clears = 0
   const clipboard: ClipboardService = {
@@ -23,7 +25,7 @@ function setup(text: string, isStart: boolean) {
     },
   }
   const renderer = {
-    getSelection: () => ({ getSelectedText: () => text, selectedRenderables: [], isStart }),
+    getSelection: () => ({ getSelectedText: () => text, selectedRenderables: [], isStart, behavior }),
     clearSelection: () => {
       clears++
     },
@@ -41,6 +43,7 @@ test("copy writes selected text without clearing the highlight", () => {
         getSelectedText: () => "beta",
         selectedRenderables: [],
         isStart: false,
+        behavior: "cell",
       }),
       clearSelection: () => {
         cleared = true
@@ -73,6 +76,20 @@ test("copy-on-select ignores a later non-drag release", () => {
   expect(copyOnSelectRelease({ isDragging: false }, renderer(), toast, clipboard)).toBe(false)
   expect(copyOnSelectRelease({ isDragging: true }, renderer(), toast, clipboard)).toBe(true)
   expect(writes).toEqual(["beta"])
+})
+
+test("copy-on-select preserves a click-only selection for subsequent clicks", () => {
+  const value = setup("", true)
+  expect(copyOnSelectRelease({ isDragging: true }, value.renderer, value.toast, value.clipboard)).toBeFalse()
+  expect(value.clears()).toBe(0)
+  expect(value.writes).toEqual([])
+})
+
+test.each(["word", "line"] as const)("copy-on-select copies a %s selection without pointer movement", (behavior) => {
+  const value = setup("selected", true, behavior)
+  expect(copyOnSelectRelease({ isDragging: true }, value.renderer, value.toast, value.clipboard)).toBeTrue()
+  expect(value.clears()).toBe(0)
+  expect(value.writes).toEqual(["selected"])
 })
 
 test("clears a click-only selection without copying", () => {
