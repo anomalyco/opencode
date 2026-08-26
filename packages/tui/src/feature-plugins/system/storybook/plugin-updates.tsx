@@ -94,7 +94,9 @@ function PluginUpdatesStory(props: { context: Plugin.Context }) {
               previousVersion: current?.currentVersion,
               version: current?.latestVersion,
             }
-            fixture = fixture.map((entry) => (entry.name === name ? { ...entry, status: "up-to-date" } : entry))
+            fixture = fixture.map((entry) =>
+              entry.name === name ? { ...entry, status: "up-to-date", currentVersion: entry.latestVersion } : entry,
+            )
             return result
           },
           async updateAll() {

@@ -5,6 +5,7 @@ import { DialogErrorDetails } from "../../component/dialog-error-details"
 import { usePlugin } from "../../plugin/context"
 import { DialogSelect, type DialogSelectOption } from "../../ui/dialog-select"
 import { useDialog } from "../../ui/dialog"
+import { matchesPluginUpdate, pluginServerKey } from "./plugins-model"
 
 const id = "opencode.plugins"
 
@@ -43,7 +44,7 @@ export function PluginsDialog(props: {
   const [detail, setDetail] = createSignal<Entry>()
   const [initial, setInitial] = createSignal<string>()
   const [checking, setChecking] = createSignal(true)
-  const [checkError, setCheckError] = createSignal<string>()
+  const [operationError, setOperationError] = createSignal<string>()
   const [updateEntries, setUpdateEntries] = createSignal<readonly UpdateEntry[]>([])
   const [updating, setUpdating] = createSignal<string>()
   const location = () => props.context.location ?? props.context.data.location.default()
@@ -61,7 +62,7 @@ export function PluginsDialog(props: {
     void operations
       .check()
       .then(setUpdateEntries)
-      .catch((cause) => setCheckError(errorMessage(cause)))
+      .catch((cause) => setOperationError(errorMessage(cause)))
       .finally(() => setChecking(false))
   })
   const entries = createMemo<Entry[]>(() => {
@@ -180,7 +181,7 @@ export function PluginsDialog(props: {
     if (locked()) return
     setLocked(true)
     setUpdating(name)
-    setCheckError()
+    setOperationError()
     void operations
       .update(name)
       .then(async (result) => {
@@ -188,7 +189,7 @@ export function PluginsDialog(props: {
         if (!props.server && result.status === "updated") await refetchServer()
       })
       .catch((cause) => {
-        setCheckError(errorMessage(cause))
+        setOperationError(errorMessage(cause))
         props.context.ui.toast.show({ variant: "error", message: errorMessage(cause) })
       })
       .finally(() => {
@@ -200,7 +201,7 @@ export function PluginsDialog(props: {
     if (locked()) return
     setLocked(true)
     setUpdating("*")
-    setCheckError()
+    setOperationError()
     void operations
       .updateAll()
       .then(async (results) => {
@@ -208,7 +209,7 @@ export function PluginsDialog(props: {
         if (!props.server && results.some((result) => result.status === "updated")) await refetchServer()
       })
       .catch((cause) => {
-        setCheckError(errorMessage(cause))
+        setOperationError(errorMessage(cause))
         props.context.ui.toast.show({ variant: "error", message: errorMessage(cause) })
       })
       .finally(() => {
@@ -269,8 +270,8 @@ export function PluginsDialog(props: {
               <Show
                 when={pluginError(focusedEntry())}
                 fallback={
-                  <Show when={checkError()}>
-                    <text fg={props.context.theme.text.feedback.error.default}>Update check failed</text>
+                  <Show when={operationError()}>
+                    <text fg={props.context.theme.text.feedback.error.default}>Plugin update failed</text>
                   </Show>
                 }
               >
@@ -305,22 +306,6 @@ function label(entry: Entry, context: Plugin.Context) {
   return entry.plugin.id ?? source(entry.plugin, context)
 }
 
-export function matchesPluginUpdate(plugin: PluginInfo, update: UpdateEntry) {
-  if (plugin.source.type !== update.source.type) return false
-  if (plugin.source.type === "package" && update.source.type === "package") {
-    return plugin.source.package === update.source.package
-  }
-  if (plugin.source.type === "local" && update.source.type === "local") return plugin.source.path === update.source.path
-  return plugin.id === update.name
-}
-
-export function pluginServerKey(plugin: PluginInfo) {
-  if (plugin.id) return `server:${plugin.id}`
-  if (plugin.source.type === "package") return `server:package:${plugin.source.package}`
-  if (plugin.source.type === "local") return `server:local:${plugin.source.path}`
-  return `server:${plugin.source.type}`
-}
-
 function source(plugin: PluginInfo, context: Plugin.Context) {
   if (plugin.source.type === "package") return plugin.source.package
   if (plugin.source.type === "local") return context.ui.format.path(plugin.source.path)
@@ -343,7 +328,7 @@ function statusLabel(entry: Entry, checking: boolean, updating: string | undefin
   if (updating === "*" || (update && updating === update.name)) return "updating …"
   if (entry.plugin.status === "failed") return "failed"
   if (!update) return checking ? "checking …" : undefined
-  if (update.status === "not-updateable") return update.source.type === "local" ? "local" : "not updateable"
+  if (update.status === "not-updateable") return update.source.type === "local" ? "local" : undefined
   const currentVersion =
     "currentVersion" in update ? update.currentVersion : "version" in update ? update.version : undefined
   if (update.status === "pinned") return currentVersion ? `${currentVersion} pinned` : "pinned"

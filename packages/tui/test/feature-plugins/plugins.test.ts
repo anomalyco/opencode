@@ -1,6 +1,6 @@
 import type { PluginInfo, PluginUpdateInfo } from "@opencode-ai/client"
 import { describe, expect, test } from "bun:test"
-import { matchesPluginUpdate, pluginServerKey } from "../../src/feature-plugins/system/plugins"
+import { matchesPluginUpdate, pluginServerKey } from "../../src/feature-plugins/system/plugins-model"
 
 const builtin = (id: string): PluginInfo => ({ id, source: { type: "builtin" }, status: "active", tui: false })
 
