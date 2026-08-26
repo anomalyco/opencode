@@ -363,7 +363,7 @@ export const TaskTool = Tool.define(
         ? [DESCRIPTION, BACKGROUND_DESCRIPTION].join("\n\n")
         : DESCRIPTION,
       parameters: Parameters,
-      jsonSchema: flags.experimentalBackgroundSubagents ? undefined : ToolJsonSchema.fromSchema(BaseParameters),
+      jsonSchema: ToolJsonSchema.fromSchema(Parameters),
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
         run(params, ctx).pipe(Effect.orDie),
     }
