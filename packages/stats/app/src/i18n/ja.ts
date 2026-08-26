@@ -111,7 +111,6 @@ export const dict = {
   "home.marketChart": "モデル作者別マーケットシェア",
   "home.noData": "データなし",
   "home.geoTitle": "地域別内訳",
-  "home.geoDescription": "国別のトークン使用量。",
   "home.noGeoTitle": "地域データがありません",
   "home.noGeoDescription": "この期間に一致する地域行はありません。",
   "home.worldMap": "国別トークン使用量の世界地図",

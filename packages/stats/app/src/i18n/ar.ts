@@ -108,7 +108,6 @@ export const dict = {
   "home.marketChart": "حصة السوق حسب مؤلف النموذج",
   "home.noData": "لا توجد بيانات",
   "home.geoTitle": "التوزيع الجغرافي",
-  "home.geoDescription": "الرموز المستخدمة حسب البلد.",
   "home.noGeoTitle": "لا توجد بيانات جغرافية",
   "home.noGeoDescription": "لم تطابق أي صفوف جغرافية هذا النطاق.",
   "home.worldMap": "خريطة عالمية لاستخدام الرموز حسب البلد",

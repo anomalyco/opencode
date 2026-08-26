@@ -110,7 +110,6 @@ export const dict = {
   "home.marketChart": "ส่วนแบ่งตลาดตามผู้สร้างโมเดล",
   "home.noData": "ไม่มีข้อมูล",
   "home.geoTitle": "แยกตามภูมิศาสตร์",
-  "home.geoDescription": "token ที่ใช้แยกตามประเทศ",
   "home.noGeoTitle": "ไม่มีข้อมูลภูมิศาสตร์",
   "home.noGeoDescription": "ไม่มีแถวภูมิศาสตร์ที่ตรงกับช่วงเวลานี้",
   "home.worldMap": "แผนที่โลกของการใช้ token แยกตามประเทศ",

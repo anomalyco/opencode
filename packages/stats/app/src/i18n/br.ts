@@ -109,7 +109,6 @@ export const dict = {
   "home.marketChart": "Participação de mercado por autor do modelo",
   "home.noData": "Sem dados",
   "home.geoTitle": "Distribuição geográfica",
-  "home.geoDescription": "Tokens usados por país.",
   "home.noGeoTitle": "Sem dados geográficos",
   "home.noGeoDescription": "Nenhuma linha geográfica correspondeu a este intervalo.",
   "home.worldMap": "Mapa-múndi do uso de tokens por país",
