@@ -16,7 +16,7 @@ import { SessionModelTransport } from "./model-transport.js"
 import { SessionRunnerModel } from "./runner/model.js"
 import { SessionSchema } from "./schema.js"
 import { SessionSystemPrompt } from "./system-prompt.js"
-import { toLLMMessages } from "./runner/to-llm-message.js"
+import { providerStateRoute, toLLMMessages } from "./runner/to-llm-message.js"
 import type { SessionMessage } from "./message.js"
 import type { Agent } from "../agent.js"
 
@@ -86,8 +86,10 @@ export const baseTranscript = (input: {
   readonly messages: ReadonlyArray<SessionMessage.Info>
 }) => {
   const providerMetadataKey = input.model.model.route.providerMetadataKey ?? input.model.model.provider
+  const route = providerStateRoute(input.model.model)
   return {
     providerMetadataKey,
+    providerStateRoute: route,
     system: [
       input.agent.system
         ? input.agent.system
@@ -96,7 +98,7 @@ export const baseTranscript = (input: {
     ]
       .filter((part) => part.length > 0)
       .map(SystemPart.make),
-    messages: toLLMMessages(input.messages, input.model.ref, providerMetadataKey),
+    messages: toLLMMessages(input.messages, input.model.ref, providerMetadataKey, route),
   }
 }
 

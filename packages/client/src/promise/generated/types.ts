@@ -717,7 +717,14 @@ export type SessionStepStarted = {
   type: "session.step.started"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
-  data: { sessionID: string; assistantMessageID: string; agent: string; model: ModelRef; snapshot?: string }
+  data: {
+    sessionID: string
+    assistantMessageID: string
+    agent: string
+    model: ModelRef
+    providerStateRoute?: "openai-api" | "openai-chatgpt-codex"
+    snapshot?: string
+  }
 }
 
 export type SessionStepStreamed = {
@@ -2087,6 +2094,7 @@ export type SessionMessageAssistant = {
   type: "assistant"
   agent: string
   model: ModelRef
+  providerStateRoute?: "openai-api" | "openai-chatgpt-codex"
   content: Array<SessionMessageAssistantText | SessionMessageAssistantReasoning | SessionMessageAssistantTool>
   snapshot?: { start?: string; end?: string; files?: Array<string> }
   finish?: "stop" | "length" | "tool-calls" | "content-filter" | "error" | "unknown"
@@ -2867,6 +2875,7 @@ export type SessionImportInput = {
           readonly type: "assistant"
           readonly agent: string
           readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
+          readonly providerStateRoute?: "openai-api" | "openai-chatgpt-codex"
           readonly content: ReadonlyArray<
             | { readonly type: "text"; readonly text: string; readonly state?: { readonly [x: string]: JsonValue } }
             | {
@@ -3143,6 +3152,7 @@ export type SessionImportInput = {
           readonly type: "assistant"
           readonly agent: string
           readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
+          readonly providerStateRoute?: "openai-api" | "openai-chatgpt-codex"
           readonly content: ReadonlyArray<
             | { readonly type: "text"; readonly text: string; readonly state?: { readonly [x: string]: JsonValue } }
             | {
@@ -3419,6 +3429,7 @@ export type SessionImportInput = {
           readonly type: "assistant"
           readonly agent: string
           readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
+          readonly providerStateRoute?: "openai-api" | "openai-chatgpt-codex"
           readonly content: ReadonlyArray<
             | { readonly type: "text"; readonly text: string; readonly state?: { readonly [x: string]: JsonValue } }
             | {

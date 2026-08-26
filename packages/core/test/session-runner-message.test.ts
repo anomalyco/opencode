@@ -808,6 +808,65 @@ Recent work
     ])
   })
 
+  test("does not replay opaque OpenAI state from ChatGPT Codex to the API", () => {
+    const openai = Model.Ref.make({ id: Model.ID.make("gpt-5.5"), providerID: Provider.ID.openai })
+    const history = [
+      SessionMessage.Assistant.make({
+        id: id("assistant-chatgpt-codex"),
+        type: "assistant",
+        agent: build,
+        model: openai,
+        providerStateRoute: "openai-chatgpt-codex",
+        content: [
+          SessionMessage.AssistantReasoning.make({
+            type: "reasoning",
+            text: "Visible thought",
+            state: { itemId: "rs_codex", reasoningEncryptedContent: "encrypted-codex-state" },
+          }),
+          SessionMessage.AssistantTool.make({
+            type: "tool",
+            id: "search",
+            name: "web_search",
+            executed: true,
+            providerState: { itemId: "call_codex" },
+            providerResultState: { itemId: "result_codex" },
+            state: SessionMessage.ToolStateCompleted.make({
+              status: "completed",
+              input: { query: "Effect" },
+              content: [{ type: "text", text: "Found it" }],
+            }),
+            time: { created, completed: created },
+          }),
+        ],
+        time: { created, completed: created },
+      }),
+    ]
+
+    const api = toLLMMessages(history, openai, "openai", "openai-api")
+    const codex = toLLMMessages(history, openai, "openai", "openai-chatgpt-codex")
+
+    expect(api[0]?.content).toEqual([
+      { type: "text", text: "Visible thought" },
+      { type: "tool-call", id: "search", name: "web_search", input: { query: "Effect" }, providerExecuted: true },
+      {
+        type: "tool-result",
+        id: "search",
+        name: "web_search",
+        providerExecuted: true,
+        result: { type: "text", value: "Found it" },
+      },
+    ])
+    expect(codex[0]?.content).toMatchObject([
+      {
+        type: "reasoning",
+        text: "Visible thought",
+        providerMetadata: { openai: { itemId: "rs_codex", reasoningEncryptedContent: "encrypted-codex-state" } },
+      },
+      { type: "tool-call", providerMetadata: { openai: { itemId: "call_codex" } } },
+      { type: "tool-result", providerMetadata: { openai: { itemId: "result_codex" } } },
+    ])
+  })
+
   test("replays flat state under an OpenCode hosted model's route key", () => {
     const opencode = Model.Ref.make({ id: Model.ID.make("claude-fable-5"), providerID: Provider.ID.opencode })
     const messages = toLLMMessages(

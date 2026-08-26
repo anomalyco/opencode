@@ -28,6 +28,7 @@ import { SessionUsage } from "../usage.js"
 import { SessionRunnerModel } from "./model.js"
 import { createLLMEventPublisher } from "./publish-llm-event.js"
 import { SessionRunnerRetry } from "./retry.js"
+import { providerStateRoute } from "./to-llm-message.js"
 
 export type Outcome = Data.TaggedEnum<{
   Completed: { readonly needsContinuation: boolean }
@@ -69,6 +70,7 @@ export const make = Effect.gen(function* () {
       agent: input.agent,
       model: input.model.ref,
       providerMetadataKey: input.model.model.route.providerMetadataKey ?? input.model.model.provider,
+      providerStateRoute: providerStateRoute(input.model.model),
       snapshot: startSnapshot,
     })
     const toolRuns: Array<{

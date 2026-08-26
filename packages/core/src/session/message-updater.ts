@@ -205,6 +205,7 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
               produce(existing, (draft) => {
                 draft.agent = event.data.agent
                 draft.model = castDraft(event.data.model)
+                draft.providerStateRoute = event.data.providerStateRoute
                 draft.retry = undefined
                 draft.error = undefined
                 draft.finish = undefined
@@ -232,6 +233,7 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
               type: "assistant",
               agent: event.data.agent,
               model: event.data.model,
+              providerStateRoute: event.data.providerStateRoute,
               metadata: event.metadata,
               time: { created },
               content: [],
