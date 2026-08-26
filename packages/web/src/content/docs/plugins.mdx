@@ -192,20 +192,15 @@ Plugins can subscribe to events as seen below in the Examples section. Here is a
 
 - `todo.updated`
 
-#### Shell Events
-
-- `shell.env`
-
-#### Tool Events
-
-- `tool.execute.after`
-- `tool.execute.before`
-
 #### TUI Events
 
 - `tui.prompt.append`
 - `tui.command.execute`
 - `tui.toast.show`
+
+`tool.execute.before`, `tool.execute.after` and `shell.env` are hooks rather than events. They are not
+delivered to the `event` hook; declare them as top-level keys taking `(input, output)`, as shown in the
+examples below.
 
 ---
 
