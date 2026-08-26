@@ -984,6 +984,14 @@ ToolRegistry.register({
       if (!value || !Array.isArray(value)) return []
       return value.filter((p): p is string => typeof p === "string")
     })
+    const paths = createMemo(() =>
+      loaded().map((filepath) => {
+        const relative = relativizeProjectPath(filepath, data.directory)
+        return relative === filepath ? relative : relative.replace(/^[/\\]/, "")
+      }),
+    )
+    const marker = "__OPENCODE_LOADED_PATH__"
+    const parts = createMemo(() => i18n.t("ui.tool.loadedFile", { path: marker }).split(marker))
     return (
       <>
         <BasicTool
@@ -995,31 +1003,26 @@ ToolRegistry.register({
             args,
           }}
         />
-        <For each={loaded()}>
-          {(filepath) => {
-            const relative = relativizeProjectPath(filepath, data.directory)
-            const path = relative === filepath ? relative : relative.replace(/^[/\\]/, "")
-            const marker = "__OPENCODE_LOADED_PATH__"
-            const parts = i18n.t("ui.tool.loadedFile", { path: marker }).split(marker)
-            return (
-              <div data-component="tool-loaded-item" aria-label={i18n.t("ui.tool.loadedFile", { path })}>
-                <span data-slot="tool-loaded-label" aria-hidden="true">
-                  {parts[0].trim()}
+        <Show when={paths().length > 0}>
+          <div
+            data-component="tool-loaded-item"
+            aria-label={i18n.t("ui.tool.loadedFile", { path: paths().join(", ") })}
+          >
+            <span data-slot="tool-loaded-label" aria-hidden="true">
+              {parts()[0]?.trim()}
+            </span>
+            <span data-slot="tool-loaded-value" aria-hidden="true">
+              {paths().join(", ")}
+            </span>
+            <Show when={parts()[1]?.trim()}>
+              {(suffix) => (
+                <span data-slot="tool-loaded-kind" aria-hidden="true">
+                  {suffix()}
                 </span>
-                <span data-slot="tool-loaded-value" aria-hidden="true">
-                  {path}
-                </span>
-                <Show when={parts[1]?.trim()}>
-                  {(suffix) => (
-                    <span data-slot="tool-loaded-kind" aria-hidden="true">
-                      {suffix()}
-                    </span>
-                  )}
-                </Show>
-              </div>
-            )
-          }}
-        </For>
+              )}
+            </Show>
+          </div>
+        </Show>
       </>
     )
   },

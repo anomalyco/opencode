@@ -194,6 +194,33 @@ test("labels read tools from their path input", async ({ page }) => {
   ).toContainText("a.ts")
 })
 
+test("groups instruction files loaded by the same read", async ({ page }) => {
+  const id = "prt_read_instructions"
+  await setupTimeline(page, {
+    messages: [
+      userMessage(),
+      assistantMessage([
+        toolPart(
+          id,
+          "read",
+          "completed",
+          { path: "src/a.ts" },
+          { metadata: { loaded: ["AGENTS.md", "packages/app/AGENTS.md", "packages/ui/AGENTS.md"] } },
+        ),
+      ]),
+    ],
+  })
+
+  const tool = page.locator(`[data-timeline-part-id="${id}"]`)
+  const loaded = tool.locator('[data-component="tool-loaded-item"]')
+  await expect(loaded).toHaveCount(1)
+  await expect(loaded).toHaveAttribute("aria-label", "Loaded AGENTS.md, packages/app/AGENTS.md, packages/ui/AGENTS.md")
+  await expect(loaded.locator('[data-slot="tool-loaded-value"]')).toHaveText(
+    "AGENTS.md, packages/app/AGENTS.md, packages/ui/AGENTS.md",
+  )
+  await expect(loaded.locator('[data-slot="tool-loaded-kind"]')).toHaveCount(0)
+})
+
 test("labels skill tools from IDs and result metadata", async ({ page }) => {
   const pending = "prt_skill_id"
   const completed = "prt_skill_name"
