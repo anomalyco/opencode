@@ -40,4 +40,15 @@ describe("queuedPromptRows", () => {
       { id: "msg_replacement", text: "edited", attachments: false },
     ])
   })
+
+  test("keeps other prompts visible while a mutation replaces the edited prompt", () => {
+    const other = { ...queued[0], id: "msg_other", payload: { text: "other" } }
+
+    expect(
+      queuedPromptRows([queued[0], other, queued[1]], { original: "msg_original", replacement: "msg_replacement" }),
+    ).toEqual([
+      { id: "msg_other", text: "other", attachments: false },
+      { id: "msg_replacement", text: "edited", attachments: false },
+    ])
+  })
 })
