@@ -4,6 +4,7 @@ import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Bus } from "@opencode-ai/core/bus"
+import { Location } from "@opencode-ai/core/location"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import type { LocationServices } from "@opencode-ai/core/location-services"
 import { Project } from "@opencode-ai/core/project"
@@ -131,6 +132,33 @@ describe("SessionExecution lifecycle", () => {
       expect(yield* execution.interrupt(sessionID)).toBeTrue()
       yield* execution.awaitIdle(sessionID)
       expect((yield* claims(database))[sessionID]).toBe(false)
+    }),
+  )
+
+  it.effect("rebuilds a moved destination after its project identity changes", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const sessionID = Session.ID.make("ses_move_refresh")
+      yield* seedSessions(database, [sessionID])
+
+      const invalidated: string[] = []
+      const drained: string[] = []
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(
+        scope,
+        () =>
+          Effect.sync(() => {
+            drained.push("drained")
+            if (drained.length === 1) return { type: "moved" as const, refreshLocation: true }
+          }),
+        { invalidated },
+      )
+
+      yield* Context.get(context, SessionExecution.Service).resume(sessionID)
+
+      expect(invalidated).toEqual(["/project"])
+      expect(drained).toHaveLength(2)
     }),
   )
 
@@ -529,8 +557,10 @@ function attempts(database: Database.Service["Service"], sessionID: Session.ID) 
 /** Builds the local execution layer plus the restart actions against the test harness services. */
 function buildExecution(
   scope: Scope.Closeable,
-  drain: (input: Parameters<SessionRunner.Interface["drain"]>[0]) => Effect.Effect<void, SessionRunner.RunError>,
-  options?: SessionRestart.Options,
+  drain: (
+    input: Parameters<SessionRunner.Interface["drain"]>[0],
+  ) => Effect.Effect<void | SessionRunner.DrainResult, SessionRunner.RunError>,
+  options?: SessionRestart.Options & { readonly invalidated?: string[] },
 ) {
   return Effect.gen(function* () {
     const database = yield* Database.Service
@@ -538,15 +568,25 @@ function buildExecution(
     const store = yield* SessionStore.Service
     const runner = Layer.succeed(
       SessionRunner.Service,
-      SessionRunner.Service.of({ drain: (input) => drain(input).pipe(Effect.as({ type: "complete" as const })) }),
+      SessionRunner.Service.of({
+        drain: (input) => drain(input).pipe(Effect.map((result) => result ?? { type: "complete" as const })),
+      }),
     )
     const locations = Layer.effect(
       LocationServiceMap.Service,
       LayerMap.make(
-        () =>
+        (_location: Location.Ref) =>
           // The local execution test only needs the Session runner from the Location graph.
           // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
           runner as unknown as Layer.Layer<LocationServices>,
+      ).pipe(
+        Effect.map((map) => ({
+          ...map,
+          invalidate: (location: Parameters<typeof map.invalidate>[0]) =>
+            map
+              .invalidate(location)
+              .pipe(Effect.tap(() => Effect.sync(() => options?.invalidated?.push(location.directory)))),
+        })),
       ),
     )
     return yield* Layer.buildWithScope(

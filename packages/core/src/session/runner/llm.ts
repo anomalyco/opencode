@@ -10,10 +10,13 @@ import {
   type ProviderErrorEvent,
   type ToolCall,
 } from "@opencode-ai/ai"
+import path from "path"
 import { Cause, Config, Data, Effect, Exit, Fiber, FiberMap, Layer, Option, Pull, Schedule, Stream } from "effect"
 import { Database } from "../../database/database.js"
 import { Bus } from "../../bus.js"
 import { Permission } from "../../permission.js"
+import { Project } from "../../project.js"
+import { RelativePath } from "../../schema.js"
 import { QuestionTool } from "../../tool/plugin/question.js"
 import { InstructionState } from "../instruction-state.js"
 import { SessionCompaction } from "../compaction.js"
@@ -30,6 +33,7 @@ import { Service, type Continuation } from "./index.js"
 import { createLLMEventPublisher, type StepRecord } from "./publish-llm-event.js"
 import { Snapshot } from "../../snapshot.js"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { FSUtil } from "@opencode-ai/util/fs-util"
 import { llmClient } from "../../effect/app-node-platform.js"
 import { StepFailedError } from "../error.js"
 import { toSessionError } from "../to-session-error.js"
@@ -127,6 +131,8 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const bus = yield* Bus.Service
+    const fs = yield* FSUtil.Service
+    const projects = yield* Project.Service
     const llm = yield* LLMClient.Service
     const store = yield* SessionStore.Service
     const context = yield* SessionContext.Service
@@ -192,7 +198,8 @@ const layer = Layer.effect(
           force = false
           continue
         }
-        if (yield* runPendingMove(input.sessionID, "input")) return { type: "moved" as const }
+        const moved = yield* runPendingMove(input.sessionID, "input")
+        if (moved) return { type: "moved" as const, ...moved }
         if (!force && !continuation && !(yield* SessionInbox.has(db, input.sessionID, promotable)))
           return { type: "complete" as const }
         const result = yield* runSteps(input.sessionID, continuation, promotable)
@@ -232,7 +239,8 @@ const layer = Layer.effect(
       // steered compaction ends the turn instead of issuing an input-free model call.
       while (true) {
         if (yield* runPendingCompaction(sessionID, "steer")) continue
-        if (yield* runPendingMove(sessionID, "steer")) return { type: "moved" as const, continuation: next }
+        const moved = yield* runPendingMove(sessionID, "steer")
+        if (moved) return { type: "moved" as const, continuation: next, ...moved }
         if (!first && !next && !(yield* SessionInbox.has(db, sessionID, "steer")))
           return { type: "complete" as const }
         const result = yield* runStep(sessionID, promotable, step)
@@ -680,6 +688,16 @@ const layer = Layer.effect(
         Effect.gen(function* () {
           const pending = yield* SessionInbox.nextPromotable(db, sessionID, promotable)
           if (pending?.type !== "move") return false
+          const project = pending.payload.location.workspaceID
+            ? undefined
+            : yield* projects.resolve(pending.payload.location.directory)
+          const subpath = project
+            ? RelativePath.make(
+                path
+                  .relative(project.directory, yield* fs.resolve(pending.payload.location.directory))
+                  .replaceAll("\\", "/"),
+              )
+            : pending.payload.subpath
           yield* modelTransport.close(sessionID)
           yield* bus.publishAll([
             [SessionEvent.InboxDelivered, { sessionID, inboxID: pending.id }],
@@ -688,12 +706,12 @@ const layer = Layer.effect(
               {
                 sessionID,
                 location: pending.payload.location,
-                projectID: pending.payload.projectID,
-                subpath: pending.payload.subpath,
+                projectID: project?.id ?? pending.payload.projectID,
+                subpath,
               },
             ],
           ])
-          return true
+          return { refreshLocation: project !== undefined && project.id !== pending.payload.projectID }
         }),
       )
     })
@@ -732,6 +750,8 @@ export const node = makeLocationNode({
   layer,
   deps: [
     Bus.node,
+    FSUtil.node,
+    Project.node,
     llmClient,
     SessionContext.node,
     SessionModelRequest.node,

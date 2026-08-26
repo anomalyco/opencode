@@ -21,7 +21,7 @@ export type Continuation = { readonly step: number }
 
 export type DrainResult =
   | { readonly type: "complete" }
-  | { readonly type: "moved"; readonly continuation?: Continuation }
+  | { readonly type: "moved"; readonly continuation?: Continuation; readonly refreshLocation?: boolean }
 
 /** Runs one local continuation from already-recorded Session history. */
 export interface Interface {

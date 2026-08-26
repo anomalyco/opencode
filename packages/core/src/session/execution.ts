@@ -95,6 +95,10 @@ export const layer = Layer.effect(
           ),
         )
         if (result.type === "complete") return
+        if (result.refreshLocation) {
+          const moved = yield* store.get(sessionID)
+          if (moved) yield* locations.invalidate(moved.location)
+        }
         return yield* drain(sessionID, false, result.continuation, promotable)
       })
     }
