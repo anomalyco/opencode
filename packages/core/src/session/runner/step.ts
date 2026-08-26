@@ -43,7 +43,7 @@ interface Input {
   readonly assistantMessageID: SessionMessage.ID
   readonly agent: Agent.ID
   readonly model: SessionRunnerModel.Resolved
-  readonly prepared: Effect.Success<ReturnType<SessionModelRequest.Interface["prepare"]>>
+  readonly prepared: SessionModelRequest.Prepared
   readonly toolsDisabled: boolean
   readonly recoverContinuation: boolean
   /** The runner owns compaction policy; the attempt invokes it only before durable output. */
@@ -60,14 +60,6 @@ export const make = Effect.gen(function* () {
   const llm = yield* LLMClient.Service
   const snapshots = yield* Snapshot.Service
   const toolOutput = yield* ToolOutput.Service
-
-  const fail = Effect.fn("SessionStep.fail")(function* (input: {
-    readonly sessionID: SessionSchema.ID
-    readonly assistantMessageID: SessionMessage.ID
-    readonly error: SessionError.Error
-  }) {
-    yield* bus.publish(SessionEvent.Step.Failed, input)
-  })
 
   const attempt = Effect.fn("SessionStep.attempt")(function* (input: Input) {
     const startSnapshot = yield* snapshots.capture()
@@ -256,7 +248,7 @@ export const make = Effect.gen(function* () {
     )
   }, Effect.scoped)
 
-  return { attempt, fail }
+  return { attempt }
 })
 
 const isDecline = (

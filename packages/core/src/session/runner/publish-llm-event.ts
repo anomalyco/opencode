@@ -1,5 +1,5 @@
 import { type LLMEvent, type ProviderMetadata, type ToolResultValue } from "@opencode-ai/ai"
-import { Clock, Effect } from "effect"
+import { Clock, Effect, Iterable } from "effect"
 import { Bus } from "../../bus.js"
 import { Model } from "../../model.js"
 import { SessionEvent } from "../event.js"
@@ -586,7 +586,8 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
       providerFailed,
       failure: stepFailure,
       finish: stepSettlement,
-      needsContinuation: Array.from(tools.values()).some(
+      needsContinuation: Iterable.some(
+        tools.values(),
         (tool) => !tool.providerExecuted && (tool.called || tool.settled),
       ),
     }),

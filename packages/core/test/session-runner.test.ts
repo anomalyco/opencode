@@ -419,7 +419,7 @@ const execution = Layer.effect(
         .drain({ sessionID, force, continuation })
         .pipe(
           Effect.flatMap((result) =>
-            result.type === "complete" ? Effect.void : drain(sessionID, false, result.continuation),
+            result._tag === "Complete" ? Effect.void : drain(sessionID, false, result.continuation),
           ),
         )
     }
@@ -2948,8 +2948,7 @@ describe("SessionRunnerLLM", () => {
       const tools = yield* blockTools()
       const streamed = yield* bus.subscribe(SessionEvent.Step.Streamed).pipe(
         Stream.filter((event) => event.data.sessionID === sessionID),
-        Stream.take(1),
-        Stream.runDrain,
+        Stream.runHead,
         Effect.forkScoped({ startImmediately: true }),
       )
       const run = yield* Effect.forkChild(session.resume(sessionID))
@@ -4292,8 +4291,7 @@ describe("SessionRunnerLLM", () => {
       yield* TestLLM.push(TestLLM.tool("call-await-interrupt", "echo", { text: "blocked" }))
       const streamed = yield* bus.subscribe(SessionEvent.Step.Streamed).pipe(
         Stream.filter((event) => event.data.sessionID === sessionID),
-        Stream.take(1),
-        Stream.runDrain,
+        Stream.runHead,
         Effect.forkScoped({ startImmediately: true }),
       )
 
@@ -4613,8 +4611,7 @@ describe("SessionRunnerLLM", () => {
       yield* TestLLM.push(Stream.fail(providerUnavailable()), TestLLM.text("Must not run", "unused-retry"))
       const scheduled = yield* bus.subscribe(SessionEvent.RetryScheduled).pipe(
         Stream.filter((event) => event.data.sessionID === sessionID),
-        Stream.take(1),
-        Stream.runDrain,
+        Stream.runHead,
         Effect.forkScoped({ startImmediately: true }),
       )
       const run = yield* session.resume(sessionID).pipe(Effect.forkChild)

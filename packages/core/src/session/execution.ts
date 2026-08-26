@@ -94,7 +94,7 @@ export const layer = Layer.effect(
               : Effect.logError("Failed to drain Session", cause).pipe(Effect.annotateLogs({ sessionID })),
           ),
         )
-        if (result.type === "complete") return
+        if (result._tag === "Complete") return
         return yield* drain(sessionID, false, result.continuation, promotable)
       })
     }

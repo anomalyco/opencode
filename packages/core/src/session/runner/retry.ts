@@ -8,7 +8,7 @@ import { SessionEvent } from "../event.js"
 import { SessionMessage } from "../message.js"
 import { SessionSchema } from "../schema.js"
 
-export interface Failure {
+export interface Input {
   readonly cause: AIError
   readonly error: SessionError.Error
   readonly assistantMessageID: SessionMessage.ID
@@ -40,18 +40,18 @@ export function isRetryable(error: AIError) {
   }
 }
 
-const retryAfter = (failure: Failure) => {
-  if (failure.cause.reason._tag === "RateLimit" || failure.cause.reason._tag === "ProviderInternal")
-    return failure.cause.reason.retryAfterMs
+const retryAfter = (input: Input) => {
+  if (input.cause.reason._tag === "RateLimit" || input.cause.reason._tag === "ProviderInternal")
+    return input.cause.reason.retryAfterMs
   return undefined
 }
 
 export const schedule = (bus: Bus.Interface, sessionID: SessionSchema.ID) =>
   Schedule.max([Schedule.exponential("2 seconds"), Schedule.recurs(4)]).pipe(
     Schedule.jittered,
-    Schedule.setInputType<Failure>(),
-    Schedule.modifyDelay(({ input: failure, duration: delay }) => {
-      const minimum = retryAfter(failure)
+    Schedule.setInputType<Input>(),
+    Schedule.modifyDelay(({ input, duration: delay }) => {
+      const minimum = retryAfter(input)
       const duration = minimum === undefined ? delay : Duration.max(delay, Duration.millis(minimum))
       return Effect.succeed(Duration.millis(Math.ceil(Duration.toMillis(duration))))
     }),

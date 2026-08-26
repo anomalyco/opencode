@@ -15,7 +15,7 @@ import { SessionMessage } from "../message.js"
 import { SessionSchema } from "../schema.js"
 import { SessionStore } from "../store.js"
 import { SessionTitle } from "../title.js"
-import { Service, type Continuation } from "./index.js"
+import { DrainResult, Service, type Continuation } from "./index.js"
 import { Snapshot } from "../../snapshot.js"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { llmClient } from "../../effect/app-node-platform.js"
@@ -81,8 +81,7 @@ const layer = Layer.effect(
       let force = input.force
       let continuation = input.continuation
       const promotable = input.promotable ?? "input"
-      if (!force && !continuation && !(yield* eligible(input.sessionID, promotable)))
-        return { type: "complete" as const }
+      if (!force && !continuation && !(yield* eligible(input.sessionID, promotable))) return DrainResult.Complete()
       yield* plugins.flush
       yield* settleStaleToolCalls(input.sessionID)
       while (true) {
@@ -91,11 +90,11 @@ const layer = Layer.effect(
           force = false
           continue
         }
-        if (yield* runPendingMove(input.sessionID, "input")) return { type: "moved" as const }
+        if (yield* runPendingMove(input.sessionID, "input")) return DrainResult.Moved({})
         if (!force && !continuation && !(yield* SessionInbox.has(db, input.sessionID, promotable)))
-          return { type: "complete" as const }
+          return DrainResult.Complete()
         const result = yield* runSteps(input.sessionID, continuation, promotable)
-        if (result.type === "moved") return result
+        if (result._tag === "Moved") return result
         force = false
         continuation = undefined
       }
@@ -120,8 +119,8 @@ const layer = Layer.effect(
       let first = true
       while (true) {
         if (yield* runPendingCompaction(sessionID, "steer")) continue
-        if (yield* runPendingMove(sessionID, "steer")) return { type: "moved" as const, continuation: next }
-        if (!first && !next && !(yield* SessionInbox.has(db, sessionID, "steer"))) return { type: "complete" as const }
+        if (yield* runPendingMove(sessionID, "steer")) return DrainResult.Moved({ continuation: next })
+        if (!first && !next && !(yield* SessionInbox.has(db, sessionID, "steer"))) return DrainResult.Complete()
         const result = yield* runStep(sessionID, promotable, step)
         first = false
         promotable = "steer"
@@ -202,10 +201,11 @@ const layer = Layer.effect(
         if (outcome._tag === "Retry" || outcome._tag === "Continue") {
           yield* retry({ cause: outcome.cause, error: outcome.error, assistantMessageID }).pipe(
             Pull.catchDone(() =>
-              (outcome._tag === "Retry"
-                ? steps.fail({ sessionID, assistantMessageID, error: outcome.error })
-                : Effect.void
-              ).pipe(Effect.andThen(Effect.fail(outcome.cause))),
+              Effect.gen(function* () {
+                if (outcome._tag === "Retry")
+                  yield* bus.publish(SessionEvent.Step.Failed, { sessionID, assistantMessageID, error: outcome.error })
+                return yield* outcome.cause
+              }),
             ),
           )
           if (outcome._tag === "Continue") {
