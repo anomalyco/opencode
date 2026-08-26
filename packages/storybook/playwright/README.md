@@ -30,7 +30,26 @@ bun turbo test:components --filter=@opencode-ai/session-ui
 bun turbo test:components --filter=@opencode-ai/app
 ```
 
-Component browser coverage deliberately remains separate from each package's default `test` script and from `packages/app`'s `test:e2e`, so expensive Storybook checks can be scheduled independently from required unit and full-app journey CI. Set `PLAYWRIGHT_STORYBOOK_URL` to reuse an existing Storybook instance or `PLAYWRIGHT_STORYBOOK_PORT` to choose its port.
+Component browser coverage remains separate from each package's default `test` script and from `packages/app`'s `test:e2e`. Session UI uses port 6006 and app uses 6007, with a separate Vite dependency cache per port, so concurrent Turbo tasks do not compete for a server or overwrite each other's optimized modules. Set `PLAYWRIGHT_STORYBOOK_URL` to reuse an existing Storybook instance locally or `PLAYWRIGHT_STORYBOOK_PORT` to override a package's port; do not give concurrent server-owning tasks the same override.
+
+## CI selection
+
+The `test` workflow selects the suites independently using Turbo's affected workspace graph:
+
+- App-only implementation, story, or component-test changes run app components and full-app E2E, not session-ui components.
+- Session-ui changes run session-ui components and dependent app suites. Shared UI, client, util, and other workspace dependencies flow through the same graph.
+- Affected Storybook harness code, config, mocks, fixtures, or stories run both component suites, without turning on full-app E2E solely for a harness change.
+- The shared preview also imports app CSS and localization outside the package graph. App CSS, public assets, localization, and the bounded persistence/platform/server-scope/path-key dependency chain select both component suites. `script/github/browser-suites.test.ts` checks the preview's transitive runtime imports so this exception cannot silently become stale. The check conservatively follows the real platform module even where Storybook mocks it.
+- Lockfiles, package manifests, TypeScript/Turbo configuration, root tooling, unknown non-documentation paths, manual dispatch, and Git/Turbo failures select all browser suites. Documentation-only changes outside affected browser workspaces skip them.
+
+PR comparisons use the tested merge ref's first parent; pushes use the event's previous SHA. Both are normalized to a merge base, with deleted files and both sides of renames included. Each component suite runs on its own Linux runner. Existing Linux/Windows E2E check names and the `v2` ref exclusion are unchanged; selection does not override that exclusion, including on manual dispatch.
+
+Run the selection matrix (real Git refs and Turbo, no browser or workspace install required):
+
+```sh
+cd script/github
+bun test --root . browser-suites.test.ts
+```
 
 ## Adding a test
 

@@ -1,9 +1,8 @@
 import { defineConfig, devices } from "@playwright/test"
 
-const port = Number(process.env.PLAYWRIGHT_STORYBOOK_PORT ?? 6006)
-const baseURL = process.env.PLAYWRIGHT_STORYBOOK_URL ?? `http://127.0.0.1:${port}`
-
-export function componentConfig(directory: string) {
+export function componentConfig(directory: string, defaultPort = 6006) {
+  const port = Number(process.env.PLAYWRIGHT_STORYBOOK_PORT ?? defaultPort)
+  const baseURL = process.env.PLAYWRIGHT_STORYBOOK_URL ?? `http://127.0.0.1:${port}`
   return defineConfig({
     testDir: `${directory}/component-tests`,
     outputDir: `${directory}/component-tests/test-results`,
@@ -17,6 +16,7 @@ export function componentConfig(directory: string) {
     webServer: {
       command: `bun --bun run --cwd ${directory}/../storybook storybook -- --port ${port} --ci --no-open`,
       url: baseURL,
+      env: { PLAYWRIGHT_STORYBOOK_PORT: String(port) },
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
     },

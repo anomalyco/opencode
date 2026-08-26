@@ -31,6 +31,10 @@ export default defineMain({
   async viteFinal(config) {
     const { mergeConfig, searchForWorkspaceRoot } = await import("vite")
     const merged = mergeConfig(config, {
+      // Concurrent package suites must not overwrite each other's optimized dependencies.
+      cacheDir: process.env.PLAYWRIGHT_STORYBOOK_PORT
+        ? path.resolve(here, "../node_modules/.cache/playwright", process.env.PLAYWRIGHT_STORYBOOK_PORT)
+        : config.cacheDir,
       plugins: [tailwindcss(), playgroundCss()],
       resolve: {
         dedupe: ["solid-js", "solid-js/web", "@solidjs/meta"],

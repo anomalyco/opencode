@@ -27,6 +27,8 @@ jobs:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     outputs:
       app: ${{ steps.packages.outputs.app }}
+      appComponents: ${{ steps.packages.outputs.appComponents }}
+      sessionComponents: ${{ steps.packages.outputs.sessionComponents }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
@@ -39,18 +41,16 @@ jobs:
         with:
           bun-version-file: package.json
 
+      - name: Test browser suite selection
+        working-directory: script/github
+        run: bun test --root . browser-suites.test.ts
+
       - name: Find affected packages
         id: packages
         env:
           TURBO_SCM_BASE: ${{ github.event_name == 'pull_request' && format('{0}^1', github.sha) || github.event.before }}
           TURBO_SCM_HEAD: ${{ github.sha }}
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "app=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          bun x turbo@2.10.2 ls --affected --filter=@opencode-ai/app --output=json > affected.json
-          bun -e 'const result = await Bun.file("affected.json").json(); console.log(`app=${result.packages.count > 0}`)' >> "$GITHUB_OUTPUT"
+        run: bun script/github/browser-suites.ts
 
   unit:
     name: unit (${{ matrix.settings.name }})
@@ -175,6 +175,58 @@ jobs:
         if: runner.os == 'Linux'
         working-directory: packages/www
         run: bun run check:generated
+
+  components:
+    name: components (${{ matrix.package }})
+    needs: affected
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - package: app
+            enabled: ${{ needs.affected.outputs.appComponents }}
+          - package: session-ui
+            enabled: ${{ needs.affected.outputs.sessionComponents }}
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      # Separate runners own separate Storybook servers; the suites never race for a port.
+      - name: Checkout repository
+        if: matrix.enabled == 'true'
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Setup Bun
+        if: matrix.enabled == 'true'
+        uses: ./.github/actions/setup-bun
+
+      - name: Setup Node for Playwright
+        if: matrix.enabled == 'true'
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24.15"
+
+      - name: Install Chromium
+        if: matrix.enabled == 'true'
+        working-directory: packages/${{ matrix.package }}
+        run: bunx playwright install --with-deps chromium
+
+      - name: Run component tests
+        if: matrix.enabled == 'true'
+        working-directory: packages/${{ matrix.package }}
+        run: bun run test:components
+        timeout-minutes: 15
+        env:
+          CI: true
+
+      - name: Upload component artifacts
+        if: always() && matrix.enabled == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: components-${{ matrix.package }}-${{ github.run_attempt }}
+          if-no-files-found: ignore
+          retention-days: 7
+          path: |
+            packages/${{ matrix.package }}/component-tests/test-results
+            packages/${{ matrix.package }}/component-tests/playwright-report
 
   e2e:
     name: e2e (${{ matrix.settings.name }})
