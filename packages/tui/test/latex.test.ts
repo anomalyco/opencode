@@ -10,7 +10,7 @@ import {
   createMarkdownCodeBlockRenderer,
 } from "@opentui/core"
 import { createTestRenderer } from "@opentui/core/testing"
-import { renderLatex } from "opentui-math"
+import { renderLatex } from "../src/feature-plugins/system/latex/render"
 import { createLatexCodeBlockRenderer } from "../src/feature-plugins/system/latex"
 
 const renderers: Awaited<ReturnType<typeof createTestRenderer>>["renderer"][] = []

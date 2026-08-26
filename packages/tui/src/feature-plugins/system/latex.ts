@@ -11,7 +11,8 @@ import {
   type MarkdownCodeBlockRenderer,
   type RenderContext,
 } from "@opentui/core"
-import { LatexParseError, renderLatex, type MathLayout } from "opentui-math"
+import { renderLatex } from "./latex/render"
+import { LatexParseError, type MathLayout } from "./latex/types"
 import { stringWidth } from "../../util/string-width"
 
 export type LatexOptions = {
