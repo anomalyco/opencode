@@ -339,26 +339,6 @@ export function TerminalPane(props: {
               processStream()
             }}
           />
-          <box
-            position="absolute"
-            left={0}
-            right={0}
-            top={0}
-            height={1}
-            backgroundColor={themes.currentTokens().background.default}
-            opacity={0.75}
-            zIndex={1}
-          />
-          <box
-            position="absolute"
-            left={0}
-            right={0}
-            top={1}
-            height={1}
-            backgroundColor={themes.currentTokens().background.default}
-            opacity={0.4}
-            zIndex={1}
-          />
         </>
       </Show>
     </box>
