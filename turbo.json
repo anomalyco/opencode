@@ -62,7 +62,6 @@
       "outputs": []
     },
     "@opencode-ai/sdk#verify:package": {
-      "dependsOn": ["^build"],
       "outputs": []
     }
   }
