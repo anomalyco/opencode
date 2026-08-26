@@ -241,33 +241,27 @@ describe("Npm.add", () => {
         await Bun.$`git -C ${fixture.repository} -c user.name=fixture -c user.email=fixture@example.com commit -qm second`
       })
       yield* npm.add(mutable, { refresh: true })
-      return {
-        mutable: yield* Effect.promise(() => Bun.file(path.join(mutableEntry.directory, "index.js")).text()),
-        pinned: yield* Effect.promise(() => Bun.file(path.join(pinnedEntry.directory, "index.js")).text()),
-      }
+      return { mutable: mutableEntry, pinned: pinnedEntry }
     }).pipe(Effect.scoped, Effect.provide(npmLayer(cache)), Effect.runPromise)
-    expect(first.mutable).toContain("root: true")
-    expect(first.pinned).toContain("root: true")
+    expect(await Bun.file(path.join(first.mutable.directory, "index.js")).text()).toContain("root: true")
+    expect(await Bun.file(path.join(first.pinned.directory, "index.js")).text()).toContain("root: true")
 
     const second = await Effect.gen(function* () {
       const npm = yield* Npm.Service
-      const mutableEntry = yield* npm.add(mutable, { refresh: true })
-      const pinnedEntry = yield* npm.add(pinned, { refresh: true })
       return {
-        mutable: yield* Effect.promise(() => Bun.file(path.join(mutableEntry.directory, "index.js")).text()),
-        pinned: yield* Effect.promise(() => Bun.file(path.join(pinnedEntry.directory, "index.js")).text()),
+        mutable: yield* npm.add(mutable, { refresh: true }),
+        pinned: yield* npm.add(pinned, { refresh: true }),
       }
     }).pipe(Effect.scoped, Effect.provide(npmLayer(cache)), Effect.runPromise)
-    expect(second.mutable).toContain('root: "second"')
-    expect(second.pinned).toContain("root: true")
+    expect(await Bun.file(path.join(second.mutable.directory, "index.js")).text()).toContain('root: "second"')
+    expect(await Bun.file(path.join(second.pinned.directory, "index.js")).text()).toContain("root: true")
 
     await fs.rename(fixture.repository, `${fixture.repository}-offline`)
     const offline = await Effect.gen(function* () {
       const npm = yield* Npm.Service
-      const entry = yield* npm.add(mutable, { refresh: true })
-      return yield* Effect.promise(() => Bun.file(path.join(entry.directory, "index.js")).text())
+      return yield* npm.add(mutable, { refresh: true })
     }).pipe(Effect.scoped, Effect.provide(npmLayer(cache)), Effect.runPromise)
-    expect(offline).toContain('root: "second"')
+    expect(await Bun.file(path.join(offline.directory, "index.js")).text()).toContain('root: "second"')
   })
 })
 

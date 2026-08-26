@@ -182,15 +182,10 @@ const layer = Layer.effect(
 
       if (refresh) {
         refreshed.add(pkg)
-        if (cached) {
-          const updated = yield* reify({ dir, add: [pkg], update: true }).pipe(
-            Effect.as(true),
-            Effect.catchCause(() =>
-              Effect.logWarning("failed to refresh cached package; using installed version").pipe(Effect.as(false)),
-            ),
+        if (cached)
+          yield* reify({ dir, add: [pkg], update: true }).pipe(
+            Effect.catchCause(() => Effect.logWarning("failed to refresh cached package; using installed version")),
           )
-          if (updated) return resolveEntryPoint(name, path.join(dir, "node_modules", name), options?.subpaths)
-        }
       }
 
       if (cached) {
@@ -309,6 +304,6 @@ export async function which(...args: Parameters<Interface["which"]>) {
 function isMutable(parsed: { readonly type: string; readonly gitCommittish?: string | null } | undefined) {
   if (!parsed) return false
   if (["tag", "range"].includes(parsed.type)) return true
-  if (!["git", "hosted"].includes(parsed.type)) return false
+  if (parsed.type !== "git") return false
   return !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/i.test(parsed.gitCommittish ?? "")
 }
