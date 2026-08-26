@@ -5,7 +5,7 @@ import { Effect, type Types } from "effect"
 import { it } from "../lib/effect"
 import { host } from "./host"
 
-it.effect("defaults only known Code Mode MCP servers to direct tools", () =>
+it.effect("defaults only known code-executing MCP servers to direct tools", () =>
   Effect.gen(function* () {
     const cases: Array<{
       name: string
@@ -21,7 +21,12 @@ it.effect("defaults only known Code Mode MCP servers to direct tools", () =>
       {
         name: "cloudflare code mode",
         server: { type: "remote", url: "https://mcp.cloudflare.com/mcp/" },
-        codemode: false,
+        codemode: undefined,
+      },
+      {
+        name: "cloudflare raw tools",
+        server: { type: "remote", url: "https://mcp.cloudflare.com/mcp?codemode=false" },
+        codemode: undefined,
       },
       {
         name: "cloudflare docs",
@@ -40,6 +45,40 @@ it.effect("defaults only known Code Mode MCP servers to direct tools", () =>
       },
       { name: "exa", server: { type: "remote", url: "https://mcp.exa.ai/mcp" }, codemode: undefined },
       { name: "unrelated", server: { type: "remote", url: "https://example.com/mcp" }, codemode: undefined },
+      ...[
+        ["uvx", "blender-mcp"],
+        ["uvx", "--python", "3.11", "blender-mcp@1.8.7"],
+        ["/opt/homebrew/bin/uvx", "blender-mcp"],
+        ["C:\\Users\\test\\.local\\bin\\uvx.exe", "blender-mcp"],
+        ["uv", "tool", "run", "blender-mcp"],
+        ["blender-mcp"],
+        ["/usr/local/bin/blender-mcp"],
+        ["C:\\tools\\blender-mcp.exe"],
+      ].map((command) => ({
+        name: command.join(" "),
+        server: { type: "local" as const, command },
+        codemode: false,
+      })),
+      {
+        name: "blender explicit true",
+        server: { type: "local", command: ["uvx", "blender-mcp"], codemode: true },
+        codemode: true,
+      },
+      {
+        name: "blender explicit false",
+        server: { type: "local", command: ["blender-mcp"], codemode: false },
+        codemode: false,
+      },
+      {
+        name: "blender-like package",
+        server: { type: "local", command: ["uvx", "blender-mcp-other"] },
+        codemode: undefined,
+      },
+      {
+        name: "unrelated command argument",
+        server: { type: "local", command: ["node", "server.js", "blender-mcp"] },
+        codemode: undefined,
+      },
     ]
     const servers: Record<string, Types.DeepMutable<Mcp.ServerConfig>> = Object.fromEntries(
       cases.map((test) => [test.name, test.server]),
