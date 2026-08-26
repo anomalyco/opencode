@@ -13,6 +13,7 @@ import { Git } from "./git.js"
 import { AppProcess } from "@opencode-ai/util/process"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { Hash } from "@opencode-ai/util/hash"
+import { ProjectMarkers } from "./project/markers.js"
 import { ProjectSchema } from "./project/schema.js"
 import { ProjectTable, upsertProject } from "./project/sql.js"
 import { WorktreeTable } from "./worktree/sql.js"
@@ -42,11 +43,16 @@ export interface Resolved {
   readonly directory: AbsolutePath
   readonly canonical: AbsolutePath
   readonly vcs?: Vcs
+  readonly vcsBackend?: string
 }
 
 // Keep this filesystem-only; permission checks use it and should not execute VCS commands.
-export const root = Effect.fn("Project.root")(function* (fs: FSUtil.Interface, input: AbsolutePath) {
-  return yield* fs.up({ targets: [".git", ".hg"], start: input, mode: "first" }).pipe(
+export const root = Effect.fn("Project.root")(function* (
+  fs: FSUtil.Interface,
+  input: AbsolutePath,
+  markers: readonly string[] = [".git", ".hg"],
+) {
+  return yield* fs.up({ targets: [...markers], start: input, mode: "first" }).pipe(
     Effect.map((matches) => (matches[0] ? AbsolutePath.make(path.dirname(matches[0])) : undefined)),
     Effect.orElseSucceed(() => undefined),
   )
@@ -90,6 +96,7 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
     const git = yield* Git.Service
+    const markers = yield* ProjectMarkers.Service
     const proc = yield* AppProcess.Service
     const bus = yield* Bus.Service
     const db = (yield* Database.Service).db
@@ -265,8 +272,9 @@ const layer = Layer.effect(
     })
 
     const resolve = Effect.fn("Project.resolve")(function* (input: AbsolutePath) {
+      const marker = yield* markers.discover(input)
       const repo = yield* git.repo.discover(input)
-      if (repo) {
+      if (repo && (!marker || FSUtil.contains(marker.directory, repo.worktree))) {
         const previous = yield* cached(repo.commonDirectory)
         const id = (yield* remote(repo)) ?? previous ?? (yield* rootCommit(repo))
         const canonical =
@@ -282,11 +290,30 @@ const layer = Layer.effect(
           directory: repo.worktree,
           canonical,
           vcs: { type: "git" as const, store: repo.commonDirectory },
+          ...(marker?.directory === repo.worktree && marker.type !== "git" ? { vcsBackend: marker.type } : {}),
         })
       }
 
       const hg = yield* hgDiscover(input)
-      if (hg) return yield* persist({ ...hg, canonical: hg.directory })
+      if (hg && (!marker || FSUtil.contains(marker.directory, hg.directory))) {
+        return yield* persist({
+          ...hg,
+          canonical: hg.directory,
+          ...(marker?.directory === hg.directory && marker.type !== "hg" ? { vcsBackend: marker.type } : {}),
+        })
+      }
+
+      if (marker) {
+        const previous = yield* cached(marker.marker)
+        return yield* persist({
+          previous,
+          id: previous ?? ID.make(Hash.fast(`vcs-repository:${marker.type}:${marker.marker}`)),
+          directory: marker.directory,
+          canonical: marker.directory,
+          vcs: { type: marker.type, store: marker.marker },
+        })
+      }
+
       const directory = AbsolutePath.make(path.parse(input).root)
       return yield* persist({ id: ID.global, directory, canonical: directory, vcs: undefined })
     })
@@ -298,5 +325,5 @@ const layer = Layer.effect(
 export const node = makeGlobalNode({
   service: Service,
   layer: layer,
-  deps: [Bus.node, Database.node, FSUtil.node, Git.node, AppProcess.node],
+  deps: [Bus.node, Database.node, FSUtil.node, Git.node, ProjectMarkers.node, AppProcess.node],
 })

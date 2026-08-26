@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test"
+import { Effect } from "effect"
 import { Agent } from "@opencode-ai/schema/agent"
 import { Command } from "@opencode-ai/schema/command"
 import { Connection } from "@opencode-ai/schema/connection"
@@ -47,6 +48,13 @@ test.each([
     "Vcs",
     "WebSearch",
   ])
+})
+
+test.each([
+  ["effect", Plugin.Plugin.define({ id: "svn", vcs: { markers: [".svn"] }, effect: () => Effect.void })],
+  ["promise", PromisePlugin.Plugin.define({ id: "svn", vcs: { markers: [".svn"] }, setup() {} })],
+])("%s plugin definitions retain repository markers", (_name, plugin) => {
+  expect(plugin.vcs).toEqual({ markers: [".svn"] })
 })
 
 test("tui entrypoint exposes the plugin definition", () => {

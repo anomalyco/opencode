@@ -287,6 +287,7 @@ export const list = Effect.fn("PluginInternal.list")(function* () {
     plugins.map(
       (plugin): Plugin => ({
         id: plugin.id,
+        vcs: plugin.vcs,
         effect: (host) => plugin.effect(host).pipe(Effect.provide(context)),
       }),
     )

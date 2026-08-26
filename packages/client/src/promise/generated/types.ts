@@ -293,7 +293,7 @@ export type McpResourceTemplate = {
   mimeType?: string
 }
 
-export type ProjectVcs = "git" | "hg"
+export type ProjectVcs = string
 
 export type ProjectIcon = { url?: string; override?: string; color?: string }
 
