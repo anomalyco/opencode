@@ -10,7 +10,8 @@ import * as Tool from "./tool"
 export const Parameters = Schema.Struct({
   pattern: Schema.String.annotate({ description: "The glob pattern to match files against" }),
   path: Schema.optional(Schema.String).annotate({
-    description: `The directory to search in. If not specified, the current working directory will be used. IMPORTANT: Omit this field to use the default directory. DO NOT enter "undefined" or "null" - simply omit it for the default behavior. Must be a valid directory path if provided.`,
+    description:
+      "The directory to search in. If omitted, the current working directory is used. Must be a valid directory path if provided.",
   }),
 })
 
