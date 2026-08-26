@@ -23,7 +23,7 @@ export const RETIRED_STAT_MODELS = ["big-pickle", ...Object.keys(MODEL_NAME_ALIA
 export const RETIRED_STAT_PROVIDERS = ["opencode"]
 
 export function normalizeInferenceModel(value: string | undefined) {
-  return (value || "unknown").replace(/(-free|:free|:global)+$/, "") || "unknown"
+  return (value || "unknown").toLowerCase().replace(/(-free|:free|:global)+$/, "") || "unknown"
 }
 
 export function modelAuthor(value: string | undefined) {
