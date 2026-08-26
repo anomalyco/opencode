@@ -129,7 +129,6 @@ const layer = Layer.effect(
           ? "The task has complete todos, successful tools, and successful verification."
           : "The task has insufficient or failed execution evidence.",
       }
-
       const session = yield* db
         .select({ metadata: SessionTable.metadata })
         .from(SessionTable)
@@ -137,9 +136,12 @@ const layer = Layer.effect(
         .get()
         .pipe(Effect.orDie)
       if (!session) return yield* Effect.die(`Session ${sessionID} was not found while persisting Quality Gate result.`)
+
+      const updatedMetadata = { ...(session.metadata ?? {}), qualityGate: result }
+
       yield* db
         .update(SessionTable)
-        .set({ metadata: { ...(session.metadata ?? {}), qualityGate: result } })
+        .set({ metadata: updatedMetadata })
         .where(eq(SessionTable.id, typedSessionID))
         .run()
         .pipe(Effect.orDie)

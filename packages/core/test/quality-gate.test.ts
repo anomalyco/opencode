@@ -127,4 +127,77 @@ describe("QualityGate", () => {
       expect(failedSession?.metadata).toMatchObject({ keep: true, qualityGate: failedResult })
     }),
   )
+
+  it.effect("updates metadata correctly when initial metadata is null in database", () =>
+    Effect.gen(function* () {
+      const nullSessionID = SessionV2.ID.make("ses_null_meta_test")
+      const nullMessageID = "msg_null_meta_test" as never
+      const nullPartID = "prt_null_meta_test" as never
+      const { db } = yield* Database.Service
+
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: nullSessionID,
+          project_id: Project.ID.global,
+          slug: "null-meta",
+          directory: "/project",
+          title: "null-meta",
+          version: "test",
+          metadata: null as never,
+        })
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .insert(MessageTable)
+        .values({
+          id: nullMessageID,
+          session_id: nullSessionID,
+          data: { id: nullMessageID, type: "system", time: { created: Date.now() }, text: "test" } as never,
+        })
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .insert(PartTable)
+        .values({
+          id: nullPartID,
+          message_id: nullMessageID,
+          session_id: nullSessionID,
+          data: {
+            type: "tool",
+            tool: "bash",
+            state: { status: "completed", input: { command: "bun test" } },
+          } as never,
+        })
+        .run()
+        .pipe(Effect.orDie)
+
+      // Verify DB starts with null metadata
+      const initialSession = yield* db
+        .select({ metadata: SessionTable.metadata })
+        .from(SessionTable)
+        .where(eq(SessionTable.id, nullSessionID))
+        .get()
+        .pipe(Effect.orDie)
+      expect(initialSession?.metadata).toBeNull()
+
+      // Evaluate session
+      const gate = yield* QualityGate.Service
+      const result = yield* gate.evaluateSession(nullSessionID)
+
+      // Verify metadata is now populated with only qualityGate
+      const updatedSession = yield* db
+        .select({ metadata: SessionTable.metadata })
+        .from(SessionTable)
+        .where(eq(SessionTable.id, nullSessionID))
+        .get()
+        .pipe(Effect.orDie)
+      expect(updatedSession?.metadata).toEqual({ qualityGate: result })
+    }),
+  )
 })
