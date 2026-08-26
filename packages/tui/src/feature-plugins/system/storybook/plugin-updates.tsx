@@ -2,8 +2,7 @@ import type { PluginInfo } from "@opencode-ai/client"
 import type { Plugin } from "@opencode-ai/plugin/tui"
 import { useTerminalDimensions } from "@opentui/solid"
 import { onMount } from "solid-js"
-import { usePlugin } from "../../../plugin/context"
-import { PluginsDialog, type PluginUpdateInfo, type PluginUpdateResult } from "../plugins"
+import { PluginsDialog, type PluginRegistry, type PluginUpdateInfo, type PluginUpdateResult } from "../plugins"
 import type { Story } from "./index"
 import { StoryFooter } from "./footer"
 
@@ -61,9 +60,15 @@ const initial = (): PluginUpdateInfo[] => [
   },
 ]
 
+const plugins: PluginRegistry = {
+  registered: () => [{ id: "fixture.ui", source: "builtin", active: true }],
+  list: () => [],
+  activate: async () => true,
+  deactivate: async () => true,
+}
+
 function PluginUpdatesStory(props: { context: Plugin.Context }) {
   const dimensions = useTerminalDimensions()
-  const plugins = usePlugin()
   const theme = props.context.theme.contextual.elevated
   let fixture = initial()
 

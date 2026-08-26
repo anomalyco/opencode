@@ -45,6 +45,8 @@ type PluginUpdateOperations = {
   updateAll(): Promise<readonly PluginUpdateResult[]>
 }
 
+export type PluginRegistry = Pick<ReturnType<typeof usePlugin>, "registered" | "list" | "activate" | "deactivate">
+
 type ServerEntry = Extract<Entry, { runtime: "server" }>
 
 type PendingPluginClient = Plugin.Context["client"]["plugin"] & {
@@ -59,7 +61,7 @@ type PendingPluginClient = Plugin.Context["client"]["plugin"] & {
 
 export function PluginsDialog(props: {
   context: Plugin.Context
-  plugins: ReturnType<typeof usePlugin>
+  plugins: PluginRegistry
   server?: () => readonly PluginInfo[]
   updates?: PluginUpdateOperations
 }) {
@@ -79,7 +81,7 @@ export function PluginsDialog(props: {
     update: (name) => pending.update({ name, location: location() }).then((result) => result.data),
     updateAll: () => pending.updateAll({ location: location() }).then((result) => result.data),
   }
-  const [server] = createResource(
+  const [server, { refetch: refetchServer }] = createResource(
     () => (props.server ? undefined : location()),
     (location) => props.context.client.plugin.list({ location }).then((result) => result.data),
   )
@@ -116,17 +118,17 @@ export function PluginsDialog(props: {
     const runtime = props.server?.() ?? server() ?? []
     const matched = new Set<PluginInfo>()
     const checked: ServerEntry[] = updateEntries().flatMap((update) => {
-      const plugin = runtime.find((candidate) => sameSource(candidate.source, update.source))
+      const plugin = runtime.find((candidate) => matchesPluginUpdate(candidate, update))
       if (!plugin) return []
       matched.add(plugin)
-      return [{ key: `server:${update.name}`, runtime: "server", plugin, update }]
+      return [{ key: pluginServerKey(plugin), runtime: "server", plugin, update }]
     })
     const serverEntries: Entry[] = [
       ...checked,
       ...runtime
         .filter((plugin) => !matched.has(plugin))
         .map((plugin) => ({
-          key: `server:${plugin.id ?? source(plugin, props.context)}`,
+          key: pluginServerKey(plugin),
           runtime: "server" as const,
           plugin,
         })),
@@ -210,7 +212,10 @@ export function PluginsDialog(props: {
     setCheckError()
     void operations
       .update(name)
-      .then((result) => setUpdateEntries((current) => current.map((entry) => (entry.name === name ? result : entry))))
+      .then(async (result) => {
+        setUpdateEntries((current) => current.map((entry) => (entry.name === name ? result : entry)))
+        if (!props.server && result.status === "updated") await refetchServer()
+      })
       .catch((cause) => {
         setCheckError(errorMessage(cause))
         props.context.ui.toast.show({ variant: "error", message: errorMessage(cause) })
@@ -227,7 +232,10 @@ export function PluginsDialog(props: {
     setCheckError()
     void operations
       .updateAll()
-      .then(setUpdateEntries)
+      .then(async (results) => {
+        setUpdateEntries(results)
+        if (!props.server && results.some((result) => result.status === "updated")) await refetchServer()
+      })
       .catch((cause) => {
         setCheckError(errorMessage(cause))
         props.context.ui.toast.show({ variant: "error", message: errorMessage(cause) })
@@ -326,11 +334,20 @@ function label(entry: Entry, context: Plugin.Context) {
   return entry.plugin.id ?? source(entry.plugin, context)
 }
 
-function sameSource(left: PluginSource, right: PluginSource) {
-  if (left.type !== right.type) return false
-  if (left.type === "package" && right.type === "package") return left.package === right.package
-  if (left.type === "local" && right.type === "local") return left.path === right.path
-  return true
+export function matchesPluginUpdate(plugin: PluginInfo, update: UpdateEntry) {
+  if (plugin.source.type !== update.source.type) return false
+  if (plugin.source.type === "package" && update.source.type === "package") {
+    return plugin.source.package === update.source.package
+  }
+  if (plugin.source.type === "local" && update.source.type === "local") return plugin.source.path === update.source.path
+  return plugin.id === update.name
+}
+
+export function pluginServerKey(plugin: PluginInfo) {
+  if (plugin.id) return `server:${plugin.id}`
+  if (plugin.source.type === "package") return `server:package:${plugin.source.package}`
+  if (plugin.source.type === "local") return `server:local:${plugin.source.path}`
+  return `server:${plugin.source.type}`
 }
 
 function source(plugin: PluginInfo, context: Plugin.Context) {

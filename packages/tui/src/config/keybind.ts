@@ -258,8 +258,8 @@ export const Definitions = {
   "plugins.toggle": keybind("space", "Toggle plugin"),
   "dialog.mcp.toggle": keybind("space", "Toggle MCP server"),
   "dialog.plugins.install": keybind("shift+i", "Install plugin from plugin dialog"),
-  "dialog.plugins.update": keybind("u", "Update selected plugin"),
-  "dialog.plugins.update_all": keybind("shift+u", "Update all plugins"),
+  "dialog.plugins.update": keybind("ctrl+r", "Update selected plugin"),
+  "dialog.plugins.update_all": keybind("ctrl+shift+r", "Update all plugins"),
 
   "terminal.suspend": keybind("ctrl+z", "Suspend terminal"),
   "terminal.title.toggle": keybind("none", "Toggle terminal title"),
