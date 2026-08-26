@@ -106,10 +106,10 @@ const rejected = (
   type: "rejected",
   recovery,
   error: new AIError({
-    module: input.id,
-    method: "stream",
+    ...observation.error,
+    message: observation.error.message,
+    cause: observation.error.cause,
     reason: new TransportReason({
-      message: observation.error.message,
       transport: "websocket",
       operation: "read",
       phase: "receive",
@@ -137,7 +137,9 @@ export const driver = (input: DriverInput): WebSocketChannelDriver => {
     observe: (create, frame) =>
       Effect.gen(function* () {
         const event = yield* decodeEvent(frame).pipe(
-          Effect.mapError(() => ProviderShared.eventError(input.id, `Invalid ${input.name} WebSocket event`, frame)),
+          Effect.mapError((cause) =>
+            ProviderShared.eventError(input.id, `Invalid ${input.name} WebSocket event`, frame, cause),
+          ),
         )
         const observation = yield* input.base.observe(create, frame)
         if (event.type === "response.output_item.done" && event.item) output.push(event.item)

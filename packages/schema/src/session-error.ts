@@ -8,4 +8,12 @@ export const Error = Schema.Struct({
   type: Schema.String,
   message: Schema.String,
   status: Schema.Int.check(Schema.isBetween({ minimum: 100, maximum: 599 })).pipe(optional),
+  body: Schema.String.pipe(optional),
+  http: Schema.Struct({
+    url: Schema.String,
+    status: Schema.Int.check(Schema.isBetween({ minimum: 100, maximum: 599 })),
+    headers: Schema.Record(Schema.String, Schema.String),
+  }).pipe(optional),
+  reason: Schema.Record(Schema.String, Schema.Json).pipe(optional),
+  cause: Schema.Json.pipe(optional),
 }).annotate({ identifier: "Session.StructuredError" })

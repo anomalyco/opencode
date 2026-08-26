@@ -17,7 +17,6 @@ import type {
 } from "@ai-sdk/provider"
 import {
   FinishReason,
-  InvalidProviderOutputReason,
   LLMEvent,
   AIError,
   LanguageModel,
@@ -613,12 +612,12 @@ function streamLanguage(language: LanguageModelV3, options: LanguageModelV3CallO
     Stream.unwrap(
       Effect.tryPromise({
         try: () => language.doStream(options),
-        catch: (error) => llmError("doStream", error),
+        catch: llmError,
       }).pipe(
         Effect.map((result) =>
           Stream.fromReadableStream({
             evaluate: () => result.stream,
-            onError: (error) => llmError("readStream", error),
+            onError: llmError,
           }).pipe(
             Stream.mapEffect((event) => streamPartEvents(state, event)),
             Stream.flatMap((events) => Stream.fromIterable(events)),
@@ -745,7 +744,7 @@ function streamPartEvents(
         }),
       ])
     case "error":
-      return Effect.fail(llmError("stream", event.error))
+      return Effect.fail(llmError(event.error))
   }
 }
 
@@ -795,39 +794,47 @@ function messageValue(input: unknown) {
   }
 }
 
-function llmError(method: string, error: unknown) {
-  const reason =
-    error instanceof AIError
-      ? new InvalidProviderOutputReason({ message: error.message })
-      : APICallError.isInstance(error)
-        ? apiCallErrorReason(error)
-        : new UnknownProviderReason({ message: unknownErrorMessage(error) })
+function llmError(error: unknown) {
+  if (error instanceof AIError) return error
+  if (APICallError.isInstance(error)) return apiCallError(error)
   return new AIError({
-    module: "AISDK",
-    method,
-    reason,
+    message: unknownErrorMessage(error),
+    reason: new UnknownProviderReason({}),
+    body: errorBody(error),
+    cause: error,
   })
 }
 
-function apiCallErrorReason(error: APICallError) {
+function apiCallError(error: APICallError) {
   const details = providerErrorDetails(error)
-  const reason = RequestExecutor.classifyHttpFailure({
+  const failure = RequestExecutor.httpFailure({
     message: details.message,
     url: error.url,
     status: error.statusCode,
     code: details.code,
     responseHeaders: error.responseHeaders,
-    responseBody: error.responseBody,
+    responseBody: error.responseBody ?? errorBody(error.data),
+    cause: error,
   })
-  if (error.statusCode !== undefined || !error.isRetryable) return reason
-  return new TransportReason({
-    message: reason.message,
-    transport: "http",
-    operation: "request",
-    code: error.name,
-    url: error.url,
-    http: "http" in reason ? reason.http : undefined,
+  if (error.statusCode !== undefined || !error.isRetryable) return failure
+  return new AIError({
+    message: failure.message,
+    body: failure.body,
+    http: failure.http,
+    cause: failure.cause,
+    reason: new TransportReason({
+      transport: "http",
+      operation: "request",
+      code: error.name,
+      url: error.url,
+    }),
   })
+}
+
+function errorBody(value: unknown) {
+  if (typeof value === "string") return value
+  if (value instanceof Error || !Schema.is(Schema.Json)(value)) return undefined
+  return ProviderShared.encodeJson(value)
 }
 
 const ProviderErrorCode = Schema.Union([Schema.String, Schema.Finite])

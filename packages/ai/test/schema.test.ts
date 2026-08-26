@@ -5,6 +5,7 @@ import * as OpenAIResponses from "../src/protocols/openai-responses.js"
 import {
   AIError,
   ContentPart,
+  HttpContext,
   InvalidRequestReason,
   LLMEvent,
   LLMRequest,
@@ -144,11 +145,12 @@ describe("AI.Usage", () => {
 
 test("AI errors expose the shared runtime tag", async () => {
   const error = new AIError({
-    module: "test",
-    method: "call",
-    reason: new InvalidRequestReason({ message: "invalid" }),
+    message: "invalid",
+    reason: new InvalidRequestReason({}),
   })
   expect(error._tag).toBe("AI.Error")
+  expect(error.message).toBe("invalid")
+  expect(error.cause).toBeUndefined()
   expect(
     await Effect.runPromise(Effect.fail(error).pipe(Effect.catchTag("AI.Error", () => Effect.succeed("caught")))),
   ).toBe("caught")
@@ -156,7 +158,6 @@ test("AI errors expose the shared runtime tag", async () => {
 
 test("transport errors serialize execution facts", () => {
   const reason = new TransportReason({
-    message: "connection closed",
     transport: "websocket",
     operation: "read",
     phase: "receive",
@@ -166,7 +167,6 @@ test("transport errors serialize execution facts", () => {
 
   expect(Schema.encodeSync(TransportReason)(reason)).toEqual({
     _tag: "Transport",
-    message: "connection closed",
     transport: "websocket",
     operation: "read",
     phase: "receive",
@@ -174,4 +174,37 @@ test("transport errors serialize execution facts", () => {
     recovery: "fail",
   })
   expect(Schema.decodeUnknownSync(TransportReason)(Schema.encodeSync(TransportReason)(reason))).toEqual(reason)
+})
+
+test("AI errors retain diagnostics independently of the classified reason", () => {
+  const cause = new SyntaxError("Unexpected end of JSON input")
+  const error = new AIError({
+    message: "Invalid provider response",
+    reason: new InvalidRequestReason({}),
+    body: '{"error":',
+    http: new HttpContext({
+      url: "https://provider.test/v1/messages",
+      status: 400,
+      headers: { "request-id": "req_123" },
+    }),
+    cause,
+  })
+  const decoded = Schema.decodeUnknownSync(AIError)(Schema.encodeSync(AIError)(error))
+
+  expect(decoded.message).toBe("Invalid provider response")
+  expect(decoded.body).toBe('{"error":')
+  expect(decoded.http).toEqual(error.http)
+  expect(error.cause).toBe(cause)
+  expect(decoded.cause).toBeInstanceOf(Error)
+  expect(decoded.cause).toMatchObject({ name: "SyntaxError", message: cause.message, stack: cause.stack })
+  expect(decoded.reason).toEqual({ _tag: "InvalidRequest" })
+})
+
+test("HTTP error context requires an observed response", () => {
+  const decode = Schema.decodeUnknownOption(HttpContext)
+  expect(decode({ status: 400, headers: {} })._tag).toBe("None")
+  expect(decode({ url: "https://provider.test", headers: {} })._tag).toBe("None")
+  expect(decode({ url: "https://provider.test", status: 400 })._tag).toBe("None")
+  expect(decode({ url: "https://provider.test", status: 0, headers: {} })._tag).toBe("None")
+  expect(decode({ url: "https://provider.test", status: Number.NaN, headers: {} })._tag).toBe("None")
 })

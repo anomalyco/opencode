@@ -966,9 +966,8 @@ describe("Anthropic Messages route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({
-        _tag: "InvalidProviderOutput",
-        classification: "incomplete-stream",
+      expect(error).toMatchObject({
+        reason: { _tag: "InvalidProviderOutput", classification: "incomplete-stream" },
         message: "The provider response ended unexpectedly.",
       })
     }),
@@ -1057,8 +1056,8 @@ describe("Anthropic Messages route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({
-        _tag: "InvalidProviderOutput",
+      expect(error).toMatchObject({
+        reason: { _tag: "InvalidProviderOutput" },
         message: "Invalid anthropic/anthropic-messages stream event",
       })
     }),
@@ -1079,8 +1078,8 @@ describe("Anthropic Messages route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({
-        _tag: "InvalidProviderOutput",
+      expect(error).toMatchObject({
+        reason: { _tag: "InvalidProviderOutput" },
         message: "Invalid anthropic/anthropic-messages stream event",
       })
     }),
@@ -1106,8 +1105,8 @@ describe("Anthropic Messages route", () => {
             Effect.flip,
           )
 
-          expect(error.reason).toMatchObject({
-            _tag: "InvalidProviderOutput",
+          expect(error).toMatchObject({
+            reason: { _tag: "InvalidProviderOutput" },
             message: "Invalid anthropic/anthropic-messages stream event",
           })
         }),
@@ -1122,8 +1121,8 @@ describe("Anthropic Messages route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({
-        _tag: "InvalidProviderOutput",
+      expect(error).toMatchObject({
+        reason: { _tag: "InvalidProviderOutput" },
         message: "Invalid anthropic/anthropic-messages stream event",
       })
     }),
@@ -1645,7 +1644,7 @@ describe("Anthropic Messages route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({ _tag: "ProviderInternal", message: "overloaded_error: Overloaded" })
+      expect(error).toMatchObject({ reason: { _tag: "ProviderInternal" }, message: "overloaded_error: Overloaded" })
     }),
   )
 
@@ -1663,10 +1662,9 @@ describe("Anthropic Messages route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({
-        _tag: "InvalidRequest",
+      expect(error).toMatchObject({
+        reason: { _tag: "InvalidRequest", classification: "context-overflow" },
         message: "invalid_request_error: prompt is too long: 210000 tokens",
-        classification: "context-overflow",
       })
     }),
   )
@@ -1678,7 +1676,7 @@ describe("Anthropic Messages route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({ _tag: "ProviderInternal", message: "overloaded_error" })
+      expect(error).toMatchObject({ reason: { _tag: "ProviderInternal" }, message: "overloaded_error" })
     }),
   )
 
@@ -1689,7 +1687,7 @@ describe("Anthropic Messages route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({ _tag: "UnknownProvider", message: "Anthropic Messages stream error" })
+      expect(error).toMatchObject({ reason: { _tag: "UnknownProvider" }, message: "Anthropic Messages stream error" })
     }),
   )
 
@@ -1706,7 +1704,7 @@ describe("Anthropic Messages route", () => {
       )
 
       expect(error).toBeInstanceOf(AIError)
-      expect(error.reason).toMatchObject({ _tag: "InvalidRequest", message: "Bad request" })
+      expect(error).toMatchObject({ reason: { _tag: "InvalidRequest" }, message: "Bad request" })
     }),
   )
 

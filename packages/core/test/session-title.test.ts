@@ -570,9 +570,8 @@ it.effect("does not rename after a failed title stream", () =>
     titleStream = () =>
       Stream.fail(
         new AIError({
-          module: "test",
-          method: "stream",
-          reason: new TransportReason({ message: "Disconnected", transport: "http", operation: "request" }),
+          message: "Disconnected",
+          reason: new TransportReason({ transport: "http", operation: "request" }),
         }),
       )
 

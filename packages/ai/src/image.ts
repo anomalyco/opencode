@@ -158,9 +158,9 @@ export function generate(input: ImageRequest | ImageRequestInput) {
     try: () => (input instanceof ImageRequest ? input : request(input)),
     catch: (error) =>
       new AIError({
-        module: "Image",
-        method: "generate",
-        reason: new InvalidRequestReason({ message: error instanceof Error ? error.message : String(error) }),
+        message: error instanceof Error ? error.message : String(error),
+        reason: new InvalidRequestReason({}),
+        cause: error,
       }),
   }).pipe(Effect.flatMap((request) => ImageClient.generate(request as unknown as ImageRequestFor<ImageOptions>)))
 }

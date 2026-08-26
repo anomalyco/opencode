@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import {
   AIError,
+  HttpContext,
   LLMEvent,
   LLMRequest,
   Message,
@@ -554,10 +555,8 @@ const setup = Effect.gen(function* () {
 
 const providerUnavailable = () =>
   new AIError({
-    module: "test",
-    method: "stream",
+    message: "Provider unavailable",
     reason: new TransportReason({
-      message: "Provider unavailable",
       transport: "http",
       operation: "request",
     }),
@@ -565,10 +564,8 @@ const providerUnavailable = () =>
 
 const streamDisconnected = () =>
   new AIError({
-    module: "test",
-    method: "stream",
+    message: "The socket connection was closed unexpectedly",
     reason: new TransportReason({
-      message: "The socket connection was closed unexpectedly",
       transport: "http",
       operation: "read",
     }),
@@ -576,10 +573,8 @@ const streamDisconnected = () =>
 
 const continuationRejected = (recovery: "retry-full" | "rotate-and-retry-full") =>
   new AIError({
-    module: "test",
-    method: "stream",
+    message: "Continuation rejected",
     reason: new TransportReason({
-      message: "Continuation rejected",
       transport: "websocket",
       operation: "read",
       phase: "receive",
@@ -590,11 +585,9 @@ const continuationRejected = (recovery: "retry-full" | "rotate-and-retry-full") 
 
 const incompleteStream = () =>
   new AIError({
-    module: "test",
-    method: "stream",
+    message: "The provider response ended unexpectedly.",
     reason: new InvalidProviderOutputReason({
       classification: "incomplete-stream",
-      message: "The provider response ended unexpectedly.",
     }),
   })
 
@@ -603,16 +596,14 @@ const INCOMPLETE_STREAM_CONTINUATION =
 
 const invalidRequest = () =>
   new AIError({
-    module: "test",
-    method: "stream",
-    reason: new InvalidRequestReason({ message: "Invalid request" }),
+    message: "Invalid request",
+    reason: new InvalidRequestReason({}),
   })
 
 const rateLimited = (retryAfterMs?: number) =>
   new AIError({
-    module: "test",
-    method: "stream",
-    reason: new RateLimitReason({ message: "Rate limited", retryAfterMs }),
+    message: "Rate limited",
+    reason: new RateLimitReason({ retryAfterMs }),
   })
 
 const setupOverflowRecovery = Effect.gen(function* () {
@@ -2450,14 +2441,18 @@ describe("SessionRunnerLLM", () => {
       yield* TestLLM.push(TestLLM.text("Earlier answer", "text-manual-provider-history"))
       yield* runPrompt(session, "Earlier question")
 
-      yield* TestLLM.push([LLMEvent.providerError({ message: "summary unavailable" })])
+      const event = LLMEvent.providerError({
+        message: "summary unavailable",
+        providerMetadata: { openai: { requestId: "summary-request" } },
+      })
+      yield* TestLLM.push([event])
       const compaction = yield* session.compact({ sessionID })
       yield* session.resume(sessionID)
 
       expect((yield* session.messages({ sessionID })).find((message) => message.id === compaction.id)).toMatchObject({
         type: "compaction",
         status: "failed",
-        error: { type: "provider.error", message: "summary unavailable" },
+        error: { type: "provider.error", message: "summary unavailable", body: JSON.stringify(event) },
       })
     }),
   )
@@ -2814,10 +2809,8 @@ describe("SessionRunnerLLM", () => {
       yield* TestLLM.push(
         Stream.fail(
           new AIError({
-            module: "test",
-            method: "stream",
+            message: "prompt too long",
             reason: new InvalidRequestReason({
-              message: "prompt too long",
               classification: "context-overflow",
             }),
           }),
@@ -4699,17 +4692,22 @@ describe("SessionRunnerLLM", () => {
   it.effect("projects provider errors as terminal assistant step failures", () =>
     Effect.gen(function* () {
       const session = yield* setup
-      yield* TestLLM.push([
-        LLMEvent.stepStart({ index: 0 }),
-        LLMEvent.providerError({ message: "Provider unavailable" }),
-      ])
+      const event = LLMEvent.providerError({
+        message: "Provider unavailable",
+        providerMetadata: { openai: { requestId: "failed-request" } },
+      })
+      yield* TestLLM.push([LLMEvent.stepStart({ index: 0 }), event])
 
       expect((yield* runPrompt(session, "Fail durably").pipe(Effect.flip)).message).toBe("Provider unavailable")
 
       expect(requests).toHaveLength(1)
       expect(yield* session.context(sessionID)).toMatchObject([
         { type: "user", text: "Fail durably" },
-        { type: "assistant", finish: "error", error: { type: "provider.unknown", message: "Provider unavailable" } },
+        {
+          type: "assistant",
+          finish: "error",
+          error: { type: "provider.unknown", message: "Provider unavailable", body: JSON.stringify(event) },
+        },
       ])
     }),
   )
@@ -4792,7 +4790,11 @@ describe("SessionRunnerLLM", () => {
             responseId: "response-blocked",
             refusal: { category: "safety", explanation: "Prompt blocked" },
           },
-          error: { type: "provider.content-filter" },
+          error: {
+            type: "provider.content-filter",
+            reason: { _tag: "ContentPolicy" },
+            body: expect.stringContaining('"refusal":{"category":"safety","explanation":"Prompt blocked"}'),
+          },
           cost: 0,
           tokens: { input: 8, output: 2, reasoning: 1, cache: { read: 0, write: 0 } },
           content: [{ type: "text", text: "Partial" }],
@@ -4855,7 +4857,11 @@ describe("SessionRunnerLLM", () => {
         {
           type: "assistant",
           finish: "error",
-          error: { message: "prompt too long" },
+          error: {
+            message: "prompt too long",
+            reason: { _tag: "InvalidRequest", classification: "context-overflow" },
+            body: expect.stringContaining('"classification":"context-overflow"'),
+          },
           content: [{ type: "text", text: "Partial" }],
         },
       ])
@@ -5436,12 +5442,40 @@ describe("SessionRunnerLLM", () => {
   it.effect("does not retry non-eligible provider failures", () =>
     Effect.gen(function* () {
       const session = yield* setup
-      const failure = invalidRequest()
+      const failure = new AIError({
+        message: "Invalid request",
+        reason: new InvalidRequestReason({ parameter: "tools" }),
+        body: '{"error":{"message":"Unsupported tool schema","parameter":"tools"}}',
+        http: new HttpContext({
+          url: "https://provider.test/responses",
+          status: 400,
+          headers: { "x-request-id": "failed-request" },
+        }),
+        cause: new Error("upstream request rejected"),
+      })
       yield* TestLLM.push(Stream.fail(failure))
 
       expect(yield* runPrompt(session, "Do not retry").pipe(Effect.flip)).toBe(failure)
       expect(requests).toHaveLength(1)
       expect(yield* recordedEventTypes(sessionID)).not.toContain("session.retry.scheduled.1")
+      const assistant = requireAssistant(yield* session.context(sessionID))
+      expect(assistant.error).toMatchObject({
+        type: "provider.invalid-request",
+        message: failure.message,
+        status: 400,
+        body: failure.body,
+        http: {
+          url: "https://provider.test/responses",
+          status: 400,
+          headers: { "x-request-id": "failed-request" },
+        },
+        reason: { _tag: "InvalidRequest", parameter: "tools" },
+        cause: { name: "Error", message: "upstream request rejected", stack: expect.any(String) },
+      })
+      expect(yield* recordedStepSettlementEvents(sessionID, assistant.id)).toMatchObject([
+        { type: "session.step.started.1" },
+        { type: "session.step.failed.1", data: { error: assistant.error } },
+      ])
     }),
   )
 
@@ -5449,9 +5483,8 @@ describe("SessionRunnerLLM", () => {
     Effect.gen(function* () {
       const session = yield* setup
       const failure = new AIError({
-        module: "test",
-        method: "stream",
-        reason: new InvalidProviderOutputReason({ message: "Invalid JSON input for tool call echo" }),
+        message: "Invalid JSON input for tool call echo",
+        reason: new InvalidProviderOutputReason({}),
       })
       yield* TestLLM.push(
         TestLLM.failAfter(
@@ -5663,9 +5696,8 @@ describe("SessionRunnerLLM", () => {
     Effect.gen(function* () {
       const session = yield* setup
       const failure = new AIError({
-        module: "test",
-        method: "stream",
-        reason: new InvalidProviderOutputReason({ message: "Invalid hosted tool input" }),
+        message: "Invalid hosted tool input",
+        reason: new InvalidProviderOutputReason({}),
       })
       yield* TestLLM.push(
         TestLLM.failAfter(
@@ -5695,9 +5727,8 @@ describe("SessionRunnerLLM", () => {
     Effect.gen(function* () {
       const session = yield* setup
       const failure = new AIError({
-        module: "test",
-        method: "stream",
-        reason: new InvalidProviderOutputReason({ message: "Provider failed after malformed input" }),
+        message: "Provider failed after malformed input",
+        reason: new InvalidProviderOutputReason({}),
       })
       yield* TestLLM.push(
         TestLLM.failAfter(

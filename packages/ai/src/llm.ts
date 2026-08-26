@@ -116,21 +116,16 @@ const runGenerateObject = Effect.fn("LLM.generateObject")(function* (
   )
   if (!call || !LLMEvent.is.toolCall(call))
     return yield* new AIError({
-      module: "LLM",
-      method: "generateObject",
-      reason: new InvalidProviderOutputReason({
-        message: `generateObject: model did not call the forced \`${GENERATE_OBJECT_TOOL_NAME}\` tool`,
-      }),
+      message: `generateObject: model did not call the forced \`${GENERATE_OBJECT_TOOL_NAME}\` tool`,
+      reason: new InvalidProviderOutputReason({}),
     })
   const object = yield* tool._decode(call.input).pipe(
     Effect.mapError(
       (error) =>
         new AIError({
-          module: "LLM",
-          method: "generateObject",
-          reason: new InvalidProviderOutputReason({
-            message: `generateObject: tool input failed schema decode: ${error.message}`,
-          }),
+          message: `generateObject: tool input failed schema decode: ${error.message}`,
+          reason: new InvalidProviderOutputReason({}),
+          cause: error,
         }),
     ),
   )

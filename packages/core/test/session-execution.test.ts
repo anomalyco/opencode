@@ -36,13 +36,19 @@ describe("SessionExecution lifecycle", () => {
       SessionExecution.terminal(
         Exit.fail(
           new AIError({
-            module: "test",
-            method: "stream",
-            reason: new TransportReason({ message: "Disconnected", transport: "http", operation: "request" }),
+            message: "Disconnected",
+            reason: new TransportReason({ transport: "http", operation: "request" }),
           }),
         ),
       ),
-    ).toEqual({ type: "failed", error: { type: "provider.transport", message: "Disconnected" } })
+    ).toEqual({
+      type: "failed",
+      error: {
+        type: "provider.transport",
+        message: "Disconnected",
+        reason: { _tag: "Transport", transport: "http", operation: "request" },
+      },
+    })
   })
 
   test("defaults owner-scope interruption to shutdown and preserves explicit reasons", () => {

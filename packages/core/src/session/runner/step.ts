@@ -149,11 +149,9 @@ export const make = Effect.gen(function* () {
         const unknownFinish =
           stream._tag === "Success" && recorded.finish?.finish === "unknown"
             ? new AIError({
-                module: "session",
-                method: "stream",
+                message: "The provider response ended with an unknown finish reason.",
                 reason: new InvalidProviderOutputReason({
                   classification: "incomplete-stream",
-                  message: "The provider response ended with an unknown finish reason.",
                 }),
               })
             : undefined

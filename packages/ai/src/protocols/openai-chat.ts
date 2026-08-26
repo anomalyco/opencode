@@ -784,10 +784,9 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
 // Streaming parsers are small state machines: every event returns a new state
 // plus the common `LLMEvent`s produced by that event. Tool calls are accumulated
 // because OpenAI streams JSON arguments across multiple deltas.
-const finishReasonError = (event: OpenAIChatEvent, reason: AIError["reason"]) =>
+const finishReasonError = (event: OpenAIChatEvent, message: string, reason: AIError["reason"]) =>
   new AIError({
-    module: ADAPTER,
-    method: "stream",
+    message,
     body: ProviderShared.encodeJson(event),
     reason,
   })
@@ -797,12 +796,14 @@ const mapFinishReason = Effect.fn("OpenAIChat.mapFinishReason")(function* (event
     case "error":
       return yield* finishReasonError(
         event,
-        new UnknownProviderReason({ message: "Provider reported an error (finish_reason: error)" }),
+        "Provider reported an error (finish_reason: error)",
+        new UnknownProviderReason({}),
       )
     case "network_error":
       return yield* finishReasonError(
         event,
-        new ProviderInternalReason({ message: "Provider reported a network error (finish_reason: network_error)" }),
+        "Provider reported a network error (finish_reason: network_error)",
+        new ProviderInternalReason({}),
       )
     case "stop":
     case "end":
@@ -936,8 +937,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
     if (event.error) {
       const body = ProviderShared.encodeJson(event)
       return yield* new AIError({
-        module: ADAPTER,
-        method: "stream",
+        message: event.error.message,
         body,
         reason: classifyProviderFailure({
           message: event.error.message,
@@ -1066,7 +1066,12 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
         "OpenAI Chat tool call delta is missing id or name",
       )
       if (ToolStream.isError(result))
-        return yield* ProviderShared.eventError(ADAPTER, result.reason.message, ProviderShared.encodeJson(event))
+        return yield* new AIError({
+          ...result,
+          message: result.message,
+          cause: result.cause,
+          body: ProviderShared.encodeJson(event),
+        })
       tools = result.tools
       if (result.events.length) lifecycle = Lifecycle.stepStart(lifecycle, events)
       events.push(...result.events)
@@ -1110,11 +1115,9 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
 const finishEvents = Effect.fn("OpenAIChat.finishEvents")(function* (state: ParserState) {
   if (state.finishReason === undefined && state.requireFinishReason)
     return yield* new AIError({
-      module: ADAPTER,
-      method: "stream",
+      message: "OpenAI Chat stream ended without finish_reason",
       reason: new InvalidProviderOutputReason({
         classification: "incomplete-stream",
-        message: "OpenAI Chat stream ended without finish_reason",
         route: ADAPTER,
       }),
     })

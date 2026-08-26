@@ -137,12 +137,13 @@ export function bearerHeader(name: string, source?: Secret | Credential) {
 const toAIError = (error: AuthError): AIError => {
   if (error instanceof MissingCredentialError || error instanceof Config.ConfigError) {
     return new AIError({
-      module: "Auth",
-      method: "apply",
+      message:
+        error instanceof MissingCredentialError ? error.message : `Failed to resolve auth config: ${error.message}`,
+      cause: error,
       reason:
         error instanceof MissingCredentialError
-          ? new AuthenticationReason({ message: error.message, kind: "missing" })
-          : new InvalidRequestReason({ message: `Failed to resolve auth config: ${error.message}` }),
+          ? new AuthenticationReason({ kind: "missing" })
+          : new InvalidRequestReason({}),
     })
   }
   return error

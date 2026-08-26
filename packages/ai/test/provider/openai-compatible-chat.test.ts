@@ -489,9 +489,8 @@ describe("OpenAI-compatible Chat route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({
-        _tag: "InvalidProviderOutput",
-        classification: "incomplete-stream",
+      expect(error).toMatchObject({
+        reason: { _tag: "InvalidProviderOutput", classification: "incomplete-stream" },
         message: "OpenAI Chat stream ended without finish_reason",
       })
     }),
@@ -527,8 +526,8 @@ describe("OpenAI-compatible Chat route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({
-        _tag: "ProviderInternal",
+      expect(error).toMatchObject({
+        reason: { _tag: "ProviderInternal" },
         message: "Provider reported a network error (finish_reason: network_error)",
       })
       expect(decodeJson(error.body ?? "")).toMatchObject({
@@ -540,8 +539,8 @@ describe("OpenAI-compatible Chat route", () => {
         Effect.provide(fixedResponse(sseEvents(deltaChunk({}, "error")))),
         Effect.flip,
       )
-      expect(generic.reason).toMatchObject({
-        _tag: "UnknownProvider",
+      expect(generic).toMatchObject({
+        reason: { _tag: "UnknownProvider" },
         message: "Provider reported an error (finish_reason: error)",
       })
     }),
@@ -562,7 +561,7 @@ describe("OpenAI-compatible Chat route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({ _tag: "ProviderInternal", message: "Provider disconnected", status: 502 })
+      expect(error).toMatchObject({ reason: { _tag: "ProviderInternal" }, message: "Provider disconnected" })
       expect(decodeJson(error.body ?? "")).toMatchObject({
         id: "chatcmpl_error",
         error: { code: 502, message: "Provider disconnected", details: { upstream: "vendor" } },
@@ -603,7 +602,7 @@ describe("OpenAI-compatible Chat route", () => {
       expect(error.message).toContain("OpenAI Chat received content after the finish reason")
       expect(error.reason._tag).toBe("InvalidProviderOutput")
       if (error.reason._tag !== "InvalidProviderOutput") return
-      expect(decodeJson(error.reason.raw ?? "")).toMatchObject({
+      expect(decodeJson(error.body ?? "")).toMatchObject({
         choices: [{ delta: { tool_calls: [{ id: "call_1" }] } }],
       })
     }),
