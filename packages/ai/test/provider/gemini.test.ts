@@ -950,9 +950,7 @@ describe("Gemini route", () => {
 
       expect(error).toBeInstanceOf(AIError)
       expect(error.reason).toMatchObject({ _tag: "InvalidProviderOutput" })
-      expect(error.message).toBe(
-        JSON.stringify({ candidates: [{ content: { role: "model", parts: [{ text: 42 }] } }] }),
-      )
+      expect(error.message).toContain("Invalid google/gemini stream event")
     }),
   )
 
@@ -1609,7 +1607,7 @@ describe("Gemini route", () => {
     }),
   )
 
-  it.effect("retains the raw payload and decode cause for invalid stream events", () =>
+  it.effect("fails invalid stream events", () =>
     Effect.gen(function* () {
       const error = yield* LLMClient.generate(request).pipe(
         Effect.provide(fixedResponse(sseRaw("data: {not json}"))),
@@ -1617,9 +1615,8 @@ describe("Gemini route", () => {
       )
 
       expect(error).toBeInstanceOf(AIError)
-      expect(error.reason).toMatchObject({ _tag: "InvalidProviderOutput", body: "{not json}" })
-      expect(error.message).toBe("{not json}")
-      expect(error.reason.cause).toBeInstanceOf(Error)
+      expect(error.reason).toMatchObject({ _tag: "InvalidProviderOutput" })
+      expect(error.message).toContain("Invalid google/gemini stream event")
     }),
   )
 

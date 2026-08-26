@@ -1058,7 +1058,7 @@ describe("Anthropic Messages route", () => {
 
       expect(error).toMatchObject({
         reason: { _tag: "InvalidProviderOutput" },
-        message: JSON.stringify({ type: "content_block_start", index: 0, content_block: { type: "text", text: 42 } }),
+        message: "Invalid anthropic/anthropic-messages stream event",
       })
     }),
   )
@@ -1080,7 +1080,7 @@ describe("Anthropic Messages route", () => {
 
       expect(error).toMatchObject({
         reason: { _tag: "InvalidProviderOutput" },
-        message: JSON.stringify({ type: "content_block_delta", index: 0, delta: { type: "text_delta", text: 42 } }),
+        message: "Invalid anthropic/anthropic-messages stream event",
       })
     }),
   )
@@ -1107,14 +1107,14 @@ describe("Anthropic Messages route", () => {
 
           expect(error).toMatchObject({
             reason: { _tag: "InvalidProviderOutput" },
-            message: JSON.stringify(event),
+            message: "Invalid anthropic/anthropic-messages stream event",
           })
         }),
       )
     }),
   )
 
-  it.effect("retains the raw payload and decode cause for malformed recognized SSE events", () =>
+  it.effect("rejects malformed recognized SSE events", () =>
     Effect.gen(function* () {
       const error = yield* LLMClient.generate(request).pipe(
         Effect.provide(fixedResponse(sseRaw(sseNamedEvent("message_start", "[DONE]")))),
@@ -1122,10 +1122,9 @@ describe("Anthropic Messages route", () => {
       )
 
       expect(error).toMatchObject({
-        reason: { _tag: "InvalidProviderOutput", body: "[DONE]" },
-        message: "[DONE]",
+        reason: { _tag: "InvalidProviderOutput" },
+        message: "Invalid anthropic/anthropic-messages stream event",
       })
-      expect(error.reason.cause).toBeInstanceOf(Error)
     }),
   )
 
@@ -1670,28 +1669,25 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
-  it.effect("falls back to the full raw event when the message is empty", () =>
+  it.effect("falls back to error type when no message is present", () =>
     Effect.gen(function* () {
       const error = yield* LLMClient.generate(request).pipe(
         Effect.provide(fixedResponse(sseEvents({ type: "error", error: { type: "overloaded_error", message: "" } }))),
         Effect.flip,
       )
 
-      expect(error).toMatchObject({
-        reason: { _tag: "ProviderInternal" },
-        message: '{"type":"error","error":{"type":"overloaded_error","message":""}}',
-      })
+      expect(error).toMatchObject({ reason: { _tag: "ProviderInternal" }, message: "overloaded_error" })
     }),
   )
 
-  it.effect("falls back to the full raw event when the error payload is absent", () =>
+  it.effect("falls back to a stable default when error payload is absent", () =>
     Effect.gen(function* () {
       const error = yield* LLMClient.generate(request).pipe(
         Effect.provide(fixedResponse(sseEvents({ type: "error" }))),
         Effect.flip,
       )
 
-      expect(error).toMatchObject({ reason: { _tag: "UnknownProvider" }, message: '{"type":"error"}' })
+      expect(error).toMatchObject({ reason: { _tag: "UnknownProvider" }, message: "Anthropic Messages stream error" })
     }),
   )
 

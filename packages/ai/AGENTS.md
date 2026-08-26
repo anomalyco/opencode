@@ -23,7 +23,6 @@ Per-type constructors live on the type, not as top-level re-exports. Use `Messag
 
 - `AIError` wraps a union of tagged reason errors. It stores only `reason`, derives `message` from the reason, and exposes the reason as its `cause`.
 - Each reason owns its readable `message`, category-specific fields, and optional `body`, `http`, and underlying exception in `cause`.
-- Prefer a non-empty readable provider message; otherwise show the complete original payload as `message`, not a generic label or code-only summary. Use generic text only when no payload is available. Preserve raw fallback messages alongside their bodies when restoring original frames after schema decoding.
 - `reason.body` is the sole original-response or triggering-event payload field. Preserve original text before schema decoding removes fields; do not replace the complete event with only its nested error.
 - `reason.http` describes an observed HTTP response with required `url`, `status`, and response `headers`. Do not invent status codes or derive a separate request ID from headers.
 - Reclassification and transport recovery must preserve the reason's body, HTTP context, and underlying cause. Error `message` and `cause` are non-enumerable: copy them explicitly when constructing an enriched reason with its constructor or `AIErrorReason.make`.

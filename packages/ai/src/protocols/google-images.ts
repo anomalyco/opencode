@@ -156,7 +156,7 @@ export const model = (input: ModelInput) => {
       )
       const output = yield* ProviderShared.imageResponse(ADAPTER, "Google Images", response)
       const decoded = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(GoogleImageResponse))(output.body).pipe(
-        Effect.mapError(output.decodeError),
+        Effect.mapError((cause) => output.invalid("Google Images returned an invalid response", cause)),
       )
       const candidates = decoded.candidates ?? []
       const candidateMetadata = candidates.map((candidate, candidateIndex) => ({

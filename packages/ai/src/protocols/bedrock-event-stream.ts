@@ -64,9 +64,8 @@ const consumeFrames = (route: string) => (state: FrameBufferState, chunk: Uint8A
         const message = decoded.headers[":error-message"]?.value
         return yield* ProviderShared.eventError(
           route,
-          typeof message === "string" && message.trim()
-            ? [code, message].filter((value): value is string => typeof value === "string").join(": ")
-            : body,
+          [code, message].filter((value): value is string => typeof value === "string").join(": ") ||
+            "Bedrock Converse event-stream error",
           body,
         )
       }
@@ -90,7 +89,7 @@ const consumeFrames = (route: string) => (state: FrameBufferState, chunk: Uint8A
         Effect.mapError(
           (error) =>
             new AIError({
-              reason: AIErrorReason.make({ ...error.reason, message: body, cause: error.reason.cause, body }),
+              reason: AIErrorReason.make({ ...error.reason, message: error.message, cause: error.reason.cause, body }),
             }),
         ),
       )) as Record<string, unknown>

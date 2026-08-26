@@ -60,28 +60,6 @@ describe("provider error retention", () => {
         expect(error.cause).toBe(error.reason)
       }),
     )
-
-    for (const message of [undefined, "", " \t "]) {
-      it.effect(`shows the complete ${entry.name} event when its message is ${JSON.stringify(message)}`, () =>
-        Effect.gen(function* () {
-          const event =
-            "response" in entry.event
-              ? {
-                  ...entry.event,
-                  response: { ...entry.event.response, error: { ...entry.event.response.error, message } },
-                }
-              : { ...entry.event, error: { ...entry.event.error, message } }
-          const body = `  ${JSON.stringify({ ...event, trace: { opaque: "outer" } })}  `
-          const error = yield* LLMClient.generate(LLM.request({ model: entry.model, prompt: "hello" })).pipe(
-            Effect.provide(fixedResponse(sseEvents(body))),
-            Effect.flip,
-          )
-          expect(error.message).toBe(body)
-          expect(error.reason.body).toBe(body)
-          expect(error.reason.http?.status).toBe(200)
-        }),
-      )
-    }
   }
 
   it.effect("retains malformed provider frames and the original decode cause", () =>
@@ -91,30 +69,15 @@ describe("provider error retention", () => {
         LLM.request({ model: Anthropic.configure(options).model("claude"), prompt: "hello" }),
       ).pipe(Effect.provide(fixedResponse(sseEvents(body))), Effect.flip)
       expect(error.reason._tag).toBe("InvalidProviderOutput")
-      expect(error.message).toBe(body)
       expect(error.reason.body).toBe(body)
       expect(error.reason.cause).toBeInstanceOf(Error)
       expect(error.reason.http?.status).toBe(200)
     }),
   )
 
-  for (const finish of ["error", "network_error"]) {
-    it.effect(`shows the original Chat event for ${finish} finish reasons`, () =>
-      Effect.gen(function* () {
-        const body = ` ${JSON.stringify({ choices: [{ delta: {}, finish_reason: finish }], trace: { opaque: 42 } })} `
-        const error = yield* LLMClient.generate(
-          LLM.request({ model: OpenAI.configure(options).chat("gpt"), prompt: "hello" }),
-        ).pipe(Effect.provide(fixedResponse(sseEvents(body))), Effect.flip)
-        expect(error.message).toBe(body)
-        expect(error.reason.body).toBe(body)
-        expect(error.reason._tag).toBe(finish === "error" ? "UnknownProvider" : "ProviderInternal")
-      }),
-    )
-  }
-
   it.effect("retains the HTTP response context when a channel falls back", () =>
     Effect.gen(function* () {
-      const body = '{ "type": "error", "error": {"code":"rate_limit_exceeded","extra":42} }'
+      const body = '{"type":"error","error":{"code":"rate_limit_exceeded","message":"Slow down","extra":42}}'
       const error = yield* LLMClient.generate(
         LLM.request({ model: OpenAI.configure(options).responses("gpt"), prompt: "hello" }),
         {
@@ -128,7 +91,6 @@ describe("provider error retention", () => {
       )
 
       expect(error.reason._tag).toBe("RateLimit")
-      expect(error.message).toBe(body)
       expect(error.reason.body).toBe(body)
       expect(error.reason.http).toMatchObject({
         url: "https://provider.test/responses",

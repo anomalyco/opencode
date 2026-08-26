@@ -1182,16 +1182,16 @@ const onResponseFinish = Effect.fn("OpenResponses.onResponseFinish")(function* (
 // to be indistinguishable from generic stream drops. Returns undefined when
 // the payload carries no usable summary.
 const providerErrorMessage = (event: Event, nested: OpenResponsesErrorPayload | undefined): string | undefined => {
-  const message = [event.message, nested?.message].find((value): value is string => !!value?.trim())
+  const message = event.message || nested?.message || undefined
   const code = event.code || nested?.code || undefined
   if (message && code) return `${code}: ${message}`
-  return message
+  return message || code
 }
 
-export const providerFailure = (event: Event, body = ProviderShared.encodeJson(event)) => {
+export const providerFailure = (event: Event, fallback: string, body = ProviderShared.encodeJson(event)) => {
   const nested = event.error ?? event.response?.error ?? undefined
   const summary = providerErrorMessage(event, nested)
-  const message = summary ?? body
+  const message = summary ?? (body === "{}" ? fallback : body)
   const status =
     typeof event.status === "number"
       ? event.status
@@ -1202,7 +1202,6 @@ export const providerFailure = (event: Event, body = ProviderShared.encodeJson(e
     event.type === "error" &&
     event.error === undefined &&
     event.response === undefined &&
-    !event.code &&
     summary === undefined &&
     status === undefined
       ? new ProviderInternalError({ message, body })
@@ -1277,7 +1276,7 @@ export const step = (state: ParserState, input: Event) => {
     return onOutputItemDone(state, event)
   }
   if (event.type === "response.completed" || event.type === "response.incomplete") return onResponseFinish(state, event)
-  if (event.type === "response.failed") return providerFailure(event)
+  if (event.type === "response.failed") return providerFailure(event, `${state.name} response failed`)
   if (event.type === "error")
     return decodeKnownErrorEvent(event).pipe(
       Effect.mapError((cause) =>
@@ -1288,7 +1287,7 @@ export const step = (state: ParserState, input: Event) => {
           cause,
         ),
       ),
-      Effect.flatMap(() => providerFailure(event)),
+      Effect.flatMap(() => providerFailure(event, `${state.name} stream error`)),
     )
   return Effect.succeed<StepResult>([state, NO_EVENTS])
 }

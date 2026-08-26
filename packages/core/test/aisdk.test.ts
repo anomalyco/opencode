@@ -611,52 +611,34 @@ it.effect("preserves non-empty AI SDK error messages", () =>
   }),
 )
 
-Object.entries({
-  nested: {
-    payload: { error: { message: "Provider busy", metadata: { requestId: "stream-request", retryable: true } } },
-    message: "Provider busy",
-  },
-  message: { payload: { message: "Provider busy", code: { upstream: 503 } }, message: "Provider busy" },
-  "malformed nested message": {
-    payload: { error: { message: 42 }, message: "Provider busy" },
-    message: "Provider busy",
-  },
-  string: { payload: '{"error":"Provider busy","requestId":"stream-request"}', message: "Provider busy" },
-  code: { payload: { error: { code: "not_found" }, requestId: "stream-request" } },
-  blank: { payload: { message: "", error: { message: " \n\t", code: "unknown" }, details: ["diagnostic"] } },
-  raw: { payload: '{\n  "error": {"code": "not_found"},\n  "requestId": "stream-request"\n}' },
-  malformed: { payload: "<html>Bad Gateway</html>\n" },
-  text: { payload: "Provider busy", message: "Provider busy" },
-  whitespace: { payload: " \n\t", message: " \n\t" },
-}).forEach(([kind, input]) => {
-  it.effect(`preserves readable messages and complete ${kind} AI SDK stream error payloads`, () =>
+Object.values({
+  object: { error: { message: "Provider busy", metadata: { requestId: "stream-request", retryable: true } } },
+  string: '{"error":"Provider busy","requestId":"stream-request"}',
+}).forEach((payload) => {
+  it.effect(`preserves ${typeof payload} AI SDK stream error payloads in the durable body`, () =>
     Effect.gen(function* () {
-      const error = yield* streamFailure(input.payload, true)
-      const body = typeof input.payload === "string" ? input.payload : JSON.stringify(input.payload)
-      expect(error.message).toBe(input.message ?? body)
+      const error = yield* streamFailure(payload, true)
+      const body = typeof payload === "string" ? payload : JSON.stringify(payload)
       expect(error.reason.body).toBe(body)
       expect(toSessionError(error).body).toBe(body)
-      expect(toSessionError(error).message).toBe(error.message)
-      expect(error.reason.cause).toBe(input.payload)
+      expect(error.reason.cause).toBe(payload)
     }),
   )
 })
 
-Object.values({ useful: "Connection failed", empty: "", whitespace: " \n\t" }).forEach((message) => {
-  it.effect(`does not copy Error request internals into the provider body or ${JSON.stringify(message)} message`, () =>
-    Effect.gen(function* () {
-      const cause = Object.assign(new Error(message), {
-        requestBodyValues: { prompt: "private prompt" },
-        requestHeaders: { authorization: "Bearer private-token" },
-      })
-      cause.cause = cause
-      const error = yield* streamFailure(cause, true)
-      expect(error.reason.body).toBeUndefined()
-      expect(error.reason.cause).toBe(cause)
-      expect(error.message).toBe(message.trim() ? message : "Provider request failed")
-    }),
-  )
-})
+it.effect("does not copy Error request internals into the provider body", () =>
+  Effect.gen(function* () {
+    const cause = Object.assign(new Error("Connection failed"), {
+      requestBodyValues: { prompt: "private prompt" },
+      requestHeaders: { authorization: "Bearer private-token" },
+    })
+    cause.cause = cause
+    const error = yield* streamFailure(cause, true)
+    expect(error.reason.body).toBeUndefined()
+    expect(error.reason.cause).toBe(cause)
+    expect(error.message).toBe("Connection failed")
+  }),
+)
 
 it.effect("preserves existing AI errors and their retry semantics unchanged", () =>
   Effect.gen(function* () {
@@ -687,7 +669,7 @@ const apiCallError = (input: Partial<ConstructorParameters<typeof APICallError>[
     ...input,
   })
 
-it.effect("uses the complete raw response when the AI SDK error only has a code", () =>
+it.effect("derives status and code when the AI SDK error message is empty", () =>
   Effect.gen(function* () {
     const error = yield* streamFailure(
       apiCallError({
@@ -696,7 +678,7 @@ it.effect("uses the complete raw response when the AI SDK error only has a code"
         data: { error: { message: "", code: "not_found" } },
       }),
     )
-    expect(error.message).toBe('{"error":{"message":"","code":"not_found"}}')
+    expect(error.message).toBe("Provider request failed with HTTP 404: not_found")
     expect(error.message).not.toContain("secret-token")
     expect(error.message).not.toContain("private prompt")
     const projected = toSessionError(error)
@@ -760,7 +742,6 @@ it.effect("classifies data-only AI SDK provider codes", () =>
     expect(error.reason.http?.status).toBe(400)
     expect(SessionRunnerRetry.isRetryable(error)).toBeTrue()
     expect(error.reason.body).toBe(JSON.stringify(data))
-    expect(error.message).toBe(JSON.stringify(data))
     expect(toSessionError(error).body).toBe(JSON.stringify(data))
     expect(error.reason.cause).toBe(cause)
     expect(error.reason.body).not.toContain("private prompt")
@@ -841,7 +822,7 @@ it.effect("retries status-less AI SDK transport failures", () =>
   }),
 )
 
-it.effect("prefers a structured provider message over raw data", () =>
+it.effect("prefers a structured provider message over the code fallback", () =>
   Effect.gen(function* () {
     const error = yield* streamFailure(
       apiCallError({
@@ -854,119 +835,17 @@ it.effect("prefers a structured provider message over raw data", () =>
   }),
 )
 
-it.effect("uses the complete malformed response body rather than a status fallback", () =>
+it.effect("falls back to the status alone for malformed response bodies", () =>
   Effect.gen(function* () {
     const error = yield* streamFailure(
       apiCallError({
         statusCode: 502,
         isRetryable: false,
-        responseBody: "<html>\n  Bad Gateway\n</html>\n",
+        responseBody: "<html>Bad Gateway</html>",
       }),
     )
     expect(error.reason).toMatchObject({ _tag: "ProviderInternal" })
     expect(error.reason.http?.status).toBe(502)
-    expect(error.message).toBe("<html>\n  Bad Gateway\n</html>\n")
+    expect(error.message).toBe("Provider request failed with HTTP 502")
   }),
 )
-
-it.effect("uses the raw response when a real SDK provider substitutes an HTTP status message", () =>
-  Effect.gen(function* () {
-    const aisdk = yield* AISDK.Service
-    const body = "<html>Upstream failure with diagnostic trace</html>\n"
-    yield* aisdk.hook.sdk((event) => {
-      event.sdk = createOpenAICompatible({
-        name: "test",
-        baseURL: "https://provider.test/v1",
-        apiKey: "test",
-        fetch: Object.assign(async () => new Response(body, { status: 502, statusText: "Bad Gateway" }), {
-          preconnect: fetch.preconnect,
-        }),
-      })
-    })
-    const resolved = yield* aisdk.model(model("@ai-sdk/openai-compatible"))
-    const error = yield* LLMClient.generate(LLM.request({ model: resolved, prompt: "Hello" })).pipe(
-      Effect.provide(client),
-      Effect.flip,
-    )
-    expect(error.reason.cause).toBeInstanceOf(APICallError)
-    expect(error.reason.cause).toMatchObject({ message: "Bad Gateway" })
-    expect(error.message).toBe(body)
-    expect(error.reason.body).toBe(body)
-    expect(error.reason.http?.status).toBe(502)
-  }),
-)
-
-Object.entries({
-  "SDK message": {
-    input: {
-      message: "Model unavailable",
-      data: { error: { message: "Parsed failure" } },
-      responseBody: '{"message":"Raw failure"}',
-    },
-    message: "Model unavailable",
-  },
-  "structured data message": {
-    input: {
-      message: " \n\t",
-      data: { error: { message: "Parsed failure" } },
-      responseBody: '{"message":"Raw failure"}',
-    },
-    message: "Parsed failure",
-  },
-  "structured body message": {
-    input: {
-      data: { error: { message: " \n\t" } },
-      responseBody: '{"message":"Raw failure"}',
-    },
-    message: "Raw failure",
-  },
-  "complete formatted body": {
-    input: {
-      message: " \n\t",
-      data: { error: { message: "", code: "not_found" }, details: ["parsed-only"] },
-      responseBody: '{\n  "error": {"message": "  ", "code": "not_found"},\n  "details": ["raw-only"]\n}\n',
-    },
-    message: '{\n  "error": {"message": "  ", "code": "not_found"},\n  "details": ["raw-only"]\n}\n',
-  },
-  "complete data with an empty body": {
-    input: {
-      data: { error: { code: "not_found" }, details: ["parsed-only"] },
-      responseBody: "",
-    },
-    message: '{"error":{"code":"not_found"},"details":["parsed-only"]}',
-  },
-  "complete string data with an empty body": {
-    input: {
-      data: '{\n  "code": "not_found",\n  "details": ["parsed-only"]\n}',
-      responseBody: "",
-    },
-    message: '{\n  "code": "not_found",\n  "details": ["parsed-only"]\n}',
-  },
-  "status with an absent body": {
-    input: { statusCode: 502 },
-    message: "Provider request failed with HTTP 502",
-  },
-  "status with an empty body": {
-    input: { statusCode: 502, responseBody: "" },
-    message: "Provider request failed with HTTP 502",
-  },
-  "generic fallback with no response": {
-    input: { isRetryable: false },
-    message: "Provider request failed",
-  },
-}).forEach(([kind, input]) => {
-  it.effect(`prefers ${kind} for AI SDK call errors`, () =>
-    Effect.gen(function* () {
-      const cause = apiCallError(input.input)
-      const error = yield* streamFailure(cause)
-      expect(error.message).toBe(input.message)
-      expect(error.reason.body).toBe(
-        cause.responseBody ?? (typeof cause.data === "string" ? cause.data : JSON.stringify(cause.data)),
-      )
-      expect(error.reason.cause).toBe(cause)
-      expect(toSessionError(error).message).toBe(input.message)
-      expect(error.message).not.toContain("private prompt")
-      expect(error.message).not.toContain("secret-token")
-    }),
-  )
-})

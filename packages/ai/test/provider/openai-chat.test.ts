@@ -1510,14 +1510,12 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
-  it.effect("retains the raw payload and decode cause for malformed stream events", () =>
+  it.effect("fails on malformed stream events", () =>
     Effect.gen(function* () {
       const body = sseEvents(deltaChunk({ content: 123 }))
       const error = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse(body)), Effect.flip)
 
-      expect(error.message).toBe(JSON.stringify(deltaChunk({ content: 123 })))
-      expect(error.reason).toMatchObject({ _tag: "InvalidProviderOutput", body: error.message })
-      expect(error.reason.cause).toBeInstanceOf(Error)
+      expect(error.message).toContain("Invalid openai/openai-chat stream event")
     }),
   )
 

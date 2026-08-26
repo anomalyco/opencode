@@ -1,18 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { isContextOverflow } from "../src/index.js"
-import { classifyProviderFailure, providerMessage } from "../src/provider-error.js"
-
-test("provider messages prefer readable text, then the original payload, then a no-body fallback", () => {
-  expect(providerMessage('{"error":{"message":"Readable failure"},"opaque":42}', "fallback")).toBe("Readable failure")
-  expect(providerMessage('{"error":"Readable failure","opaque":42}', "fallback")).toBe("Readable failure")
-  expect(providerMessage('{"error":{"message":42},"message":"Readable failure"}', "fallback")).toBe("Readable failure")
-  const body = ' {"error":{"message":"  ","code":"unknown","opaque":42}} '
-  expect(providerMessage(body, "fallback")).toBe(body)
-  expect(providerMessage("<html>Unknown failure</html>", "fallback")).toBe("<html>Unknown failure</html>")
-  expect(providerMessage("{}", "fallback")).toBe("{}")
-  expect(providerMessage("", "fallback")).toBe("fallback")
-  expect(providerMessage(undefined, "fallback")).toBe("fallback")
-})
+import { classifyProviderFailure } from "../src/provider-error.js"
 
 describe("provider error classification", () => {
   test("classifies provider token limit messages as context overflow", () => {

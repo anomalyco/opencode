@@ -302,7 +302,7 @@ describe("RequestExecutor", () => {
       expectAIError(error)
       expect(error.reason).toMatchObject({ _tag: "InvalidRequest" })
       expect("classification" in error.reason ? error.reason.classification : undefined).toBeUndefined()
-      expect(error.message).toBe("invalid parameter")
+      expect(error.message).toBe("Provider request failed with HTTP 400")
     }).pipe(Effect.provide(responsesLayer([new Response("invalid parameter", { status: 400 })]))),
   )
 
@@ -330,7 +330,7 @@ describe("RequestExecutor", () => {
     ),
   )
 
-  it.effect("falls back to the full raw body when structured provider messages are empty", () =>
+  it.effect("falls back when structured provider messages are empty", () =>
     Effect.gen(function* () {
       const executor = yield* RequestExecutor.Service
       const error = yield* executor.execute(request).pipe(Effect.flip)
@@ -339,7 +339,7 @@ describe("RequestExecutor", () => {
       expect(error.reason).toMatchObject({
         _tag: "InvalidRequest",
       })
-      expect(error.message).toBe('{"error":{"message":"  "}}')
+      expect(error.message).toBe("Provider request failed with HTTP 400")
     }).pipe(Effect.provide(responsesLayer([new Response('{"error":{"message":"  "}}', { status: 400 })]))),
   )
 

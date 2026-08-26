@@ -398,7 +398,7 @@ const AnthropicEvent = Schema.Struct({
   // `type` and `message` are both required per Anthropic's spec, but
   // OpenAI-compatible proxies and gateway translations occasionally drop one
   // or the other; mark them optional so a partial payload still parses and
-  // the parser can show the original event when no readable message is present.
+  // the parser can fall back to whichever field is populated.
   error: Schema.optional(
     Schema.Struct({ type: Schema.optional(Schema.String), message: Schema.optional(Schema.String) }),
   ),
@@ -1380,18 +1380,19 @@ const onMessageStop = Effect.fn("AnthropicMessages.onMessageStop")(function* (st
 
 // Prefix `error.type` so overloads, rate limits, and quota errors are visible
 // even when the provider message is generic or empty.
-const providerErrorMessage = (event: AnthropicEvent, body: string): string => {
+const providerErrorMessage = (event: AnthropicEvent): string => {
   const type = event.error?.type
   const message = event.error?.message
-  if (!message?.trim()) return body
-  return type ? `${type}: ${message}` : message
+  if (type && message) return `${type}: ${message}`
+  return message || type || "Anthropic Messages stream error"
 }
 
 const onError = (event: AnthropicEvent) => {
+  const message = providerErrorMessage(event)
   const body = ProviderShared.encodeJson(event)
   return Effect.fail(
     new AIError({
-      reason: classifyProviderFailure({ message: providerErrorMessage(event, body), rawBody: body }),
+      reason: classifyProviderFailure({ message, rawBody: body }),
     }),
   )
 }
@@ -1407,10 +1408,14 @@ const isKnownStreamBlockType = (type: string) =>
 const isKnownStreamDeltaType = (type: string) =>
   type === "text_delta" || type === "thinking_delta" || type === "signature_delta" || type === "input_json_delta"
 
-const invalidStreamEvent = (event: AnthropicEvent) => {
-  const body = ProviderShared.encodeJson(event)
-  return Effect.fail(ProviderShared.eventError(ADAPTER, body, body))
-}
+const invalidStreamEvent = (event: AnthropicEvent) =>
+  Effect.fail(
+    ProviderShared.eventError(
+      ADAPTER,
+      "Invalid anthropic/anthropic-messages stream event",
+      ProviderShared.encodeJson(event),
+    ),
+  )
 
 const step = (state: ParserState, event: AnthropicEvent) => {
   if (!SSE_EVENTS.has(event.type)) return Effect.succeed<StepResult>([state, NO_EVENTS])

@@ -197,7 +197,7 @@ const parseResponse = Effect.fn("OpenAIImages.parseResponse")(function* (
 ) {
   const output = yield* ProviderShared.imageResponse(ADAPTER, "OpenAI Images", response)
   const decoded = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(OpenAIImageResponse))(output.body).pipe(
-    Effect.mapError(output.decodeError),
+    Effect.mapError((cause) => output.invalid("OpenAI Images returned an invalid response", cause)),
   )
   const requestBody = mergeJsonRecords(nativeOptions(options), overlay)
   const format =
