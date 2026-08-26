@@ -4,7 +4,8 @@ import { Resource } from "sst/resource"
 import { DatabaseError } from "../database"
 import type { GeoStatMetric } from "./geo"
 import { ModelStatRepo, type ModelStatMetric } from "./model"
-import type { ProviderStatMetric } from "./provider"
+import { statProvider } from "./model-normalization"
+import { DATA_SITE_TIERS, normalizeTier } from "./stat"
 
 export type UsageProduct = "All Users" | "Zen" | "Go" | "Enterprise"
 export type TokenProduct = "Zen" | "Go" | "Enterprise"
@@ -129,15 +130,13 @@ const TOKEN_SCALE = 1_000_000
 const DOLLARS_PER_MICROCENT = 1 / 100_000_000
 const METRIC_MODEL_LIMIT = 10
 const TOP_MODEL_SEGMENT_LIMIT = 9
+// Preserve the response shape while the public site presents Go and Free as one cohort.
 const SITE_PRODUCT = "Go"
+const SITE_TIER_PLACEHOLDERS = DATA_SITE_TIERS.map(() => "?").join(", ")
 const LEADERBOARD_CHANGE_MIN_MULTIPLE = 10
 const months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"] as const
 
 type StatMetricRow = Omit<ModelStatMetric, "updatedAt"> & {
-  periodStart: number
-  updatedAt: number
-}
-type ProviderMetricRow = Omit<ProviderStatMetric, "updatedAt"> & {
   periodStart: number
   updatedAt: number
 }
@@ -168,12 +167,8 @@ type RawRow = Record<string, unknown>
 export function getStatsHomeData(): Effect.Effect<StatsHomeData, StatsDataError> {
   return Effect.tryPromise({
     try: async () => {
-      const [modelRows, providerRows, geoRows] = await Promise.all([
-        listModelDaily(),
-        listProviderDaily(),
-        listGeoDaily(),
-      ])
-      return buildStatsHomeData(modelRows, providerRows, geoRows)
+      const [modelRows, geoRows] = await Promise.all([listModelDaily(), listGeoDaily()])
+      return buildStatsHomeData(modelRows, geoRows)
     },
     catch: (cause) => new StatsDataError(cause),
   })
@@ -212,10 +207,13 @@ export function getStatsLabData(provider: string): Effect.Effect<StatsLabData | 
 
 async function listModelDaily(): Promise<ModelStatMetric[]> {
   return (
-    await queryRows(`select period_key, updated_at, tier, provider, model, sessions, unique_users, input_tokens,
+    await queryRows(
+      `select period_key, updated_at, tier, provider, model, sessions, unique_users, input_tokens,
     output_tokens, reasoning_tokens, cache_read_tokens, total_tokens, input_cost_microcents, output_cost_microcents,
     total_cost_microcents from model_stat where grain = 'day' and client = 'all' and source = 'all'
-    and tier in ('Go', 'go') order by period_key`)
+    and tier in (${SITE_TIER_PLACEHOLDERS}) order by period_key`,
+      DATA_SITE_TIERS,
+    )
   ).map((row) => ({
     periodKey: stringValue(row.period_key),
     updatedAt: dateValue(row.updated_at),
@@ -235,19 +233,6 @@ async function listModelDaily(): Promise<ModelStatMetric[]> {
   }))
 }
 
-async function listProviderDaily(): Promise<ProviderStatMetric[]> {
-  return (
-    await queryRows(`select period_key, updated_at, tier, provider, total_tokens from provider_stat
-    where grain = 'day' and client = 'all' and source = 'all' and tier in ('Go', 'go') order by period_key`)
-  ).map((row) => ({
-    periodKey: stringValue(row.period_key),
-    updatedAt: dateValue(row.updated_at),
-    tier: stringValue(row.tier),
-    provider: stringValue(row.provider),
-    totalTokens: numberValue(row.total_tokens),
-  }))
-}
-
 async function listGeoDaily(opts?: { provider?: string; model?: string }): Promise<GeoStatMetric[]> {
   const scope =
     opts?.model && opts.provider
@@ -259,8 +244,9 @@ async function listGeoDaily(opts?: { provider?: string; model?: string }): Promi
   return (
     await queryRows(
       `select period_key, updated_at, tier, provider, model, country, continent, total_tokens from geo_stat
-    where grain = 'day' and client = 'all' and source = 'all' and tier in ('Go', 'go') ${scope} order by period_key`,
-      params,
+    where grain = 'day' and client = 'all' and source = 'all'
+    and tier in (${SITE_TIER_PLACEHOLDERS}) ${scope} order by period_key`,
+      [...DATA_SITE_TIERS, ...params],
     )
   ).map((row) => ({
     periodKey: stringValue(row.period_key),
@@ -323,15 +309,10 @@ export const getStatsModelComparisonData = (
     { provider: secondProvider, model: secondModel },
   ])
 
-function buildStatsHomeData(
-  modelRows: ModelStatMetric[],
-  providerRows: ProviderStatMetric[],
-  geoRows: GeoStatMetric[],
-): StatsHomeData {
+function buildStatsHomeData(modelRows: ModelStatMetric[], geoRows: GeoStatMetric[]): StatsHomeData {
   const normalized = modelRows.flatMap(normalizeStatRow)
-  const providers = providerRows.flatMap(normalizeProviderRow)
   const geo = geoRows.flatMap(normalizeGeoRow)
-  const periods = [...normalized, ...providers, ...geo]
+  const periods = [...normalized, ...geo]
   if (periods.length === 0) return emptyStatsHomeData()
 
   const earliest = Math.min(...periods.map((row) => row.periodStart))
@@ -366,7 +347,7 @@ function buildStatsHomeData(
     leaderboard: createUsageProductRecord((product) =>
       createRangeRecord((range) => buildLeaderboard(normalized, product, getWindow("1W", earliest, latest))),
     ),
-    market: createRangeRecord((range) => buildMarketShare(providers, "Go", range, getWindow(range, earliest, latest))),
+    market: createRangeRecord((range) => buildMarketShare(normalized, "Go", range, getWindow(range, earliest, latest))),
     tokenCost: createTokenProductRecord((product) =>
       buildTokenCost(normalized, product, getWindow("1W", earliest, latest)),
     ),
@@ -591,15 +572,20 @@ function buildLeaderboard(rows: StatMetricRow[], product: UsageProduct, rankWind
     }))
 }
 
-function buildMarketShare(rows: ProviderMetricRow[], product: UsageProduct, range: UsageRange, window: DateWindow) {
+function buildMarketShare(rows: StatMetricRow[], product: UsageProduct, range: UsageRange, window: DateWindow) {
+  const providerOrder = aggregateByProvider(rowsForProduct(rows, product, window.start, window.end))
+    .filter((item) => item.provider !== "unknown")
+    .toSorted((a, b) => b.tokens - a.tokens || a.provider.localeCompare(b.provider))
+    .slice(0, 8)
+    .map((item) => item.provider)
+
   return createBuckets(window, range).flatMap((bucket) => {
-    const total = aggregateByProvider(rowsForProduct(rows, product, bucket.start, bucket.end)).toSorted(
-      (a, b) => b.tokens - a.tokens,
-    )
+    const total = aggregateByProvider(rowsForProduct(rows, product, bucket.start, bucket.end))
     const totalTokens = total.reduce((sum, item) => sum + item.tokens, 0)
     if (totalTokens === 0) return []
 
-    const authors = total.slice(0, 8)
+    const byProvider = new Map(total.map((item) => [item.provider, item.tokens]))
+    const authors = providerOrder.map((provider) => ({ provider, tokens: byProvider.get(provider) ?? 0 }))
     const knownTokens = authors.reduce((sum, item) => sum + item.tokens, 0)
     const withOther = [...authors, { provider: "Other", tokens: Math.max(totalTokens - knownTokens, 0) }].filter(
       (item) => item.tokens > 0,
@@ -735,6 +721,7 @@ function rowsForProduct<T extends { periodStart: number; tier: string }>(
   end: number,
 ) {
   const windowRows = rows.filter((row) => row.periodStart >= start && row.periodStart < end)
+  if (product === SITE_PRODUCT) return windowRows.filter((row) => row.tier === "Go" || row.tier === "Free")
   if (product !== "All Users") return windowRows.filter((row) => row.tier === product)
 
   const allRows = windowRows.filter((row) => row.tier === "all")
@@ -761,7 +748,7 @@ function aggregateByModelName(rows: StatMetricRow[]) {
   )
 }
 
-function aggregateByProvider(rows: ProviderMetricRow[]) {
+function aggregateByProvider(rows: { provider: string; totalTokens: number }[]) {
   return Object.values(
     rows.reduce<Record<string, { provider: string; tokens: number }>>((result, row) => {
       result[row.provider] = {
@@ -905,23 +892,8 @@ function normalizeStatRow(row: ModelStatMetric): StatMetricRow[] {
       periodStart,
       updatedAt,
       tier: normalizeTier(row.tier),
-      provider: row.provider || "unknown",
+      provider: statProvider(row.model, undefined, row.provider) || "unknown",
       model: row.model || "unknown",
-    },
-  ]
-}
-
-function normalizeProviderRow(row: ProviderStatMetric): ProviderMetricRow[] {
-  const periodStart = periodKeyTime(row.periodKey)
-  const updatedAt = dateTime(row.updatedAt)
-  if (!Number.isFinite(periodStart) || !Number.isFinite(updatedAt)) return []
-  return [
-    {
-      ...row,
-      periodStart,
-      updatedAt,
-      tier: normalizeTier(row.tier),
-      provider: row.provider || "unknown",
     },
   ]
 }
@@ -936,21 +908,12 @@ function normalizeGeoRow(row: GeoStatMetric): GeoMetricRow[] {
       periodStart,
       updatedAt,
       tier: normalizeTier(row.tier),
-      provider: row.provider || "all",
+      provider: row.provider === "all" ? "all" : statProvider(row.model, undefined, row.provider) || "unknown",
       model: row.model || "all",
       country: row.country || "ZZ",
       continent: row.continent || "",
     },
   ]
-}
-
-function normalizeTier(value: string) {
-  const normalized = value.toLowerCase()
-  if (normalized === "paid" || normalized === "zen") return "Zen"
-  if (normalized === "go") return "Go"
-  if (normalized === "enterprise") return "Enterprise"
-  if (normalized === "all") return "all"
-  return value
 }
 
 function dateTime(value: Date | string) {
@@ -984,6 +947,7 @@ function formatProvider(provider: string) {
     deepseek: "DeepSeek",
     google: "Google",
     minimax: "MiniMax",
+    meta: "Meta",
     moonshot: "Moonshot",
     moonshotai: "Moonshot",
     nvidia: "NVIDIA",
