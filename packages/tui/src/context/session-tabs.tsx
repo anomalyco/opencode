@@ -204,7 +204,14 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
           promotedSession = undefined
           cancelledTabs.delete(sessionID)
           history = recordSessionTabHistory(history, sessionID)
-          if (state().selectedSessionID === sessionID && state().tabs.some((tab) => tab.sessionID === sessionID)) return
+          if (state().tabs.some((tab) => tab.sessionID === sessionID)) {
+            if (state().selectedSessionID !== sessionID) {
+              update((draft) => {
+                if (!cancelledTabs.has(sessionID)) draft.selectedSessionID = sessionID
+              })
+            }
+            return
+          }
           const fallback = newTab() ? NEW_SESSION_TAB_TITLE : undefined
           const temporary = previews() && !permanent
           const replaced = temporary ? previewID() : undefined
