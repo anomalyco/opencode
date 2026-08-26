@@ -385,6 +385,9 @@ describe("DatabaseMigration", () => {
     const content = JSON.stringify({
       openai: { type: "oauth", refresh: "refresh", access: "access", expires: 123, accountId: "account" },
       anthropic: { type: "api", key: "legacy-key", metadata: { region: "us" } },
+      google: { type: "api", key: "google-key", metadata: { region: "us" } },
+      "github-copilot": { type: "oauth", refresh: "refresh", access: "access", expires: 123 },
+      "custom-provider": { type: "api", key: "custom-key" },
       "https://example.com/": { type: "wellknown", key: "TOKEN", token: "wellknown-key" },
       invalid: { type: "unknown" },
     })
@@ -402,6 +405,7 @@ describe("DatabaseMigration", () => {
 
         yield* db.run(sql`DELETE FROM migration WHERE id = ${legacyCredentialsMigration.id}`)
         yield* DatabaseMigration.applyOnly(db, [legacyCredentialsMigration])
+        yield* DatabaseMigration.applyOnly(db, [legacyCredentialsMigration])
 
         expect(yield* db.all(sql`SELECT integration_id, label, value FROM credential ORDER BY integration_id`)).toEqual(
           [
@@ -411,13 +415,34 @@ describe("DatabaseMigration", () => {
               value: JSON.stringify({ type: "key", key: "current-key" }),
             },
             {
+              integration_id: "custom-provider",
+              label: "API key",
+              value: JSON.stringify({ type: "key", key: "custom-key" }),
+            },
+            {
+              integration_id: "github-copilot",
+              label: "OAuth",
+              value: JSON.stringify({
+                type: "oauth",
+                methodID: "device",
+                refresh: "refresh",
+                access: "access",
+                expires: 123,
+              }),
+            },
+            {
+              integration_id: "google",
+              label: "API key",
+              value: JSON.stringify({ type: "key", key: "google-key", metadata: { region: "us" } }),
+            },
+            {
               integration_id: "https://example.com",
-              label: "default",
+              label: "API key",
               value: JSON.stringify({ type: "key", key: "wellknown-key" }),
             },
             {
               integration_id: "openai",
-              label: "default",
+              label: "OAuth",
               value: JSON.stringify({
                 type: "oauth",
                 methodID: "chatgpt-browser",
