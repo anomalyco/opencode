@@ -1,3 +1,4 @@
+import type { SelectionBehavior } from "@opentui/core"
 import type { ClipboardService } from "../context/clipboard"
 
 type Toast = {
@@ -15,6 +16,7 @@ type Renderer = {
     getSelectedText: () => string
     selectedRenderables: FocusableSelectionTarget[]
     isStart: boolean
+    behavior: SelectionBehavior
   } | null
   clearSelection: () => void
   currentFocusedRenderable?: FocusableSelectionTarget | null
@@ -40,16 +42,15 @@ export function copyOnSelectRelease(
 export function copy(renderer: Renderer, toast: Toast, clipboard: ClipboardService): boolean {
   const selection = renderer.getSelection()
   if (!selection) return false
-  if (selection.isStart) {
-    renderer.clearSelection()
+  const text = selection.getSelectedText()
+  // A word or line selection can start and finish without a drag.
+  if (selection.isStart && selection.behavior === "cell") {
+    // Embedded terminals select the clicked cell before a drag starts.
+    if (text) renderer.clearSelection()
     return false
   }
 
-  const text = selection.getSelectedText()
-  if (!text) {
-    renderer.clearSelection()
-    return false
-  }
+  if (!text) return false
 
   const focus = renderer.currentFocusedRenderable
   const clipboardText =
