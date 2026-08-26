@@ -5,6 +5,7 @@ import fs from "fs/promises"
 import path from "path"
 import { scrapeDynamic, crawlDynamic, releaseBrowser, fetchPage, validateMarkdownSize, htmlToMarkdown, sanitizeHtml, extractContentFromHtml } from "./dynamic-crawler"
 import type { DynamicCrawlResult, DynamicCrawlStats } from "./dynamic-crawler"
+import { isScrapeEnabled, SCRAPE_DISABLED_MESSAGE } from "./scrape-state"
 
 export function sanitizeFolderName(name: string): string {
   return name
@@ -161,6 +162,10 @@ export const dynamicScrapeHandler = Effect.fn("Cli.dynamic.scrape")(function* (a
   retries: number
   "validate-auth": boolean
 }) {
+  if (!isScrapeEnabled()) {
+    return yield* Effect.fail(new CliError({ message: SCRAPE_DISABLED_MESSAGE }))
+  }
+
   UI.empty()
   UI.println(UI.Style.TEXT_HIGHLIGHT_BOLD + "  Dynamic Scrape" + UI.Style.TEXT_NORMAL)
   UI.empty()
@@ -269,6 +274,10 @@ export const dynamicCrawlHandler = Effect.fn("Cli.dynamic.crawl")(function* (arg
   "include-external-links": boolean
   "skip-patterns": string[]
 }) {
+  if (!isScrapeEnabled()) {
+    return yield* Effect.fail(new CliError({ message: SCRAPE_DISABLED_MESSAGE }))
+  }
+
   UI.empty()
   UI.println(UI.Style.TEXT_HIGHLIGHT_BOLD + "  Dynamic Crawl" + UI.Style.TEXT_NORMAL)
   UI.empty()
