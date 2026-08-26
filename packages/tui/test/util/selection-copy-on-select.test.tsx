@@ -45,6 +45,7 @@ test("copy-on-select keeps a word highlight so a third click can select the line
 
     await app.mockMouse.click(6, 0)
     expect(app.renderer.getSelection()?.getSelectedText() ?? "").toBe("")
+    expect(writes).toEqual([])
 
     await app.mockMouse.click(6, 0)
     expect(app.renderer.getSelection()?.getSelectedText()).toBe("beta")

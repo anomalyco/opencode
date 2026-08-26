@@ -1090,7 +1090,9 @@ function buildExecution(
     )
     const runner = Layer.succeed(
       SessionRunner.Service,
-      SessionRunner.Service.of({ drain: (input) => drain(input).pipe(Effect.as({ type: "complete" as const })) }),
+      SessionRunner.Service.of({
+        drain: (input) => drain(input).pipe(Effect.as(SessionRunner.DrainResult.Complete())),
+      }),
     )
     const locations = Layer.effect(
       LocationServiceMap.Service,

@@ -45,7 +45,7 @@ const declineDefect = (cause: Cause.Cause<Tool.Error>) => {
   return decline ? Result.succeed(decline) : Result.fail(cause)
 }
 
-interface Prepared {
+export interface Prepared {
   readonly request: LLMRequest
   readonly options: StreamOptions
   /**
