@@ -72,7 +72,9 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
   createEffect(() => {
     const width = showTerminal()
       ? Math.max(1, Math.floor((dimensions().width - props.verticalTabsWidth) / 2))
-      : SESSION_SIDEBAR_WIDTH
+      : rightVisible()
+        ? SESSION_SIDEBAR_WIDTH
+        : 0
     rightWidth.animate({ width })
   })
   const toggleSidebar = () => {
@@ -146,7 +148,7 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
           />
         </Show>
       </box>
-      <Show when={rightVisible()}>
+      <Show when={rightVisible() || Math.round(rightWidth.value().width) > 0}>
         <box flexShrink={0} width={Math.round(rightWidth.value().width)} minWidth={0} minHeight={0}>
           <Show
             when={showSidebar()}
