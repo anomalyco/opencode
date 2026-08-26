@@ -160,7 +160,7 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
               </Show>
             }
           >
-            <Sidebar sessionID={props.sessionID} fill />
+            <Sidebar sessionID={props.sessionID} />
           </Show>
         </box>
       </Show>
