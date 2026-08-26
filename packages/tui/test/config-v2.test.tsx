@@ -74,24 +74,29 @@ test("validates terminal copy behavior", () => {
   expect(decodeInfo({ terminal: { copy: "manual" } })).toEqual({ terminal: { copy: "manual" } })
   expect(decodeInfo({ terminal: { copy: "select" } })).toEqual({ terminal: { copy: "select" } })
   expect(() => decodeInfo({ terminal: { copy: "always" } })).toThrow()
+
+  const setting = settings.find((setting) => setting.path.join(".") === "terminal.copy")
+  expect(setting?.values).toEqual(["manual", "select"])
+  expect(setting?.default).toBe(process.platform === "win32" ? "manual" : "select")
 })
 
 test("keeps persistent terminals disabled until explicitly enabled", () => {
   const disabled = resolve({}, { terminalSuspend: true })
-  expect(disabled.terminal?.enabled ?? false).toBe(false)
+  expect(disabled.session.terminal ?? false).toBe(false)
   expect(disabled.keybinds.get("theme.switch")).toMatchObject([{ key: "<leader>t" }])
   expect(disabled.keybinds.get("terminal.toggle")).toEqual([])
-  expect(settings.find((setting) => setting.path.join(".") === "terminal.enabled")?.default).toBe(false)
+  expect(settings.find((setting) => setting.path.join(".") === "session.terminal")?.default).toBe(false)
   expect(settings.filter((setting) => setting.category === "Terminal").map((setting) => setting.title)).toEqual([
-    "Enabled",
+    "Window title",
+    "Copy behavior",
   ])
 
-  const enabled = resolve({ terminal: { enabled: true } }, { terminalSuspend: true })
+  const enabled = resolve({ session: { terminal: true } }, { terminalSuspend: true })
   expect(enabled.keybinds.get("terminal.toggle")).toMatchObject([{ key: "<leader>t" }])
   expect(enabled.keybinds.get("theme.switch")).toEqual([])
 
   const customized = resolve(
-    { terminal: { enabled: true }, keybinds: { "theme.switch": "<leader>t", "terminal.toggle": "<leader>p" } },
+    { session: { terminal: true }, keybinds: { "theme.switch": "<leader>t", "terminal.toggle": "<leader>p" } },
     { terminalSuspend: true },
   )
   expect(customized.keybinds.get("theme.switch")).toMatchObject([{ key: "<leader>t" }])

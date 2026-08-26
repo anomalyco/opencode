@@ -47,7 +47,7 @@ export const { use: useSessionTerminals, provider: SessionTerminalsProvider } = 
     for (const type of ["persistent-pty.added", "persistent-pty.removed"] as const) {
       onCleanup(
         event.on(type, (evt) => {
-          if (!config.terminal?.enabled || !store.sessions[evt.data.sessionID]) return
+          if (!config.session.terminal || !store.sessions[evt.data.sessionID]) return
           void refresh(evt.data.sessionID).catch((error) =>
             console.error("Failed to refresh persistent terminal panes", error),
           )

@@ -895,7 +895,7 @@ export function Session(props: {
         dialog.clear()
       },
     },
-    ...(config.terminal?.enabled
+    ...(config.session.terminal
       ? [
           {
             title: props.visibleTerminalID ? "Hide terminal pane" : "Show terminal pane",

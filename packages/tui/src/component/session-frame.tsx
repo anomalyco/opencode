@@ -25,13 +25,13 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
   const [restoreTerminalFocus, setRestoreTerminalFocus] = createSignal(false)
   let focusTerminal: (() => void) | undefined
   createResource(
-    () => (config.data.terminal?.enabled ? props.sessionID : undefined),
+    () => (config.data.session.terminal ? props.sessionID : undefined),
     (sessionID) => sessions.refresh(sessionID).catch(() => undefined),
   )
   const session = () => sessions.get(props.sessionID)
   const terminals = () => session()?.terminals ?? []
   const selectedTerminal = () => {
-    if (!config.data.terminal?.enabled) return
+    if (!config.data.session.terminal) return
     const value = session()
     if (value?.hidden) return
     return value?.terminals.find((terminal) => terminal.id === value.selectedTerminalID) ?? value?.terminals.at(-1)
@@ -74,7 +74,7 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
     prompt.current?.focus()
   })
   Keymap.createLayer(() => ({
-    enabled: () => config.data.terminal?.enabled === true,
+    enabled: () => config.data.session.terminal === true,
     commands: [
       {
         id: "pane.focus.left",

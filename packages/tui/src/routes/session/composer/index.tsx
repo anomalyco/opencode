@@ -152,7 +152,7 @@ export function Composer(props: ComposerProps) {
             </box>
             <SubagentsTab sessionID={props.sessionID} />
             <ShellTab sessionID={props.sessionID} />
-            <Show when={config.terminal?.enabled}>
+            <Show when={config.session.terminal}>
               <TerminalsTab sessionID={props.sessionID} visibleTerminalID={props.visibleTerminalID} />
             </Show>
             <box flexDirection="row" gap={2} paddingLeft={1} flexShrink={0}>
