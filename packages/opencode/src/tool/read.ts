@@ -277,7 +277,7 @@ export const ReadTool = Tool.define<
             `<entries>`,
             sliced.join("\n"),
             truncated
-              ? `\n(Showing ${sliced.length} of ${items.length} entries. Use 'offset' parameter to read beyond entry ${offset + sliced.length})`
+              ? `\n(Showing entries ${offset}-${offset + sliced.length - 1} of ${items.length}. Use offset=${offset + sliced.length} to continue.)`
               : `\n(${items.length} entries)`,
             `</entries>`,
           ].join("\n"),
