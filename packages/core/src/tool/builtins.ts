@@ -9,6 +9,7 @@ import { GlobTool } from "./glob"
 import { GrepTool } from "./grep"
 import { QuestionTool } from "./question"
 import { ReadTool } from "./read"
+import { SembleTool } from "./semble"
 import { SkillTool } from "./skill"
 import { TodoWriteTool } from "./todowrite"
 import { WebFetchTool } from "./webfetch"
@@ -39,6 +40,7 @@ export const node = makeLocationNode({
     GrepTool.node,
     QuestionTool.node,
     ReadTool.node,
+    SembleTool.node,
     SkillTool.node,
     TodoWriteTool.node,
     WebFetchTool.node,
