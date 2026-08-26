@@ -1,5 +1,5 @@
 import { RGBA } from "@opentui/core"
-import { useTerminalDimensions } from "@opentui/solid"
+import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { batch, createEffect, createMemo, createResource, createSignal, on, Show } from "solid-js"
 import { useConfig } from "../config"
 import { useData } from "../context/data"
@@ -18,6 +18,7 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
   const config = useConfig()
   const data = useData()
   const toast = useToast()
+  const renderer = useRenderer()
   const dimensions = useTerminalDimensions()
   const [sidebarOpen, setSidebarOpen] = createSignal(false)
   const [sessionWidth, setSessionWidth] = createSignal<number>()
@@ -68,10 +69,15 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
       if (!visible && selectedTerminal()) void sessions.hideTerminal(props.sessionID).catch(toast.error)
     })
   }
+  const focusSession = () => {
+    // Permission prompts replace the input, so returning focus must not depend on it.
+    if (terminalFocused()) renderer.currentFocusedRenderable?.blur()
+    prompt.current?.focus()
+  }
   createEffect(() => {
     if (!restoreTerminalFocus() || terminals().length > 0) return
     setRestoreTerminalFocus(false)
-    prompt.current?.focus()
+    focusSession()
   })
   Keymap.createLayer(() => ({
     enabled: () => config.data.session.terminal === true,
@@ -79,9 +85,7 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
       {
         id: "pane.focus.left",
         title: "Focus session pane",
-        run: () => {
-          prompt.current?.focus()
-        },
+        run: focusSession,
       },
       {
         id: "pane.focus.right",
@@ -121,7 +125,8 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
             width="100%"
             height="100%"
             zIndex={1}
-            onMouseDown={() => prompt.current?.focus()}
+            // Consume the release before revealing permission buttons underneath.
+            onMouseUp={focusSession}
           />
         </Show>
       </box>
