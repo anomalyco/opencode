@@ -38,17 +38,23 @@ export function createSessionQueue(input: {
   const language = useLanguage()
   const [state, setState] = createStore<{ editing?: { id: string; stash: EditStash } }>({})
   const notify = () => showToast({ title: language.t("common.requestFailed") })
-  const editMutation = useMutation(() => ({
-    mutationFn: async (change: {
-      inboxIDs: string[]
-      original: string
-      replacement: string
-      item: QueuedPrompt | undefined
-      prompt: Prompt
-      text: string
-      delivery: ComposerDelivery
-    }) => {
-      const request = await editedPromptInput(
+  const mutation = useMutation(() => ({
+    mutationFn: async (
+      change:
+        | { type: "reorder"; inboxIDs: string[] }
+        | {
+            type: "edit"
+            inboxIDs: string[]
+            original: string
+            replacement: string
+            item: QueuedPrompt | undefined
+            prompt: Prompt
+            text: string
+            delivery: ComposerDelivery
+          },
+    ) => {
+      if (change.type === "reorder") return rewrite(change.inboxIDs)
+      const replacement = await editedPromptInput(
         input.sessionID,
         location().directory,
         change.item,
@@ -57,7 +63,7 @@ export function createSessionQueue(input: {
       )
       // Admit before cancelling so a failed replacement never discards the original.
       const admitted = await data.session.prompt({
-        ...request,
+        ...replacement,
         id: change.replacement,
         delivery: change.delivery,
         ...(change.delivery === "queue" ? { resume: false } : {}),
@@ -70,12 +76,6 @@ export function createSessionQueue(input: {
     onError: notify,
     onSettled: () => data.session.pending.sync(input.sessionID).catch(() => undefined),
   }))
-  const reorderMutation = useMutation(() => ({
-    mutationFn: (inboxIDs: string[]) => rewrite(inboxIDs),
-    onError: notify,
-    onSettled: () => data.session.pending.sync(input.sessionID).catch(() => undefined),
-  }))
-  const busy = () => editMutation.isPending || reorderMutation.isPending
 
   const queued = createMemo(() =>
     data.session.pending
@@ -83,13 +83,16 @@ export function createSessionQueue(input: {
       .filter((item): item is QueuedPrompt => item.type === "user" && item.delivery === "queue"),
   )
   const rows = createMemo(() => {
-    const replacement = editMutation.isPending ? editMutation.variables : undefined
-    return queuedPromptRows(queued(), replacement?.delivery === "queue" ? replacement : undefined)
+    const replacement = mutation.isPending ? mutation.variables : undefined
+    return queuedPromptRows(
+      queued(),
+      replacement?.type === "edit" && replacement.delivery === "queue" ? replacement : undefined,
+    )
   })
 
   createEffect(() => {
     const editing = state.editing
-    if (!editing || busy() || queued().some((item) => item.id === editing.id)) return
+    if (!editing || mutation.isPending || queued().some((item) => item.id === editing.id)) return
     setState("editing", undefined)
   })
   onCleanup(() => cancelEdit())
@@ -135,12 +138,12 @@ export function createSessionQueue(input: {
     return server.api.session.inbox.cancel({ sessionID: input.sessionID, inboxID: id }).catch(() => notify())
   }
   const reorder = (inboxIDs: string[]) => {
-    if (busy()) return Promise.resolve()
-    return reorderMutation.mutateAsync(inboxIDs).catch(() => undefined)
+    if (mutation.isPending) return Promise.resolve()
+    return mutation.mutateAsync({ type: "reorder", inboxIDs }).catch(() => undefined)
   }
 
   const edit = (id: string) => {
-    if (busy()) return false
+    if (mutation.isPending) return false
     if (state.editing?.id === id) return true
     const item = queued().find((entry) => entry.id === id)
     if (!item) return false
@@ -174,14 +177,15 @@ export function createSessionQueue(input: {
   }
   const confirmEdit = (delivery: ComposerDelivery) => {
     const editing = state.editing
-    if (!editing || busy()) return
+    if (!editing || mutation.isPending) return
     const prompt = clonePrompt(input.draft.current())
     const text = prompt.map((part) => ("content" in part ? part.content : "")).join("")
     if (!text.trim() && !prompt.some((part) => part.type === "image")) return cancelEdit()
     const item = queued().find((entry) => entry.id === editing.id)
     const pristine = item && text.trim() === queuedPromptText(item) && !prompt.some((part) => part.type === "image")
     if (pristine && delivery === "queue") return cancelEdit()
-    editMutation.mutate({
+    mutation.mutate({
+      type: "edit",
       inboxIDs: queued().map((entry) => entry.id),
       original: editing.id,
       replacement: SessionMessage.ID.create(),
@@ -210,7 +214,7 @@ export function createSessionQueue(input: {
     cancelEdit,
     editFirst,
     rows,
-    busy,
+    busy: () => mutation.isPending,
     working: input.working,
     steer,
     remove,
