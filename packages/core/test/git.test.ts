@@ -131,6 +131,34 @@ describe("Git worktrees", () => {
 })
 
 describe("Git trees", () => {
+  it.live("skips untracked nested repositories without commits", () =>
+    Effect.gen(function* () {
+      const root = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+      )
+      const storage = AbsolutePath.make(`${root.path}-snapshot`)
+      yield* Effect.addFinalizer(() => Effect.promise(() => fs.rm(storage, { recursive: true, force: true })))
+      yield* Effect.promise(async () => {
+        await initRepo(root.path)
+        await fs.mkdir(path.join(root.path, "tui"))
+        await $`git init`.cwd(path.join(root.path, "tui")).quiet()
+        await fs.writeFile(path.join(root.path, "tui", "nested.txt"), "nested\n")
+        await fs.writeFile(path.join(root.path, "added.txt"), "added\n")
+      })
+      const git = yield* Git.Service
+      const source = yield* git.repo.discover(AbsolutePath.make(root.path))
+      if (!source) throw new Error("Repository not found")
+      const repository = yield* git.repo.create({ worktree: source.worktree, gitDirectory: storage, seed: source })
+      const before = yield* git.tree.write(repository)
+
+      yield* git.index.refresh({ repository, scope: RelativePath.make(".") })
+      const after = yield* git.tree.write(repository)
+
+      expect(yield* git.tree.files({ repository, from: before, to: after })).toEqual([RelativePath.make("added.txt")])
+    }),
+  )
+
   it.live("captures, compares, previews, and restores scoped trees", () =>
     Effect.gen(function* () {
       const root = yield* Effect.acquireRelease(

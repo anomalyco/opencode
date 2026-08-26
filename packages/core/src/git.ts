@@ -398,7 +398,7 @@ const layer = Layer.effect(
         ],
         { concurrency: 2 },
       )
-      const candidates = Array.from(new Set([...tracked, ...untracked]))
+      const candidates = Array.from(new Set([...tracked, ...untracked])).filter((item) => !item.endsWith("/"))
       if (!candidates.length) return { skipped: [] }
       const ignored = input.ignores
         ? new Set(
