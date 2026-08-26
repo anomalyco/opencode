@@ -119,6 +119,7 @@
     "@ff-labs/fff-node": "0.10.5",
     "@opencode-ai/codemode": "workspace:*",
     "@opencode-ai/ai": "workspace:*",
+    "@opencode-ai/pty": "0.1.8",
     "@opencode-ai/schema": "workspace:*",
     "@opencode-ai/plugin": "workspace:*",
     "@opencode-ai/util": "workspace:*",

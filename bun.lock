@@ -125,6 +125,7 @@
         "@effect/platform-node": "catalog:",
         "@opencode-ai/client": "workspace:*",
         "@opencode-ai/plugin": "workspace:*",
+        "@opencode-ai/pty": "0.1.8",
         "@opencode-ai/schema": "workspace:*",
         "@opencode-ai/server": "workspace:*",
         "@opencode-ai/tui": "workspace:*",
@@ -364,6 +365,7 @@
         "@opencode-ai/ai": "workspace:*",
         "@opencode-ai/codemode": "workspace:*",
         "@opencode-ai/plugin": "workspace:*",
+        "@opencode-ai/pty": "0.1.8",
         "@opencode-ai/schema": "workspace:*",
         "@opencode-ai/util": "workspace:*",
         "@parcel/watcher": "2.5.1",
@@ -2154,6 +2156,20 @@
     "@opencode-ai/posts": ["@opencode-ai/posts@workspace:packages/posts"],
 
     "@opencode-ai/protocol": ["@opencode-ai/protocol@workspace:packages/protocol"],
+
+    "@opencode-ai/pty": ["@opencode-ai/pty@0.1.8", "", { "optionalDependencies": { "@opencode-ai/pty-darwin-arm64": "0.1.8", "@opencode-ai/pty-darwin-x64": "0.1.8", "@opencode-ai/pty-linux-arm64-gnu": "0.1.8", "@opencode-ai/pty-linux-arm64-musl": "0.1.8", "@opencode-ai/pty-linux-x64-gnu": "0.1.8", "@opencode-ai/pty-linux-x64-musl": "0.1.8" }, "bin": { "opencode-pty": "bin/opencode-pty.js" } }, "sha512-+OHAANB6xgtO4zVMK5Q3l50Iot2fYcHL003rNpvxxCXLkpdO90UnnRCL9jrll1SWkWoDZKaUDlR/Scw6TUTN4A=="],
+
+    "@opencode-ai/pty-darwin-arm64": ["@opencode-ai/pty-darwin-arm64@0.1.8", "", { "os": "darwin", "cpu": "arm64" }, "sha512-5DqVcCfa9P5zpM0QpvXD/QqZXFdXvtIoaBHVHjYnTt8oqlnmMWqG4OVowzPNQg07NudW6apwX1Jop1wuERgWGw=="],
+
+    "@opencode-ai/pty-darwin-x64": ["@opencode-ai/pty-darwin-x64@0.1.8", "", { "os": "darwin", "cpu": "x64" }, "sha512-keEDxfpy0mFJYmsTqea9IUbpLKpbe9yL4ISU8tYA0daWiKuR8ZlfLTlLGltaFNO7l7q6mURMeI4cZzwySOX/Kw=="],
+
+    "@opencode-ai/pty-linux-arm64-gnu": ["@opencode-ai/pty-linux-arm64-gnu@0.1.8", "", { "os": "linux", "cpu": "arm64" }, "sha512-NVJvlVtPbYRyjABwLkm1iboijpSZMXv4lfg4qda7UCzAgiDZ0cWauXeW5wtd9bbnUbHw4rdNVU6YweuwASgZXw=="],
+
+    "@opencode-ai/pty-linux-arm64-musl": ["@opencode-ai/pty-linux-arm64-musl@0.1.8", "", { "os": "linux", "cpu": "arm64" }, "sha512-GAhnCs7b7B8Hqa7AEN7k5ra4IqybFYePgbCSOHn3Y4mofp/5NjDlkOG/VFM7rHAy05iEmRi5WtOPRv0Mkca8zA=="],
+
+    "@opencode-ai/pty-linux-x64-gnu": ["@opencode-ai/pty-linux-x64-gnu@0.1.8", "", { "os": "linux", "cpu": "x64" }, "sha512-vSbty1L0BuOQlK7DmukuhdxNKv2vzqyxOjHmh+TULptMDbDZwE1EybASoXB7dYog9as85adFCz8ZTF7Boyfxjg=="],
+
+    "@opencode-ai/pty-linux-x64-musl": ["@opencode-ai/pty-linux-x64-musl@0.1.8", "", { "os": "linux", "cpu": "x64" }, "sha512-2GhmJLl+Ly/JjzMS2Eqvk7SgeuHIB0cQ4Wrmnj4WKhr2V7lS+pdUEApN6S0SG/FK0TYJlWeHeOIpNZgDqzEPPg=="],
 
     "@opencode-ai/schema": ["@opencode-ai/schema@workspace:packages/schema"],
 
