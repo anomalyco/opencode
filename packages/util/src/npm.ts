@@ -180,12 +180,14 @@ const layer = Layer.effect(
       }
       return pkg
     })
-    const installed = Effect.fnUntraced(function* (pkg: string, dir: string, parsedName?: string) {
+    const installed = Effect.fnUntraced(function* (pkg: string, dir: string, parsedName?: string, git = false) {
       const name = yield* installedName(pkg, dir, parsedName)
       const directory = path.join(dir, "node_modules", name)
       const manifest = yield* afs
         .readJson(path.join(directory, "package.json"))
         .pipe(Effect.flatMap(Schema.decodeUnknownEffect(PackageJson)), Effect.option)
+      const version = Option.isSome(manifest) ? manifest.value.version : undefined
+      if (version && !git) return { name, directory, version }
       const lock = yield* afs
         .readJson(path.join(dir, "package-lock.json"))
         .pipe(Effect.flatMap(Schema.decodeUnknownEffect(PackageLock)), Effect.option)
@@ -196,7 +198,7 @@ const layer = Layer.effect(
         version: packageVersion({
           name,
           path: directory,
-          version: Option.isSome(manifest) ? manifest.value.version : entry?.version,
+          version: version ?? entry?.version,
           resolved: entry?.resolved,
         }),
       }
@@ -261,62 +263,24 @@ const layer = Layer.effect(
           currentVersion: version,
           latestVersion: version,
           updateAvailable: false,
-          updated: false,
         }
       }
 
       const root = yield* directory(pkg)
       const dir = yield* activeDirectory(root)
-      const current = yield* installed(pkg, dir, parsed.name ?? undefined)
+      const current = yield* installed(pkg, dir, parsed.name ?? undefined, ["git", "hosted"].includes(parsed.type))
       const npmOptions = yield* NpmConfig.load(root)
       const { default: pacote } = yield* Effect.promise(() => import("pacote"))
       const latestVersion = yield* Effect.tryPromise({
         try: async () => {
           if (["git", "hosted"].includes(parsed.type)) {
-            const { execFile } = await import("node:child_process")
-            const { promisify } = await import("node:util")
-            const repository =
-              parsed.fetchSpec ??
-              (parsed.hosted
-                ? (await pacote.resolve(pkg, { ...npmOptions, preferOnline: true })).split("#", 1)[0]
-                : undefined)
-            if (!repository) throw new Error("Git repository URL unavailable")
-            const ref = parsed.gitCommittish ?? "HEAD"
-            const { stdout } = await promisify(execFile)(
-              "git",
-              parsed.gitRange
-                ? ["ls-remote", "--tags", repository.replace(/^git\+/, "")]
-                : ["ls-remote", repository.replace(/^git\+/, ""), ref, `${ref}^{}`],
-              {
-                encoding: "utf8",
-                env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
-              },
-            )
-            if (parsed.gitRange) {
-              const { maxSatisfying } = await import("semver")
-              const tags = new Map(
-                stdout
-                  .trim()
-                  .split("\n")
-                  .filter(Boolean)
-                  .map((line) => line.split(/\s+/, 2))
-                  .flatMap(([commit, ref]) =>
-                    commit && ref?.startsWith("refs/tags/")
-                      ? [[ref.slice("refs/tags/".length).replace(/\^\{\}$/, ""), commit] as const]
-                      : [],
-                  ),
-              )
-              const tag = maxSatisfying([...tags.keys()], parsed.gitRange)
-              if (!tag) throw new Error(`No Git tag satisfies: ${parsed.gitRange}`)
-              return tags.get(tag)
-            }
-            const revision = stdout
-              .trim()
-              .split("\n")
-              .filter(Boolean)
-              .map((line) => line.split(/\s+/, 1)[0])
-              .at(-1)
-            if (!revision) throw new Error(`Git ref not found: ${ref}`)
+            const resolved = await pacote.resolve(pkg, {
+              ...npmOptions,
+              preferOnline: true,
+              noGitRevCache: true,
+            })
+            const revision = resolved.match(/#([a-f0-9]{40,64})$/i)?.[1]
+            if (!revision) throw new Error("Resolved Git package did not include a commit")
             return revision
           }
           const manifest = await pacote.manifest(pkg, { ...npmOptions, preferOnline: true })
@@ -334,20 +298,14 @@ const layer = Layer.effect(
     })
 
     const update = Effect.fn("Npm.update")(function* (pkg: string) {
-      const parsed = yield* parse(pkg)
-      const policy = yield* Effect.promise(() => updatePolicy(pkg))
-      if (policy !== "mutable") {
-        const checked = yield* check(pkg)
-        return { ...checked, previousVersion: checked.currentVersion, updated: false }
-      }
-      const root = yield* directory(pkg)
-      const previous = yield* installed(pkg, yield* activeDirectory(root), parsed.name ?? undefined)
       const checked = yield* check(pkg)
       if (!checked.updateAvailable) {
-        return { ...checked, previousVersion: previous.version, updated: false }
+        return { ...checked, previousVersion: checked.currentVersion, updated: false }
       }
+      const parsed = yield* parse(pkg)
+      const root = yield* directory(pkg)
       yield* flock.acquire(`npm-install:${root}`)
-      const dir = `${root}-revision-${createHash("sha256").update(`${Date.now()}:${randomUUID()}`).digest("hex")}`
+      const dir = `${root}-revision-${randomUUID()}`
       const target =
         ["git", "hosted"].includes(parsed.type) && checked.latestVersion ? pinGitSpec(pkg, checked.latestVersion) : pkg
       const tree = yield* reify({ dir, add: [target], update: true })
@@ -372,9 +330,9 @@ const layer = Layer.effect(
         pinned: false,
         currentVersion: version,
         latestVersion: checked.latestVersion,
-        updateAvailable: checked.latestVersion !== undefined && version !== checked.latestVersion,
-        previousVersion: previous.version,
-        updated: version !== previous.version,
+        updateAvailable: false,
+        previousVersion: checked.currentVersion,
+        updated: version !== checked.currentVersion,
       }
     }, Effect.scoped)
 
@@ -401,18 +359,22 @@ const layer = Layer.effect(
       const { default: npa } = yield* Effect.promise(() => import("npm-package-arg"))
       const root = yield* directory(pkg)
       const dir = yield* activeDirectory(root)
-      const parsedName = (() => {
+      const parsed = (() => {
         try {
-          return npa(pkg).name ?? undefined
+          return npa(pkg)
         } catch {
           return undefined
         }
       })()
+      const parsedName = parsed?.name ?? undefined
       const name = yield* installedName(pkg, dir, parsedName)
 
       if (yield* afs.existsSafe(path.join(dir, "node_modules", name))) {
         const result = resolveEntryPoint(name, path.join(dir, "node_modules", name), options?.subpaths)
-        return { ...result, revision: (yield* installed(pkg, dir, parsedName)).version }
+        return {
+          ...result,
+          revision: (yield* installed(pkg, dir, parsedName, ["git", "hosted"].includes(parsed?.type ?? ""))).version,
+        }
       }
 
       const tree = yield* reify({ dir, add: [pkg] })
@@ -431,20 +393,21 @@ const layer = Layer.effect(
       options?: { readonly subpaths?: readonly string[] },
     ) {
       const { default: npa } = yield* Effect.promise(() => import("npm-package-arg"))
-      const parsedName = (() => {
+      const parsed = (() => {
         try {
-          return npa(pkg).name ?? undefined
+          return npa(pkg)
         } catch {
           return undefined
         }
       })()
+      const parsedName = parsed?.name ?? undefined
       const root = yield* activeDirectory(yield* directory(pkg))
       const name = yield* installedName(pkg, root, parsedName)
       const dir = path.join(root, "node_modules", name)
       if (!(yield* afs.existsSafe(dir))) return { directory: dir }
       return {
         ...resolveEntryPoint(name, dir, options?.subpaths),
-        revision: (yield* installed(pkg, root, parsedName)).version,
+        revision: (yield* installed(pkg, root, parsedName, ["git", "hosted"].includes(parsed?.type ?? ""))).version,
       }
     })
 
@@ -524,18 +487,6 @@ export async function add(...args: Parameters<Interface["add"]>) {
 
 export async function resolve(...args: Parameters<Interface["resolve"]>) {
   return runPromise((svc) => svc.resolve(...args))
-}
-
-export async function check(...args: Parameters<Interface["check"]>) {
-  return runPromise((svc) => svc.check(...args))
-}
-
-export async function update(...args: Parameters<Interface["update"]>) {
-  return runPromise((svc) => svc.update(...args))
-}
-
-export async function rollback(...args: Parameters<Interface["rollback"]>) {
-  return runPromise((svc) => svc.rollback(...args))
 }
 
 export async function which(...args: Parameters<Interface["which"]>) {

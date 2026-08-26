@@ -252,8 +252,12 @@ export const layer = Layer.effect(
               : [],
           )
           if (failed.length === 0) return failed
-          yield* Effect.forEach(failed, npm.rollback).pipe(
-            Effect.catchCause((cause) => Effect.logError("failed to restore plugin package revision", { cause })),
+          yield* Effect.forEach(failed, (pkg) =>
+            npm
+              .rollback(pkg)
+              .pipe(
+                Effect.catchCause((cause) => Effect.logError("failed to restore plugin package revision", { cause })),
+              ),
           )
           yield* activate().pipe(Effect.scoped, Effect.provideService(Npm.Service, npm))
           return failed
@@ -275,12 +279,7 @@ export const layer = Layer.effect(
       flush: ready.await,
       check,
       update: Effect.fn("PluginSupervisor.update")(function* (name) {
-        const info = (yield* registry.list()).find(
-          (info) =>
-            pluginName(info) === name ||
-            info.id === name ||
-            (info.source.type === "package" && info.source.package === name),
-        )
+        const info = (yield* registry.list()).find((info) => pluginName(info) === name || info.id === name)
         if (!info) {
           return {
             name,
@@ -290,25 +289,22 @@ export const layer = Layer.effect(
           }
         }
         const result = yield* updateOne(info)
-        if (result.status === "updated" && info.source.type === "package") {
-          const failed = yield* reload([info.source.package])
+        if (result.status === "updated" && result.source.type === "package") {
+          const failed = yield* reload([result.source.package])
           if (failed.length > 0)
             return { ...result, status: "failed" as const, error: "Updated plugin failed to activate" }
         }
         return result
       }),
       updateAll: Effect.fn("PluginSupervisor.updateAll")(function* () {
-        const inventory = yield* registry.list()
-        const results = yield* Effect.forEach(inventory, updateOne)
-        const packages = results.flatMap((result, index) => {
-          const info = inventory[index]
-          return result.status === "updated" && info?.source.type === "package" ? [info.source.package] : []
-        })
+        const results = yield* Effect.forEach(yield* registry.list(), updateOne)
+        const packages = results.flatMap((result) =>
+          result.status === "updated" && result.source.type === "package" ? [result.source.package] : [],
+        )
         if (packages.length === 0) return results
         const failed = yield* reload(packages)
-        return results.map((result, index) => {
-          const info = inventory[index]
-          if (info?.source.type !== "package" || !failed.includes(info.source.package)) return result
+        return results.map((result) => {
+          if (result.source.type !== "package" || !failed.includes(result.source.package)) return result
           return { ...result, status: "failed" as const, error: "Updated plugin failed to activate" }
         })
       }),
