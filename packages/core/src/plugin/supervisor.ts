@@ -108,7 +108,7 @@ const load = Effect.fn("PluginSupervisor.load")(function* (
   const npm = yield* Npm.Service
   const entrypoint = path.isAbsolute(operation.target)
     ? pathToFileURL(operation.target).href
-    : (yield* npm.add(operation.target, { subpaths: ["server", ""] })).entrypoint
+    : (yield* npm.add(operation.target, { subpaths: ["server", ""], refresh: true })).entrypoint
   if (!entrypoint) return yield* Effect.fail(new Error(`Plugin entrypoint not found: ${operation.target}`))
   // Bun currently ignores query parameters when caching file:// imports.
   const source =

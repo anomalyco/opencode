@@ -1,5 +1,6 @@
 import fs from "fs/promises"
 import path from "path"
+import { pathToFileURL } from "url"
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -220,6 +221,53 @@ describe("Npm.add", () => {
     expect(
       await fs.stat(path.join(path.dirname(entry.directory), "fixture-subdirectory-dependency", "package.json")),
     ).toBeTruthy()
+  })
+
+  test("refreshes mutable Git packages once per service lifetime and preserves pinned or cached installs", async () => {
+    await using tmp = await tmpdir()
+    const fixture = await createGitFixture(tmp.path)
+    const cache = path.join(tmp.path, "cache")
+    const repository = pathToFileURL(fixture.repository).href
+    const mutable = `git+${repository}#fixture-branch`
+    const pinned = `git+${repository}#${fixture.commit}`
+
+    const first = await Effect.gen(function* () {
+      const npm = yield* Npm.Service
+      const mutableEntry = yield* npm.add(mutable, { refresh: true })
+      const pinnedEntry = yield* npm.add(pinned, { refresh: true })
+      yield* Effect.promise(async () => {
+        await Bun.write(path.join(fixture.repository, "index.js"), 'export default { root: "second" }\n')
+        await Bun.$`git -C ${fixture.repository} add .`
+        await Bun.$`git -C ${fixture.repository} -c user.name=fixture -c user.email=fixture@example.com commit -qm second`
+      })
+      yield* npm.add(mutable, { refresh: true })
+      return {
+        mutable: yield* Effect.promise(() => Bun.file(path.join(mutableEntry.directory, "index.js")).text()),
+        pinned: yield* Effect.promise(() => Bun.file(path.join(pinnedEntry.directory, "index.js")).text()),
+      }
+    }).pipe(Effect.scoped, Effect.provide(npmLayer(cache)), Effect.runPromise)
+    expect(first.mutable).toContain("root: true")
+    expect(first.pinned).toContain("root: true")
+
+    const second = await Effect.gen(function* () {
+      const npm = yield* Npm.Service
+      const mutableEntry = yield* npm.add(mutable, { refresh: true })
+      const pinnedEntry = yield* npm.add(pinned, { refresh: true })
+      return {
+        mutable: yield* Effect.promise(() => Bun.file(path.join(mutableEntry.directory, "index.js")).text()),
+        pinned: yield* Effect.promise(() => Bun.file(path.join(pinnedEntry.directory, "index.js")).text()),
+      }
+    }).pipe(Effect.scoped, Effect.provide(npmLayer(cache)), Effect.runPromise)
+    expect(second.mutable).toContain('root: "second"')
+    expect(second.pinned).toContain("root: true")
+
+    await fs.rename(fixture.repository, `${fixture.repository}-offline`)
+    const offline = await Effect.gen(function* () {
+      const npm = yield* Npm.Service
+      const entry = yield* npm.add(mutable, { refresh: true })
+      return yield* Effect.promise(() => Bun.file(path.join(entry.directory, "index.js")).text())
+    }).pipe(Effect.scoped, Effect.provide(npmLayer(cache)), Effect.runPromise)
+    expect(offline).toContain('root: "second"')
   })
 })
 
