@@ -34,15 +34,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
-function commandFromPart(data: unknown): string | undefined {
-  if (!isRecord(data) || !isRecord(data.state) || !isRecord(data.state.input)) return undefined
-  return typeof data.state.input.command === "string" ? data.state.input.command : undefined
-}
-
-function isVerificationCommand(command: string) {
-  return /\b(test|tests|pytest|lint|typecheck|type-check|build|verify|check)\b/i.test(command)
-}
-
 function toolStatus(data: Record<string, unknown>) {
   return isRecord(data.state) && typeof data.state.status === "string" ? data.state.status : "unknown"
 }
@@ -55,6 +46,14 @@ function toolFailed(data: Record<string, unknown>) {
     : false
 }
 
+function toolEvidence(data: Record<string, unknown>) {
+  if (typeof data.tool !== "string") return "unknown tool"
+  if (isRecord(data.state) && isRecord(data.state.input) && typeof data.state.input.command === "string") {
+    return data.state.input.command
+  }
+  return data.tool
+}
+
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -63,13 +62,13 @@ const layer = Layer.effect(
 
     const evaluateSession = Effect.fn("QualityGate.evaluateSession")(function* (sessionID: string) {
       const typedSessionID = SessionSchema.ID.make(sessionID)
-      const todos = yield* todosSvc.get(typedSessionID).pipe(Effect.orElseSucceed(() => []))
+      const todos = yield* todosSvc.get(typedSessionID).pipe(Effect.orDie)
       const parts = yield* db
         .select()
         .from(PartTable)
         .where(eq(PartTable.session_id, typedSessionID))
         .all()
-        .pipe(Effect.orElseSucceed(() => []))
+        .pipe(Effect.orDie)
 
       const failedTools: string[] = []
       const verificationCommands: string[] = []
@@ -85,11 +84,10 @@ const layer = Layer.effect(
         const failed = toolFailed(data)
         if (failed) failedTools.push(toolName)
 
-        const command = commandFromPart(data)
-        if (!command || !isVerificationCommand(command)) continue
-        verificationCommands.push(command)
-        if (!failed && status === "completed") passedVerificationCommands.push(command)
-        else failedVerificationCommands.push(command)
+        const evidence = toolEvidence(data)
+        verificationCommands.push(evidence)
+        if (!failed && status === "completed") passedVerificationCommands.push(evidence)
+        else failedVerificationCommands.push(evidence)
       }
 
       const totalTodos = todos.length
@@ -97,7 +95,7 @@ const layer = Layer.effect(
       const issues: string[] = []
       if (totalTodos > 0 && completedTodos < totalTodos) issues.push(`${totalTodos - completedTodos} todo(s) are unfinished.`)
       if (failedTools.length > 0) issues.push(`Failed tools: ${failedTools.join(", ")}`)
-      if (verificationCommands.length === 0) issues.push("No verification command was detected.")
+      if (verificationCommands.length === 0) issues.push("No completed tool evidence was recorded.")
       if (failedVerificationCommands.length > 0) {
         issues.push(`Verification failed: ${failedVerificationCommands.join(", ")}`)
       }
@@ -138,14 +136,13 @@ const layer = Layer.effect(
         .where(eq(SessionTable.id, typedSessionID))
         .get()
         .pipe(Effect.orDie)
-      if (session) {
-        yield* db
-          .update(SessionTable)
-          .set({ metadata: { ...(session.metadata ?? {}), qualityGate: result } })
-          .where(eq(SessionTable.id, typedSessionID))
-          .run()
-          .pipe(Effect.orDie)
-      }
+      if (!session) return yield* Effect.die(`Session ${sessionID} was not found while persisting Quality Gate result.`)
+      yield* db
+        .update(SessionTable)
+        .set({ metadata: { ...(session.metadata ?? {}), qualityGate: result } })
+        .where(eq(SessionTable.id, typedSessionID))
+        .run()
+        .pipe(Effect.orDie)
 
       return result
     })

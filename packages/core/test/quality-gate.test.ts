@@ -38,6 +38,7 @@ const setup = Effect.gen(function* () {
       directory: "/project",
       title: "quality-gate",
       version: "test",
+      metadata: { keep: true },
     })
     .run()
     .pipe(Effect.orDie)
@@ -98,7 +99,32 @@ describe("QualityGate", () => {
         .where(eq(SessionTable.id, sessionID))
         .get()
         .pipe(Effect.orDie)
-      expect(session?.metadata?.qualityGate).toEqual(result)
+      expect(session?.metadata).toMatchObject({ keep: true, qualityGate: result })
+
+      yield* db
+        .insert(PartTable)
+        .values({
+          id: "prt_quality_gate_failed" as never,
+          message_id: messageID,
+          session_id: sessionID,
+          data: {
+            type: "tool",
+            tool: "bash",
+            state: { status: "error", input: { command: "unrelated command" }, metadata: { exit: 1 } },
+          } as never,
+        })
+        .run()
+        .pipe(Effect.orDie)
+
+      const failedResult = yield* gate.evaluateSession(sessionID)
+      expect(failedResult.passed).toBe(false)
+      const failedSession = yield* db
+        .select({ metadata: SessionTable.metadata })
+        .from(SessionTable)
+        .where(eq(SessionTable.id, sessionID))
+        .get()
+        .pipe(Effect.orDie)
+      expect(failedSession?.metadata).toMatchObject({ keep: true, qualityGate: failedResult })
     }),
   )
 })

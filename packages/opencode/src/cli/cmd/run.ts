@@ -269,12 +269,10 @@ export const RunCommand = effectCmd({
     const { RuntimeFlags } = yield* Effect.promise(() => import("@/effect/runtime-flags"))
     const { InstanceRef } = yield* Effect.promise(() => import("@/effect/instance-ref"))
     const { ServerAuth } = yield* Effect.promise(() => import("@/server/auth"))
-    const { JudgeAgent } = yield* Effect.promise(() => import("@opencode-ai/core/harness"))
     const { Provider } = yield* Effect.promise(() => import("@/provider/provider"))
     const agentSvc = yield* Agent.Service
     const flags = yield* RuntimeFlags.Service
     const localInstance = yield* InstanceRef
-    const judge = yield* JudgeAgent.Service
     const provider = yield* Provider.Service
     const sessionRef: { value?: string; providerID?: string; modelID?: string } = {}
     yield* Effect.promise(async () => {
@@ -973,33 +971,6 @@ export const RunCommand = effectCmd({
       })
       await execute(sdk, sessionRef)
     })
-    if (sessionRef.value && sessionRef.providerID && sessionRef.modelID && !args.interactive && !args.mini) {
-      const selectedModel = yield* provider.getModel(
-        sessionRef.providerID as Parameters<typeof provider.getModel>[0],
-        sessionRef.modelID as Parameters<typeof provider.getModel>[1],
-      ).pipe(Effect.orElseSucceed(() => undefined))
-      if (!selectedModel) return
-      const selectedProvider = yield* provider.getProvider(selectedModel.providerID)
-      const apiKey =
-        typeof selectedProvider.options.apiKey === "string" ? selectedProvider.options.apiKey : selectedProvider.key
-      const judgeModel = LLMNative.model({ model: selectedModel, apiKey })
-
-      if (judgeModel) {
-        yield* judge.evaluate(
-          {
-            taskID: `cli_${sessionRef.value}`,
-            sessionID: sessionRef.value,
-            originalPrompt: [...args.message, ...(args["--"] || [])].join(" "),
-          },
-          judgeModel,
-        ).pipe(
-          Effect.tapError((error) =>
-            Effect.sync(() => console.error("🔥 JUDGE EVALUATE ERROR:", error)),
-          ),
-          Effect.orElseSucceed(() => undefined),
-        )
-      }
-    }
   }),
 })
 

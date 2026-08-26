@@ -56,6 +56,8 @@ import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionReminders } from "./reminders"
 import { SessionTools } from "./tools"
 import { LLMEvent } from "@opencode-ai/llm"
+import { JudgeAgent } from "@opencode-ai/core/harness"
+import { model as nativeModel } from "./llm/native-request"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -140,6 +142,7 @@ const layer = Layer.effect(
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
     const database = yield* Database.Service
+    const judge = yield* JudgeAgent.Service
     const { db } = database
     const ops = Effect.fn("SessionPrompt.ops")(function* () {
       return {
@@ -1067,7 +1070,48 @@ const layer = Layer.effect(
       }
 
       if (input.noReply === true) return message
-      return yield* loop({ sessionID: input.sessionID })
+      const originalPrompt = input.parts
+        .filter((part) => part.type === "text")
+        .map((part) => part.text)
+        .join("\n")
+        .trim()
+      const execution = yield* loop({ sessionID: input.sessionID }).pipe(Effect.exit)
+      yield* Effect.gen(function* () {
+        const taskModel = yield* getModel(message.info.model.providerID, message.info.model.modelID, input.sessionID)
+        const judgeModel = yield* Effect.try({
+          try: () => nativeModel(taskModel),
+          catch: (error) => error,
+        }).pipe(Effect.option)
+        if (Option.isNone(judgeModel)) return
+        const classification = yield* judge.classify(originalPrompt, judgeModel.value).pipe(
+          Effect.orElseSucceed(() => ({
+            isTask: false,
+            taskType: undefined,
+            taskSubType: undefined,
+            taskSubTypes: undefined,
+            summary: undefined,
+          })),
+        )
+        if (!classification.isTask) return
+        const taskID = yield* judge.registerTask({
+          prompt: originalPrompt,
+          taskType: classification.taskType,
+          taskSubType: classification.taskSubType,
+          taskSubTypes: classification.taskSubTypes,
+          taskModel: `${message.info.model.providerID}/${message.info.model.modelID}`,
+          sessionID: input.sessionID,
+        })
+        yield* judge.evaluate(
+          { taskID, sessionID: input.sessionID, originalPrompt },
+          judgeModel.value,
+        )
+      }).pipe(
+        Effect.tapError((error) => Effect.logError("session task evaluation failed", { error })),
+        Effect.orElseSucceed(() => undefined),
+        Effect.orDie,
+        Effect.forkIn(scope),
+      )
+      return yield* execution
     })
 
     const lastAssistant = Effect.fnUntraced(function* (sessionID: SessionID) {
@@ -1625,6 +1669,7 @@ export const node = LayerNode.make({
     EventV2Bridge.node,
     RuntimeFlags.node,
     Database.node,
+    JudgeAgent.node,
   ],
 })
 
