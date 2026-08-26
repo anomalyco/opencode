@@ -137,7 +137,7 @@ export const model = (input: ModelInput) => {
       )
       const output = yield* ProviderShared.imageResponse(ADAPTER, "xAI Images", response)
       const decoded = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(XAIImageResponse))(output.body).pipe(
-        Effect.mapError((cause) => output.invalid("xAI Images returned an invalid response", cause)),
+        Effect.mapError(output.decodeError),
       )
       const images = yield* Effect.forEach(decoded.data, (item, index) => {
         const mediaType = item.mime_type ?? "application/octet-stream"

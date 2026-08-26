@@ -17,7 +17,6 @@ interface CheckpointValue {
 
 export interface DriverInput {
   readonly id: string
-  readonly name: string
   readonly request: Readonly<Record<string, unknown>>
   readonly message: string
   readonly base: WebSocketChannelDriver
@@ -137,9 +136,7 @@ export const driver = (input: DriverInput): WebSocketChannelDriver => {
     observe: (create, frame) =>
       Effect.gen(function* () {
         const event = yield* decodeEvent(frame).pipe(
-          Effect.mapError((cause) =>
-            ProviderShared.eventError(input.id, `Invalid ${input.name} WebSocket event`, frame, cause),
-          ),
+          Effect.mapError((cause) => ProviderShared.eventError(input.id, frame, frame, cause)),
         )
         const observation = yield* input.base.observe(create, frame)
         if (event.type === "response.output_item.done" && event.item) output.push(event.item)

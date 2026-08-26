@@ -61,9 +61,7 @@ const driver = (options: Options, body: string): WebSocketChannelDriver => {
     observe: (_create, frame) =>
       Effect.gen(function* () {
         const event = yield* decodeEvent(frame).pipe(
-          Effect.mapError((cause) =>
-            ProviderShared.eventError(options.id, `Invalid ${options.name} WebSocket event`, frame, cause),
-          ),
+          Effect.mapError((cause) => ProviderShared.eventError(options.id, frame, frame, cause)),
         )
         if (terminal)
           return yield* ProviderShared.eventError(
@@ -74,13 +72,11 @@ const driver = (options: Options, body: string): WebSocketChannelDriver => {
         if (event.type === "error") {
           terminal = true
           yield* OpenResponses.decodeKnownErrorEvent(event).pipe(
-            Effect.mapError((cause) =>
-              ProviderShared.eventError(options.id, `${options.name} returned a malformed error event`, frame, cause),
-            ),
+            Effect.mapError((cause) => ProviderShared.eventError(options.id, frame, frame, cause)),
           )
           return {
             type: "provider-failure",
-            error: OpenResponses.providerFailure(event, `${options.name} stream error`, frame),
+            error: OpenResponses.providerFailure(event, frame),
           }
         }
         if (event.type === "response.failed") {
@@ -93,7 +89,7 @@ const driver = (options: Options, body: string): WebSocketChannelDriver => {
             )
           return {
             type: "provider-failure",
-            error: OpenResponses.providerFailure(event, `${options.name} response failed`, frame),
+            error: OpenResponses.providerFailure(event, frame),
           }
         }
         if (event.type === "response.created") {
@@ -159,7 +155,6 @@ export const transport = <Body>(options: Options): Transport<Body, Prepared, str
                   rotateAfterMs: options.rotateAfterMs,
                   driver: OpenResponsesContinuation.driver({
                     id: options.id,
-                    name: options.name,
                     request: create.request,
                     message: create.message,
                     base,

@@ -9,31 +9,47 @@ import { dynamicResponse } from "./lib/http.js"
 describe("Image", () => {
   for (const provider of [OpenAI, Google, XAI, ZAI]) {
     const model = provider.configure({ apiKey: "test", baseURL: "https://image.test" }).image("image-model")
-    for (const body of ['{"data":42,"candidates":42,"opaque":{"nested":[1,2]},"trace":"outer"}', '{"invalid":']) {
-      it.effect(`retains ${model.provider} image response body and decode cause: ${body}`, () =>
-        Effect.gen(function* () {
-          const error = yield* Image.generate({ model, prompt: "hello" }).pipe(Effect.flip)
-          expect(error.reason._tag).toBe("InvalidProviderOutput")
-          expect(error.message).toContain("invalid response")
-          expect(error.reason.body).toBe(body)
-          expect(error.reason.http).toMatchObject({ status: 200, headers: { "x-image-trace": "trace-1" } })
-          expect(error.reason.http?.url).toStartWith("https://image.test/")
-          expect(error.reason.cause).toBeInstanceOf(Error)
-        }).pipe(
-          Effect.provide(
-            ImageClient.layer.pipe(
-              Layer.provide(
-                dynamicResponse((input) =>
-                  Effect.succeed(
-                    input.respond(body, {
-                      headers: { "content-type": "application/json", "x-image-trace": "trace-1" },
-                    }),
+    for (const example of [
+      {
+        body: '{"data":42,"candidates":42,"opaque":{"nested":[1,2]},"trace":"outer"}',
+        message: '{"data":42,"candidates":42,"opaque":{"nested":[1,2]},"trace":"outer"}',
+      },
+      { body: '{"invalid":', message: '{"invalid":' },
+      {
+        body: '{"data":42,"candidates":42,"error":{"message":"Image generation unavailable"},"trace":"outer"}',
+        message: "Image generation unavailable",
+      },
+      {
+        body: '{"data":42,"candidates":42,"message":"Image generation unavailable","trace":"outer"}',
+        message: "Image generation unavailable",
+      },
+    ]) {
+      it.effect(
+        `retains ${model.provider} image response body, readable message or raw fallback, and decode cause: ${example.body}`,
+        () =>
+          Effect.gen(function* () {
+            const error = yield* Image.generate({ model, prompt: "hello" }).pipe(Effect.flip)
+            expect(error.reason._tag).toBe("InvalidProviderOutput")
+            expect(error.message).toBe(example.message)
+            expect(error.reason.body).toBe(example.body)
+            expect(error.reason.http).toMatchObject({ status: 200, headers: { "x-image-trace": "trace-1" } })
+            expect(error.reason.http?.url).toStartWith("https://image.test/")
+            expect(error.reason.cause).toBeInstanceOf(Error)
+          }).pipe(
+            Effect.provide(
+              ImageClient.layer.pipe(
+                Layer.provide(
+                  dynamicResponse((input) =>
+                    Effect.succeed(
+                      input.respond(example.body, {
+                        headers: { "content-type": "application/json", "x-image-trace": "trace-1" },
+                      }),
+                    ),
                   ),
                 ),
               ),
             ),
           ),
-        ),
       )
     }
   }

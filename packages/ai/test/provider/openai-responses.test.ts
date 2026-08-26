@@ -72,7 +72,6 @@ const continuationDriver = (request: Readonly<Record<string, unknown>>) => {
   const message = ProviderShared.encodeJson(request)
   return OpenResponsesContinuation.driver({
     id: "openai-responses",
-    name: "OpenAI Responses",
     request,
     message,
     base: baseChannelDriver(message),
@@ -4451,25 +4450,31 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("falls back to error code when no message is present", () =>
+  it.effect("falls back to the full raw event when no message is present", () =>
     Effect.gen(function* () {
       const error = yield* LLMClient.generate(request).pipe(
         Effect.provide(fixedResponse(sseEvents({ type: "error", code: "internal_error" }))),
         Effect.flip,
       )
 
-      expect(error).toMatchObject({ reason: { _tag: "ProviderInternal" }, message: "internal_error" })
+      expect(error).toMatchObject({
+        reason: { _tag: "ProviderInternal" },
+        message: '{"type":"error","code":"internal_error"}',
+      })
     }),
   )
 
-  it.effect("falls back to error code when message is empty", () =>
+  it.effect("falls back to the full raw event when the message is empty", () =>
     Effect.gen(function* () {
       const error = yield* LLMClient.generate(request).pipe(
         Effect.provide(fixedResponse(sseEvents({ type: "error", code: "internal_error", message: "" }))),
         Effect.flip,
       )
 
-      expect(error).toMatchObject({ reason: { _tag: "ProviderInternal" }, message: "internal_error" })
+      expect(error).toMatchObject({
+        reason: { _tag: "ProviderInternal" },
+        message: '{"type":"error","code":"internal_error","message":""}',
+      })
     }),
   )
 
@@ -4501,7 +4506,7 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("surfaces response.failed code when no nested message is present", () =>
+  it.effect("surfaces the full raw response.failed event when no nested message is present", () =>
     Effect.gen(function* () {
       const error = yield* LLMClient.generate(request).pipe(
         Effect.provide(
@@ -4515,7 +4520,10 @@ describe("OpenAI Responses route", () => {
         Effect.flip,
       )
 
-      expect(error).toMatchObject({ reason: { _tag: "InvalidRequest" }, message: "invalid_prompt" })
+      expect(error).toMatchObject({
+        reason: { _tag: "InvalidRequest" },
+        message: '{"type":"response.failed","response":{"id":"resp_failed_2","error":{"code":"invalid_prompt"}}}',
+      })
     }),
   )
 
@@ -4601,7 +4609,7 @@ describe("OpenAI Responses route", () => {
       )
 
       expect(error.reason).toMatchObject({ _tag: "UnknownProvider" })
-      expect(error.message).toContain('"error":null')
+      expect(error.message).toBe('{"type":"error","error":null}')
       expect(error.reason.body).toBe(error.message)
     }),
   )
@@ -4614,7 +4622,7 @@ describe("OpenAI Responses route", () => {
       )
 
       expect(error.reason).toMatchObject({ _tag: "ProviderInternal" })
-      expect(error.message).toContain('"type":"error"')
+      expect(error.message).toBe('{"type":"error","sequence_number":2}')
       expect(error.reason.body).toBe(error.message)
     }),
   )
@@ -4627,7 +4635,7 @@ describe("OpenAI Responses route", () => {
       )
 
       expect(error.reason).toMatchObject({ _tag: "UnknownProvider" })
-      expect(error.message).toContain('"resp_failed_3"')
+      expect(error.message).toBe('{"type":"response.failed","response":{"id":"resp_failed_3"}}')
       expect(error.reason.body).toBe(error.message)
     }),
   )

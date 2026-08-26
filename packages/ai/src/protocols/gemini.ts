@@ -231,7 +231,6 @@ const GeminiEvent = Schema.Struct({
 type GeminiEvent = Schema.Schema.Type<typeof GeminiEvent>
 
 interface ParserState {
-  readonly route: string
   readonly providerMetadataKey: string
   readonly finishReason?: string
   readonly hasToolCalls: boolean
@@ -601,13 +600,14 @@ const finish = (state: ParserState): ReadonlyArray<LLMEvent> => {
 }
 
 const step = (state: ParserState, event: GeminiEvent) => {
-  if (ProviderShared.isRecord(event.error) && typeof event.error.message === "string") {
+  if (event.error !== undefined && event.error !== null) {
     const body = ProviderShared.encodeJson(event)
+    const error = ProviderShared.isRecord(event.error) ? event.error : undefined
     return Effect.fail(
       new AIError({
         reason: classifyProviderFailure({
-          message: event.error.message,
-          status: typeof event.error.code === "number" ? event.error.code : undefined,
+          message: typeof error?.message === "string" && error.message.trim() ? error.message : body,
+          status: typeof error?.code === "number" ? error.code : undefined,
           rawBody: body,
         }),
       }),
@@ -645,10 +645,10 @@ const step = (state: ParserState, event: GeminiEvent) => {
     )
       continue
     const decoded = decodeGeminiContentPart(input)
-    if (Option.isNone(decoded))
-      return Effect.fail(
-        ProviderShared.eventError(ADAPTER, `Invalid ${state.route} stream event`, ProviderShared.encodeJson(event)),
-      )
+    if (Option.isNone(decoded)) {
+      const body = ProviderShared.encodeJson(event)
+      return Effect.fail(ProviderShared.eventError(ADAPTER, body, body))
+    }
     const part = decoded.value
     const signature = "thoughtSignature" in part && part.thoughtSignature ? part.thoughtSignature : undefined
     // Gemini attaches replay signatures to thought parts, visible text, or function calls;
@@ -748,7 +748,6 @@ export const protocol = Protocol.make({
   stream: {
     event: Protocol.jsonEvent(GeminiEvent),
     initial: (request) => ({
-      route: `${request.model.provider}/${request.model.route.id}`,
       providerMetadataKey: request.model.route.providerMetadataKey ?? String(request.model.provider),
       hasToolCalls: false,
       lifecycle: Lifecycle.initial(),

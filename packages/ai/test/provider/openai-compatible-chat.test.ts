@@ -528,7 +528,7 @@ describe("OpenAI-compatible Chat route", () => {
 
       expect(error).toMatchObject({
         reason: { _tag: "ProviderInternal" },
-        message: "Provider reported a network error (finish_reason: network_error)",
+        message: JSON.stringify(deltaChunk({}, "network_error")),
       })
       expect(decodeJson(error.reason.body ?? "")).toMatchObject({
         id: "chatcmpl_fixture",
@@ -541,7 +541,7 @@ describe("OpenAI-compatible Chat route", () => {
       )
       expect(generic).toMatchObject({
         reason: { _tag: "UnknownProvider" },
-        message: "Provider reported an error (finish_reason: error)",
+        message: JSON.stringify(deltaChunk({}, "error")),
       })
     }),
   )

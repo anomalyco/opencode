@@ -93,7 +93,7 @@ export const model = (input: ModelInput) => {
       )
       const output = yield* ProviderShared.imageResponse(ADAPTER, "Z.ai Images", response)
       const decoded = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(ZAIImageResponse))(output.body).pipe(
-        Effect.mapError((cause) => output.invalid("Z.ai Images returned an invalid response", cause)),
+        Effect.mapError(output.decodeError),
       )
       if (decoded.data.length === 0) return yield* output.invalid("Z.ai Images returned no images")
       return new ImageResponse({

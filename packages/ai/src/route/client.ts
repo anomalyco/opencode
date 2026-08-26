@@ -262,16 +262,12 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
   const protocol = input.protocol
   const encodeBody = Schema.encodeSync(Schema.fromJsonString(protocol.body.schema))
   const decodeEventEffect = Schema.decodeUnknownEffect(protocol.stream.event)
-  const decodeEvent = (route: string) => (frame: Frame) =>
+  const decodeEvent = (frame: Frame) =>
     decodeEventEffect(frame).pipe(
-      Effect.mapError((cause) =>
-        ProviderShared.eventError(
-          input.id,
-          `Invalid ${route} stream event`,
-          typeof frame === "string" ? frame : ProviderShared.encodeJson(frame),
-          cause,
-        ),
-      ),
+      Effect.mapError((cause) => {
+        const body = typeof frame === "string" ? frame : ProviderShared.encodeJson(frame)
+        return ProviderShared.eventError(input.id, body, body, cause)
+      }),
     )
 
   type BuiltRouteInput = Omit<MakeTransportInput<Body, Prepared, Frame, Event, State>, "defaults"> & {
@@ -328,22 +324,24 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
               // Preserve assembled inputs; replace only serialized event fallbacks with their original wire data.
               const frameError =
                 (frame: Frame, event: Frame | Event = frame) =>
-                (error: AIError) =>
-                  new AIError({
+                (error: AIError) => {
+                  const body =
+                    error.reason.body !== undefined && error.reason.body !== ProviderShared.encodeJson(event)
+                      ? error.reason.body
+                      : (execution.body?.(frame) ??
+                        (typeof frame === "string" ? frame : ProviderShared.encodeJson(frame)))
+                  return new AIError({
                     reason: AIErrorReason.make({
                       ...error.reason,
-                      message: error.reason.message,
+                      message: error.message === error.reason.body ? body : error.message,
                       cause: error.reason.cause,
-                      body:
-                        error.reason.body !== undefined && error.reason.body !== ProviderShared.encodeJson(event)
-                          ? error.reason.body
-                          : (execution.body?.(frame) ??
-                            (typeof frame === "string" ? frame : ProviderShared.encodeJson(frame))),
+                      body,
                     }),
                   })
+                }
               const events = execution.frames.pipe(
                 Stream.mapEffect((frame) =>
-                  decodeEvent(route)(frame).pipe(
+                  decodeEvent(frame).pipe(
                     Effect.catchCause((cause) =>
                       Effect.fail(streamError(route, `Failed to decode ${route} event`, cause)),
                     ),

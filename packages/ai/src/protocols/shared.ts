@@ -15,6 +15,7 @@ import {
   type ToolResultPart,
 } from "../schema/index.js"
 import { isRecord } from "../utils/record.js"
+import { providerMessage } from "../provider-error.js"
 export { isRecord }
 
 export const Json = Schema.fromJsonString(Schema.Unknown)
@@ -272,12 +273,14 @@ export const imageResponse = Effect.fn("ProviderShared.imageResponse")(function*
         }),
     ),
   )
+  const invalid = (message: string, cause?: unknown) =>
+    new AIError({
+      reason: new InvalidProviderOutputError({ route, message, body, http, cause }),
+    })
   return {
     body,
-    invalid: (message: string, cause?: unknown) =>
-      new AIError({
-        reason: new InvalidProviderOutputError({ route, message, body, http, cause }),
-      }),
+    invalid,
+    decodeError: (cause: unknown) => invalid(providerMessage(body, `${name} returned an empty response`), cause),
   }
 })
 

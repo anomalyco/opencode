@@ -834,12 +834,36 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
+  for (const message of [undefined, "", " \t "]) {
+    it.effect(`shows the original AWS exception when its message is ${JSON.stringify(message)}`, () =>
+      Effect.gen(function* () {
+        const payload = { message, originalMessage: message, opaque: { nested: [1, 2] }, p: "padding" }
+        const error = yield* LLMClient.generate(baseRequest).pipe(
+          Effect.provide(fixedBytes(exceptionFrame("throttlingException", payload))),
+          Effect.flip,
+        )
+        expect(error.reason._tag).toBe("RateLimit")
+        expect(error.message).toBe(error.reason.body)
+        expect(JSON.parse(error.message)).toEqual({
+          headers: {
+            ":message-type": { type: "string", value: "exception" },
+            ":exception-type": { type: "string", value: "throttlingException" },
+            ":content-type": { type: "string", value: "application/json" },
+          },
+          body: JSON.stringify(payload),
+        })
+        expect(error.reason.http?.status).toBe(200)
+      }),
+    )
+  }
+
   it.effect("uses originalMessage from model stream exception frames", () =>
     Effect.gen(function* () {
       const error = yield* LLMClient.generate(baseRequest).pipe(
         Effect.provide(
           fixedBytes(
             exceptionFrame("modelStreamErrorException", {
+              message: " \t ",
               originalMessage: "Upstream model failed",
               originalStatusCode: 500,
             }),
@@ -882,9 +906,24 @@ describe("Bedrock Converse route", () => {
         Effect.flip,
       )
       expect(error.reason._tag).toBe("InvalidProviderOutput")
+      expect(error.message).toBe(error.reason.body)
       expect(JSON.parse(error.reason.body ?? "")).toEqual({ headers, body })
       expect(error.reason.cause).toBeInstanceOf(Error)
       expect(error.reason.http?.status).toBe(200)
+    }),
+  )
+
+  it.effect("shows the complete AWS error frame instead of only its error code", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.generate(baseRequest).pipe(
+        Effect.provide(fixedBytes(errorFrame("BadStream", ""))),
+        Effect.flip,
+      )
+      expect(error.message).toBe(error.reason.body)
+      expect(JSON.parse(error.message)).toMatchObject({
+        headers: { ":error-code": { value: "BadStream" } },
+        body: "",
+      })
     }),
   )
 

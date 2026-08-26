@@ -8,7 +8,7 @@ import {
   HttpClientResponse,
 } from "effect/unstable/http"
 import { HttpContext, HttpRateLimitDetails, AIError, TransportError } from "../schema/index.js"
-import { classifyProviderFailure } from "../provider-error.js"
+import { classifyProviderFailure, providerMessage } from "../provider-error.js"
 
 export interface Interface {
   readonly execute: (
@@ -97,29 +97,15 @@ export const responseHttp = (response: HttpClientResponse.HttpClientResponse) =>
     headers: headerDetails(response.headers),
   })
 
-const decodeProviderBody = Schema.decodeUnknownOption(
-  Schema.fromJsonString(
-    Schema.Struct({
-      message: Schema.optionalKey(Schema.String),
-      error: Schema.optionalKey(Schema.Struct({ message: Schema.optionalKey(Schema.String) })),
-    }),
-  ),
-)
-
-const providerMessage = (status: number, body: string | void) => {
-  const decoded = body === undefined ? undefined : Option.getOrUndefined(decodeProviderBody(body))
-  return (
-    [decoded?.error?.message, decoded?.message].find((message) => message?.trim()) ??
-    `Provider request failed with HTTP ${status}`
-  )
-}
-
 const statusError = (response: HttpClientResponse.HttpClientResponse) =>
   Effect.gen(function* () {
     if (response.status < 400) return response
     const result = yield* response.text.pipe(Effect.result)
     return yield* httpFailure({
-      message: providerMessage(response.status, result._tag === "Success" ? result.success : undefined),
+      message: providerMessage(
+        result._tag === "Success" ? result.success : undefined,
+        `Provider request failed with HTTP ${response.status}`,
+      ),
       url: response.request.url,
       status: response.status,
       responseHeaders: headerDetails(response.headers),

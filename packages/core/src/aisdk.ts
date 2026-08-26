@@ -1,6 +1,7 @@
 export * as AISDK from "./aisdk.js"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { STATUS_CODES } from "node:http"
 import { APICallError } from "@ai-sdk/provider"
 import type {
   JSONSchema7,
@@ -836,33 +837,30 @@ function errorBody(value: unknown) {
   return ProviderShared.encodeJson(value)
 }
 
-const ProviderErrorDetail = Schema.Struct({
-  message: Schema.optionalKey(Schema.String),
-  code: Schema.optionalKey(Schema.Union([Schema.String, Schema.Finite])),
-})
-const ProviderErrorBody = Schema.Struct({
-  ...ProviderErrorDetail.fields,
-  error: Schema.optionalKey(ProviderErrorDetail),
-})
-const decodeProviderError = Schema.decodeUnknownOption(
-  Schema.Union([ProviderErrorBody, Schema.fromJsonString(ProviderErrorBody)]),
-)
-
 function unknownErrorMessage(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error)
-  return message.trim() === "" ? "Provider request failed" : message
+  if (error instanceof Error) return error.message.trim() ? error.message : "Provider request failed"
+  return structuredErrorMessage(error) ?? (errorBody(error) || String(error) || "Provider request failed")
+}
+
+function structuredErrorMessage(value: unknown) {
+  const body = typeof value === "string" ? Option.getOrUndefined(decodeJson(value)) : value
+  if (!ProviderShared.isRecord(body)) return undefined
+  return [ProviderShared.isRecord(body.error) ? body.error.message : body.error, body.message].find(
+    (message): message is string => typeof message === "string" && message.trim() !== "",
+  )
 }
 
 function providerErrorMessage(error: APICallError) {
-  const data = Option.getOrUndefined(decodeProviderError(error.data))
-  const body = Option.getOrUndefined(decodeProviderError(error.responseBody))
-  const details = [data?.error, data, body?.error, body]
-  const message = details.map((detail) => detail?.message).find((value) => value?.trim())
-  const value = details.map((detail) => detail?.code).find((value) => value !== undefined)
-  const code = value === undefined ? undefined : String(value)
-  const prefix =
-    error.statusCode === undefined ? "Provider request failed" : `Provider request failed with HTTP ${error.statusCode}`
-  return error.message.trim() !== "" ? error.message : (message ?? (code === undefined ? prefix : `${prefix}: ${code}`))
+  // SDK response handlers substitute the HTTP status text when they cannot parse an error body.
+  if (error.message.trim() && error.message.trim().toLowerCase() !== STATUS_CODES[error.statusCode ?? 0]?.toLowerCase())
+    return error.message
+  const message = structuredErrorMessage(error.data) ?? structuredErrorMessage(error.responseBody)
+  if (message !== undefined) return message
+  const body = error.responseBody || errorBody(error.data)
+  if (body) return body
+  return error.statusCode === undefined
+    ? "Provider request failed"
+    : `Provider request failed with HTTP ${error.statusCode}`
 }
 
 export const node = makeLocationNode({ service: Service, layer: locationLayer, deps: [] })

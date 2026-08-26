@@ -159,6 +159,18 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
   return new UnknownProviderError(details)
 }
 
+export function providerMessage(body: string | undefined, fallback: string) {
+  const decoded = body === undefined ? undefined : Option.getOrUndefined(decodeJson(body))
+  const error = isRecord(decoded) ? decoded.error : undefined
+  return (
+    [
+      typeof error === "string" ? error : isRecord(error) ? error.message : undefined,
+      isRecord(decoded) ? decoded.message : undefined,
+    ].find((value): value is string => typeof value === "string" && value.trim() !== "") ??
+    (body || fallback)
+  )
+}
+
 function providerCodes(value: unknown) {
   const decoded = typeof value === "string" ? Option.getOrUndefined(decodeJson(value)) : value
   if (!isRecord(decoded)) return []

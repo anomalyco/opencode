@@ -787,20 +787,24 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
 // because OpenAI streams JSON arguments across multiple deltas.
 const mapFinishReason = Effect.fn("OpenAIChat.mapFinishReason")(function* (event: OpenAIChatEvent, reason: string) {
   switch (reason) {
-    case "error":
+    case "error": {
+      const body = ProviderShared.encodeJson(event)
       return yield* new AIError({
         reason: new UnknownProviderError({
-          message: "Provider reported an error (finish_reason: error)",
-          body: ProviderShared.encodeJson(event),
+          message: body,
+          body,
         }),
       })
-    case "network_error":
+    }
+    case "network_error": {
+      const body = ProviderShared.encodeJson(event)
       return yield* new AIError({
         reason: new ProviderInternalError({
-          message: "Provider reported a network error (finish_reason: network_error)",
-          body: ProviderShared.encodeJson(event),
+          message: body,
+          body,
         }),
       })
+    }
     case "stop":
     case "end":
       return "stop" as const
@@ -934,7 +938,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
       const body = ProviderShared.encodeJson(event)
       return yield* new AIError({
         reason: classifyProviderFailure({
-          message: event.error.message,
+          message: event.error.message.trim() ? event.error.message : body,
           status: typeof event.error.code === "number" ? event.error.code : undefined,
           rawBody: body,
         }),
