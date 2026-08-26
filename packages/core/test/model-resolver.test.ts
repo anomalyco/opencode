@@ -916,6 +916,12 @@ describe("ModelResolver", () => {
           { reasoning: { effort: "high" } },
         ],
         [
+          "@ai-sdk/groq",
+          "@opencode-ai/ai/providers/groq",
+          { reasoningEffort: "high", parallelToolCalls: false },
+          { reasoningEffort: "high", parallelToolCalls: false },
+        ],
+        [
           "@ai-sdk/togetherai",
           "@opencode-ai/ai/providers/togetherai",
           { reasoningEffort: "high" },
@@ -973,6 +979,7 @@ describe("ModelResolver", () => {
         ["@ai-sdk/google", "@opencode-ai/ai/providers/google", "api-model"],
         ["@ai-sdk/google-vertex", "@opencode-ai/ai/providers/google-vertex", "api-model"],
         ["@ai-sdk/google-vertex/anthropic", "@opencode-ai/ai/providers/google-vertex/messages", "claude-sonnet-4-6"],
+        ["@ai-sdk/groq", "@opencode-ai/ai/providers/groq", "api-model"],
         ["@ai-sdk/openai", "@opencode-ai/ai/providers/openai", "api-model"],
         ["@ai-sdk/openai-compatible", "@opencode-ai/ai/providers/openai-compatible", "api-model"],
         ["@openrouter/ai-sdk-provider", "@opencode-ai/ai/providers/openrouter", "api-model"],
@@ -1102,6 +1109,11 @@ describe("ModelResolver", () => {
       const togetherai = yield* ModelResolver.fromCatalogModel(
         model(Provider.aisdk("@ai-sdk/togetherai"), { settings: { reasoningEffort: "high" } }),
       )
+      const groq = yield* ModelResolver.fromCatalogModel(
+        model(Provider.aisdk("@ai-sdk/groq"), {
+          settings: { reasoningEffort: "high", parallelToolCalls: false },
+        }),
+      )
       const xai = yield* ModelResolver.fromCatalogModel(
         model(Provider.aisdk("@ai-sdk/xai"), { settings: { reasoningEffort: "high" } }),
       )
@@ -1132,6 +1144,10 @@ describe("ModelResolver", () => {
       expect(togetherai.route.id).toBe("togetherai-chat")
       expect(togetherai.route.defaults.providerOptions).toEqual({ reasoningEffort: "high" })
       expect(String(togetherai.provider)).toBe("test-provider")
+      expect(groq.route.id).toBe("groq-chat")
+      expect(groq.route.protocol).toBe("groq-chat")
+      expect(groq.route.defaults.providerOptions).toEqual({ reasoningEffort: "high", parallelToolCalls: false })
+      expect(String(groq.provider)).toBe("test-provider")
       expect(xai.route.id).toBe("openai-responses")
       expect(xai.route.defaults.providerOptions).toEqual({
         reasoningEffort: "high",

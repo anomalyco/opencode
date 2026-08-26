@@ -32,6 +32,7 @@ export interface Transformable<DraftApi> {
 
 type Batch = {
   active: boolean
+  readonly flush: boolean
   readonly reloads: Set<Reload>
 }
 
@@ -40,14 +41,15 @@ const CurrentBatch = Context.Reference<Batch | undefined>("@opencode/State/Curre
 })
 const reloadDebounce = 500
 
-export function batch<A, E, R>(effect: Effect.Effect<A, E, R>) {
+/** flush: false is terminal teardown: states whose transforms are removed stop rebuilding, including pending reloads. */
+export function batch<A, E, R>(effect: Effect.Effect<A, E, R>, options: { readonly flush?: boolean } = {}) {
   return Effect.gen(function* () {
     const current = yield* CurrentBatch
-    if (current?.active) return yield* effect
-    const batch: Batch = { active: true, reloads: new Set() }
+    if (current?.active && options.flush !== false) return yield* effect
+    const batch: Batch = { active: true, flush: options.flush !== false, reloads: new Set() }
     const exit = yield* effect.pipe(Effect.provideService(CurrentBatch, batch), Effect.exit)
     batch.active = false
-    yield* Effect.forEach(batch.reloads, (reload) => reload(), { discard: true })
+    if (batch.flush) yield* Effect.forEach(batch.reloads, (reload) => reload(), { discard: true })
     return yield* exit
   })
 }
@@ -81,6 +83,7 @@ export function create<State, DraftApi>(options: Options<State, DraftApi>): Inte
   let generation = 0
   let requestedAt = 0
   let running = false
+  let closed = false
   let waiters: { generation: number; done: Deferred.Deferred<void> }[] = []
   const semaphore = Semaphore.makeUnsafe(1)
 
@@ -90,6 +93,7 @@ export function create<State, DraftApi>(options: Options<State, DraftApi>): Inte
   })
 
   const materialize = Effect.fnUntraced(function* () {
+    if (closed) return
     const next = options.initial()
     const api = options.draft(next)
     for (const transform of transforms) {
@@ -122,6 +126,7 @@ export function create<State, DraftApi>(options: Options<State, DraftApi>): Inte
     })
 
   const reload = Effect.fnUntraced(function* () {
+    if (closed) return
     const done = Deferred.makeUnsafe<void>()
     const clock = yield* Clock.Clock
     generation++
@@ -131,7 +136,7 @@ export function create<State, DraftApi>(options: Options<State, DraftApi>): Inte
       running = true
       yield* rebuild().pipe(Effect.forkDetach)
     }
-    return yield* Deferred.await(done)
+    yield* Deferred.await(done)
   })
 
   return {
@@ -152,6 +157,11 @@ export function create<State, DraftApi>(options: Options<State, DraftApi>): Inte
                 return Effect.gen(function* () {
                   const batch = yield* CurrentBatch
                   if (batch?.active) {
+                    // Detached debounced reloads must also stay quiet after teardown.
+                    if (!batch.flush) {
+                      closed = true
+                      return
+                    }
                     batch.reloads.add(materializeReload)
                     return
                   }

@@ -62,6 +62,7 @@ const builtins = new Map<string, () => Promise<unknown>>([
     "@opencode-ai/ai/providers/google-vertex/messages",
     () => import("@opencode-ai/ai/providers/google-vertex/messages"),
   ],
+  ["@opencode-ai/ai/providers/groq", () => import("@opencode-ai/ai/providers/groq")],
   ["@opencode-ai/ai/providers/openai", () => import("@opencode-ai/ai/providers/openai")],
   ["@opencode-ai/ai/providers/openai/chat", () => import("@opencode-ai/ai/providers/openai/chat")],
   ["@opencode-ai/ai/providers/openai/responses", () => import("@opencode-ai/ai/providers/openai/responses")],

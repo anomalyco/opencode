@@ -29,6 +29,7 @@ describe("provider package entrypoints", () => {
       import("@opencode-ai/ai/providers/togetherai"),
       import("@opencode-ai/ai/providers/cerebras"),
       import("@opencode-ai/ai/providers/deepinfra"),
+      import("@opencode-ai/ai/providers/groq"),
     ])
 
     for (const module of modules) expect(module.model).toBeFunction()

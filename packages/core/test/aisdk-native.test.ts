@@ -61,8 +61,8 @@ describe("AISDKNative", () => {
     })
   })
 
-  test("maps Cerebras, DeepInfra, and Together AI settings, headers, and reasoning options to native providers", () => {
-    for (const name of ["cerebras", "deepinfra", "togetherai"]) {
+  test("maps Cerebras, DeepInfra, Groq, and Together AI settings, headers, and reasoning options to native providers", () => {
+    for (const name of ["cerebras", "deepinfra", "groq", "togetherai"]) {
       expect(
         map(`@ai-sdk/${name}`, {
           apiKey: "secret",

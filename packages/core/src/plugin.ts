@@ -161,7 +161,7 @@ const layer = Layer.effect(
     yield* Effect.addFinalizer((exit) =>
       Effect.gen(function* () {
         active.clear()
-        yield* State.batch(Scope.close(scope, exit))
+        yield* State.batch(Scope.close(scope, exit), { flush: false })
       }),
     )
 

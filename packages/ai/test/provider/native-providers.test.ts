@@ -2,7 +2,7 @@ import { describe, expect } from "bun:test"
 import { ConfigProvider, Effect } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
 import { LLM, Message, ToolDefinition } from "../../src/index.js"
-import { Cerebras, DeepInfra, TogetherAI } from "../../src/providers/index.js"
+import { Cerebras, DeepInfra, Groq, TogetherAI } from "../../src/providers/index.js"
 import { compileRequest } from "../../src/route/client.js"
 import { it } from "../lib/effect.js"
 import { dynamicResponse } from "../lib/http.js"
@@ -154,6 +154,12 @@ describe("native OpenAI-compatible providers", () => {
           env: { DEEPINFRA_API_KEY: "deepinfra-secret" },
           token: "deepinfra-secret",
           url: "https://api.deepinfra.com/v1/openai/chat/completions",
+        },
+        {
+          model: Groq.configure().model("llama"),
+          env: { GROQ_API_KEY: "groq-secret" },
+          token: "groq-secret",
+          url: "https://api.groq.com/openai/v1/chat/completions",
         },
       ]
 
