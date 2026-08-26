@@ -142,7 +142,11 @@ export const Plugin = {
               : state === "error"
                 ? (info.error ?? "Command failed")
                 : "Command cancelled"
+            const recovery = (yield* runtime.job.recoverable).find(
+              (job) => job.id === id && job.recovery.kind === "shell",
+            )
             yield* runtime.session.synthetic({
+              ...(recovery ? { id: recovery.notificationID } : {}),
               sessionID,
               text: `<shell id="${id}" state="${state}" command="${command}">\n${text}\n</shell>`,
               description: command,
@@ -160,6 +164,7 @@ export const Plugin = {
                   : {}),
               },
             })
+            if (recovery) yield* runtime.job.acknowledge(recovery.notificationID)
           }),
         ),
         Effect.forkIn(scope, { startImmediately: true }),
@@ -294,6 +299,12 @@ export const Plugin = {
                 type: name,
                 title: info.command,
                 metadata: { sessionID: context.sessionID, shellID: info.id },
+                recovery: {
+                  kind: "shell",
+                  sessionID: context.sessionID,
+                  shellID: info.id,
+                  command: info.command,
+                },
                 run,
               })
 

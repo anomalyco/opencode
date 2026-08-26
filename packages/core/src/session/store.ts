@@ -1,25 +1,15 @@
 export * as SessionStore from "./store.js"
 
-import { and, eq, gte, isNotNull, isNull, lt, sql } from "drizzle-orm"
-import { Context, Effect, Layer, Option, Schema } from "effect"
+import { and, eq, isNotNull, isNull, notInArray, sql } from "drizzle-orm"
+import { Context, Effect, Layer } from "effect"
 import { Database } from "../database/database.js"
-import { KVTable } from "../kv/sql.js"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { SessionHistory } from "./history.js"
 import { MessageDecodeError } from "./error.js"
 import { SessionMessage } from "./message.js"
 import { Session } from "@opencode-ai/schema/session"
-import { SessionInboxTable, SessionMessageTable, SessionTable } from "./sql.js"
+import { SessionMessageTable, SessionTable } from "./sql.js"
 import { fromRow } from "./info.js"
-
-const Background = Schema.Struct({
-  type: Schema.tag("shell"),
-  sessionID: Session.ID,
-  id: Schema.String,
-  shellID: Schema.String,
-  description: Schema.String,
-})
-export type Background = typeof Background.Type
 
 export interface Interface {
   readonly get: (sessionID: Session.ID) => Effect.Effect<Session.Info | undefined>
@@ -28,12 +18,10 @@ export interface Interface {
     messageID: SessionMessage.ID,
   ) => Effect.Effect<{ readonly sessionID: Session.ID; readonly message: SessionMessage.Info } | undefined>
   /**
-   * Top-level Sessions holding an execution claim. Child (subagent) Sessions
-   * are excluded: a resumed parent re-runs its tool call and spawns fresh
-   * children, so resuming orphaned children would duplicate their work.
+   * Top-level Sessions holding an execution claim. Recoverable background
+   * children are resumed separately through their durable Job records.
    */
   readonly listSuspended: () => Effect.Effect<ReadonlyArray<Session.ID>>
-  readonly listBackground: () => Effect.Effect<ReadonlyArray<Background>>
   /**
    * Records the execution claim: the durable write-ahead intent that a turn is
    * (or was) in flight. Set when execution starts; a claim that survives to the
@@ -44,11 +32,10 @@ export interface Interface {
   /** Releases the claim and resets resume accounting. Terminal events call this on commit. */
   readonly release: (sessionID: Session.ID) => Effect.Effect<void>
   /**
-   * Clears orphaned child (subagent) claims. Children are never resumed
-   * independently, so a dead child's claim is noise no terminal will ever
-   * release.
+   * Clears orphaned child claims except children owned by recoverable
+   * background subagent jobs.
    */
-  readonly releaseChildClaims: Effect.Effect<void>
+  readonly releaseChildClaims: (recoverable: ReadonlyArray<Session.ID>) => Effect.Effect<void>
   /**
    * Durably counts one more resume of an orphaned claim, returning the new
    * total — or undefined when the Session no longer exists.
@@ -57,8 +44,6 @@ export interface Interface {
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionStore") {}
-
-const decodeBackground = Schema.decodeUnknownOption(Background)
 
 const layer = Layer.effect(
   Service,
@@ -96,31 +81,6 @@ const layer = Layer.effect(
             Effect.map((rows) => rows.map((row) => row.sessionID)),
           )
       }),
-      listBackground: Effect.fn("SessionStore.listBackground")(function* () {
-        const rows = yield* db
-          .select({ value: KVTable.value })
-          .from(KVTable)
-          .innerJoin(SessionTable, sql`${SessionTable.id} = json_extract(${KVTable.value}, '$.sessionID')`)
-          .where(
-            and(
-              gte(KVTable.key, "session.background/"),
-              lt(KVTable.key, "session.background0"),
-              sql`NOT EXISTS (
-                SELECT 1 FROM ${SessionInboxTable}
-                WHERE ${SessionInboxTable.session_id} = ${SessionTable.id}
-                  AND ${SessionInboxTable.type} = 'synthetic'
-                  AND json_extract(${SessionInboxTable.payload}, '$.metadata.source') = 'shell'
-                  AND json_extract(${SessionInboxTable.payload}, '$.metadata.state')
-                    IN ('completed', 'error', 'cancelled')
-                  AND json_extract(${SessionInboxTable.payload}, '$.metadata.shellID')
-                    = json_extract(${KVTable.value}, '$.shellID')
-              )`,
-            ),
-          )
-          .all()
-          .pipe(Effect.orDie)
-        return rows.flatMap((row) => Option.toArray(decodeBackground(row.value)))
-      }),
       claim: Effect.fn("SessionStore.claim")(function* (sessionID) {
         // The null guard makes re-claiming a still-claimed Session a zero-row
         // no-op (a resumed turn re-claims through the same started hook).
@@ -141,12 +101,20 @@ const layer = Layer.effect(
           .run()
           .pipe(Effect.orDie)
       }),
-      releaseChildClaims: db
-        .update(SessionTable)
-        .set({ time_suspended: null, resume_attempts: 0, time_updated: sql`${SessionTable.time_updated}` })
-        .where(and(isNotNull(SessionTable.time_suspended), isNotNull(SessionTable.parent_id)))
-        .run()
-        .pipe(Effect.orDie, Effect.asVoid, Effect.withSpan("SessionStore.releaseChildClaims")),
+      releaseChildClaims: Effect.fn("SessionStore.releaseChildClaims")((recoverable) =>
+        db
+          .update(SessionTable)
+          .set({ time_suspended: null, resume_attempts: 0, time_updated: sql`${SessionTable.time_updated}` })
+          .where(
+            and(
+              isNotNull(SessionTable.time_suspended),
+              isNotNull(SessionTable.parent_id),
+              recoverable.length > 0 ? notInArray(SessionTable.id, Array.from(recoverable)) : undefined,
+            ),
+          )
+          .run()
+          .pipe(Effect.orDie, Effect.asVoid),
+      ),
       countResume: Effect.fn("SessionStore.countResume")(function* (sessionID) {
         const row = yield* db
           .update(SessionTable)

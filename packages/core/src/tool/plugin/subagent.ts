@@ -86,12 +86,17 @@ export const Plugin = {
       state: "completed" | "error" | "cancelled",
       text: string,
     ) {
+      const recovery = (yield* runtime.job.recoverable).find(
+        (job) => job.id === childID && job.recovery.kind === "subagent",
+      )
       yield* runtime.session.synthetic({
+        ...(recovery ? { id: recovery.notificationID } : {}),
         sessionID: parentID,
         text: `<subagent sessionID="${childID}" state="${state}" description="${description}">\n${text}\n</subagent>`,
         description,
         metadata: { source: "subagent", childID, agent, state },
       })
+      if (recovery) yield* runtime.job.acknowledge(recovery.notificationID)
     })
 
     const notifyWhenDone = Effect.fn("SubagentTool.notifyWhenDone")(function* (
@@ -239,6 +244,7 @@ export const Plugin = {
                     existing === undefined
                       ? ["You are a subagent spawned by another session.", input.prompt].join("\n")
                       : input.prompt,
+                  ...(background && existing === undefined ? { resume: false } : {}),
                 })
                 .pipe(
                   Effect.mapError(
@@ -249,13 +255,20 @@ export const Plugin = {
               const run = Effect.gen(function* () {
                 yield* runtime.session.resume(child.id)
                 return yield* latestAssistantText(child.id)
-              }).pipe(Effect.onInterrupt(() => runtime.session.interrupt(child.id)))
+              })
 
               const info = yield* runtime.job.start({
                 id: child.id,
                 type: name,
                 title: input.description,
                 metadata: {},
+                recovery: {
+                  kind: "subagent",
+                  parentSessionID: context.sessionID,
+                  childSessionID: child.id,
+                  agent: agent.name,
+                  description: input.description,
+                },
                 run,
               })
 
