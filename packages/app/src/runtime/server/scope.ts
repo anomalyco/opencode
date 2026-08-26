@@ -3,6 +3,7 @@ import type { ServerConnection } from "@/runtime/server/registry"
 export type ServerScope = string & { readonly __brand: "ServerScope" }
 export type SessionRouteKey = string & { readonly __brand: "SessionRouteKey" }
 export type SessionStateKey = string & { readonly __brand: "SessionStateKey" }
+export type SessionIdentityKey = string & { readonly __brand: "SessionIdentityKey" }
 export type ScopedKey = string & { readonly __brand: "ScopedKey" }
 
 const separator = "\u0000"
@@ -48,6 +49,14 @@ export const SessionStateKey = {
     const split = key.indexOf(separator)
     if (split === -1) throw new Error("Session state key must include server scope")
     return fragment("Stored server scope", key.slice(0, split)) as ServerScope
+  },
+}
+
+export const SessionIdentityKey = {
+  fromState(key: SessionStateKey) {
+    const sessionID = SessionStateKey.route(key).split("/")[1]
+    if (!sessionID) throw new Error("Session identity key requires a session ID")
+    return compose(SessionStateKey.scope(key), [sessionID]) as SessionIdentityKey
   },
 }
 

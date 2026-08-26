@@ -2,6 +2,7 @@ import { createVirtualizer, defaultRangeExtractor, elementScroll, type VirtualIt
 import { isScrollKeyTarget, scrollKey, scrollKeyOwner, ScrollView } from "@opencode-ai/ui/scroll-view"
 import { TimelineRow } from "@opencode-ai/session-ui/timeline/projection"
 import { useLanguage } from "@/runtime/i18n/language"
+import { SessionIdentityKey, type SessionStateKey } from "@/runtime/server/scope"
 import {
   createEffect,
   createMemo,
@@ -18,7 +19,6 @@ import { createStore } from "solid-js/store"
 import type { createTimelineProjection } from "./projection"
 import { observeElementOffsetReconnectAware } from "./observe-element-offset"
 import { filterVirtualIndexes } from "./virtual-items"
-import { remeasureTimeline } from "./measurement"
 
 const fallbackItemSize = 60
 const pendingMarkdown = '[data-component="markdown"]:not([data-markdown-ready])'
@@ -34,7 +34,7 @@ type Projection = Pick<
 >
 
 type Input = {
-  sessionKey: Accessor<string>
+  sessionKey: Accessor<SessionStateKey>
   projection: Projection
   showHeader: Accessor<boolean>
   /** True while the timeline follows the newest content. Drives every anchoring decision. */
@@ -63,7 +63,8 @@ type ViewProps = {
 
 export function createTimelineVirtualizer(input: Input) {
   const language = useLanguage()
-  const ownerSessionKey = input.sessionKey()
+  const sessionIdentity = createMemo(() => SessionIdentityKey.fromState(input.sessionKey()))
+  const ownerSessionKey = sessionIdentity()
   const cached = cache.get(ownerSessionKey)
   const initialMeasurements = cached?.measurements
   const coldBottomMount = !initialMeasurements?.length && input.pinned()
@@ -233,12 +234,12 @@ export function createTimelineVirtualizer(input: Input) {
     })
   })
 
-  let measuredSessionKey = input.sessionKey()
+  let measuredSessionKey = sessionIdentity()
   createEffect(() => {
-    const key = input.sessionKey()
+    const key = sessionIdentity()
     if (measuredSessionKey !== key) {
       measuredSessionKey = key
-      remeasureTimeline(virtualizer, virtualContent)
+      virtualizer.measure()
     }
   })
 
