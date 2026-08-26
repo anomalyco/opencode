@@ -17,6 +17,7 @@ export const SettingsProjects: Component = () => {
   const global = useGlobal()
   const [allServers, setAllServers] = createSignal(true)
   const selected = global.settings.server.selected
+  const multiple = createMemo(() => global.servers.list().length > 1)
   const projects = createMemo(() => {
     const server = selected()
     if (!server) return []
@@ -41,7 +42,7 @@ export const SettingsProjects: Component = () => {
     const name = () => displayName(props.project)
     return (
       <div
-        class="group flex items-center justify-between gap-5 px-4 py-2.5 rounded-lg bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)] cursor-pointer transition-all hover:bg-v2-background-bg-layer-01"
+        class="group flex items-center justify-between gap-5 px-4 py-2.5 rounded-lg bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)] transition-all hover:bg-v2-background-bg-layer-01"
         onClick={() => openProjectSettings(props.project, props.server)}
       >
         <div class="flex items-center gap-2.5 min-w-0 flex-1">
@@ -72,14 +73,16 @@ export const SettingsProjects: Component = () => {
             <h2 class="settings-tab-title">{language.t("settings.projects.title")}</h2>
             <span class="text-11-regular text-v2-text-text-muted">{language.t("settings.projects.description")}</span>
           </div>
-          <InlineServerSelect
-            all={{
-              label: language.t("settings.projects.server.all"),
-              selected: allServers,
-              onSelect: () => setAllServers(true),
-            }}
-            onServerSelect={() => setAllServers(false)}
-          />
+          <Show when={multiple()}>
+            <InlineServerSelect
+              all={{
+                label: language.t("settings.projects.server.all"),
+                selected: allServers,
+                onSelect: () => setAllServers(true),
+              }}
+              onServerSelect={() => setAllServers(false)}
+            />
+          </Show>
         </div>
       </div>
 
@@ -98,7 +101,14 @@ export const SettingsProjects: Component = () => {
               >
                 <Show when={selected()} keyed>
                   {(server) => (
-                    <For each={projects()}>{(project) => <ProjectRow project={project} server={server} />}</For>
+                    <div class="settings-section">
+                      <Show when={multiple()}>
+                        <h3 class="settings-section-title">{serverName(server) || ServerConnection.key(server)}</h3>
+                      </Show>
+                      <div class="flex flex-col gap-2 w-full">
+                        <For each={projects()}>{(project) => <ProjectRow project={project} server={server} />}</For>
+                      </div>
+                    </div>
                   )}
                 </Show>
               </Show>
@@ -117,9 +127,11 @@ export const SettingsProjects: Component = () => {
               <For each={groups()}>
                 {(group) => (
                   <div class="settings-section">
-                    <h3 class="settings-section-title">
-                      {serverName(group.server) || ServerConnection.key(group.server)}
-                    </h3>
+                    <Show when={multiple()}>
+                      <h3 class="settings-section-title">
+                        {serverName(group.server) || ServerConnection.key(group.server)}
+                      </h3>
+                    </Show>
                     <div class="flex flex-col gap-2 w-full">
                       <For each={group.projects}>
                         {(project) => <ProjectRow project={project} server={group.server} />}
