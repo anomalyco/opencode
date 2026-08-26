@@ -26,7 +26,14 @@ import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
 import { Spinner, SPINNER_FRAMES } from "../../component/spinner"
 import { PatchDiff } from "../../component/patch-diff"
 import { createSyntaxStyleMemo, ThemeContextProvider, useTheme, useThemes } from "../../context/theme"
-import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA, MouseEvent } from "@opentui/core"
+import {
+  BoxRenderable,
+  ScrollBoxRenderable,
+  addDefaultParsers,
+  TextAttributes,
+  RGBA,
+  MouseEvent,
+} from "@opentui/core"
 import { Prompt, type PromptRef } from "../../component/prompt"
 import type {
   ModelInfo,
@@ -110,6 +117,8 @@ import { createDelayedPresence } from "../../util/delayed-presence"
 import { SessionLocationMissing } from "./location-missing"
 import { isRecord } from "../../util/record"
 import { createHistoryPrepend } from "./history"
+import { useStorage } from "../../context/storage"
+import { nextTranscriptDetail, transcriptDetailAt, type TranscriptDetail } from "./detail-level"
 
 addDefaultParsers(parsers.parsers)
 
@@ -136,6 +145,7 @@ const context = createContext<{
   markdownMode: () => "source" | "rendered"
   groupExploration: () => boolean
   diffWrapMode: () => "word" | "none"
+  transcriptDetail: () => TranscriptDetail
   models: () => ModelInfo[]
   config: ReturnType<typeof useConfig>["data"]
   mutatePending: (action: PendingAction, inboxID: string) => Promise<boolean>
@@ -164,6 +174,11 @@ export function Session(props: { verticalTabsWidth: number }) {
   const paths = useTuiPaths()
   const configState = useConfig()
   const config = configState.data
+  const [viewPreferences, updateViewPreferences] = useStorage().store<{ detail: TranscriptDetail }>("session-view", {
+    initial: { detail: "compact" },
+  })
+  const [transcriptDetail, setTranscriptDetail] = createSignal<TranscriptDetail>(viewPreferences.detail)
+  createEffect(() => setTranscriptDetail(viewPreferences.detail))
   const theme = useTheme()
   const promptRef = usePromptRef()
   const session = createMemo(() => data.session.get(route.sessionID))
@@ -682,6 +697,23 @@ export function Session(props: { verticalTabsWidth: number }) {
     dialog.clear()
   }
 
+  const changeTranscriptDetail = (detail: TranscriptDetail) => {
+    if (detail === transcriptDetail()) return
+    setTranscriptDetail(detail)
+    afterLayout(() => {
+      if (!awayFromBottom()) scroll.scrollTo(scroll.scrollHeight)
+      updateAwayFromBottom()
+    })
+  }
+
+  const commitTranscriptDetail = (detail: TranscriptDetail) => {
+    changeTranscriptDetail(detail)
+    if (detail === viewPreferences.detail) return
+    void updateViewPreferences((draft) => {
+      draft.detail = detail
+    }).catch(toast.error)
+  }
+
   const globalCommands = [
     {
       id: "session.page.up",
@@ -952,6 +984,15 @@ export function Session(props: { verticalTabsWidth: number }) {
       },
     },
     {
+      title: `Transcript detail: ${transcriptDetail()}`,
+      id: "session.detail.cycle",
+      group: "Session",
+      run: () => {
+        commitTranscriptDetail(nextTranscriptDetail(transcriptDetail()))
+        dialog.clear()
+      },
+    },
+    {
       title: "Jump to last user message",
       id: "session.messages_last_user",
       group: "Session",
@@ -1210,6 +1251,7 @@ export function Session(props: { verticalTabsWidth: number }) {
         markdownMode,
         groupExploration,
         diffWrapMode,
+        transcriptDetail,
         models,
         config,
         mutatePending,
@@ -1273,7 +1315,12 @@ export function Session(props: { verticalTabsWidth: number }) {
                 </Show>
               </scrollbox>
             </box>
-            <box height={1} flexShrink={0} flexDirection="row" justifyContent="flex-end">
+            <box height={1} flexShrink={0} flexDirection="row" justifyContent="space-between">
+              <TranscriptDetailSlider
+                value={transcriptDetail()}
+                onChange={changeTranscriptDetail}
+                onCommit={commitTranscriptDetail}
+              />
               <Show when={awayFromBottom()}>
                 <box
                   id="session-jump-to-latest"
@@ -1393,50 +1440,135 @@ type SessionRowViewProps = {
 }
 
 function SessionRowView(props: SessionRowViewProps) {
+  const ctx = use()
+  const visible = createMemo(() => {
+    if (ctx.transcriptDetail() !== "final") return true
+    if (props.row.type === "part") {
+      const message = props.message(props.row.ref.messageID)
+      if (message?.type !== "assistant") return false
+      return resolvePart(message, props.row.ref.partID)?.type === "text"
+    }
+    if (props.row.type === "message") return props.message(props.row.messageID)?.type === "user"
+    if (props.row.type !== "assistant-footer") return false
+    const message = props.message(props.row.messageID)
+    return message?.type === "assistant" && Boolean(message.error || message.retry)
+  })
   return (
-    <box id={props.boundaryID} marginTop={1} flexShrink={0}>
-      <Switch>
-        <Match when={props.row.type === "message" ? props.row : undefined}>
-          {(row) => (
-            <Show when={props.message(row().messageID)}>{(message) => <SessionMessageView message={message()} />}</Show>
-          )}
-        </Match>
-        <Match when={props.row.type === "compaction-queued"}>
-          <CompactionQueued />
-        </Match>
-        <Match when={props.row.type === "part" ? props.row : undefined}>
-          {(row) => <SessionPartView partRef={row().ref} message={props.message} />}
-        </Match>
-        <Match when={props.row.type === "group" && props.row.kind === "reasoning" ? props.row : undefined}>
-          {(row) => <SessionReasoningGroupView refs={row().refs} completed={row().completed} message={props.message} />}
-        </Match>
-        <Match when={props.row.type === "group" && props.row.kind === "exploration" ? props.row : undefined}>
-          {(row) => (
-            <SessionGroupView
-              refs={row().refs}
-              pending={row().pending}
-              completed={row().completed}
-              message={props.message}
-            />
-          )}
-        </Match>
-        <Match when={props.row.type === "assistant-footer" ? props.row : undefined}>
-          {(row) => (
-            <Show when={props.message(row().messageID)}>
-              {(message) => (
-                <Show when={message().type === "assistant"}>
-                  <AssistantFooter message={message() as SessionMessageAssistant} />
-                </Show>
-              )}
-            </Show>
-          )}
-        </Match>
-        <Match when={props.row.type === "turn-usage" ? props.row : undefined}>
-          {(row) => (
-            <TurnTokenUsage messageIDs={row().messageIDs} previousCache={row().previousCache} message={props.message} />
-          )}
-        </Match>
-      </Switch>
+    <Show when={visible()}>
+      <box id={props.boundaryID} marginTop={1} flexShrink={0}>
+        <Switch>
+          <Match when={props.row.type === "message" ? props.row : undefined}>
+            {(row) => (
+              <Show when={props.message(row().messageID)}>
+                {(message) => <SessionMessageView message={message()} />}
+              </Show>
+            )}
+          </Match>
+          <Match when={props.row.type === "compaction-queued"}>
+            <CompactionQueued />
+          </Match>
+          <Match when={props.row.type === "part" ? props.row : undefined}>
+            {(row) => <SessionPartView partRef={row().ref} message={props.message} />}
+          </Match>
+          <Match when={props.row.type === "group" && props.row.kind === "reasoning" ? props.row : undefined}>
+            {(row) => (
+              <SessionReasoningGroupView refs={row().refs} completed={row().completed} message={props.message} />
+            )}
+          </Match>
+          <Match when={props.row.type === "group" && props.row.kind === "exploration" ? props.row : undefined}>
+            {(row) => (
+              <SessionGroupView
+                refs={row().refs}
+                pending={row().pending}
+                completed={row().completed}
+                message={props.message}
+              />
+            )}
+          </Match>
+          <Match when={props.row.type === "assistant-footer" ? props.row : undefined}>
+            {(row) => (
+              <Show when={props.message(row().messageID)}>
+                {(message) => (
+                  <Show when={message().type === "assistant"}>
+                    <AssistantFooter message={message() as SessionMessageAssistant} />
+                  </Show>
+                )}
+              </Show>
+            )}
+          </Match>
+          <Match when={props.row.type === "turn-usage" ? props.row : undefined}>
+            {(row) => (
+              <TurnTokenUsage
+                messageIDs={row().messageIDs}
+                previousCache={row().previousCache}
+                message={props.message}
+              />
+            )}
+          </Match>
+        </Switch>
+      </box>
+    </Show>
+  )
+}
+
+function TranscriptDetailSlider(props: {
+  value: TranscriptDetail
+  onChange: (detail: TranscriptDetail) => void
+  onCommit: (detail: TranscriptDetail) => void
+}) {
+  const theme = useTheme()
+  const renderer = useRenderer()
+  const [hover, setHover] = createSignal(false)
+  let track: BoxRenderable
+  let dragging = false
+
+  const detail = (event: MouseEvent) => transcriptDetailAt(event.x - track.x, track.width)
+  const update = (event: MouseEvent) => {
+    if (event.button !== 0 && !dragging) return
+    props.onChange(detail(event))
+    event.preventDefault()
+    event.stopPropagation()
+  }
+  const commit = (event: MouseEvent) => {
+    if (!dragging) return
+    dragging = false
+    props.onCommit(detail(event))
+    event.preventDefault()
+    event.stopPropagation()
+  }
+  const color = (value: TranscriptDetail) =>
+    props.value === value
+      ? hover()
+        ? theme.text.action.secondary.hovered
+        : theme.text.action.secondary.default
+      : theme.text.subdued
+
+  return (
+    <box
+      id="session-detail-slider"
+      ref={(value) => (track = value)}
+      width={33}
+      flexDirection="row"
+      onMouseOver={() => setHover(true)}
+      onMouseOut={() => setHover(false)}
+      onMouseDown={(event) => {
+        if (event.button !== 0 || renderer.getSelection()?.getSelectedText()) return
+        dragging = true
+        update(event)
+      }}
+      onMouseDrag={(event) => {
+        if (dragging) update(event)
+      }}
+      onMouseDragEnd={commit}
+      onMouseUp={commit}
+    >
+      <text wrapMode="none">
+        <span style={{ fg: color("final") }}>{props.value === "final" ? "●" : "○"} Final</span>
+        <span style={{ fg: theme.text.subdued }}> ─── </span>
+        <span style={{ fg: color("compact") }}>{props.value === "compact" ? "●" : "○"} Compact</span>
+        <span style={{ fg: theme.text.subdued }}> ─── </span>
+        <span style={{ fg: color("full") }}>{props.value === "full" ? "●" : "○"} Full</span>
+      </text>
     </box>
   )
 }
@@ -2526,6 +2658,7 @@ function TextPart(props: { last: boolean; part: SessionMessageAssistantText; mes
 // Pending messages moved to individual tool pending functions
 
 function ToolPart(props: { part: SessionMessageAssistantTool; images?: boolean }) {
+  const ctx = use()
   const display = createMemo(() => toolDisplay(props.part.name))
 
   const toolprops = {
@@ -2595,12 +2728,60 @@ function ToolPart(props: { part: SessionMessageAssistantTool; images?: boolean }
       </Match>
     </Switch>
   )
-  return [
-    content,
-    <Show when={props.images !== false}>
-      <ToolImages parts={[props.part]} />
-    </Show>,
-  ]
+  return (
+    <Show
+      when={ctx.transcriptDetail() === "compact"}
+      fallback={[
+        content,
+        <Show when={props.images !== false}>
+          <ToolImages parts={[props.part]} />
+        </Show>,
+      ]}
+    >
+      <CompactToolPart part={props.part} />
+    </Show>
+  )
+}
+
+function CompactToolPart(props: { part: SessionMessageAssistantTool }) {
+  const pathFormatter = usePathFormatter()
+  const display = createMemo(() => toolDisplay(props.part.name))
+  const input = createMemo(() => (typeof props.part.state.input === "string" ? {} : props.part.state.input))
+  const summary = createMemo(() => {
+    const value = input()
+    const path = stringValue(value.path)
+    if (display() === "shell") return `Shell ${stringValue(value.command) ?? "command"}`
+    if (display() === "write") return `Write ${pathFormatter.format(path)}`
+    if (display() === "edit") return `Edit ${pathFormatter.format(path)}`
+    if (display() === "read") return `Read ${pathFormatter.format(path)}`
+    if (display() === "glob") return `Glob "${stringValue(value.pattern) ?? ""}"`
+    if (display() === "grep") return `Grep "${stringValue(value.pattern) ?? ""}"`
+    if (display() === "webfetch") return `WebFetch ${stringValue(value.url) ?? ""}`
+    if (display() === "websearch") return `WebSearch "${stringValue(value.query) ?? ""}"`
+    if (display() === "patch") {
+      const count = [...(stringValue(value.patchText) ?? "").matchAll(/\*\*\* (?:Add|Update|Delete) File:/g)].length
+      return count ? `Apply patch · ${count} ${count === 1 ? "file" : "files"}` : "Apply patch"
+    }
+    const concise = Object.fromEntries(
+      Object.entries(value)
+        .filter(([key, item]) => !["content", "patchText", "code"].includes(key) && typeof item !== "object")
+        .map(([key, item]) => [key, typeof item === "string" && item.length > 120 ? item.slice(0, 117) + "..." : item]),
+    )
+    return genericToolSummary(props.part.name, concise)
+  })
+  const running = createMemo(() => props.part.state.status === "streaming" || props.part.state.status === "running")
+
+  return (
+    <InlineTool
+      icon={props.part.state.status === "error" ? "✗" : "✓"}
+      complete={!running()}
+      pending={summary()}
+      spinner={running()}
+      part={props.part}
+    >
+      {summary()}
+    </InlineTool>
+  )
 }
 
 function ToolImages(props: { parts: readonly SessionMessageAssistantTool[] }) {
