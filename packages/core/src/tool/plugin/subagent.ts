@@ -165,7 +165,7 @@ export const Plugin = {
                 .pipe(Effect.mapError((error) => new ToolFailure({ message: `Subagent denied: ${agent.id}`, error })))
 
               const existing =
-                input.sessionID === undefined
+                input.sessionID === undefined || input.sessionID === context.sessionID
                   ? undefined
                   : yield* runtime.session
                       .get(input.sessionID)

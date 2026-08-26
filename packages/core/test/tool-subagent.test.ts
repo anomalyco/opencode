@@ -383,6 +383,39 @@ describe("SubagentTool", () => {
     ),
   )
 
+  it.live("treats the current session ID as a new subagent request", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+          const sessions = yield* Session.Service
+          const parent = yield* sessions.create({ location, model: parentModel })
+          yield* withSubagent(parent.location)
+          const locations = yield* LocationServiceMap.Service
+          const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
+
+          const result = yield* executeTool(registry, {
+            sessionID: parent.id,
+            ...toolIdentity,
+            call: {
+              type: "tool-call",
+              id: "call-self-session",
+              name: SubagentTool.name,
+              input: { agent: "reviewer", description: "review", prompt: "review this", sessionID: parent.id },
+            },
+          })
+          const childID = outputSessionID(result.metadata)
+
+          expect(childID).not.toBe(parent.id)
+          expect((yield* sessions.get(childID)).parentID).toBe(parent.id)
+        }),
+      ),
+    ),
+  )
+
   it.live("steers a running child session in the background", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
