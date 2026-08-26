@@ -1612,7 +1612,11 @@ function SessionPartView(props: { partRef: PartRef; message: (messageID: string)
       {(item) => (
         <Switch>
           <Match when={item().type === "text"}>
-            <TextPart part={item() as SessionMessageAssistantText} last={false} />
+            <TextPart
+              part={item() as SessionMessageAssistantText}
+              message={message() as SessionMessageAssistant}
+              last={false}
+            />
           </Match>
           <Match when={item().type === "reasoning"}>
             <ReasoningPart
@@ -2426,7 +2430,7 @@ function ReasoningHeader(props: {
   )
 }
 
-function TextPart(props: { last: boolean; part: SessionMessageAssistantText }) {
+function TextPart(props: { last: boolean; part: SessionMessageAssistantText; message: SessionMessageAssistant }) {
   const ctx = use()
   const theme = useTheme()
   const { currentSyntax: syntax } = useThemes()
@@ -2436,7 +2440,7 @@ function TextPart(props: { last: boolean; part: SessionMessageAssistantText }) {
       <box paddingLeft={3} flexShrink={0}>
         <markdown
           syntaxStyle={syntax()}
-          streaming={true}
+          streaming={props.message.time.completed === undefined}
           internalBlockMode="top-level"
           content={props.part.text.trim()}
           tableOptions={{ style: "grid", cellPaddingX: 1 }}
