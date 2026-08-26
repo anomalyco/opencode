@@ -12,11 +12,11 @@ import {
   onCleanup,
   untrack,
 } from "solid-js"
-import { Portal, useTerminalDimensions } from "@opentui/solid"
+import { Portal, useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { useConfig } from "../config"
 import { useSessionTabs } from "../context/session-tabs"
 import { useData } from "../context/data"
-import { useTheme, useThemes } from "../context/theme"
+import { useTheme } from "../context/theme"
 import {
   adaptiveSessionTabLayout,
   moveSessionTab,
@@ -39,6 +39,18 @@ import { marqueeCycleWidth, marqueeOverflows, marqueeTextParts } from "../util/m
 import { useDialog } from "../ui/dialog"
 import { DialogSessionRename } from "./dialog-session-rename"
 import { Keymap } from "../context/keymap"
+import { registerOpencodeSpinner } from "./register-spinner"
+import { SPINNER_FRAMES } from "./spinner-frames"
+
+registerOpencodeSpinner()
+
+export const TAB_SPINNERS = {
+  arcs: { frames: ["◜", "◝", "◞", "◟"], interval: 120 },
+  dots: { frames: SPINNER_FRAMES, interval: 80 },
+  quadrants: { frames: ["◴", "◷", "◶", "◵"], interval: 120 },
+  line: { frames: ["|", "/", "-", "\\"], interval: 120 },
+}
+export type TabSpinner = keyof typeof TAB_SPINNERS
 
 // A long title fades out over its last cells instead of cutting hard.
 const FADE_WIDTH = 4
@@ -88,6 +100,49 @@ export type SessionTabsController = Pick<ContextController, "tabs" | "current" |
 const NEW_SESSION_TAB: SessionTab = { sessionID: "new", title: NEW_SESSION_TAB_TITLE }
 const glowTextColor = (base: RGBA, glow: RGBA, index: number, width: number, level = 1) =>
   tint(base, glow, 0.12 * unreadGlowIntensity(index, width) * level)
+
+function tabFeedbackColor(status: SessionTabsStatus, theme: ReturnType<typeof useTheme>) {
+  if (status.attention) return theme.text.status[status.attention]
+  if (status.unread === "error") return theme.text.feedback.error.default
+  return undefined
+}
+
+function TabIndicator(props: {
+  status: SessionTabsStatus
+  label: string
+  width: number
+  color: RGBA
+  animations: boolean
+  numbers: boolean
+  spinner?: TabSpinner
+  attributes?: number
+}) {
+  const runs = () => props.status.busy && !props.status.attention
+  const spinner = () => TAB_SPINNERS[props.spinner ?? "arcs"]
+  const label = () => {
+    if (props.numbers) return props.label
+    if (props.status.attention === "permission") return "!"
+    if (props.status.attention === "question") return "?"
+    if (runs()) return spinner().frames[0]
+    if (props.status.unread === "error") return "×"
+    if (props.status.unread === "activity") return "✓"
+    return props.label
+  }
+  return (
+    <box width={props.width + 1} flexShrink={0} flexDirection="row" justifyContent="flex-end" paddingRight={1}>
+      <Show
+        when={runs() && props.animations && !props.numbers}
+        fallback={
+          <text fg={props.color} selectable={false} attributes={props.attributes}>
+            {label()}
+          </text>
+        }
+      >
+        <spinner frames={spinner().frames} interval={spinner().interval} color={props.color} />
+      </Show>
+    </box>
+  )
+}
 
 function createPreviewDoubleClick(tabs: SessionTabsController) {
   let previous: { sessionID: string; time: number } | undefined
@@ -360,35 +415,67 @@ export function SessionTabs(
   props: {
     controller?: SessionTabsController
     animations?: boolean
+    spinner?: TabSpinner
+    statusPosition?: "inline" | "below"
     orientation?: "horizontal" | "vertical"
     width?: number
   } = {},
 ) {
+  const renderer = useRenderer()
+  const [numbers, setNumbers] = createSignal(false)
+  useKeyboard(
+    (key) => {
+      if (key.name === "leftctrl" || key.name === "rightctrl") setNumbers(key.eventType !== "release")
+    },
+    { release: true },
+  )
+  const blur = () => setNumbers(false)
+  renderer.on("blur", blur)
+  onCleanup(() => renderer.off("blur", blur))
+
   return (
     <Switch>
       <Match when={props.orientation === "vertical"}>
-        <VerticalSessionTabs controller={props.controller} animations={props.animations} width={props.width} />
+        <VerticalSessionTabs
+          controller={props.controller}
+          animations={props.animations}
+          spinner={props.spinner}
+          statusPosition={props.statusPosition}
+          numbers={numbers()}
+          width={props.width}
+        />
       </Match>
       <Match when={true}>
-        <HorizontalSessionTabs controller={props.controller} animations={props.animations} />
+        <HorizontalSessionTabs
+          controller={props.controller}
+          animations={props.animations}
+          spinner={props.spinner}
+          numbers={numbers()}
+        />
       </Match>
     </Switch>
   )
 }
 
-function VerticalSessionTabs(props: { controller?: SessionTabsController; animations?: boolean; width?: number }) {
+function VerticalSessionTabs(props: {
+  controller?: SessionTabsController
+  animations?: boolean
+  numbers: boolean
+  spinner?: TabSpinner
+  statusPosition?: "inline" | "below"
+  width?: number
+}) {
   const contextTabs = useSessionTabs()
   const tabs: SessionTabsController = props.controller ?? contextTabs
   const data = useData()
   const theme = useTheme("elevated")
-  const { mode } = useThemes()
   const config = useConfig().data
   const animations = () => props.animations ?? config.animations ?? true
   const width = () => props.width ?? SESSION_SIDEBAR_WIDTH
-  const hueStep = () => (mode() === "light" ? 800 : 200)
-  const accent = () => theme.hue.accent[hueStep()]
-  const activeNumber = () => theme.hue.interactive[hueStep()]
-  const idleNumber = () => tint(theme.text.subdued, theme.background.default, 0.35)
+  const below = () => props.statusPosition === "below"
+  const accent = () => theme.text.feedback.success.default
+  const activeNumber = () => theme.text.status.running
+  const idleNumber = () => tint(theme.text.formfield.default, theme.background.default, 0.55)
   const separatorUpperPulseColor = createMemo(() => tint(theme.background.default, theme.text.default, 0.04))
   const separatorLowerPulseColor = createMemo(() => tint(theme.background.default, theme.text.default, 0.05))
   const [addHovered, setAddHovered] = createSignal(false)
@@ -423,7 +510,8 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
               complete: sessionTabComplete(status.unread, status.busy),
               runs: status.busy && !status.attention,
               glows:
-                tab.sessionID !== activeID() && (status.attention || (!status.busy && status.unread !== undefined)),
+                tab.sessionID !== activeID() &&
+                Boolean(status.attention || (!status.busy && status.unread !== undefined)),
             },
           ] as const
         }),
@@ -564,7 +652,7 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                   hovered() === tab.sessionID && !selected()
                     ? foreground()
                     : tint(idleNumber(), tint(theme.text.default, pulseBackground(), 0.25), Number(selected()))
-                const color = tint(base, glowHue(), numberGlow.value().level)
+                const color = tabFeedbackColor(status(), theme) ?? tint(base, glowHue(), numberGlow.value().level)
                 const runningColor = runs() ? activeNumber() : color
                 return sweepLevel() === 0
                   ? tint(runningColor, theme.text.default, numberIgnition.value().level)
@@ -578,8 +666,8 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
               // Latched so a resolving glow fades out in the hue it lit with instead of snapping to accent.
               let lastGlowHue: RGBA | undefined
               const glowHue = () => {
-                if (status().attention) return (lastGlowHue = theme.text.feedback.warning.default)
-                if (status().unread === "error") return (lastGlowHue = theme.text.feedback.error.default)
+                const feedback = tabFeedbackColor(status(), theme)
+                if (feedback) return (lastGlowHue = feedback)
                 if (status().unread !== undefined) return (lastGlowHue = accent())
                 return lastGlowHue ?? accent()
               }
@@ -622,9 +710,8 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
               const indicatorWidth = 10
               let lastPreviousGlowHue: RGBA | undefined
               const previousGlowHue = () => {
-                if (previousStatus().attention) return (lastPreviousGlowHue = theme.text.feedback.warning.default)
-                if (previousStatus().unread === "error")
-                  return (lastPreviousGlowHue = theme.text.feedback.error.default)
+                const feedback = tabFeedbackColor(previousStatus(), theme)
+                if (feedback) return (lastPreviousGlowHue = feedback)
                 if (previousStatus().unread !== undefined) return (lastPreviousGlowHue = accent())
                 return lastPreviousGlowHue ?? accent()
               }
@@ -755,14 +842,16 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                       onLevel={setSweepLevel}
                     />
                     <box zIndex={1} width="100%" flexDirection="row" paddingRight={1}>
-                      <text
-                        width={numberWidth() + 1}
-                        fg={numberColor()}
-                        selectable={false}
+                      <TabIndicator
+                        status={status()}
+                        label={sessionTabNumberLabel(index())}
+                        width={numberWidth()}
+                        color={numberColor()}
+                        animations={animations()}
+                        numbers={below() || props.numbers}
+                        spinner={props.spinner}
                         attributes={selected() ? TextAttributes.BOLD : undefined}
-                      >
-                        {sessionTabNumberLabel(index()).padStart(numberWidth())}
-                      </text>
+                      />
                       <text
                         width={titleWidth()}
                         fg={foreground()}
@@ -826,7 +915,24 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                       completionColor={detailGlowColor()}
                       backgroundColor={pulseBackground()}
                     />
-                    <box zIndex={1} width="100%" flexDirection="row" paddingLeft={numberWidth() + 1} paddingRight={2}>
+                    <box
+                      zIndex={1}
+                      width="100%"
+                      flexDirection="row"
+                      paddingLeft={below() ? 0 : numberWidth() + 1}
+                      paddingRight={2}
+                    >
+                      <Show when={below()}>
+                        <TabIndicator
+                          status={status()}
+                          label=""
+                          width={numberWidth()}
+                          color={numberColor()}
+                          animations={animations()}
+                          numbers={false}
+                          spinner={props.spinner}
+                        />
+                      </Show>
                       <text fg={detailColor()} wrapMode="none" selectable={false}>
                         <Show when={detailFades()} fallback={visibleDetail()}>
                           <For each={visibleDetailParts()}>
@@ -923,11 +1029,15 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
   )
 }
 
-function HorizontalSessionTabs(props: { controller?: SessionTabsController; animations?: boolean } = {}) {
+function HorizontalSessionTabs(props: {
+  controller?: SessionTabsController
+  animations?: boolean
+  spinner?: TabSpinner
+  numbers: boolean
+}) {
   const tabs = props.controller ?? useSessionTabs()
   const dimensions = useTerminalDimensions()
   const theme = useTheme()
-  const { mode } = useThemes()
   const config = useConfig().data
   const animations = () => props.animations ?? config.animations ?? true
   const [addHovered, setAddHovered] = createSignal(false)
@@ -960,10 +1070,9 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
   onCleanup(clearCloseHold)
   // A captured drag ends with a synthetic up on its drop target; do not turn that into a click.
   let suppressClick = false
-  const hueStep = () => (mode() === "light" ? 800 : 200)
-  const accent = () => theme.hue.accent[hueStep()]
-  const activeNumber = () => theme.hue.interactive[hueStep()]
-  const idleNumber = () => tint(theme.text.subdued, theme.background.default, 0.35)
+  const accent = () => theme.text.feedback.success.default
+  const activeNumber = () => theme.text.status.running
+  const idleNumber = () => tint(theme.text.formfield.default, theme.background.default, 0.55)
   const newTab = () => tabs.newTab?.() ?? false
   const activeID = createMemo(() => (newTab() ? NEW_SESSION_TAB.sessionID : tabs.current()))
   const ordered = createMemo(() => {
@@ -1211,13 +1320,10 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
           // The edge flash washes toward a brighter stop on the same background-to-text ramp,
           // so it reads as a lift of the pulse color rather than a different hue.
           const flashColor = () => tint(background(), theme.text.default, 0.65)
-          const feedbackColor = () => {
-            if (status().attention) return theme.text.feedback.warning.default
-            if (status().unread === "error") return theme.text.feedback.error.default
-            return undefined
-          }
+          const feedbackColor = () => tabFeedbackColor(status(), theme)
           const glowColor = () => feedbackColor() ?? accent()
-          const glows = () => !selected() && (status().attention || (!status().busy && status().unread !== undefined))
+          const glows = () =>
+            !selected() && Boolean(status().attention || (!status().busy && status().unread !== undefined))
           const title = () => tab.title ?? "Untitled session"
           const tabNumber = createMemo(() => items().findIndex((item) => item.sessionID === tab.sessionID) + 1)
           const numberWidth = () => Math.max(2, String(items().length).length)
@@ -1273,7 +1379,7 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
               hovered() === tab.sessionID && !selected()
                 ? foreground()
                 : tint(idleNumber(), tint(theme.text.default, background(), 0.25), selection())
-            const color = feedback ?? (runs() ? activeNumber() : tint(base, accent(), activity()))
+            const color = runs() ? activeNumber() : (feedback ?? tint(base, accent(), activity()))
             // The number brightens faintly as the running sweep passes beneath it.
             return tint(color, theme.text.default, Math.max(numberIgnition.value().level, 0.15 * sweepLevel()))
           }
@@ -1332,9 +1438,16 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
                 onLevel={setSweepLevel}
               />
               <box zIndex={1} width="100%" flexDirection="row">
-                <text width={numberWidth() + 1} fg={numberColor()} selectable={false} attributes={bold()}>
-                  {(tab === NEW_SESSION_TAB ? "+" : sessionTabNumberLabel(tabNumber() - 1)).padStart(numberWidth())}
-                </text>
+                <TabIndicator
+                  status={status()}
+                  label={tab === NEW_SESSION_TAB ? "+" : sessionTabNumberLabel(tabNumber() - 1)}
+                  width={numberWidth()}
+                  color={numberColor()}
+                  animations={animations()}
+                  numbers={props.numbers}
+                  spinner={props.spinner}
+                  attributes={bold()}
+                />
                 <text
                   width={availableTitleWidth()}
                   fg={foreground()}

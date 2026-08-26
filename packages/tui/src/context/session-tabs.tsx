@@ -167,9 +167,11 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
             ? ("error" as const)
             : ("activity" as const),
         promptPulse: promptPulses()[session] ?? 0,
-        attention: members.some(
-          (id) => (data.session.permission.list(id)?.length ?? 0) > 0 || (data.session.form.list(id)?.length ?? 0) > 0,
-        ),
+        attention: members.some((id) => (data.session.permission.list(id)?.length ?? 0) > 0)
+          ? ("permission" as const)
+          : members.some((id) => (data.session.form.list(id)?.length ?? 0) > 0)
+            ? ("question" as const)
+            : (false as const),
         busy: members.some((id) => data.session.status(id) === "running" || data.session.pending.list(id).length > 0),
       }
     }
