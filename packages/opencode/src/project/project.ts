@@ -394,6 +394,7 @@ const layer = Layer.effect(
       if (input.worktree && input.worktree !== current.worktree) {
         const next = AbsolutePath.make(input.worktree)
         if (!(yield* fs.exists(next).pipe(Effect.orDie))) {
+          // typed failure instead of a raw defect -> surfaces as a clean API error
           return yield* new NotFoundError({ projectID: input.projectID })
         }
         // history follows the folder: migrate every stored reference (#23248, #34737)
