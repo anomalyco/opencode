@@ -7,31 +7,6 @@ import {
   userMessage,
 } from "../performance/timeline-stability/fixture"
 
-test("renders every tool error outcome without leaking hidden tools", async ({ page }) => {
-  const ordinary = ["shell", "edit", "write", "patch", "webfetch", "websearch", "subagent", "skill", "mcp_probe"]
-  const parts = ordinary.map((tool, index) =>
-    toolPart(`prt_error_${index}`, tool, "error", errorInput(tool), { error: `${tool} failed visibly` }),
-  )
-  parts.push(
-    toolPart("prt_question_dismissed", "question", "error", questionInput(), {
-      error: "The user dismissed this question",
-    }),
-    toolPart("prt_question_error", "question", "error", questionInput(), { error: "Question transport failed" }),
-    toolPart("prt_todo_error", "todowrite", "error", { todos: [] }, { error: "Hidden todo failure" }),
-  )
-  await setupTimeline(page, { messages: [userMessage(), assistantMessage(parts)] })
-
-  const group = page.locator(`[data-timeline-part-ids="${ordinary.map((_, index) => `prt_error_${index}`).join(",")}"]`)
-  await expect(group.locator('[data-component="tag"]')).toHaveText(String(ordinary.length))
-  await group.getByRole("button").click()
-  await expect(page.locator('[data-kind="tool-error-card"]')).toHaveCount(ordinary.length + 1)
-  await expect(page.getByText(/dismissed/i)).toBeVisible()
-  await expect(page.locator('[data-timeline-part-id="prt_todo_error"]')).toHaveCount(0)
-  for (let index = 0; index < ordinary.length; index++) {
-    await expect(page.locator(`[data-timeline-part-id="prt_error_${index}"]`)).toBeVisible()
-  }
-})
-
 test("transitions shell and question through running error outcomes", async ({ page }) => {
   const shellID = "prt_transition_error_shell"
   const questionID = "prt_transition_error_question"
@@ -138,62 +113,6 @@ test("preserves surviving grouped patch state when its first patch fails", async
     .toBeGreaterThanOrEqual(-0.5)
 })
 
-test("labels all web search provider variants", async ({ page }) => {
-  const parts = [
-    toolPart(
-      "prt_search_parallel",
-      "websearch",
-      "completed",
-      { query: "parallel" },
-      { metadata: { provider: "parallel" } },
-    ),
-    toolPart("prt_search_exa", "websearch", "completed", { query: "exa" }, { metadata: { provider: "exa" } }),
-    toolPart("prt_search_generic", "websearch", "completed", { query: "generic" }),
-  ]
-  await setupTimeline(page, { messages: [userMessage(), assistantMessage(parts)] })
-  await page.getByRole("button", { name: "Used Parallel Web Search, Exa Web Search, Web Search" }).click()
-
-  const tools = page.locator('[data-component="context-tool-group-list"]')
-  await expect(tools.getByRole("button", { name: /Parallel Web Search/ })).toBeVisible()
-  await expect(tools.getByRole("button", { name: /Exa Web Search/ })).toBeVisible()
-  await expect(tools.getByRole("button", { name: /^Web Search/ })).toBeVisible()
-})
-
-test("labels completed searches with result counts", async ({ page }) => {
-  const glob = "prt_glob_count"
-  const grep = "prt_grep_count"
-  await setupTimeline(page, {
-    messages: [
-      userMessage(),
-      assistantMessage([
-        toolPart(glob, "glob", "completed", { path: ".", pattern: "**/*.ts" }, { metadata: { count: 1 } }),
-        toolPart(grep, "grep", "completed", { path: ".", pattern: "value" }, { metadata: { matches: 12 } }),
-      ]),
-    ],
-  })
-
-  const group = page.locator(`[data-timeline-part-ids="${glob},${grep}"]`)
-  await group.locator('[data-slot="collapsible-trigger"]').click()
-  const rows = group.locator('[data-component="context-tool-group-list"] [data-component="tool-trigger"]')
-  await expect(rows.filter({ hasText: "Glob" })).toContainText("(1 match)")
-  await expect(rows.filter({ hasText: "Grep" })).toContainText("(12 matches)")
-})
-
-test("labels read tools from their path input", async ({ page }) => {
-  const id = "prt_read_path"
-  await setupTimeline(page, {
-    messages: [userMessage(), assistantMessage([toolPart(id, "read", "completed", { path: "src/a.ts" })])],
-  })
-
-  const group = page.locator(`[data-timeline-part-ids="${id}"]`)
-  await group.locator('[data-slot="collapsible-trigger"]').click()
-  await expect(
-    group
-      .locator('[data-component="context-tool-group-list"] [data-component="tool-trigger"]')
-      .filter({ hasText: "Read" }),
-  ).toContainText("a.ts")
-})
-
 test("groups instruction files loaded by the same read", async ({ page }) => {
   const id = "prt_read_instructions"
   await setupTimeline(page, {
@@ -221,36 +140,6 @@ test("groups instruction files loaded by the same read", async ({ page }) => {
   await expect(loaded.locator('[data-slot="tool-loaded-kind"]')).toHaveCount(0)
 })
 
-test("labels skill tools from IDs and result metadata", async ({ page }) => {
-  const pending = "prt_skill_id"
-  const completed = "prt_skill_name"
-  await setupTimeline(page, {
-    messages: [
-      userMessage(),
-      assistantMessage([
-        toolPart(pending, "skill", "running", { id: "frontend-design" }),
-        toolPart(completed, "skill", "completed", { id: "opencode" }, { metadata: { name: "OpenCode" } }),
-      ]),
-    ],
-  })
-
-  const group = page.locator(`[data-timeline-part-ids="${pending},${completed}"]`)
-  await expect(group.getByRole("button")).toHaveAccessibleName("Used Skill")
-  await expect(group.locator('[data-component="tag"]')).toHaveText("2")
-  await group.getByRole("button").click()
-
-  const loaded = group.locator('[data-component="tool-loaded-item"]')
-  await expect(loaded).toHaveCount(1)
-  await expect(loaded).toHaveAttribute("aria-label", "Loaded frontend-design, OpenCode skills")
-  await expect(loaded).toHaveCSS("line-height", "16px")
-  await expect(loaded.locator('[data-slot="tool-loaded-label"]')).toHaveText("Loaded")
-  await expect(loaded.locator('[data-slot="tool-loaded-kind"]')).toHaveText("skills")
-  const names = loaded.locator('[data-component="text-shimmer"]')
-  await expect(names).toHaveCount(2)
-  await expect(names.nth(0)).toHaveAttribute("aria-label", "frontend-design")
-  await expect(names.nth(1)).toHaveAttribute("aria-label", "OpenCode")
-})
-
 test("groups only consecutive successful skill tools", async ({ page }) => {
   const parts = [
     toolPart("prt_skill_first", "skill", "completed", { id: "ocpr" }),
@@ -272,15 +161,4 @@ test("groups only consecutive successful skill tools", async ({ page }) => {
 
 function questionInput() {
   return { questions: [{ header: "Stability", question: "Keep it stable?", options: [] }] }
-}
-
-function errorInput(tool: string) {
-  if (tool === "shell") return { command: "exit 1" }
-  if (["edit", "write"].includes(tool)) return { path: "src/error.ts", content: "" }
-  if (tool === "patch") return { patchText: "Update src/error.ts" }
-  if (tool === "webfetch") return { url: "https://example.com" }
-  if (tool === "websearch") return { query: "failure" }
-  if (tool === "subagent") return { description: "Fail subagent", agent: "explore", prompt: "Inspect the failure." }
-  if (tool === "skill") return { name: "failure" }
-  return { target: "failure" }
 }

@@ -1,4 +1,7 @@
-import { CurrentSessionTimelineStory } from "../storybook/current-session-story"
+import type { SessionMessageAssistant } from "@opencode-ai/client/promise"
+import { createMemo } from "solid-js"
+import { createStore } from "solid-js/store"
+import { CurrentSessionProviders, CurrentSessionTimelineStory } from "../storybook/current-session-story"
 import {
   executeCodeDocument,
   expandedShellDocument,
@@ -9,6 +12,7 @@ import {
   terminalPassedDocument,
   terminalRunningDocument,
 } from "../storybook/current-session-fixtures"
+import { storyDocument, storyTool } from "../storybook/current-session-scenarios"
 import { SessionTimeline } from "./session-timeline"
 
 export default {
@@ -62,6 +66,17 @@ export const UserCommandCompleted = {
   ),
 }
 
+const CollapsedShell = {
+  render: () => (
+    <CurrentSessionTimelineStory
+      title="Collapsed completed shell"
+      description="A focused shell disclosure responds to the keyboard without scrolling its containing surface."
+      document={terminalPassedDocument}
+      width="720px"
+    />
+  ),
+}
+
 export const TestsPassed = {
   render: () => (
     <CurrentSessionTimelineStory
@@ -108,6 +123,75 @@ export const TestFailed = {
       shellToolDefaultOpen
     />
   ),
+}
+
+function InteractiveCommandStory(props: { expanded?: boolean; streaming?: boolean }) {
+  const [state, setState] = createStore({
+    phase: props.streaming ? "streaming" : "completed",
+    lines: 3,
+    sibling: false,
+    busy: false,
+  })
+  const document = createMemo(() => {
+    const phase = state.phase as "streaming" | "input" | "running" | "completed"
+    const command = phase === "streaming" ? "" : "printf ready"
+    const content: SessionMessageAssistant["content"] = [
+      storyTool("tool_shell_lifecycle", "shell", phase === "input" ? "streaming" : phase, command ? { command } : {}, {
+        output:
+          phase === "running"
+            ? "still running"
+            : Array.from({ length: state.lines }, (_, index) => `line ${index + 1}`).join("\n"),
+        ...(phase === "streaming" ? { raw: "" } : {}),
+      }),
+      ...(state.sibling ? [{ type: "text" as const, text: "Sibling content" }] : []),
+    ]
+    return {
+      ...storyDocument(content, phase !== "completed"),
+      status: { type: phase !== "completed" || state.busy ? ("busy" as const) : ("idle" as const) },
+    }
+  })
+  return (
+    <section class="mx-auto flex w-full max-w-[720px] flex-col gap-4 p-6">
+      <div class="flex gap-3">
+        <button type="button" onClick={() => setState("phase", "input")}>
+          Complete input
+        </button>
+        <button type="button" onClick={() => setState("phase", "running")}>
+          Run command
+        </button>
+        <button type="button" onClick={() => setState("phase", "completed")}>
+          Complete command
+        </button>
+        <button type="button" onClick={() => setState("lines", 6)}>
+          Update output
+        </button>
+        <button type="button" onClick={() => setState("sibling", true)}>
+          Append sibling
+        </button>
+        <button type="button" onClick={() => setState("busy", true)}>
+          Mark session busy
+        </button>
+        <button type="button" onClick={() => setState("busy", false)}>
+          Mark session idle
+        </button>
+      </div>
+      <CurrentSessionProviders document={document()}>
+        <SessionTimeline document={document()} shellToolDefaultOpen={props.expanded} />
+      </CurrentSessionProviders>
+    </section>
+  )
+}
+
+const RunACommand = {
+  args: { expanded: false, streaming: false },
+  render: (args: { expanded: boolean; streaming: boolean }) => <InteractiveCommandStory {...args} />,
+}
+
+export const TerminalCommands = {
+  args: { scenario: "command", expanded: false, streaming: false },
+  argTypes: { scenario: { control: "select", options: ["command", "collapsed"] } },
+  render: (args: { scenario: string; expanded: boolean; streaming: boolean }) =>
+    args.scenario === "collapsed" ? CollapsedShell.render() : RunACommand.render(args),
 }
 
 export const FixedAndPassed = {

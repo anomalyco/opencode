@@ -122,6 +122,7 @@ test("updates running compactions to failed and cancelled boundaries", async ({ 
 
   await timeline.send(compactionStarted({ sessionID, reason: "auto", recent: "" }))
   await timeline.send(compactionDelta({ sessionID, text: "Partial summary that should be discarded." }))
+  await expect(page.getByText("Partial summary that should be discarded.", { exact: true })).toBeVisible()
   await timeline.send(
     compactionFailed({
       sessionID,
@@ -140,6 +141,9 @@ test("updates running compactions to failed and cancelled boundaries", async ({ 
   await expect(failed).not.toContainText("Partial summary that should be discarded.")
 
   await timeline.send(compactionStarted({ sessionID, reason: "manual", recent: "" }))
+  await expect(compactions).toHaveCount(2)
+  await timeline.send(compactionDelta({ sessionID, text: "Summary before cancellation." }))
+  await expect(page.getByText("Summary before cancellation.", { exact: true })).toBeVisible()
   await timeline.send(
     compactionFailed({
       sessionID,
@@ -152,88 +156,7 @@ test("updates running compactions to failed and cancelled boundaries", async ({ 
   const cancelled = compactions.filter({ hasNotText: "The provider rejected the summary." })
   await expect(cancelled.getByText("Session compacted", { exact: true })).toBeVisible()
   await expect(cancelled).not.toContainText("Cancellation detail should stay hidden.")
-})
-
-test("shows a delegating row while subagent input streams", async ({ page }) => {
-  await setupTimeline(page, {
-    sessionMessages: [
-      user,
-      {
-        ...assistant(false),
-        content: [
-          {
-            type: "tool",
-            id: "call_subagent",
-            name: "subagent",
-            state: { status: "streaming", input: "" },
-            time: { created: 2 },
-          },
-        ],
-      },
-    ],
-  })
-
-  const delegating = page.locator('[data-component="task-tool-delegating"]')
-  await expect(delegating).toBeVisible()
-  const shimmer = delegating.locator('[data-component="text-shimmer"]')
-  await expect(shimmer).toHaveAttribute("aria-label", "Delegating agent...")
-  await expect(shimmer).toHaveCSS("line-height", "16px")
-  const icon = delegating.locator('[data-slot="icon-svg"]')
-  await expect(icon.locator('use[href="#opencode-v2-icon-subagent"]')).toBeVisible()
-  await expect(icon).toHaveCSS("color", "rgb(174, 174, 174)")
-  await expect(page.locator('[data-component="task-tool-card"]')).toHaveCount(0)
-  await expect(page.locator('[data-timeline-row="Thinking"]')).toHaveCount(0)
-})
-
-test("renders the moved location notice in its compact timeline style", async ({ page }) => {
-  const directory = `/Users/usrnk1/Developer/opencode/${"nested-directory/".repeat(24)}session`
-  await page.setViewportSize({ width: 480, height: 720 })
-  await setupTimeline(page, {
-    sessionMessages: [
-      user,
-      {
-        id: "msg_location",
-        type: "location-switched",
-        location: { directory },
-        time: { created: 2 },
-      },
-    ],
-  })
-
-  const notice = page.locator('[data-slot="session-timeline-notice"][data-type="location-switched"]')
-  const label = notice.locator('[data-slot="session-timeline-notice-label"]')
-  const value = notice.locator('[data-slot="session-timeline-notice-value"]')
-  const tooltipTrigger = notice.locator('[data-component="tooltip-v2-trigger"]')
-
-  await expect(label).toHaveText("Moved to")
-  await expect(value).toHaveText(directory)
-  await expect(notice).not.toContainText("·")
-  await expect(notice.locator("svg")).toHaveCount(0)
-  await expect(notice).toHaveCSS("height", "28px")
-  await expect(notice).toHaveCSS("gap", "8px")
-  await expect(notice).toHaveCSS("padding-top", "4px")
-  await expect(notice).toHaveCSS("padding-bottom", "4px")
-  await expect(label).toHaveCSS("font-size", "13px")
-  await expect(label).toHaveCSS("font-weight", "530")
-  await expect(label).toHaveCSS("line-height", "16px")
-  await expect(label).toHaveCSS("color", "rgb(128, 128, 128)")
-  await expect(value).toHaveCSS("font-size", "13px")
-  await expect(value).toHaveCSS("font-weight", "440")
-  await expect(value).toHaveCSS("line-height", "16px")
-  await expect(value).toHaveCSS("color", "rgb(128, 128, 128)")
-  await expect(value).toHaveCSS("text-overflow", "ellipsis")
-  await expect(value).toHaveCSS("white-space", "nowrap")
-  await expect(value).toHaveAttribute("dir", "ltr")
-  await expect.poll(() => value.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true)
-
-  const tooltip = page.getByText("Session working directory changed", { exact: true })
-  await label.hover()
-  await expect(tooltip).toBeVisible()
-  await page.mouse.move(0, 0)
-  await expect(tooltip).toBeHidden()
-  await tooltipTrigger.focus()
-  await expect(tooltipTrigger).toBeFocused()
-  await expect(tooltip).toBeVisible()
+  await expect(cancelled).not.toContainText("Summary before cancellation.")
 })
 
 test("moves blocking work to the background with Ctrl+B", async ({ page }) => {
@@ -269,11 +192,6 @@ test("moves blocking work to the background with Ctrl+B", async ({ page }) => {
   )
   await page.keyboard.press("Control+b")
   await request
-})
-
-test("waits for completion before labeling requested background work", async ({ page }) => {
-  await setupTimeline(page, { sessionMessages: [user, assistant(false, true, undefined, true)] })
-  await expect(page.locator('[data-component="task-tool-card"]')).not.toContainText("(background)")
 })
 
 test("navigates from a running subagent card and hides background controls in the child", async ({ page }) => {

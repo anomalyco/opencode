@@ -21,8 +21,19 @@ export function CurrentSessionProviders(props: { document: SessionDocument; chil
           { name: "test", color: "green" },
         ],
         provider: {
-          all: new Map([["anthropic", { models: { "claude-sonnet-4": { name: "Claude Sonnet 4" } } }]]),
-          connected: ["anthropic"],
+          all: new Map<string, { models: Record<string, { name: string }> }>([
+            ["anthropic", { models: { "claude-sonnet-4": { name: "Claude Sonnet 4" } } }],
+            [
+              "company-gateway",
+              {
+                models: {
+                  "fast-nano": { name: "GPT-5.4 nano" },
+                  "long-context": { name: "Company Gateway Extra Long Context Model for Narrow Timeline Layouts" },
+                },
+              },
+            ],
+          ]),
+          connected: ["anthropic", "company-gateway"],
           default: { anthropic: "claude-sonnet-4" },
         },
         session: [

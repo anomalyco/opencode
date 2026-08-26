@@ -122,6 +122,7 @@ test("transitions thinking and hidden reasoning through busy to idle", async ({ 
   await expect(page.locator('[data-timeline-row="Thinking"]')).toBeVisible()
   await expect(page.getByText("Inspecting stability", { exact: true })).toBeVisible()
   await expect(page.locator(`[data-timeline-part-id="${reasoningID}"]`)).toHaveCount(0)
+  await expect(page.locator(`[data-timeline-part-id="${renderedPartID(reasoningID)}"]`)).toHaveCount(0)
   await timeline.send(partUpdated(shell("prt_reasoning_shell", "running")), 160)
   await expect(page.locator('[data-timeline-row="Thinking"]')).toBeVisible()
   await timeline.send(partUpdated(shell("prt_reasoning_shell", "completed", "done")), 180)
@@ -129,6 +130,7 @@ test("transitions thinking and hidden reasoning through busy to idle", async ({ 
   await timeline.send(status("idle"), 300)
   await expect(page.locator('[data-timeline-row="Thinking"]')).toHaveCount(0)
   await expect(page.locator(`[data-timeline-part-id="${reasoningID}"]`)).toHaveCount(0)
+  await expect(page.locator(`[data-timeline-part-id="${renderedPartID(reasoningID)}"]`)).toHaveCount(0)
 })
 
 test("moves busy through retry and recovery to final idle content", async ({ page }) => {
