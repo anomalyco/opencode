@@ -46,6 +46,7 @@ export interface Interface {
   readonly resolve: (pkg: string, options?: { readonly subpaths?: readonly string[] }) => Effect.Effect<EntryPoint>
   readonly check: (pkg: string) => Effect.Effect<UpdateInfo, InstallFailedError | EffectFlock.LockError>
   readonly update: (pkg: string) => Effect.Effect<UpdateResult, InstallFailedError | EffectFlock.LockError>
+  readonly rollback: (pkg: string) => Effect.Effect<void, InstallFailedError>
   readonly which: (pkg: string, bin?: string) => Effect.Effect<string | undefined>
 }
 
@@ -277,19 +278,46 @@ const layer = Layer.effect(
             const repository =
               parsed.fetchSpec ??
               (parsed.hosted
-                ? `https://${parsed.hosted.domain}/${parsed.hosted.user}/${parsed.hosted.project}.git`
+                ? (await pacote.resolve(pkg, { ...npmOptions, preferOnline: true })).split("#", 1)[0]
                 : undefined)
             if (!repository) throw new Error("Git repository URL unavailable")
             const ref = parsed.gitCommittish ?? "HEAD"
-            const { stdout } = await promisify(execFile)("git", ["ls-remote", repository, ref, `${ref}^{}`], {
-              encoding: "utf8",
-              env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
-            })
-            return stdout
+            const { stdout } = await promisify(execFile)(
+              "git",
+              parsed.gitRange
+                ? ["ls-remote", "--tags", repository.replace(/^git\+/, "")]
+                : ["ls-remote", repository.replace(/^git\+/, ""), ref, `${ref}^{}`],
+              {
+                encoding: "utf8",
+                env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+              },
+            )
+            if (parsed.gitRange) {
+              const { maxSatisfying } = await import("semver")
+              const tags = new Map(
+                stdout
+                  .trim()
+                  .split("\n")
+                  .filter(Boolean)
+                  .map((line) => line.split(/\s+/, 2))
+                  .flatMap(([commit, ref]) =>
+                    commit && ref?.startsWith("refs/tags/")
+                      ? [[ref.slice("refs/tags/".length).replace(/\^\{\}$/, ""), commit] as const]
+                      : [],
+                  ),
+              )
+              const tag = maxSatisfying([...tags.keys()], parsed.gitRange)
+              if (!tag) throw new Error(`No Git tag satisfies: ${parsed.gitRange}`)
+              return tags.get(tag)
+            }
+            const revision = stdout
               .trim()
               .split("\n")
+              .filter(Boolean)
               .map((line) => line.split(/\s+/, 1)[0])
               .at(-1)
+            if (!revision) throw new Error(`Git ref not found: ${ref}`)
+            return revision
           }
           const manifest = await pacote.manifest(pkg, { ...npmOptions, preferOnline: true })
           return manifest.version
@@ -315,6 +343,9 @@ const layer = Layer.effect(
       const root = yield* directory(pkg)
       const previous = yield* installed(pkg, yield* activeDirectory(root), parsed.name ?? undefined)
       const checked = yield* check(pkg)
+      if (!checked.updateAvailable) {
+        return { ...checked, previousVersion: previous.version, updated: false }
+      }
       yield* flock.acquire(`npm-install:${root}`)
       const dir = `${root}-revision-${createHash("sha256").update(`${Date.now()}:${randomUUID()}`).digest("hex")}`
       const target =
@@ -322,6 +353,17 @@ const layer = Layer.effect(
       const tree = yield* reify({ dir, add: [target], update: true })
       const node = parsed.name ? tree.edgesOut.get(parsed.name)?.to : tree.edgesOut.values().next().value?.to
       const version = packageVersion(node)
+      if (!version || version !== checked.latestVersion) {
+        return yield* new InstallFailedError({
+          cause: new Error(`Installed package identity did not match checked update: ${version ?? "missing"}`),
+          add: [target],
+          dir,
+        })
+      }
+      const previousDirectory = yield* activeDirectory(root)
+      yield* afs
+        .writeWithDirs(path.join(root, ".opencode-previous"), previousDirectory)
+        .pipe(Effect.mapError((cause) => new InstallFailedError({ cause, dir: root })))
       yield* afs
         .writeWithDirs(path.join(root, ".opencode-active"), dir)
         .pipe(Effect.mapError((cause) => new InstallFailedError({ cause, dir: root })))
@@ -329,12 +371,31 @@ const layer = Layer.effect(
         updateable: true,
         pinned: false,
         currentVersion: version,
-        latestVersion: version,
-        updateAvailable: false,
+        latestVersion: checked.latestVersion,
+        updateAvailable: checked.latestVersion !== undefined && version !== checked.latestVersion,
         previousVersion: previous.version,
-        updated: version !== undefined,
+        updated: version !== previous.version,
       }
     }, Effect.scoped)
+
+    const rollback = Effect.fn("Npm.rollback")(function* (pkg: string) {
+      const root = yield* directory(pkg)
+      const previous = yield* afs
+        .readFileStringSafe(path.join(root, ".opencode-previous"))
+        .pipe(Effect.mapError((cause) => new InstallFailedError({ cause, dir: root })))
+      if (!previous) return
+      const resolved = path.resolve(previous.trim())
+      if (resolved !== root && !resolved.startsWith(`${root}-revision-`)) return
+      if (resolved === root) {
+        yield* fs
+          .remove(path.join(root, ".opencode-active"))
+          .pipe(Effect.mapError((cause) => new InstallFailedError({ cause, dir: root })))
+        return
+      }
+      yield* afs
+        .writeWithDirs(path.join(root, ".opencode-active"), resolved)
+        .pipe(Effect.mapError((cause) => new InstallFailedError({ cause, dir: root })))
+    })
 
     const add = Effect.fn("Npm.add")(function* (pkg: string, options?: { readonly subpaths?: readonly string[] }) {
       const { default: npa } = yield* Effect.promise(() => import("npm-package-arg"))
@@ -442,6 +503,7 @@ const layer = Layer.effect(
       add,
       check,
       resolve,
+      rollback,
       update,
       which,
     })
@@ -470,6 +532,10 @@ export async function check(...args: Parameters<Interface["check"]>) {
 
 export async function update(...args: Parameters<Interface["update"]>) {
   return runPromise((svc) => svc.update(...args))
+}
+
+export async function rollback(...args: Parameters<Interface["rollback"]>) {
+  return runPromise((svc) => svc.rollback(...args))
 }
 
 export async function which(...args: Parameters<Interface["which"]>) {

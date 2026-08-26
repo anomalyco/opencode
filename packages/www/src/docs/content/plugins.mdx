@@ -93,8 +93,9 @@ opencode2 plugin add 'github:acme/plugins#main::path:packages/opencode-plugin'
 Branches, tags, complete commit hashes, and npm's `::path:` repository-subdirectory selectors are supported. Configure
 local paths directly; tarball and npm alias targets are not accepted by `plugin add`.
 
-Changes under watched config directories reload automatically. Restart OpenCode after changing an installed package
-version or an unwatched dependency.
+Changes under watched config directories reload automatically. Package and Git plugins refresh only when you explicitly
+request an update; OpenCode installs the matching revision and reloads the plugin without a restart. Changes to unwatched
+local dependencies may still require restarting OpenCode.
 
 ```sh
 touch .opencode/plugins/concise.ts

@@ -26,6 +26,7 @@ function npmEntrypoint(entrypoint?: string) {
     check: () => Effect.succeed({ updateable: false, pinned: false, updateAvailable: false }),
     resolve: () => Effect.succeed({ directory: "", entrypoint }),
     update: () => Effect.succeed({ updateable: false, pinned: false, updateAvailable: false, updated: false }),
+    rollback: () => Effect.void,
     which: () => Effect.undefined,
   })
 }

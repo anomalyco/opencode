@@ -17,6 +17,7 @@ const npm = Npm.Service.of({
   check: () => Effect.succeed({ updateable: false, pinned: false, updateAvailable: false }),
   resolve: () => Effect.succeed({ directory: "", entrypoint: undefined }),
   update: () => Effect.succeed({ updateable: false, pinned: false, updateAvailable: false, updated: false }),
+  rollback: () => Effect.void,
   which: () => Effect.undefined,
 })
 

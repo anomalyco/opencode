@@ -1,6 +1,6 @@
 import fs from "fs/promises"
 import path from "path"
-import { fileURLToPath } from "url"
+import { fileURLToPath, pathToFileURL } from "url"
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -25,7 +25,7 @@ describe("Npm plugin updates", () => {
     await Bun.$`git init -q -b main ${repository}`
     await commit(repository, "first")
     const first = await revision(repository)
-    const spec = `git+file://${repository}#main`
+    const spec = `git+${pathToFileURL(repository).href}#main`
     const layer = npmLayer(cache)
 
     const installed = await Effect.gen(function* () {
@@ -70,8 +70,103 @@ describe("Npm plugin updates", () => {
         current.entrypoint.startsWith("file:") ? fileURLToPath(current.entrypoint) : current.entrypoint,
       ).text(),
     ).toContain("second")
+
+    const unchanged = await Effect.gen(function* () {
+      const npm = yield* Npm.Service
+      return yield* npm.update(spec)
+    }).pipe(Effect.scoped, Effect.provide(layer), Effect.runPromise)
+    expect(unchanged).toMatchObject({
+      previousVersion: second,
+      currentVersion: second,
+      latestVersion: second,
+      updateAvailable: false,
+      updated: false,
+    })
+    expect(
+      await Effect.gen(function* () {
+        const npm = yield* Npm.Service
+        return yield* npm.resolve(spec)
+      }).pipe(Effect.provide(layer), Effect.runPromise),
+    ).toMatchObject({ directory: current.directory, revision: second })
+
+    await Effect.gen(function* () {
+      const npm = yield* Npm.Service
+      yield* npm.rollback(spec)
+    }).pipe(Effect.provide(layer), Effect.runPromise)
+    expect(
+      await Effect.gen(function* () {
+        const npm = yield* Npm.Service
+        return yield* npm.resolve(spec)
+      }).pipe(Effect.provide(layer), Effect.runPromise),
+    ).toMatchObject({ directory: installed.directory, revision: first })
+  })
+
+  test("resolves a Git semver selector without installing HEAD outside the configured range", async () => {
+    await using tmp = await tmpdir()
+    const repository = path.join(tmp.path, "plugin")
+    const cache = path.join(tmp.path, "cache")
+    await fs.mkdir(repository)
+    await writePlugin(repository, "1.0.0", "one")
+    await Bun.$`git init -q -b main ${repository}`
+    await commit(repository, "one")
+    await Bun.$`git -C ${repository} tag v1.0.0`
+    const first = await revision(repository)
+    const spec = `git+${pathToFileURL(repository).href}#semver:^1`
+    const layer = npmLayer(cache)
+
+    const installed = await Effect.gen(function* () {
+      const npm = yield* Npm.Service
+      return yield* npm.add(spec)
+    }).pipe(Effect.scoped, Effect.provide(layer), Effect.runPromise)
+    expect(installed.revision).toBe(first)
+
+    await writePlugin(repository, "1.1.0", "one-one")
+    await commit(repository, "one-one")
+    await Bun.$`git -C ${repository} tag v1.1.0`
+    const latest = await revision(repository)
+    await writePlugin(repository, "2.0.0", "two")
+    await commit(repository, "two")
+    await Bun.$`git -C ${repository} tag v2.0.0`
+    expect(await revision(repository)).not.toBe(latest)
+
+    const checked = await Effect.gen(function* () {
+      const npm = yield* Npm.Service
+      return yield* npm.check(spec)
+    }).pipe(Effect.provide(layer), Effect.runPromise)
+    expect(checked).toMatchObject({ currentVersion: first, latestVersion: latest, updateAvailable: true })
+
+    const updated = await Effect.gen(function* () {
+      const npm = yield* Npm.Service
+      return yield* npm.update(spec)
+    }).pipe(Effect.scoped, Effect.provide(layer), Effect.runPromise)
+    expect(updated).toMatchObject({ currentVersion: latest, latestVersion: latest, updated: true })
+  })
+
+  test("fails checks for missing Git refs", async () => {
+    await using tmp = await tmpdir()
+    const repository = path.join(tmp.path, "plugin")
+    await fs.mkdir(repository)
+    await writePlugin(repository, "1.0.0", "one")
+    await Bun.$`git init -q -b main ${repository}`
+    await commit(repository, "one")
+    const layer = npmLayer(path.join(tmp.path, "cache"))
+
+    await expect(
+      Effect.gen(function* () {
+        const npm = yield* Npm.Service
+        return yield* npm.check(`git+${pathToFileURL(repository).href}#missing`)
+      }).pipe(Effect.provide(layer), Effect.runPromise),
+    ).rejects.toMatchObject({ _tag: "NpmInstallFailedError" })
   })
 })
+
+async function writePlugin(repository: string, version: string, value: string) {
+  await Bun.write(
+    path.join(repository, "package.json"),
+    JSON.stringify({ name: "fixture-plugin", version, exports: "./index.js" }),
+  )
+  await Bun.write(path.join(repository, "index.js"), `export default '${value}'\n`)
+}
 
 async function commit(repository: string, message: string) {
   await Bun.$`git -C ${repository} add .`

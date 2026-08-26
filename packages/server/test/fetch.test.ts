@@ -96,6 +96,35 @@ it.live("serves unauthenticated and answers CORS preflight when no password is c
   }).pipe(Effect.scoped),
 )
 
+it.live("serves plugin update operations through the HttpApi", () =>
+  Effect.gen(function* () {
+    const handler = yield* ServerFetch.make(options)
+    const check = yield* Effect.promise(() => handler(new Request("http://opencode.local/api/plugin/update")))
+    expect(check.status).toBe(200)
+    expect(yield* Effect.promise(() => check.json())).toMatchObject({ data: expect.any(Array) })
+
+    const update = yield* Effect.promise(() =>
+      handler(
+        new Request("http://opencode.local/api/plugin/update", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ name: "missing-plugin" }),
+        }),
+      ),
+    )
+    expect(update.status).toBe(200)
+    expect(yield* Effect.promise(() => update.json())).toMatchObject({
+      data: { name: "missing-plugin", status: "failed", error: "Plugin not found" },
+    })
+
+    const updateAll = yield* Effect.promise(() =>
+      handler(new Request("http://opencode.local/api/plugin/update-all", { method: "POST" })),
+    )
+    expect(updateAll.status).toBe(200)
+    expect(yield* Effect.promise(() => updateAll.json())).toMatchObject({ data: expect.any(Array) })
+  }).pipe(Effect.scoped),
+)
+
 it.live("cancels a stale OpenAI OAuth callback server before falling back", () =>
   Effect.gen(function* () {
     const requests: string[] = []
