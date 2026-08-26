@@ -27,7 +27,7 @@ export interface EntryPoint {
 export interface Interface {
   readonly add: (
     pkg: string,
-    options?: { readonly subpaths?: readonly string[] },
+    options?: { readonly subpaths?: readonly string[]; readonly refresh?: boolean },
   ) => Effect.Effect<EntryPoint, InstallFailedError | EffectFlock.LockError>
   readonly resolve: (pkg: string, options?: { readonly subpaths?: readonly string[] }) => Effect.Effect<EntryPoint>
   readonly which: (pkg: string, bin?: string) => Effect.Effect<string | undefined>
@@ -124,14 +124,16 @@ const layer = Layer.effect(
       }
       return pkg
     })
-    const reify = (input: { dir: string; add?: string[] }) =>
+    const refreshed = new Set<string>()
+    const reify = (input: { dir: string; add?: string[]; update?: boolean }) =>
       Effect.gen(function* () {
         yield* flock.acquire(`npm-install:${input.dir}`)
         const { Arborist } = yield* Effect.promise(() => import("@npmcli/arborist"))
         const add = input.add ?? []
         const npmOptions = yield* NpmConfig.load(input.dir)
+        const options = input.update ? { ...npmOptions, preferOnline: true, noGitRevCache: true } : npmOptions
         const arborist = new Arborist({
-          ...npmOptions,
+          ...options,
           path: input.dir,
           binLinks: true,
           progress: false,
@@ -141,8 +143,9 @@ const layer = Layer.effect(
         return yield* Effect.tryPromise({
           try: () =>
             arborist.reify({
-              ...npmOptions,
+              ...options,
               add,
+              update: input.update,
               save: true,
               saveType: "prod",
             }),
@@ -159,19 +162,33 @@ const layer = Layer.effect(
         }),
       )
 
-    const add = Effect.fn("Npm.add")(function* (pkg: string, options?: { readonly subpaths?: readonly string[] }) {
+    const add = Effect.fn("Npm.add")(function* (
+      pkg: string,
+      options?: { readonly subpaths?: readonly string[]; readonly refresh?: boolean },
+    ) {
       const { default: npa } = yield* Effect.promise(() => import("npm-package-arg"))
-      const parsedName = (() => {
+      const parsed = (() => {
         try {
-          return npa(pkg).name ?? undefined
+          return npa(pkg)
         } catch {
           return undefined
         }
       })()
+      const parsedName = parsed?.name ?? undefined
       const dir = yield* directory(pkg)
       const name = yield* installedName(pkg, dir, parsedName)
+      const cached = yield* afs.existsSafe(path.join(dir, "node_modules", name))
+      const refresh = options?.refresh && isMutable(parsed) && !refreshed.has(pkg)
 
-      if (yield* afs.existsSafe(path.join(dir, "node_modules", name))) {
+      if (refresh) {
+        refreshed.add(pkg)
+        if (cached)
+          yield* reify({ dir, add: [pkg], update: true }).pipe(
+            Effect.catchCause(() => Effect.logWarning("failed to refresh cached package; using installed version")),
+          )
+      }
+
+      if (cached) {
         return resolveEntryPoint(name, path.join(dir, "node_modules", name), options?.subpaths)
       }
 
@@ -282,4 +299,11 @@ export async function resolve(...args: Parameters<Interface["resolve"]>) {
 
 export async function which(...args: Parameters<Interface["which"]>) {
   return runPromise((svc) => svc.which(...args))
+}
+
+function isMutable(parsed: { readonly type: string; readonly gitCommittish?: string | null } | undefined) {
+  if (!parsed) return false
+  if (["tag", "range"].includes(parsed.type)) return true
+  if (parsed.type !== "git") return false
+  return !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/i.test(parsed.gitCommittish ?? "")
 }

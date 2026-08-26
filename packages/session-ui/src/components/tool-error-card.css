@@ -4,7 +4,7 @@
   --card-pad-r: 0px;
 
   &::before {
-    border-radius: 0;
+    display: none;
   }
 
   /* Figma's leading-none would clip Inter descenders at 13px; keep the compact metric. */

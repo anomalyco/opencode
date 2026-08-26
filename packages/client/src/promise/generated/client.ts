@@ -80,6 +80,8 @@ import type {
   SessionBackgroundOutput,
   SessionMessageInput,
   SessionMessageOutput,
+  SessionMessageUpdateInput,
+  SessionMessageUpdateOutput,
   SessionEnvironmentInput,
   SessionEnvironmentOutput,
   SessionViewInput,
@@ -925,6 +927,18 @@ export function make(options: ClientOptions) {
             path: `/api/session/${encodeURIComponent(input.sessionID)}/message/${encodeURIComponent(input.messageID)}`,
             successStatus: 200,
             declaredStatuses: [404, 401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      messageUpdate: (input: SessionMessageUpdateInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: SessionMessageUpdateOutput }>(
+          {
+            method: "PATCH",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/message/${encodeURIComponent(input.messageID)}`,
+            body: { content: input["content"] },
+            successStatus: 200,
+            declaredStatuses: [404, 400, 409, 401],
             empty: false,
           },
           requestOptions,

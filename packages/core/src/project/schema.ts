@@ -18,14 +18,8 @@ export type UpdateInput = typeof UpdateInput.Type
 
 export const Event = Project.Event
 
-export const Vcs = Schema.Union([
-  Schema.Struct({
-    type: Schema.Literal("git"),
-    store: AbsolutePath,
-  }),
-  Schema.Struct({
-    type: Schema.Literal("hg"),
-    store: AbsolutePath,
-  }),
-])
+export const Vcs = Schema.Struct({
+  type: Project.Vcs,
+  store: AbsolutePath,
+})
 export type Vcs = typeof Vcs.Type

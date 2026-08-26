@@ -31,7 +31,6 @@ import {
   batch,
   Show,
 } from "solid-js"
-import { createStore } from "solid-js/store"
 import {
   TuiLifecycleProvider,
   TuiAppProvider,
@@ -77,7 +76,6 @@ import { clampSessionTabsWidth, sessionTabsFitVertically, SESSION_SIDEBAR_WIDTH 
 import { ThemeErrorToast } from "./component/theme-error-toast"
 import { createThemeSource, ThemeProvider, useTheme, useThemes } from "./context/theme"
 import { Home } from "./routes/home"
-import { Session } from "./routes/session"
 import { PromptHistoryProvider } from "./prompt/history"
 import { FrecencyProvider } from "./prompt/frecency"
 import { PromptStashProvider } from "./prompt/stash"
@@ -100,6 +98,8 @@ import { destroyRenderer } from "./util/renderer"
 import { cliErrorMessage, errorFormat } from "./util/error"
 import { AttentionProvider } from "./context/attention"
 import { StorageProvider, useStorage } from "./context/storage"
+import { SessionTerminalsProvider } from "./context/session-terminals"
+import { SessionFrame } from "./component/session-frame"
 import { createTuiClipboard } from "./clipboard"
 
 registerOpencodeSpinner()
@@ -218,7 +218,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
         reconnect: async (signal: AbortSignal) => {
           const endpoint = await managed.reconnect(signal)
           const next = { baseUrl: endpoint.url, headers: Service.headers(endpoint) }
-          return { api: OpenCode.make(next) }
+          return { api: OpenCode.make(next), url: endpoint.url }
         },
         restart: managed.restart,
       }
@@ -373,48 +373,50 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                                 : undefined
                                             }
                                           >
-                                            <ClientProvider api={api} service={service}>
+                                            <ClientProvider api={api} url={input.server.endpoint.url} service={service}>
                                               <PermissionProvider>
                                                 <DataProvider>
                                                   <LocationProvider>
                                                     <SessionTabsProvider>
-                                                      <ThemeProvider
-                                                        mode={mode}
-                                                        source={createThemeSource(global.config)}
-                                                      >
-                                                        <ThemeErrorToast />
-                                                        <LocalProvider>
-                                                          <PromptStashProvider>
-                                                            <DialogProvider>
-                                                              <FrecencyProvider>
-                                                                <PromptHistoryProvider>
-                                                                  <PromptRefProvider>
-                                                                    <EditorContextProvider>
-                                                                      <AttentionProvider>
-                                                                        <PluginProvider
-                                                                          packages={input.packages}
-                                                                          directories={pluginDirectories}
-                                                                        >
-                                                                          <App
-                                                                            pair={
-                                                                              input.server.endpoint.auth
-                                                                                ? input.server.endpoint.auth
-                                                                                : {
-                                                                                    username: "opencode",
-                                                                                    password: "",
-                                                                                  }
-                                                                            }
-                                                                          />
-                                                                        </PluginProvider>
-                                                                      </AttentionProvider>
-                                                                    </EditorContextProvider>
-                                                                  </PromptRefProvider>
-                                                                </PromptHistoryProvider>
-                                                              </FrecencyProvider>
-                                                            </DialogProvider>
-                                                          </PromptStashProvider>
-                                                        </LocalProvider>
-                                                      </ThemeProvider>
+                                                      <SessionTerminalsProvider>
+                                                        <ThemeProvider
+                                                          mode={mode}
+                                                          source={createThemeSource(global.config)}
+                                                        >
+                                                          <ThemeErrorToast />
+                                                          <LocalProvider>
+                                                            <PromptStashProvider>
+                                                              <DialogProvider>
+                                                                <FrecencyProvider>
+                                                                  <PromptHistoryProvider>
+                                                                    <PromptRefProvider>
+                                                                      <EditorContextProvider>
+                                                                        <AttentionProvider>
+                                                                          <PluginProvider
+                                                                            packages={input.packages}
+                                                                            directories={pluginDirectories}
+                                                                          >
+                                                                            <App
+                                                                              pair={
+                                                                                input.server.endpoint.auth
+                                                                                  ? input.server.endpoint.auth
+                                                                                  : {
+                                                                                      username: "opencode",
+                                                                                      password: "",
+                                                                                    }
+                                                                              }
+                                                                            />
+                                                                          </PluginProvider>
+                                                                        </AttentionProvider>
+                                                                      </EditorContextProvider>
+                                                                    </PromptRefProvider>
+                                                                  </PromptHistoryProvider>
+                                                                </FrecencyProvider>
+                                                              </DialogProvider>
+                                                            </PromptStashProvider>
+                                                          </LocalProvider>
+                                                        </ThemeProvider>
+                                                      </SessionTerminalsProvider>
                                                     </SessionTabsProvider>
                                                   </LocationProvider>
                                                 </DataProvider>
@@ -614,7 +616,7 @@ function App(props: { pair?: DialogPairCredentials }) {
         return
       }
 
-      renderer.setTerminalTitle(`OC | ${title.length > 40 ? title.slice(0, 37) + "..." : title}`)
+      renderer.setTerminalTitle(`OC | ${title.length > 40 ? title.slice(0, 37) + "…" : title}`)
       return
     }
 
@@ -971,7 +973,7 @@ function App(props: { pair?: DialogPairCredentials }) {
                 const restart = client.restart
                 if (!restart) return
                 dialog.clear()
-                toast.show({ variant: "info", message: "Restarting service...", duration: 30000 })
+                toast.show({ variant: "info", message: "Restarting service…", duration: 30000 })
                 // restart resolves once the replacement service is healthy; the
                 // event stream reattaches through the reconnect loop.
                 await restart()
@@ -1318,7 +1320,12 @@ function App(props: { pair?: DialogPairCredentials }) {
                 </Match>
                 <Match when={route.data.type === "session"}>
                   <Show when={route.data.type === "session" ? route.data.sessionID : undefined} keyed>
-                    {(_) => <Session verticalTabsWidth={verticalTabsVisible() ? verticalTabsWidth() : 0} />}
+                    {(sessionID) => (
+                      <SessionFrame
+                        sessionID={sessionID}
+                        verticalTabsWidth={verticalTabsVisible() ? verticalTabsWidth() : 0}
+                      />
+                    )}
                   </Show>
                 </Match>
                 <Match when={route.data.type === "plugin"}>

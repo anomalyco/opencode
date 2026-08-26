@@ -3150,37 +3150,49 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("drops replayed item ids outside the server's grammar", () =>
+  it.effect("preserves provider-issued item ids and removes malformed ids without dropping items", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         LLM.request({
           model,
           messages: [
             Message.assistant([
-              // Fails the message id prefix.
               {
                 type: "text",
                 text: "Hello",
                 providerMetadata: { openai: { itemId: "history_1" } },
               },
-              // Oversized for the Responses item id limit.
               {
                 type: "text",
                 text: "World",
-                providerMetadata: { openai: { itemId: `m${"a".repeat(64)}` } },
+                providerMetadata: { openai: { itemId: `message_${"a".repeat(64)}` } },
               },
-              // Fails the reasoning id prefix, so the whole item is unreplayable
-              // statelessly and is skipped rather than sent malformed.
               {
                 type: "reasoning",
                 text: "Checked the diff.",
                 providerMetadata: { openai: { itemId: "thinking_1", reasoningEncryptedContent: "encrypted-state" } },
+              },
+              {
+                type: "reasoning",
+                text: "Missing suffix.",
+                providerMetadata: { openai: { itemId: "rs_", reasoningEncryptedContent: "another-state" } },
+              },
+              {
+                type: "reasoning",
+                text: "No prefix separator.",
+                providerMetadata: { openai: { itemId: "550e8400-e29b-41d4-a716-446655440000" } },
               },
               ToolCallPart.make({
                 id: "call_1",
                 name: "lookup",
                 input: { query: "weather" },
                 providerMetadata: { openai: { itemId: "toolu_01A" } },
+              }),
+              ToolCallPart.make({
+                id: "call_2",
+                name: "lookup",
+                input: { query: "news" },
+                providerMetadata: { openai: { itemId: "fc_" } },
               }),
             ]),
           ],
@@ -3190,17 +3202,43 @@ describe("OpenAI Responses route", () => {
       expect(prepared.body.input).toEqual([
         {
           type: "message",
+          id: "history_1",
           role: "assistant",
-          content: [
-            { type: "output_text", text: "Hello" },
-            { type: "output_text", text: "World" },
-          ],
+          content: [{ type: "output_text", text: "Hello" }],
+        },
+        {
+          type: "message",
+          id: `message_${"a".repeat(64)}`,
+          role: "assistant",
+          content: [{ type: "output_text", text: "World" }],
+        },
+        {
+          type: "reasoning",
+          id: "thinking_1",
+          summary: [{ type: "summary_text", text: "Checked the diff." }],
+          encrypted_content: "encrypted-state",
+        },
+        {
+          type: "reasoning",
+          summary: [{ type: "summary_text", text: "Missing suffix." }],
+          encrypted_content: "another-state",
+        },
+        {
+          type: "reasoning",
+          summary: [{ type: "summary_text", text: "No prefix separator." }],
         },
         {
           type: "function_call",
+          id: "toolu_01A",
           call_id: "call_1",
           name: "lookup",
           arguments: '{"query":"weather"}',
+        },
+        {
+          type: "function_call",
+          call_id: "call_2",
+          name: "lookup",
+          arguments: '{"query":"news"}',
         },
       ])
     }),

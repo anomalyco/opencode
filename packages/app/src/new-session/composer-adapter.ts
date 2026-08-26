@@ -133,7 +133,7 @@ export function createNewSessionComposerAdapter(props: {
 
   return {
     adapter,
-    project: createComposerProjectControls({ draftId: props.draftID }),
+    project: createComposerProjectControls({ draftId: props.draftID, worktree: props.worktree }),
     model,
     ready: prompt.ready,
   }

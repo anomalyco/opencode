@@ -110,6 +110,7 @@ const source = {
   "ui.messagePart.context.list.other": "{{count}} lists",
   "ui.messagePart.context.match.one": "({{count}} match)",
   "ui.messagePart.context.match.other": "({{count}} matches)",
+  "ui.messagePart.tools.used": "Used {{tools}}",
 
   "ui.list.loading": "Loading",
   "ui.list.empty": "No results",
@@ -158,6 +159,8 @@ const source = {
   "ui.tool.loaded": "Loaded",
   "ui.tool.loadedFile": "Loaded {{path}}",
   "ui.tool.loadedSkill": "Loaded {{name}} skill",
+  "ui.tool.loadedSkills.one": "Loaded {{name}} skill",
+  "ui.tool.loadedSkills.other": "Loaded {{name}} skills",
   "ui.tool.list": "List",
   "ui.tool.glob": "Glob",
   "ui.tool.grep": "Grep",

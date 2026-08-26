@@ -1,9 +1,7 @@
-import { Component, createEffect, createMemo, createSignal, startTransition } from "solid-js"
-import { Dialog } from "@opencode-ai/ui/dialog"
+import { Component, createEffect, createMemo, createSignal, onCleanup, onMount, startTransition } from "solid-js"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { Icon } from "@opencode-ai/ui/icon"
 import { useLanguage } from "@/runtime/i18n/language"
-import { usePlatform } from "@/runtime/platform/platform"
 import { SettingsGeneral } from "./general/general"
 import { SettingsAppearance } from "./appearance/appearance"
 import { SettingsKeybinds } from "./keybinds/keybinds"
@@ -20,19 +18,32 @@ import { useLayout } from "@/shell/state/layout"
 import { useTabs } from "@/shell/tabs/tabs"
 import { useGlobal, useServerCtx } from "@/runtime/server/runtime"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
+import { useCommand } from "@/shell/commands/command"
+import { useSettingsSurface } from "./surface"
 import "@/settings/settings.css"
 
-export const DialogSettings: Component<{
+export const SettingsScreen: Component<{
   defaultValue?: string
 }> = (props) => {
   const language = useLanguage()
-  const platform = usePlatform()
   const dialog = useDialog()
+  const command = useCommand()
+  const surface = useSettingsSurface()
   const layout = useLayout()
   const servers = useServers()
   const tabs = useTabs()
   const global = useGlobal()
   const [tab, setTab] = createSignal(props.defaultValue ?? "general")
+  let root: HTMLDivElement | undefined
+
+  onMount(() => {
+    command.keybinds(false)
+    root?.focus({ preventScroll: true })
+  })
+  onCleanup(() => command.keybinds(true))
+
+  createEffect(() => setTab(props.defaultValue ?? "general"))
+
   const server = createMemo(() => {
     const route = layout.route()
     switch (route.type) {
@@ -67,11 +78,22 @@ export const DialogSettings: Component<{
   })
 
   const showProviders = () => {
-    void dialog.show(() => <DialogSettings defaultValue="providers" />)
+    dialog.close()
+    setTab("providers")
   }
 
   return (
-    <Dialog size="x-large" variant="settings" class="settings-dialog">
+    <div
+      ref={root}
+      data-testid="settings-screen"
+      class="settings-screen"
+      tabIndex={-1}
+      onKeyDown={(event) => {
+        if (event.key !== "Escape" || event.defaultPrevented || dialog.active) return
+        event.preventDefault()
+        surface.close()
+      }}
+    >
       <Tabs
         orientation="vertical"
         variant="settings"
@@ -80,7 +102,11 @@ export const DialogSettings: Component<{
         class="settings"
       >
         <Tabs.List>
-          <div class="flex flex-col justify-between h-full w-full">
+          <div class="settings-nav">
+            <button type="button" class="settings-back" onClick={surface.close}>
+              <Icon name="arrow-left" size="small" class="settings-back-icon" />
+              <span>{language.t("settings.backToApp")}</span>
+            </button>
             <div class="flex flex-col gap-4 w-full">
               {/* Group 1: Preferences */}
               <div class="flex flex-col gap-1 w-full">
@@ -134,11 +160,6 @@ export const DialogSettings: Component<{
                 </Tabs.Trigger>
               </div>
             </div>
-
-            <div class="settings-nav-footer">
-              <span>{language.t("app.name.desktop")}</span>
-              <span>v{platform.version}</span>
-            </div>
           </div>
         </Tabs.List>
 
@@ -175,6 +196,6 @@ export const DialogSettings: Component<{
           </Tabs.Content>
         </SettingsServerScope>
       </Tabs>
-    </Dialog>
+    </div>
   )
 }

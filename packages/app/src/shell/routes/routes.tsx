@@ -6,6 +6,7 @@ import { useGlobal } from "@/runtime/server/runtime"
 import { ServerConnection } from "@/runtime/server/registry"
 import { SessionPanelFrame, SessionRouteFrame } from "@/session/session-frame"
 import { LayoutProvider } from "@/shell/state/layout"
+import { SettingsSurfaceProvider } from "@/settings/surface"
 import Shell from "@/shell/shell"
 import { requireServerKey } from "./session"
 
@@ -69,7 +70,9 @@ function TargetServerRoute(props: ParentProps) {
 function AppLayout(props: ParentProps) {
   return (
     <LayoutProvider>
-      <Shell>{props.children}</Shell>
+      <SettingsSurfaceProvider>
+        <Shell>{props.children}</Shell>
+      </SettingsSurfaceProvider>
     </LayoutProvider>
   )
 }

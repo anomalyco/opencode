@@ -241,6 +241,7 @@ describe("SessionRunnerLLM recorded", () => {
         "session.step.started.1",
         "session.text.started.1",
         "session.text.ended.1",
+        "session.step.streamed.1",
         "session.step.ended.1",
       ])
     }),

@@ -196,7 +196,7 @@ type LoweredInputItem =
 // multiple streamed summary parts into the same item before flushing.
 type OpenResponsesReasoningInput = {
   type: "reasoning"
-  id: string
+  id?: string
   summary: Array<{ type: "summary_text"; text: string }>
   encrypted_content?: string | null
 }
@@ -372,9 +372,6 @@ export const Event = Schema.StructWithRest(
 )
 export type Event = Schema.Schema.Type<typeof Event>
 
-// Which lowered input item a persisted item id is about to be attached to.
-export type ItemKind = "message" | "reasoning" | "function-call" | "hosted-tool"
-
 export interface Extension {
   readonly id: string
   readonly name: string
@@ -384,10 +381,6 @@ export interface Extension {
     readonly request: LLMRequest
   }) => MediaInput | undefined
   readonly lowerHostedToolItem?: (item: unknown) => ExtendedHostedToolItem | undefined
-  // Optional grammar check applied before a persisted item id is resent as
-  // part of replayed history. Returning false drops the id; every lowered
-  // item treats a dropped id the same as an absent one.
-  readonly acceptsItemID?: (kind: ItemKind, id: string) => boolean
 }
 
 const BASE: Extension = { id: ADAPTER, name: NAME }
@@ -447,53 +440,37 @@ export const lowerToolChoice = (protocolName: string, toolChoice: NonNullable<LL
     tool: (toolName) => ({ type: "function" as const, name: toolName }),
   })
 
-// Servers validate item ids on replayed history, and a malformed or oversized
-// id can fail an otherwise valid request. Only server-issued tokens are worth
-// resending; anything else is treated as absent so the item is resent without
-// an id (or skipped, for items that cannot be expressed without one).
-const ITEM_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/
+// Server-issued item ids need a nonempty prefix and suffix, but the prefix is
+// provider-defined and does not necessarily identify the item's semantic type.
 const itemID = (providerMetadata: ProviderMetadata | undefined, providerMetadataKey: string) => {
   const metadata = providerMetadata?.[providerMetadataKey]
-  return ProviderShared.isRecord(metadata) &&
-    typeof metadata.itemId === "string" &&
-    ITEM_ID_PATTERN.test(metadata.itemId)
-    ? metadata.itemId
-    : undefined
+  if (!ProviderShared.isRecord(metadata) || typeof metadata.itemId !== "string") return undefined
+  const separator = metadata.itemId.indexOf("_")
+  return separator > 0 && separator < metadata.itemId.length - 1 ? metadata.itemId : undefined
 }
 
-const acceptsItemID = (extension: Extension, kind: ItemKind, id: string | undefined): id is string =>
-  id !== undefined && (extension.acceptsItemID?.(kind, id) ?? true)
-
-const lowerToolCall = (
-  part: ToolCallPart,
-  providerMetadataKey: string,
-  extension: Extension,
-): OpenResponsesInputItem => {
+const lowerToolCall = (part: ToolCallPart, providerMetadataKey: string): OpenResponsesInputItem => {
   const id = itemID(part.providerMetadata, providerMetadataKey)
   return {
     type: "function_call",
-    ...(acceptsItemID(extension, "function-call", id) ? { id } : {}),
+    ...(id === undefined ? {} : { id }),
     call_id: part.id,
     name: part.name,
     arguments: ProviderShared.encodeJson(part.input),
   }
 }
 
-const lowerReasoning = (
-  part: ReasoningPart,
-  providerMetadataKey: string,
-  extension: Extension,
-): OpenResponsesReasoningInput | undefined => {
+const lowerReasoning = (part: ReasoningPart, providerMetadataKey: string): OpenResponsesReasoningInput | undefined => {
   const metadata = part.providerMetadata?.[providerMetadataKey]
+  if (!ProviderShared.isRecord(metadata)) return undefined
   const id = itemID(part.providerMetadata, providerMetadataKey)
-  if (!ProviderShared.isRecord(metadata) || !acceptsItemID(extension, "reasoning", id)) return undefined
   const encryptedContent =
     typeof metadata.reasoningEncryptedContent === "string" || metadata.reasoningEncryptedContent === null
       ? metadata.reasoningEncryptedContent
       : undefined
   return {
     type: "reasoning",
-    id,
+    ...(id === undefined ? {} : { id }),
     summary: part.text.length > 0 ? [{ type: "summary_text", text: part.text }] : [],
     encrypted_content: encryptedContent,
   }
@@ -614,8 +591,7 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
           Array<{ id: string | undefined; phase: MessagePhase | null | undefined; parts: TextPart[] }>
         >((groups, part) => {
           const metadata = part.providerMetadata?.[providerMetadataKey]
-          const rawID = itemID(part.providerMetadata, providerMetadataKey)
-          const id = acceptsItemID(extension, "message", rawID) ? rawID : undefined
+          const id = itemID(part.providerMetadata, providerMetadataKey)
           const phase = ProviderShared.isRecord(metadata) ? messagePhase(metadata.phase) : undefined
           const group = groups.at(-1)
           if (group && group.id === id && group.phase === phase) group.parts.push(part)
@@ -640,23 +616,23 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
         }
         if (part.type === "reasoning") {
           flushText()
-          const reasoning = lowerReasoning(part, providerMetadataKey, extension)
+          const reasoning = lowerReasoning(part, providerMetadataKey)
           if (!reasoning) continue
-          const existing = reasoningItems[reasoning.id]
+          const existing = reasoning.id === undefined ? undefined : reasoningItems[reasoning.id]
           if (existing) {
             existing.summary.push(...reasoning.summary)
             if (typeof reasoning.encrypted_content === "string")
               existing.encrypted_content = reasoning.encrypted_content
             continue
           }
-          reasoningItems[reasoning.id] = reasoning
+          if (reasoning.id !== undefined) reasoningItems[reasoning.id] = reasoning
           input.push(reasoning)
           continue
         }
         if (part.type === "tool-call") {
           flushText()
           if (part.providerExecuted === true) continue
-          input.push(lowerToolCall(part, providerMetadataKey, extension))
+          input.push(lowerToolCall(part, providerMetadataKey))
           continue
         }
         if (part.type === "tool-result" && part.providerExecuted === true) {
@@ -668,7 +644,7 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
               : Schema.is(HostedToolItem)(part.result.value)
                 ? part.result.value
                 : extension.lowerHostedToolItem?.(part.result.value)
-          if (acceptsItemID(extension, "hosted-tool", id) && hosted?.id === id) {
+          if (id !== undefined && hosted?.id === id) {
             if (!hostedToolItems.has(id)) {
               input.push(hosted)
               hostedToolItems.add(id)

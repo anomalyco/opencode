@@ -606,6 +606,25 @@ test("text fields retain default paste behavior", async () => {
   }
 })
 
+test("ctrl+c clears a text field before cancelling its form", async () => {
+  await using tmp = await tmpdir()
+  const prompt = await mountForm(tmp.path, 80, [{ key: "notes", type: "string" }])
+
+  try {
+    await prompt.app.mockInput.typeText("draft answer")
+    await prompt.app.waitFor(() => prompt.app.renderer.currentFocusedEditor?.plainText === "draft answer")
+
+    prompt.app.mockInput.pressKey("c", { ctrl: true })
+    await prompt.app.waitFor(() => prompt.app.renderer.currentFocusedEditor?.plainText === "")
+    expect(prompt.cancellations).toEqual([])
+
+    prompt.app.mockInput.pressKey("c", { ctrl: true })
+    await prompt.app.waitFor(() => prompt.cancellations.length === 1)
+  } finally {
+    prompt.app.renderer.destroy()
+  }
+})
+
 test("pasting on a choice without custom answers does not open an editor", async () => {
   await using tmp = await tmpdir()
   const prompt = await mountForm(tmp.path, 80, [

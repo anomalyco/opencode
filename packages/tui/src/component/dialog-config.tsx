@@ -52,6 +52,15 @@ export const settings: Setting[] = [
     keywords: ["side panel"],
   },
   {
+    title: "Terminal",
+    category: "Session",
+    path: ["session", "terminal"],
+    default: false,
+    values: [false, true],
+    labels: ["off", "on"],
+    keywords: ["pty", "shell", "terminal pane"],
+  },
+  {
     title: "Scrollbar",
     category: "Session",
     path: ["session", "scrollbar"],
@@ -92,6 +101,15 @@ export const settings: Setting[] = [
     values: [false, true],
     labels: ["off", "on"],
     keywords: ["attachments", "images", "tool output"],
+  },
+  {
+    title: "TPS",
+    category: "Session",
+    path: ["session", "tps"],
+    default: true,
+    values: [false, true],
+    labels: ["off", "on"],
+    keywords: ["tokens per second", "throughput"],
   },
   {
     title: "New session location",

@@ -139,6 +139,27 @@ export class CompactionConflictError extends Schema.TaggedError<CompactionConfli
 export class BusyError extends Schema.TaggedError<BusyError>()("Session.BusyError", {
   sessionID: SessionSchema.ID,
 }) {}
+export class MessageNotAssistantError extends Schema.TaggedError<MessageNotAssistantError>()(
+  "Session.MessageNotAssistantError",
+  {
+    sessionID: SessionSchema.ID,
+    messageID: SessionMessage.ID,
+  },
+) {}
+export class MessageIncompleteError extends Schema.TaggedError<MessageIncompleteError>()(
+  "Session.MessageIncompleteError",
+  {
+    sessionID: SessionSchema.ID,
+    messageID: SessionMessage.ID,
+  },
+) {}
+export class MessageToolIncompleteError extends Schema.TaggedError<MessageToolIncompleteError>()(
+  "Session.MessageToolIncompleteError",
+  {
+    sessionID: SessionSchema.ID,
+    messageID: SessionMessage.ID,
+  },
+) {}
 export class InboxConflictError extends Schema.TaggedError<InboxConflictError>()("Session.InboxConflictError", {
   sessionID: SessionSchema.ID,
   inboxID: SessionMessage.ID,
@@ -193,6 +214,19 @@ export interface Interface {
     sessionID: SessionSchema.ID
     messageID: SessionMessage.ID
   }) => Effect.Effect<SessionMessage.Info | undefined>
+  readonly updateMessage: (input: {
+    readonly sessionID: SessionSchema.ID
+    readonly messageID: SessionMessage.ID
+    readonly content: readonly SessionMessage.AssistantContent[]
+  }) => Effect.Effect<
+    SessionMessage.Assistant,
+    | NotFoundError
+    | MessageNotFoundError
+    | BusyError
+    | MessageNotAssistantError
+    | MessageIncompleteError
+    | MessageToolIncompleteError
+  >
   readonly context: (
     sessionID: SessionSchema.ID,
   ) => Effect.Effect<SessionMessage.Info[], NotFoundError | MessageDecodeError>
@@ -559,6 +593,29 @@ const layer = Layer.effect(
       message: Effect.fn("Session.message")(function* (input) {
         const stored = yield* store.message(input.messageID)
         return stored?.sessionID === input.sessionID ? stored.message : undefined
+      }),
+      updateMessage: Effect.fn("Session.updateMessage")(function* (input) {
+        const ref = { sessionID: input.sessionID, messageID: input.messageID }
+        yield* result.get(ref.sessionID)
+        if ((yield* execution.active).has(ref.sessionID)) return yield* new BusyError({ sessionID: ref.sessionID })
+        const message = yield* result.message(ref)
+        if (!message) return yield* new MessageNotFoundError(ref)
+        if (message.type !== "assistant") return yield* new MessageNotAssistantError(ref)
+        if (!message.time.completed) return yield* new MessageIncompleteError(ref)
+        if (
+          input.content.some(
+            (content) =>
+              content.type === "tool" && (content.state.status === "streaming" || content.state.status === "running"),
+          )
+        )
+          return yield* new MessageToolIncompleteError(ref)
+        yield* bus.publish(SessionEvent.MessageContentUpdated, {
+          ...ref,
+          content: Schema.encodeSync(Schema.Array(SessionMessage.AssistantContent))(input.content),
+        })
+        const updated = yield* result.message(ref)
+        if (updated?.type !== "assistant") return yield* new MessageNotFoundError(ref)
+        return updated
       }),
       context: Effect.fn("Session.context")(function* (sessionID) {
         yield* result.get(sessionID)

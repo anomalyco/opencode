@@ -2,7 +2,7 @@ import { expect, test, type Route } from "@playwright/test"
 
 const server = "http://127.0.0.1:4097"
 
-test("nested server dialog keeps focus inside the top layer", async ({ page }) => {
+test("server dialog keeps focus above fullscreen settings", async ({ page }) => {
   await page.addInitScript((server) => {
     localStorage.setItem("opencode.global.dat:server", JSON.stringify({ list: [server] }))
   }, server)
@@ -24,8 +24,9 @@ test("nested server dialog keeps focus inside the top layer", async ({ page }) =
 
   await page.goto("/")
   await page.keyboard.press("Control+,")
-  const settings = page.locator(".settings-dialog")
+  const settings = page.getByTestId("settings-screen")
   await expect(settings).toBeVisible()
+  await expect(page.getByRole("dialog")).toHaveCount(0)
   await settings.getByRole("tab", { name: "Servers" }).click()
   await settings.getByRole("button", { name: "Add server" }).click()
 
@@ -41,6 +42,9 @@ test("nested server dialog keeps focus inside the top layer", async ({ page }) =
   await expect(password).toBeFocused()
   await password.fill("secret")
   await expect(password).toHaveValue("secret")
+  await page.keyboard.press("Escape")
+  await expect(editor).toBeHidden()
+  await expect(settings).toBeVisible()
 })
 
 function json(route: Route, body: unknown, status = 200) {

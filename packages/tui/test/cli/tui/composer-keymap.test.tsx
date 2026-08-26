@@ -187,6 +187,17 @@ test("configured composer bindings work with a focused textarea", async () => {
   }
 })
 
+test("ctrl+c closes the active composer", async () => {
+  const composer = await renderComposer("shell", {})
+
+  try {
+    composer.app.mockInput.pressKey("c", { ctrl: true })
+    await composer.app.waitFor(() => composer.closed() === 1)
+  } finally {
+    composer.app.renderer.destroy()
+  }
+})
+
 function session(id: string, title: string, parentID?: string) {
   return {
     id,

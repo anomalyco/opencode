@@ -53,9 +53,14 @@ test.describe("session timeline projection", () => {
     ]
     await setupTimeline(page, { messages: [userMessage(), assistantMessage(parts)] })
 
-    await expect(
-      page.locator('[data-timeline-part-ids="prt_01_read,prt_02_glob,prt_03_grep,prt_04_list"]'),
-    ).toBeVisible()
+    const first = page.locator(
+      '[data-timeline-part-ids="prt_01_read,prt_02_glob,prt_03_grep,prt_04_list,prt_webfetch,prt_websearch,prt_task,prt_bash,prt_edit,prt_write,prt_patch"]',
+    )
+    const second = page.locator('[data-timeline-part-ids="prt_skill,prt_custom"]')
+    await expect(first).toBeVisible()
+    await expect(second).toBeVisible()
+    await first.getByRole("button").click()
+    await second.getByRole("button").click()
     for (const id of [
       "prt_webfetch",
       "prt_websearch",
@@ -78,8 +83,7 @@ test.describe("session timeline projection", () => {
     await expect(patch.locator('[data-slot="message-part-title-filename"]')).toHaveCount(0)
     await expect(patch.locator('[data-slot="message-part-actions"]')).toHaveCount(0)
     const edit = page.locator('[data-timeline-part-id="prt_edit"]')
-    await expect(edit.locator('[data-component="apply-patch-tool"]')).toBeVisible()
-    await expect(edit.locator('[data-slot="basic-tool-tool-title"]')).toContainText("Edit")
+    await expect(edit).toContainText("Edit")
     await expect(page.locator('[data-timeline-part-id="prt_todo"]')).toHaveCount(0)
   })
 
@@ -87,6 +91,7 @@ test.describe("session timeline projection", () => {
     const first = "prt_patch_first"
     const second = "prt_patch_second"
     const timeline = await setupTimeline(page, {
+      settings: { editToolPartsExpanded: true },
       messages: [
         userMessage(),
         assistantMessage([

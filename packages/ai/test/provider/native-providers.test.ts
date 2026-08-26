@@ -2,7 +2,7 @@ import { describe, expect } from "bun:test"
 import { ConfigProvider, Effect } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
 import { LLM, Message, ToolDefinition } from "../../src/index.js"
-import { Cerebras, TogetherAI } from "../../src/providers/index.js"
+import { Cerebras, DeepInfra, Groq, TogetherAI } from "../../src/providers/index.js"
 import { compileRequest } from "../../src/route/client.js"
 import { it } from "../lib/effect.js"
 import { dynamicResponse } from "../lib/http.js"
@@ -26,6 +26,18 @@ describe("native OpenAI-compatible providers", () => {
         route: { id: "cerebras-chat", protocol: "openai-chat" },
       })
       expect(cerebras.route.endpoint.baseURL).toBe("https://api.cerebras.ai/v1")
+    }),
+  )
+
+  it.effect("preserves native DeepInfra provider and route identity", () =>
+    Effect.gen(function* () {
+      const deepinfra = DeepInfra.configure({ apiKey: "fixture" }).model("google/gemma-3-27b-it")
+      expect(deepinfra).toMatchObject({
+        provider: "deepinfra",
+        compatibility: { maxTokensField: "max_tokens", reasoningField: "reasoning_content", supportsStore: false },
+        route: { id: "deepinfra-chat", protocol: "openai-chat" },
+      })
+      expect(deepinfra.route.endpoint.baseURL).toBe("https://api.deepinfra.com/v1/openai")
     }),
   )
 
@@ -82,6 +94,21 @@ describe("native OpenAI-compatible providers", () => {
     }),
   )
 
+  it.effect("normalizes DeepInfra API roots without duplicating the OpenAI path", () =>
+    Effect.gen(function* () {
+      for (const baseURL of [
+        "https://gateway.example/v1",
+        "https://gateway.example/v1/",
+        "https://gateway.example/v1/openai",
+        "https://gateway.example/v1/openai/",
+      ]) {
+        expect(DeepInfra.configure({ apiKey: "fixture", baseURL }).model("gemma").route.endpoint.baseURL).toBe(
+          "https://gateway.example/v1/openai",
+        )
+      }
+    }),
+  )
+
   it.effect("maps package settings onto native executable models", () =>
     Effect.gen(function* () {
       for (const native of [TogetherAI, Cerebras]) {
@@ -121,6 +148,18 @@ describe("native OpenAI-compatible providers", () => {
           env: { CEREBRAS_API_KEY: "cerebras-secret" },
           token: "cerebras-secret",
           url: "https://api.cerebras.ai/v1/chat/completions",
+        },
+        {
+          model: DeepInfra.configure().model("gemma"),
+          env: { DEEPINFRA_API_KEY: "deepinfra-secret" },
+          token: "deepinfra-secret",
+          url: "https://api.deepinfra.com/v1/openai/chat/completions",
+        },
+        {
+          model: Groq.configure().model("llama"),
+          env: { GROQ_API_KEY: "groq-secret" },
+          token: "groq-secret",
+          url: "https://api.groq.com/openai/v1/chat/completions",
         },
       ]
 

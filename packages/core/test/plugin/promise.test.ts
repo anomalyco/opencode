@@ -137,6 +137,7 @@ describe("fromPromise", () => {
           switchAgent: (input) => Effect.sync(() => seen.push(input)),
           switchModel: (input) => Effect.sync(() => seen.push(input)),
           rename: (input) => Effect.sync(() => seen.push(input)),
+          move: (input) => Effect.sync(() => seen.push(input)),
           wait: (input) => Effect.sync(() => seen.push(input)),
         },
       })
@@ -157,6 +158,9 @@ describe("fromPromise", () => {
               }),
             ).toBeUndefined()
             expect(await ctx.session.rename({ sessionID: "ses_success", title: "Renamed" })).toBeUndefined()
+            expect(
+              await ctx.session.move({ sessionID: "ses_success", directory: "/destination", delivery: "queue" }),
+            ).toBeUndefined()
             expect(await ctx.session.wait({ sessionID: "ses_success" })).toBeUndefined()
           },
         }),
@@ -169,6 +173,11 @@ describe("fromPromise", () => {
           model: { providerID: Provider.ID.make("openai"), id: Model.ID.make("gpt-5") },
         },
         { sessionID: Session.ID.make("ses_success"), title: "Renamed" },
+        {
+          sessionID: Session.ID.make("ses_success"),
+          directory: AbsolutePath.make("/destination"),
+          delivery: "queue",
+        },
         { sessionID: Session.ID.make("ses_success") },
       ])
     }),

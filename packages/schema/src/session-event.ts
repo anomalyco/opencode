@@ -117,6 +117,18 @@ export const Viewed = Event.durable({
 })
 export type Viewed = typeof Viewed.Type
 
+export const MessageContentUpdated = Event.durable({
+  type: "session.message.content.updated",
+  ...options,
+  schema: {
+    ...Base,
+    messageID: SessionMessage.ID,
+    // Public events are framed directly, so timestamps must already be encoded.
+    content: Schema.Array(SessionMessage.AssistantContentEncoded),
+  },
+})
+export type MessageContentUpdated = typeof MessageContentUpdated.Type
+
 export const UsageRecorded = Event.durable({
   type: "session.usage.recorded",
   ...options,
@@ -303,6 +315,17 @@ export namespace Step {
     },
   })
   export type Started = typeof Started.Type
+
+  /** Records the provider response-body boundary independently of tool settlement. */
+  export const Streamed = Event.durable({
+    type: "session.step.streamed",
+    ...options,
+    schema: {
+      ...Base,
+      assistantMessageID: SessionMessage.ID,
+    },
+  })
+  export type Streamed = typeof Streamed.Type
 
   export const Ended = Event.durable({
     type: "session.step.ended",
@@ -616,6 +639,7 @@ export const Definitions = Event.inventory(
   Shell.Started,
   Shell.Ended,
   Step.Started,
+  Step.Streamed,
   Step.Ended,
   Step.Failed,
   Text.Started,
@@ -639,6 +663,7 @@ export const Definitions = Event.inventory(
   RevertEvent.Staged,
   RevertEvent.Cleared,
   RevertEvent.Committed,
+  MessageContentUpdated,
 )
 
 // UsageRecorded is durable but internal: excluded from Definitions so it never reaches the public manifest.

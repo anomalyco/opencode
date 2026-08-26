@@ -297,6 +297,76 @@ test("session startup prompt is submitted exactly once", async () => {
   }
 })
 
+test("error investigations repeatedly seed editable home drafts without creating sessions", async () => {
+  const setup = await createTestRenderer({ width: 100, height: 30, useThread: false, kittyKeyboard: true })
+  setup.renderer.start()
+  const events = createEventStream()
+  const cwd = process.cwd()
+  const location = { directory: cwd, project: { id: "project", directory: cwd } }
+  let created = 0
+  const calls = createFetch((url, request) => {
+    if (url.pathname === "/api/location") return json(location)
+    if (url.pathname === "/api/mcp")
+      return json({
+        location,
+        data: [
+          { name: "alpha", status: { status: "failed", error: "Alpha connection refused" } },
+          { name: "beta", status: { status: "failed", error: "Beta initialization failed" } },
+        ],
+      })
+    if (url.pathname === "/api/session" && request.method === "POST") created++
+    return undefined
+  }, events)
+  const server = Bun.serve({ port: 0, fetch: (request) => calls.fetch(request) })
+
+  try {
+    const { run } = await import("../src/app")
+    const task = Effect.runPromise(
+      run({
+        app: { name: "test", version: "test", channel: "test" },
+        server: { endpoint: { url: server.url.toString() } },
+        config: {
+          get: async () => ({ animations: false, keybinds: { "mcp.list": "f6" } }),
+          update: async () => ({}),
+        },
+        packages: { resolve: async () => undefined },
+        args: {},
+        terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
+        log: () => {},
+      }).pipe(Effect.provide(AppNodeBuilder.build(Global.node)), Effect.provide(FileSystem.layerNoop({}))),
+    )
+    await setup.waitForFrame((frame) => frame.includes("commands"))
+
+    setup.mockInput.pressKey("F6")
+    await setup.waitForFrame((frame) => frame.includes("MCP servers") && frame.includes("alpha"))
+    setup.mockInput.pressEnter()
+    await setup.waitForFrame((frame) => frame.includes("Alpha connection refused") && frame.includes("i investigate"))
+    setup.mockInput.pressKey("i")
+    await setup.waitForFrame((frame) => frame.includes("Alpha connection refused") && !frame.includes("i investigate"))
+
+    setup.mockInput.pressKey("F6")
+    await setup.waitForFrame((frame) => frame.includes("MCP servers"))
+    setup.mockInput.pressArrow("down")
+    setup.mockInput.pressEnter()
+    await setup.waitForFrame((frame) => frame.includes("Beta initialization failed") && frame.includes("i investigate"))
+    setup.mockInput.pressKey("i")
+    const draft = await setup.waitForFrame(
+      (frame) => frame.includes("Beta initialization failed") && !frame.includes("i investigate"),
+    )
+
+    expect(draft).not.toContain("Alpha connection refused")
+    expect(created).toBe(0)
+
+    setup.mockInput.pressKey("c", { ctrl: true })
+    await setup.waitForFrame((frame) => !frame.includes("Beta initialization failed"))
+    setup.renderer.destroy()
+    await task
+  } finally {
+    if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+    await server.stop()
+  }
+})
+
 test("shows jump to latest after scrolling one line above the final message", async () => {
   const setup = await createTestRenderer({ width: 80, height: 20, useThread: false, kittyKeyboard: true })
   setup.renderer.start()
@@ -628,6 +698,51 @@ test("configured app bindings execute settings and permission commands", async (
       { maxPasses: 100 },
     )
     expect(commands).not.toContain("Enable auto-approve permissions")
+
+    setup.renderer.destroy()
+    await task
+  } finally {
+    if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+    await server.stop()
+  }
+})
+
+test("ctrl+c dismisses autocomplete and shell mode before exiting", async () => {
+  const setup = await createTestRenderer({ width: 100, height: 30, useThread: false, kittyKeyboard: true })
+  setup.renderer.start()
+  const ready = Promise.withResolvers<void>()
+  const events = createEventStream()
+  const calls = createFetch(undefined, events)
+  const server = Bun.serve({ port: 0, fetch: (request) => calls.fetch(request) })
+
+  try {
+    const { run } = await import("../src/app")
+    const task = Effect.runPromise(
+      run({
+        app: { name: "test", version: "test", channel: "test" },
+        server: { endpoint: { url: server.url.toString() } },
+        config: { get: async () => ({ animations: false }), update: async () => ({}) },
+        packages: { resolve: async () => undefined },
+        args: {},
+        terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: ready.resolve }),
+        log: () => {},
+      }).pipe(Effect.provide(AppNodeBuilder.build(Global.node)), Effect.provide(FileSystem.layerNoop({}))),
+    )
+
+    await ready.promise
+    await setup.waitForFrame((frame) => frame.includes("commands"))
+    await setup.mockInput.typeText("/theme")
+    await setup.waitForFrame((frame) => frame.includes("Switch theme"))
+
+    setup.mockInput.pressKey("c", { ctrl: true })
+    await setup.waitForFrame((frame) => !frame.includes("Switch theme"))
+    expect(setup.renderer.isDestroyed).toBe(false)
+
+    await setup.mockInput.typeText("!")
+    await setup.waitForFrame((frame) => frame.includes("Shell"))
+    setup.mockInput.pressKey("c", { ctrl: true })
+    await setup.waitForFrame((frame) => !frame.includes("Shell"))
+    expect(setup.renderer.isDestroyed).toBe(false)
 
     setup.renderer.destroy()
     await task

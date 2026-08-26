@@ -22,6 +22,8 @@ export function SessionTimeline(props: SessionTimelineProps) {
     sessionMessages: () => props.document.messages,
     status: () => props.document.status,
     showReasoningSummaries: () => props.showReasoningSummaries ?? true,
+    shellToolDefaultOpen: () => props.shellToolDefaultOpen ?? false,
+    editToolDefaultOpen: () => props.editToolDefaultOpen ?? false,
   })
   const [toolOpen, setToolOpen] = createStore<Record<string, boolean | undefined>>({})
   const renderer = createSessionTimelineRowRenderer({

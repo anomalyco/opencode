@@ -86,28 +86,10 @@ const OpenAIResponsesBody = Schema.Struct({
 })
 export type OpenAIResponsesBody = Schema.Schema.Type<typeof OpenAIResponsesBody>
 
-// Replayed items are paired with stored server state by id, so a foreign or
-// synthetic token can fail request validation even when `call_id` pairing is
-// intact. Only resend ids in each item kind's own grammar; hosted tool
-// items keep generic validation because every hosted tool mints its own
-// prefix. The same allowlist approach codex uses before resending history
-// (codex-rs core/src/client.rs, `prepare_response_items_for_request`).
-const ITEM_ID_PREFIXES: Record<OpenResponses.ItemKind, ReadonlyArray<string>> = {
-  message: ["msg_"],
-  reasoning: ["rs_"],
-  "function-call": ["fc_"],
-  // Every hosted tool mints its own id prefix, so items keep generic validation.
-  "hosted-tool": [],
-}
-
 const extension = {
   id: ADAPTER,
   name: NAME,
   lowerHostedToolItem: (item: unknown) => (Schema.is(OpenAIResponsesHostedToolItem)(item) ? item : undefined),
-  acceptsItemID: (kind: OpenResponses.ItemKind, id: string) => {
-    const prefixes = ITEM_ID_PREFIXES[kind]
-    return prefixes.length === 0 || prefixes.some((prefix) => id.startsWith(prefix))
-  },
 } satisfies OpenResponses.Extension
 
 const nativeImageToolInput = (tool: ToolDefinition) => {

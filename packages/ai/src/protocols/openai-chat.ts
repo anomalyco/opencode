@@ -496,7 +496,11 @@ const lowerMessages = Effect.fn("OpenAIChat.lowerMessages")(function* (request: 
   const lowering = {
     ...options,
     toolCallID: (id: string) => {
-      if (mistral) return id.replace(/[^a-zA-Z0-9]/g, "").slice(0, 9).padEnd(9, "0")
+      if (mistral)
+        return id
+          .replace(/[^a-zA-Z0-9]/g, "")
+          .slice(0, 9)
+          .padEnd(9, "0")
       if (modelID.includes("claude")) return id.replace(/[^a-zA-Z0-9_-]/g, "_")
       if (request.model.provider === "openai" || request.model.provider === "azure" || modelID.startsWith("openai/"))
         return id.slice(0, 40)
@@ -505,7 +509,8 @@ const lowerMessages = Effect.fn("OpenAIChat.lowerMessages")(function* (request: 
   }
   const requireAssistantAfterTool = request.model.compatibility?.requireAssistantAfterTool ?? mistral
   const bridgeTools = () => {
-    if (requireAssistantAfterTool && messages.at(-1)?.role === "tool") messages.push({ role: "assistant", content: "Done." })
+    if (requireAssistantAfterTool && messages.at(-1)?.role === "tool")
+      messages.push({ role: "assistant", content: "Done." })
   }
   const pendingImages: Array<Schema.Schema.Type<typeof OpenAIChatUserContent>> = []
   const flushImages = () => {
@@ -557,7 +562,10 @@ const lowerMessages = Effect.fn("OpenAIChat.lowerMessages")(function* (request: 
         )
       continue
     }
-    if (message.role === "assistant" && message.content.every((part) => part.type === "text" && part.text.trim() === ""))
+    if (
+      message.role === "assistant" &&
+      message.content.every((part) => part.type === "text" && part.text.trim() === "")
+    )
       continue
     if (message.role === "tool") {
       const lowered = yield* lowerToolMessages(message, lowering)
@@ -588,7 +596,10 @@ const hasToolHistory = (messages: ReadonlyArray<LLMRequest["messages"][number]>)
 // models.dev provider naming: DeepSeek, Moonshot AI, Together AI, ZAI
 // (Zhipu + Coding Plan variants), Nvidia, Cerebras, Chutes, etc. still
 // require `max_tokens`.
-const detectMaxTokensField = (provider: string, baseURL: string | undefined): "max_tokens" | "max_completion_tokens" => {
+const detectMaxTokensField = (
+  provider: string,
+  baseURL: string | undefined,
+): "max_tokens" | "max_completion_tokens" => {
   const p = provider.toLowerCase()
   const url = (baseURL ?? "").toLowerCase()
   if (
@@ -638,7 +649,8 @@ const detectSupportsStore = (provider: string, baseURL: string | undefined): boo
   const isChutes = p === "chutes" || url.includes("chutes.ai")
   const isCloudflareWorkersAI = p === "cloudflare-workers-ai" || url.includes("api.cloudflare.com")
   const isCloudflareAiGateway = p === "cloudflare-ai-gateway" || url.includes("gateway.ai.cloudflare.com")
-  const isVercelAiGateway = p === "vercel-ai-gateway" || url.includes("ai-gateway.vercel.sh") || url.includes("vercel.sh")
+  const isVercelAiGateway =
+    p === "vercel-ai-gateway" || url.includes("ai-gateway.vercel.sh") || url.includes("vercel.sh")
   const isAntLing = p === "ant-ling" || url.includes("api.ant-ling.com")
   const isOpencode = p === "opencode" || url.includes("opencode.ai")
   const isNonStandard =
@@ -670,11 +682,7 @@ const detectSupportsStrictMode = (provider: string, baseURL: string | undefined)
   return !isMoonshot && !isTogether && !isCloudflareAiGateway && !isNvidia
 }
 
-const detectZaiToolStream = (
-  provider: string,
-  baseURL: string | undefined,
-  modelID: string,
-): boolean => {
+const detectZaiToolStream = (provider: string, baseURL: string | undefined, modelID: string): boolean => {
   const p = provider.toLowerCase()
   const url = (baseURL ?? "").toLowerCase()
   const isZai =
@@ -724,10 +732,10 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
   const supportsStore = request.model.compatibility?.supportsStore ?? detectSupportsStore(provider, baseURL)
   const supportsUsageInStreaming =
     request.model.compatibility?.supportsUsageInStreaming ?? detectSupportsUsageInStreaming()
-  const supportsStrictMode = request.model.compatibility?.supportsStrictMode ?? detectSupportsStrictMode(provider, baseURL)
+  const supportsStrictMode =
+    request.model.compatibility?.supportsStrictMode ?? detectSupportsStrictMode(provider, baseURL)
   const zaiToolStream =
-    request.model.compatibility?.zaiToolStream ??
-    detectZaiToolStream(provider, baseURL, request.model.id)
+    request.model.compatibility?.zaiToolStream ?? detectZaiToolStream(provider, baseURL, request.model.id)
   const hasHistory = hasToolHistory(request.messages)
   const hasActiveTools = request.tools.length > 0
   return {
@@ -816,11 +824,10 @@ const mapUsage = (usage: OpenAIChatEvent["usage"]): Usage | undefined => {
   if (!usage) return undefined
   const input = usage.prompt_tokens ?? undefined
   const output = usage.completion_tokens ?? undefined
-  const cached =
-    (usage.prompt_tokens_details?.cached_tokens ??
-      (usage as { prompt_cache_hit_tokens?: number | null }).prompt_cache_hit_tokens ??
-      (usage as { cached_tokens?: number | null }).cached_tokens ??
-      undefined) as number | undefined
+  const cached = (usage.prompt_tokens_details?.cached_tokens ??
+    (usage as { prompt_cache_hit_tokens?: number | null }).prompt_cache_hit_tokens ??
+    (usage as { cached_tokens?: number | null }).cached_tokens ??
+    undefined) as number | undefined
   const cacheWrite = usage.prompt_tokens_details?.cache_write_tokens ?? undefined
   const reasoning = usage.completion_tokens_details?.reasoning_tokens ?? undefined
   const nonCached = ProviderShared.subtractTokens(input, ProviderShared.sumTokens(cached, cacheWrite))
@@ -936,13 +943,12 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
     const choiceUsage = (choice as unknown as { usage?: OpenAIChatEvent["usage"] })?.usage
     const usage = mapUsage(event.usage) ?? (choiceUsage ? mapUsage(choiceUsage) : undefined) ?? state.usage
     const rawFinishReason = choice?.finish_reason
-    const finishReason =
-      rawFinishReason
-        ? {
-            normalized: yield* mapFinishReason(event, rawFinishReason),
-            raw: choice?.native_finish_reason ?? rawFinishReason,
-          }
-        : state.finishReason
+    const finishReason = rawFinishReason
+      ? {
+          normalized: yield* mapFinishReason(event, rawFinishReason),
+          raw: choice?.native_finish_reason ?? rawFinishReason,
+        }
+      : state.finishReason
     const delta = choice?.delta
     const toolDeltas = delta?.tool_calls ?? []
     let tools = state.tools

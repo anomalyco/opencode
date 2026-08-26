@@ -540,6 +540,10 @@ export function FormPrompt(props: { form: FormWithLocation }) {
         run() {
           const text = textarea?.plainText ?? ""
           if (!text) {
+            if (textual()) {
+              cancel()
+              return
+            }
             setStore("editing", false)
             return
           }

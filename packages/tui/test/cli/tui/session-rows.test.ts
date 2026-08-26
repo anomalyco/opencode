@@ -1,6 +1,12 @@
 import { expect, test } from "bun:test"
 import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode-ai/client"
-import { cacheReuseDrop, messageBoundaryIDs, reduceSessionRows, turnDuration } from "../../../src/routes/session/rows"
+import {
+  cacheReuseDrop,
+  messageBoundaryIDs,
+  reduceSessionRows,
+  turnDuration,
+  turnTokensPerSecond,
+} from "../../../src/routes/session/rows"
 
 test("measures turn duration from the user prompt across assistant steps", () => {
   const first = assistant("assistant-1", [])
@@ -14,6 +20,28 @@ test("measures turn duration from the user prompt across assistant steps", () =>
   ]
 
   expect(turnDuration(final, messages)).toBe(29_000)
+})
+
+test("measures turn output throughput across model steps without tool time", () => {
+  const first = assistant("assistant-1", [])
+  first.time = { created: 8_000, streamed: 10_000, completed: 20_000 }
+  first.tokens = { input: 10, output: 20, reasoning: 5, cache: { read: 0, write: 0 } }
+  const final = assistant("assistant-2", [])
+  final.time = { created: 27_000, streamed: 30_000, completed: 31_000 }
+  final.tokens = { input: 20, output: 30, reasoning: 10, cache: { read: 0, write: 0 } }
+  const messages: SessionMessageInfo[] = [
+    { type: "user", id: "user-1", text: "Question", time: { created: 1_000 } },
+    first,
+    final,
+  ]
+
+  expect(turnTokensPerSecond(final, messages)).toBe(10)
+})
+
+test("omits turn throughput when a stream boundary is unavailable", () => {
+  const final = assistant("assistant-1", [])
+  final.tokens = { input: 10, output: 20, reasoning: 0, cache: { read: 0, write: 0 } }
+  expect(turnTokensPerSecond(final, [final])).toBeUndefined()
 })
 
 test("filters OpenAI cache quantization from cache reuse drops", () => {

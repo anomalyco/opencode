@@ -38,6 +38,7 @@ import { projectName } from "../util/project"
 import { marqueeCycleWidth, marqueeOverflows, marqueeTextParts } from "../util/marquee"
 import { useDialog } from "../ui/dialog"
 import { DialogSessionRename } from "./dialog-session-rename"
+import { Keymap } from "../context/keymap"
 
 // A long title fades out over its last cells instead of cutting hard.
 const FADE_WIDTH = 4
@@ -266,6 +267,11 @@ function TabContextMenu(props: { state: TabContextMenuState; tabs: SessionTabsCo
   const dimensions = useTerminalDimensions()
   const theme = useTheme("elevated")
   const dialog = useDialog()
+  onCleanup(Keymap.use().mode.push("menu"))
+  Keymap.createLayer(() => ({
+    mode: "menu",
+    commands: [{ bind: "escape,ctrl+c", title: "Close tab menu", group: "Tabs", run: props.onClose }],
+  }))
   const actions = createMemo(() => {
     const sessionID = props.state.sessionID
     return [
@@ -1050,7 +1056,12 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
     if (closeHold() && heldLayout()) {
       const current = untrack(motion.value)
       const seeded = changed
-        ? seedSessionTabMotion(previous.split(":"), layout().tabs.map((tab) => tab.sessionID), current, next)
+        ? seedSessionTabMotion(
+            previous.split(":"),
+            layout().tabs.map((tab) => tab.sessionID),
+            current,
+            next,
+          )
         : current
       if (!seeded) return motion.jump(next)
       motion.jump({ ...seeded, widths: next.widths })

@@ -8,6 +8,7 @@ import type {
 } from "@opencode-ai/client/promise"
 import { Option, Schema } from "effect"
 import { createMemo, type Accessor } from "solid-js"
+import { currentContentDefaultOpen } from "../message/current-tool-state"
 import { TimelineRow, type PartGroup, type PartRef, type TimelineRowMap } from "./timeline-row"
 
 export { TimelineRow, type PartGroup, type PartRef, type TimelineRowMap }
@@ -18,13 +19,14 @@ type Content = SessionMessageAssistant["content"][number]
 type GroupRow = Extract<TimelineRow.TimelineRow, { _tag: "AssistantPart" }>
 type PriorGroup = { index: number; row: GroupRow }
 
-const contextTools = new Set(["read", "glob", "grep", "list"])
 const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
 
 export type TimelineProjectionInput = {
   sessionMessages: SessionMessageInfo[]
   status: SessionStatus
   showReasoningSummaries: boolean
+  shellToolDefaultOpen?: boolean
+  editToolDefaultOpen?: boolean
   pendingUserMessageIDs?: ReadonlySet<string>
   previousRows?: TimelineRow.TimelineRow[]
 }
@@ -36,6 +38,8 @@ export function createTimelineProjection(input: TimelineProjectionInput) {
     input.showReasoningSummaries,
     input.status,
     input.pendingUserMessageIDs,
+    input.shellToolDefaultOpen ?? false,
+    input.editToolDefaultOpen ?? false,
   )
   const rows = reuseTimelineRows(input.previousRows, projection.rows)
   const rowByKey = new Map(rows.map((row) => [TimelineRow.key(row), row] as const))
@@ -67,6 +71,8 @@ export function createReactiveTimelineProjection(input: {
   sessionMessages: Accessor<SessionMessageInfo[]>
   status: Accessor<SessionStatus>
   showReasoningSummaries: Accessor<boolean>
+  shellToolDefaultOpen?: Accessor<boolean>
+  editToolDefaultOpen?: Accessor<boolean>
   pendingUserMessageIDs?: Accessor<ReadonlySet<string>>
 }) {
   const sessionMessageByID = createMemo(
@@ -80,6 +86,8 @@ export function createReactiveTimelineProjection(input: {
       input.showReasoningSummaries(),
       input.status(),
       input.pendingUserMessageIDs?.(),
+      input.shellToolDefaultOpen?.() ?? false,
+      input.editToolDefaultOpen?.() ?? false,
     ),
   )
   const activeMessageID = createMemo(() => projection().activeMessageID)
@@ -128,6 +136,8 @@ export namespace Timeline {
     showReasoning: boolean,
     status: SessionStatus,
     pendingUserMessageIDs?: ReadonlySet<string>,
+    shellToolDefaultOpen = false,
+    editToolDefaultOpen = false,
   ) {
     type Turn = {
       id: string
@@ -204,6 +214,8 @@ export namespace Timeline {
             showReasoning,
             status,
             turn.id === activeMessageID,
+            shellToolDefaultOpen,
+            editToolDefaultOpen,
           )
         }),
       ],
@@ -218,6 +230,8 @@ export namespace Timeline {
     showReasoning: boolean,
     status: SessionStatus,
     isActive: boolean,
+    shellToolDefaultOpen = false,
+    editToolDefaultOpen = false,
   ) {
     const rows: TimelineRow.TimelineRow[] = []
     const assistantMessages = entries.flatMap((entry) => (entry.type === "assistant" ? [entry.message] : []))
@@ -237,6 +251,7 @@ export namespace Timeline {
     if (userMessage) rows.push(new TimelineRow.UserMessage({ userMessageID: turnID }))
 
     let assistantGroupIndex = 0
+    let previousAssistantTool = false
     // An assistant message can produce several rows because its content parts are
     // rendered separately. Notices end a segment so none of those rows cross it.
     const appendAssistantSegment = (messages: SessionMessageAssistant[]) => {
@@ -248,17 +263,23 @@ export namespace Timeline {
       const interruptedAt = messages.findIndex((message) => isInterrupted(message.error))
       const before = interruptedAt < 0 ? refs : refs.filter((ref) => ref.messageIndex <= interruptedAt)
       const after = interruptedAt < 0 ? [] : refs.filter((ref) => ref.messageIndex > interruptedAt)
-      const appendGroups = (items: typeof refs) =>
-        groupContent(items).forEach((group) => {
+      const appendGroups = (items: typeof refs) => {
+        let offset = 0
+        groupContent(items, shellToolDefaultOpen, editToolDefaultOpen).forEach((group) => {
+          const tool = group.type !== "part" || items[offset]?.content.type === "tool"
+          offset += group.type === "part" ? 1 : group.refs.length
           rows.push(
             new TimelineRow.AssistantPart({
               userMessageID: turnID,
               group,
               previousAssistantPart: assistantGroupIndex > 0,
+              spacing: assistantGroupIndex > 0 ? (previousAssistantTool && tool ? "tool" : "content") : undefined,
             }),
           )
           assistantGroupIndex += 1
+          previousAssistantTool = tool
         })
+      }
 
       appendGroups(before)
       if (interruptedAt >= 0) {
@@ -444,6 +465,7 @@ function stabilizeGroupKey(
   return new TimelineRow.AssistantPart({
     userMessageID: row.userMessageID,
     previousAssistantPart: row.previousAssistantPart,
+    spacing: row.spacing,
     group: { ...row.group, key: existing.row.group.key },
   })
 }
@@ -462,7 +484,11 @@ function renderable(content: Content, showReasoning: boolean) {
   return true
 }
 
-function groupContent(items: { messageID: string; partID: string; content: Content }[]): PartGroup[] {
+function groupContent(
+  items: { messageID: string; partID: string; content: Content }[],
+  shellToolDefaultOpen: boolean,
+  editToolDefaultOpen: boolean,
+): PartGroup[] {
   const groups: PartGroup[] = []
   let adjacent: { type: "context" | "patch" | "edit"; refs: PartRef[] } | undefined
   const flush = () => {
@@ -482,13 +508,7 @@ function groupContent(items: { messageID: string; partID: string; content: Conte
 
   items.forEach((item) => {
     const type =
-      item.content.type === "tool" && contextTools.has(item.content.name) && !hasLoadedFiles(item.content)
-        ? "context"
-        : item.content.type === "tool" && item.content.name === "patch" && item.content.state.status !== "error"
-          ? "patch"
-          : item.content.type === "tool" && item.content.name === "edit" && item.content.state.status !== "error"
-            ? "edit"
-            : undefined
+      item.content.type === "tool" ? toolGroupType(item.content, shellToolDefaultOpen, editToolDefaultOpen) : undefined
     if (type) {
       if (adjacent?.type !== type) flush()
       adjacent ??= { type, refs: [] }
@@ -504,6 +524,26 @@ function groupContent(items: { messageID: string; partID: string; content: Conte
   })
   flush()
   return groups
+}
+
+function toolGroupType(content: Extract<Content, { type: "tool" }>, shellExpanded: boolean, editExpanded: boolean) {
+  if (content.name === "question" || hasLoadedFiles(content)) return undefined
+  if (content.state.status === "error") {
+    if ((content.name === "shell" || content.name === "execute") && shellExpanded) return undefined
+    if ((content.name === "edit" || content.name === "write" || content.name === "patch") && editExpanded)
+      return undefined
+    return "context"
+  }
+  if (
+    (content.state.status !== "completed" ||
+      ("metadata" in content.state && content.state.metadata?.status === "running")) &&
+    (content.name === "shell" || content.name === "execute" || content.name === "subagent")
+  )
+    return undefined
+  if (currentContentDefaultOpen(content, shellExpanded, editExpanded) !== true) return "context"
+  if (content.name === "patch") return "patch"
+  if (content.name === "edit") return "edit"
+  return undefined
 }
 
 function hasLoadedFiles(content: Extract<Content, { type: "tool" }>) {

@@ -12,7 +12,7 @@ type Transaction = Parameters<Parameters<DatabaseClient["transaction"]>[0]>[0]
 export const ProjectTable = sqliteTable("project", {
   id: text().$type<ProjectSchema.ID>().primaryKey(),
   worktree: absoluteColumn().notNull(),
-  vcs: text().$type<"git" | "hg">(),
+  vcs: text().$type<ProjectSchema.Vcs["type"]>(),
   name: text(),
   icon_url: text(),
   icon_url_override: text(),

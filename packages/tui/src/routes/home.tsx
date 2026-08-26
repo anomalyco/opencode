@@ -48,16 +48,17 @@ export function Home() {
   const bind = (r: PromptRef | undefined) => {
     setRef(r)
     promptRef.set(r)
-    if (once || !r) return
-    if (route.prompt) {
-      r.set(route.prompt)
-      once = true
-      return
-    }
-    if (!args.prompt) return
+    if (once || !r || route.prompt || !args.prompt) return
     r.set({ text: args.prompt, files: [], agents: [], pasted: [] })
     once = true
   }
+
+  createEffect(() => {
+    const composer = ref()
+    const prompt = route.prompt
+    if (!composer || prompt?.text === undefined) return
+    untrack(() => composer.set(prompt))
+  })
 
   // Wait for the model store to be ready before auto-submitting --prompt.
   createEffect(() => {

@@ -652,7 +652,9 @@ const step = (state: ParserState, event: BedrockEvent) =>
         method: "stream",
         reason: classifyProviderFailure({
           message:
-            event.exception.details.message ?? event.exception.details.originalMessage ?? "Bedrock Converse stream error",
+            event.exception.details.message ??
+            event.exception.details.originalMessage ??
+            "Bedrock Converse stream error",
           code: event.exception.type,
         }),
       })

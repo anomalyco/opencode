@@ -27,6 +27,7 @@ test("validates the session tabs setting", () => {
   expect(() => decode({ tabs: { enabled: "on" } })).toThrow()
   expect(decode({ prompt: { image_preview: true } })).toEqual({ prompt: { image_preview: true } })
   expect(decode({ session: { image_preview: true } })).toEqual({ session: { image_preview: true } })
+  expect(decode({ session: { tps: false } })).toEqual({ session: { tps: false } })
   expect(decode({ session: { new_location: "inherit" } })).toEqual({ session: { new_location: "inherit" } })
   expect(() => decode({ session: { new_location: "current" } })).toThrow()
 })
@@ -50,6 +51,7 @@ test("resolves nested config and keybind defaults", () => {
   expect(config.debug).toEqual({ devtools: true })
   expect(config.tabs).toEqual({ enabled: true, scope: "cwd", layout: "horizontal" })
   expect(config.session.new_location).toBe("launch")
+  expect(config.session.tps).toBe(true)
 })
 
 test("shows resolved tab defaults in settings", () => {
@@ -62,6 +64,12 @@ test("shows the new session location default in settings", () => {
   expect(settings.find((setting) => setting.path.join(".") === "session.new_location")?.default).toBe("launch")
 })
 
+test("shows the TPS default in session settings", () => {
+  const setting = settings.find((setting) => setting.path.join(".") === "session.tps")
+  expect(setting?.category).toBe("Session")
+  expect(setting?.default).toBe(true)
+})
+
 test("validates terminal copy behavior", () => {
   expect(decodeInfo({ terminal: { copy: "manual" } })).toEqual({ terminal: { copy: "manual" } })
   expect(decodeInfo({ terminal: { copy: "select" } })).toEqual({ terminal: { copy: "select" } })
@@ -70,6 +78,29 @@ test("validates terminal copy behavior", () => {
   const setting = settings.find((setting) => setting.path.join(".") === "terminal.copy")
   expect(setting?.values).toEqual(["manual", "select"])
   expect(setting?.default).toBe(process.platform === "win32" ? "manual" : "select")
+})
+
+test("keeps persistent terminals disabled until explicitly enabled", () => {
+  const disabled = resolve({}, { terminalSuspend: true })
+  expect(disabled.session.terminal ?? false).toBe(false)
+  expect(disabled.keybinds.get("theme.switch")).toMatchObject([{ key: "<leader>t" }])
+  expect(disabled.keybinds.get("terminal.toggle")).toEqual([])
+  expect(settings.find((setting) => setting.path.join(".") === "session.terminal")?.default).toBe(false)
+  expect(settings.filter((setting) => setting.category === "Terminal").map((setting) => setting.title)).toEqual([
+    "Window title",
+    "Copy behavior",
+  ])
+
+  const enabled = resolve({ session: { terminal: true } }, { terminalSuspend: true })
+  expect(enabled.keybinds.get("terminal.toggle")).toMatchObject([{ key: "<leader>t" }])
+  expect(enabled.keybinds.get("theme.switch")).toEqual([])
+
+  const customized = resolve(
+    { session: { terminal: true }, keybinds: { "theme.switch": "<leader>t", "terminal.toggle": "<leader>p" } },
+    { terminalSuspend: true },
+  )
+  expect(customized.keybinds.get("theme.switch")).toMatchObject([{ key: "<leader>t" }])
+  expect(customized.keybinds.get("terminal.toggle")).toMatchObject([{ key: "<leader>p" }])
 })
 
 test("uses command IDs as keybind keys", () => {

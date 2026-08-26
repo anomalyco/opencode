@@ -1,5 +1,5 @@
 import { castDraft, produce, type WritableDraft } from "immer"
-import { DateTime, Effect, Match, pipe } from "effect"
+import { DateTime, Effect, Match, pipe, Schema } from "effect"
 import { SessionEvent } from "./event.js"
 import { SessionMessage } from "./message.js"
 
@@ -71,6 +71,12 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
     Match.discriminatorsExhaustive("type")({
       "session.created": () => Effect.void,
       "session.viewed": () => Effect.void,
+      "session.message.content.updated": (event) =>
+        updateOwnedAssistant(event.data.messageID, (draft) => {
+          draft.content = castDraft(
+            Schema.decodeUnknownSync(Schema.Array(SessionMessage.AssistantContent))(event.data.content),
+          )
+        }),
       "session.usage.recorded": () => Effect.void,
       "session.agent.selected": (event) =>
         Effect.gen(function* () {
@@ -204,6 +210,7 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
                 draft.finish = undefined
                 draft.rawFinish = undefined
                 draft.providerState = undefined
+                draft.time.streamed = undefined
                 draft.time.completed = undefined
                 if (event.data.snapshot) draft.snapshot = { ...draft.snapshot, start: event.data.snapshot }
               }),
@@ -232,6 +239,11 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
             }),
           )
         }),
+      "session.step.streamed": (event) => {
+        return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
+          draft.time.streamed = created
+        })
+      },
       "session.step.ended": (event) => {
         return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
           draft.time.completed = created

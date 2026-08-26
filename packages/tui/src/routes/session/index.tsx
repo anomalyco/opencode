@@ -1,5 +1,4 @@
 import {
-  batch,
   createContext,
   createEffect,
   createMemo,
@@ -60,7 +59,6 @@ import { DialogImagePreview } from "../../component/dialog-image-preview"
 import { DialogMessage } from "./dialog-message"
 import { DialogFork } from "./dialog-fork"
 import { DialogTimeline } from "./dialog-timeline"
-import { Sidebar } from "./sidebar"
 import { Composer } from "./composer"
 import { filetype } from "../../util/filetype"
 import parsers from "../../parsers-config"
@@ -93,6 +91,7 @@ import {
   messageBoundaryIDs,
   resolvePart,
   turnDuration,
+  turnTokensPerSecond,
   type CacheUsage,
   type PartRef,
   type SessionRow,
@@ -110,6 +109,7 @@ import { createDelayedPresence } from "../../util/delayed-presence"
 import { SessionLocationMissing } from "./location-missing"
 import { isRecord } from "../../util/record"
 import { createHistoryPrepend } from "./history"
+import { useSessionTerminals } from "../../context/session-terminals"
 
 addDefaultParsers(parsers.parsers)
 
@@ -148,7 +148,14 @@ function use() {
   return ctx
 }
 
-export function Session(props: { verticalTabsWidth: number }) {
+export function Session(props: {
+  verticalTabsWidth: number
+  promptMuted?: boolean
+  sidebarVisible: boolean
+  onToggleSidebar: () => void
+  visibleTerminalID?: string
+  width?: number
+}) {
   const setEpilogue = useEpilogue()
   const clipboard = useClipboard()
   const writeExport = async (file: string, content: string) => {
@@ -219,6 +226,9 @@ export function Session(props: { verticalTabsWidth: number }) {
     open: false,
     tab: undefined as string | undefined,
   })
+  createEffect(() => {
+    if (props.promptMuted && composer.open) setComposer("open", false)
+  })
   const disabled = createMemo(() => promptedPermissions().length > 0 || forms().length > 0)
 
   const lastAssistant = createMemo(() => {
@@ -226,27 +236,23 @@ export function Session(props: { verticalTabsWidth: number }) {
   })
 
   const dimensions = useTerminalDimensions()
-  const sidebar = createMemo(() => config.session?.sidebar ?? "auto")
-  const [sidebarOpen, setSidebarOpen] = createSignal(false)
   const thinkingMode = createMemo<ThinkingMode>(() => config.session?.thinking ?? "hide")
   const showScrollbar = createMemo(() => config.session?.scrollbar ?? false)
   const markdownMode = createMemo(() => config.session?.markdown ?? "rendered")
   const diffWrapMode = createMemo(() => config.diffs?.wrap ?? "word")
   const groupExploration = createMemo(() => config.session?.grouping !== "none")
 
-  const availableWidth = createMemo(() => dimensions().width - props.verticalTabsWidth)
-  const wide = createMemo(() => availableWidth() > 120)
-  const sidebarVisible = createMemo(() => {
-    if (session()?.parentID) return false
-    if (sidebarOpen()) return true
-    if (sidebar() === "auto" && wide()) return true
-    return false
-  })
-  const contentWidth = createMemo(() => availableWidth() - (sidebarVisible() ? 42 : 0) - 4)
+  Keymap.createLayer(() => ({
+    priority: 10,
+    enabled: () => props.sidebarVisible && dimensions().width - props.verticalTabsWidth <= 120 && !disabled(),
+    commands: [{ bind: "escape,ctrl+c", title: "Close sidebar", group: "Session", run: props.onToggleSidebar }],
+  }))
+  const contentWidth = createMemo(() => (props.width ?? dimensions().width - props.verticalTabsWidth) - 4)
   const models = createMemo(() => data.location.model.list(location()) ?? [])
 
   const scrollAcceleration = createMemo(() => getScrollAcceleration(config))
   const toast = useToast()
+  const terminalError = () => toast.show({ variant: "error", message: "Unable to load terminal" })
   const client = useClient()
   const autoApproved = new Set<string>()
   createEffect(() => {
@@ -280,6 +286,7 @@ export function Session(props: { verticalTabsWidth: number }) {
   const [navigationSlack, setNavigationSlack] = createSignal(0)
   const [synced, setSynced] = createSignal(false)
   const sessionTabs = useSessionTabs()
+  const terminals = useSessionTerminals()
   const [awayFromBottom, setAwayFromBottom] = createSignal(false)
   const [latestHovered, setLatestHovered] = createSignal(false)
   let ensureAllRowsPending: (() => void)[] | undefined
@@ -880,22 +887,68 @@ export function Session(props: { verticalTabsWidth: number }) {
       },
     },
     {
-      title: sidebarVisible() ? "Hide sidebar" : "Show sidebar",
+      title: props.sidebarVisible ? "Hide sidebar" : "Show sidebar",
       id: "session.sidebar.toggle",
       group: "Session",
       run: () => {
-        batch(() => {
-          const isVisible = sidebarVisible()
-          void configState
-            .update((draft) => {
-              draft.session = { ...draft.session, sidebar: isVisible ? "hide" : "auto" }
-            })
-            .catch(toast.error)
-          setSidebarOpen(!isVisible)
-        })
+        props.onToggleSidebar()
         dialog.clear()
       },
     },
+    ...(config.session.terminal
+      ? [
+          {
+            title: props.visibleTerminalID ? "Hide terminal pane" : "Show terminal pane",
+            id: "terminal.toggle",
+            group: "Session",
+            run: () => {
+              if (props.visibleTerminalID) {
+                promptRef.current?.focus()
+                void terminals.hideTerminal(route.sessionID).catch(toast.error)
+              } else {
+                const state = terminals.get(route.sessionID)
+                const terminal =
+                  state?.terminals.find((item) => item.id === state.selectedTerminalID) ?? state?.terminals.at(-1)
+                if (terminal) void terminals.selectTerminal(route.sessionID, terminal.id).catch(terminalError)
+                else void terminals.newTerminal(route.sessionID).catch(terminalError)
+              }
+              dialog.clear()
+            },
+          },
+          {
+            title: "Select terminal",
+            id: "terminal.select",
+            group: "Session",
+            run: () => {
+              promptRef.current?.focus()
+              setComposer({ open: true, tab: "terminals" })
+              void terminals.refresh(route.sessionID).catch(terminalError)
+              dialog.clear()
+            },
+          },
+          {
+            title: "Close terminal pane",
+            id: "terminal.close",
+            group: "Session",
+            enabled: props.visibleTerminalID !== undefined,
+            run: () => {
+              promptRef.current?.focus()
+              void terminals.hideTerminal(route.sessionID).catch(toast.error)
+              dialog.clear()
+            },
+          },
+          {
+            title: "New terminal",
+            id: "session.terminal",
+            group: "Session",
+            slash: { name: "terminal" },
+            run: async () => {
+              dialog.clear()
+              await terminals.newTerminal(route.sessionID).catch(terminalError)
+            },
+          },
+        ]
+      : []),
     {
       title: (() => {
         const next = nextThinkingMode(thinkingMode())
@@ -1115,7 +1168,7 @@ export function Session(props: { verticalTabsWidth: number }) {
       group: "Session",
       run: () => {
         if (composer.open || session()?.parentID) setComposer("open", false)
-        else setComposer("open", true)
+        else setComposer({ open: true, tab: "subagents" })
         dialog.clear()
       },
     },
@@ -1294,7 +1347,15 @@ export function Session(props: { verticalTabsWidth: number }) {
                 sessionID={route.sessionID}
                 open={composer.open || (!!session()?.parentID && forms().length === 0)}
                 defaultTab={composer.tab ?? (session()?.parentID ? "subagents" : undefined)}
-                onClose={() => setComposer("open", false)}
+                onClose={() => {
+                  const parent = session()?.parentID
+                  if (parent) {
+                    navigate({ type: "session", sessionID: parent })
+                    return
+                  }
+                  setComposer("open", false)
+                }}
+                visibleTerminalID={props.visibleTerminalID}
               />
               <Switch>
                 <Match when={composer.open || (!!session()?.parentID && forms().length === 0)}>{null}</Match>
@@ -1334,6 +1395,7 @@ export function Session(props: { verticalTabsWidth: number }) {
                     visible={true}
                     ref={bind}
                     disabled={false}
+                    muted={props.promptMuted}
                     onSubmit={() => {
                       toBottom()
                     }}
@@ -1349,26 +1411,6 @@ export function Session(props: { verticalTabsWidth: number }) {
             </box>
           </Show>
         </box>
-        <Show when={sidebarVisible()}>
-          <Switch>
-            <Match when={wide()}>
-              <Sidebar sessionID={route.sessionID} />
-            </Match>
-            <Match when={!wide()}>
-              <box
-                position="absolute"
-                top={0}
-                left={0}
-                right={0}
-                bottom={0}
-                alignItems="flex-end"
-                backgroundColor={RGBA.fromInts(0, 0, 0, 70)}
-              >
-                <Sidebar sessionID={route.sessionID} />
-              </box>
-            </Match>
-          </Switch>
-        </Show>
       </box>
     </context.Provider>
   )
@@ -1882,6 +1924,7 @@ function SessionGroupView(props: {
 
 function AssistantFooter(props: { message: SessionMessageAssistant }) {
   const ctx = use()
+  const config = useConfig()
   const data = useData()
   const local = useLocal()
   const theme = useTheme("elevated")
@@ -1892,7 +1935,9 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
         .find((model) => model.providerID === props.message.model.providerID && model.id === props.message.model.id)
         ?.name ?? `${props.message.model.providerID}/${props.message.model.id}`,
   )
-  const duration = createMemo(() => turnDuration(props.message, data.session.message.list(ctx.sessionID)))
+  const messages = createMemo(() => data.session.message.list(ctx.sessionID))
+  const duration = createMemo(() => turnDuration(props.message, messages()))
+  const tokensPerSecond = createMemo(() => turnTokensPerSecond(props.message, messages()))
   const interrupted = createMemo(() => props.message.error?.message === "Step interrupted")
   return (
     <>
@@ -1912,6 +1957,9 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
           </Show>
           <Show when={duration() && (ctx.terminal.width < 28 || ctx.terminal.width >= 36)}>
             <span style={{ fg: theme.text.subdued }}> · {Locale.duration(duration())}</span>
+          </Show>
+          <Show when={config.data.session.tps && tokensPerSecond()}>
+            {(value) => <span style={{ fg: theme.text.subdued }}> · {value().toFixed(1)} tok/s</span>}
           </Show>
           <Show when={interrupted()}>
             <span style={{ fg: theme.text.subdued }}> · interrupted</span>
@@ -3122,9 +3170,9 @@ function Shell(props: ToolProps) {
           when={command()}
           fallback={
             isRunning() || props.part.state.status === "streaming" ? (
-              <Spinner color={color()}>Writing command...</Spinner>
+              <Spinner color={color()}>Writing command…</Spinner>
             ) : (
-              <text fg={theme.text.subdued}>Writing command...</text>
+              <text fg={theme.text.subdued}>Writing command…</text>
             )
           }
         >
@@ -3171,7 +3219,7 @@ function Write(props: ToolProps) {
         </BlockTool>
       </Match>
       <Match when={true}>
-        <InlineTool icon="←" pending="Preparing write..." complete={stringValue(props.input.path)} part={props.part}>
+        <InlineTool icon="←" pending="Preparing write…" complete={stringValue(props.input.path)} part={props.part}>
           Write {pathFormatter.format(stringValue(props.input.path))}
         </InlineTool>
       </Match>
@@ -3182,7 +3230,7 @@ function Write(props: ToolProps) {
 function Glob(props: ToolProps) {
   const pathFormatter = usePathFormatter()
   return (
-    <InlineTool icon="✱" pending="Finding files..." complete={stringValue(props.input.pattern)} part={props.part}>
+    <InlineTool icon="✱" pending="Finding files…" complete={stringValue(props.input.pattern)} part={props.part}>
       Glob "{stringValue(props.input.pattern)}"{" "}
       <Show when={stringValue(props.input.path)}>in {pathFormatter.format(stringValue(props.input.path))} </Show>
       <Show when={finiteNumber(props.metadata.count)}>
@@ -3206,7 +3254,7 @@ function Read(props: ToolProps) {
     <>
       <InlineTool
         icon="→"
-        pending="Reading file..."
+        pending="Reading file…"
         complete={stringValue(props.input.path)}
         spinner={isRunning()}
         part={props.part}
@@ -3229,7 +3277,7 @@ function Read(props: ToolProps) {
 function Grep(props: ToolProps) {
   const pathFormatter = usePathFormatter()
   return (
-    <InlineTool icon="✱" pending="Searching content..." complete={stringValue(props.input.pattern)} part={props.part}>
+    <InlineTool icon="✱" pending="Searching content…" complete={stringValue(props.input.pattern)} part={props.part}>
       Grep "{stringValue(props.input.pattern)}"{" "}
       <Show when={stringValue(props.input.path)}>in {pathFormatter.format(stringValue(props.input.path))} </Show>
       <Show when={finiteNumber(props.metadata.matches)}>
@@ -3241,7 +3289,7 @@ function Grep(props: ToolProps) {
 
 function WebFetch(props: ToolProps) {
   return (
-    <InlineTool icon="%" pending="Fetching from the web..." complete={stringValue(props.input.url)} part={props.part}>
+    <InlineTool icon="%" pending="Fetching from the web…" complete={stringValue(props.input.url)} part={props.part}>
       WebFetch {stringValue(props.input.url)}
     </InlineTool>
   )
@@ -3249,7 +3297,7 @@ function WebFetch(props: ToolProps) {
 
 function WebSearch(props: ToolProps) {
   return (
-    <InlineTool icon="◈" pending="Searching web..." complete={stringValue(props.input.query)} part={props.part}>
+    <InlineTool icon="◈" pending="Searching web…" complete={stringValue(props.input.query)} part={props.part}>
       {webSearchProviderLabel(props.metadata.provider)} "{stringValue(props.input.query)}"
     </InlineTool>
   )
@@ -3271,7 +3319,7 @@ function Subagent(props: ToolProps) {
       icon={continuation() ? "↳" : isRunning() ? "│" : props.part.state.status === "completed" ? "✓" : "│"}
       spinner={!continuation() && isRunning()}
       complete={description()}
-      pending="Delegating..."
+      pending="Delegating…"
       part={props.part}
       onClick={() => {
         const id = sessionID()
@@ -3312,7 +3360,7 @@ function executeCalls(value: unknown): ExecuteCall[] {
 
 export function executeCallSummary(call: ExecuteCall) {
   const args = primitiveInputSummary(call.input ?? {}).replace(/\s+/g, " ")
-  return `↳ ${call.tool}${call.status === "error" ? " (failed)" : ""}${args ? ` ${args}` : ""}`
+  return `${call.tool}${args ? ` ${args}` : ""}`
 }
 
 function ExecuteCallView(props: { call: Accessor<ExecuteCall> }) {
@@ -3322,11 +3370,16 @@ function ExecuteCallView(props: { call: Accessor<ExecuteCall> }) {
   const [hover, setHover] = createSignal(false)
   const input = createMemo(() => Object.entries(props.call().input ?? {}))
   const expandable = createMemo(() => input().length > 0)
-  const title = createMemo(() => `↳ ${props.call().tool}${props.call().status === "error" ? " (failed)" : ""}`)
+  const expandedColor = createMemo(() => theme.raise(theme.text.subdued))
+  const color = createMemo(() => {
+    if (props.call().status === "error") return theme.text.feedback.error.default
+    if (hover()) return theme.text.default
+    return expanded() ? expandedColor() : theme.text.subdued
+  })
 
   return (
     <box
-      paddingLeft={3 + INLINE_TOOL_ICON_WIDTH}
+      paddingLeft={3}
       onMouseOver={() => expandable() && setHover(true)}
       onMouseOut={() => setHover(false)}
       onMouseUp={() => {
@@ -3334,21 +3387,16 @@ function ExecuteCallView(props: { call: Accessor<ExecuteCall> }) {
         setExpanded((value) => !value)
       }}
     >
-      <text
-        wrapMode="none"
-        truncate
-        fg={
-          props.call().status === "error"
-            ? theme.text.feedback.error.default
-            : hover()
-              ? theme.text.default
-              : theme.text.subdued
-        }
-      >
-        {expanded() ? title() : executeCallSummary(props.call())}
-      </text>
+      <box flexDirection="row">
+        <box width={INLINE_TOOL_ICON_WIDTH} flexShrink={0}>
+          <text fg={color()}>{props.call().status === "error" ? "✗" : "›"}</text>
+        </box>
+        <text flexGrow={1} wrapMode="none" truncate fg={color()}>
+          {expanded() ? props.call().tool : executeCallSummary(props.call())}
+        </text>
+      </box>
       <Show when={expanded()}>
-        <box paddingLeft={2}>
+        <box paddingLeft={1} border={["left"]} borderColor={expandedColor()}>
           <For each={input()}>
             {([key, value]) => (
               <box flexDirection="row">
@@ -3462,7 +3510,7 @@ function Edit(props: ToolProps) {
               ? { label: "← Edit", value: pathFormatter.format(stringValue(props.input.path)) }
               : undefined
           }
-          title={stringValue(props.input.path) ? undefined : "# Preparing edit..."}
+          title={stringValue(props.input.path) ? undefined : "# Preparing edit…"}
           part={props.part}
           spinner={props.part.state.status === "streaming"}
         />
@@ -3617,7 +3665,7 @@ function Question(props: ToolProps) {
         </BlockTool>
       </Match>
       <Match when={true}>
-        <InlineTool icon="→" pending="Asking questions..." complete={count()} part={props.part}>
+        <InlineTool icon="→" pending="Asking questions…" complete={count()} part={props.part}>
           Asked {count()} question{count() !== 1 ? "s" : ""}
         </InlineTool>
       </Match>
@@ -3628,7 +3676,7 @@ function Question(props: ToolProps) {
 function Skill(props: ToolProps) {
   const name = createMemo(() => stringValue(props.metadata.name) ?? stringValue(props.input.id))
   return (
-    <InlineTool icon="→" pending="Loading skill..." complete={name()} part={props.part}>
+    <InlineTool icon="→" pending="Loading skill…" complete={name()} part={props.part}>
       Skill "{name()}"
     </InlineTool>
   )

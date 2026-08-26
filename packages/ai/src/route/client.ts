@@ -339,9 +339,7 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
                 return onHalt
                   ? parsed.pipe(
                       Stream.concat(
-                        Stream.suspend(() =>
-                          Stream.unwrap(onHalt(state).pipe(Effect.map(Stream.fromIterable))),
-                        ),
+                        Stream.suspend(() => Stream.unwrap(onHalt(state).pipe(Effect.map(Stream.fromIterable)))),
                       ),
                     )
                   : parsed

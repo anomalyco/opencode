@@ -11,7 +11,11 @@ type FocusableSelectionTarget = {
 }
 
 type Renderer = {
-  getSelection: () => { getSelectedText: () => string; selectedRenderables: FocusableSelectionTarget[] } | null
+  getSelection: () => {
+    getSelectedText: () => string
+    selectedRenderables: FocusableSelectionTarget[]
+    isStart: boolean
+  } | null
   clearSelection: () => void
   currentFocusedRenderable?: FocusableSelectionTarget | null
 }
@@ -36,9 +40,16 @@ export function copyOnSelectRelease(
 export function copy(renderer: Renderer, toast: Toast, clipboard: ClipboardService): boolean {
   const selection = renderer.getSelection()
   if (!selection) return false
+  if (selection.isStart) {
+    renderer.clearSelection()
+    return false
+  }
 
   const text = selection.getSelectedText()
-  if (!text) return false
+  if (!text) {
+    renderer.clearSelection()
+    return false
+  }
 
   const focus = renderer.currentFocusedRenderable
   const clipboardText =

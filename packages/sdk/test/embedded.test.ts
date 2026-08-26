@@ -173,6 +173,87 @@ it.live(
 )
 
 it.live(
+  "evicts a Location without triggering connected client refetches",
+  () =>
+    withEmbedded("opencode-embedded-quiet-eviction-", (fixture) =>
+      Effect.gen(function* () {
+        const opencode = yield* fixture.sdk.OpenCode.create({
+          config: { directory: fixture.directory, project: false, content: "{}" },
+        })
+        const ref = location(fixture)
+        const connected = yield* Latch.make(false)
+        const booted = yield* Deferred.make<void>()
+        const boots = yield* Ref.make(0)
+        const updates = yield* Ref.make<string[]>([])
+
+        yield* opencode.plugin({
+          id: `quiet-eviction-${crypto.randomUUID()}`,
+          effect: (ctx) =>
+            Effect.gen(function* () {
+              yield* Ref.update(boots, (count) => count + 1)
+              yield* ctx.catalog.transform((catalog) => catalog.provider.update("eviction-test", () => {}))
+              yield* ctx.agent.transform((agents) => agents.update("eviction-test", () => {}))
+              yield* ctx.command.transform((commands) =>
+                commands.add({ name: "eviction-test", execute: () => Effect.void }),
+              )
+            }),
+        })
+        const subscriber = yield* opencode.events.subscribe().pipe(
+          Stream.runForEach((event) =>
+            Effect.gen(function* () {
+              if (event.type === "server.connected") {
+                yield* connected.open
+                return
+              }
+              if (event.location?.directory !== fixture.directory) return
+              if (event.type === "plugin.updated") {
+                yield* Deferred.succeed(booted, undefined)
+                return
+              }
+              if (
+                event.type !== "catalog.updated" &&
+                event.type !== "agent.updated" &&
+                event.type !== "command.updated"
+              )
+                return
+              yield* Ref.update(updates, (types) => [...types, event.type])
+              // A connected consumer re-reads invalidated resources through the real router.
+              if (event.type === "catalog.updated") {
+                yield* opencode.model.list({ location: ref })
+                yield* opencode.provider.list({ location: ref })
+                return
+              }
+              if (event.type === "agent.updated") {
+                yield* opencode.agent.list({ location: ref })
+                return
+              }
+              yield* opencode.command.list({ location: ref })
+            }),
+          ),
+          Effect.forkScoped,
+        )
+        yield* connected.await
+        yield* opencode.plugin.list({ location: ref })
+        yield* Deferred.await(booted).pipe(Effect.timeout("5 seconds"))
+        expect(yield* Ref.get(updates)).toEqual(
+          expect.arrayContaining(["catalog.updated", "agent.updated", "command.updated"]),
+        )
+        yield* Ref.set(updates, [])
+
+        yield* opencode.debug.location.evict({ location: ref })
+        // Allow the live event stream to deliver teardown notifications and any refetches.
+        yield* Effect.sleep("200 millis")
+
+        expect(yield* Ref.get(updates)).toEqual([])
+        expect(yield* Ref.get(boots)).toBe(1)
+        expect(yield* opencode.debug.location.list()).toEqual([])
+        expect(subscriber.pollUnsafe()).toBeUndefined()
+      }),
+    ),
+  15_000,
+)
+
+it.live(
   "keeps SDK plugin registration isolated between embedded hosts",
   () =>
     withEmbedded("opencode-embedded-plugin-isolation-", (fixture) =>

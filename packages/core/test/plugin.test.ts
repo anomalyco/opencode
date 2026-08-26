@@ -184,6 +184,39 @@ describe("Plugin", () => {
     }),
   )
 
+  it.effect("emits rebuilt state when disabling one plugin while another remains enabled", () =>
+    Effect.gen(function* () {
+      const plugins = yield* Plugin.Service
+      const agents = yield* Agent.Service
+      const bus = yield* Bus.Service
+      const definitions = ["first", "second"].map((id) =>
+        versioned(
+          EffectPlugin.define({
+            id,
+            effect: (ctx) => ctx.agent.transform((draft) => draft.update(id, () => {})),
+          }),
+        ),
+      )
+      yield* plugins.activate(definitions)
+
+      const observed: string[][] = []
+      const unsubscribe = yield* bus.listen((event) =>
+        event.type === Agent.Event.Updated.type
+          ? agents.list().pipe(
+              Effect.flatMap((items) => Effect.sync(() => observed.push(items.map((item) => item.id)))),
+              Effect.asVoid,
+            )
+          : Effect.void,
+      )
+      yield* Effect.addFinalizer(() => unsubscribe)
+
+      yield* plugins.activate(definitions.slice(1))
+      expect(yield* agents.get(Agent.ID.make("first"))).toBeUndefined()
+      expect(yield* agents.get(Agent.ID.make("second"))).toBeDefined()
+      expect(observed).toEqual([["second"]])
+    }),
+  )
+
   it.effect("rejects duplicate IDs before replacing active plugins", () =>
     Effect.gen(function* () {
       const plugins = yield* Plugin.Service

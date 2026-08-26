@@ -8,6 +8,7 @@ export type WorkspaceDefaultDestination = "last-used" | "local" | "new"
 export type WorkspaceLastUsed = "local" | "workspace"
 export type TerminalPlacement = "side" | "bottom"
 export type FollowUpBehavior = "queue" | "steer"
+export type TabLayout = "horizontal" | "vertical"
 
 export interface NotificationSettings {
   agent: boolean
@@ -47,6 +48,7 @@ export interface Settings {
     mono: string
     sans: string
     terminal: string
+    tabLayout: TabLayout
   }
   keybinds: Record<string, string>
   permissions: {
@@ -135,6 +137,7 @@ const defaultSettings: Settings = {
     mono: "",
     sans: "",
     terminal: "",
+    tabLayout: "horizontal",
   },
   keybinds: {},
   permissions: {
@@ -286,6 +289,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         terminalFont: withFallback(() => store.appearance?.terminal, defaultSettings.appearance.terminal),
         setTerminalFont(value: string) {
           setStore("appearance", "terminal", value.trim() ? value : "")
+        },
+        tabLayout: withFallback(() => store.appearance?.tabLayout, defaultSettings.appearance.tabLayout),
+        setTabLayout(value: TabLayout) {
+          setStore("appearance", "tabLayout", value)
         },
       },
       keybinds: {

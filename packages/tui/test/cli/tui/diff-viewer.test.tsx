@@ -49,6 +49,18 @@ test("closing the diff viewer returns to the route it opened from", async () => 
   }
 })
 
+test("ctrl+c closes the diff viewer without exiting the application", async () => {
+  const viewer = await renderDiffViewer([])
+
+  try {
+    viewer.app.mockInput.pressKey("c", { ctrl: true })
+    await viewer.app.waitFor(() => viewer.current().type !== "plugin")
+    expect(viewer.current()).toEqual(startRoute)
+  } finally {
+    viewer.app.renderer.destroy()
+  }
+})
+
 test("shows an error instead of an empty diff when loading fails", async () => {
   const viewer = await renderDiffViewer([], { fail: true })
   try {

@@ -195,15 +195,19 @@ describe("Open Responses-compatible route", () => {
           model,
           messages: [
             Message.assistant([
-              // The baseline does not enforce a provider id grammar, so a
-              // non-OpenAI but well-formed token is resent as-is.
               { type: "text", text: "Kept.", providerMetadata: { openresponses: { itemId: "history_1" } } },
-              // Shape violations are dropped even without a grammar policy.
               {
                 type: "text",
-                text: "Dropped.",
-                providerMetadata: { openresponses: { itemId: `m${"a".repeat(64)}` } },
+                text: "Long.",
+                providerMetadata: { openresponses: { itemId: `history_${"a".repeat(64)}` } },
               },
+              {
+                type: "text",
+                text: "Opaque.",
+                providerMetadata: { openresponses: { itemId: "provider_value/with+symbols" } },
+              },
+              { type: "text", text: "No suffix.", providerMetadata: { openresponses: { itemId: "msg_" } } },
+              { type: "text", text: "No prefix.", providerMetadata: { openresponses: { itemId: "_item" } } },
             ]),
           ],
         }),
@@ -218,8 +222,23 @@ describe("Open Responses-compatible route", () => {
         },
         {
           type: "message",
+          id: `history_${"a".repeat(64)}`,
           role: "assistant",
-          content: [{ type: "output_text", text: "Dropped." }],
+          content: [{ type: "output_text", text: "Long." }],
+        },
+        {
+          type: "message",
+          id: "provider_value/with+symbols",
+          role: "assistant",
+          content: [{ type: "output_text", text: "Opaque." }],
+        },
+        {
+          type: "message",
+          role: "assistant",
+          content: [
+            { type: "output_text", text: "No suffix." },
+            { type: "output_text", text: "No prefix." },
+          ],
         },
       ])
     }),
