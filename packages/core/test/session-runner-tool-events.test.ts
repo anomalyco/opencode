@@ -342,7 +342,7 @@ test("step finish records settlement without publishing step ended", async () =>
   await Effect.runPromise(publisher.publish(LLMEvent.stepStart({ index: 0 })))
   await Effect.runPromise(publisher.publish(LLMEvent.stepFinish({ index: 0, reason: { normalized: "stop" } })))
 
-  expect(published.some((event) => event.type === "step.ended.2")).toBe(false)
+  expect(published.map((event) => event.type)).toEqual(["session.step.started.1"])
   expect(publisher.record().finish).toMatchObject({ finish: "stop" })
 })
 

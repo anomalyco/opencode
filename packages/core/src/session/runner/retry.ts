@@ -2,17 +2,17 @@ export * as SessionRunnerRetry from "./retry.js"
 
 import { AIError } from "@opencode-ai/ai"
 import { SessionError } from "@opencode-ai/schema/session-error"
-import { Data, Duration, Effect, Schedule } from "effect"
+import { Duration, Effect, Schedule } from "effect"
 import { Bus } from "../../bus.js"
 import { SessionEvent } from "../event.js"
 import { SessionMessage } from "../message.js"
 import { SessionSchema } from "../schema.js"
 
-export class RetryableFailure extends Data.TaggedError("SessionRunner.RetryableFailure")<{
+export interface Failure {
   readonly cause: AIError
   readonly error: SessionError.Error
-  readonly step: number
-}> {}
+  readonly assistantMessageID: SessionMessage.ID
+}
 
 export function isRetryable(error: AIError) {
   const override = "http" in error.reason ? error.reason.http?.response?.headers["x-should-retry"] : undefined
@@ -40,20 +40,16 @@ export function isRetryable(error: AIError) {
   }
 }
 
-const retryAfter = (failure: RetryableFailure) => {
+const retryAfter = (failure: Failure) => {
   if (failure.cause.reason._tag === "RateLimit" || failure.cause.reason._tag === "ProviderInternal")
     return failure.cause.reason.retryAfterMs
   return undefined
 }
 
-export const schedule = (
-  bus: Bus.Interface,
-  sessionID: SessionSchema.ID,
-  assistantMessageID: () => SessionMessage.ID,
-) =>
+export const schedule = (bus: Bus.Interface, sessionID: SessionSchema.ID) =>
   Schedule.max([Schedule.exponential("2 seconds"), Schedule.recurs(4)]).pipe(
     Schedule.jittered,
-    Schedule.setInputType<RetryableFailure>(),
+    Schedule.setInputType<Failure>(),
     Schedule.modifyDelay(({ input: failure, duration: delay }) => {
       const minimum = retryAfter(failure)
       const duration = minimum === undefined ? delay : Duration.max(delay, Duration.millis(minimum))
@@ -62,7 +58,7 @@ export const schedule = (
     Schedule.tap((metadata) =>
       bus.publish(SessionEvent.RetryScheduled, {
         sessionID,
-        assistantMessageID: assistantMessageID(),
+        assistantMessageID: metadata.input.assistantMessageID,
         attempt: metadata.attempt + 1,
         at: metadata.now + Duration.toMillis(metadata.duration),
         error: metadata.input.error,
