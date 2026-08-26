@@ -569,6 +569,7 @@ test("new session inherits the active session model", async () => {
     time: { created: 0, updated: 0 },
   }
   const calls = createFetch((url) => {
+    if (url.pathname === "/api/fs/list") return json({ location, data: [] })
     if (url.pathname === "/api/location") return json(location)
     if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
     if (url.pathname === "/api/session/dummy") return json({ data: session })
