@@ -45,8 +45,8 @@ import { SPINNER_FRAMES } from "./spinner-frames"
 registerOpencodeSpinner()
 
 export const TAB_SPINNERS = {
-  arcs: { frames: ["◜", "◝", "◞", "◟"], interval: 120 },
   dots: { frames: SPINNER_FRAMES, interval: 80 },
+  arcs: { frames: ["◜", "◝", "◞", "◟"], interval: 120 },
   quadrants: { frames: ["◴", "◷", "◶", "◵"], interval: 120 },
   line: { frames: ["|", "/", "-", "\\"], interval: 120 },
 }
@@ -118,14 +118,12 @@ function TabIndicator(props: {
   attributes?: number
 }) {
   const runs = () => props.status.busy && !props.status.attention
-  const spinner = () => TAB_SPINNERS[props.spinner ?? "arcs"]
+  const spinner = () => TAB_SPINNERS[props.spinner ?? "dots"]
   const label = () => {
     if (props.numbers) return props.label
     if (props.status.attention === "permission") return "!"
     if (props.status.attention === "question") return "?"
     if (runs()) return spinner().frames[0]
-    if (props.status.unread === "error") return "×"
-    if (props.status.unread === "activity") return "✓"
     return props.label
   }
   return (
@@ -416,7 +414,6 @@ export function SessionTabs(
     controller?: SessionTabsController
     animations?: boolean
     spinner?: TabSpinner
-    statusPosition?: "inline" | "below"
     orientation?: "horizontal" | "vertical"
     width?: number
   } = {},
@@ -430,7 +427,6 @@ export function SessionTabs(
           controller={props.controller}
           animations={props.animations}
           spinner={props.spinner}
-          statusPosition={props.statusPosition}
           numbers={keymap.control()}
           width={props.width}
         />
@@ -452,7 +448,6 @@ function VerticalSessionTabs(props: {
   animations?: boolean
   numbers: boolean
   spinner?: TabSpinner
-  statusPosition?: "inline" | "below"
   width?: number
 }) {
   const contextTabs = useSessionTabs()
@@ -462,8 +457,7 @@ function VerticalSessionTabs(props: {
   const config = useConfig().data
   const animations = () => props.animations ?? config.animations ?? true
   const width = () => props.width ?? SESSION_SIDEBAR_WIDTH
-  const below = () => props.statusPosition === "below"
-  const accent = () => theme.text.feedback.success.default
+  const unreadColor = () => theme.text.status.unread
   const activeNumber = () => theme.text.status.running
   const idleNumber = () => tint(theme.text.formfield.default, theme.background.default, 0.55)
   const separatorUpperPulseColor = createMemo(() => tint(theme.background.default, theme.text.default, 0.04))
@@ -653,13 +647,13 @@ function VerticalSessionTabs(props: {
                 return selected() ? theme.text.default : theme.text.subdued
               }
               const complete = () => status().complete
-              // Latched so a resolving glow fades out in the hue it lit with instead of snapping to accent.
+              // Latched so a resolving glow fades out in the hue it lit with instead of snapping to the unread color.
               let lastGlowHue: RGBA | undefined
               const glowHue = () => {
                 const feedback = tabFeedbackColor(status(), theme)
                 if (feedback) return (lastGlowHue = feedback)
-                if (status().unread !== undefined) return (lastGlowHue = accent())
-                return lastGlowHue ?? accent()
+                if (status().unread !== undefined) return (lastGlowHue = unreadColor())
+                return lastGlowHue ?? unreadColor()
               }
               const pulseColor = createMemo(() => tint(pulseBackground(), theme.text.default, 0.25))
               const flashColor = createMemo(() => tint(pulseBackground(), theme.text.default, 0.7))
@@ -702,8 +696,8 @@ function VerticalSessionTabs(props: {
               const previousGlowHue = () => {
                 const feedback = tabFeedbackColor(previousStatus(), theme)
                 if (feedback) return (lastPreviousGlowHue = feedback)
-                if (previousStatus().unread !== undefined) return (lastPreviousGlowHue = accent())
-                return lastPreviousGlowHue ?? accent()
+                if (previousStatus().unread !== undefined) return (lastPreviousGlowHue = unreadColor())
+                return lastPreviousGlowHue ?? unreadColor()
               }
               const separatorUpperColor = createMemo(() => tint(theme.background.default, previousGlowHue(), 0.1))
               const separatorLowerColor = createMemo(() => tint(theme.background.default, glowHue(), 0.12))
@@ -838,7 +832,7 @@ function VerticalSessionTabs(props: {
                         width={numberWidth()}
                         color={numberColor()}
                         animations={animations()}
-                        numbers={below() || props.numbers}
+                        numbers={props.numbers}
                         spinner={props.spinner}
                         attributes={selected() ? TextAttributes.BOLD : undefined}
                       />
@@ -905,24 +899,7 @@ function VerticalSessionTabs(props: {
                       completionColor={detailGlowColor()}
                       backgroundColor={pulseBackground()}
                     />
-                    <box
-                      zIndex={1}
-                      width="100%"
-                      flexDirection="row"
-                      paddingLeft={below() ? 0 : numberWidth() + 1}
-                      paddingRight={2}
-                    >
-                      <Show when={below()}>
-                        <TabIndicator
-                          status={status()}
-                          label=""
-                          width={numberWidth()}
-                          color={numberColor()}
-                          animations={animations()}
-                          numbers={false}
-                          spinner={props.spinner}
-                        />
-                      </Show>
+                    <box zIndex={1} width="100%" flexDirection="row" paddingLeft={numberWidth() + 1} paddingRight={2}>
                       <text fg={detailColor()} wrapMode="none" selectable={false}>
                         <Show when={detailFades()} fallback={visibleDetail()}>
                           <For each={visibleDetailParts()}>
@@ -1060,7 +1037,7 @@ function HorizontalSessionTabs(props: {
   onCleanup(clearCloseHold)
   // A captured drag ends with a synthetic up on its drop target; do not turn that into a click.
   let suppressClick = false
-  const accent = () => theme.text.feedback.success.default
+  const unreadColor = () => theme.text.status.unread
   const activeNumber = () => theme.text.status.running
   const idleNumber = () => tint(theme.text.formfield.default, theme.background.default, 0.55)
   const newTab = () => tabs.newTab?.() ?? false
@@ -1311,7 +1288,7 @@ function HorizontalSessionTabs(props: {
           // so it reads as a lift of the pulse color rather than a different hue.
           const flashColor = () => tint(background(), theme.text.default, 0.65)
           const feedbackColor = () => tabFeedbackColor(status(), theme)
-          const glowColor = () => feedbackColor() ?? accent()
+          const glowColor = () => feedbackColor() ?? unreadColor()
           const glows = () =>
             !selected() && Boolean(status().attention || (!status().busy && status().unread !== undefined))
           const title = () => tab.title ?? "Untitled session"
@@ -1369,7 +1346,7 @@ function HorizontalSessionTabs(props: {
               hovered() === tab.sessionID && !selected()
                 ? foreground()
                 : tint(idleNumber(), tint(theme.text.default, background(), 0.25), selection())
-            const color = runs() ? activeNumber() : (feedback ?? tint(base, accent(), activity()))
+            const color = runs() ? activeNumber() : (feedback ?? tint(base, unreadColor(), activity()))
             // The number brightens faintly as the running sweep passes beneath it.
             return tint(color, theme.text.default, Math.max(numberIgnition.value().level, 0.15 * sweepLevel()))
           }
@@ -1423,7 +1400,7 @@ function HorizontalSessionTabs(props: {
                 color={pulseColor()}
                 glowColor={glowColor()}
                 flashColor={flashColor()}
-                completionColor={accent()}
+                completionColor={unreadColor()}
                 backgroundColor={background()}
                 onLevel={setSweepLevel}
               />

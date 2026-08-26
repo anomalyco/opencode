@@ -13,6 +13,7 @@ export function fallback(mode: Mode): ThemeTokensDefinition {
         running: mode === "light" ? "$hue.interactive.800" : "$hue.interactive.200",
         question: "$text.feedback.info.default",
         permission: "$text.feedback.warning.default",
+        unread: mode === "light" ? "$hue.interactive.800" : "$hue.interactive.200",
       },
       feedback: Object.fromEntries(FeedbackKind.literals.map((kind) => [kind, { default: red }])),
     },

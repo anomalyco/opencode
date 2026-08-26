@@ -63,9 +63,8 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
   const [lastEvent, setLastEvent] = createSignal("idle / working / question / permission / complete / error")
   const [statuses, setStatuses] = createSignal<Record<string, FixtureStatus>>(FIXTURE_STATUSES)
   const [orientation, setOrientation] = createSignal<"horizontal" | "vertical">("vertical")
-  const [statusPosition, setStatusPosition] = createSignal<"inline" | "below">("below")
   const spinners = Object.keys(TAB_SPINNERS) as TabSpinner[]
-  const [spinner, setSpinner] = createSignal<TabSpinner>("arcs")
+  const [spinner, setSpinner] = createSignal<TabSpinner>("dots")
   const [animations, setAnimations] = createSignal(true)
   // Unread clears on select, so the transcript remembers how each session's last run ended.
   const [outcomes, setOutcomes] = createSignal<Record<string, "completed" | "failed">>(FIXTURE_OUTCOMES)
@@ -260,10 +259,9 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
       setStatuses(showcase ? FIXTURE_STATUSES : {})
       setOutcomes(showcase ? FIXTURE_OUTCOMES : {})
       setActive("fixture-1")
-      setSpinner("arcs")
+      setSpinner("dots")
       setAnimations(true)
       setOrientation("vertical")
-      setStatusPosition("below")
     })
     setLastEvent(showcase ? "all six states are visible" : "reset; all tabs idle")
   }
@@ -386,15 +384,6 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
         run: () => setSpinner((value) => spinners[(spinners.indexOf(value) + 1) % spinners.length]),
       },
       { bind: "m", title: "Toggle animations", group: "Storybook", run: () => setAnimations((value) => !value) },
-      {
-        bind: "b",
-        title: "Toggle status below vertical tab titles",
-        group: "Storybook",
-        run() {
-          setOrientation("vertical")
-          setStatusPosition((value) => (value === "inline" ? "below" : "inline"))
-        },
-      },
       { bind: "t", title: "Add tab", group: "Storybook", run: addTab },
       { bind: "d", title: "Close tab", group: "Storybook", run: () => controller.close() },
       {
@@ -422,7 +411,6 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
           controller={controller}
           orientation={orientation()}
           spinner={spinner()}
-          statusPosition={statusPosition()}
           animations={animations()}
         />
         <box flexGrow={1} paddingLeft={2} paddingRight={2} paddingTop={1} flexDirection="column">
@@ -440,7 +428,6 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
         title="storybook / tabs"
         details={[
           orientation() === "vertical" ? "left rail" : "top strip",
-          ...(orientation() === "vertical" ? [`status ${statusPosition()}`] : []),
           spinner(),
           animations() ? "animated" : "still",
         ]}
@@ -457,7 +444,6 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
           { shortcut: "m", label: "motion" },
           { shortcut: "↑/↓", label: "select" },
           { shortcut: "o", label: "layout" },
-          { shortcut: "b", label: "rail inline/below" },
           { shortcut: "r", label: "reset idle" },
           { shortcut: "v", label: "all states" },
           { shortcut: "esc", label: "back" },

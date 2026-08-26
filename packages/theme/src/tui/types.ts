@@ -34,6 +34,7 @@ export type ResolvedThemeTokens = {
       readonly running: RGBA
       readonly question: RGBA
       readonly permission: RGBA
+      readonly unread: RGBA
     }
     readonly feedback: Readonly<Record<FeedbackKind, { readonly default: RGBA; readonly subdued: RGBA }>>
   }

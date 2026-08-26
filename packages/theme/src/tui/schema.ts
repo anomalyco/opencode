@@ -113,6 +113,7 @@ const TextDefinition = Schema.Struct({
       running: Schema.optional(ColorValue),
       question: Schema.optional(ColorValue),
       permission: Schema.optional(ColorValue),
+      unread: Schema.optional(ColorValue),
     }),
   ),
   feedback: Schema.optional(
