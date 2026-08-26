@@ -305,9 +305,13 @@ export default function LegacyLayout(props: ParentProps) {
   createEffect(() => {
     if (!state.autoselect) return
     const dir = params.dir
-    if (!dir) return
-    const directory = decode64(dir)
-    if (!directory) return
+    const id = params.id
+    // Direct session URL must not be overridden by autoselect — see #43667
+    if (!dir && !id) return
+    if (dir) {
+      const directory = decode64(dir)
+      if (!directory) return
+    }
     setState("autoselect", false)
   })
 
