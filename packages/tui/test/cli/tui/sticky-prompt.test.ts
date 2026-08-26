@@ -7,6 +7,7 @@ import {
   truncateStickyPrompt,
   getStickyUserMessageText,
   hasEligibleUserText,
+  getStickyPromptHeight,
 } from "../../../src/routes/session/sticky-prompt"
 
 describe("hasEligibleUserText", () => {
@@ -52,9 +53,24 @@ describe("getStickyPromptTextWidth", () => {
   })
 })
 
+describe("getStickyPromptHeight", () => {
+  test("uses the measured height when available", () => {
+    expect(getStickyPromptHeight(7, false)).toBe(7)
+  })
+
+  test("falls back to the rendered line count before measurement", () => {
+    expect(getStickyPromptHeight(undefined, false)).toBe(3)
+    expect(getStickyPromptHeight(undefined, true)).toBe(4)
+  })
+})
+
 describe("getStickyPromptGeometry", () => {
   test("maps the user message bounds into the sticky container", () => {
     expect(getStickyPromptGeometry({ screenX: 10 }, { screenX: 12, width: 50 })).toEqual({ left: 2, width: 50 })
+  })
+
+  test("extends to the scrollbar when right viewport padding is reserved", () => {
+    expect(getStickyPromptGeometry({ screenX: 10 }, { screenX: 12, width: 50 }, 1)).toEqual({ left: 2, width: 51 })
   })
 })
 

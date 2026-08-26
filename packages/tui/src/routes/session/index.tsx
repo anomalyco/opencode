@@ -1310,6 +1310,7 @@ export function Session() {
               <StickyPrompt
                 scroll={() => scroll}
                 showTimestamps={showTimestamps}
+                scrollbarPadding={() => (showScrollbar() ? SCROLLBAR_VIEWPORT_PADDING : 0)}
                 container={() => sessionContent}
               />
               <box flexShrink={0}>

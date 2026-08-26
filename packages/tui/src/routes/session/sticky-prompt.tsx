@@ -9,9 +9,18 @@ import { SplitBorder } from "../../ui/border"
 import { useDialog } from "../../ui/dialog"
 import { Locale } from "../../util/locale"
 
+const STICKY_PROMPT_PADDING_TOP = 1
+const STICKY_PROMPT_PADDING_BOTTOM = 1
+const STICKY_PROMPT_PADDING_LEFT = 2
+const STICKY_PROMPT_PADDING_RIGHT = 1
+const STICKY_PROMPT_TEXT_SAFETY_WIDTH = 2
+const STICKY_PROMPT_TEXT_LINES = 1
+const STICKY_PROMPT_TIMESTAMP_LINES = 1
+
 export function StickyPrompt(props: {
   scroll: () => ScrollBoxRenderable | undefined
   showTimestamps: () => boolean
+  scrollbarPadding: () => number
   container: () => BoxRenderable | undefined
 }) {
   const route = useRouteData("session")
@@ -31,6 +40,7 @@ export function StickyPrompt(props: {
       previous?.id === next?.id && previous?.text === next?.text && previous?.agent === next?.agent,
   })
   const [stickyGeometry, setStickyGeometry] = createSignal<{ left: number; width: number } | undefined>(undefined)
+  const [stickyHeight, setStickyHeight] = createSignal<number>()
   let attachedScroll: ScrollBoxRenderable | undefined
 
   const updateStickyAnchor = () => {
@@ -51,7 +61,7 @@ export function StickyPrompt(props: {
       scroll.getChildren(),
       new Set(eligibleMessages.map((message) => message.id)),
       scroll.y,
-      props.showTimestamps() ? 4 : 3,
+      getStickyPromptHeight(stickyHeight(), props.showTimestamps()),
     )
     if (!target || target.height <= 0) {
       setStickyAnchor(undefined)
@@ -74,7 +84,7 @@ export function StickyPrompt(props: {
     }
 
     const text = getStickyUserMessageText(sync.data.part[message.id] ?? [])
-    setStickyGeometry(getStickyPromptGeometry(container, target))
+    setStickyGeometry(getStickyPromptGeometry(container, target, props.scrollbarPadding()))
     setStickyAnchor(text ? { id: message.id, text, agent: message.agent, created: message.time.created } : undefined)
   }
 
@@ -106,15 +116,19 @@ export function StickyPrompt(props: {
               ref={(box) => {
                 promptContent = box
                 setPromptContentWidth(box.width)
+                setStickyHeight(box.height)
               }}
-              paddingTop={1}
-              paddingBottom={1}
-              paddingLeft={2}
-              paddingRight={1}
+              paddingTop={STICKY_PROMPT_PADDING_TOP}
+              paddingBottom={STICKY_PROMPT_PADDING_BOTTOM}
+              paddingLeft={STICKY_PROMPT_PADDING_LEFT}
+              paddingRight={STICKY_PROMPT_PADDING_RIGHT}
               width="100%"
               flexShrink={0}
               onSizeChange={() => {
-                if (promptContent) setPromptContentWidth(promptContent.width)
+                if (promptContent) {
+                  setPromptContentWidth(promptContent.width)
+                  setStickyHeight(promptContent.height)
+                }
               }}
               backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
               onMouseOver={() => setHover(true)}
@@ -128,7 +142,15 @@ export function StickyPrompt(props: {
             >
               <text fg={theme.text} width="100%" overflow="hidden" wrapMode="none">
                 {promptContentWidth() > 0
-                  ? truncateStickyPrompt(anchor().text, getStickyPromptTextWidth(promptContentWidth(), 2, 1, 2))
+                  ? truncateStickyPrompt(
+                      anchor().text,
+                      getStickyPromptTextWidth(
+                        promptContentWidth(),
+                        STICKY_PROMPT_PADDING_LEFT,
+                        STICKY_PROMPT_PADDING_RIGHT,
+                        STICKY_PROMPT_TEXT_SAFETY_WIDTH,
+                      ),
+                    )
                   : anchor().text}
               </text>
               <Show when={props.showTimestamps()}>
@@ -151,11 +173,22 @@ export function getStickyPromptTextWidth(
   return Math.max(1, contentWidth - paddingLeft - paddingRight - safetyWidth)
 }
 
+export function getStickyPromptHeight(measuredHeight: number | undefined, showTimestamps: boolean) {
+  if (measuredHeight !== undefined && measuredHeight > 0) return measuredHeight
+  return (
+    STICKY_PROMPT_PADDING_TOP +
+    STICKY_PROMPT_PADDING_BOTTOM +
+    STICKY_PROMPT_TEXT_LINES +
+    (showTimestamps ? STICKY_PROMPT_TIMESTAMP_LINES : 0)
+  )
+}
+
 export function getStickyPromptGeometry(
   container: { screenX: number },
   message: { screenX: number; width: number },
+  rightPadding = 0,
 ) {
-  return { left: message.screenX - container.screenX, width: message.width }
+  return { left: message.screenX - container.screenX, width: message.width + rightPadding }
 }
 
 export function getStickyPromptScrollDelta(childY: number, scrollY: number) {
