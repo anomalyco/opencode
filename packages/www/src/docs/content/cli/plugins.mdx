@@ -6,6 +6,16 @@ Plugins configured in `opencode.json(c)` that expose a TUI component are loaded 
 to build plugins, see [Building plugins](/build/plugins). You do not need to add the same package to `cli.json`. The CLI
 gets the active plugin list from the connected OpenCode server, so this also works when the server is remote.
 
+## Manage installed plugins
+
+Run `/plugins`, or open **Plugins** from the command palette, to inspect server and CLI plugins. Select an installed server
+package or Git plugin, then use the actions in the dialog footer:
+
+- `ctrl+r` updates the selected plugin when an update is available.
+- `ctrl+shift+r` updates every plugin with an available update.
+
+The dialog marks pinned and local plugins that cannot be updated automatically.
+
 Use `cli.json` for CLI-only plugins. These plugins run locally in the terminal and remain active when the CLI connects
 to a remote server:
 
