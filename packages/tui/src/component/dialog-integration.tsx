@@ -352,7 +352,7 @@ function CommandStarting(props: {
     if (!handedOff) closed = true
   })
 
-  return <CommandView title={props.method.label} output="" message="Starting command..." />
+  return <CommandView title={props.method.label} output="" message="Starting command…" />
 }
 
 function CommandPending(props: {
@@ -412,7 +412,7 @@ function CommandPending(props: {
     })
   })
 
-  return <CommandView title={props.title} output={output()} message="Waiting for command to finish..." />
+  return <CommandView title={props.title} output={output()} message="Waiting for command to finish…" />
 }
 
 function CommandView(props: { title: string; output: string; message: string }) {
@@ -541,7 +541,7 @@ function OAuthStarting(props: {
       })
   })
 
-  return <OAuthView title={props.method.label} message="Starting authorization..." />
+  return <OAuthView title={props.method.label} message="Starting authorization…" />
 }
 
 function OAuthAuto(props: {
@@ -629,7 +629,7 @@ function OAuthAuto(props: {
       title={props.title}
       url={props.attempt.url}
       instructions={props.attempt.instructions}
-      message="Waiting for authorization..."
+      message="Waiting for authorization…"
       copy
       open
     />
@@ -953,7 +953,7 @@ async function externalAnswer(
     if (choice === true) return true
     const result = await new Promise<boolean | typeof CANCELLED>((resolve) => {
       dialog.replace(
-        () => <OAuthView title={formLabel(field) || title} message="Opening link..." />,
+        () => <OAuthView title={formLabel(field) || title} message="Opening link…" />,
         () => resolve(CANCELLED),
       )
       void open(field.url).then(

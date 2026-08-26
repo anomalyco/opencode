@@ -360,7 +360,7 @@ export function DevToolsBar() {
           <PanelBox>
             <PanelTitle>Tools</PanelTitle>
             <Action onClick={() => void dump()} disabled={dumping()} hoverBackground>
-              {dumping() ? "Writing debug snapshot..." : "Write debug snapshot"}
+              {dumping() ? "Writing debug snapshot…" : "Write debug snapshot"}
             </Action>
             <Show when={dumpPath()}>
               {(file) => (
