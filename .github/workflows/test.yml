@@ -27,7 +27,6 @@ jobs:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     outputs:
       app: ${{ steps.packages.outputs.app }}
-      sdk: ${{ steps.packages.outputs.sdk }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
@@ -48,31 +47,13 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "app=true" >> "$GITHUB_OUTPUT"
-            echo "sdk=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          bun x turbo@2.10.2 ls --affected --filter=@opencode-ai/app --filter=@opencode-ai/sdk --output=json > affected.json
-          git diff --name-only "$TURBO_SCM_BASE" "$TURBO_SCM_HEAD" > changed.txt
-          bun - <<'EOF' >> "$GITHUB_OUTPUT"
-          const result = await Bun.file("affected.json").json()
-          const names = new Set(result.packages.items.map((item) => item.name))
-          const changed = (await Bun.file("changed.txt").text()).split("\n")
-          const infrastructure = ["package.json", "bun.lock", "bunfig.toml", "turbo.json", ".npmrc"]
-          const sdk =
-            names.has("@opencode-ai/sdk") ||
-            changed.some(
-              (file) =>
-                infrastructure.includes(file) ||
-                file.startsWith("patches/") ||
-                file.startsWith(".github/actions/setup-bun/") ||
-                file === ".github/workflows/test.yml",
-            )
-          console.log(`app=${names.has("@opencode-ai/app")}\nsdk=${sdk}`)
-          EOF
+          bun x turbo@2.10.2 ls --affected --filter=@opencode-ai/app --output=json > affected.json
+          bun -e 'const result = await Bun.file("affected.json").json(); console.log(`app=${result.packages.count > 0}`)' >> "$GITHUB_OUTPUT"
 
   unit:
     name: unit (${{ matrix.settings.name }})
-    needs: affected
     strategy:
       fail-fast: false
       matrix:
@@ -147,10 +128,18 @@ jobs:
         run: bun run script/publish.ts --dry-run
 
       - name: Verify packed workerd SDK
-        if: runner.os == 'Linux' && needs.affected.outputs.sdk == 'true'
+        if: runner.os == 'Linux'
         timeout-minutes: 15
         working-directory: packages/sdk
-        run: bun run verify:package
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            bun turbo verify:package --filter=@opencode-ai/sdk
+            exit 0
+          fi
+          bun turbo verify:package --affected --filter=@opencode-ai/sdk
+        env:
+          TURBO_SCM_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          TURBO_SCM_HEAD: ${{ github.sha }}
 
       - name: Verify compiled service lifecycle
         if: always()
