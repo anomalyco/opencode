@@ -1,4 +1,3 @@
-import type { PersistentPtyInfo } from "@opencode-ai/client"
 import { RGBA } from "@opentui/core"
 import { useTerminalDimensions } from "@opentui/solid"
 import { batch, createEffect, createMemo, createResource, createSignal, on, Show } from "solid-js"
@@ -21,14 +20,13 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
   const toast = useToast()
   const dimensions = useTerminalDimensions()
   const [sidebarOpen, setSidebarOpen] = createSignal(false)
-  const [sidebarSelected, setSidebarSelected] = createSignal(false)
   const [sessionWidth, setSessionWidth] = createSignal<number>()
   const [terminalFocused, setTerminalFocused] = createSignal(false)
   const [restoreTerminalFocus, setRestoreTerminalFocus] = createSignal(false)
   let focusTerminal: (() => void) | undefined
   createResource(
     () => (config.data.terminal?.enabled ? props.sessionID : undefined),
-    (sessionID) => sessions.load(sessionID).catch(() => undefined),
+    (sessionID) => sessions.refresh(sessionID).catch(() => undefined),
   )
   const session = () => sessions.get(props.sessionID)
   const terminals = () => session()?.terminals ?? []
@@ -42,15 +40,11 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
     on(
       () => selectedTerminal()?.id,
       (id) => {
-        if (id) setSidebarSelected(false)
+        if (id) setSidebarOpen(false)
       },
       { defer: true },
     ),
   )
-  createEffect(() => {
-    const terminal = selectedTerminal()
-    if (terminal && sessions.shouldFocus(terminal.id)) setSidebarSelected(false)
-  })
   const wide = createMemo(() => dimensions().width - props.verticalTabsWidth > 120)
   const sidebarVisible = createMemo(() => {
     if (data.session.get(props.sessionID)?.parentID) return false
@@ -58,8 +52,9 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
     return (config.data.session?.sidebar ?? "auto") === "auto" && wide()
   })
   const rightPane = createMemo(() => {
-    if (sidebarVisible() && (sidebarSelected() || (!selectedTerminal() && !session()?.hidden))) return "sidebar"
+    if (sidebarOpen() && sidebarVisible()) return "sidebar"
     if (selectedTerminal()) return "terminal"
+    if (sidebarVisible() && !session()?.hidden) return "sidebar"
   })
   const toggleSidebar = () => {
     batch(() => {
@@ -70,7 +65,6 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
         })
         .catch(toast.error)
       setSidebarOpen(!visible)
-      setSidebarSelected(!visible)
       if (!visible && selectedTerminal()) void sessions.hideTerminal(props.sessionID).catch(toast.error)
     })
   }
@@ -93,7 +87,6 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
         id: "pane.focus.right",
         title: "Focus terminal pane",
         run: () => {
-          setSidebarSelected(false)
           focusTerminal?.()
         },
       },
@@ -148,12 +141,15 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
             fallback={
               <Show keyed when={selectedTerminal()}>
                 {(terminal) => (
-                  <TerminalPanel
-                    info={terminal}
+                  <TerminalPane
+                    ptyID={terminal.id}
+                    autoFocus={restoreTerminalFocus() || sessions.shouldFocus(terminal.id)}
+                    onAutoFocus={() => {
+                      sessions.clearFocus(terminal.id)
+                      setRestoreTerminalFocus(false)
+                    }}
                     onFocusChange={setTerminalFocused}
                     onFocusRequest={(value) => (focusTerminal = value)}
-                    restoreFocus={restoreTerminalFocus()}
-                    onAutoFocus={() => setRestoreTerminalFocus(false)}
                     onDisconnect={() => setRestoreTerminalFocus(true)}
                   />
                 )}
@@ -178,29 +174,5 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
         </box>
       </Show>
     </box>
-  )
-}
-
-function TerminalPanel(props: {
-  info: PersistentPtyInfo
-  onFocusChange: (focused: boolean) => void
-  onFocusRequest: (focus: (() => void) | undefined) => void
-  restoreFocus: boolean
-  onAutoFocus: () => void
-  onDisconnect: () => void
-}) {
-  const sessions = useSessionTerminals()
-  return (
-    <TerminalPane
-      ptyID={props.info.id}
-      autoFocus={props.restoreFocus || sessions.shouldFocus(props.info.id)}
-      onAutoFocus={() => {
-        sessions.clearFocus(props.info.id)
-        props.onAutoFocus()
-      }}
-      onFocusRequest={props.onFocusRequest}
-      onDisconnect={props.onDisconnect}
-      onFocusChange={props.onFocusChange}
-    />
   )
 }

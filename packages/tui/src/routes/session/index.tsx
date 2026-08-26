@@ -251,6 +251,7 @@ export function Session(props: {
 
   const scrollAcceleration = createMemo(() => getScrollAcceleration(config))
   const toast = useToast()
+  const terminalError = () => toast.show({ variant: "error", message: "Unable to load terminal" })
   const client = useClient()
   const autoApproved = new Set<string>()
   createEffect(() => {
@@ -907,14 +908,8 @@ export function Session(props: {
                 const state = terminals.get(route.sessionID)
                 const terminal =
                   state?.terminals.find((item) => item.id === state.selectedTerminalID) ?? state?.terminals.at(-1)
-                if (terminal)
-                  void terminals
-                    .selectTerminal(route.sessionID, terminal.id)
-                    .catch(() => toast.show({ variant: "error", message: "Unable to load terminal" }))
-                else
-                  void terminals
-                    .newTerminal(route.sessionID)
-                    .catch(() => toast.show({ variant: "error", message: "Unable to load terminal" }))
+                if (terminal) void terminals.selectTerminal(route.sessionID, terminal.id).catch(terminalError)
+                else void terminals.newTerminal(route.sessionID).catch(terminalError)
               }
               dialog.clear()
             },
@@ -926,9 +921,7 @@ export function Session(props: {
             run: () => {
               promptRef.current?.focus()
               setComposer({ open: true, tab: "terminals" })
-              void terminals
-                .refresh(route.sessionID)
-                .catch(() => toast.show({ variant: "error", message: "Unable to load terminal" }))
+              void terminals.refresh(route.sessionID).catch(terminalError)
               dialog.clear()
             },
           },
@@ -950,9 +943,7 @@ export function Session(props: {
             slash: { name: "terminal" },
             run: async () => {
               dialog.clear()
-              await terminals
-                .newTerminal(route.sessionID)
-                .catch(() => toast.show({ variant: "error", message: "Unable to load terminal" }))
+              await terminals.newTerminal(route.sessionID).catch(terminalError)
             },
           },
         ]
@@ -1363,7 +1354,6 @@ export function Session(props: {
                   }
                   setComposer("open", false)
                 }}
-                terminals={config.terminal?.enabled ? terminals : undefined}
                 visibleTerminalID={props.visibleTerminalID}
               />
               <Switch>

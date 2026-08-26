@@ -26,9 +26,6 @@ export function TerminalPane(props: {
   autoFocus?: boolean
   onAutoFocus?: () => void
   onFocusRequest?: (focus: (() => void) | undefined) => void
-  onInfo?: (info: { cwd: string; title: string; foregroundProcess?: string }) => void
-  onTitleChange?: (title: string) => void
-  onForegroundProcessChange?: (process: string | undefined) => void
   onDisconnect?: () => void
   onFocusChange?: (focused: boolean) => void
 }) {
@@ -177,11 +174,6 @@ export function TerminalPane(props: {
   async function connect() {
     const snapshot = await client.api.experimental.persistentPty.snapshot({ ptyID: props.ptyID })
     if (disposed) return
-    props.onInfo?.({
-      cwd: snapshot.info.cwd,
-      title: snapshot.info.title,
-      foregroundProcess: snapshot.info.foregroundProcess ?? undefined,
-    })
     setCanonicalSize(snapshot.info.size)
     await waitForTerminalSize(snapshot.info.size)
     if (disposed) return
@@ -211,18 +203,6 @@ export function TerminalPane(props: {
       if (typeof event.data !== "string") return
       const message: unknown = JSON.parse(event.data)
       if (!message || typeof message !== "object" || !("type" in message)) return
-      if (message.type === "title_changed" && "title" in message && typeof message.title === "string") {
-        props.onTitleChange?.(message.title)
-        return
-      }
-      if (
-        message.type === "foreground_process_changed" &&
-        "process" in message &&
-        (typeof message.process === "string" || message.process === null)
-      ) {
-        props.onForegroundProcessChange?.(message.process ?? undefined)
-        return
-      }
       if (
         message.type === "resized" &&
         "cols" in message &&

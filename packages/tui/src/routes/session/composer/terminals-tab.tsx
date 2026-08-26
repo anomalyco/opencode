@@ -1,21 +1,19 @@
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
 import { TextAttributes } from "@opentui/core"
 import { Keymap } from "../../../context/keymap"
-import type { useSessionTerminals } from "../../../context/session-terminals"
+import { useSessionTerminals } from "../../../context/session-terminals"
 import { useTheme } from "../../../context/theme"
 import { useToast } from "../../../ui/toast"
 import { useComposerTab } from "./index"
 
-export function TerminalsTab(props: {
-  sessionID: string
-  terminals: ReturnType<typeof useSessionTerminals>
-  visibleTerminalID?: string
-}) {
+export function TerminalsTab(props: { sessionID: string; visibleTerminalID?: string }) {
   const composer = useComposerTab()
+  const terminals = useSessionTerminals()
   const theme = useTheme()
   const toast = useToast()
+  const failure = () => toast.show({ variant: "error", message: "Unable to load terminal" })
   const [selected, setSelected] = createSignal<number>()
-  const session = () => props.terminals.get(props.sessionID)
+  const session = () => terminals.get(props.sessionID)
   const entries = () => session()?.terminals ?? []
 
   onMount(() => {
@@ -35,14 +33,10 @@ export function TerminalsTab(props: {
     const terminal = entries()[index]
     composer.close()
     if (terminal) {
-      void props.terminals
-        .selectTerminal(props.sessionID, terminal.id)
-        .catch(() => toast.show({ variant: "error", message: "Unable to load terminal" }))
+      void terminals.selectTerminal(props.sessionID, terminal.id).catch(failure)
       return
     }
-    void props.terminals
-      .newTerminal(props.sessionID)
-      .catch(() => toast.show({ variant: "error", message: "Unable to load terminal" }))
+    void terminals.newTerminal(props.sessionID).catch(failure)
   }
 
   Keymap.createLayer(() => ({

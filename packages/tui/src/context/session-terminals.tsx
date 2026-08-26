@@ -8,7 +8,6 @@ import { useEvent } from "./event"
 import { useStorage } from "./storage"
 
 type SessionTerminals = {
-  sessionID: string
   terminals: PersistentPtyInfo[]
   selectedTerminalID?: string
   hidden?: boolean
@@ -35,7 +34,6 @@ export const { use: useSessionTerminals, provider: SessionTerminalsProvider } = 
         const current = draft.sessions[sessionID]?.selectedTerminalID
         const selected = selectedTerminalID ?? current
         draft.sessions[sessionID] = {
-          sessionID,
           terminals,
           selectedTerminalID: terminals.some((terminal) => terminal.id === selected) ? selected : terminals.at(-1)?.id,
           ...(selectedTerminalID === undefined && draft.sessions[sessionID]?.hidden ? { hidden: true } : {}),
@@ -46,31 +44,21 @@ export const { use: useSessionTerminals, provider: SessionTerminalsProvider } = 
       await save(sessionID, await client.api.experimental.persistentPty.list({ sessionID }))
     }
 
-    onCleanup(
-      event.on("persistent-pty.added", (evt) => {
-        if (!config.terminal?.enabled) return
-        if (!store.sessions[evt.data.sessionID]) return
-        void refresh(evt.data.sessionID).catch((error) =>
-          console.error("Failed to add persistent terminal pane", error),
-        )
-      }),
-    )
-
-    onCleanup(
-      event.on("persistent-pty.removed", (evt) => {
-        if (!config.terminal?.enabled) return
-        if (!store.sessions[evt.data.sessionID]) return
-        void refresh(evt.data.sessionID).catch((error) =>
-          console.error("Failed to remove persistent terminal pane", error),
-        )
-      }),
-    )
+    for (const type of ["persistent-pty.added", "persistent-pty.removed"] as const) {
+      onCleanup(
+        event.on(type, (evt) => {
+          if (!config.terminal?.enabled || !store.sessions[evt.data.sessionID]) return
+          void refresh(evt.data.sessionID).catch((error) =>
+            console.error("Failed to refresh persistent terminal panes", error),
+          )
+        }),
+      )
+    }
 
     return {
       get(sessionID: string) {
         return store.sessions[sessionID]
       },
-      load: refresh,
       refresh,
       selectTerminal(sessionID: string, ptyID: string) {
         setFocus(ptyID)
