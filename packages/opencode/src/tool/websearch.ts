@@ -6,6 +6,7 @@ import DESCRIPTION from "./websearch.txt"
 import { checksum } from "@opencode-ai/core/util/encode"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { Config } from "@/config/config"
 
 export const Parameters = Schema.Struct({
   query: Schema.String.annotate({ description: "Websearch query" }),
@@ -27,13 +28,33 @@ export const Parameters = Schema.Struct({
 const WebSearchProviderSchema = Schema.Literals(["exa", "parallel"])
 export type WebSearchProvider = Schema.Schema.Type<typeof WebSearchProviderSchema>
 
-export function selectWebSearchProvider(sessionID: string, flags = { exa: false, parallel: false }): WebSearchProvider {
+// Backend pin priority (decision D3): config.websearch.provider > OPENCODE_WEBSEARCH_PROVIDER
+// > legacy OPENCODE_ENABLE_EXA/_PARALLEL > per-session checksum split.
+export function selectWebSearchProvider(
+  sessionID: string,
+  options: {
+    provider?: "auto" | WebSearchProvider
+    exa?: boolean
+    parallel?: boolean
+  } = {},
+): WebSearchProvider {
+  if (options.provider === "exa" || options.provider === "parallel") return options.provider
   const override = process.env.OPENCODE_WEBSEARCH_PROVIDER
   if (override === "exa" || override === "parallel") return override
-  if (flags.parallel) return "parallel"
-  if (flags.exa) return "exa"
+  if (options.parallel) return "parallel"
+  if (options.exa) return "exa"
 
   return Number.parseInt(checksum(sessionID) ?? "0", 36) % 2 === 0 ? "exa" : "parallel"
+}
+
+let legacyEnvWarned = false
+
+function warnLegacyEnvFlags(flags: { enableExa: boolean; enableParallel: boolean }) {
+  if (legacyEnvWarned || (!flags.enableExa && !flags.enableParallel)) return Effect.void
+  legacyEnvWarned = true
+  return Effect.logWarning(
+    "OPENCODE_ENABLE_EXA / OPENCODE_ENABLE_PARALLEL no longer enable or disable websearch; the tool is available to all providers by default. They now only pin the backend — use the websearch.provider section in opencode.json instead",
+  )
 }
 
 export function webSearchProviderLabel(provider: unknown) {
@@ -101,6 +122,9 @@ export const WebSearchTool = Tool.define(
   Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient
     const flags = yield* RuntimeFlags.Service
+    const config = yield* Config.Service
+
+    yield* warnLegacyEnvFlags(flags)
 
     return {
       get description() {
@@ -109,7 +133,9 @@ export const WebSearchTool = Tool.define(
       parameters: Parameters,
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
+          const cfg = yield* config.get()
           const provider = selectWebSearchProvider(ctx.sessionID, {
+            provider: cfg.websearch?.provider,
             exa: flags.enableExa,
             parallel: flags.enableParallel,
           })
