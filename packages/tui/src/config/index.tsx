@@ -159,6 +159,9 @@ export const Info = Schema.Struct({
       layout: Schema.optional(Schema.Literals(["horizontal", "vertical"])).annotate({
         description: "Show tabs in a horizontal strip or vertical sidebar",
       }),
+      indicators: Schema.optional(Schema.Literals(["status", "numbers"])).annotate({
+        description: "Show status icons with numbers on held Control, or always show tab numbers",
+      }),
     }),
   ).annotate({ description: "Tab strip settings" }),
   mini: Schema.optional(
@@ -231,6 +234,7 @@ export type Resolved = Omit<Info, "attention" | "cursor" | "keybinds" | "leader"
     enabled: boolean
     scope: "global" | "cwd"
     layout: "horizontal" | "vertical"
+    indicators: "status" | "numbers"
   }
 }
 
@@ -283,6 +287,7 @@ export function resolve(input: Info, options: { terminalSuspend: boolean }): Res
       enabled: input.tabs?.enabled ?? true,
       scope: input.tabs?.scope ?? "cwd",
       layout: input.tabs?.layout ?? "horizontal",
+      indicators: input.tabs?.indicators ?? "status",
     },
   }
 }

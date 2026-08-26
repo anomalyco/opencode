@@ -145,6 +145,15 @@ export const settings: Setting[] = [
     keywords: ["sidebar", "orientation", "left"],
   },
   {
+    title: "Indicators",
+    category: "Tabs",
+    path: ["tabs", "indicators"],
+    default: "status",
+    values: ["status", "numbers"],
+    labels: ["status icons", "always show numbers"],
+    keywords: ["tab numbers", "number mode", "status icons"],
+  },
+  {
     title: "Layout",
     category: "Diffs",
     path: ["diffs", "view"],

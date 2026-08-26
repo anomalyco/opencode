@@ -2,7 +2,7 @@
 import { testRender } from "@opentui/solid"
 import { expect, test } from "bun:test"
 import { batch, createSignal } from "solid-js"
-import { ConfigProvider } from "../../src/config"
+import { ConfigProvider, useConfig, type Info } from "../../src/config"
 import {
   EMPTY_SESSION_TAB_STATUS,
   SessionTabs,
@@ -31,8 +31,11 @@ for (const orientation of ["horizontal", "vertical"] as const) {
     const [active, setActive] = createSignal("second")
     const [animations, setAnimations] = createSignal(false)
     const [newTab, setNewTab] = createSignal(false)
+    const settings: Info = { tabs: { enabled: true } }
+    let config!: ReturnType<typeof useConfig>
     let theme!: ReturnType<typeof useTheme>
     function Colors() {
+      config = useConfig()
       theme = orientation === "vertical" ? useTheme("elevated") : useTheme()
       return null
     }
@@ -59,7 +62,16 @@ for (const orientation of ["horizontal", "vertical"] as const) {
         <TestTuiContexts paths={{ state: temporary.path }}>
           <TuiAppProvider value={{ name: "test", version: "test", channel: "test" }}>
             <StorageProvider>
-              <ConfigProvider config={createTuiResolvedConfig({ tabs: { enabled: true } })}>
+              <ConfigProvider
+                config={createTuiResolvedConfig(settings)}
+                service={{
+                  get: async () => settings,
+                  update: async (update) => {
+                    update(settings)
+                    return settings
+                  },
+                }}
+              >
                 <RouteProvider initialRoute={{ type: "home" }}>
                   <ClientProvider api={createApi(createFetch(undefined, createEventStream()).fetch)}>
                     <DataProvider directory={temporary.path}>
@@ -218,6 +230,20 @@ for (const orientation of ["horizontal", "vertical"] as const) {
       await app.waitForFrame((frame) => frame.includes("1 First"))
       app.renderer.emit("blur")
       await app.waitForFrame((frame) => frame.includes("? First"))
+
+      await config.update((draft) => {
+        draft.tabs.indicators = "numbers"
+      })
+      await app.waitForFrame((frame) => frame.includes("1 First") && frame.includes("2 Second"))
+      await app.mockInput.pressKeys(["\x1b[57442;5u", "\x1b[57442;1:3u"])
+      app.renderer.emit("blur")
+      setStatus({ ...EMPTY_SESSION_TAB_STATUS, busy: true })
+      await app.renderOnce()
+      expect(app.captureCharFrame()).toContain("1 First")
+      await config.update((draft) => {
+        draft.tabs.indicators = "status"
+      })
+      await app.waitForFrame((frame) => SPINNER_FRAMES.some((glyph) => frame.includes(`${glyph} First`)))
 
       setNewTab(true)
       await app.waitForFrame((frame) => frame.includes("+ New session"))

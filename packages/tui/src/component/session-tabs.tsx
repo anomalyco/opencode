@@ -465,10 +465,11 @@ export function SessionTabs(
   } = {},
 ) {
   const keymap = Keymap.use()
-  const [numbers, setNumbers] = createSignal(false)
+  const config = useConfig().data
+  const [numbers, setNumbers] = createSignal(config.tabs.indicators === "numbers")
   createEffect(() => {
-    if (!keymap.control()) {
-      setNumbers(false)
+    if (config.tabs.indicators === "numbers" || !keymap.control()) {
+      setNumbers(config.tabs.indicators === "numbers")
       return
     }
     // Brief Control chords should not flash the tab numbers.

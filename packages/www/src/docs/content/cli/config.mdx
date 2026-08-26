@@ -156,6 +156,20 @@ Configure diff presentation:
 | `single` | boolean                       | Shows only the selected file patch.                           |
 | `view`   | `auto`, `split`, or `unified` | Sets the layout. `auto` chooses based on the available width. |
 
+## Tabs
+
+Choose **Tabs > Indicators** in settings, or set `tabs.indicators` in `cli.json`:
+
+```json title="cli.json"
+{
+  "tabs": {
+    "indicators": "numbers"
+  }
+}
+```
+
+`status` (the default) shows status icons and reveals tab numbers while Control is held. `numbers` always shows tab numbers, retaining their status colors and background animations. Both modes work with horizontal and vertical tabs.
+
 ## Terminal
 
 Configure terminal integration:
