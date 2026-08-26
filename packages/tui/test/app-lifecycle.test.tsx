@@ -550,3 +550,48 @@ test("configured app bindings execute settings and permission commands", async (
     await server.stop()
   }
 })
+
+test("ctrl+c dismisses autocomplete and shell mode before exiting", async () => {
+  const setup = await createTestRenderer({ width: 100, height: 30, useThread: false, kittyKeyboard: true })
+  setup.renderer.start()
+  const ready = Promise.withResolvers<void>()
+  const events = createEventStream()
+  const calls = createFetch(undefined, events)
+  const server = Bun.serve({ port: 0, fetch: (request) => calls.fetch(request) })
+
+  try {
+    const { run } = await import("../src/app")
+    const task = Effect.runPromise(
+      run({
+        app: { name: "test", version: "test", channel: "test" },
+        server: { endpoint: { url: server.url.toString() } },
+        config: { get: async () => ({ animations: false }), update: async () => ({}) },
+        packages: { resolve: async () => undefined },
+        args: {},
+        terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: ready.resolve }),
+        log: () => {},
+      }).pipe(Effect.provide(AppNodeBuilder.build(Global.node)), Effect.provide(FileSystem.layerNoop({}))),
+    )
+
+    await ready.promise
+    await setup.waitForFrame((frame) => frame.includes("commands"))
+    await setup.mockInput.typeText("/theme")
+    await setup.waitForFrame((frame) => frame.includes("Switch theme"))
+
+    setup.mockInput.pressKey("c", { ctrl: true })
+    await setup.waitForFrame((frame) => !frame.includes("Switch theme"))
+    expect(setup.renderer.isDestroyed).toBe(false)
+
+    await setup.mockInput.typeText("!")
+    await setup.waitForFrame((frame) => frame.includes("Shell"))
+    setup.mockInput.pressKey("c", { ctrl: true })
+    await setup.waitForFrame((frame) => !frame.includes("Shell"))
+    expect(setup.renderer.isDestroyed).toBe(false)
+
+    setup.renderer.destroy()
+    await task
+  } finally {
+    if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+    await server.stop()
+  }
+})

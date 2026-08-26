@@ -986,9 +986,19 @@ export function Prompt(props: PromptProps) {
 
   Keymap.createLayer(() => {
     return {
+      priority: 1,
       target: inputTarget,
       enabled: inputTarget() !== undefined && store.mode === "shell",
-      commands: [{ bind: "escape", title: "Exit shell mode", group: "Prompt", run: () => setStore("mode", "normal") }],
+      commands: [
+        { bind: "escape", title: "Exit shell mode", group: "Prompt", run: () => setStore("mode", "normal") },
+        {
+          bind: "ctrl+c",
+          title: "Exit shell mode",
+          group: "Prompt",
+          enabled: () => store.prompt.text === "",
+          run: () => setStore("mode", "normal"),
+        },
+      ],
     }
   })
 

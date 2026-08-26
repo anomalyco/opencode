@@ -242,6 +242,11 @@ export function Session(props: { verticalTabsWidth: number }) {
     if (sidebar() === "auto" && wide()) return true
     return false
   })
+  Keymap.createLayer(() => ({
+    priority: 10,
+    enabled: () => sidebarOpen() && !wide() && !disabled(),
+    commands: [{ bind: "escape,ctrl+c", title: "Close sidebar", group: "Session", run: () => setSidebarOpen(false) }],
+  }))
   const contentWidth = createMemo(() => availableWidth() - (sidebarVisible() ? 42 : 0) - 4)
   const models = createMemo(() => data.location.model.list(location()) ?? [])
 
@@ -1294,7 +1299,14 @@ export function Session(props: { verticalTabsWidth: number }) {
                 sessionID={route.sessionID}
                 open={composer.open || (!!session()?.parentID && forms().length === 0)}
                 defaultTab={composer.tab ?? (session()?.parentID ? "subagents" : undefined)}
-                onClose={() => setComposer("open", false)}
+                onClose={() => {
+                  const parent = session()?.parentID
+                  if (parent) {
+                    navigate({ type: "session", sessionID: parent })
+                    return
+                  }
+                  setComposer("open", false)
+                }}
               />
               <Switch>
                 <Match when={composer.open || (!!session()?.parentID && forms().length === 0)}>{null}</Match>
