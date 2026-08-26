@@ -2845,7 +2845,12 @@ describe("SessionRunnerLLM", () => {
           type: "compaction",
           status: "failed",
           reason: "auto",
-          error: { type: "provider.error", message: "summary unavailable" },
+          error: {
+            type: "provider.error",
+            message: "summary unavailable",
+            body: JSON.stringify({ type: "provider-error", message: "summary unavailable" }),
+            reason: { _tag: "UnknownProvider" },
+          },
         }),
       )
       expect(context.slice(-3)).toMatchObject([
