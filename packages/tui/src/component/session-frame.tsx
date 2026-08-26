@@ -57,15 +57,13 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
     if (sidebarOpen()) return true
     return (config.data.session?.sidebar ?? "auto") === "auto" && wide()
   })
-  const showSidebar = () => sidebarVisible() && (sidebarSelected() || (!selectedTerminal() && !session()?.hidden))
-  const showTerminal = () => !!selectedTerminal() && !showSidebar()
-  const overlaySidebar = () => showSidebar() && !wide()
-  const rightVisible = () => showTerminal() || (showSidebar() && !overlaySidebar())
-  const rightWidth = () =>
-    showTerminal() ? Math.max(1, Math.floor((dimensions().width - props.verticalTabsWidth) / 2)) : SESSION_SIDEBAR_WIDTH
+  const rightPane = createMemo(() => {
+    if (sidebarVisible() && (sidebarSelected() || (!selectedTerminal() && !session()?.hidden))) return "sidebar"
+    if (selectedTerminal()) return "terminal"
+  })
   const toggleSidebar = () => {
     batch(() => {
-      const visible = showSidebar()
+      const visible = rightPane() === "sidebar"
       void config
         .update((draft) => {
           draft.session = { ...draft.session, sidebar: visible ? "hide" : "auto" }
@@ -117,9 +115,9 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
         <Session
           verticalTabsWidth={props.verticalTabsWidth}
           promptMuted={terminalFocused()}
-          sidebarVisible={showSidebar()}
+          sidebarVisible={rightPane() === "sidebar"}
           onToggleSidebar={toggleSidebar}
-          visibleTerminalID={showTerminal() ? selectedTerminal()?.id : undefined}
+          visibleTerminalID={rightPane() === "terminal" ? selectedTerminal()?.id : undefined}
           width={sessionWidth()}
         />
         <Show when={terminalFocused()}>
@@ -134,10 +132,19 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
           />
         </Show>
       </box>
-      <Show when={rightVisible()}>
-        <box flexShrink={0} width={rightWidth()} minWidth={0} minHeight={0}>
+      <Show when={rightPane() === "terminal" || (rightPane() === "sidebar" && wide())}>
+        <box
+          flexShrink={0}
+          width={
+            rightPane() === "terminal"
+              ? Math.max(1, Math.floor((dimensions().width - props.verticalTabsWidth) / 2))
+              : SESSION_SIDEBAR_WIDTH
+          }
+          minWidth={0}
+          minHeight={0}
+        >
           <Show
-            when={showSidebar()}
+            when={rightPane() === "sidebar"}
             fallback={
               <Show keyed when={selectedTerminal()}>
                 {(terminal) => (
@@ -157,7 +164,7 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
           </Show>
         </box>
       </Show>
-      <Show when={overlaySidebar()}>
+      <Show when={rightPane() === "sidebar" && !wide()}>
         <box
           position="absolute"
           top={0}
