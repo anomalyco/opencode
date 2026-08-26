@@ -6,10 +6,24 @@ describe("renderLatexToString", () => {
     expect(renderLatexToString(String.raw`\frac{x+1}{y-1}`)).toBe([" x + 1", "───────", " y - 1"].join("\n"))
   })
 
-  test("uses compact unicode scripts where possible", () => {
-    expect(renderLatexToString(String.raw`E = mc^2`)).toBe("E = mc²")
-    expect(renderLatexToString(String.raw`a_n`)).toBe("aₙ")
-    expect(renderLatexToString(String.raw`x_i^2`)).toBe("x²ᵢ")
+  test.each([
+    [String.raw`E = mc^2`, "E = mc²"],
+    [String.raw`a_n`, "aₙ"],
+    [String.raw`x_i^2`, "x²ᵢ"],
+    [String.raw`x^{}`, "x"],
+    [String.raw`x_{}`, "x"],
+    [String.raw`x^{}_{}`, "x"],
+    [String.raw`x^m_1`, " m\nx\n 1"],
+    [String.raw`x^2_q`, " 2\nx\n q"],
+    [String.raw`x^{\frac{1}{2}}_1`, "  1\n ───\n  2\nx\n 1"],
+  ])("compacts scripts only when every script is supported: %s", (source, expected) => {
+    expect(renderLatexToString(source)).toBe(expected)
+  })
+
+  test("respects script and display mode options", () => {
+    expect(renderLatexToString(String.raw`x_i^2`, { compactScripts: false })).toBe(" 2\nx\n i")
+    expect(renderLatexToString(String.raw`\sum_1^n`, { displayMode: false })).toBe("∑ⁿ₁")
+    expect(renderLatexToString(String.raw`\sum_1^n`, { compactScripts: false })).toBe("n\n∑\n1")
   })
 
   test("centers binomials around an empty math-axis row", () => {
@@ -39,6 +53,11 @@ describe("renderLatexToString", () => {
 
   test("renders blackboard, calligraphic, and fraktur alphabets", () => {
     expect(renderLatexToString(String.raw`\mathbb{R} \to \mathcal{C} \times \mathfrak{g}`)).toBe("ℝ → 𝒞 × 𝔤")
+  })
+
+  test("preserves inherited styles through nested variants and colors", () => {
+    const layout = renderLatex(String.raw`\mathbf{\mathsf{\textcolor{red}{\mathit{x}}}}`)
+    expect(layout.cells[0][0]).toEqual({ char: "x", style: { bold: true, italic: true, color: "red" } })
   })
 
   test("renders nested fractions without flattening their structure", () => {

@@ -14,6 +14,8 @@ interface LayoutContext {
   variant?: MathVariant
 }
 
+const graphemeSegmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" })
+
 const superscripts: Readonly<Record<string, string>> = {
   "0": "⁰",
   "1": "¹",
@@ -83,8 +85,8 @@ function layoutNode(node: MathNode, context: LayoutContext): Box {
     case "row":
       return layoutRow(node.body, context)
     case "symbol":
-      return textBox(applyVariant(node.value, context.variant), context.style)
     case "text":
+    case "operator":
       return textBox(applyVariant(node.value, context.variant), context.style)
     case "space":
       return blank(node.width, 1, 0)
@@ -102,12 +104,10 @@ function layoutNode(node: MathNode, context: LayoutContext): Box {
       return layoutAccent(node.accent, node.body, context)
     case "variant":
       return layoutNode(node.body, withVariant(context, node.variant))
-    case "operator":
-      return textBox(applyVariant(node.value, context.variant), context.style)
     case "overunder":
       return layoutOverUnder(node.base, node.over, node.under, context)
     case "color":
-      return layoutNode(node.body, { ...context, style: mergeStyle(context.style, { color: node.color }) })
+      return layoutNode(node.body, { ...context, style: { ...context.style, color: node.color } })
   }
   throw new Error("Unsupported math node")
 }
@@ -168,40 +168,17 @@ function layoutRoot(bodyNode: MathNode, indexNode: MathNode | undefined, context
 }
 
 function layoutScripts(node: Extract<MathNode, { type: "scripts" }>, context: LayoutContext): Box {
-  const simpleBase = layoutNode(node.base, context)
-  const superscriptText = node.superscript ? simpleNodeText(node.superscript) : undefined
-  const subscriptText = node.subscript ? simpleNodeText(node.subscript) : undefined
-  const canCompactBase = !(node.base.type === "operator" && node.base.limits && context.displayMode)
-
-  if (context.compactScripts && canCompactBase && superscriptText !== undefined && subscriptText !== undefined) {
-    const compactSuperscript = mapScript(superscriptText, superscripts)
-    const compactSubscript = mapScript(subscriptText, subscripts)
-    if (compactSuperscript !== undefined && compactSubscript !== undefined) {
-      return hpack([simpleBase, textBox(compactSuperscript, context.style), textBox(compactSubscript, context.style)])
-    }
-  }
-
-  if (
-    context.compactScripts &&
-    canCompactBase &&
-    !(node.superscript && node.subscript) &&
-    superscriptText !== undefined
-  ) {
-    const compact = mapScript(superscriptText, superscripts)
-    if (compact !== undefined) return hpack([simpleBase, textBox(compact, context.style)])
-  }
-  if (
-    context.compactScripts &&
-    canCompactBase &&
-    !(node.superscript && node.subscript) &&
-    subscriptText !== undefined
-  ) {
-    const compact = mapScript(subscriptText, subscripts)
-    if (compact !== undefined) return hpack([simpleBase, textBox(compact, context.style)])
-  }
-
   if (node.base.type === "operator" && node.base.limits && context.displayMode) {
     return layoutOverUnder(node.base, node.superscript, node.subscript, context)
+  }
+
+  const base = layoutNode(node.base, context)
+  if (context.compactScripts) {
+    const superscript = mapScript(node.superscript ? simpleNodeText(node.superscript) : "", superscripts)
+    const subscript = mapScript(node.subscript ? simpleNodeText(node.subscript) : "", subscripts)
+    if (superscript !== undefined && subscript !== undefined) {
+      return hpack([base, textBox(superscript + subscript, context.style)])
+    }
   }
 
   const superscript = node.superscript ? layoutNode(node.superscript, context) : undefined
@@ -209,14 +186,14 @@ function layoutScripts(node: Extract<MathNode, { type: "scripts" }>, context: La
   const scriptWidth = Math.max(superscript?.width ?? 0, subscript?.width ?? 0)
   const topHeight = superscript?.height ?? 0
   const bottomHeight = subscript?.height ?? 0
-  const width = simpleBase.width + scriptWidth
-  const height = topHeight + simpleBase.height + bottomHeight
-  const baseline = topHeight + simpleBase.baseline
+  const width = base.width + scriptWidth
+  const height = topHeight + base.height + bottomHeight
+  const baseline = topHeight + base.baseline
   const result = blank(width, height, baseline)
 
-  overlay(result, simpleBase, 0, topHeight)
-  if (superscript) overlay(result, superscript, simpleBase.width, 0)
-  if (subscript) overlay(result, subscript, simpleBase.width, topHeight + simpleBase.height)
+  overlay(result, base, 0, topHeight)
+  if (superscript) overlay(result, superscript, base.width, 0)
+  if (subscript) overlay(result, subscript, base.width, topHeight + base.height)
   return result
 }
 
@@ -417,7 +394,7 @@ function hpack(boxes: Box[]): Box {
 }
 
 function textBox(text: string, style?: MathStyle): Box {
-  const graphemes = segment(text)
+  const graphemes = Array.from(graphemeSegmenter.segment(text), (item) => item.segment)
   const width = graphemes.reduce((sum, grapheme) => sum + cellWidth(grapheme), 0)
   const result = blank(width, 1, 0)
   let x = 0
@@ -530,7 +507,8 @@ function simpleNodeText(node: MathNode): string | undefined {
   return undefined
 }
 
-function mapScript(value: string, table: Readonly<Record<string, string>>): string | undefined {
+function mapScript(value: string | undefined, table: Readonly<Record<string, string>>): string | undefined {
+  if (value === undefined) return undefined
   let result = ""
   for (const char of value) {
     const mapped = table[char]
@@ -541,17 +519,8 @@ function mapScript(value: string, table: Readonly<Record<string, string>>): stri
 }
 
 function withVariant(context: LayoutContext, variant: MathVariant): LayoutContext {
-  const style =
-    variant === "bold"
-      ? { bold: true }
-      : variant === "italic"
-        ? { italic: true }
-        : variant === "sans"
-          ? {}
-          : variant === "monospace"
-            ? {}
-            : {}
-  return { ...context, variant, style: mergeStyle(context.style, style) }
+  const style = variant === "bold" ? { bold: true } : variant === "italic" ? { italic: true } : {}
+  return { ...context, variant, style: { ...context.style, ...style } }
 }
 
 function applyVariant(value: string, variant: MathVariant | undefined): string {
@@ -610,17 +579,6 @@ function applyVariant(value: string, variant: MathVariant | undefined): string {
       return char
     })
     .join("")
-}
-
-function mergeStyle(base: MathStyle | undefined, overlayStyle: MathStyle): MathStyle {
-  return { ...base, ...overlayStyle }
-}
-
-function segment(value: string): string[] {
-  if (typeof Intl.Segmenter === "function") {
-    return [...new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(value)].map((item) => item.segment)
-  }
-  return Array.from(value)
 }
 
 function cellWidth(value: string): number {

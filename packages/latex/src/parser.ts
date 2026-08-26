@@ -74,7 +74,7 @@ export function expandLatexMacros(source: string, options: ParseOptions = {}): s
   assertSourceLength(source, maxSourceLength)
   assertNestingDepth(source, maxDepth)
   const expanded = expandMacros(source, options.macros, maxExpand, maxExpandedLength)
-  assertNestingDepth(expanded, maxDepth)
+  if (expanded !== source) assertNestingDepth(expanded, maxDepth)
   return expanded
 }
 
@@ -222,7 +222,7 @@ class Parser {
       return { type: "delimited", left: "(", body: fraction, right: ")" }
     }
     if (command === "sqrt") {
-      const index = this.peekOptionalArgument()
+      const index = this.parseOptionalArgument()
       const result: MathNode = { type: "root", body: this.parseArgument() }
       if (index) result.index = index
       return result
@@ -402,7 +402,7 @@ class Parser {
     return body
   }
 
-  private peekOptionalArgument(): MathNode | undefined {
+  private parseOptionalArgument(): MathNode | undefined {
     this.skipMathWhitespace()
     if (this.peek() !== "[") return undefined
     this.position++

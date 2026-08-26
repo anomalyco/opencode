@@ -88,6 +88,7 @@ describe("parseLatex", () => {
         maxExpandedLength: 64,
       }),
     ).toThrow(/64-character limit/)
+    expect(() => parseLatex(String.raw`\a`, { macros: { a: "{{x}}" }, maxDepth: 1 })).toThrow(/1-level limit/)
     expect(() => parseLatex("x", { maxSourceLength: 0 })).toThrow(RangeError)
   })
 
