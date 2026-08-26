@@ -12,7 +12,7 @@ import {
   onCleanup,
   untrack,
 } from "solid-js"
-import { Portal, useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
+import { Portal, useTerminalDimensions } from "@opentui/solid"
 import { useConfig } from "../config"
 import { useSessionTabs } from "../context/session-tabs"
 import { useData } from "../context/data"
@@ -421,17 +421,7 @@ export function SessionTabs(
     width?: number
   } = {},
 ) {
-  const renderer = useRenderer()
-  const [numbers, setNumbers] = createSignal(false)
-  useKeyboard(
-    (key) => {
-      if (key.name === "leftctrl" || key.name === "rightctrl") setNumbers(key.eventType !== "release")
-    },
-    { release: true },
-  )
-  const blur = () => setNumbers(false)
-  renderer.on("blur", blur)
-  onCleanup(() => renderer.off("blur", blur))
+  const keymap = Keymap.use()
 
   return (
     <Switch>
@@ -441,7 +431,7 @@ export function SessionTabs(
           animations={props.animations}
           spinner={props.spinner}
           statusPosition={props.statusPosition}
-          numbers={numbers()}
+          numbers={keymap.control()}
           width={props.width}
         />
       </Match>
@@ -450,7 +440,7 @@ export function SessionTabs(
           controller={props.controller}
           animations={props.animations}
           spinner={props.spinner}
-          numbers={numbers()}
+          numbers={keymap.control()}
         />
       </Match>
     </Switch>
