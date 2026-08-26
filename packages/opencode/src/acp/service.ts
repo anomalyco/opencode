@@ -701,7 +701,7 @@ type MessageInfo = {
   readonly modelID?: Extract<Message, { role: "assistant" }>["modelID"]
   readonly variant?: Extract<Message, { role: "assistant" }>["variant"]
   readonly mode?: Extract<Message, { role: "assistant" }>["mode"]
-  readonly agent?: Message["agent"]
+  readonly agent?: Extract<Message, { role: "user" }>["agent"]
 }
 
 type AssistantError = NonNullable<AssistantMessage["error"]>

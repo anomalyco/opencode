@@ -207,13 +207,15 @@ function sanitize(data: { info: Session.Info; messages: SessionV1.WithParts[] })
                     diffs: diff("message-diff", msg.info.summary.diffs),
                   },
             }
-          : {
-              ...msg.info,
-              path: {
-                cwd: redact("cwd", msg.info.id, msg.info.path.cwd),
-                root: redact("root", msg.info.id, msg.info.path.root),
-              },
-            },
+          : msg.info.role === "assistant"
+            ? {
+                ...msg.info,
+                path: {
+                  cwd: redact("cwd", msg.info.id, msg.info.path.cwd),
+                  root: redact("root", msg.info.id, msg.info.path.root),
+                },
+              }
+            : msg.info,
       parts: msg.parts.map(partFn),
     })),
   }

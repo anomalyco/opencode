@@ -2,6 +2,7 @@ import { Binary } from "@opencode-ai/core/util/binary"
 import { retry } from "@opencode-ai/core/util/retry"
 import type { OpenCodeEvent, SessionApi, SessionMessageInfo } from "@opencode-ai/client/promise"
 import type {
+  AssistantMessage,
   Message,
   OpencodeClient,
   Part,
@@ -10,6 +11,7 @@ import type {
   Session,
   SessionStatus,
   Todo,
+  UserMessage,
 } from "@opencode-ai/sdk/v2/client"
 import type { FileDiffInfo } from "@opencode-ai/client/promise"
 import { batch } from "solid-js"
@@ -62,6 +64,7 @@ type MessagePage = {
 
 function legacyMessageSource(items: { info: Message; parts: Part[] }[]): SessionMessageInfo[] {
   return items
+    .filter((item): item is { info: UserMessage | AssistantMessage; parts: Part[] } => item.info.role !== "system")
     .slice()
     .sort((a, b) => compareMessages(a.info, b.info))
     .map((item) => {

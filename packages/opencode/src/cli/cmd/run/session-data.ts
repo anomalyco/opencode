@@ -828,7 +828,7 @@ export function reduceSessionData(input: SessionDataInput): SessionDataOutput {
     }
 
     const info = event.properties.info
-    if (typeof info.id === "string") {
+    if (typeof info.id === "string" && (info.role === "user" || info.role === "assistant")) {
       data.role.set(info.id, info.role)
       replay(data, commits, info.id, info.role, input.thinking)
     }

@@ -588,7 +588,7 @@ export const {
           const messages = store.message[sessionID] ?? []
           const last = messages.at(-1)
           if (!last) return "idle"
-          if (last.role === "user") return "working"
+          if (last.role !== "assistant") return "working"
           return last.time.completed ? "idle" : "working"
         },
         async sync(sessionID: string) {

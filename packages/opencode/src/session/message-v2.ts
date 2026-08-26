@@ -241,6 +241,25 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
       if (userMessage.parts.length > 0) result.push(userMessage)
     }
 
+    // System messages cannot be persisted, so they only reach this point when
+    // a plugin inserts them via the messages.transform hook. ConvertToModelMessages
+    // places them at their array position in the final ModelMessage[].
+    if (msg.info.role === "system") {
+      const systemMessage: UIMessage = {
+        id: msg.info.id,
+        role: "system",
+        parts: [],
+      }
+      for (const part of msg.parts) {
+        if (part.type === "text" && !part.ignored && part.text !== "")
+          systemMessage.parts.push({
+            type: "text",
+            text: part.text,
+          })
+      }
+      if (systemMessage.parts.length > 0) result.push(systemMessage)
+    }
+
     if (msg.info.role === "assistant") {
       const differentModel = `${model.providerID}/${model.id}` !== `${msg.info.providerID}/${msg.info.modelID}`
       const media: Array<{ mime: string; url: string; filename?: string }> = []

@@ -1,4 +1,4 @@
-import type { AssistantMessage, Part, Provider, UserMessage } from "@opencode-ai/sdk/v2"
+import type { AssistantMessage, Part, Provider, SystemMessage, UserMessage } from "@opencode-ai/sdk/v2"
 import { Locale } from "./locale"
 import * as Model from "./model"
 
@@ -19,7 +19,7 @@ export type SessionInfo = {
 }
 
 export type MessageWithParts = {
-  info: UserMessage | AssistantMessage
+  info: UserMessage | AssistantMessage | SystemMessage
   parts: Part[]
 }
 
@@ -38,6 +38,7 @@ export function formatTranscript(
   for (const msg of messages.toSorted(
     (a, b) => a.info.time.created - b.info.time.created || a.info.id.localeCompare(b.info.id),
   )) {
+    if (msg.info.role === "system") continue
     transcript += formatMessage(msg.info, msg.parts, options, providers)
     transcript += `---\n\n`
   }
