@@ -60,7 +60,7 @@ export function createLatexCodeBlockRenderer(
               {
                 __isChunk: true as const,
                 text: cell?.char ?? " ",
-                fg: /^[()[\]{}|\u239b-\u23ad\u2500-\u257f]$/u.test(cell?.char ?? "") ? subdued : text,
+                fg: /^[()[\]{}|\u221a\u239b-\u23ad\u2500-\u257f]$/u.test(cell?.char ?? "") ? subdued : text,
                 attributes: createTextAttributes({
                   bold: cell?.style?.bold || /^[=<>\u2260\u2261\u2264\u2265\u2248]$/u.test(cell?.char ?? ""),
                   italic: cell?.style?.italic,

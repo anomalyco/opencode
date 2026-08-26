@@ -179,11 +179,17 @@ test("allows wide formulas to scroll horizontally without wrapping", async () =>
 })
 
 test("subdues structure and emphasizes relations using the theme", async () => {
-  const output = await setup("```latex\nx=\\frac{1}{2}\n```")
+  const output = await setup("```latex\nx=\\sqrt{\\frac{1}{2}}\n```")
   const formula = output.markdown.getChildren()[0]?.getChildren()[0]
   if (!(formula instanceof TextRenderable)) throw new Error("Expected Unicode math")
   expect(
     formula.chunks.find((chunk) => chunk.text === "\u2500")?.fg?.equals(RGBA.fromHex(output.palette.subdued)),
+  ).toBe(true)
+  expect(
+    formula.chunks.find((chunk) => chunk.text === "\u221a")?.fg?.equals(RGBA.fromHex(output.palette.subdued)),
+  ).toBe(true)
+  expect(
+    formula.chunks.find((chunk) => chunk.text === "\u256d")?.fg?.equals(RGBA.fromHex(output.palette.subdued)),
   ).toBe(true)
   expect(formula.chunks.find((chunk) => chunk.text === "x")?.fg?.equals(RGBA.fromHex(output.palette.text))).toBe(true)
   expect(formula.chunks.find((chunk) => chunk.text === "=")?.attributes).toBe(TextAttributes.BOLD)
@@ -197,6 +203,12 @@ test("subdues structure and emphasizes relations using the theme", async () => {
   expect(updated.chunks.find((chunk) => chunk.text === "x")?.fg?.equals(RGBA.fromHex(output.palette.text))).toBe(true)
   expect(
     updated.chunks.find((chunk) => chunk.text === "\u2500")?.fg?.equals(RGBA.fromHex(output.palette.subdued)),
+  ).toBe(true)
+  expect(
+    updated.chunks.find((chunk) => chunk.text === "\u221a")?.fg?.equals(RGBA.fromHex(output.palette.subdued)),
+  ).toBe(true)
+  expect(
+    updated.chunks.find((chunk) => chunk.text === "\u256d")?.fg?.equals(RGBA.fromHex(output.palette.subdued)),
   ).toBe(true)
 })
 
