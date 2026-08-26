@@ -21,6 +21,8 @@ import { SessionUsage } from "./usage.js"
 import { SessionStore } from "./store.js"
 
 const MAX_LENGTH = 100
+const MAX_CONTEXT_LENGTH = 8_000
+const MAX_FIRST_MESSAGE_LENGTH = 2_000
 const titleChanged = Symbol("Session title changed")
 
 type Dependencies = {
@@ -36,14 +38,14 @@ type Dependencies = {
 }
 
 export interface Interface {
-  /** Generates a title from the session's first user message when the session remains untitled. */
-  readonly generateForFirstPrompt: (sessionID: SessionSchema.ID) => Effect.Effect<void>
+  /** Generates an initial title or regenerates one from bounded conversation history. */
+  readonly generate: (sessionID: SessionSchema.ID) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionTitle") {}
 
 const truncate = (value: string) => (value.length <= MAX_LENGTH ? value : `${value.slice(0, MAX_LENGTH - 3)}...`)
-const isUntitled = (session: SessionSchema.Info) =>
+export const isUntitled = (session: SessionSchema.Info) =>
   isExactRootFallback({
     title: session.title,
     time: { created: DateTime.toEpochMillis(session.time.created) },
@@ -108,16 +110,36 @@ const attempt = Effect.fn("SessionTitle.attempt")(function* (
 const MINIMAL_REASONING_VARIANTS = ["none", "minimal", "low"].map((id) => Model.VariantID.make(id))
 
 const make = (dependencies: Dependencies) => {
-  const generateForFirstPrompt = Effect.fn("SessionTitle.generateForFirstPrompt")(function* (
+  const generate = Effect.fn("SessionTitle.generate")(function* (
     db: Database.Interface["db"],
     sessionID: SessionSchema.ID,
   ) {
     const session = yield* dependencies.store.get(sessionID)
     if (!session) return
-    if (session.parentID) return
-    if (!isUntitled(session)) return
     const firstUser = yield* SessionHistory.firstUserMessage(db, session.id)
     if (!firstUser) return
+    const text = !isUntitled(session)
+      ? yield* dependencies.store.context(session.id).pipe(
+          Effect.map((messages) => {
+            const original = `Original request:\n${firstUser.text.slice(0, MAX_FIRST_MESSAGE_LENGTH)}`
+            const recent = messages
+              .flatMap((message) => {
+                if (message.type === "user" && message.id !== firstUser.id) return [`User: ${message.text.trim()}`]
+                if (message.type !== "assistant") return []
+                const text = message.content
+                  .flatMap((part) => (part.type === "text" ? [part.text.trim()] : []))
+                  .filter(Boolean)
+                  .join("\n")
+                return text ? [`Assistant: ${text}`] : []
+              })
+              .join("\n\n")
+            if (!recent) return original
+            const prefix = `${original}\n\nRecent conversation:\n`
+            return `${prefix}${recent.slice(-(MAX_CONTEXT_LENGTH - prefix.length))}`
+          }),
+          Effect.orElseSucceed(() => firstUser.text),
+        )
+      : firstUser.text
     const agent = yield* dependencies.agents.get(Agent.ID.make("title"))
     if (!agent) return
     const primary = yield* dependencies.models.resolve(session).pipe(Effect.orElseSucceed(() => undefined))
@@ -143,14 +165,14 @@ const make = (dependencies: Dependencies) => {
     const selected = preferred ?? primary
     if (!selected) return
     const title =
-      (yield* attempt(dependencies, { session, agent, text: firstUser.text, model: selected })) ??
+      (yield* attempt(dependencies, { session, agent, text, model: selected })) ??
       (primary && !isDeepStrictEqual(selected.ref, primary.ref)
-        ? yield* attempt(dependencies, { session, agent, text: firstUser.text, model: primary })
+        ? yield* attempt(dependencies, { session, agent, text, model: primary })
         : undefined)
     if (!title) return
     const expectedSequence = (yield* Bus.latestSequence(db, sessionID)) + 1
     const current = yield* dependencies.store.get(sessionID)
-    if (!current || !isUntitled(current)) return
+    if (!current || current.title !== session.title || current.title === truncate(title)) return
     yield* dependencies.bus
       .publish(
         SessionEvent.Renamed,
@@ -162,7 +184,7 @@ const make = (dependencies: Dependencies) => {
       )
       .pipe(Effect.catchDefect((defect) => (defect === titleChanged ? Effect.void : Effect.die(defect))))
   })
-  return { generateForFirstPrompt }
+  return { generate }
 }
 
 export const layer = Layer.effect(
@@ -178,7 +200,7 @@ export const layer = Layer.effect(
     const database = yield* Database.Service
     const title = make({ bus, llm, agents, catalog, models, modelRequests, store })
     return Service.of({
-      generateForFirstPrompt: (sessionID) => title.generateForFirstPrompt(database.db, sessionID),
+      generate: (sessionID) => title.generate(database.db, sessionID),
     })
   }),
 )

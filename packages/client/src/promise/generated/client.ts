@@ -132,6 +132,8 @@ import type {
   McpResourceCatalogOutput,
   CredentialUpdateInput,
   CredentialUpdateOutput,
+  CredentialActivateInput,
+  CredentialActivateOutput,
   CredentialRemoveInput,
   CredentialRemoveOutput,
   ProjectListOutput,
@@ -1264,6 +1266,18 @@ export function make(options: ClientOptions) {
             path: `/api/credential/${encodeURIComponent(input.credentialID)}`,
             query: { location: input["location"] },
             body: { label: input["label"] },
+            successStatus: 204,
+            declaredStatuses: [401, 400],
+            empty: true,
+          },
+          requestOptions,
+        ),
+      activate: (input: CredentialActivateInput, requestOptions?: RequestOptions) =>
+        request<CredentialActivateOutput>(
+          {
+            method: "POST",
+            path: `/api/credential/${encodeURIComponent(input.credentialID)}/activate`,
+            query: { location: input["location"] },
             successStatus: 204,
             declaredStatuses: [401, 400],
             empty: true,

@@ -56,7 +56,6 @@ export const StreamOptions = Schema.Struct({
 })
 
 export const Options = Schema.Struct({
-  instructions: Schema.optional(Schema.String),
   store: Schema.optional(Schema.Boolean),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   safetyIdentifier: Schema.optional(Schema.String),

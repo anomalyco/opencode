@@ -279,7 +279,7 @@ describe("OpencodePlugin", () => {
             })
             draft.model.update(Provider.ID.make("remote"), Model.ID.make("stale"), () => {})
           })
-          yield* credentials.create({
+          const initial = yield* credentials.create({
             integrationID: Integration.ID.make("opencode"),
             value: Credential.Key.make({
               type: "key",
@@ -332,6 +332,29 @@ describe("OpencodePlugin", () => {
             required(yield* catalog.model.get(Provider.ID.make("remote"), Model.ID.make("disabled"))).enabled,
           ).toBe(false)
           expect(yield* catalog.model.get(Provider.ID.make("remote"), Model.ID.make("stale"))).toBeDefined()
+
+          yield* credentials.update(initial.id, { label: "Renamed" })
+          yield* Effect.yieldNow
+          expect(authorization).toEqual(["Bearer secret"])
+
+          const replacement = yield* credentials.create({
+            integrationID: Integration.ID.make("opencode"),
+            value: Credential.Key.make({
+              type: "key",
+              key: "replacement",
+              metadata: { server: server.url.origin },
+            }),
+          })
+          yield* eventually(
+            Effect.sync(() => authorization.length),
+            (count) => count === 2,
+          )
+          expect(authorization).toEqual(["Bearer secret", "Bearer replacement"])
+
+          yield* credentials.remove(initial.id)
+          yield* Effect.yieldNow
+          expect(authorization).toEqual(["Bearer secret", "Bearer replacement"])
+          expect((yield* credentials.list(Integration.ID.make("opencode"))).at(-1)?.id).toBe(replacement.id)
         }),
       ({ server }) => Effect.promise(() => server.stop(true)),
     ),

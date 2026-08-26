@@ -38,6 +38,7 @@ const integrations = Layer.mock(Integration.Service, {
     active: () => Effect.undefined,
     resolve: () => Effect.die("unused"),
     key: () => Effect.die("unused"),
+    activate: () => Effect.die("unused"),
     update: () => Effect.die("unused"),
     remove: () => Effect.die("unused"),
   },

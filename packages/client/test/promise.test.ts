@@ -26,6 +26,7 @@ test("exposes every standard HTTP API group", () => {
     "skill",
     "event",
     "pty",
+    "experimental",
     "shell",
     "reference",
     "worktree",
@@ -185,6 +186,24 @@ test("experimental wellknown integration add uses the public HTTP contract", asy
     "http://localhost:3000/api/experimental/integration/wellknown?location%5Bdirectory%5D=%2Ftmp%2Fproject",
   )
   expect(await request?.json()).toEqual({ url: "https://example.com" })
+})
+
+test("credential.activate uses the public HTTP contract", async () => {
+  let request: Request | undefined
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async (input, init) => {
+      request = input instanceof Request ? input : new Request(input, init)
+      return new Response(null, { status: 204 })
+    },
+  })
+
+  await client.credential.activate({ credentialID: "cred_work", location: { directory: "/tmp/project" } })
+
+  expect(request?.method).toBe("POST")
+  expect(request?.url).toBe(
+    "http://localhost:3000/api/credential/cred_work/activate?location%5Bdirectory%5D=%2Ftmp%2Fproject",
+  )
 })
 
 test("integration connections optionally submit a form answer", async () => {

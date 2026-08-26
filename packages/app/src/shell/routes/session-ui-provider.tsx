@@ -6,6 +6,7 @@ import { LocalProvider } from "@/providers/models/selection"
 import type { ServerConnection } from "@/runtime/server/registry"
 import { sessionHref } from "@/shell/routes/session"
 import { useData } from "@/runtime/server/current"
+import { useServerSDK } from "@/runtime/server/client"
 import { useTabs } from "@/shell/tabs/tabs"
 
 export function SessionUIProvider(
@@ -17,6 +18,7 @@ export function SessionUIProvider(
   const navigate = useNavigate()
   const params = useParams()
   const data = useData()
+  const serverSDK = useServerSDK()
   const tabs = useTabs()
   const directory = () => props.directory
   const href = (sessionID: string) => sessionHref(props.server, sessionID)
@@ -53,6 +55,7 @@ export function SessionUIProvider(
       data={sessionUIData()}
       directory={directory()}
       sessionID={params.id}
+      shellOutput={(input) => serverSDK.api.shell.output(input)}
       onNavigateToSession={navigateToSession}
       onSessionHref={href}
     >

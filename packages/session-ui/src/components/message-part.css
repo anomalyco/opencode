@@ -263,6 +263,10 @@
   }
 }
 
+[data-timeline-row="AssistantPart"][data-timeline-spacing="content"] [data-component="text-part"] {
+  margin-top: 0;
+}
+
 [data-component="reasoning-part"] {
   width: 100%;
   color: var(--v2-text-text-muted);
@@ -663,8 +667,33 @@
   cursor: default;
 
   [data-slot="context-tool-group-title"] {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     flex-shrink: 1;
     min-width: 0;
+  }
+
+  [data-slot="context-tool-group-prefix"] {
+    flex-shrink: 0;
+    color: var(--v2-text-text-muted);
+    font-family: var(--v2-font-family-sans);
+    font-size: 13px;
+    font-weight: 440;
+    line-height: var(--line-height-compact);
+    letter-spacing: -0.04px;
+  }
+
+  [data-slot="basic-tool-tool-title"] {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  [data-component="tag"] {
+    flex-shrink: 0;
+    border: 0;
+    background: var(--v2-background-bg-layer-03);
   }
 
   [data-slot="collapsible-arrow"] {
@@ -673,18 +702,31 @@
   }
 }
 
+[data-component="collapsed-tool-group"] > [data-component="collapsible"].tool-collapsible {
+  --tool-content-gap: 8px;
+}
+
 [data-component="context-tool-group-list"] {
-  /* The 28px compact trigger centers a 16px line box, already leaving 6px above this list. */
-  padding: 4px 0 0 12px;
+  padding: 0;
   display: flex;
   flex-direction: column;
-  /* 16px line boxes with 13px gaps reproduce the design's 29px row pitch for 13px solid rows. */
-  gap: 13px;
+  gap: 8px;
 
   [data-slot="context-tool-group-item"] {
     min-width: 0;
+    min-height: 28px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
     padding: 0;
-    opacity: 0.8;
+
+    > [data-component="tool-part-wrapper"] {
+      width: 100%;
+    }
+
+    > [data-component="tool-part-wrapper"] > [data-component="collapsible"] > [data-slot="collapsible-trigger"] {
+      height: 28px;
+    }
 
     [data-slot="basic-tool-tool-info-structured"] {
       gap: 6px;

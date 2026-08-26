@@ -103,6 +103,7 @@ export type Outcome =
   | Pick<SessionMessage.CompactionFailed, "status" | "error">
 
 export interface Interface extends State.Transformable<Draft> {
+  readonly enabled: () => boolean
   readonly required: (input: RequiredInput) => boolean
   readonly compact: (input: AutoInput) => Effect.Effect<Outcome>
   readonly compactManual: (input: ManualInput) => Effect.Effect<Outcome>
@@ -138,7 +139,11 @@ const serialize = (message: SessionMessage.Info) => {
         (file) =>
           `[Attached ${file.mime}: ${file.name ?? (file.source.type === "uri" ? file.source.uri : "inline attachment")}]`,
       ) ?? []
-    return [`[User]: ${message.text}`, ...files].join("\n")
+    const skills =
+      message.skills?.flatMap((skill) =>
+        skill.text === undefined ? [] : [`[Skill activated: ${skill.name}]\n${skill.text}`],
+      ) ?? []
+    return [...skills, `[User]: ${message.text}`, ...files].join("\n")
   }
   if (message.type === "location-switched")
     return `[User]: The working directory has been changed to ${message.location.directory}.`
@@ -405,6 +410,7 @@ const make = (dependencies: Dependencies) => {
   return Service.of({
     transform: state.transform,
     reload: state.reload,
+    enabled: () => state.get().auto,
     required,
     compact,
     compactManual,

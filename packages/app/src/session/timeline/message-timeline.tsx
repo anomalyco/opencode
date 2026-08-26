@@ -342,12 +342,11 @@ function MessageTimelineView(
   const projection = props.data.projection
   const sessionDirectory = createMemo(() => props.session.data.info()?.location.directory ?? sdk().directory)
   const project = createMemo(() => {
-    const projectID = props.session.data.info()?.projectID
-    const value = projectID
-      ? data.project.get(projectID)
-      : data.project.list().find((item) => containsDirectory(item.canonical, sessionDirectory()))
-    if (!value) return undefined
-    return { ...value, worktree: value.canonical, worktrees: [] }
+    const session = props.session.data.info()
+    const projects = server.ctx.sync.data.project
+    return session
+      ? projectForSession(session, projects)
+      : projects.find((item) => containsDirectory(item.worktree, sessionDirectory()))
   })
   const workspaceSession = createMemo(() => isWorkspaceDirectory(project(), sessionDirectory()))
   const showProjectIcon = () =>
@@ -388,7 +387,7 @@ function MessageTimelineView(
   const pinned = createMemo(() => props.pinned)
   const messageByID = projection.messageByID
   const virtualized = createTimelineVirtualizer({
-    sessionKey: props.data.sessionKey,
+    sessionKey: () => `${server.key}/${props.data.sessionID()}`,
     projection,
     showHeader,
     pinned,

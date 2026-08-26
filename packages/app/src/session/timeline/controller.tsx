@@ -105,6 +105,8 @@ export function createTimelineController(input: { session: TimelineSessionSource
     sessionMessages: projectedMessages,
     status: input.session.data.status,
     showReasoningSummaries: settings.general.showReasoningSummaries,
+    shellToolDefaultOpen: settings.general.shellToolPartsExpanded,
+    editToolDefaultOpen: settings.general.editToolPartsExpanded,
     pendingUserMessageIDs,
   })
   const [pending, setPending] = createStore({ rename: false })

@@ -26,7 +26,9 @@ for (const expanded of [false, true]) {
       messages: [userMessage(), assistantMessage([shell(id, "completed", lines(3))])],
       settings: { shellToolPartsExpanded: expanded },
     })
-    const trigger = page.locator(`[data-timeline-part-id="${id}"] [data-slot="collapsible-trigger"]`)
+    const trigger = expanded
+      ? page.locator(`[data-timeline-part-id="${id}"] [data-slot="collapsible-trigger"]`)
+      : page.getByRole("button", { name: "Used Shell" })
     await expect(trigger).toHaveAttribute("aria-expanded", String(expanded))
     await trigger.click()
     await expect(trigger).toHaveAttribute("aria-expanded", String(!expanded))

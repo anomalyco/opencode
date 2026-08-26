@@ -85,6 +85,28 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("omits empty and whitespace-only assistant messages", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.user("Before."),
+            Message.assistant([]),
+            Message.assistant(""),
+            Message.assistant(" \n\t "),
+            Message.assistant("After."),
+          ],
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        { role: "user", content: "Before." },
+        { role: "assistant", content: "After." },
+      ])
+    }),
+  )
+
   it.effect("replays canonical reasoning as OpenAI-compatible reasoning_content", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
@@ -143,6 +165,56 @@ describe("OpenAI Chat route", () => {
       expect(prepared.body.messages).toEqual([
         { role: "assistant", content: "Hello", vendor_reasoning: "thinking" },
         { role: "assistant", content: "Done", vendor_reasoning: "" },
+      ])
+    }),
+  )
+
+  it.effect("preserves observed reasoning fields when reasoning is required", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: LanguageModel.update(model, { compatibility: { requireReasoning: true } }),
+          messages: [
+            Message.assistant([
+              {
+                type: "reasoning",
+                text: "thinking",
+                providerMetadata: { openai: { reasoningField: "reasoning_text" } },
+              },
+              { type: "text", text: "Hello" },
+            ]),
+            Message.assistant("Done"),
+          ],
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        { role: "assistant", content: "Hello", reasoning_text: "thinking" },
+        { role: "assistant", content: "Done", reasoning_content: "" },
+      ])
+    }),
+  )
+
+  it.effect("omits empty configured reasoning fields when reasoning is explicitly optional", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: LanguageModel.update(model, {
+            compatibility: { reasoningField: "reasoning_text", requireReasoning: false },
+          }),
+          messages: [
+            Message.assistant([
+              { type: "reasoning", text: "thinking" },
+              { type: "text", text: "Hello" },
+            ]),
+            Message.assistant("Done"),
+          ],
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        { role: "assistant", content: "Hello", reasoning_text: "thinking" },
+        { role: "assistant", content: "Done" },
       ])
     }),
   )
@@ -366,6 +438,35 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("limits OpenAI and Azure Chat tool call IDs to 40 characters", () =>
+    Effect.gen(function* () {
+      const id = `call_${"a".repeat(48)}`
+      const models = [
+        model,
+        Azure.configure({ baseURL: "https://opencode-test.openai.azure.com/openai/", apiKey: "test" }).chat("gpt-4o"),
+      ]
+
+      yield* Effect.forEach(models, (selected) =>
+        Effect.gen(function* () {
+          const prepared = yield* compileRequest(
+            LLM.request({
+              model: selected,
+              messages: [
+                Message.assistant([ToolCallPart.make({ id, name: "lookup", input: {} })]),
+                Message.tool({ id, name: "lookup", result: "Sunny" }),
+              ],
+            }),
+          )
+
+          expect(prepared.body.messages).toMatchObject([
+            { role: "assistant", tool_calls: [{ id: id.slice(0, 40) }] },
+            { role: "tool", tool_call_id: id.slice(0, 40) },
+          ])
+        }),
+      )
+    }),
+  )
+
   it.effect("preserves structured tool errors for the model", () =>
     Effect.gen(function* () {
       const error = { error: { type: "unknown", message: "Tool execution interrupted" } }
@@ -428,6 +529,30 @@ describe("OpenAI Chat route", () => {
         },
       ])
       expect(JSON.stringify(prepared.body.messages)).not.toContain('"content":"AAECAw=="')
+    }),
+  )
+
+  it.effect("bridges image tool results before their synthetic user message when required", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: LanguageModel.update(model, { compatibility: { requireAssistantAfterTool: true } }),
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "call_image", name: "read", input: {} })]),
+            Message.tool({
+              id: "call_image",
+              name: "read",
+              result: {
+                type: "content",
+                value: [{ type: "file", uri: "data:image/png;base64,AAECAw==", mime: "image/png", name: "pixel.png" }],
+              },
+            }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.messages.map((message) => message.role)).toEqual(["assistant", "tool", "assistant", "user"])
+      expect(prepared.body.messages[2]).toEqual({ role: "assistant", content: "Done." })
     }),
   )
 

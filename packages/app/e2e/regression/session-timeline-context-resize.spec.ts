@@ -40,7 +40,7 @@ test.describe("regression: session timeline context group resize", () => {
     expect(samples.at(-1)?.expanded).toBe("true")
   })
 
-  test("paints a stable exploring to explored transition", async ({ page }) => {
+  test("keeps a grouped tool summary stable as its calls complete", async ({ page }) => {
     const events: OpenCodeEvent[] = []
     await page.setViewportSize({ width: 1400, height: 900 })
     await mockServer(page, events, [
@@ -55,13 +55,12 @@ test.describe("regression: session timeline context group resize", () => {
     await devtools.send("Emulation.setCPUThrottlingRate", { rate: 4 })
     const context = page.locator(`[data-timeline-part-ids="${contextIDs.join(",")}"]`).first()
     await expectAppVisible(context)
-    await expect(context.locator('[data-component="tool-status-title"]')).toHaveAttribute("aria-label", "Exploring")
+    await expect(context.getByRole("button")).toHaveAccessibleName("Used Read, Glob, Grep, List")
 
     const contextSelector = `[data-timeline-part-ids="${contextIDs.join(",")}"]`
     const regions = defineVisualRegions({
       status: {
-        selector: `${contextSelector} [data-component="tool-status-title"]`,
-        opacitySelectors: ['[data-slot="tool-status-active"]', '[data-slot="tool-status-done"]'],
+        selector: `${contextSelector} [data-component="context-tool-group-trigger"]`,
       },
       context: { selector: contextSelector, closest: '[data-timeline-row="AssistantPart"]' },
       following: {
@@ -89,7 +88,7 @@ test.describe("regression: session timeline context group resize", () => {
       await page.waitForTimeout(delay)
     }
 
-    await expect(context.locator('[data-component="tool-status-title"]')).toHaveAttribute("aria-label", "Explored")
+    await expect(context.getByRole("button")).toHaveAccessibleName("Used Read, Glob, Grep, List")
     await page.waitForTimeout(700)
     const trace = await stopVisualProbe<keyof typeof regions>(page)
     const labels = trace.samples
@@ -108,7 +107,7 @@ test.describe("regression: session timeline context group resize", () => {
       ]),
     )
 
-    expect(labels).toEqual(["Exploring", "Explored"])
+    expect(labels).toEqual(["Used Read, Glob, Grep, List"])
     expect(issues, JSON.stringify(trace.samples, null, 2)).toEqual([])
   })
 })
@@ -209,13 +208,7 @@ function turn(index: number, target: boolean, status: "running" | "completed" = 
   const content: SessionMessageAssistant["content"] = target
     ? [
         toolContent(
-          contextTool(
-            contextIDs[0]!,
-            assistantID,
-            "read",
-            { path: "src/recent-a.ts", offset: 0, limit: 120 },
-            status,
-          ),
+          contextTool(contextIDs[0]!, assistantID, "read", { path: "src/recent-a.ts", offset: 0, limit: 120 }, status),
         ),
         toolContent(contextTool(contextIDs[1]!, assistantID, "glob", { path: directory, pattern: "**/*.ts" }, status)),
         toolContent(

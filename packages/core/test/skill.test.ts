@@ -31,6 +31,8 @@ describe("Skill", () => {
       })
 
       expect(yield* skill.list()).toEqual([info("review", "Second"), info("deploy", "Deploy")])
+      expect(yield* skill.get(Skill.ID.make("review"))).toEqual(info("review", "Second"))
+      expect(yield* skill.get(Skill.ID.make("missing"))).toBeUndefined()
     }),
   )
 

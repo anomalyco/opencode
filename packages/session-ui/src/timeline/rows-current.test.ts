@@ -514,7 +514,9 @@ describe("current session timeline rows", () => {
       assistant("msg_assistant_3", "grep"),
     ] satisfies SessionMessageInfo[]
 
-    const keys = Timeline.constructSessionMessageRows(source, false, { type: "idle" }).rows.map(TimelineRow.key)
+    const keys = Timeline.constructSessionMessageRows(source, false, { type: "idle" }, undefined, true).rows.map(
+      TimelineRow.key,
+    )
 
     expect(keys).toEqual([
       "user-message:msg_user",
@@ -595,7 +597,7 @@ describe("current session timeline rows", () => {
       },
     ] satisfies SessionMessageInfo[]
 
-    const result = Timeline.constructSessionMessageRows(source, false, { type: "idle" })
+    const result = Timeline.constructSessionMessageRows(source, false, { type: "idle" }, undefined, false, true)
     const groups = result.rows.flatMap((row) => (row._tag === "AssistantPart" ? [row.group] : []))
 
     expect(groups).toEqual([
@@ -626,6 +628,224 @@ describe("current session timeline rows", () => {
         ],
       },
     ])
+  })
+
+  test("groups every consecutive collapsed tool in chronological order", () => {
+    const source = [
+      { id: "msg_user", type: "user", text: "work", time: { created: 1 } },
+      {
+        id: "msg_assistant",
+        type: "assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+        content: [
+          ...["shell", "subagent", "patch", "shell", "edit", "write", "grep"].map(
+            (name, index): SessionMessageAssistantTool => ({
+              type: "tool" as const,
+              id: `tool_${index}`,
+              name,
+              state: {
+                status: "completed" as const,
+                input: {},
+                content: [{ type: "text" as const, text: "done" }],
+                metadata: {},
+              },
+              time: { created: index + 2, completed: index + 3 },
+            }),
+          ),
+          { type: "text" as const, text: "finished" },
+          {
+            type: "tool" as const,
+            id: "tool_after_text",
+            name: "shell",
+            state: {
+              status: "completed" as const,
+              input: {},
+              content: [{ type: "text" as const, text: "done" }],
+              metadata: {},
+            },
+            time: { created: 10, completed: 11 },
+          },
+        ],
+        time: { created: 2 },
+      },
+    ] satisfies SessionMessageInfo[]
+
+    const groups = Timeline.constructSessionMessageRows(source, false, { type: "idle" }).rows.flatMap((row) =>
+      row._tag === "AssistantPart" ? [row.group] : [],
+    )
+
+    expect(groups.map((group) => group.type)).toEqual(["context", "part", "context"])
+    expect(groups[0]?.type === "context" ? groups[0].refs.map((ref) => ref.partID) : []).toEqual([
+      "tool_0",
+      "tool_1",
+      "tool_2",
+      "tool_3",
+      "tool_4",
+      "tool_5",
+      "tool_6",
+    ])
+    expect(groups[2]?.type === "context" ? groups[2].refs.map((ref) => ref.partID) : []).toEqual(["tool_after_text"])
+  })
+
+  test.each([
+    { shell: false, edit: false, types: ["context"] },
+    { shell: true, edit: false, types: ["part", "context"] },
+    { shell: false, edit: true, types: ["context", "file", "part", "file", "context"] },
+    { shell: true, edit: true, types: ["part", "file", "part", "file", "context"] },
+  ])("keeps tools expanded by settings outside collapsed groups ($shell, $edit)", ({ shell, edit, types }) => {
+    const source = [
+      { id: "msg_user", type: "user", text: "work", time: { created: 1 } },
+      {
+        id: "msg_assistant",
+        type: "assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+        content: ["shell", "edit", "write", "patch", "read"].map(
+          (name, index): SessionMessageAssistantTool => ({
+            type: "tool" as const,
+            id: `tool_${name}`,
+            name,
+            state: {
+              status: "completed" as const,
+              input: {},
+              content: [{ type: "text" as const, text: "done" }],
+              metadata: {},
+            },
+            time: { created: index + 2, completed: index + 3 },
+          }),
+        ),
+        time: { created: 2 },
+      },
+    ] satisfies SessionMessageInfo[]
+
+    const rows = Timeline.constructSessionMessageRows(source, false, { type: "idle" }, undefined, shell, edit).rows
+
+    expect(rows.flatMap((row) => (row._tag === "AssistantPart" ? [row.group.type] : []))).toEqual([...types])
+  })
+
+  test("keeps active and background work visible outside collapsed stacks", () => {
+    const source: SessionMessageInfo[] = [
+      { id: "msg_user", type: "user", text: "work", time: { created: 1 } },
+      {
+        id: "msg_assistant",
+        type: "assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+        content: [
+          {
+            type: "tool",
+            id: "tool_running_shell",
+            name: "shell",
+            state: { status: "running", input: {}, metadata: {} },
+            time: { created: 2 },
+          },
+          {
+            type: "tool",
+            id: "tool_background_agent",
+            name: "subagent",
+            state: {
+              status: "completed",
+              input: {},
+              content: [{ type: "text", text: "running" }],
+              metadata: { status: "running" },
+            },
+            time: { created: 3, completed: 4 },
+          },
+          {
+            type: "tool",
+            id: "tool_completed_shell",
+            name: "shell",
+            state: {
+              status: "completed",
+              input: {},
+              content: [{ type: "text", text: "done" }],
+              metadata: {},
+            },
+            time: { created: 5, completed: 6 },
+          },
+        ],
+        time: { created: 2 },
+      },
+    ]
+
+    expect(
+      Timeline.constructSessionMessageRows(source, false, { type: "busy" }).rows.flatMap((row) =>
+        row._tag === "AssistantPart" ? [row.group.type] : [],
+      ),
+    ).toEqual(["part", "part", "context"])
+  })
+
+  test("keeps failed calls inside a collapsed mixed-tool stack", () => {
+    const source: SessionMessageInfo[] = [
+      { id: "msg_user", type: "user", text: "search", time: { created: 1 } },
+      {
+        id: "msg_assistant",
+        type: "assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+        content: [
+          {
+            type: "tool",
+            id: "tool_glob_failed",
+            name: "glob",
+            state: {
+              status: "error",
+              input: { pattern: "*.ts" },
+              error: { type: "ToolError", message: "Invalid tool input" },
+              metadata: {},
+            },
+            time: { created: 2, completed: 3 },
+          },
+          {
+            type: "tool",
+            id: "tool_grep_failed",
+            name: "grep",
+            state: {
+              status: "error",
+              input: { pattern: "value" },
+              error: { type: "ToolError", message: "Search timed out" },
+              metadata: {},
+            },
+            time: { created: 4, completed: 5 },
+          },
+          {
+            type: "tool",
+            id: "tool_shell_failed",
+            name: "shell",
+            state: {
+              status: "error",
+              input: { command: "exit 1" },
+              error: { type: "ToolError", message: "Command failed" },
+              metadata: {},
+            },
+            time: { created: 6, completed: 7 },
+          },
+        ],
+        time: { created: 2, completed: 8 },
+      },
+    ]
+
+    const groups = Timeline.constructSessionMessageRows(source, false, { type: "idle" }).rows.flatMap((row) =>
+      row._tag === "AssistantPart" ? [row.group] : [],
+    )
+
+    expect(groups).toEqual([
+      {
+        type: "context",
+        key: "context:msg_assistant:tool_glob_failed",
+        refs: [
+          { messageID: "msg_assistant", partID: "tool_glob_failed" },
+          { messageID: "msg_assistant", partID: "tool_grep_failed" },
+          { messageID: "msg_assistant", partID: "tool_shell_failed" },
+        ],
+      },
+    ])
+    expect(
+      Timeline.constructSessionMessageRows(source, false, { type: "idle" }, undefined, true).rows.flatMap((row) =>
+        row._tag === "AssistantPart" ? [row.group.type] : [],
+      ),
+    ).toEqual(["context", "part"])
   })
 
   test("places a divider after interrupted output unless the turn compacts", () => {

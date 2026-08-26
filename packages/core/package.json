@@ -22,7 +22,7 @@
     "benchmark:location": "bun run script/benchmark-location.ts",
     "build": "bun run script/build.ts",
     "update-models-snapshot": "bun run script/update-models-snapshot.ts",
-    "test": "bun test --only-failures",
+    "test": "bun run script/test.ts",
     "typecheck": "tsgo -b tsconfig.json tsconfig.tests.json"
   },
   "exports": {
@@ -40,6 +40,12 @@
       "bun": "./src/pty/pty.bun.ts",
       "node": "./src/pty/pty.node.ts",
       "default": "./src/pty/pty.bun.ts"
+    },
+    "#persistent-pty-binary": {
+      "workerd": "./src/persistent-pty/binary.workerd.ts",
+      "bun": "./src/persistent-pty/binary.bun.ts",
+      "node": "./src/persistent-pty/binary.node.ts",
+      "default": "./src/persistent-pty/binary.bun.ts"
     },
     "#fff": {
       "workerd": "./src/filesystem/fff.workerd.ts",
@@ -96,9 +102,7 @@
     "@ai-sdk/amazon-bedrock": "4.0.112",
     "@ai-sdk/anthropic": "3.0.82",
     "@ai-sdk/azure": "3.0.88",
-    "@ai-sdk/cerebras": "2.0.41",
     "@ai-sdk/cohere": "3.0.27",
-    "@ai-sdk/deepinfra": "2.0.41",
     "@ai-sdk/gateway": "3.0.104",
     "@ai-sdk/google-vertex": "4.0.128",
     "@ai-sdk/groq": "3.0.31",
@@ -107,7 +111,6 @@
     "@ai-sdk/perplexity": "3.0.26",
     "@ai-sdk/provider": "3.0.8",
     "@ai-sdk/provider-utils": "4.0.23",
-    "@ai-sdk/togetherai": "2.0.41",
     "@ai-sdk/vercel": "2.0.39",
     "@aws-sdk/credential-providers": "3.1057.0",
     "@lydell/node-pty": "catalog:",

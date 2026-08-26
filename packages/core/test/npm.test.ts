@@ -1,5 +1,6 @@
 import fs from "fs/promises"
 import path from "path"
+import { pathToFileURL } from "url"
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -20,6 +21,39 @@ const writePackage = (dir: string, pkg: Record<string, unknown>) =>
 
 const npmLayer = (cache: string) =>
   AppNodeBuilder.build(Npm.node, [[Global.node, Global.layerWith({ cache, state: path.join(cache, "state") })]])
+
+async function createGitFixture(directory: string) {
+  const repository = path.join(directory, "repository")
+  await fs.mkdir(path.join(repository, "dependency"), { recursive: true })
+  await writePackage(repository, {
+    name: "fixture-git-plugin",
+    exports: "./index.js",
+    dependencies: { "fixture-dependency": "file:./dependency" },
+  })
+  await writePackage(path.join(repository, "dependency"), { name: "fixture-dependency", exports: "./index.js" })
+  await Bun.write(path.join(repository, "index.js"), "export default { root: true }\n")
+  await Bun.write(path.join(repository, "dependency", "index.js"), "export const dependency = true\n")
+
+  const subdirectory = path.join(repository, "packages", "subdirectory-plugin")
+  await fs.mkdir(path.join(subdirectory, "dependency"), { recursive: true })
+  await writePackage(subdirectory, {
+    name: "fixture-subdirectory-plugin",
+    exports: "./index.js",
+    dependencies: { "fixture-subdirectory-dependency": "file:./dependency" },
+  })
+  await writePackage(path.join(subdirectory, "dependency"), {
+    name: "fixture-subdirectory-dependency",
+    exports: "./index.js",
+  })
+  await Bun.write(path.join(subdirectory, "index.js"), "export default { subdirectory: true }\n")
+  await Bun.write(path.join(subdirectory, "dependency", "index.js"), "export const dependency = true\n")
+
+  await Bun.$`git init -q -b fixture-branch ${repository}`
+  await Bun.$`git -C ${repository} add .`
+  await Bun.$`git -C ${repository} -c user.name=fixture -c user.email=fixture@example.com commit -qm fixture`
+  const commit = await Bun.$`git -C ${repository} rev-parse HEAD`.text().then((value) => value.trim())
+  return { repository, commit }
+}
 
 describe("Npm.sanitize", () => {
   test("keeps normal scoped package specs unchanged", () => {
@@ -43,6 +77,33 @@ describe("Npm.isRegistryPackage", () => {
     expect(await Npm.isRegistryPackage("./plugin")).toBe(false)
     expect(await Npm.isRegistryPackage("github:acme/plugin")).toBe(false)
     expect(await Npm.isRegistryPackage("alias@npm:plugin@1.0.0")).toBe(false)
+  })
+})
+
+describe("Npm.isInstallablePackage", () => {
+  test("accepts registry and npm-compatible Git specs", async () => {
+    expect(await Npm.isInstallablePackage("plugin@^1.2.0")).toBe(true)
+    expect(await Npm.isInstallablePackage("github:acme/plugin#main")).toBe(true)
+    expect(await Npm.isInstallablePackage("git+ssh://git@github.com/acme/plugin.git#main")).toBe(true)
+    expect(await Npm.isInstallablePackage("git@github.com:acme/plugin.git")).toBe(true)
+    expect(
+      await Npm.isInstallablePackage(
+        "git+https://github.com/acme/plugins.git#0123456789abcdef0123456789abcdef01234567::path:packages/plugin",
+      ),
+    ).toBe(true)
+    expect(await Npm.isInstallablePackage("./plugin")).toBe(false)
+    expect(await Npm.isInstallablePackage("https://example.com/plugin.tgz")).toBe(false)
+    expect(await Npm.isInstallablePackage("alias@npm:plugin@1.0.0")).toBe(false)
+  })
+})
+
+describe("Npm.cacheKey", () => {
+  test("preserves registry keys and hashes Git specs", async () => {
+    expect(await Npm.cacheKey("@opencode/acme@1.0.0")).toBe(Npm.sanitize("@opencode/acme@1.0.0"))
+    const spec = "git+ssh://git@github.com/acme/plugin.git#main"
+    expect(await Npm.cacheKey(spec)).toMatch(/^git-[a-f0-9]{64}$/)
+    expect(await Npm.cacheKey(spec)).toBe(await Npm.cacheKey(spec))
+    expect(await Npm.cacheKey(`${spec}-other`)).not.toBe(await Npm.cacheKey(spec))
   })
 })
 
@@ -115,6 +176,92 @@ describe("Npm.add", () => {
 
     expect(entries.tui.entrypoint).toEndWith("/tui.js")
     expect(entries.fallback.entrypoint).toEndWith("/index.js")
+  })
+
+  test("installs and resolves named and unnamed Git packages with dependencies", async () => {
+    await using tmp = await tmpdir()
+    const fixture = await createGitFixture(tmp.path)
+    const cache = path.join(tmp.path, "cache")
+    const specs = [
+      `git+file://${fixture.repository}#${fixture.commit}`,
+      `fixture-named-plugin@git+file://${fixture.repository}#fixture-branch`,
+    ]
+
+    for (const spec of specs) {
+      const entries = await Effect.gen(function* () {
+        const npm = yield* Npm.Service
+        return {
+          added: yield* npm.add(spec),
+          cached: yield* npm.add(spec),
+          resolved: yield* npm.resolve(spec),
+        }
+      }).pipe(Effect.scoped, Effect.provide(npmLayer(cache)), Effect.runPromise)
+
+      expect(entries.added.entrypoint).toEndWith("/index.js")
+      expect(entries.cached).toEqual(entries.added)
+      expect(entries.resolved).toEqual(entries.added)
+      expect(
+        await fs.stat(path.join(path.dirname(entries.added.directory), "fixture-dependency", "package.json")),
+      ).toBeTruthy()
+      expect(entries.added.directory).toContain(path.join("packages", await Npm.cacheKey(spec), "node_modules"))
+    }
+  })
+
+  test("installs a Git package from an npm ::path: subdirectory", async () => {
+    await using tmp = await tmpdir()
+    const fixture = await createGitFixture(tmp.path)
+    const spec = `git+file://${fixture.repository}#${fixture.commit}::path:packages/subdirectory-plugin`
+    const entry = await Effect.gen(function* () {
+      const npm = yield* Npm.Service
+      return yield* npm.add(spec)
+    }).pipe(Effect.scoped, Effect.provide(npmLayer(path.join(tmp.path, "cache"))), Effect.runPromise)
+
+    expect(entry.directory).toEndWith(path.join("node_modules", "fixture-subdirectory-plugin"))
+    expect(entry.entrypoint).toEndWith("/index.js")
+    expect(
+      await fs.stat(path.join(path.dirname(entry.directory), "fixture-subdirectory-dependency", "package.json")),
+    ).toBeTruthy()
+  })
+
+  test("refreshes mutable Git packages once per service lifetime and preserves pinned or cached installs", async () => {
+    await using tmp = await tmpdir()
+    const fixture = await createGitFixture(tmp.path)
+    const cache = path.join(tmp.path, "cache")
+    const repository = pathToFileURL(fixture.repository).href
+    const mutable = `git+${repository}#fixture-branch`
+    const pinned = `git+${repository}#${fixture.commit}`
+
+    const first = await Effect.gen(function* () {
+      const npm = yield* Npm.Service
+      const mutableEntry = yield* npm.add(mutable, { refresh: true })
+      const pinnedEntry = yield* npm.add(pinned, { refresh: true })
+      yield* Effect.promise(async () => {
+        await Bun.write(path.join(fixture.repository, "index.js"), 'export default { root: "second" }\n')
+        await Bun.$`git -C ${fixture.repository} add .`
+        await Bun.$`git -C ${fixture.repository} -c user.name=fixture -c user.email=fixture@example.com commit -qm second`
+      })
+      yield* npm.add(mutable, { refresh: true })
+      return { mutable: mutableEntry, pinned: pinnedEntry }
+    }).pipe(Effect.scoped, Effect.provide(npmLayer(cache)), Effect.runPromise)
+    expect(await Bun.file(path.join(first.mutable.directory, "index.js")).text()).toContain("root: true")
+    expect(await Bun.file(path.join(first.pinned.directory, "index.js")).text()).toContain("root: true")
+
+    const second = await Effect.gen(function* () {
+      const npm = yield* Npm.Service
+      return {
+        mutable: yield* npm.add(mutable, { refresh: true }),
+        pinned: yield* npm.add(pinned, { refresh: true }),
+      }
+    }).pipe(Effect.scoped, Effect.provide(npmLayer(cache)), Effect.runPromise)
+    expect(await Bun.file(path.join(second.mutable.directory, "index.js")).text()).toContain('root: "second"')
+    expect(await Bun.file(path.join(second.pinned.directory, "index.js")).text()).toContain("root: true")
+
+    await fs.rename(fixture.repository, `${fixture.repository}-offline`)
+    const offline = await Effect.gen(function* () {
+      const npm = yield* Npm.Service
+      return yield* npm.add(mutable, { refresh: true })
+    }).pipe(Effect.scoped, Effect.provide(npmLayer(cache)), Effect.runPromise)
+    expect(await Bun.file(path.join(offline.directory, "index.js")).text()).toContain('root: "second"')
   })
 })
 

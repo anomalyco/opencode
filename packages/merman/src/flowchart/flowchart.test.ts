@@ -26,6 +26,29 @@ function layoutFlowchartDiagram(content: string, options?: Parameters<typeof lay
   return layoutParsedFlowchartDiagram(parseMermaidFlowchartDiagram(content), options)
 }
 
+test("separates subgraph labels from their frame style", () => {
+  const grid = drawFlowchartDiagramGrid(`flowchart LR
+  subgraph Group
+    A[Node]
+  end`)
+  const styles = grid.rows.flatMap((row) => row.map((cell) => cell.style))
+
+  expect(styles).toContain("group")
+  expect(styles).toContain("groupLabel")
+})
+
+test("keeps every branch connected at a shared source junction", () => {
+  const source = `flowchart TB
+  A --> B
+  A --> C`
+  const layout = layoutFlowchartDiagram(source, { compact: true })
+  const grid = drawFlowchartDiagramGrid(source, { compact: true })
+  const sourcePoint = layout.routes[0]!.points[0]!
+
+  expect(layout.routes[1]!.points[0]).toEqual(sourcePoint)
+  expect(grid.getCell(sourcePoint.x, sourcePoint.y)?.char).toBe("┴")
+})
+
 function routeRunsAlongHorizontalBorder(
   route: { points: readonly { x: number; y: number }[] },
   bounds: { left: number; top: number; width: number; height: number },
@@ -333,12 +356,12 @@ describe("FlowchartDiagram", () => {
                                ╭──────────────────────╮
                                │ DEPLOYMENT - Anomaly │
                                ╰───────────┬──────────╯
-                      ╭────────────────────╰────────────────────╮
+                      ╭────────────────────┴────────────────────╮
                       ▼                                         ▼
        ╭────────────────────────────╮            ╭────────────────────────────╮
        │ ClientApps: google, github │            │ ORG acme = guild/workspace │
        ╰────────────────────────────╯            ╰──────────────┬─────────────╯
-                            ╭───────────────────────────────────╰───────╮
+                            ╭───────────────────────────────────┴───────╮
                             ▼                                           ▼
       ╭───────────────────────────────────────────╮            ╭────────────────╮
       │ org grant: google, authed as bot@acme.com │            │ MEMBER juliana │
@@ -1029,6 +1052,31 @@ describe("FlowchartDiagram", () => {
     }
   })
 
+  test("keeps external nodes outside local-direction subgraph frames", () => {
+    const layout = layoutFlowchartDiagram(
+      `flowchart LR
+  Input([Input]) --> Parse
+  subgraph Outer[Outer orchestration]
+    direction RL
+    subgraph Inner[Inner pipeline]
+      direction TD
+      Parse[Parse request] --> Validate{Valid?}
+      Validate -->|yes| Cache[(Cache)]
+      Cache -->|stale| Validate
+    end
+    Validate --> Dispatch[[Dispatch work]]
+    Dispatch -->|requeue| Parse
+  end
+  Dispatch -. result .-> Output([Output])
+  Output -->|audit| Cache`,
+      { compact: true, layoutMaxWidth: 120 },
+    )
+    const outer = layout.subgraphBounds.get("Outer")!
+
+    expect(boundsIntersect(outer, layout.bounds.get("Input")!)).toBe(false)
+    expect(boundsIntersect(outer, layout.bounds.get("Output")!)).toBe(false)
+  })
+
   test("keeps responsive sibling subgraph frames and long titles disjoint", () => {
     const layout = layoutFlowchartDiagram(
       `flowchart TD
@@ -1048,6 +1096,78 @@ describe("FlowchartDiagram", () => {
     )
 
     expect(boundsIntersect(layout.subgraphBounds.get("Left")!, layout.subgraphBounds.get("Right")!)).toBe(false)
+  })
+
+  test.each([80, 144])("keeps nested deployment groups compact and dependency-ordered at width %s", (width) => {
+    const layout = layoutFlowchartDiagram(
+      `flowchart LR
+  Browser([Browser]) --> Gateway[Gateway]
+  subgraph Cloud[Cloud platform]
+    direction TB
+    subgraph Compute[Compute]
+      API[API service] --> Worker[Background worker]
+    end
+    subgraph Storage[Storage]
+      Database[(Database)]
+      Cache[(Cache)]
+    end
+    API --> Database
+    Worker --> Cache
+  end
+  Gateway --> API
+  Worker --> Result([Result])`,
+      { compact: true, layoutMaxWidth: width },
+    )
+    const cloud = layout.subgraphBounds.get("Cloud")!
+    const compute = layout.subgraphBounds.get("Compute")!
+    const storage = layout.subgraphBounds.get("Storage")!
+    const result = layout.bounds.get("Result")!
+
+    expect(layout.bounds.get("Worker")!.top).toBeGreaterThan(layout.bounds.get("API")!.top)
+    expect(layout.bounds.get("Database")!.centerY).toBe(layout.bounds.get("Cache")!.centerY)
+    expect(storage.top).toBeGreaterThan(compute.top + compute.height - 1)
+    expect(cloud.width).toBeLessThanOrEqual(50)
+    expect([...layout.subgraphBounds.values()].every((frame) => frame.labelSide === "top")).toBe(true)
+    expect(boundsContains(cloud, compute)).toBe(true)
+    expect(boundsContains(cloud, storage)).toBe(true)
+    expect(boundsIntersect(cloud, result)).toBe(false)
+    if (layout.diagram.direction === "TD") expect(result.top).toBeGreaterThan(cloud.top + cloud.height - 1)
+    if (layout.diagram.direction === "LR") expect(result.left).toBeGreaterThan(cloud.left + cloud.width - 1)
+
+    for (const route of layout.routes.filter(
+      (route) =>
+        (route.edge.from === "API" && route.edge.to === "Database") ||
+        (route.edge.from === "Worker" && route.edge.to === "Cache"),
+    )) {
+      for (const point of route.points) {
+        expect(point.x).toBeGreaterThan(cloud.left)
+        expect(point.x).toBeLessThan(cloud.left + cloud.width - 1)
+        expect(point.y).toBeGreaterThan(cloud.top)
+        expect(point.y).toBeLessThan(cloud.top + cloud.height - 1)
+      }
+    }
+  })
+
+  test("keeps responsive labeled fan-out on one rank with a shared source junction", () => {
+    const content = `flowchart LR
+  Request([Request]) --> Gateway[API gateway]
+  Gateway -->|authenticate| Auth[Authentication]
+  Gateway -->|rate limit| Limit[Rate limiter]
+  Gateway -->|cache lookup| Cache[(Response cache)]
+  Auth --> Worker[Request worker]
+  Limit --> Worker
+  Cache --> Worker
+  Worker --> Response([Response])`
+    const layout = layoutFlowchartDiagram(content, { compact: true, layoutMaxWidth: 80 })
+    const branches = layout.routes.filter((route) => route.edge.from === "Gateway")
+    const gateway = layout.bounds.get("Gateway")!
+
+    expect(new Set(["Auth", "Limit", "Cache"].map((id) => layout.bounds.get(id)!.centerY)).size).toBe(1)
+    expect(new Set(branches.map((route) => JSON.stringify(route.points[0]))).size).toBe(1)
+    expect(branches.flatMap((route) => route.points).every((point) => point.y > gateway.top)).toBe(true)
+    for (const label of ["authenticate", "rate limit", "cache lookup"]) {
+      expect(renderFlowchartDiagram(content, { compact: true, layoutMaxWidth: 80 })).toContain(label)
+    }
   })
 
   test("does not change parallel routes for a non-binding width target", () => {
@@ -1534,6 +1654,19 @@ flowchart LR
     expect(output).toContain("second line")
     expect(output.indexOf("first")).toBeLessThan(output.indexOf("second line"))
     expect(output).not.toContain("<br")
+  })
+
+  test("renders edge labels with an independent background", () => {
+    const background = parseColor("#334455")
+    const styled = renderGridStyledText(
+      drawFlowchartDiagramGrid(`flowchart LR
+  A[Start] -->|route label| B[Finish]`),
+      resolveFlowchartStyleColors(),
+      { label: background },
+    )
+
+    expect(styled.chunks.some((chunk) => chunk.text.includes("route label") && chunk.bg === background)).toBe(true)
+    expect(styled.chunks.some((chunk) => chunk.text.includes("Start") && chunk.bg !== undefined)).toBe(false)
   })
 
   test("keeps quoted multiline labels compact and renders italic node text", () => {

@@ -211,6 +211,28 @@ describe("RequestExecutor", () => {
     }).pipe(Effect.provide(responsesLayer([new Response("request too large", { status: 413 })]))),
   )
 
+  it.effect("classifies Anthropic request_too_large as context overflow", () =>
+    Effect.gen(function* () {
+      const executor = yield* RequestExecutor.Service
+      const error = yield* executor.execute(request).pipe(Effect.flip)
+
+      expectAIError(error)
+      expect(error.reason).toMatchObject({
+        _tag: "InvalidRequest",
+        classification: "context-overflow",
+        http: { response: { status: 413 } },
+      })
+    }).pipe(
+      Effect.provide(
+        responsesLayer([
+          new Response('{"error":{"type":"request_too_large","message":"Request exceeds the maximum size"}}', {
+            status: 413,
+          }),
+        ]),
+      ),
+    ),
+  )
+
   it.effect("does not classify ordinary invalid requests as context overflow", () =>
     Effect.gen(function* () {
       const executor = yield* RequestExecutor.Service

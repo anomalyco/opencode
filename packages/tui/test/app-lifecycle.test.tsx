@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test"
+import { type Renderable, ScrollBoxRenderable } from "@opentui/core"
 import { createTestRenderer } from "@opentui/core/testing"
 import { Effect, FileSystem } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -296,6 +297,91 @@ test("session startup prompt is submitted exactly once", async () => {
   }
 })
 
+test("shows jump to latest after scrolling one line above the final message", async () => {
+  const setup = await createTestRenderer({ width: 80, height: 20, useThread: false, kittyKeyboard: true })
+  setup.renderer.start()
+  const events = createEventStream()
+  const session = {
+    id: "dummy",
+    title: "Demo session",
+    projectID: "project",
+    location: { directory },
+    agent: "build",
+    model: { providerID: "provider", id: "model" },
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    time: { created: 0, updated: 0 },
+  }
+  const messages = Array.from({ length: 8 }, (_, index) => ({
+    id: `message-${index}`,
+    type: "user",
+    text: index === 7 ? "Final visible message" : `Earlier message ${index}`,
+    time: { created: index },
+  }))
+  const calls = createFetch((url) => {
+    if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
+    if (url.pathname === "/api/session/dummy") return json({ data: session })
+    if (url.pathname === "/api/session/dummy/message") return json({ data: messages.toReversed(), cursor: {} })
+    if (url.pathname === "/api/session/dummy/inbox") return json({ data: [] })
+    if (url.pathname === "/api/session/dummy/permission") return json({ data: [] })
+  }, events)
+  const server = Bun.serve({ port: 0, fetch: (request) => calls.fetch(request) })
+
+  try {
+    const { run } = await import("../src/app")
+    const task = Effect.runPromise(
+      run({
+        app: { name: "test", version: "test", channel: "test" },
+        server: { endpoint: { url: server.url.toString() } },
+        config: {
+          get: async () => ({
+            animations: false,
+            keybinds: { "session.line.up": "f6", "session.line.down": "f7" },
+          }),
+          update: async () => ({}),
+        },
+        packages: { resolve: async () => undefined },
+        terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
+        args: { sessionID: "dummy" },
+        log: () => {},
+      }).pipe(Effect.provide(AppNodeBuilder.build(Global.node)), Effect.provide(FileSystem.layerNoop({}))),
+    )
+
+    await setup.waitForFrame((frame) => frame.includes("Final visible message"))
+    const findScrollBox = (root: Renderable): ScrollBoxRenderable | undefined =>
+      root instanceof ScrollBoxRenderable && root.getRenderable("message-7")
+        ? root
+        : root.getChildren().map(findScrollBox).find(Boolean)
+    const scroll = findScrollBox(setup.renderer.root)
+    expect(scroll).toBeDefined()
+    if (!scroll) throw new Error("session transcript scrollbox was not found")
+    const maximum = () => Math.max(0, scroll.scrollHeight - scroll.viewport.height)
+
+    expect(scroll.scrollTop).toBe(maximum())
+    const initial = setup.captureCharFrame().split("\n")
+    expect(initial.find((line) => line.includes("Jump to latest"))).toBeUndefined()
+    expect(initial[initial.findIndex((line) => line.includes("Final visible message")) + 1]).toContain("┃")
+
+    setup.mockInput.pressKey("F6")
+    const clipped = (await setup.waitForFrame((frame) => frame.includes("Jump to latest"))).split("\n")
+    expect(scroll.scrollTop).toBe(maximum() - 1)
+    expect(clipped.find((line) => line.includes("Jump to latest"))).toBeDefined()
+    expect(clipped[clipped.findIndex((line) => line.includes("Final visible message")) + 1]).not.toContain("┃")
+
+    setup.mockInput.pressKey("F7")
+    const restored = (await setup.waitForFrame((frame) => !frame.includes("Jump to latest"))).split("\n")
+    expect(scroll.scrollTop).toBe(maximum())
+    expect(restored.find((line) => line.includes("Jump to latest"))).toBeUndefined()
+    expect(restored[restored.findIndex((line) => line.includes("Final visible message")) + 1]).toContain("┃")
+
+    setup.renderer.destroy()
+    await task
+  } finally {
+    if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+    await server.stop()
+  }
+})
+
 test("new session inherits the active session model", async () => {
   const setup = await createTestRenderer({ width: 80, height: 24, useThread: false, kittyKeyboard: true })
   setup.renderer.start()
@@ -542,6 +628,51 @@ test("configured app bindings execute settings and permission commands", async (
       { maxPasses: 100 },
     )
     expect(commands).not.toContain("Enable auto-approve permissions")
+
+    setup.renderer.destroy()
+    await task
+  } finally {
+    if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+    await server.stop()
+  }
+})
+
+test("ctrl+c dismisses autocomplete and shell mode before exiting", async () => {
+  const setup = await createTestRenderer({ width: 100, height: 30, useThread: false, kittyKeyboard: true })
+  setup.renderer.start()
+  const ready = Promise.withResolvers<void>()
+  const events = createEventStream()
+  const calls = createFetch(undefined, events)
+  const server = Bun.serve({ port: 0, fetch: (request) => calls.fetch(request) })
+
+  try {
+    const { run } = await import("../src/app")
+    const task = Effect.runPromise(
+      run({
+        app: { name: "test", version: "test", channel: "test" },
+        server: { endpoint: { url: server.url.toString() } },
+        config: { get: async () => ({ animations: false }), update: async () => ({}) },
+        packages: { resolve: async () => undefined },
+        args: {},
+        terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: ready.resolve }),
+        log: () => {},
+      }).pipe(Effect.provide(AppNodeBuilder.build(Global.node)), Effect.provide(FileSystem.layerNoop({}))),
+    )
+
+    await ready.promise
+    await setup.waitForFrame((frame) => frame.includes("commands"))
+    await setup.mockInput.typeText("/theme")
+    await setup.waitForFrame((frame) => frame.includes("Switch theme"))
+
+    setup.mockInput.pressKey("c", { ctrl: true })
+    await setup.waitForFrame((frame) => !frame.includes("Switch theme"))
+    expect(setup.renderer.isDestroyed).toBe(false)
+
+    await setup.mockInput.typeText("!")
+    await setup.waitForFrame((frame) => frame.includes("Shell"))
+    setup.mockInput.pressKey("c", { ctrl: true })
+    await setup.waitForFrame((frame) => !frame.includes("Shell"))
+    expect(setup.renderer.isDestroyed).toBe(false)
 
     setup.renderer.destroy()
     await task

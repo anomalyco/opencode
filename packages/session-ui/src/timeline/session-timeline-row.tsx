@@ -229,10 +229,12 @@ export function createSessionTimelineRowRenderer(input: {
       id={props.row._tag === "UserMessage" ? input.anchor?.(props.row.userMessageID) : undefined}
       data-message-id={props.row.userMessageID}
       data-timeline-row={props.row._tag}
+      data-timeline-spacing={props.row._tag === "AssistantPart" ? props.row.spacing : undefined}
       classList={{
         "min-w-0 w-full max-w-full": true,
         "md:max-w-[1000px] md:mx-auto": input.centered?.(),
-        "pt-3": props.row._tag === "AssistantPart" && props.row.previousAssistantPart,
+        "pt-2": props.row._tag === "AssistantPart" && props.row.spacing === "tool",
+        "pt-4": props.row._tag === "AssistantPart" && props.row.spacing === "content",
       }}
     >
       <div data-component="session-turn" class="min-w-0 w-full relative" style={{ height: "auto" }}>

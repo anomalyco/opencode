@@ -744,9 +744,12 @@ const endsInServerToolUse = (message: LLMRequest["messages"][number]) => {
   return message.role === "assistant" && last?.type === "tool-call" && last.providerExecuted === true
 }
 
-const canUseNativeSystemUpdate = (messages: LLMRequest["messages"], index: number) => {
-  const previous = messages[index - 1]
-  const next = messages[index + 1]
+const canUseNativeSystemUpdate = (request: LLMRequest, index: number) => {
+  const previous = request.messages[index - 1]
+  const next = request.messages[index + 1]
+  // Vertex currently rejects/404s for a system message after local tool results,
+  // so fold it into the user tool-result turn across continuations and history.
+  if (request.model.route.id === "google-vertex-messages" && previous?.role === "tool") return false
   return (
     previous !== undefined &&
     previous.role !== "system" &&
@@ -793,7 +796,7 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
     if (message.role === "system") {
       if (splitsLocalToolResults(request.messages, index))
         return yield* invalid("Anthropic Messages system updates cannot split a local tool call from its tool result")
-      if (supportsNativeSystemUpdates(request) && canUseNativeSystemUpdate(request.messages, index)) {
+      if (supportsNativeSystemUpdates(request) && canUseNativeSystemUpdate(request, index)) {
         messages.push(yield* lowerNativeSystemUpdate(message, breakpoints))
         continue
       }

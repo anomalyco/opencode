@@ -1,5 +1,12 @@
 {
   "$schema": "https://v2-8-13.turborepo.dev/schema.json",
+  "globalDependencies": [
+    "patches/**",
+    "bunfig.toml",
+    ".npmrc",
+    ".github/actions/setup-bun/**",
+    ".github/workflows/test.yml"
+  ],
   "globalEnv": ["CI", "OPENCODE_DISABLE_SHARE"],
   "globalPassThroughEnv": ["CI", "OPENCODE_DISABLE_SHARE"],
   "tasks": {
@@ -52,6 +59,9 @@
     },
     "@opencode-ai/session-ui#test": {
       "dependsOn": ["^build"],
+      "outputs": []
+    },
+    "@opencode-ai/sdk#verify:package": {
       "outputs": []
     }
   }

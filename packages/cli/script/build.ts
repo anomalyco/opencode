@@ -9,6 +9,7 @@ import type { BunPlugin } from "bun"
 import pkg from "../package.json"
 import { buildAppArchive } from "./app-assets"
 import { verifyArtifact, verifySimulationGraph } from "./verify-artifact"
+import { resolveOpencodePty } from "./opencode-pty"
 
 const dir = path.resolve(import.meta.dirname, "..")
 const binary = "opencode2"
@@ -78,6 +79,23 @@ const appAssetsPlugin: BunPlugin = {
 }
 
 for (const item of targets) {
+  const opencodePty = await resolveOpencodePty({
+    platform: item.os,
+    arch: item.arch,
+    ...(item.os === "linux" ? { libc: item.abi ?? "glibc" } : {}),
+  })
+  const opencodePtyPlugin: BunPlugin = {
+    name: "opencode-pty-binary",
+    setup(build) {
+      build.onLoad({ filter: /persistent-pty[/\\]pty-binding\.ts$/ }, () => ({
+        loader: "js",
+        contents: opencodePty
+          ? `import file from ${JSON.stringify(opencodePty.source)} with { type: "file" }
+export default { path: file, version: ${JSON.stringify(opencodePty.version)}, sha256: ${JSON.stringify(opencodePty.sha256)} }`
+          : "export default undefined",
+      }))
+    },
+  }
   const simulationInputs = new Set<string>()
   const simulationGraphPlugin: BunPlugin = {
     name: "opencode-simulation-graph",
@@ -105,7 +123,7 @@ for (const item of targets) {
   const result = await Bun.build({
     entrypoints: ["./src/index.ts"],
     tsconfig: "./tsconfig.json",
-    plugins: [appAssetsPlugin, solidPlugin, parcelWatcherPlugin, simulationGraphPlugin],
+    plugins: [appAssetsPlugin, solidPlugin, parcelWatcherPlugin, opencodePtyPlugin, simulationGraphPlugin],
     external: ["node-gyp"],
     format: "esm",
     minify: true,

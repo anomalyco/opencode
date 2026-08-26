@@ -83,6 +83,7 @@ test("keeps an expanded file diff header at the same viewport position", async (
   const before = Array.from({ length: 80 }, (_, index) => `export const value${index} = ${index}\n`).join("")
   const after = before.replaceAll(" = ", " = compute(").replaceAll("\n", ")\n")
   await setupTimeline(page, {
+    settings: { editToolPartsExpanded: true },
     messages: [
       userMessage([userText("Preceding context ".repeat(120))]),
       assistantMessage([

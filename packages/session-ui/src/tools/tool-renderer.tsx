@@ -6,6 +6,7 @@ import {
   createSignal,
   For,
   Match,
+  onCleanup,
   onMount,
   Show,
   Switch,
@@ -19,6 +20,7 @@ import { useFileComponent } from "@opencode-ai/ui/context/file"
 import { type UiI18n, useI18n } from "@opencode-ai/ui/context/i18n"
 import { BasicTool, GenericTool } from "../components/basic-tool"
 import { Accordion } from "@opencode-ai/ui/accordion"
+import { Badge } from "@opencode-ai/ui/badge"
 import { StickyAccordionHeader } from "@opencode-ai/ui/sticky-accordion-header"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
@@ -31,13 +33,16 @@ import { checksum } from "@opencode-ai/util/encode"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
-import { AnimatedCountList } from "../components/tool-count-summary"
-import { ToolStatusTitle } from "../components/tool-status-title"
 import { changedFileDiff, patchFileGroups } from "../components/apply-patch-file"
 import { animate } from "motion"
 import { SessionProgressIndicatorV2 } from "../v2/components/session-progress-indicator-v2"
 import type { SessionMessageAssistantTool, SessionMessageShell } from "@opencode-ai/client/promise"
-import { currentToolInput, currentToolMetadata } from "../message/current-tool-state"
+import {
+  currentToolError,
+  currentToolInput,
+  currentToolMetadata,
+  currentToolOutput,
+} from "../message/current-tool-state"
 import { writeClipboard } from "../message/message-content"
 
 function ShellSubmessage(props: { text: string; animate?: boolean }) {
@@ -476,50 +481,50 @@ export function CurrentContextToolGroup(props: {
     () =>
       props.busy || props.tools.some((tool) => tool.state.status === "streaming" || tool.state.status === "running"),
   )
-  const summary = createMemo(() => ({
-    read: props.tools.filter((tool) => tool.name === "read").length,
-    search: props.tools.filter((tool) => tool.name === "glob" || tool.name === "grep").length,
-    list: props.tools.filter((tool) => tool.name === "list").length,
-  }))
+  const names = createMemo(() =>
+    [
+      ...new Set(
+        props.tools.map((tool) => {
+          const input = currentToolInput(tool)
+          if (tool.name === "skill") return i18n.t("ui.tool.skill")
+          if (tool.name === "subagent" && typeof input.agent === "string" && input.agent)
+            return input.agent[0]!.toUpperCase() + input.agent.slice(1)
+          return getToolInfo(tool.name, input, currentToolMetadata(tool)).title
+        }),
+      ),
+    ].join(", "),
+  )
+  const label = createMemo(() => {
+    const tools = names()
+    const text = i18n.t("ui.messagePart.tools.used", { tools })
+    const index = text.indexOf(tools)
+    return { text, before: text.slice(0, index).trim(), after: text.slice(index + tools.length).trim() }
+  })
   const change = (open: boolean) => {
     props.onOpenChange(open)
     props.onSizeChange?.()
   }
 
   return (
-    <div data-timeline-part-ids={props.tools.map((tool) => tool.id).join(",")}>
+    <div data-component="collapsed-tool-group" data-timeline-part-ids={props.tools.map((tool) => tool.id).join(",")}>
       <BasicTool
         icon="glasses"
         status={pending() ? "running" : "completed"}
         compact
-        rail={false}
         allowOpenWhilePending
         open={props.open}
         onOpenChange={change}
         trigger={
-          <div data-component="context-tool-group-trigger">
-            <span data-slot="context-tool-group-title" class="min-w-0 flex items-center gap-2">
-              <span data-slot="basic-tool-tool-title" class="shrink-0">
-                <ToolStatusTitle
-                  active={pending()}
-                  activeText={i18n.t("ui.sessionTurn.status.gatheringContext")}
-                  doneText={i18n.t("ui.sessionTurn.status.gatheredContext")}
-                  split={false}
-                />
-              </span>
-              <span
-                data-slot="basic-tool-tool-subtitle"
-                class="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap"
-              >
-                <AnimatedCountList
-                  items={[
-                    { key: "ui.messagePart.context.read", count: summary().read },
-                    { key: "ui.messagePart.context.search", count: summary().search },
-                    { key: "ui.messagePart.context.list", count: summary().list },
-                  ]}
-                  fallback=""
-                />
-              </span>
+          <div data-component="context-tool-group-trigger" aria-label={label().text}>
+            <span data-slot="context-tool-group-title">
+              <Show when={label().before}>
+                {(before) => <span data-slot="context-tool-group-prefix">{before()}</span>}
+              </Show>
+              <span data-slot="basic-tool-tool-title">{names()}</span>
+              <Show when={label().after}>
+                {(after) => <span data-slot="context-tool-group-prefix">{after()}</span>}
+              </Show>
+              <Badge>{props.tools.length}</Badge>
             </span>
           </div>
         }
@@ -528,32 +533,57 @@ export function CurrentContextToolGroup(props: {
           <Index each={props.tools}>
             {(tool) => {
               const trigger = createMemo(() => currentContextToolTrigger(tool(), i18n))
-              const running = () => tool().state.status === "streaming" || tool().state.status === "running"
               return (
                 <div data-slot="context-tool-group-item">
-                  <div data-component="tool-trigger">
-                    <div data-slot="basic-tool-tool-trigger-content">
-                      <div data-slot="basic-tool-tool-info">
-                        <div data-slot="basic-tool-tool-info-structured">
-                          <div data-slot="basic-tool-tool-info-main">
-                            <span data-slot="basic-tool-tool-title">
-                              <TextShimmer text={trigger().title} active={running()} />
-                            </span>
-                            <Show when={trigger().subtitle}>
-                              <span data-slot="basic-tool-tool-subtitle">{trigger().subtitle}</span>
+                  <Show
+                    when={tool().state.status !== "error" && ["read", "glob", "grep", "list"].includes(tool().name)}
+                    fallback={
+                      <ToolDisplay
+                        id={tool().id}
+                        tool={tool().name}
+                        input={currentToolInput(tool())}
+                        metadata={currentToolMetadata(tool())}
+                        output={currentToolOutput(tool())}
+                        error={currentToolError(tool())}
+                        status={tool().state.status}
+                        defaultOpen={false}
+                        deferContent
+                        virtualizeDiff={false}
+                        onContentRendered={props.onSizeChange}
+                      />
+                    }
+                  >
+                    <div data-component="tool-trigger">
+                      <div data-slot="basic-tool-tool-trigger-content">
+                        <div data-slot="basic-tool-tool-info">
+                          <div data-slot="basic-tool-tool-info-structured">
+                            <div data-slot="basic-tool-tool-info-main">
+                              <span data-slot="basic-tool-tool-title">
+                                <TextShimmer
+                                  text={trigger().title}
+                                  active={tool().state.status === "streaming" || tool().state.status === "running"}
+                                />
+                              </span>
+                              <Show when={trigger().subtitle}>
+                                {(subtitle) => <span data-slot="basic-tool-tool-subtitle">{subtitle()}</span>}
+                              </Show>
+                              <For each={trigger().args}>
+                                {(arg) => <span data-slot="basic-tool-tool-arg">{arg}</span>}
+                              </For>
+                            </div>
+                            <Show when={trigger().matches}>
+                              {(matches) => (
+                                <>
+                                  <span data-slot="context-tool-group-dot" />
+                                  <span data-slot="context-tool-group-matches">{matches()}</span>
+                                </>
+                              )}
                             </Show>
-                            <For each={trigger().args}>
-                              {(arg) => <span data-slot="basic-tool-tool-arg">{arg}</span>}
-                            </For>
                           </div>
-                          <Show when={trigger().matches}>
-                            <span data-slot="context-tool-group-dot" />
-                            <span data-slot="context-tool-group-matches">{trigger().matches}</span>
-                          </Show>
                         </div>
                       </div>
                     </div>
-                  </div>
+                  </Show>
                 </div>
               )
             }}
@@ -1294,15 +1324,41 @@ ToolRegistry.register({
   name: "shell",
   render(props) {
     const i18n = useI18n()
+    const data = useData()
     const streaming = () => props.status === "streaming"
     const pending = () => streaming() || props.status === "running" || props.metadata.status === "running"
     const sawStreaming = streaming()
+    const [streamed, setStreamed] = createSignal("")
+    createEffect(() => {
+      const id = props.metadata.shellID
+      const shellOutput = data.shellOutput
+      if (typeof id !== "string" || !pending() || !shellOutput) return
+      const directory = data.directory
+      let cursor = 0
+      let loading = false
+      let disposed = false
+      const load = async () => {
+        if (loading) return
+        loading = true
+        const response = await shellOutput({ id, location: { directory }, cursor }).catch(() => undefined)
+        if (disposed) return
+        if (response?.data.output) setStreamed((output) => output + response.data.output)
+        if (response) cursor = response.data.cursor
+        loading = false
+      }
+      void load()
+      const interval = setInterval(() => void load(), 1_000)
+      onCleanup(() => {
+        disposed = true
+        clearInterval(interval)
+      })
+    })
     const command = () => {
       if (typeof props.input.command === "string") return props.input.command
       if (typeof props.metadata.command === "string") return props.metadata.command
       return ""
     }
-    const output = createMemo(() => stripAnsi(props.output ?? "").replace(/\r\n?/g, "\n"))
+    const output = createMemo(() => stripAnsi((pending() && streamed()) || props.output || "").replace(/\r\n?/g, "\n"))
     return (
       <BasicTool
         {...props}

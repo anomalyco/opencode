@@ -500,7 +500,7 @@ export const dict = {
   "context.stats.lastActivity": "Last Activity",
 
   "context.usage.tokens": "Tokens",
-  "context.usage.usage": "Usage",
+  "context.usage.usage": "Context Usage",
   "context.usage.cost": "Cost",
   "context.usage.clickToView": "Click to view context",
   "context.usage.view": "View context usage",
@@ -884,6 +884,7 @@ export const dict = {
 
   "settings.section.desktop": "Desktop",
   "settings.section.server": "Server",
+  "settings.backToApp": "Back to app",
   "settings.tab.general": "General",
   "settings.tab.preferences": "Preferences",
   "settings.tab.shortcuts": "Shortcuts",

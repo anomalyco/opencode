@@ -1,6 +1,8 @@
 import { createEffect, createMemo, onCleanup, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
+import { useMutation } from "@tanstack/solid-query"
 import type { SessionInboxInfo } from "@opencode-ai/client/promise"
+import { SessionMessage } from "@opencode-ai/schema/session-message"
 import type { ComposerDelivery } from "@/composer/adapter"
 import type { ComposerModel } from "@/composer/model"
 import type { ComposerStateTarget } from "@/composer/submission-state"
@@ -34,38 +36,66 @@ export function createSessionQueue(input: {
   const server = useServerSDK()
   const location = useWorkspaceLocation()
   const language = useLanguage()
-  const [state, setState] = createStore<{ editing?: { id: string; stash: EditStash }; busy: boolean }>({ busy: false })
+  const [state, setState] = createStore<{ editing?: { id: string; stash: EditStash } }>({})
+  const notify = () => showToast({ title: language.t("common.requestFailed") })
+  const mutation = useMutation(() => ({
+    mutationFn: async (
+      change:
+        | { type: "reorder"; inboxIDs: string[] }
+        | {
+            type: "edit"
+            inboxIDs: string[]
+            original: string
+            replacement: string
+            item: QueuedPrompt | undefined
+            prompt: Prompt
+            text: string
+            delivery: ComposerDelivery
+          },
+    ) => {
+      if (change.type === "reorder") return rewrite(change.inboxIDs)
+      const replacement = await editedPromptInput(
+        input.sessionID,
+        location().directory,
+        change.item,
+        change.prompt,
+        change.text,
+      )
+      // Admit before cancelling so a failed replacement never discards the original.
+      const admitted = await data.session.prompt({
+        ...replacement,
+        id: change.replacement,
+        delivery: change.delivery,
+        ...(change.delivery === "queue" ? { resume: false } : {}),
+      })
+      await server.api.session.inbox.cancel({ sessionID: input.sessionID, inboxID: change.original })
+      cancelEdit()
+      if (change.delivery === "queue")
+        await rewrite(change.inboxIDs.map((id) => (id === change.original ? admitted.id : id)))
+    },
+    onError: notify,
+    onSettled: () => data.session.pending.sync(input.sessionID).catch(() => undefined),
+  }))
 
   const queued = createMemo(() =>
     data.session.pending
       .list(input.sessionID)
       .filter((item): item is QueuedPrompt => item.type === "user" && item.delivery === "queue"),
   )
-  const rows = createMemo(() =>
-    queued().map((item) => ({
-      id: item.id,
-      text: queuedPromptText(item),
-      attachments: (item.payload.files?.length ?? 0) > 0,
-    })),
-  )
+  const rows = createMemo(() => {
+    const replacement = mutation.isPending ? mutation.variables : undefined
+    return queuedPromptRows(
+      queued(),
+      replacement?.type === "edit" && replacement.delivery === "queue" ? replacement : undefined,
+    )
+  })
 
   createEffect(() => {
     const editing = state.editing
-    if (!editing || state.busy || queued().some((item) => item.id === editing.id)) return
+    if (!editing || mutation.isPending || queued().some((item) => item.id === editing.id)) return
     setState("editing", undefined)
   })
   onCleanup(() => cancelEdit())
-
-  const notify = () => showToast({ title: language.t("common.requestFailed") })
-  const run = (work: () => Promise<unknown>) => {
-    setState("busy", true)
-    return work()
-      .catch(() => notify())
-      .finally(async () => {
-        await data.session.pending.sync(input.sessionID).catch(() => undefined)
-        setState("busy", false)
-      })
-  }
 
   const rewrite = async (inboxIDs: string[]) => {
     const pending = await server.api.session.inbox.list({ sessionID: input.sessionID })
@@ -108,12 +138,12 @@ export function createSessionQueue(input: {
     return server.api.session.inbox.cancel({ sessionID: input.sessionID, inboxID: id }).catch(() => notify())
   }
   const reorder = (inboxIDs: string[]) => {
-    if (state.busy) return Promise.resolve()
-    return run(() => rewrite(inboxIDs))
+    if (mutation.isPending) return Promise.resolve()
+    return mutation.mutateAsync({ type: "reorder", inboxIDs }).catch(() => undefined)
   }
 
   const edit = (id: string) => {
-    if (state.busy) return false
+    if (mutation.isPending) return false
     if (state.editing?.id === id) return true
     const item = queued().find((entry) => entry.id === id)
     if (!item) return false
@@ -147,25 +177,22 @@ export function createSessionQueue(input: {
   }
   const confirmEdit = (delivery: ComposerDelivery) => {
     const editing = state.editing
-    if (!editing || state.busy) return
+    if (!editing || mutation.isPending) return
     const prompt = clonePrompt(input.draft.current())
     const text = prompt.map((part) => ("content" in part ? part.content : "")).join("")
     if (!text.trim() && !prompt.some((part) => part.type === "image")) return cancelEdit()
     const item = queued().find((entry) => entry.id === editing.id)
     const pristine = item && text.trim() === queuedPromptText(item) && !prompt.some((part) => part.type === "image")
     if (pristine && delivery === "queue") return cancelEdit()
-    const inboxIDs = queued().map((entry) => entry.id)
-    void run(async () => {
-      const replacement = await editedPromptInput(input.sessionID, location().directory, item, prompt, text)
-      // Admit before cancelling so a failed replacement never discards the original.
-      const admitted = await data.session.prompt({
-        ...replacement,
-        delivery,
-        ...(delivery === "queue" ? { resume: false } : {}),
-      })
-      await server.api.session.inbox.cancel({ sessionID: input.sessionID, inboxID: editing.id })
-      cancelEdit()
-      if (delivery === "queue") await rewrite(inboxIDs.map((id) => (id === editing.id ? admitted.id : id)))
+    mutation.mutate({
+      type: "edit",
+      inboxIDs: queued().map((entry) => entry.id),
+      original: editing.id,
+      replacement: SessionMessage.ID.create(),
+      item,
+      prompt,
+      text,
+      delivery,
     })
   }
   const editFirst = () => {
@@ -187,7 +214,7 @@ export function createSessionQueue(input: {
     cancelEdit,
     editFirst,
     rows,
-    busy: () => state.busy,
+    busy: () => mutation.isPending,
     working: input.working,
     steer,
     remove,
@@ -203,6 +230,17 @@ export type SessionQueueView = Pick<
   SessionQueue,
   "rows" | "editing" | "working" | "busy" | "steer" | "remove" | "edit" | "reorder"
 >
+
+export function queuedPromptRows(items: QueuedPrompt[], replacement?: { original: string; replacement: string }) {
+  const replaced = replacement && items.some((item) => item.id === replacement.replacement)
+  return items
+    .filter((item) => !replaced || item.id !== replacement.original)
+    .map((item) => ({
+      id: item.id,
+      text: queuedPromptText(item),
+      attachments: (item.payload.files?.length ?? 0) > 0,
+    }))
+}
 
 export function queuedPromptText(item: QueuedPrompt) {
   const display = item.payload.metadata?.["displayText"]

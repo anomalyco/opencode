@@ -33,6 +33,7 @@ import { Session } from "@opencode-ai/core/session"
 import { Snapshot } from "@opencode-ai/core/snapshot"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionContext } from "@opencode-ai/core/session/context"
+import { SessionCompaction } from "@opencode-ai/core/session/compaction"
 import { SessionInbox } from "@opencode-ai/core/session/inbox"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionModelRequest } from "@opencode-ai/core/session/model-request"
@@ -458,6 +459,7 @@ const it = testEffect(
       Config.node,
       Snapshot.node,
       SessionContext.node,
+      SessionCompaction.node,
       SessionModelRequest.node,
       SessionRunnerLLM.node,
       SessionExecution.node,
@@ -935,6 +937,21 @@ describe("SessionRunnerLLM", () => {
 
       expect((yield* session.get(sessionID)).title).toBe("Generated title")
       yield* Fiber.interrupt(fiber)
+    }),
+  )
+
+  it.effect("does not automatically replace an existing session title", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      yield* prepareTitleGeneration
+      yield* session.rename({ sessionID, title: "Manual title" })
+      yield* admit(session, "Follow-up prompt")
+      yield* TestLLM.push(TestLLM.text("Assistant response", "text-response"))
+
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(1)
+      expect((yield* session.get(sessionID)).title).toBe("Manual title")
     }),
   )
 
@@ -2542,6 +2559,34 @@ describe("SessionRunnerLLM", () => {
         { type: "compaction" },
         { type: "assistant", finish: "stop" },
       ])
+    }),
+  )
+
+  it.effect("does not recover provider context overflow when automatic compaction is disabled", () =>
+    Effect.gen(function* () {
+      const session = yield* setupOverflowRecovery
+      const compaction = yield* SessionCompaction.Service
+      yield* compaction.transform((draft) => draft.configure({ auto: false }))
+      yield* TestLLM.push(
+        [LLMEvent.providerError({ message: "prompt too long", classification: "context-overflow" })],
+        TestLLM.text("Must not compact", "text-unexpected-summary"),
+        TestLLM.text("Must not retry", "text-unexpected-retry"),
+      )
+      yield* admit(session, "Continue")
+      expect((yield* session.resume(sessionID).pipe(Effect.flip)).message).toBe("prompt too long")
+
+      expect(requests).toHaveLength(1)
+      expect(yield* session.context(sessionID)).toContainEqual(
+        expect.objectContaining({
+          type: "assistant",
+          finish: "error",
+          error: expect.objectContaining({ message: "prompt too long" }),
+        }),
+      )
+      expect(yield* session.context(sessionID)).not.toContainEqual(expect.objectContaining({ type: "compaction" }))
+      expect(yield* recordedEventTypes(sessionID)).not.toContain(
+        Bus.versionedType(SessionEvent.Compaction.Started.type, 1),
+      )
     }),
   )
 

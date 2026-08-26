@@ -11,13 +11,12 @@ import {
   spanCapacity,
   type DiagramSegment,
 } from "../core/geometry.js"
-import { splitDiagramLines } from "../core/text.js"
+import { measureDiagramLabelWidth, padDiagramLabelLine, splitDiagramLines } from "../core/text.js"
 import type { FlowchartEdgeRoute, FlowchartPoint } from "./types.js"
 
 const LABEL_BUS_CLEARANCE = 3
 const LABEL_NODE_CLEARANCE = 2
 const LABEL_LINE_CLEARANCE = 2
-const LABEL_PADDING = 1
 const LABEL_TERMINAL_CLEARANCE = 1
 
 export interface FlowchartEdgeLabelLayout {
@@ -28,11 +27,11 @@ export interface FlowchartEdgeLabelLayout {
 }
 
 export function flowchartLabelText(label: string): string {
-  return `${" ".repeat(LABEL_PADDING)}${label}${" ".repeat(LABEL_PADDING)}`
+  return padDiagramLabelLine(label)
 }
 
 export function flowchartLabelWidth(label: string, measure: (text: string) => number): number {
-  return Math.max(...splitDiagramLines(label).map((line) => measure(line) + LABEL_PADDING * 2))
+  return measureDiagramLabelWidth(label, measure)
 }
 
 function minimumInlineLabelLength(labelWidth: number): number {

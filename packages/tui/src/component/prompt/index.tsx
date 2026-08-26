@@ -102,6 +102,7 @@ export type PromptRef = {
 }
 
 const DRAFT_RETENTION_MIN_CHARS = 20
+const revealedPromptMetadata = new WeakSet<object>()
 
 function randomIndex(count: number) {
   if (count <= 0) return 0
@@ -986,9 +987,19 @@ export function Prompt(props: PromptProps) {
 
   Keymap.createLayer(() => {
     return {
+      priority: 1,
       target: inputTarget,
       enabled: inputTarget() !== undefined && store.mode === "shell",
-      commands: [{ bind: "escape", title: "Exit shell mode", group: "Prompt", run: () => setStore("mode", "normal") }],
+      commands: [
+        { bind: "escape", title: "Exit shell mode", group: "Prompt", run: () => setStore("mode", "normal") },
+        {
+          bind: "ctrl+c",
+          title: "Exit shell mode",
+          group: "Prompt",
+          enabled: () => store.prompt.text === "",
+          run: () => setStore("mode", "normal"),
+        },
+      ],
     }
   })
 
@@ -1380,6 +1391,8 @@ export function Prompt(props: PromptProps) {
       if (pendingEditorSelection) editor.markSelectionSent()
     }
 
+    sessionTabs.promote(target)
+
     // Optimistic admission puts the message in the store synchronously, so
     // the session view renders it on arrival.
     if (!props.sessionID) {
@@ -1606,12 +1619,20 @@ export function Prompt(props: PromptProps) {
     return promptDisplay().agentColor ?? theme.border.default
   })
   const agentLabel = createMemo(() => (store.mode === "shell" ? "Shell" : promptDisplay().agentLabel))
-  const agentMetaAlpha = createFadeIn(() => !!agentLabel(), animationsEnabled)
-  const modelMetaAlpha = createFadeIn(() => !!promptDisplay().agentLabel && store.mode === "normal", animationsEnabled)
+  const animateMetadata = !revealedPromptMetadata.has(local)
+  const metadataAnimationsEnabled = () => animationsEnabled() && animateMetadata
+  const agentMetaAlpha = createFadeIn(() => !!agentLabel(), metadataAnimationsEnabled)
+  const modelMetaAlpha = createFadeIn(
+    () => !!promptDisplay().agentLabel && store.mode === "normal",
+    metadataAnimationsEnabled,
+  )
   const variantMetaAlpha = createFadeIn(
     () => !!promptDisplay().agentLabel && store.mode === "normal" && !!promptDisplay().variant,
-    animationsEnabled,
+    metadataAnimationsEnabled,
   )
+  createEffect(() => {
+    if (agentLabel()) revealedPromptMetadata.add(local)
+  })
   const borderHighlight = createMemo(() => tint(theme.border.default, highlight(), agentMetaAlpha()))
   const footerInput = () => ({ sessionID: props.sessionID, mode: store.mode })
 
@@ -1620,10 +1641,10 @@ export function Prompt(props: PromptProps) {
     const value = (() => {
       if (store.mode === "shell") {
         if (!shell().length) return undefined
-        return `Run a command... "${shell()[store.placeholder % shell().length]}"`
+        return `Run a command… "${shell()[store.placeholder % shell().length]}"`
       }
       if (!list().length) return undefined
-      return `Ask anything... "${list()[store.placeholder % list().length]}"`
+      return `Ask anything… "${list()[store.placeholder % list().length]}"`
     })()
     if (!value) return undefined
     const width = dimensions().width < 44 ? dimensions().width - 5 : Math.min(75, dimensions().width - 4) - 5

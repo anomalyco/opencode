@@ -596,7 +596,11 @@ const layer = Layer.effect(
               yield* plugins.flush
               return yield* Image.Service
             }).pipe(Effect.provide(locations.get(session.location)))
-            const skills = Skill.Service.pipe(Effect.provide(locations.get(session.location)))
+            const skills = Effect.gen(function* () {
+              const plugins = yield* PluginSupervisor.Service
+              yield* plugins.flush
+              return yield* Skill.Service
+            }).pipe(Effect.provide(locations.get(session.location)))
             const prompt = yield* resolvePrompt(
               { text: input.text, files: input.files, agents: input.agents, skills: input.skills },
               image,
@@ -718,7 +722,7 @@ const layer = Layer.effect(
       skill: Effect.fn("Session.skill")(function* (input) {
         const session = yield* result.get(input.sessionID)
         const skills = yield* Skill.Service.pipe(Effect.provide(locations.get(session.location)))
-        const skill = (yield* skills.list()).find((item) => item.id === input.skill)
+        const skill = yield* skills.get(input.skill)
         if (!skill) return yield* new SkillNotFoundError({ skill: input.skill })
         yield* bus.publish(
           SessionEvent.Skill.Activated,
@@ -970,16 +974,22 @@ const resolvePrompt = Effect.fn("Session.resolvePrompt")(function* (
   const selected = yield* Effect.gen(function* () {
     if (!requested?.length) return undefined
     const skillService = yield* skills
-    const available = yield* skillService.list()
-    return yield* Effect.forEach(requested, (attachment) => {
-      const skill = available.find((item) => item.id === attachment.id)
-      if (!skill) return Effect.fail(new SkillNotFoundError({ skill: attachment.id }))
-      return Effect.succeed({
-        id: skill.id,
-        name: skill.name,
-        mention: attachment.mention,
-      })
-    })
+    const prepared = new Map<Skill.ID, Skill.Name>()
+    return yield* Effect.forEach(requested, (attachment) =>
+      Effect.gen(function* () {
+        const name = prepared.get(attachment.id)
+        if (name !== undefined) return { id: attachment.id, name, mention: attachment.mention }
+        const skill = yield* skillService.get(attachment.id)
+        if (!skill) return yield* new SkillNotFoundError({ skill: attachment.id })
+        prepared.set(skill.id, skill.name)
+        return {
+          id: skill.id,
+          name: skill.name,
+          text: (yield* Skill.prepare(fs, skill).pipe(Effect.orDie)).output,
+          mention: attachment.mention,
+        }
+      }),
+    )
   })
   return Prompt.make({ text: input.text, agents: input.agents, files, skills: selected?.length ? selected : undefined })
 })

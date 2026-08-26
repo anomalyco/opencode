@@ -138,6 +138,8 @@ import type {
   McpResourceCatalogOutput,
   CredentialUpdateInput,
   CredentialUpdateOutput,
+  CredentialActivateInput,
+  CredentialActivateOutput,
   CredentialRemoveInput,
   CredentialRemoveOutput,
   ProjectListOutput,
@@ -935,6 +937,14 @@ const EndpointCredentialUpdate = (raw: RawClient["server.credential"]) => (input
     }).pipe(Effect.mapError(mapClientError)),
   )
 
+const EndpointCredentialActivate = (raw: RawClient["server.credential"]) => (input: CredentialActivateInput) =>
+  preserveEffect<CredentialActivateOutput>()(
+    raw["credential.activate"]({
+      params: { credentialID: input["credentialID"] },
+      query: { location: input["location"] },
+    }).pipe(Effect.mapError(mapClientError)),
+  )
+
 const EndpointCredentialRemove = (raw: RawClient["server.credential"]) => (input: CredentialRemoveInput) =>
   preserveEffect<CredentialRemoveOutput>()(
     raw["credential.remove"]({
@@ -945,6 +955,7 @@ const EndpointCredentialRemove = (raw: RawClient["server.credential"]) => (input
 
 const adaptGroupCredential = (raw: RawClient["server.credential"]) => ({
   update: EndpointCredentialUpdate(raw),
+  activate: EndpointCredentialActivate(raw),
   remove: EndpointCredentialRemove(raw),
 })
 

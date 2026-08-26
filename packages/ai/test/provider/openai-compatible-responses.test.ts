@@ -47,10 +47,8 @@ describe("Open Responses-compatible route", () => {
       })
       expect(prepared.body).toEqual({
         model: "example-model",
-        input: [
-          { role: "system", content: "You are concise." },
-          { role: "user", content: [{ type: "input_text", text: "Say hello." }] },
-        ],
+        input: [{ role: "user", content: [{ type: "input_text", text: "Say hello." }] }],
+        instructions: "You are concise.",
         stream: true,
         store: false,
         include: ["reasoning.encrypted_content"],
@@ -84,10 +82,12 @@ describe("Open Responses-compatible route", () => {
       const prepared = yield* compileRequest(
         LLM.request({
           model,
+          system: "Initial instructions.",
           messages: [Message.user("Before."), Message.system("Operator update."), Message.assistant("After.")],
         }),
       )
 
+      expect(prepared.body.instructions).toBe("Initial instructions.")
       expect(prepared.body.input).toEqual([
         { role: "user", content: [{ type: "input_text", text: "Before." }] },
         { role: "developer", content: "Operator update." },
@@ -195,15 +195,19 @@ describe("Open Responses-compatible route", () => {
           model,
           messages: [
             Message.assistant([
-              // The baseline does not enforce a provider id grammar, so a
-              // non-OpenAI but well-formed token is resent as-is.
               { type: "text", text: "Kept.", providerMetadata: { openresponses: { itemId: "history_1" } } },
-              // Shape violations are dropped even without a grammar policy.
               {
                 type: "text",
-                text: "Dropped.",
-                providerMetadata: { openresponses: { itemId: `m${"a".repeat(64)}` } },
+                text: "Long.",
+                providerMetadata: { openresponses: { itemId: `history_${"a".repeat(64)}` } },
               },
+              {
+                type: "text",
+                text: "Opaque.",
+                providerMetadata: { openresponses: { itemId: "provider_value/with+symbols" } },
+              },
+              { type: "text", text: "No suffix.", providerMetadata: { openresponses: { itemId: "msg_" } } },
+              { type: "text", text: "No prefix.", providerMetadata: { openresponses: { itemId: "_item" } } },
             ]),
           ],
         }),
@@ -218,10 +222,125 @@ describe("Open Responses-compatible route", () => {
         },
         {
           type: "message",
+          id: `history_${"a".repeat(64)}`,
           role: "assistant",
-          content: [{ type: "output_text", text: "Dropped." }],
+          content: [{ type: "output_text", text: "Long." }],
+        },
+        {
+          type: "message",
+          id: "provider_value/with+symbols",
+          role: "assistant",
+          content: [{ type: "output_text", text: "Opaque." }],
+        },
+        {
+          type: "message",
+          role: "assistant",
+          content: [
+            { type: "output_text", text: "No suffix." },
+            { type: "output_text", text: "No prefix." },
+          ],
         },
       ])
+    }),
+  )
+
+  it.effect("replays only shared hosted tool items", () =>
+    Effect.gen(function* () {
+      const model = configure({
+        apiKey: "test-key",
+        baseURL: "https://responses.example.test/v1",
+        provider: "example",
+      }).model("example-model")
+      const items = [
+        { type: "web_search_call", id: "ws_1", status: "completed" },
+        { type: "x_search_call", id: "x_search_1", status: "completed" },
+        { type: "future_call", id: "future_1", status: "completed" },
+        { type: "file_search_call", id: "fs_1", queries: "not-an-array" },
+      ]
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: items.map((item) =>
+            Message.assistant({
+              type: "tool-result",
+              id: item.id,
+              name: item.type,
+              result: { type: "json", value: item },
+              providerExecuted: true,
+              providerMetadata: { openresponses: { itemId: item.id } },
+            }),
+          ),
+        }),
+      )
+
+      expect(prepared.body.input).toEqual([
+        items[0],
+        { role: "user", content: [{ type: "input_text", text: JSON.stringify(items[1]) }] },
+        { role: "user", content: [{ type: "input_text", text: JSON.stringify(items[2]) }] },
+        { role: "user", content: [{ type: "input_text", text: JSON.stringify(items[3]) }] },
+      ])
+    }),
+  )
+
+  it.effect("routes response deltas by output index", () =>
+    Effect.gen(function* () {
+      const model = configure({
+        apiKey: "test-key",
+        baseURL: "https://responses.example.test/v1",
+      }).model("example-model")
+      const response = yield* LLMClient.generate(LLM.request({ model, prompt: "Say hello." })).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "response.output_item.added", output_index: 2, item: { type: "message", id: "msg_1" } },
+              { type: "response.output_text.delta", output_index: 2, item_id: "wrong_message", delta: "Indexed" },
+              { type: "response.output_item.done", output_index: 2, item: { type: "message", id: "msg_1" } },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.message.content).toEqual([
+        { type: "text", text: "Indexed", providerMetadata: { openresponses: { itemId: "msg_1" } } },
+      ])
+    }),
+  )
+
+  it.effect("streams function calls without optional item ids through the shared baseline", () =>
+    Effect.gen(function* () {
+      const model = configure({
+        apiKey: "test-key",
+        baseURL: "https://responses.example.test/v1",
+        provider: "example",
+      }).model("example-model")
+      const item = { type: "function_call", call_id: "call_1", name: "lookup", arguments: "" }
+      const response = yield* LLMClient.generate(LLM.request({ model, prompt: "Look it up." })).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "response.output_item.added", output_index: 1, item },
+              {
+                type: "response.function_call_arguments.delta",
+                output_index: 1,
+                item_id: "opaque_item",
+                delta: '{"query":"shared"}',
+              },
+              {
+                type: "response.output_item.done",
+                output_index: 1,
+                item: { ...item, arguments: '{"query":"complete"}' },
+              },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.events.filter(LLMEvent.is.toolCall)).toEqual([
+        expect.objectContaining({ id: "call_1", name: "lookup", input: { query: "complete" } }),
+      ])
+      expect(response.events.find(LLMEvent.is.toolCall)?.providerMetadata).toBeUndefined()
     }),
   )
 

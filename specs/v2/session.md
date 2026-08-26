@@ -73,7 +73,7 @@ Before each Step, the runner estimates the complete model-visible request agains
 
 The full transcript remains durable. Active model history after the compaction boundary contains the summary and retained recent context; provider-native continuation state does not cross that boundary.
 
-If the provider reports context overflow before durable assistant output or tool execution, the runner may perform one overflow-triggered compaction and rebuild the same logical Step. A second overflow or any overflow after durable output is terminal.
+If automatic compaction is enabled and the provider reports context overflow before durable assistant output or tool execution, the runner may perform one overflow-triggered compaction and rebuild the same logical Step. A second overflow, any overflow after durable output, or an overflow when automatic compaction is disabled is terminal.
 
 ## Durable Events Are Session-Scoped
 

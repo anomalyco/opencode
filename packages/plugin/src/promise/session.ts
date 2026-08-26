@@ -57,7 +57,9 @@ export type SessionDomain = Pick<
   | "synthetic"
   | "interrupt"
   | "rename"
+  | "move"
   | "wait"
+  | "context"
 > & {
   readonly hook: ModelHooks<SessionHooks>
 }

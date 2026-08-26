@@ -21,6 +21,9 @@ test("renders every tool error outcome without leaking hidden tools", async ({ p
   )
   await setupTimeline(page, { messages: [userMessage(), assistantMessage(parts)] })
 
+  const group = page.locator(`[data-timeline-part-ids="${ordinary.map((_, index) => `prt_error_${index}`).join(",")}"]`)
+  await expect(group.locator('[data-component="tag"]')).toHaveText(String(ordinary.length))
+  await group.getByRole("button").click()
   await expect(page.locator('[data-kind="tool-error-card"]')).toHaveCount(ordinary.length + 1)
   await expect(page.getByText(/dismissed/i)).toBeVisible()
   await expect(page.locator('[data-timeline-part-id="prt_todo_error"]')).toHaveCount(0)
@@ -33,6 +36,7 @@ test("transitions shell and question through running error outcomes", async ({ p
   const shellID = "prt_transition_error_shell"
   const questionID = "prt_transition_error_question"
   const timeline = await setupTimeline(page, {
+    settings: { shellToolPartsExpanded: true },
     messages: [
       userMessage(),
       assistantMessage(
@@ -44,7 +48,6 @@ test("transitions shell and question through running error outcomes", async ({ p
       ),
     ],
   })
-  await timeline.waitForPart(shellID)
   await expect(page.locator(`[data-timeline-part-id="${questionID}"]`)).toHaveCount(0)
   await timeline.send(partUpdated(toolPart(shellID, "shell", "running", { command: "exit 1" })), 120)
   await timeline.send(partUpdated(toolPart(questionID, "question", "running", questionInput())), 180)
@@ -68,6 +71,7 @@ test("preserves surviving grouped patch state when its first patch fails", async
   const failed = "prt_grouped_patch_failed"
   const surviving = "prt_grouped_patch_surviving"
   const timeline = await setupTimeline(page, {
+    settings: { editToolPartsExpanded: true },
     messages: [
       userMessage(),
       assistantMessage(
@@ -147,10 +151,12 @@ test("labels all web search provider variants", async ({ page }) => {
     toolPart("prt_search_generic", "websearch", "completed", { query: "generic" }),
   ]
   await setupTimeline(page, { messages: [userMessage(), assistantMessage(parts)] })
+  await page.getByRole("button", { name: "Used Parallel Web Search, Exa Web Search, Web Search" }).click()
 
-  await expect(page.getByRole("button", { name: /Parallel Web Search/ })).toBeVisible()
-  await expect(page.getByRole("button", { name: /Exa Web Search/ })).toBeVisible()
-  await expect(page.getByRole("button", { name: /^Web Search/ })).toBeVisible()
+  const tools = page.locator('[data-component="context-tool-group-list"]')
+  await expect(tools.getByRole("button", { name: /Parallel Web Search/ })).toBeVisible()
+  await expect(tools.getByRole("button", { name: /Exa Web Search/ })).toBeVisible()
+  await expect(tools.getByRole("button", { name: /^Web Search/ })).toBeVisible()
 })
 
 test("labels completed searches with result counts", async ({ page }) => {
@@ -200,6 +206,11 @@ test("labels skill tools from IDs and result metadata", async ({ page }) => {
       ]),
     ],
   })
+
+  const group = page.locator(`[data-timeline-part-ids="${pending},${completed}"]`)
+  await expect(group.getByRole("button")).toHaveAccessibleName("Used Skill")
+  await expect(group.locator('[data-component="tag"]')).toHaveText("2")
+  await group.getByRole("button").click()
 
   for (const [id, name] of [
     [pending, "frontend-design"],

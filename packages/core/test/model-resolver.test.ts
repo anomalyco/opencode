@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { LLM, LanguageModel } from "@opencode-ai/ai"
+import { LLM, LanguageModel, Message } from "@opencode-ai/ai"
 import { OpenAIChat } from "@opencode-ai/ai/protocols"
 import { compileRequest } from "@opencode-ai/ai/route/client"
 import { ConfigProvider, Effect, Layer } from "effect"
@@ -312,6 +312,7 @@ describe("ModelResolver", () => {
         active: () => Effect.undefined,
         resolve: () => Effect.die("unused"),
         key: () => Effect.die("unused"),
+        activate: () => Effect.die("unused"),
         update: () => Effect.die("unused"),
         remove: () => Effect.die("unused"),
       },
@@ -390,8 +391,10 @@ describe("ModelResolver", () => {
         model(Provider.aisdk("@ai-sdk/openai-compatible"), {
           compatibility: {
             reasoningField: "vendor_reasoning",
+            requireReasoning: true,
             maxTokensField: "max_completion_tokens",
             requireFinishReason: false,
+            requireAssistantAfterTool: true,
           },
           settings: {
             apiKey: "settings-secret",
@@ -415,8 +418,10 @@ describe("ModelResolver", () => {
       expect(headers.authorization).toBe("Bearer settings-secret")
       expect(resolved.route.id).toBe("openai-compatible-chat")
       expect(resolved.compatibility?.reasoningField).toBe("vendor_reasoning")
+      expect(resolved.compatibility?.requireReasoning).toBe(true)
       expect(resolved.compatibility?.maxTokensField).toBe("max_completion_tokens")
       expect(resolved.compatibility?.requireFinishReason).toBe(false)
+      expect(resolved.compatibility?.requireAssistantAfterTool).toBe(true)
       expect(prepared.body).toMatchObject({ max_completion_tokens: 10 })
       expect(prepared.body).not.toHaveProperty("max_tokens")
       expect(resolved.route.endpoint.baseURL).toBe("https://compatible.example/v1")
@@ -674,7 +679,15 @@ describe("ModelResolver", () => {
           metadata: { accountID: "acct_123" },
         }),
       )
-      const request = LLM.request({ model: resolved, prompt: "Hello" })
+      const request = LLM.request({
+        model: resolved,
+        system: [
+          { type: "text", text: "Base instructions." },
+          { type: "text", text: "Project instructions." },
+        ],
+        messages: [Message.user("Hello"), Message.system("Updated instructions.")],
+      })
+      const prepared = yield* compileRequest(request)
       const headers = yield* resolved.route.auth.apply({
         request,
         method: "POST",
@@ -689,6 +702,13 @@ describe("ModelResolver", () => {
       })
       expect(resolved.route.defaults.headers).toMatchObject({ "chatgpt-account-id": "acct_123" })
       expect(headers.authorization).toBe("Bearer chatgpt-token")
+      expect(prepared.body).toMatchObject({
+        instructions: "Base instructions.\nProject instructions.",
+        input: [
+          { role: "user", content: [{ type: "input_text", text: "Hello" }] },
+          { role: "developer", content: "Updated instructions." },
+        ],
+      })
     }),
   )
 
@@ -860,6 +880,18 @@ describe("ModelResolver", () => {
           { thinking: { type: "adaptive", display: "summarized" }, effort: "high" },
         ],
         [
+          "@ai-sdk/cerebras",
+          "@opencode-ai/ai/providers/cerebras",
+          { reasoningEffort: "high" },
+          { reasoningEffort: "high" },
+        ],
+        [
+          "@ai-sdk/deepinfra",
+          "@opencode-ai/ai/providers/deepinfra",
+          { reasoningEffort: "none" },
+          { reasoningEffort: "none" },
+        ],
+        [
           "@ai-sdk/openai-compatible",
           "@opencode-ai/ai/providers/openai-compatible",
           { reasoningEffort: "high" },
@@ -884,11 +916,12 @@ describe("ModelResolver", () => {
           { reasoning: { effort: "high" } },
         ],
         [
-          "@ai-sdk/xai",
-          "@opencode-ai/ai/providers/xai",
+          "@ai-sdk/togetherai",
+          "@opencode-ai/ai/providers/togetherai",
           { reasoningEffort: "high" },
           { reasoningEffort: "high" },
         ],
+        ["@ai-sdk/xai", "@opencode-ai/ai/providers/xai", { reasoningEffort: "high" }, { reasoningEffort: "high" }],
       ] as const
 
       yield* Effect.forEach(packages, ([catalogPackage, nativePackage, sourceOptions, providerOptions]) =>
@@ -935,16 +968,15 @@ describe("ModelResolver", () => {
           "openai.gpt-oss-120b",
         ],
         ["@ai-sdk/azure", "@opencode-ai/ai/providers/azure/responses", "api-model"],
+        ["@ai-sdk/cerebras", "@opencode-ai/ai/providers/cerebras", "api-model"],
+        ["@ai-sdk/deepinfra", "@opencode-ai/ai/providers/deepinfra", "api-model"],
         ["@ai-sdk/google", "@opencode-ai/ai/providers/google", "api-model"],
         ["@ai-sdk/google-vertex", "@opencode-ai/ai/providers/google-vertex", "api-model"],
-        [
-          "@ai-sdk/google-vertex/anthropic",
-          "@opencode-ai/ai/providers/google-vertex/messages",
-          "claude-sonnet-4-6",
-        ],
+        ["@ai-sdk/google-vertex/anthropic", "@opencode-ai/ai/providers/google-vertex/messages", "claude-sonnet-4-6"],
         ["@ai-sdk/openai", "@opencode-ai/ai/providers/openai", "api-model"],
         ["@ai-sdk/openai-compatible", "@opencode-ai/ai/providers/openai-compatible", "api-model"],
         ["@openrouter/ai-sdk-provider", "@opencode-ai/ai/providers/openrouter", "api-model"],
+        ["@ai-sdk/togetherai", "@opencode-ai/ai/providers/togetherai", "api-model"],
         ["@ai-sdk/xai", "@opencode-ai/ai/providers/xai", "api-model"],
       ] as const
 
@@ -1059,6 +1091,17 @@ describe("ModelResolver", () => {
           settings: { reasoning: { effort: "high" } },
         }),
       )
+      const cerebras = yield* ModelResolver.fromCatalogModel(
+        model(Provider.aisdk("@ai-sdk/cerebras"), { settings: { reasoningEffort: "high" } }),
+      )
+      const deepinfra = yield* ModelResolver.fromCatalogModel(
+        model(Provider.aisdk("@ai-sdk/deepinfra"), {
+          settings: { baseURL: "https://deepinfra.example/provider-root", reasoningEffort: "none" },
+        }),
+      )
+      const togetherai = yield* ModelResolver.fromCatalogModel(
+        model(Provider.aisdk("@ai-sdk/togetherai"), { settings: { reasoningEffort: "high" } }),
+      )
       const xai = yield* ModelResolver.fromCatalogModel(
         model(Provider.aisdk("@ai-sdk/xai"), { settings: { reasoningEffort: "high" } }),
       )
@@ -1079,6 +1122,16 @@ describe("ModelResolver", () => {
       expect(google.route.defaults.providerOptions).toEqual({ thinkingConfig: { thinkingBudget: 1_024 } })
       expect(openrouter.route.id).toBe("openrouter")
       expect(openrouter.route.defaults.providerOptions).toEqual({ reasoning: { effort: "high" } })
+      expect(cerebras.route.id).toBe("cerebras-chat")
+      expect(cerebras.route.defaults.providerOptions).toEqual({ reasoningEffort: "high" })
+      expect(String(cerebras.provider)).toBe("test-provider")
+      expect(deepinfra.route.id).toBe("deepinfra-chat")
+      expect(deepinfra.route.endpoint.baseURL).toBe("https://deepinfra.example/provider-root/openai")
+      expect(deepinfra.route.defaults.providerOptions).toEqual({ reasoningEffort: "none" })
+      expect(String(deepinfra.provider)).toBe("test-provider")
+      expect(togetherai.route.id).toBe("togetherai-chat")
+      expect(togetherai.route.defaults.providerOptions).toEqual({ reasoningEffort: "high" })
+      expect(String(togetherai.provider)).toBe("test-provider")
       expect(xai.route.id).toBe("openai-responses")
       expect(xai.route.defaults.providerOptions).toEqual({
         reasoningEffort: "high",

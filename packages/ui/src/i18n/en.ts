@@ -110,6 +110,7 @@ const source = {
   "ui.messagePart.context.list.other": "{{count}} lists",
   "ui.messagePart.context.match.one": "({{count}} match)",
   "ui.messagePart.context.match.other": "({{count}} matches)",
+  "ui.messagePart.tools.used": "Used {{tools}}",
 
   "ui.list.loading": "Loading",
   "ui.list.empty": "No results",

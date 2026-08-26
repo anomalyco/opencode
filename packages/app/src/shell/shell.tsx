@@ -4,11 +4,14 @@ import { Titlebar, type TitlebarUpdate } from "@/shell/titlebar/titlebar"
 import { usePlatform } from "@/runtime/platform/platform"
 import { ToastRegion } from "@/shell/notifications/toast"
 import { TitlebarRightProvider } from "@/shell/titlebar/right-slot"
+import { useSettingsSurface } from "@/settings/surface"
 
 const DebugBar = lazy(() => import("@/shell/debug/debug-bar").then((module) => ({ default: module.DebugBar })))
+const SettingsScreen = lazy(() => import("@/settings/shell").then((module) => ({ default: module.SettingsScreen })))
 
 export default function Layout(props: ParentProps) {
   const platform = usePlatform()
+  const settings = useSettingsSurface()
   const [state, setState] = createStore({ debugTools: false })
 
   const update: TitlebarUpdate = {
@@ -41,7 +44,19 @@ export default function Layout(props: ParentProps) {
           }
         />
         <main class="flex-1 min-h-0 min-w-0 overflow-x-hidden flex flex-col items-start contain-strict">
-          <Suspense>{props.children}</Suspense>
+          <div
+            class="flex size-full min-h-0 min-w-0 flex-col"
+            hidden={settings.store.open}
+            inert={settings.store.open}
+            aria-hidden={settings.store.open}
+          >
+            <Suspense>{props.children}</Suspense>
+          </div>
+          <Show when={settings.store.open}>
+            <Suspense>
+              <SettingsScreen defaultValue={settings.store.tab} />
+            </Suspense>
+          </Show>
         </main>
         <Show when={import.meta.env.DEV && state.debugTools}>
           <Suspense>

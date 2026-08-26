@@ -8,6 +8,8 @@ export function createTimelineProjection(input: {
   sessionMessages: Accessor<SessionMessageInfo[]>
   status: Accessor<SessionStatus>
   showReasoningSummaries: Accessor<boolean>
+  shellToolDefaultOpen: Accessor<boolean>
+  editToolDefaultOpen: Accessor<boolean>
   pendingUserMessageIDs: Accessor<ReadonlySet<string>>
 }) {
   const sessionMessageByID = createMemo(
@@ -81,6 +83,8 @@ export function createTimelineProjection(input: {
       input.showReasoningSummaries(),
       input.status(),
       input.pendingUserMessageIDs(),
+      input.shellToolDefaultOpen(),
+      input.editToolDefaultOpen(),
     ),
   )
   const activeMessageID = createMemo(() => projection().activeMessageID)
