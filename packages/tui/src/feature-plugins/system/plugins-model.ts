@@ -1,6 +1,6 @@
 import type { PluginInfo, PluginUpdateInfo, PluginUpdateResult } from "@opencode-ai/client"
 
-type UpdateEntry = PluginUpdateInfo | PluginUpdateResult
+export type UpdateEntry = PluginUpdateInfo | PluginUpdateResult
 
 export function matchesPluginUpdate(plugin: PluginInfo, update: UpdateEntry) {
   if (plugin.source.type !== update.source.type) return false

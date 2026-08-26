@@ -5,11 +5,10 @@ import { DialogErrorDetails } from "../../component/dialog-error-details"
 import { usePlugin } from "../../plugin/context"
 import { DialogSelect, type DialogSelectOption } from "../../ui/dialog-select"
 import { useDialog } from "../../ui/dialog"
-import { matchesPluginUpdate, pluginServerKey } from "./plugins-model"
+import { errorMessage } from "../../util/error"
+import { matchesPluginUpdate, pluginServerKey, type UpdateEntry } from "./plugins-model"
 
 const id = "opencode.plugins"
-
-type UpdateEntry = PluginUpdateInfo | PluginUpdateResult
 
 type Entry =
   | { readonly key: string; readonly runtime: "server"; readonly plugin: PluginInfo; readonly update?: UpdateEntry }
@@ -30,8 +29,6 @@ type PluginUpdateOperations = {
 
 export type PluginRegistry = Pick<ReturnType<typeof usePlugin>, "registered" | "list" | "activate" | "deactivate">
 
-type ServerEntry = Extract<Entry, { runtime: "server" }>
-
 export function PluginsDialog(props: {
   context: Plugin.Context
   plugins: PluginRegistry
@@ -44,7 +41,7 @@ export function PluginsDialog(props: {
   const [detail, setDetail] = createSignal<Entry>()
   const [initial, setInitial] = createSignal<string>()
   const [checking, setChecking] = createSignal(true)
-  const [operationError, setOperationError] = createSignal<string>()
+  const [operationError, setOperationError] = createSignal(false)
   const [updateEntries, setUpdateEntries] = createSignal<readonly UpdateEntry[]>([])
   const [updating, setUpdating] = createSignal<string>()
   const location = () => props.context.location ?? props.context.data.location.default()
@@ -62,7 +59,7 @@ export function PluginsDialog(props: {
     void operations
       .check()
       .then(setUpdateEntries)
-      .catch((cause) => setOperationError(errorMessage(cause)))
+      .catch(() => setOperationError(true))
       .finally(() => setChecking(false))
   })
   const entries = createMemo<Entry[]>(() => {
@@ -88,23 +85,12 @@ export function PluginsDialog(props: {
         error: plugin.status === "failed" ? plugin.error : undefined,
       }))
     const runtime = props.server?.() ?? server() ?? []
-    const matched = new Set<PluginInfo>()
-    const checked: ServerEntry[] = updateEntries().flatMap((update) => {
-      const plugin = runtime.find((candidate) => matchesPluginUpdate(candidate, update))
-      if (!plugin) return []
-      matched.add(plugin)
-      return [{ key: pluginServerKey(plugin), runtime: "server", plugin, update }]
-    })
-    const serverEntries: Entry[] = [
-      ...checked,
-      ...runtime
-        .filter((plugin) => !matched.has(plugin))
-        .map((plugin) => ({
-          key: pluginServerKey(plugin),
-          runtime: "server" as const,
-          plugin,
-        })),
-    ]
+    const serverEntries: Entry[] = runtime.map((plugin) => ({
+      key: pluginServerKey(plugin),
+      runtime: "server",
+      plugin,
+      update: updateEntries().find((update) => matchesPluginUpdate(plugin, update)),
+    }))
     return [
       ...[...builtins, ...external].sort((a, b) => label(a, props.context).localeCompare(label(b, props.context))),
       ...serverEntries.sort((a, b) => label(a, props.context).localeCompare(label(b, props.context))),
@@ -172,24 +158,19 @@ export function PluginsDialog(props: {
       .catch((cause) => {
         props.context.ui.toast.show({
           variant: "error",
-          message: cause instanceof Error ? cause.message : String(cause),
+          message: errorMessage(cause),
         })
       })
       .finally(() => setLocked(false))
   }
-  const update = (name: string) => {
+  const runUpdate = (updating: string, operation: () => Promise<void>) => {
     if (locked()) return
     setLocked(true)
-    setUpdating(name)
-    setOperationError()
-    void operations
-      .update(name)
-      .then(async (result) => {
-        setUpdateEntries((current) => current.map((entry) => (entry.name === name ? result : entry)))
-        if (!props.server && result.status === "updated") await refetchServer()
-      })
+    setUpdating(updating)
+    setOperationError(false)
+    void operation()
       .catch((cause) => {
-        setOperationError(errorMessage(cause))
+        setOperationError(true)
         props.context.ui.toast.show({ variant: "error", message: errorMessage(cause) })
       })
       .finally(() => {
@@ -197,26 +178,18 @@ export function PluginsDialog(props: {
         setLocked(false)
       })
   }
-  const updateAll = () => {
-    if (locked()) return
-    setLocked(true)
-    setUpdating("*")
-    setOperationError()
-    void operations
-      .updateAll()
-      .then(async (results) => {
-        setUpdateEntries(results)
-        if (!props.server && results.some((result) => result.status === "updated")) await refetchServer()
-      })
-      .catch((cause) => {
-        setOperationError(errorMessage(cause))
-        props.context.ui.toast.show({ variant: "error", message: errorMessage(cause) })
-      })
-      .finally(() => {
-        setUpdating()
-        setLocked(false)
-      })
-  }
+  const update = (name: string) =>
+    runUpdate(name, async () => {
+      const result = await operations.update(name)
+      setUpdateEntries((current) => current.map((entry) => (entry.name === name ? result : entry)))
+      if (!props.server && result.status === "updated") await refetchServer()
+    })
+  const updateAll = () =>
+    runUpdate("*", async () => {
+      const results = await operations.updateAll()
+      setUpdateEntries(results)
+      if (!props.server && results.some((result) => result.status === "updated")) await refetchServer()
+    })
 
   return (
     <box>
@@ -347,10 +320,6 @@ function pluginError(entry: Entry | undefined) {
     return
   }
   return entry?.error
-}
-
-function errorMessage(cause: unknown) {
-  return cause instanceof Error ? cause.message : String(cause)
 }
 
 function Commands(props: { context: Plugin.Context }) {
