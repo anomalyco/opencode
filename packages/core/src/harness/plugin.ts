@@ -49,25 +49,48 @@ const layer = Layer.effect(
     const createHooks = Effect.fn("HarnessPlugin.createHooks")(function* (domainCategory: string) {
       const activeVersion = yield* versionSvc.getActiveVersion(domainCategory).pipe(Effect.orElseSucceed(() => undefined))
 
+      const resolveActiveVersion = async (sessionID?: string) => {
+        if (!sessionID) return activeVersion
+        const task = await Effect.runPromise(
+          db
+            .select()
+            .from(harness_task)
+            .where(eq(harness_task.session_id, sessionID))
+            .orderBy(desc(harness_task.task_id))
+            .get()
+            .pipe(Effect.orElseSucceed(() => undefined)),
+        ).catch(() => undefined)
+
+        if (task?.task_type && task.task_type !== domainCategory) {
+          const specificVer = await Effect.runPromise(
+            versionSvc.getActiveVersion(task.task_type).pipe(Effect.orElseSucceed(() => null)),
+          ).catch(() => null)
+          if (specificVer) return specificVer
+        }
+        return activeVersion
+      }
+
       const hooks: Hooks = {
-        "chat.params": async (_input, output) => {
-          if (!activeVersion) return
-          if (typeof activeVersion.temperature === "number") output.temperature = activeVersion.temperature
-          if (typeof activeVersion.maxOutputTokens === "number") output.maxOutputTokens = activeVersion.maxOutputTokens
-          const extraOptions = parseRecord(activeVersion.modelOptions)
+        "chat.params": async (input, output) => {
+          const currentVersion = await resolveActiveVersion(input.sessionID)
+          if (!currentVersion) return
+          if (typeof currentVersion.temperature === "number") output.temperature = currentVersion.temperature
+          if (typeof currentVersion.maxOutputTokens === "number") output.maxOutputTokens = currentVersion.maxOutputTokens
+          const extraOptions = parseRecord(currentVersion.modelOptions)
           Object.assign(output.options, extraOptions)
         },
 
-        "experimental.chat.system.transform": async (_input, output) => {
-          if (!activeVersion) return
-          if (activeVersion.systemPrompt) output.system.push(activeVersion.systemPrompt)
-          const rules = Array.isArray(activeVersion.extractedRules)
-            ? activeVersion.extractedRules
+        "experimental.chat.system.transform": async (input, output) => {
+          const currentVersion = await resolveActiveVersion(input.sessionID)
+          if (!currentVersion) return
+          if (currentVersion.systemPrompt) output.system.push(currentVersion.systemPrompt)
+          const rules = Array.isArray(currentVersion.extractedRules)
+            ? currentVersion.extractedRules
                 .filter((r): r is string => typeof r === "string")
                 .map((r) => `- ${r}`)
                 .join("\n")
             : ""
-          if (rules) output.system.push(`EXTRACTED LESSONS:\n${rules}`)
+          if (rules) output.system.push(`EXTRACTED LESSONS (${currentVersion.domainCategory}):\n${rules}`)
         },
 
         "experimental.text.complete": async (input, output) => {
@@ -78,8 +101,9 @@ const layer = Layer.effect(
         },
 
         "tool.execute.before": async (input, output) => {
-          if (!activeVersion) return
-          const toolArgRules = parseRecord(activeVersion.toolOverrides)
+          const currentVersion = await resolveActiveVersion(input.sessionID)
+          if (!currentVersion) return
+          const toolArgRules = parseRecord(currentVersion.toolOverrides)
           const toolRule = toolArgRules[input.tool]
           if (isRecord(toolRule) && isRecord(toolRule._args) && isRecord(output.args)) {
             Object.assign(output.args, toolRule._args)
@@ -87,8 +111,9 @@ const layer = Layer.effect(
         },
 
         "tool.execute.after": async (input, output) => {
-          if (!activeVersion) return
-          const toolNotes = parseRecord(activeVersion.toolOverrides)
+          const currentVersion = await resolveActiveVersion(input.sessionID)
+          if (!currentVersion) return
+          const toolNotes = parseRecord(currentVersion.toolOverrides)
           const toolNote = toolNotes[input.tool]
           if (isRecord(toolNote) && typeof toolNote.note === "string" && output.output) {
             output.output = `${output.output}\n\n[HARNESS LESSON: ${toolNote.note}]`
@@ -96,8 +121,9 @@ const layer = Layer.effect(
         },
 
         "permission.ask": async (input, output) => {
-          if (!activeVersion) return
-          const permRules = parseRecord(activeVersion.toolOverrides)
+          const currentVersion = activeVersion
+          if (!currentVersion) return
+          const permRules = parseRecord(currentVersion.toolOverrides)
           const rawInput = input as Record<string, unknown>
           const permissionKey = typeof input === "string"
             ? input
@@ -114,10 +140,11 @@ const layer = Layer.effect(
           }
         },
 
-        "shell.env": async (_input, output) => {
-          if (!activeVersion) return
-          output.env["HARNESS_DOMAIN"] = domainCategory
-          output.env["HARNESS_VERSION_ID"] = activeVersion.versionID
+        "shell.env": async (input, output) => {
+          const currentVersion = await resolveActiveVersion(input.sessionID)
+          if (!currentVersion) return
+          output.env["HARNESS_DOMAIN"] = currentVersion.domainCategory
+          output.env["HARNESS_VERSION_ID"] = currentVersion.versionID
         },
 
         "chat.message": async (input, output) => {
