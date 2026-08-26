@@ -77,6 +77,10 @@ test("Kitty modifier-only events preserve a pending shifted leader sequence", as
   try {
     await app.mockInput.pressKeys(["\x1b[57442;5u", "\x1b[120;5u"])
     expect(leader()).toBeTrue()
+    for (const code of [57453, 57454]) {
+      await app.mockInput.pressKeys([`\x1b[${code}u`, `\x1b[${code};1:3u`])
+      expect(leader()).toBeTrue()
+    }
     await app.mockInput.pressKeys(["\x1b[120;5:3u", "\x1b[57442;1:3u", "\x1b[57441;2u"])
     expect(leader()).toBeTrue()
     await app.mockInput.pressKeys(["\x1b[114:82;2u", "\x1b[114:82;2:3u", "\x1b[57441;1:3u"])

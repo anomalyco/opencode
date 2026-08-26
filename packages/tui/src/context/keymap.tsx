@@ -58,7 +58,7 @@ function Provider(props: ParentProps<{ config?: KeymapConfig }>) {
   const mode = createMode(keymap)
   const [control, setControl] = createSignal(false)
   const modifier = (event: KeyEvent) => {
-    if (!/^(?:(left|right)(ctrl|shift|alt|super|hyper|meta)|isolevel[35]shift)$/.test(event.name)) return
+    if (!/^(?:(left|right)(ctrl|shift|alt|super|hyper|meta)|iso_level[35]_shift)$/.test(event.name)) return
     if (event.name === "leftctrl" || event.name === "rightctrl") setControl(event.eventType !== "release")
     // Modifier-only reports are state changes, not input that cancels a selection or pending chord.
     event.preventDefault()
