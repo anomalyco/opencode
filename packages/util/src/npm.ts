@@ -1,8 +1,8 @@
 export * as Npm from "./npm.js"
 
 import path from "path"
+import { createHash } from "node:crypto"
 import { Effect, Schema, Context, Layer, Option, FileSystem } from "effect"
-import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem"
 import { FSUtil } from "./fs-util.js"
 import { Global } from "./global.js"
 import { EffectFlock } from "./effect-flock.js"
@@ -52,6 +52,26 @@ export async function isRegistryPackage(pkg: string) {
   }
 }
 
+export async function isInstallablePackage(pkg: string) {
+  const { default: npa } = await import("npm-package-arg")
+  try {
+    const result = npa(pkg)
+    return result.type === "git" || (result.name !== undefined && ["version", "range", "tag"].includes(result.type))
+  } catch {
+    return false
+  }
+}
+
+export async function cacheKey(pkg: string) {
+  const { default: npa } = await import("npm-package-arg")
+  try {
+    if (npa(pkg).type === "git") return `git-${createHash("sha256").update(pkg).digest("hex")}`
+  } catch {
+    // Preserve the existing fallback for invalid and non-registry package strings.
+  }
+  return sanitize(pkg)
+}
+
 const resolveEntryPoint = (name: string, dir: string, subpaths: readonly string[] = [""]): EntryPoint => {
   const entrypoint = subpaths
     .map((subpath) => {
@@ -77,6 +97,10 @@ interface ArboristTree {
   edgesOut: Map<string, { to?: ArboristNode }>
 }
 
+const PackageJson = Schema.Struct({
+  dependencies: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+})
+
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -84,7 +108,22 @@ const layer = Layer.effect(
     const global = yield* Global.Service
     const fs = yield* FileSystem.FileSystem
     const flock = yield* EffectFlock.Service
-    const directory = (pkg: string) => path.join(global.cache, "packages", sanitize(pkg))
+    const directory = (pkg: string) =>
+      Effect.map(
+        Effect.promise(() => cacheKey(pkg)),
+        (key) => path.join(global.cache, "packages", key),
+      )
+    const installedName = Effect.fnUntraced(function* (pkg: string, dir: string, parsedName?: string) {
+      if (parsedName) return parsedName
+      const manifest = yield* afs
+        .readJson(path.join(dir, "package.json"))
+        .pipe(Effect.flatMap(Schema.decodeUnknownEffect(PackageJson)), Effect.option)
+      if (Option.isSome(manifest)) {
+        const name = Object.keys(manifest.value.dependencies ?? {})[0]
+        if (name) return name
+      }
+      return pkg
+    })
     const reify = (input: { dir: string; add?: string[] }) =>
       Effect.gen(function* () {
         yield* flock.acquire(`npm-install:${input.dir}`)
@@ -122,14 +161,15 @@ const layer = Layer.effect(
 
     const add = Effect.fn("Npm.add")(function* (pkg: string, options?: { readonly subpaths?: readonly string[] }) {
       const { default: npa } = yield* Effect.promise(() => import("npm-package-arg"))
-      const dir = directory(pkg)
-      const name = (() => {
+      const parsedName = (() => {
         try {
-          return npa(pkg).name ?? pkg
+          return npa(pkg).name ?? undefined
         } catch {
-          return pkg
+          return undefined
         }
       })()
+      const dir = yield* directory(pkg)
+      const name = yield* installedName(pkg, dir, parsedName)
 
       if (yield* afs.existsSafe(path.join(dir, "node_modules", name))) {
         return resolveEntryPoint(name, path.join(dir, "node_modules", name), options?.subpaths)
@@ -138,7 +178,8 @@ const layer = Layer.effect(
       const tree = yield* reify({ dir, add: [pkg] })
       const first = tree.edgesOut.values().next().value?.to
       if (!first) {
-        const result = resolveEntryPoint(name, path.join(dir, "node_modules", name), options?.subpaths)
+        const installed = yield* installedName(pkg, dir, parsedName)
+        const result = resolveEntryPoint(installed, path.join(dir, "node_modules", installed), options?.subpaths)
         if (result.entrypoint) return result
         return yield* new InstallFailedError({ add: [pkg], dir })
       }
@@ -150,20 +191,22 @@ const layer = Layer.effect(
       options?: { readonly subpaths?: readonly string[] },
     ) {
       const { default: npa } = yield* Effect.promise(() => import("npm-package-arg"))
-      const name = (() => {
+      const parsedName = (() => {
         try {
-          return npa(pkg).name ?? pkg
+          return npa(pkg).name ?? undefined
         } catch {
-          return pkg
+          return undefined
         }
       })()
-      const dir = path.join(directory(pkg), "node_modules", name)
+      const root = yield* directory(pkg)
+      const name = yield* installedName(pkg, root, parsedName)
+      const dir = path.join(root, "node_modules", name)
       if (!(yield* afs.existsSafe(dir))) return { directory: dir }
       return resolveEntryPoint(name, dir, options?.subpaths)
     })
 
     const which = Effect.fn("Npm.which")(function* (pkg: string, bin?: string) {
-      const dir = directory(pkg)
+      const dir = yield* directory(pkg)
       const binDir = path.join(dir, "node_modules", ".bin")
 
       const pick = Effect.fnUntraced(function* () {

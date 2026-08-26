@@ -181,7 +181,7 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
         Spec.make("add", {
           description: "Install a plugin and add it to the global configuration",
           params: {
-            package: Argument.string("package").pipe(Argument.withDescription("npm registry package specifier")),
+            package: Argument.string("package").pipe(Argument.withDescription("npm registry or Git package specifier")),
           },
         }),
         Spec.make("remove", {
