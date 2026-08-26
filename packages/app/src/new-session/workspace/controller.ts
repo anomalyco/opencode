@@ -5,6 +5,8 @@ import { useWorkspaceLocation } from "@/workspaces/location"
 import { useServerSDK } from "@/runtime/server/client"
 import { useData } from "@/runtime/server/current"
 import { useSettings } from "@/settings/model"
+import { useTabs } from "@/shell/tabs/tabs"
+import { ServerConnection } from "@/runtime/server/registry"
 import { normalizeProjectInfo } from "@/runtime/server/global-sync/utils"
 import {
   isWorkspaceDirectory,
@@ -58,6 +60,7 @@ export function createNewSessionWorkspaceController(input: {
   const serverSDK = useServerSDK()
   const data = useData()
   const settings = useSettings()
+  const tabs = useTabs()
   const [state, setState] = createStore({ search: "" })
   const searchBranches = debounce((search: string) => setState("search", search.trim()), 100)
   const currentProject = createMemo(() => {
@@ -84,11 +87,6 @@ export function createNewSessionWorkspaceController(input: {
       settings.workspaces.defaultDestination(),
       settings.workspaces.lastUsed(serverSDK.scope, project.id),
     )
-  })
-  createEffect(() => {
-    const project = currentProject()
-    if (!project || !visible() || input.selectedWorktree()) return
-    input.setSelectedWorktree(normalizeNewSessionWorktree(fallback(), sdk().directory, project.worktree))
   })
   const value = createMemo(() =>
     resolveNewSessionWorktree({
@@ -127,6 +125,7 @@ export function createNewSessionWorkspaceController(input: {
   const remember = (worktree = value()) => {
     const project = currentProject()
     if (!project) return
+    tabs.initializeDraftWorktrees(ServerConnection.key(serverSDK.server), sdk().directory, fallback())
     const local = workspaceSelectionDestination(worktree, project.worktree) === "main"
     settings.workspaces.setLastUsed(serverSDK.scope, project.id, local ? "local" : "workspace")
   }
