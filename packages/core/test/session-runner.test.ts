@@ -1444,6 +1444,49 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("delivers controls without preflighting unavailable initial instructions", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+      const runner = yield* SessionRunner.Service
+      systemUnavailable = true
+      let reads = 0
+      systemLoadHook = Effect.sync(() => {
+        reads++
+      })
+      const compaction = yield* SessionInbox.admitCompaction(database.db, bus, {
+        id: SessionMessage.ID.create(),
+        sessionID,
+        delivery: "queue",
+      })
+      yield* SessionInbox.admit(database.db, bus, {
+        id: SessionMessage.ID.create(),
+        sessionID,
+        item: {
+          type: "move",
+          payload: {
+            location: Location.Ref.make({ directory: AbsolutePath.make("/moved") }),
+            projectID: Project.ID.global,
+          },
+          delivery: "queue",
+        },
+      })
+
+      expect(yield* runner.drain({ sessionID, force: false })).toEqual(SessionRunner.DrainResult.Moved({}))
+
+      expect(reads).toBe(0)
+      expect(requests).toHaveLength(0)
+      expect(yield* session.inbox(sessionID)).toEqual([])
+      expect((yield* session.get(sessionID)).location.directory).toBe(AbsolutePath.make("/moved"))
+      expect((yield* session.messages({ sessionID })).find((message) => message.id === compaction.id)).toMatchObject({
+        type: "compaction",
+        status: "failed",
+        error: { type: "compaction.unavailable", message: "Nothing to compact yet" },
+      })
+    }),
+  )
+
   it.effect("delivers a queued move atomically at the idle boundary", () =>
     Effect.gen(function* () {
       const session = yield* setup
@@ -1551,6 +1594,56 @@ describe("SessionRunnerLLM", () => {
       expect(requests).toHaveLength(3)
       expect(userTexts(requests[1])).not.toContain("Queued for later")
       expect(userTexts(requests[2])).toContain("Queued for later")
+    }),
+  )
+
+  it.effect("runs a queued control on Location entry before a carried continuation", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+      const runner = yield* SessionRunner.Service
+      yield* admit(session, "Echo before moving")
+      yield* TestLLM.push(
+        TestLLM.tool("call-entry", "echo", { text: "moving" }),
+        TestLLM.text("Entry summary", "entry-summary"),
+        TestLLM.text("Continued", "entry-continuation"),
+      )
+      const stream = yield* TestLLM.gate
+      const run = yield* runner.drain({ sessionID, force: false }).pipe(Effect.forkChild)
+      yield* stream.started
+      const compaction = yield* SessionInbox.admitCompaction(database.db, bus, {
+        id: SessionMessage.ID.create(),
+        sessionID,
+        delivery: "queue",
+      })
+      yield* SessionInbox.admit(database.db, bus, {
+        id: SessionMessage.ID.create(),
+        sessionID,
+        item: {
+          type: "move",
+          payload: {
+            location: Location.Ref.make({ directory: AbsolutePath.make("/project") }),
+            projectID: Project.ID.global,
+          },
+          delivery: "steer",
+        },
+      })
+      yield* stream.release
+      const moved = yield* Fiber.join(run)
+
+      expect(moved).toEqual(SessionRunner.DrainResult.Moved({ continuation: { step: 2 } }))
+      expect(requests).toHaveLength(1)
+      expect(yield* SessionInbox.find(database.db, compaction.id)).toMatchObject({ id: compaction.id })
+      if (moved._tag !== "Moved") throw new Error("Expected a Location handoff")
+
+      // Location entry considers queued controls even when model work carries across the move.
+      yield* runner.drain({ sessionID, force: false, continuation: moved.continuation })
+
+      expect(requests).toHaveLength(3)
+      expect(userTexts(requests[1])[0]).toContain("Create a new anchored summary")
+      expect(userTexts(requests[2])[0]).toContain("<summary>\nEntry summary\n</summary>")
+      expect(yield* session.inbox(sessionID)).toEqual([])
     }),
   )
 
@@ -2562,6 +2655,74 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("refreshes preparation after overflow compaction without promoting new input", () =>
+    Effect.gen(function* () {
+      const session = yield* setupOverflowRecovery
+      const bus = yield* Bus.Service
+      let reads = 0
+      let resolutions = 0
+      systemLoadHook = Effect.sync(() => {
+        reads++
+      })
+      modelResolveHook = Effect.sync(() => {
+        resolutions++
+      })
+      yield* admit(session, "Continue")
+      yield* TestLLM.push(
+        [LLMEvent.providerError({ message: "prompt too long", classification: "context-overflow" })],
+        TestLLM.text("Overflow summary", "overflow-summary"),
+        TestLLM.text("Recovered", "overflow-recovered"),
+        TestLLM.stop(),
+        TestLLM.stop(),
+      )
+      const first = yield* TestLLM.gate
+      const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      yield* first.started
+      expect(reads).toBe(1)
+      expect(resolutions).toBe(1)
+      expect(requests[0]?.model).toBe(recoveryModel)
+
+      const summary = yield* TestLLM.gate
+      yield* first.release
+      yield* summary.started
+      systemBaseline = "Changed during compaction"
+      yield* bus.publish(SessionEvent.ModelSelected, {
+        sessionID,
+        model: { id: ID.make("replacement"), providerID: Provider.ID.make("fake") },
+      })
+      const queued = yield* session.prompt({
+        sessionID,
+        text: "Queued during compaction",
+        delivery: "queue",
+        resume: false,
+      })
+      const steered = yield* admit(session, "Steered during compaction")
+      const retry = yield* TestLLM.gate
+      yield* summary.release
+      yield* retry.started
+
+      expect(reads).toBe(2)
+      expect(resolutions).toBe(2)
+      expect(requests).toHaveLength(3)
+      expect(requests[2]?.model).toBe(replacementModel)
+      expect(requests[2]?.system.map((part) => part.text)).toEqual([defaultSystem, "Initial context"])
+      expect(systemTexts(requests[2])).toContain("Changed during compaction")
+      expect(userTexts(requests[2])[0]).toContain("<summary>\nOverflow summary\n</summary>")
+      expect(userTexts(requests[2]).join("\n")).not.toContain("Queued during compaction")
+      expect(userTexts(requests[2]).join("\n")).not.toContain("Steered during compaction")
+      expect((yield* session.inbox(sessionID)).map((item) => item.id)).toEqual([queued.id, steered.id])
+
+      yield* retry.release
+      yield* Fiber.join(run)
+
+      expect(requests).toHaveLength(5)
+      expect(userTexts(requests[3])).toContain("Steered during compaction")
+      expect(userTexts(requests[3])).not.toContain("Queued during compaction")
+      expect(userTexts(requests[4])).toContain("Queued during compaction")
+      expect(yield* session.inbox(sessionID)).toEqual([])
+    }),
+  )
+
   it.effect("does not recover provider context overflow when automatic compaction is disabled", () =>
     Effect.gen(function* () {
       const session = yield* setupOverflowRecovery
@@ -3317,6 +3478,71 @@ describe("SessionRunnerLLM", () => {
       expect(userTexts(requests[0])).toEqual(["Start working"])
       expect(userTexts(requests[1])).toEqual(["Start working"])
       expect(userTexts(requests[2])).toEqual(["Start working", "Wait until continuation ends"])
+    }),
+  )
+
+  it.effect("keeps queued input parked when a steer is cancelled during preparation", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      const runner = yield* SessionRunner.Service
+      yield* admit(session, "A")
+      yield* TestLLM.push(TestLLM.stop(), TestLLM.stop(), TestLLM.stop())
+      const stream = yield* TestLLM.gate
+      const run = yield* runner.drain({ sessionID, force: false }).pipe(Effect.forkChild)
+      yield* stream.started
+
+      yield* session.prompt({ sessionID, text: "B", delivery: "queue", resume: false })
+      const steer = yield* admit(session, "S")
+      systemLoadHook = Effect.gen(function* () {
+        systemLoadHook = Effect.void
+        yield* session.cancelInbox({ sessionID, inboxID: steer.id }).pipe(Effect.orDie)
+      })
+      yield* stream.release
+      yield* Fiber.join(run)
+
+      expect(requests.map(userTexts)).toEqual([["A"], ["A"], ["A", "B"]])
+      expect((yield* session.messages({ sessionID })).some((message) => message.id === steer.id)).toBe(false)
+      expect(yield* session.inbox(sessionID)).toEqual([])
+    }),
+  )
+
+  it.effect("dispatches a queued move when a steer is cancelled during preparation", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      const runner = yield* SessionRunner.Service
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+      const location = Location.Ref.make({ directory: AbsolutePath.make("/moved") })
+      yield* admit(session, "A")
+      yield* TestLLM.push(TestLLM.stop(), TestLLM.stop())
+      const stream = yield* TestLLM.gate
+      const run = yield* runner.drain({ sessionID, force: false }).pipe(Effect.forkChild)
+      yield* stream.started
+
+      yield* SessionInbox.admit(database.db, bus, {
+        id: SessionMessage.ID.create(),
+        sessionID,
+        item: {
+          type: "move",
+          payload: { location, projectID: Project.ID.global },
+          delivery: "queue",
+        },
+      })
+      const steer = yield* admit(session, "S")
+      systemLoadHook = Effect.gen(function* () {
+        systemLoadHook = Effect.void
+        yield* session.cancelInbox({ sessionID, inboxID: steer.id }).pipe(Effect.orDie)
+      })
+      yield* stream.release
+
+      expect({ result: yield* Fiber.join(run), location: (yield* session.get(sessionID)).location }).toEqual({
+        result: SessionRunner.DrainResult.Moved({}),
+        location,
+      })
+      expect(requests.map(userTexts)).toEqual([["A"], ["A"]])
+      expect(closedTransports).toEqual([sessionID])
+      expect(yield* recordedEventTypes(sessionID)).toContain(Bus.versionedType(SessionEvent.Moved.type, 1))
+      expect(yield* session.inbox(sessionID)).toEqual([])
     }),
   )
 
