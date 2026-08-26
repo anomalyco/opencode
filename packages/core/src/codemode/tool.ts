@@ -152,7 +152,7 @@ function runtime(
 ) {
   const tools: Record<string, Tool.Tool<never>> = {}
   for (const [name, registration] of registrations) {
-    const child = definition(registration)
+    const child = definition(name, registration)
     const path = qualifiedName(registration)
     tools[path] = Tool.make({
       description: child.description,

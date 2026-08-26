@@ -15,7 +15,7 @@ test("tools are structural values", async () => {
   }
   const tool: Info = config
 
-  expect(definition(tool)).toEqual({
+  expect(definition(tool.name, tool)).toEqual({
     name: "foreign",
     description: "Foreign tool",
     inputSchema: {
@@ -44,7 +44,7 @@ test("Effect tool schemas use exact optional keys and flatten compatible constra
     execute: () => Effect.succeed({ content: "unused" }),
   }
 
-  expect(definition(tool).inputSchema).toEqual({
+  expect(definition(tool.name, tool).inputSchema).toEqual({
     type: "object",
     properties: {
       offset: { type: "integer", minimum: 0 },
@@ -64,7 +64,7 @@ test("Effect tool schemas inline named child schemas", () => {
     execute: () => Effect.succeed({ content: "unused" }),
   }
 
-  expect(definition(tool).inputSchema).toEqual({
+  expect(definition(tool.name, tool).inputSchema).toEqual({
     type: "object",
     properties: {
       child: {
@@ -90,8 +90,8 @@ test("Effect tool schemas resolve escaped definition names", () => {
     execute: () => Effect.succeed({ content: "unused" }),
   }
 
-  expect(JSON.stringify(definition(tool).inputSchema)).not.toContain("$ref")
-  expect(JSON.stringify(definition(tool).inputSchema)).not.toContain("$defs")
+  expect(JSON.stringify(definition(tool.name, tool).inputSchema)).not.toContain("$ref")
+  expect(JSON.stringify(definition(tool.name, tool).inputSchema)).not.toContain("$defs")
 })
 
 test("portable schemas validate and describe typed tools", async () => {
@@ -130,7 +130,7 @@ test("portable schemas validate and describe typed tools", async () => {
     execute: ({ count }) => Effect.succeed({ output: count + 1 }),
   }
 
-  expect(definition(tool)).toEqual({
+  expect(definition(tool.name, tool)).toEqual({
     name: "portable",
     description: "Portable tool",
     inputSchema: { type: "object", properties: { count: { type: "string" } } },
@@ -307,7 +307,7 @@ test("raw JSON schemas validate and decode tool input", async () => {
     execute: (input) => Effect.succeed({ content: JSON.stringify(input) }),
   }
 
-  expect(definition(tool)).toEqual({
+  expect(definition(tool.name, tool)).toEqual({
     name: "raw",
     description: "Raw tool",
     inputSchema: input,
@@ -394,7 +394,7 @@ test("missing external input schemas fall back to an empty schema", () => {
     execute: () => Effect.succeed({ content: "unused" }),
   } as unknown as Info
 
-  expect(definition(tool)).toEqual({
+  expect(definition(tool.name, tool)).toEqual({
     name: "external",
     description: "External tool",
     inputSchema: {},

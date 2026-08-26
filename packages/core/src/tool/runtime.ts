@@ -17,8 +17,8 @@ const jsonSchemas = Effect.runSync(
   }),
 )
 
-export const definition = (tool: Tool.Info<any, any>): ToolDefinition => ({
-  name: effectiveName(tool),
+export const definition = (name: string, tool: Tool.Info<any, any>): ToolDefinition => ({
+  name,
   description: tool.description,
   inputSchema: inputJsonSchema(tool.input),
   ...(tool.output === undefined ? {} : { outputSchema: outputJsonSchema(tool.output) }),
@@ -269,10 +269,3 @@ const stringify = (value: unknown) => {
     return String(value)
   }
 }
-
-const normalizedName = (tool: Tool.Info) => tool.name.replace(/[^a-zA-Z0-9_-]/g, "_")
-
-const effectiveName = (tool: Tool.Info) =>
-  tool.options?.namespace === undefined
-    ? normalizedName(tool)
-    : `${tool.options.namespace.replaceAll(".", "_")}_${normalizedName(tool)}`
