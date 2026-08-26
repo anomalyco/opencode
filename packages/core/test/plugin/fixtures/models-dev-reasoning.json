@@ -94,6 +94,37 @@
       }
     }
   },
+  "deepinfra": {
+    "id": "deepinfra",
+    "name": "DeepInfra",
+    "env": ["DEEPINFRA_API_KEY"],
+    "npm": "@ai-sdk/deepinfra",
+    "api": "https://api.deepinfra.com/v1",
+    "models": {
+      "deepinfra-toggle": {
+        "id": "deepinfra-toggle",
+        "name": "DeepInfra Toggle",
+        "release_date": "2026-01-01",
+        "attachment": false,
+        "reasoning": true,
+        "reasoning_options": [{ "type": "toggle" }],
+        "temperature": true,
+        "tool_call": true,
+        "limit": { "context": 128000, "output": 8192 }
+      },
+      "deepinfra-toggle-effort": {
+        "id": "deepinfra-toggle-effort",
+        "name": "DeepInfra Toggle Effort",
+        "release_date": "2026-01-01",
+        "attachment": false,
+        "reasoning": true,
+        "reasoning_options": [{ "type": "toggle" }, { "type": "effort", "values": ["low", "high"] }],
+        "temperature": true,
+        "tool_call": true,
+        "limit": { "context": 128000, "output": 8192 }
+      }
+    }
+  },
   "xai": {
     "id": "xai",
     "name": "xAI",

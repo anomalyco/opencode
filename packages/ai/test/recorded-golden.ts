@@ -21,6 +21,7 @@ type ScenarioInput =
       readonly cassette?: string
       readonly tags?: ReadonlyArray<string>
       readonly prompt?: string
+      readonly system?: string
       readonly maxTokens?: number
       readonly temperature?: number | false
       readonly timeout?: number
@@ -89,6 +90,7 @@ const runTarget = (target: TargetInput) => {
               id: `recorded_${kebab(target.name).replaceAll("-", "_")}_${input.id.replaceAll("-", "_")}`,
               model: target.model,
               prompt: input.prompt,
+              system: input.system,
               maxTokens: input.maxTokens,
               temperature: input.temperature,
             })

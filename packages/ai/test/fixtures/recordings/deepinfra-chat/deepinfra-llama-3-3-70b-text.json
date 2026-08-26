@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "metadata": {
+    "provider": "deepinfra",
+    "route": "deepinfra-chat",
+    "transport": "http",
+    "model": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+    "tags": ["prefix:deepinfra-chat", "provider:deepinfra", "text", "golden"],
+    "name": "deepinfra-chat/deepinfra-llama-3-3-70b-text",
+    "recordedAt": "2026-08-26T00:34:03.019Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.deepinfra.com/v1/openai/chat/completions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"meta-llama/Llama-3.3-70B-Instruct-Turbo\",\"messages\":[{\"role\":\"system\",\"content\":\"You are concise.\"},{\"role\":\"user\",\"content\":\"Reply exactly with: Hello!\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"max_tokens\":40,\"temperature\":0}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream; charset=utf-8"
+        },
+        "body": "data: {\"service_tier\":null,\"id\":\"chatcmpl-RbZ8MyY5pos2MShihSmoXoRe\",\"object\":\"chat.completion.chunk\",\"created\":1787704442,\"model\":\"meta-llama/Llama-3.3-70B-Instruct-Turbo\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\",\"reasoning_content\":null,\"tool_calls\":null},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null}\n\ndata: {\"service_tier\":\"default\",\"id\":\"chatcmpl-RbZ8MyY5pos2MShihSmoXoRe\",\"object\":\"chat.completion.chunk\",\"created\":1787704442,\"model\":\"meta-llama/Llama-3.3-70B-Instruct-Turbo\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"Hello\",\"reasoning_content\":null,\"tool_calls\":null},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null}\n\ndata: {\"service_tier\":\"default\",\"id\":\"chatcmpl-RbZ8MyY5pos2MShihSmoXoRe\",\"object\":\"chat.completion.chunk\",\"created\":1787704442,\"model\":\"meta-llama/Llama-3.3-70B-Instruct-Turbo\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"!\",\"reasoning_content\":null,\"tool_calls\":null},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null}\n\ndata: {\"service_tier\":\"default\",\"id\":\"chatcmpl-RbZ8MyY5pos2MShihSmoXoRe\",\"object\":\"chat.completion.chunk\",\"created\":1787704442,\"model\":\"meta-llama/Llama-3.3-70B-Instruct-Turbo\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\",\"reasoning_content\":null,\"tool_calls\":null},\"logprobs\":null,\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":25,\"total_tokens\":28,\"completion_tokens\":3,\"estimated_cost\":null,\"prompt_tokens_details\":null}}\n\ndata: {\"service_tier\":\"default\",\"id\":\"chatcmpl-RbZ8MyY5pos2MShihSmoXoRe\",\"object\":\"chat.completion.chunk\",\"created\":1787704442,\"model\":\"meta-llama/Llama-3.3-70B-Instruct-Turbo\",\"choices\":[],\"usage\":{\"prompt_tokens\":25,\"total_tokens\":28,\"completion_tokens\":3,\"estimated_cost\":3.46e-6,\"prompt_tokens_details\":null}}\n\ndata: [DONE]\n\n"
+      }
+    }
+  ]
+}

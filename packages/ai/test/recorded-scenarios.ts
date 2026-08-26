@@ -165,6 +165,7 @@ export interface GoldenScenarioContext {
   readonly id: string
   readonly model: LanguageModel
   readonly prompt?: string
+  readonly system?: string
   readonly maxTokens?: number
   readonly temperature?: number | false
 }
@@ -388,7 +389,8 @@ const runReasoningScenario = (context: GoldenScenarioContext) =>
       system: "Show concise reasoning when the provider supports visible reasoning summaries.",
       providerOptions: { reasoningEffort: "low", reasoningSummary: "auto" },
       maxTokens: context.maxTokens ?? 120,
-      assert: (response) => expect(response.usage?.reasoningTokens ?? 0).toBeGreaterThan(0),
+      assert: (response) =>
+        expect(response.reasoning.length > 0 || (response.usage?.reasoningTokens ?? 0) > 0).toBe(true),
     }),
   ])
 
@@ -406,16 +408,19 @@ const runReasoningContinuationScenario = (context: GoldenScenarioContext) =>
 
 const runToolLoopScenario = (context: GoldenScenarioContext) =>
   Effect.gen(function* () {
-    expectGoldenWeatherToolLoop(
-      yield* runWeatherToolLoop(
-        goldenWeatherToolLoopRequest({
-          id: context.id,
-          model: context.model,
-          maxTokens: context.maxTokens ?? 80,
-          temperature: context.temperature,
-        }),
-      ),
+    const input = {
+      id: context.id,
+      model: context.model,
+      maxTokens: context.maxTokens ?? 80,
+      temperature: context.temperature,
+    }
+    const events = yield* runWeatherToolLoop(
+      context.system
+        ? weatherToolLoopRequest({ ...input, system: context.system })
+        : goldenWeatherToolLoopRequest(input),
     )
+    if (context.system) return expectWeatherToolLoop(events)
+    expectGoldenWeatherToolLoop(events)
   })
 
 const goldenScenarios = {

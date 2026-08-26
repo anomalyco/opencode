@@ -61,12 +61,13 @@ describe("AISDKNative", () => {
     })
   })
 
-  test("maps Cerebras and Together AI settings, headers, and reasoning options to native providers", () => {
-    for (const name of ["cerebras", "togetherai"]) {
+  test("maps native chat provider settings, headers, and reasoning options", () => {
+    for (const name of ["cerebras", "deepinfra", "groq", "togetherai"]) {
+      const baseURL = `https://${name}.example/${name === "deepinfra" ? "provider-root" : "v1"}`
       expect(
         map(`@ai-sdk/${name}`, {
           apiKey: "secret",
-          baseURL: `https://${name}.example/v1`,
+          baseURL,
           headers: { "x-provider": name },
           name: "custom-provider",
           reasoningEffort: "high",
@@ -76,7 +77,7 @@ describe("AISDKNative", () => {
         package: `@opencode-ai/ai/providers/${name}`,
         settings: {
           apiKey: "secret",
-          baseURL: `https://${name}.example/v1`,
+          baseURL,
           providerOptions: { reasoningEffort: "high", customOption: { enabled: true } },
         },
         headers: { "x-provider": name },

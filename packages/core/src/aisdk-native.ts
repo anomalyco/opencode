@@ -54,9 +54,11 @@ export function map(input: MapInput): Mapping | undefined {
         },
       }
     case "@ai-sdk/cerebras":
+    case "@ai-sdk/deepinfra":
+    case "@ai-sdk/groq":
     case "@ai-sdk/togetherai":
       return {
-        package: `@opencode-ai/ai/providers/${input.packageName === "@ai-sdk/cerebras" ? "cerebras" : "togetherai"}`,
+        package: `@opencode-ai/ai/providers/${input.packageName.slice("@ai-sdk/".length)}`,
         settings: {
           ...baseSettings,
           ...mapAPIKey(input.settings),

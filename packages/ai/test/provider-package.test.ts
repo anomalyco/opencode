@@ -28,6 +28,8 @@ describe("provider package entrypoints", () => {
       import("@opencode-ai/ai/providers/amazon-bedrock/mantle/responses"),
       import("@opencode-ai/ai/providers/togetherai"),
       import("@opencode-ai/ai/providers/cerebras"),
+      import("@opencode-ai/ai/providers/groq"),
+      import("@opencode-ai/ai/providers/deepinfra"),
     ])
 
     for (const module of modules) expect(module.model).toBeFunction()
@@ -35,6 +37,34 @@ describe("provider package entrypoints", () => {
     expect(modules[8].model).toBe(modules[9].model)
     expect(modules[12].model).toBe(modules[13].model)
     expect(modules[19].model).toBe(modules[20].model)
+  })
+
+  test("maps Groq and DeepInfra package settings onto native executable models", async () => {
+    const Groq = await import("@opencode-ai/ai/providers/groq")
+    const DeepInfra = await import("@opencode-ai/ai/providers/deepinfra")
+    const settings = {
+      apiKey: "fixture",
+      baseURL: "https://provider.example.test/v1/",
+      headers: { "x-application": "opencode" },
+      body: { service_tier: "priority" },
+      providerOptions: { reasoningEffort: "high" as const },
+    }
+    const groq = Groq.model("openai/gpt-oss-120b", {
+      ...settings,
+      providerOptions: { ...settings.providerOptions, reasoningFormat: "parsed" },
+    })
+    const deepinfra = DeepInfra.model("google/gemma-3-27b-it", settings)
+
+    expect(groq.route.id).toBe("groq-chat")
+    expect(groq.route.endpoint.baseURL).toBe(settings.baseURL)
+    expect(groq.route.defaults.providerOptions).toEqual({ reasoningEffort: "high", reasoningFormat: "parsed" })
+    expect(deepinfra.route.id).toBe("deepinfra-chat")
+    expect(deepinfra.route.endpoint.baseURL).toBe("https://provider.example.test/v1/openai")
+    expect(deepinfra.route.defaults.providerOptions).toEqual(settings.providerOptions)
+    for (const selected of [groq, deepinfra]) {
+      expect(selected.route.defaults.headers).toEqual(settings.headers)
+      expect(selected.route.defaults.http?.body).toEqual(settings.body)
+    }
   })
 
   test("maps OpenRouter and xAI package settings onto executable models", async () => {

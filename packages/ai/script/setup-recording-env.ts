@@ -78,7 +78,7 @@ const PROVIDERS: ReadonlyArray<Provider> = [
     id: "groq",
     label: "Groq",
     tier: "canary",
-    note: "Fast OpenAI-compatible canary for text/tool streaming",
+    note: "Native Groq text/tool/tool-loop recorded tests",
     vars: [{ name: "GROQ_API_KEY" }],
     validate: (env) => validateBearer("https://api.groq.com/openai/v1/models", Redacted.make(env.GROQ_API_KEY)),
   },
@@ -208,8 +208,8 @@ const PROVIDERS: ReadonlyArray<Provider> = [
   {
     id: "deepinfra",
     label: "DeepInfra",
-    tier: "optional",
-    note: "OpenAI-compatible bridge",
+    tier: "compatible",
+    note: "Native DeepInfra text/tool/tool-loop and reasoning recorded tests",
     vars: [{ name: "DEEPINFRA_API_KEY" }],
     validate: (env) =>
       validateBearer("https://api.deepinfra.com/v1/openai/models", Redacted.make(env.DEEPINFRA_API_KEY)),
