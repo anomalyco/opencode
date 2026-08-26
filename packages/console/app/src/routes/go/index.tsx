@@ -23,7 +23,7 @@ const checkLoggedIn = query(async () => {
 }, "checkLoggedIn.get")
 
 const models = [
-  { name: "Grok 4.5", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },
+  { name: "Grok 4.6", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },
   { name: "GPT 5.6 Luna", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },
   { name: "GLM-5.3", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "GLM-5.2", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
@@ -70,8 +70,8 @@ function LimitsGraph(props: { href: string }) {
   const baseline = 100
   const graph = [
     { id: "kimi-k3", name: "Kimi K3", req: 110, d: "50ms" },
-    { id: "grok-4.5", name: "Grok 4.5", req: 120, d: "75ms" },
     { id: "qwen3.8-max", name: "Qwen3.8 Max", req: 160, d: "90ms" },
+    { id: "grok-4.6", name: "Grok 4.6", req: 169, d: "75ms" },
     { id: "glm-5.2", name: "GLM-5.2", req: 880, d: "100ms" },
     { id: "gpt-5.6-luna", name: "GPT 5.6 Luna", req: 2050, d: "290ms" },
     { id: "minimax-m3", name: "MiniMax M3", req: 3200, d: "210ms" },
@@ -81,7 +81,6 @@ function LimitsGraph(props: { href: string }) {
     { id: "mimo-v2.5", name: "MiMo-V2.5", req: 30100, d: "340ms" },
     { id: "hy3", name: "Hy3", req: 34400, baseReq: 4300, d: "320ms" },
     { id: "muse-spark-1.2-contributor", name: "Muse Spark 1.2 Contributor", req: 45300, edge: true, d: "360ms" },
-    { id: "ox-alpha-free", name: "Ox Alpha Free", req: Infinity, infinite: true, edge: true, d: "400ms" },
   ]
 
   const w = 1040
@@ -270,12 +269,6 @@ export default function Home() {
 
         <div data-component="content">
           <section data-component="hero">
-            <div data-component="desktop-app-banner">
-              <span data-slot="badge">{i18n.t("home.banner.badge")}</span>
-              <div data-slot="content">
-                <span data-slot="text">{i18n.t("go.banner.text")}</span>
-              </div>
-            </div>
             <div data-slot="hero-copy">
               <img data-slot="zen logo light" src={goLogoLight} alt="" />
               <img data-slot="zen logo dark" src={goLogoDark} alt="" />
@@ -511,7 +504,7 @@ export default function Home() {
                   </div>
                   <div data-slot="faq-retention-notes">
                     <p>
-                      <strong>Grok 4.5:</strong> {i18n.t("go.faq.a5.grokRetention")}{" "}
+                      <strong>Grok 4.6:</strong> {i18n.t("go.faq.a5.grokRetention")}{" "}
                       <a href="https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr">
                         {i18n.t("go.faq.a5.learnMore")}
                       </a>
