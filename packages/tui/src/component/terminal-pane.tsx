@@ -330,8 +330,8 @@ function sameSize(first: TerminalSize | undefined, second: TerminalSize | undefi
 }
 
 function terminalPalette(theme: ResolvedThemeTokens, mode: "dark" | "light", background: RGBA) {
-  const base = mode === "dark" ? 500 : 700
-  const bright = mode === "dark" ? 300 : 500
+  const base = mode === "dark" ? 200 : 800
+  const bright = mode === "dark" ? 100 : 900
   const colors = [
     background,
     theme.text.feedback.error.default,
