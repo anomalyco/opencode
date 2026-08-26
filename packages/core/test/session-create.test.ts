@@ -22,6 +22,7 @@ import { Provider } from "@opencode-ai/core/provider"
 import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
 import { SessionMessage } from "@opencode-ai/core/session/message"
+import { toLLMMessages } from "@opencode-ai/core/session/runner/to-llm-message"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionInbox } from "@opencode-ai/core/session/inbox"
@@ -30,6 +31,7 @@ import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { SessionTransfer } from "@opencode-ai/core/session/transfer"
+import { ToolOutput } from "@opencode-ai/core/tool-output"
 import { Workspace } from "@opencode-ai/core/workspace"
 import { testEffect } from "./lib/effect"
 import { globalProjectLayer } from "./lib/project"
@@ -903,6 +905,47 @@ describe("Session.create", () => {
         expect(shell).toMatchObject({ type: "shell", command: "false", status: "exited" })
         expect(shell?.exit).not.toBe(0)
         expect(shell?.time.completed).toBeDefined()
+      }),
+    ),
+  )
+
+  it.live("bounds large session shell output before model replay", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const session = yield* Session.Service
+        const created = yield* session.create({
+          location: Location.Ref.make({ directory: AbsolutePath.make(directory) }),
+        })
+        const bytes = ToolOutput.MAX_BYTES + 1024
+        const command =
+          process.platform === "win32"
+            ? `[Console]::Out.Write('x' * ${bytes})`
+            : `head -c ${bytes} /dev/zero | tr '\\0' 'x'`
+
+        yield* session.shell({ sessionID: created.id, command })
+
+        const messages = yield* session.messages({ sessionID: created.id, order: "asc" })
+        const shell = messages.find((message): message is SessionMessage.Shell => message.type === "shell")
+        expect(shell).toBeDefined()
+        if (!shell?.output) throw new Error("Expected shell output")
+
+        expect(Buffer.byteLength(shell.output.output, "utf8")).toBeLessThanOrEqual(ToolOutput.MAX_BYTES)
+        expect(shell.output.size).toBeGreaterThan(ToolOutput.MAX_BYTES)
+        expect(shell.output.cursor).toBeLessThan(shell.output.size)
+
+        const model = Model.Ref.make({
+          id: Model.ID.make("session-shell-limit"),
+          providerID: Provider.ID.make("test"),
+        })
+        const content = toLLMMessages([shell], model)[0]?.content[0]
+        if (!content || content.type !== "text") throw new Error("Expected shell text content")
+
+        const marker = "\n\nOutput:\n"
+        const outputStart = content.text.indexOf(marker)
+        expect(outputStart).toBeGreaterThanOrEqual(0)
+        expect(Buffer.byteLength(content.text.slice(outputStart + marker.length), "utf8")).toBeLessThanOrEqual(
+          ToolOutput.MAX_BYTES,
+        )
       }),
     ),
   )

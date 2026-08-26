@@ -55,6 +55,7 @@ import { fileURLToPath } from "url"
 import { SessionEnvironment } from "./session/environment.js"
 import { SessionHistory } from "./session/history.js"
 import { InstructionEntry } from "./session/instruction-entry.js"
+import { ToolOutput } from "./tool-output.js"
 
 // get project -> project.locations
 //
@@ -1121,7 +1122,7 @@ function positiveInt(value: string | null) {
 }
 
 // Mirrors the shell tool's in-memory preview safety limit.
-const SHELL_MAX_CAPTURE_BYTES = 1024 * 1024
+const SHELL_MAX_CAPTURE_BYTES = ToolOutput.MAX_BYTES
 
 export const node = makeGlobalNode({
   service: Service,
