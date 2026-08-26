@@ -93,143 +93,152 @@ export const layer = (options?: Options) =>
         return true
       })
 
+      const recoverShell = Effect.fnUntraced(function* (
+        background: Job.Background,
+        recovery: Extract<Job.Recovery, { kind: "shell" }>,
+      ) {
+        if (!(yield* store.get(recovery.sessionID))) {
+          yield* jobs.completeBackground(background.notificationID)
+          return
+        }
+
+        const state = background.status === "running" ? "cancelled" : background.status
+        const text =
+          background.status === "running"
+            ? "Command cancelled because the server restarted"
+            : state === "completed"
+              ? (background.output ?? "Command completed")
+              : state === "error"
+                ? (background.error ?? "Command failed")
+                : "Command cancelled"
+
+        yield* bus.publish(
+          SessionEvent.Synthetic,
+          {
+            sessionID: recovery.sessionID,
+            description: recovery.command,
+            text: `<shell id="${background.id}" state="${state}" command="${recovery.command}">\n${text}\n</shell>`,
+            metadata: {
+              source: "shell",
+              jobID: background.id,
+              shellID: recovery.shellID,
+              state,
+            },
+          },
+          { commit: () => jobs.completeBackground(background.notificationID) },
+        )
+      })
+
+      const recoverSubagent = Effect.fnUntraced(function* (
+        background: Job.Background,
+        recovery: Extract<Job.Recovery, { kind: "subagent" }>,
+        active: ReadonlySet<SessionSchema.ID>,
+      ) {
+        const child = yield* store.get(recovery.childSessionID)
+        if (!child || child.parentID !== recovery.parentSessionID || !(yield* store.get(recovery.parentSessionID))) {
+          yield* jobs.completeBackground(background.notificationID)
+          return
+        }
+
+        const notify = Effect.fnUntraced(function* (result: Pick<Job.Background, "status" | "output" | "error">) {
+          if (result.status === "running") return
+          const text =
+            result.status === "completed"
+              ? (result.output ?? "Subagent completed without a text response.")
+              : result.status === "error"
+                ? (result.error ?? "Subagent failed")
+                : "Subagent cancelled"
+          yield* SessionInbox.admit(database.db, bus, {
+            id: background.notificationID,
+            sessionID: recovery.parentSessionID,
+            item: SessionInbox.Item.make({
+              type: "synthetic",
+              delivery: "steer",
+              payload: {
+                description: recovery.description,
+                text: `<subagent sessionID="${recovery.childSessionID}" state="${result.status}" description="${recovery.description}">\n${text}\n</subagent>`,
+                metadata: {
+                  source: "subagent",
+                  childID: recovery.childSessionID,
+                  agent: recovery.agent,
+                  state: result.status,
+                },
+              },
+            }),
+          })
+          yield* jobs.completeBackground(background.notificationID)
+          yield* execution.wake(recovery.parentSessionID)
+        })
+
+        if (background.status !== "running") {
+          yield* notify(background)
+          return
+        }
+        if (active.has(recovery.childSessionID)) return
+        if (!(yield* prepareResume(recovery.childSessionID))) {
+          yield* notify({ status: "error", error: RESUME_EXHAUSTED.message })
+          return
+        }
+
+        yield* jobs.start({
+          id: background.id,
+          type: "subagent",
+          title: recovery.description,
+          notificationID: background.notificationID,
+          recovery,
+          run: execution.resume(recovery.childSessionID).pipe(
+            Effect.andThen(store.context(recovery.childSessionID)),
+            Effect.map((messages) => {
+              const assistant = messages.findLast(
+                (message) =>
+                  message.type === "assistant" && message.time.completed !== undefined && message.error === undefined,
+              )
+              if (assistant?.type !== "assistant") return "Subagent completed without a text response."
+              return (
+                assistant.content
+                  .filter((part) => part.type === "text")
+                  .map((part) => part.text)
+                  .join("") || "Subagent completed without a text response."
+              )
+            }),
+          ),
+        })
+        yield* jobs.background(background.id)
+        yield* jobs.wait({ id: background.id }).pipe(
+          Effect.flatMap((result) => (result.info ? notify(result.info) : Effect.void)),
+          Effect.ignore,
+          Effect.forkIn(scope),
+        )
+      })
+
       return Service.of({
         resumeSuspendedSessions: Effect.gen(function* () {
           const pending = yield* jobs.pendingBackground
           yield* store.releaseChildClaims(
             pending.flatMap((background) =>
-              background.recovery.kind === "subagent" ? [background.recovery.childSessionID] : [],
+              background.status === "running" && background.recovery.kind === "subagent"
+                ? [background.recovery.childSessionID]
+                : [],
             ),
           )
           const active = yield* execution.active
-          // Sessions already draining in this process keep their claim; resuming
-          // them would only inject a stray continuation into a live turn.
-          const orphaned = (yield* store.listSuspended()).filter((sessionID) => !active.has(sessionID))
           yield* Effect.forEach(
             pending,
             (background) =>
               Effect.gen(function* () {
                 if ((yield* jobs.get(background.id))?.status === "running") return
-                if (background.recovery.kind === "shell") {
-                  if (yield* store.get(background.recovery.sessionID)) {
-                    const state = background.status === "running" ? "cancelled" : background.status
-                    const text =
-                      background.status === "running"
-                        ? "Command cancelled because the server restarted"
-                        : state === "completed"
-                          ? (background.output ?? "Command completed")
-                          : state === "error"
-                            ? (background.error ?? "Command failed")
-                            : "Command cancelled"
-                    yield* bus.publish(
-                      SessionEvent.Synthetic,
-                      {
-                        sessionID: background.recovery.sessionID,
-                        description: background.recovery.command,
-                        text: `<shell id="${background.id}" state="${state}" command="${background.recovery.command}">\n${text}\n</shell>`,
-                        metadata: {
-                          source: "shell",
-                          jobID: background.id,
-                          shellID: background.recovery.shellID,
-                          state,
-                        },
-                      },
-                      { commit: () => jobs.completeBackground(background.notificationID) },
-                    )
-                    return
-                  }
-                  yield* jobs.completeBackground(background.notificationID)
-                  return
-                }
-
                 const recovery = background.recovery
-                const child = yield* store.get(recovery.childSessionID)
-                if (
-                  !(yield* store.get(recovery.parentSessionID)) ||
-                  !child ||
-                  child.parentID !== recovery.parentSessionID
-                ) {
-                  yield* jobs.completeBackground(background.notificationID)
-                  return
-                }
-
-                const notify = Effect.fnUntraced(function* (
-                  result: Pick<Job.Background, "status" | "output" | "error">,
-                ) {
-                  if (result.status === "running") return
-                  const text =
-                    result.status === "completed"
-                      ? (result.output ?? "Subagent completed without a text response.")
-                      : result.status === "error"
-                        ? (result.error ?? "Subagent failed")
-                        : "Subagent cancelled"
-                  yield* SessionInbox.admit(database.db, bus, {
-                    id: background.notificationID,
-                    sessionID: recovery.parentSessionID,
-                    item: SessionInbox.Item.make({
-                      type: "synthetic",
-                      delivery: "steer",
-                      payload: {
-                        description: recovery.description,
-                        text: `<subagent sessionID="${recovery.childSessionID}" state="${result.status}" description="${recovery.description}">\n${text}\n</subagent>`,
-                        metadata: {
-                          source: "subagent",
-                          childID: recovery.childSessionID,
-                          agent: recovery.agent,
-                          state: result.status,
-                        },
-                      },
-                    }),
-                  })
-                  yield* jobs.completeBackground(background.notificationID)
-                  yield* execution.wake(recovery.parentSessionID)
-                })
-
-                if (background.status !== "running") {
-                  yield* notify(background)
-                  return
-                }
-                if (active.has(recovery.childSessionID)) return
-                if (!(yield* prepareResume(recovery.childSessionID))) {
-                  yield* notify({ status: "error", error: RESUME_EXHAUSTED.message })
-                  return
-                }
-                yield* jobs.start({
-                  id: background.id,
-                  type: "subagent",
-                  title: recovery.description,
-                  notificationID: background.notificationID,
-                  recovery,
-                  run: execution.resume(recovery.childSessionID).pipe(
-                    Effect.andThen(store.context(recovery.childSessionID)),
-                    Effect.map((messages) => {
-                      const assistant = messages.findLast(
-                        (message) =>
-                          message.type === "assistant" &&
-                          message.time.completed !== undefined &&
-                          message.error === undefined,
-                      )
-                      if (assistant?.type !== "assistant") return "Subagent completed without a text response."
-                      return (
-                        assistant.content
-                          .filter((part) => part.type === "text")
-                          .map((part) => part.text)
-                          .join("") || "Subagent completed without a text response."
-                      )
-                    }),
-                  ),
-                })
-                yield* jobs.background(background.id)
-                yield* jobs.wait({ id: background.id }).pipe(
-                  Effect.flatMap((result) => (result.info ? notify(result.info) : Effect.void)),
-                  Effect.ignore,
-                  Effect.forkIn(scope),
-                )
+                yield* recovery.kind === "shell"
+                  ? recoverShell(background, recovery)
+                  : recoverSubagent(background, recovery, active)
               }),
             { discard: true },
           )
+
+          // Background completion can wake a parent, so inspect local ownership only after recovery.
+          const resumed = yield* execution.active
           yield* Effect.forEach(
-            orphaned,
+            (yield* store.listSuspended()).filter((sessionID) => !resumed.has(sessionID)),
             (sessionID) =>
               prepareResume(sessionID).pipe(
                 Effect.flatMap((resume) =>
