@@ -19,6 +19,8 @@ export function createEditProjectModel(props: { project: LocalProject; server: S
     color: props.project.icon?.color,
     iconOverride: props.project.icon?.override,
     startup: props.project.commands?.start ?? "",
+    worktree: props.project.worktree,
+    confirmDelete: false,
     dragOver: false,
     iconHover: false,
   })
@@ -79,6 +81,7 @@ export function createEditProjectModel(props: { project: LocalProject; server: S
             name,
             icon: { color: store.color || "", override: store.iconOverride || "" },
             commands: { start },
+            worktree: store.worktree.trim() !== props.project.worktree ? store.worktree.trim() : undefined,
           })
           .then((result) => result.data)
         if (!project) return
@@ -105,6 +108,19 @@ export function createEditProjectModel(props: { project: LocalProject; server: S
     },
   }))
 
+  const removeProject = useMutation(() => ({
+    mutationFn: async () => {
+      if (!props.project.id || props.project.id === "global") return
+      await serverCtx().sdk.client.project.remove({
+        projectID: props.project.id,
+        mode: "cascade",
+        directory: props.project.worktree,
+      })
+      serverCtx().sync.set("project", (items) => items.filter((item) => item.id !== props.project.id))
+      dialog.close()
+    },
+  }))
+
   function submit(event: SubmitEvent) {
     event.preventDefault()
     if (save.isPending) return
@@ -123,6 +139,7 @@ export function createEditProjectModel(props: { project: LocalProject; server: S
     dragLeave,
     inputChange,
     iconClick,
+    removeProject,
     close() {
       dialog.close()
     },
