@@ -12,6 +12,7 @@ import { useLocal, type ModelSelection } from "@/context/local"
 import { usePermission } from "@/context/permission"
 import { type ContextItem, type ImageAttachmentPart, type Prompt, type usePrompt } from "@/context/prompt"
 import { useSDK, type DirectorySDK } from "@/context/sdk"
+import { useSettings } from "@/context/settings"
 import { useSync, type DirectorySync } from "@/context/sync"
 import { Identifier } from "@/utils/id"
 import { Worktree as WorktreeState } from "@/utils/worktree"
@@ -241,6 +242,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
   const prompt = input.prompt
   const layout = useLayout()
   const language = useLanguage()
+  const settings = useSettings()
   const params = useParams()
   const [search] = useSearchParams<{ draftId?: string }>()
   const tabs = useTabs()
@@ -512,6 +514,23 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     if (text.startsWith("/")) {
       const [cmdName, ...args] = text.split(" ")
       const commandName = cmdName.slice(1)
+      // /thinking — client-side toggle (NOT a server command). Cycles the
+      // showReasoningSummaries setting so the model's reasoning parts render as
+      // a styled "reasoning-part" block in the timeline. Optional "on"/"off"
+      // arg forces a state. Persists across sessions via the settings store.
+      if (commandName === "thinking") {
+        clearInput()
+        const arg = args[0]?.toLowerCase()
+        const next = arg === "on" ? true : arg === "off" ? false : !settings.general.showReasoningSummaries()
+        settings.general.setShowReasoningSummaries(next)
+        showToast({
+          title: language.t(next ? "prompt.toast.thinkingOn.title" : "prompt.toast.thinkingOff.title"),
+          description: language.t(
+            next ? "prompt.toast.thinkingOn.description" : "prompt.toast.thinkingOff.description",
+          ),
+        })
+        return
+      }
       const customCommand = sync().data.command.find((c) => c.name === commandName)
       if (customCommand) {
         clearInput()
