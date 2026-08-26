@@ -100,7 +100,44 @@ smoke(
           expect(Buffer.from(snapshot.data.checkpoint, "base64").byteLength).toBeGreaterThan(0)
           expect(snapshot.data.info.output.tail).toBeGreaterThan(0)
 
+          const ticket = yield* request(
+            base,
+            "POST",
+            `/api/experimental/persistent-pty/${first.id}/connect-token`,
+            undefined,
+            {
+              "x-opencode-ticket": "1",
+            },
+          )
+          if (!isRecord(ticket.data) || typeof ticket.data.ticket !== "string")
+            throw new Error("Invalid connect ticket")
+          const connectTicket = ticket.data.ticket
           yield* request(base, "DELETE", `/api/experimental/persistent-pty/${first.id}`)
+          yield* Effect.promise(async () => {
+            const url = new URL(`/api/experimental/persistent-pty/${first.id}/connect`, base)
+            url.searchParams.set("ticket", "invalid")
+            expect((await fetch(url)).status).toBe(403)
+            url.protocol = "ws:"
+            url.searchParams.set("ticket", connectTicket)
+            const socket = new WebSocket(url)
+            try {
+              const closed = await new Promise<CloseEvent>((resolve, reject) => {
+                const timeout = setTimeout(() => reject(new Error("Removed terminal socket did not close")), 5_000)
+                socket.addEventListener("close", (event) => {
+                  clearTimeout(timeout)
+                  resolve(event)
+                })
+                socket.addEventListener("error", () => {
+                  clearTimeout(timeout)
+                  reject(new Error("Valid ticket should upgrade before the missing terminal is reported"))
+                })
+              })
+              expect(closed.code).toBe(4404)
+              expect(closed.reason).toBe("terminal unavailable")
+            } finally {
+              socket.close()
+            }
+          })
           expect(yield* Effect.promise(() => events.next("persistent-pty.removed"))).toMatchObject({
             data: { sessionID, ptyID: first.id },
           })
