@@ -206,14 +206,12 @@ describe("Session.updateMessage", () => {
 
       expect(
         yield* Effect.flip(session.updateMessage({ sessionID: created.id, messageID: syntheticID, content: [] })),
-      ).toEqual(
-        new Session.MessageUpdateError({ sessionID: created.id, messageID: syntheticID, reason: "not_assistant" }),
-      )
+      ).toEqual(new Session.MessageNotAssistantError({ sessionID: created.id, messageID: syntheticID }))
 
       const messageID = SessionMessage.ID.create()
       yield* start(bus, created.id, messageID)
       expect(yield* Effect.flip(session.updateMessage({ sessionID: created.id, messageID, content: [] }))).toEqual(
-        new Session.MessageUpdateError({ sessionID: created.id, messageID, reason: "incomplete" }),
+        new Session.MessageIncompleteError({ sessionID: created.id, messageID }),
       )
 
       yield* complete(bus, created.id, messageID)
@@ -226,7 +224,7 @@ describe("Session.updateMessage", () => {
       })
       expect(
         yield* Effect.flip(session.updateMessage({ sessionID: created.id, messageID, content: [unfinished] })),
-      ).toEqual(new Session.MessageUpdateError({ sessionID: created.id, messageID, reason: "unfinished_tool" }))
+      ).toEqual(new Session.MessageToolIncompleteError({ sessionID: created.id, messageID }))
     }),
   )
 

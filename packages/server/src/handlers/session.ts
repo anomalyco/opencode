@@ -644,18 +644,17 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                 }),
             ),
             Effect.catchTag("Session.BusyError", busySession),
-            Effect.catchTag("Session.MessageUpdateError", (error) =>
-              Effect.fail(
-                error.reason === "incomplete"
-                  ? new ConflictError({ message: "Assistant message is incomplete", resource: error.messageID })
-                  : new InvalidRequestError({
-                      message:
-                        error.reason === "not_assistant"
-                          ? "Only assistant messages can be updated"
-                          : "Tool content must be completed",
-                      field: error.reason === "not_assistant" ? "messageID" : "content",
-                    }),
-              ),
+            Effect.catchTag(
+              "Session.MessageNotAssistantError",
+              () => new InvalidRequestError({ message: "Only assistant messages can be updated", field: "messageID" }),
+            ),
+            Effect.catchTag(
+              "Session.MessageIncompleteError",
+              (error) => new ConflictError({ message: "Assistant message is incomplete", resource: error.messageID }),
+            ),
+            Effect.catchTag(
+              "Session.MessageToolIncompleteError",
+              () => new InvalidRequestError({ message: "Tool content must be completed", field: "content" }),
             ),
           )
           return { data: message }

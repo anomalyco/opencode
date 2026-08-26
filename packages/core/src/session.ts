@@ -139,11 +139,27 @@ export class CompactionConflictError extends Schema.TaggedError<CompactionConfli
 export class BusyError extends Schema.TaggedError<BusyError>()("Session.BusyError", {
   sessionID: SessionSchema.ID,
 }) {}
-export class MessageUpdateError extends Schema.TaggedError<MessageUpdateError>()("Session.MessageUpdateError", {
-  sessionID: SessionSchema.ID,
-  messageID: SessionMessage.ID,
-  reason: Schema.Literals(["not_assistant", "incomplete", "unfinished_tool"]),
-}) {}
+export class MessageNotAssistantError extends Schema.TaggedError<MessageNotAssistantError>()(
+  "Session.MessageNotAssistantError",
+  {
+    sessionID: SessionSchema.ID,
+    messageID: SessionMessage.ID,
+  },
+) {}
+export class MessageIncompleteError extends Schema.TaggedError<MessageIncompleteError>()(
+  "Session.MessageIncompleteError",
+  {
+    sessionID: SessionSchema.ID,
+    messageID: SessionMessage.ID,
+  },
+) {}
+export class MessageToolIncompleteError extends Schema.TaggedError<MessageToolIncompleteError>()(
+  "Session.MessageToolIncompleteError",
+  {
+    sessionID: SessionSchema.ID,
+    messageID: SessionMessage.ID,
+  },
+) {}
 export class InboxConflictError extends Schema.TaggedError<InboxConflictError>()("Session.InboxConflictError", {
   sessionID: SessionSchema.ID,
   inboxID: SessionMessage.ID,
@@ -202,7 +218,15 @@ export interface Interface {
     readonly sessionID: SessionSchema.ID
     readonly messageID: SessionMessage.ID
     readonly content: readonly SessionMessage.AssistantContent[]
-  }) => Effect.Effect<SessionMessage.Assistant, NotFoundError | MessageNotFoundError | BusyError | MessageUpdateError>
+  }) => Effect.Effect<
+    SessionMessage.Assistant,
+    | NotFoundError
+    | MessageNotFoundError
+    | BusyError
+    | MessageNotAssistantError
+    | MessageIncompleteError
+    | MessageToolIncompleteError
+  >
   readonly context: (
     sessionID: SessionSchema.ID,
   ) => Effect.Effect<SessionMessage.Info[], NotFoundError | MessageDecodeError>
@@ -576,28 +600,16 @@ const layer = Layer.effect(
         const message = yield* result.message(input)
         if (!message) return yield* new MessageNotFoundError({ sessionID: input.sessionID, messageID: input.messageID })
         if (message.type !== "assistant")
-          return yield* new MessageUpdateError({
-            sessionID: input.sessionID,
-            messageID: input.messageID,
-            reason: "not_assistant",
-          })
+          return yield* new MessageNotAssistantError({ sessionID: input.sessionID, messageID: input.messageID })
         if (!message.time.completed)
-          return yield* new MessageUpdateError({
-            sessionID: input.sessionID,
-            messageID: input.messageID,
-            reason: "incomplete",
-          })
+          return yield* new MessageIncompleteError({ sessionID: input.sessionID, messageID: input.messageID })
         if (
           input.content.some(
             (content) =>
               content.type === "tool" && (content.state.status === "streaming" || content.state.status === "running"),
           )
         )
-          return yield* new MessageUpdateError({
-            sessionID: input.sessionID,
-            messageID: input.messageID,
-            reason: "unfinished_tool",
-          })
+          return yield* new MessageToolIncompleteError({ sessionID: input.sessionID, messageID: input.messageID })
         yield* bus.publish(SessionEvent.MessageContentUpdated, {
           sessionID: input.sessionID,
           messageID: input.messageID,
