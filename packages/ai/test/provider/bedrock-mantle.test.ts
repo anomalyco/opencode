@@ -3,6 +3,7 @@ import { Effect } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
 import { LLM, Message } from "../../src/index.js"
 import { AmazonBedrockMantle } from "../../src/providers.js"
+import { model } from "../../src/providers/amazon-bedrock/mantle.js"
 import { OpenAIResponses } from "../../src/protocols/openai-responses.js"
 import { compileRequest, LLMClient } from "../../src/route/client.js"
 import { it } from "../lib/effect.js"
@@ -17,13 +18,16 @@ const credentials = {
 }
 
 describe("Amazon Bedrock Mantle provider", () => {
-  it.effect("uses Chat by default and exposes Responses", () =>
+  it.effect("uses Responses by default and exposes Chat explicitly", () =>
     Effect.gen(function* () {
       const provider = AmazonBedrockMantle.configure({ credentials })
-      expect(provider.responses("openai.gpt-oss-120b").route.transport).toBe(OpenAIResponses.httpTransport)
-      const chat = yield* compileRequest(LLM.request({ model: provider.model("openai.gpt-oss-120b"), prompt: "Hi" }))
+      expect(provider.model).toBe(provider.responses)
+      expect(AmazonBedrockMantle.model).toBe(AmazonBedrockMantle.responsesModel)
+      expect(model).toBe(AmazonBedrockMantle.responsesModel)
+      expect(provider.model("openai.gpt-oss-120b").route.transport).toBe(OpenAIResponses.httpTransport)
+      const chat = yield* compileRequest(LLM.request({ model: provider.chat("openai.gpt-oss-120b"), prompt: "Hi" }))
       const responses = yield* compileRequest(
-        LLM.request({ model: provider.responses("openai.gpt-oss-120b"), prompt: "Hi" }),
+        LLM.request({ model: provider.model("openai.gpt-oss-120b"), prompt: "Hi" }),
       )
 
       expect(chat).toMatchObject({
@@ -37,7 +41,7 @@ describe("Amazon Bedrock Mantle provider", () => {
         body: { model: "openai.gpt-oss-120b", store: false },
       })
       expect(provider.model("openai.gpt-oss-120b").route.providerMetadataKey).toBe("mantle")
-      expect(provider.responses("openai.gpt-oss-120b").route.providerMetadataKey).toBe("mantle")
+      expect(provider.chat("openai.gpt-oss-120b").route.providerMetadataKey).toBe("mantle")
     }),
   )
 

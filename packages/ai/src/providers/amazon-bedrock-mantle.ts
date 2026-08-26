@@ -78,7 +78,7 @@ export const configure = (input: Config = {}) => {
 
   return {
     id,
-    model: chat,
+    model: responses,
     chat,
     responses,
     configure,
@@ -112,4 +112,4 @@ export const responsesModel: ProviderPackage.Definition<Settings, OpenAIProvider
   modelID,
   settings,
 ) => configure(config(settings)).responses(modelID)
-export const model = chatModel
+export const model = responsesModel
