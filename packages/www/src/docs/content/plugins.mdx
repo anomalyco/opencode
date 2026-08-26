@@ -57,7 +57,7 @@ explicitly or move it under `.opencode/`.
 
 ```jsonc title="opencode.jsonc"
 {
-  "plugins": ["./plugins/local.ts"],
+  "plugins": ["./plugins/local.ts"]
 }
 ```
 
@@ -66,7 +66,7 @@ use `.*` to match an ID prefix. A later ID re-enables a plugin.
 
 ```jsonc title="opencode.jsonc"
 {
-  "plugins": ["*", "-opencode.provider.*", "opencode.provider.openai", "-acme.reviewer"],
+  "plugins": ["*", "-opencode.provider.*", "opencode.provider.openai", "-acme.reviewer"]
 }
 ```
 
