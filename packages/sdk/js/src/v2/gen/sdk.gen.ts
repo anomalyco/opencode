@@ -1436,7 +1436,7 @@ export class Global extends HeyApiClient {
   /**
    * Upgrade opencode
    *
-   * Upgrade opencode to the specified version or latest if not specified.
+   * Upgrade opencode to the specified version.
    */
   public upgrade<ThrowOnError extends boolean = false>(
     parameters?: {
