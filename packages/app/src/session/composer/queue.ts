@@ -39,8 +39,38 @@ export function createSessionQueue(input: {
   const [state, setState] = createStore<{ editing?: { id: string; stash: EditStash } }>({})
   const notify = () => showToast({ title: language.t("common.requestFailed") })
   const mutation = useMutation(() => ({
-    mutationFn: (input: { run: () => Promise<unknown>; replacement?: { original: string; replacement: string } }) =>
-      input.run(),
+    mutationFn: async (change: {
+      inboxIDs: string[]
+      replacement?: {
+        original: string
+        replacement: string
+        item: QueuedPrompt | undefined
+        prompt: Prompt
+        text: string
+        delivery: ComposerDelivery
+      }
+    }) => {
+      const replacement = change.replacement
+      if (!replacement) return rewrite(change.inboxIDs)
+      const request = await editedPromptInput(
+        input.sessionID,
+        location().directory,
+        replacement.item,
+        replacement.prompt,
+        replacement.text,
+      )
+      // Admit before cancelling so a failed replacement never discards the original.
+      const admitted = await data.session.prompt({
+        ...request,
+        id: replacement.replacement,
+        delivery: replacement.delivery,
+        ...(replacement.delivery === "queue" ? { resume: false } : {}),
+      })
+      await server.api.session.inbox.cancel({ sessionID: input.sessionID, inboxID: replacement.original })
+      cancelEdit()
+      if (replacement.delivery === "queue")
+        await rewrite(change.inboxIDs.map((id) => (id === replacement.original ? admitted.id : id)))
+    },
     onError: notify,
     onSettled: () => data.session.pending.sync(input.sessionID).catch(() => undefined),
   }))
@@ -50,9 +80,10 @@ export function createSessionQueue(input: {
       .list(input.sessionID)
       .filter((item): item is QueuedPrompt => item.type === "user" && item.delivery === "queue"),
   )
-  const rows = createMemo(() =>
-    queuedPromptRows(queued(), mutation.isPending ? mutation.variables?.replacement : undefined),
-  )
+  const rows = createMemo(() => {
+    const replacement = mutation.isPending ? mutation.variables?.replacement : undefined
+    return queuedPromptRows(queued(), replacement?.delivery === "queue" ? replacement : undefined)
+  })
 
   createEffect(() => {
     const editing = state.editing
@@ -103,7 +134,7 @@ export function createSessionQueue(input: {
   }
   const reorder = (inboxIDs: string[]) => {
     if (mutation.isPending) return Promise.resolve()
-    return mutation.mutateAsync({ run: () => rewrite(inboxIDs) }).catch(() => undefined)
+    return mutation.mutateAsync({ inboxIDs }).catch(() => undefined)
   }
 
   const edit = (id: string) => {
@@ -148,22 +179,15 @@ export function createSessionQueue(input: {
     const item = queued().find((entry) => entry.id === editing.id)
     const pristine = item && text.trim() === queuedPromptText(item) && !prompt.some((part) => part.type === "image")
     if (pristine && delivery === "queue") return cancelEdit()
-    const inboxIDs = queued().map((entry) => entry.id)
-    const id = SessionMessage.ID.create()
     mutation.mutate({
-      replacement: delivery === "queue" ? { original: editing.id, replacement: id } : undefined,
-      run: async () => {
-        const replacement = await editedPromptInput(input.sessionID, location().directory, item, prompt, text)
-        // Admit before cancelling so a failed replacement never discards the original.
-        const admitted = await data.session.prompt({
-          ...replacement,
-          id,
-          delivery,
-          ...(delivery === "queue" ? { resume: false } : {}),
-        })
-        await server.api.session.inbox.cancel({ sessionID: input.sessionID, inboxID: editing.id })
-        cancelEdit()
-        if (delivery === "queue") await rewrite(inboxIDs.map((id) => (id === editing.id ? admitted.id : id)))
+      inboxIDs: queued().map((entry) => entry.id),
+      replacement: {
+        original: editing.id,
+        replacement: SessionMessage.ID.create(),
+        item,
+        prompt,
+        text,
+        delivery,
       },
     })
   }
