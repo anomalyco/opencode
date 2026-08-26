@@ -52,7 +52,23 @@ jobs:
             exit 0
           fi
           bun x turbo@2.10.2 ls --affected --filter=@opencode-ai/app --filter=@opencode-ai/sdk --output=json > affected.json
-          bun -e 'const result = await Bun.file("affected.json").json(); const names = new Set(result.packages.items.map((item) => item.name)); console.log(`app=${names.has("@opencode-ai/app")}\nsdk=${names.has("@opencode-ai/sdk")}`)' >> "$GITHUB_OUTPUT"
+          git diff --name-only "$TURBO_SCM_BASE" "$TURBO_SCM_HEAD" > changed.txt
+          bun - <<'EOF' >> "$GITHUB_OUTPUT"
+          const result = await Bun.file("affected.json").json()
+          const names = new Set(result.packages.items.map((item) => item.name))
+          const changed = (await Bun.file("changed.txt").text()).split("\n")
+          const infrastructure = ["package.json", "bun.lock", "bunfig.toml", "turbo.json", ".npmrc"]
+          const sdk =
+            names.has("@opencode-ai/sdk") ||
+            changed.some(
+              (file) =>
+                infrastructure.includes(file) ||
+                file.startsWith("patches/") ||
+                file.startsWith(".github/actions/setup-bun/") ||
+                file === ".github/workflows/test.yml",
+            )
+          console.log(`app=${names.has("@opencode-ai/app")}\nsdk=${sdk}`)
+          EOF
 
   unit:
     name: unit (${{ matrix.settings.name }})
