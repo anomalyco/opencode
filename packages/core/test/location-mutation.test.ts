@@ -3,10 +3,13 @@ import path from "path"
 import { describe, expect, test } from "bun:test"
 import { Effect, Layer, Schema } from "effect"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { Environment } from "@opencode-ai/core/environment/index"
 import { Location } from "@opencode-ai/core/location"
 import { LocationMutation } from "@opencode-ai/core/location-mutation"
 import { AbsolutePath } from "@opencode-ai/core/schema"
+import { Workspace } from "@opencode-ai/core/workspace"
 import { tmpdir } from "./fixture/tmpdir"
+import { hostEnvironmentLayer } from "./fixture/environment"
 import { location } from "./fixture/location"
 import { it } from "./lib/effect"
 
@@ -16,6 +19,30 @@ function provide(directory: string) {
       [
         Location.node,
         Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
+      ],
+      [Environment.node, hostEnvironmentLayer],
+    ]),
+  )
+}
+
+function provideMemory(directory: string, memory: Environment.MemoryDriver) {
+  return Effect.provide(
+    LayerNode.compile(LocationMutation.node, [
+      [
+        Location.node,
+        Layer.succeed(
+          Location.Service,
+          Location.Service.of(
+            location({ directory: AbsolutePath.make(directory), workspaceID: Workspace.ID.make("wrk_test") }),
+          ),
+        ),
+      ],
+      [
+        Environment.node,
+        Layer.succeed(
+          Environment.Service,
+          Environment.Service.of({ files: Environment.makeFiles(memory), spawner: memory.spawner }),
+        ),
       ],
     ]),
   )
@@ -188,6 +215,48 @@ describe("LocationMutation", () => {
         }).pipe(provide(directory)),
       ),
     ),
+  )
+
+  it.live("classifies an external target against the location environment, not the server host", () =>
+    Effect.gen(function* () {
+      if (process.platform === "win32") return
+      const memory = Environment.makeMemoryDriver()
+      const files = Environment.makeFiles(memory)
+      yield* files.mkdir("/workspace/project")
+      yield* files.mkdir("/remote/data")
+      yield* memory.symlink("/remote/data", "/remote/link")
+      yield* Effect.gen(function* () {
+        const mutation = yield* LocationMutation.Service
+        // The directory exists only in the location environment; the server host has no /remote.
+        expect((yield* mutation.resolve({ path: "/remote/data" })).externalDirectory).toMatchObject({
+          directory: "/remote/data",
+          resource: "/remote/data/*",
+        })
+        // A final symlink is followed when classifying the boundary.
+        expect((yield* mutation.resolve({ path: "/remote/link" })).externalDirectory).toMatchObject({
+          directory: "/remote/link",
+          resource: "/remote/link/*",
+        })
+      }).pipe(provideMemory("/workspace/project", memory))
+    }),
+  )
+
+  it.live("derives the external save boundary from the location environment project root", () =>
+    Effect.gen(function* () {
+      if (process.platform === "win32") return
+      const memory = Environment.makeMemoryDriver()
+      const files = Environment.makeFiles(memory)
+      yield* files.mkdir("/workspace/project")
+      yield* files.mkdir("/remote/repo/.git")
+      yield* Effect.gen(function* () {
+        const target = yield* (yield* LocationMutation.Service).resolve({ path: "/remote/repo/nested/file.txt" })
+        expect(target.externalDirectory).toMatchObject({
+          directory: "/remote/repo/nested",
+          resource: "/remote/repo/nested/*",
+          save: "/remote/repo/*",
+        })
+      }).pipe(provideMemory("/workspace/project", memory))
+    }),
   )
 
   test("ignores unknown mutation input fields", () => {

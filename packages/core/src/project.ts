@@ -7,6 +7,7 @@ import path from "path"
 import { AbsolutePath } from "./schema.js"
 import { Bus } from "./bus.js"
 import { Database } from "./database/database.js"
+import type { Files } from "./environment/index.js"
 import { Worktree } from "@opencode-ai/schema/worktree"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Git } from "./git.js"
@@ -45,12 +46,25 @@ export interface Resolved {
 }
 
 // Keep this filesystem-only; permission checks use it and should not execute VCS commands.
-export const root = Effect.fn("Project.root")(function* (fs: FSUtil.Interface, input: AbsolutePath) {
-  return yield* fs.up({ targets: [".git", ".hg"], start: input, mode: "first" }).pipe(
-    Effect.map((matches) => (matches[0] ? AbsolutePath.make(path.dirname(matches[0])) : undefined)),
-    Effect.orElseSucceed(() => undefined),
-  )
-})
+// Probes go through the caller's Environment files so workspace-backed Locations walk the
+// Location filesystem rather than the server host. Any probe failure yields no root.
+export const root = Effect.fn("Project.root")((files: Files, input: AbsolutePath) =>
+  Effect.gen(function* () {
+    let current: string = input
+    while (true) {
+      for (const target of [".git", ".hg"]) {
+        const found = yield* files.stat(path.join(current, target)).pipe(
+          Effect.as(true),
+          Effect.catchTag("Environment.NotFound", () => Effect.succeed(false)),
+        )
+        if (found) return AbsolutePath.make(current)
+      }
+      const parent = path.dirname(current)
+      if (parent === current) return undefined
+      current = parent
+    }
+  }).pipe(Effect.orElseSucceed(() => undefined)),
+)
 
 export interface Interface {
   readonly list: () => Effect.Effect<ReadonlyArray<Info>>

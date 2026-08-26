@@ -4,6 +4,7 @@ import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import path from "path"
 import { Context, Effect, Layer, Schema } from "effect"
 import { FSUtil } from "@opencode-ai/util/fs-util"
+import { Environment } from "./environment/index.js"
 import { Location } from "./location.js"
 import { Project } from "./project.js"
 import { AbsolutePath } from "./schema.js"
@@ -52,7 +53,7 @@ export interface Interface {
    * from the Location. Paths outside it require separate `external_directory`
    * approval. This does not approve the mutation.
    */
-  readonly resolve: (input: ResolveInput) => Effect.Effect<Target, FSUtil.Error>
+  readonly resolve: (input: ResolveInput) => Effect.Effect<Target, Environment.Failed>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/LocationMutation") {}
@@ -62,7 +63,7 @@ const slash = (value: string) => value.replaceAll("\\", "/")
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const fs = yield* FSUtil.Service
+    const environment = yield* Environment.Service
     const location = yield* Location.Service
 
     const resolve = Effect.fnUntraced(function* (input: ResolveInput) {
@@ -73,14 +74,14 @@ const layer = Layer.effect(
           resource: slash(path.relative(location.directory, absolute) || "."),
         } satisfies Target
       }
+      // Probe through the Location environment so workspace-backed Locations classify
+      // the target against the sandbox filesystem rather than the server host.
       const type =
-        input.kind === "directory"
-          ? "Directory"
-          : input.kind === "file"
-            ? "File"
-            : (yield* fs.stat(absolute).pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined)))
-                ?.type
-      const externalDirectory = type === "Directory" ? absolute : path.dirname(absolute)
+        input.kind ??
+        (yield* Environment.typeFollowing(environment.files, absolute).pipe(
+          Effect.catchTag("Environment.NotFound", () => Effect.undefined),
+        ))
+      const externalDirectory = type === "directory" ? absolute : path.dirname(absolute)
       const externalResource = slash(path.join(externalDirectory, "*"))
       return {
         absolute,
@@ -90,7 +91,10 @@ const layer = Layer.effect(
           directory: externalDirectory,
           resource: externalResource,
           save: slash(
-            path.join((yield* Project.root(fs, AbsolutePath.make(externalDirectory))) ?? externalDirectory, "*"),
+            path.join(
+              (yield* Project.root(environment.files, AbsolutePath.make(externalDirectory))) ?? externalDirectory,
+              "*",
+            ),
           ),
         },
       } satisfies Target
@@ -103,5 +107,5 @@ const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer: layer.pipe(Layer.orDie),
-  deps: [FSUtil.node, Location.node],
+  deps: [Environment.node, Location.node],
 })
