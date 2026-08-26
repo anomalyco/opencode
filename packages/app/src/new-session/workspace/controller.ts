@@ -12,6 +12,7 @@ import {
   sameDirectory,
   workspaceDefaultSelection,
   workspaceDirectories,
+  workspaceSelectionDestination,
 } from "@/workspaces/paths"
 
 export function resolveNewSessionWorktree(input: {
@@ -84,6 +85,11 @@ export function createNewSessionWorkspaceController(input: {
       settings.workspaces.lastUsed(serverSDK.scope, project.id),
     )
   })
+  createEffect(() => {
+    const project = currentProject()
+    if (!project || !visible() || input.selectedWorktree()) return
+    input.setSelectedWorktree(normalizeNewSessionWorktree(fallback(), sdk().directory, project.worktree))
+  })
   const value = createMemo(() =>
     resolveNewSessionWorktree({
       enabled: visible(),
@@ -121,7 +127,7 @@ export function createNewSessionWorkspaceController(input: {
   const remember = (worktree = value()) => {
     const project = currentProject()
     if (!project) return
-    const local = worktree === "main" || sameDirectory(worktree, project.worktree)
+    const local = workspaceSelectionDestination(worktree, project.worktree) === "main"
     settings.workspaces.setLastUsed(serverSDK.scope, project.id, local ? "local" : "workspace")
   }
 
@@ -141,6 +147,7 @@ export function createNewSessionWorkspaceController(input: {
       set: (worktree: string) => {
         input.setSelectedBranch(undefined)
         input.setSelectedWorktree(normalizeNewSessionWorktree(worktree, sdk().directory, currentProject()?.worktree))
+        remember(worktree)
       },
       create: (branch: string) => {
         input.setSelectedBranch(branch)
@@ -160,7 +167,10 @@ export function createNewSessionWorkspaceController(input: {
         const loaded = branches.latest
         const list = loaded?.directory === projectRoot() ? loaded.data : []
         return [
-          ...new Set([...list, ...(current && current.toLowerCase().includes(state.search.toLowerCase()) ? [current] : [])]),
+          ...new Set([
+            ...list,
+            ...(current && current.toLowerCase().includes(state.search.toLowerCase()) ? [current] : []),
+          ]),
         ].slice(0, 50)
       },
       searchBranches,
