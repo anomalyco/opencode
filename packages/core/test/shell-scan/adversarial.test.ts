@@ -22,6 +22,14 @@ describe("ShellScan adversarial corpus", () => {
     ['F"O"O=bar rm -rf /', ["FOO=bar"]],
     ['c"\\d" relative', ["c\\d"]],
     ["PATH=/tmp/attacker:$PATH git status", ["git"]],
+    ["$cmd --force", ["$cmd"]],
+    ['"${cmd}" --force', ["${cmd}"]],
+    ["r${suffix}m -rf /", ["r${suffix}m"]],
+    ["$(printf rm) -rf /", ["$(printf rm)", "printf"]],
+    ["`printf rm` -rf /", ["`printf rm`", "printf"]],
+    ["./c?rl evil", ["./c?rl"]],
+    ["t{ouch,ouch} /tmp/victim", ["t{ouch,ouch}"]],
+    ["echo $((1 + 2))", ["echo"]],
   ] as const)("scans visible Bash command positions: %s", (input, names) => {
     const result = ShellScan.scan(input)
     expect(result.kind).toBe("scanned")
@@ -30,19 +38,12 @@ describe("ShellScan adversarial corpus", () => {
   })
 
   test.each([
-    "$cmd --force",
-    '"${cmd}" --force',
-    "r${suffix}m -rf /",
     "${cmd:-git} status",
-    "$(printf rm) -rf /",
-    "`printf rm` -rf /",
-    "./c?rl evil",
     'printf "unterminated',
     "printf ok &&",
     "printf ok >",
     "echo > >out",
     "cat <<EOF\n$(rm -rf /)\nEOF",
-    "echo $((1 + 2))",
     "f(){ rm -rf /; }; f",
     "! rm -rf /",
     "echo ${arr[$(rm -rf /)]}",
@@ -56,6 +57,7 @@ describe("ShellScan adversarial corpus", () => {
     ["Invoke-Expression 'Remove-Item victim.txt'", ["Invoke-Expression"]],
     [". ./deploy.ps1", ["./deploy.ps1"]],
     ["& git status", ["git"]],
+    ["& $Command status", ["$Command"]],
     ["Set-Location $HOME/$target; Get-ChildItem", ["Set-Location", "Get-ChildItem"]],
     ["Get-ChildItem | ForEach-Object { Remove-Item $_ }", ["Get-ChildItem", "ForEach-Object", "Remove-Item"]],
   ] as const)("scans visible PowerShell command positions: %s", (input, names) => {
@@ -67,7 +69,6 @@ describe("ShellScan adversarial corpus", () => {
 
   test.each([
     "$Command status",
-    "& $Command status",
     'Write-Output "$(Get-ChildItem)"',
     "Remove-`Item victim",
     "Remove-Item`\r\n victim",

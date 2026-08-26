@@ -89,7 +89,7 @@ describe("PowerShell scanner safety", () => {
 
   test("preserves doubled double quotes in argument values", () => {
     const result = ShellScan.scanPowerShell('Write-Output "a""b"')
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       kind: "scanned",
       commands: [{ resource: 'Write-Output "a""b"', words: ["Write-Output", 'a"b'] }],
     })
@@ -107,14 +107,14 @@ describe("PowerShell scanner safety", () => {
   )
 
   test("keeps generic-token quotes distinct from standalone strings", () => {
-    expect(ShellScan.scanPowerShell("Write-Output pre'safe'#literal; Get-Item x")).toEqual({
+    expect(ShellScan.scanPowerShell("Write-Output pre'safe'#literal; Get-Item x")).toMatchObject({
       kind: "scanned",
       commands: [
         { resource: "Write-Output pre'safe'#literal", words: ["Write-Output", "presafe#literal"] },
         { resource: "Get-Item x", words: ["Get-Item", "x"] },
       ],
     })
-    expect(ShellScan.scanPowerShell("Write-Output 'safe'tail")).toEqual({
+    expect(ShellScan.scanPowerShell("Write-Output 'safe'tail")).toMatchObject({
       kind: "scanned",
       commands: [{ resource: "Write-Output 'safe'tail", words: ["Write-Output", "safe", "tail"] }],
     })
@@ -160,9 +160,6 @@ describe("PowerShell scanner safety", () => {
     "& '' victim",
     '& "Remove-`u{0049}tem" victim',
     '& "Remove-`Item" victim',
-    "& Get-* victim",
-    "& ./g?t victim",
-    "& ./[gr]it victim",
     "Write-Output ok > > out",
     "Write-Output ok > 2>&1",
     "Write-Output ok 2>&",
@@ -198,7 +195,7 @@ describe("PowerShell scanner safety", () => {
   test.each(["Set-Location", "SL", "cd", "chdir", "Push-Location", "pushd", "Microsoft.PowerShell.Management\\sl"])(
     "preserves commands with directory variables for Core policy through %s",
     (head) => {
-      expect(ShellScan.scanPowerShell(`${head} $target; Get-Item x`)).toEqual({
+      expect(ShellScan.scanPowerShell(`${head} $target; Get-Item x`)).toMatchObject({
         kind: "scanned",
         commands: [
           { resource: `${head} $target`, words: [head, "$target"] },
@@ -222,7 +219,7 @@ describe("PowerShell scanner safety", () => {
     "Set-Location Registry::HKEY_CURRENT_USER",
     "Set-Location $HOME/$target",
   ])("preserves directory command syntax without deciding directory policy: %s", (input) => {
-    expect(ShellScan.scanPowerShell(`${input}; Get-Item x`)).toEqual({
+    expect(ShellScan.scanPowerShell(`${input}; Get-Item x`)).toMatchObject({
       kind: "scanned",
       commands: [
         { resource: input, words: input.split(" ") },
@@ -237,6 +234,16 @@ describe("PowerShell scanner safety", () => {
     if (result.kind === "opaque") return
     expect(result.commands.map((command) => command.words[0])).toEqual(["Get-Item", head, "Remove-Item"])
   })
+
+  test.each(["Get-*", "./g?t", "./[gr]it", ".\\script.ps1", "..\\scripts\\run.ps1", "\\\\host\\share\\run.ps1"])(
+    "retains command names and paths without resolving them: %s",
+    (head) => {
+      expect(ShellScan.scanPowerShell(`& ${head} victim`)).toEqual({
+        kind: "scanned",
+        commands: [{ resource: `& ${head} victim`, words: [head, "victim"], rawWords: [head, "victim"] }],
+      })
+    },
+  )
 
   test("recursively marks commands from nested script blocks", () => {
     const result = ShellScan.scanPowerShell("Get-Item x | % { Get-Item y | ? { Remove-Item victim } }")
@@ -260,7 +267,7 @@ describe("PowerShell scanner safety", () => {
   })
 
   test.each([";", "&", "\n", "\r", "\r\n"])("never invents a command after a trailing %j", (separator) => {
-    expect(ShellScan.scanPowerShell(`Get-Item x${separator}`)).toEqual({
+    expect(ShellScan.scanPowerShell(`Get-Item x${separator}`)).toMatchObject({
       kind: "scanned",
       commands: [{ resource: "Get-Item x", words: ["Get-Item", "x"] }],
     })
@@ -275,7 +282,7 @@ describe("PowerShell scanner safety", () => {
 
   test("scans valid redirects without consuming command arguments", () => {
     for (const redirect of [">", ">>", "1>", "2>>", "3>", "4>", "5>", "6>", "*>", "*>>"]) {
-      expect(ShellScan.scanPowerShell(`Get-Item x ${redirect} out.txt | Write-Output done`)).toEqual({
+      expect(ShellScan.scanPowerShell(`Get-Item x ${redirect} out.txt | Write-Output done`)).toMatchObject({
         kind: "scanned",
         commands: [
           { resource: `Get-Item x ${redirect} out.txt`, words: ["Get-Item", "x"] },
@@ -284,7 +291,7 @@ describe("PowerShell scanner safety", () => {
       })
     }
     for (const redirect of ["2>&1", "3>&1", "4>&1", "5>&1", "6>&1", "*>&1"]) {
-      expect(ShellScan.scanPowerShell(`Get-Item x ${redirect}`)).toEqual({
+      expect(ShellScan.scanPowerShell(`Get-Item x ${redirect}`)).toMatchObject({
         kind: "scanned",
         commands: [{ resource: `Get-Item x ${redirect}`, words: ["Get-Item", "x"] }],
       })

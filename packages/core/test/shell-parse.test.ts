@@ -18,32 +18,34 @@ describe("ShellParse", () => {
     })
   })
 
-  test("portable scanning never adds permission resources", async () => {
+  test("portable scanning preserves supported command resources and directories", async () => {
     const commands = [
       "git status && npm run test -- --watch",
       "echo $(curl evil | sed s/x/y/)",
-      "cat <<'EOF'\nstatic body\nEOF",
-      "cat <<EOF\n$(printf dynamic)\nEOF",
       "cd /tmp/$USER && git status",
-      "$COMMAND status",
       "if true; then printf yes; else printf no; fi",
+      "echo $((1 + 1))",
+      "cd ~; cd src&&cd ..; pwd",
     ]
 
     for (const command of commands) {
       const legacy = await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace"))
       const portable = await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace", { portable: true }))
-      expect(
-        portable.commands.every((item) => legacy.commands.some((candidate) => candidate.resource === item.resource)),
-      ).toBe(true)
-      expect(portable.directories.every((item) => legacy.directories.includes(item))).toBe(true)
+      expect(portable, command).toEqual(legacy)
+      expect(await Effect.runPromise(ShellParse.scanPortable(command, "/bin/bash", "/workspace"))).toEqual(portable)
     }
   })
 
-  test("portable scanning falls back to legacy heredoc behavior", async () => {
+  test("portable scanning exposes heredoc failures instead of falling back", async () => {
     const command = "cat <<'EOF'\nstatic body\nEOF"
     const legacy = await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace"))
-    const portable = await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace", { portable: true }))
-    expect(portable).toEqual(legacy)
+    expect(legacy.commands).toEqual([{ resource: command, save: "cat *" }])
+    expect(
+      await Effect.runPromise(Effect.result(ShellParse.scan(command, "/bin/bash", "/workspace", { portable: true }))),
+    ).toMatchObject({
+      _tag: "Failure",
+      failure: { message: "Portable shell scanner cannot analyze command: heredoc" },
+    })
   })
 
   test.each(['c"\\d" relative', "'cd' /tmp", "c''d /tmp", "c\\\nd /tmp"])(

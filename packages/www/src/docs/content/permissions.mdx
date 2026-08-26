@@ -140,16 +140,16 @@ permission scanner. The default remains the tree-sitter scanner.
 }
 ```
 
-When enabled, supported commands use the portable scanner. Cases whose syntax
-or output compatibility is not yet covered fall back to the existing tree-sitter
-analysis. Tree-sitter remains available during this transition toward a
-behavior-compatible replacement.
+When enabled, shell commands are analyzed only by the portable scanner.
+Tree-sitter is not used as a fallback or a second opinion. If the scanner
+cannot analyze a command, the shell tool reports a scanner error rather than
+silently retrying with Tree-sitter. These failures are experimental parser
+gaps to fix, not permission denials.
 
 The flag changes parser selection, not permission policy. Existing rules,
 saved approval patterns, and best-effort directory inference continue to apply.
-Arithmetic expressions, home-directory paths, sequential directory changes,
-and commands under Zsh do not require stricter approval just because the
-portable scanner cannot yet handle a case independently.
+There is no additional approval mode or blanket unknown-directory restriction.
+With the flag disabled, the existing Tree-sitter path is unchanged.
 
 ## Defaults
 

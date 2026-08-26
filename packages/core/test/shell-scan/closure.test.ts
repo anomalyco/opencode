@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { ShellScan } from "../../src/shell/scan.js"
 
-const opaque = ["$COMMAND hidden", "$(printf command) hidden", 'printf "unterminated'] as const
+const opaque = ["${COMMAND:-hidden}", "$(printf ${value:-command}) hidden", 'printf "unterminated'] as const
 const contexts = [
   (source: string) => source,
   (source: string) => `${source}; printf visible`,

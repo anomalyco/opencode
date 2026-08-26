@@ -517,35 +517,55 @@ describe("ShellTool", () => {
     { timeout: 15_000 },
   )
 
-  it.live("does not add external-directory permission for an experimental portable heredoc", () =>
-    Effect.acquireUseRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) =>
-        Effect.gen(function* () {
-          if (isWindows) return
-          reset()
-          denyAction = "external_directory"
-          yield* Effect.promise(() =>
-            Bun.write(
-              path.join(tmp.path, "opencode.json"),
-              JSON.stringify({ experimental: { portable_shell_scanner: true } }),
-            ),
-          )
-          const settled = yield* withSession(tmp.path, (registry) =>
-            executeTool(registry, call({ command: "cat <<'EOF'\nhello\nEOF" }, "call-portable-heredoc")),
-          )
-          expect(settled.status).toBe("completed")
-          expect(assertions.map((item) => item.action)).toEqual(["shell"])
-          expect(settled.content?.[0]).toMatchObject({ type: "text", text: "hello\n" })
-        }),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
-    ),
+  it.live("exposes unsupported native syntax without fallback or execution", () =>
+    Effect.gen(function* () {
+      if (isWindows) return
+      for (const portable of [false, true]) {
+        yield* Effect.acquireUseRelease(
+          Effect.promise(() => tmpdir()),
+          (tmp) =>
+            Effect.gen(function* () {
+              reset()
+              yield* Effect.promise(() =>
+                Bun.write(
+                  path.join(tmp.path, "opencode.json"),
+                  JSON.stringify({ experimental: { portable_shell_scanner: portable } }),
+                ),
+              )
+              const settled = yield* withSession(tmp.path, (registry) =>
+                Effect.gen(function* () {
+                  const selection = yield* ShellSelect.Service
+                  yield* selection.transform((draft) => draft.configure("sh"))
+                  return yield* executeTool(
+                    registry,
+                    call({ command: "cat <<'EOF' > marker\nhello\nEOF" }, "call-portable-heredoc"),
+                  )
+                }),
+              )
+              if (portable) {
+                expect(settled).toMatchObject({
+                  status: "error",
+                  error: { message: expect.stringContaining("heredoc") },
+                })
+                expect(assertions).toEqual([])
+                expect(yield* Effect.promise(() => Bun.file(path.join(tmp.path, "marker")).exists())).toBe(false)
+                return
+              }
+              expect(settled.status).toBe("completed")
+              expect(settled.metadata).toMatchObject({ exit: 0 })
+              expect(assertions.map((item) => item.action)).toEqual(["shell"])
+              expect(yield* Effect.promise(() => Bun.file(path.join(tmp.path, "marker")).text())).toBe("hello\n")
+            }),
+          (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+        )
+      }
+    }),
   )
 
   for (const shell of ["sh", "zsh"]) {
     const test = isWindows || !Bun.which(shell) ? it.live.skip : it.live
     test(
-      `preserves Tree-sitter permission assertions with the portable scanner in ${shell}`,
+      `preserves arithmetic and directory permissions with scanner flag on and off in ${shell}`,
       () =>
         Effect.gen(function* () {
           const results = yield* Effect.forEach([false, true], (portable) =>
@@ -568,7 +588,7 @@ describe("ShellTool", () => {
                       for (const [command, output] of [
                         ["echo $((1 + 1))", "2\n"],
                         ["cd ~ && pwd", `${realpathSync(os.homedir())}\n`],
-                        ["cd one && cd two && pwd", `${path.join(tmp.path, "one", "two")}\n`],
+                        ["cd one&&cd two&&pwd", `${path.join(tmp.path, "one", "two")}\n`],
                       ]) {
                         const settled = yield* executeTool(registry, call({ command }, `call-parity-${command}`))
                         expect(settled.status).toBe("completed")
@@ -584,6 +604,9 @@ describe("ShellTool", () => {
                     "shell",
                   ])
                   expect(assertions[1]?.resources).toEqual([path.join(realpathSync(os.homedir()), "*")])
+                  expect(assertions[0]).toMatchObject({ resources: ["echo $((1 + 1))"], save: ["echo *"] })
+                  expect(assertions[2]).toMatchObject({ resources: ["pwd"], save: ["pwd *"] })
+                  expect(assertions[3]).toMatchObject({ resources: ["pwd"], save: ["pwd *"] })
                   return assertions.slice()
                 }),
               (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),

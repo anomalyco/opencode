@@ -164,10 +164,7 @@ export const scan = Effect.fnUntraced(function* (
   cwd: string,
   options?: { portable?: boolean },
 ) {
-  if (options?.portable) {
-    const result = yield* Effect.promise(() => scanPortable(command, shell, cwd))
-    if (result) return result
-  }
+  if (options?.portable) return yield* scanPortable(command, shell, cwd)
   return yield* scanLegacy(command, shell, cwd)
 })
 
@@ -205,42 +202,31 @@ const scanLegacy = Effect.fnUntraced(function* (command: string, shell: string, 
   )
 })
 
-export async function scanPortable(command: string, shell: string, cwd: string): Promise<Result | undefined> {
+export const scanPortable = Effect.fnUntraced(function* (command: string, shell: string, cwd: string) {
+  const { ShellScan } = yield* Effect.tryPromise({
+    try: () => import("./scan.js"),
+    catch: (cause) => new Error(`Portable shell scanner failed to load: ${cause}`, { cause }),
+  })
   const powershell = ShellSelect.ps(shell)
-  // Tree-sitter's resource omissions are part of the compatibility contract.
-  // Keep redirects, substitutions, groups, comments, and escapes on that path.
-  if (/[^\t\n\x20-\x7e]|[<>$`(){}#]/.test(command)) return
-  // PowerShell's argument grammar also splits punctuation and treats tabs specially.
-  if (powershell ? /[^A-Za-z0-9_./\\:~ \n;|-]/.test(command) : command.includes("\\")) return
-  const { ShellScan } = await import("./scan.js")
   const result = powershell ? ShellScan.scanPowerShell(command) : ShellScan.scan(command)
-  if (result.kind === "opaque") return
+  if (result.kind === "opaque")
+    return yield* Effect.fail(new Error(`Portable shell scanner cannot analyze command: ${result.reason}`))
 
   const output: Result = { commands: [], directories: [] }
   for (const item of result.commands) {
-    const name = powershell ? item.words[0]?.toLowerCase() : item.words[0]
-    // These are statements or non-word Parts in the legacy grammar, not plain commands.
-    if (
-      powershell
-        ? /^(?:break|continue|throw|return|exit|workflow|parallel|sequence|inlinescript|foreach)$/.test(name) ||
-          item.words.some((word) => word.startsWith("-") && !/^-+[A-Za-z_][A-Za-z_-]*$/.test(word))
-        : /^(?:declare|typeset|export|readonly|local|unset|unsetenv)$/.test(name) ||
-          item.words.some((word) => /^-?\d|^=(?:=|~)$/.test(word))
-    )
-      return
+    const name = powershell ? item.rawWords[0]?.toLowerCase() : item.rawWords[0]
     if (CWD.has(name)) {
-      // Only unquoted literal operands have the same provenance as legacy Parts.
-      if (
-        item.words.some((word) => !/^[A-Za-z0-9_./\\:@%+=,~-]+$/.test(word)) ||
-        item.resource.replace(/[ \t]+/g, " ") !== item.words.join(" ")
-      )
-        return
       output.directories.push(
         ...directoryArgs(
-          item.words.map((text) => ({
-            type: powershell && text.startsWith("-") ? "command_parameter" : "word",
-            text,
-          })),
+          item.rawWords.flatMap((text): Part[] => {
+            const parameter = powershell ? /^(-(?:literalpath|path)):(.*)$/i.exec(text) : undefined
+            if (parameter)
+              return [
+                { type: "command_parameter", text: parameter[1] },
+                { type: "word", text: parameter[2] },
+              ]
+            return [{ type: powershell && text.startsWith("-") ? "command_parameter" : "word", text }]
+          }),
           powershell,
           cwd,
           shell,
@@ -248,15 +234,13 @@ export async function scanPortable(command: string, shell: string, cwd: string):
       )
       continue
     }
-    const tokens = prefix(item.words.slice(0, PREFIX_LENGTH))
-    if (!tokens.length || tokens.some((token) => !/^[A-Za-z0-9_./:@%+=,-]+$/.test(token))) return
-    // Decoding quotes or assignments must not change the saved permission.
-    const sourcePrefix = tokens.map((token) => token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("[ \\t]+")
-    if (!new RegExp(`^${sourcePrefix}(?:[ \\t]|$)`).test(item.resource)) return
-    output.commands.push({ resource: item.resource, save: `${tokens.join(" ")} *` })
+    output.commands.push({
+      resource: item.resource,
+      save: `${prefix(item.rawWords.slice(0, PREFIX_LENGTH)).join(" ")} *`,
+    })
   }
   return output
-}
+})
 
 function parts(node: Node) {
   return Array.from({ length: node.childCount }).flatMap((_, index): Part[] => {
