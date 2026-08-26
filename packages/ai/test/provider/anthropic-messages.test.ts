@@ -2,7 +2,7 @@ import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
 import { CacheHint, LLM, AIError, LLMRequest, Message, ToolCallPart, ToolDefinition, Usage } from "../../src/index.js"
-import { Auth, LLMClient } from "../../src/route.js"
+import { Auth, Endpoint, LLMClient, Route } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import * as AnthropicMessages from "../../src/protocols/anthropic-messages.js"
 import { GoogleVertexMessages } from "../../src/providers.js"
@@ -807,6 +807,99 @@ describe("Anthropic Messages route", () => {
           },
         ],
       })
+    }),
+  )
+
+  it.effect("round-trips compatible provider metadata in its own namespace", () =>
+    Effect.gen(function* () {
+      const compatible = Route.make({
+        id: "custom-anthropic-messages",
+        provider: "custom-anthropic",
+        protocol: AnthropicMessages.protocol,
+        endpoint: Endpoint.path("/messages", { baseURL: "https://compatible.test/v1" }),
+        auth: Auth.header("x-api-key", "test"),
+        framing: AnthropicMessages.framing,
+      }).model({ id: "custom-model" })
+      const result = [
+        {
+          type: "web_search_result",
+          url: "https://example.com",
+          citations: [{ type: "web_search_result_location", cited_text: "Example" }],
+        },
+      ]
+      const response = yield* LLMClient.generate(LLM.request({ model: compatible, prompt: "Search." })).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "message_start", message: { usage: { input_tokens: 5, custom_start: true } } },
+              { type: "content_block_start", index: 0, content_block: { type: "thinking", thinking: "Thinking." } },
+              { type: "content_block_delta", index: 0, delta: { type: "signature_delta", signature: "custom_sig" } },
+              { type: "content_block_stop", index: 0 },
+              {
+                type: "content_block_start",
+                index: 1,
+                content_block: { type: "redacted_thinking", data: "custom_redacted" },
+              },
+              { type: "content_block_stop", index: 1 },
+              {
+                type: "content_block_start",
+                index: 2,
+                content_block: {
+                  type: "server_tool_use",
+                  id: "custom_tool",
+                  name: "web_search",
+                  input: { query: "example" },
+                },
+              },
+              { type: "content_block_stop", index: 2 },
+              {
+                type: "content_block_start",
+                index: 3,
+                content_block: { type: "web_search_tool_result", tool_use_id: "custom_tool", content: result },
+              },
+              { type: "content_block_stop", index: 3 },
+              {
+                type: "message_delta",
+                delta: { stop_reason: "end_turn", stop_sequence: "custom_stop" },
+                usage: { output_tokens: 2, custom_terminal: true },
+              },
+              { type: "message_stop" },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.message.content).toMatchObject([
+        { type: "reasoning", text: "Thinking.", providerMetadata: { "custom-anthropic": { signature: "custom_sig" } } },
+        { type: "reasoning", text: "", providerMetadata: { "custom-anthropic": { redactedData: "custom_redacted" } } },
+        { type: "tool-call", id: "custom_tool", providerExecuted: true },
+        {
+          type: "tool-result",
+          providerExecuted: true,
+          providerMetadata: { "custom-anthropic": { blockType: "web_search_tool_result", result } },
+        },
+      ])
+      expect(response.usage?.providerMetadata).toEqual({
+        "custom-anthropic": { input_tokens: 5, custom_start: true, output_tokens: 2, custom_terminal: true },
+      })
+      expect(response.events.at(-1)).toMatchObject({
+        providerMetadata: { "custom-anthropic": { stopSequence: "custom_stop" } },
+      })
+
+      const prepared = yield* compileRequest(
+        LLM.request({ model: compatible, messages: [response.message], cache: "none" }),
+      )
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "assistant",
+          content: [
+            { type: "thinking", thinking: "Thinking.", signature: "custom_sig" },
+            { type: "redacted_thinking", data: "custom_redacted" },
+            { type: "server_tool_use", id: "custom_tool", name: "web_search", input: { query: "example" } },
+            { type: "web_search_tool_result", tool_use_id: "custom_tool", content: result },
+          ],
+        },
+      ])
     }),
   )
 

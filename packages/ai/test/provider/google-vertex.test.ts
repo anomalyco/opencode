@@ -6,7 +6,7 @@ import { GoogleVertex, GoogleVertexChat, GoogleVertexMessages, GoogleVertexRespo
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import { it } from "../lib/effect.js"
-import { dynamicResponse } from "../lib/http.js"
+import { dynamicResponse, fixedResponse } from "../lib/http.js"
 import { deltaChunk, finishChunk } from "../lib/openai-chunks.js"
 import { sseEvents } from "../lib/sse.js"
 
@@ -89,7 +89,7 @@ describe("Google Vertex providers", () => {
                 id: "call_1",
                 name: "lookup",
                 input: { query: "weather" },
-                providerMetadata: { google: { functionCallId: "provider_call_1" } },
+                providerMetadata: { vertex: { functionCallId: "provider_call_1" } },
               }),
             ]),
             Message.tool({
@@ -97,7 +97,7 @@ describe("Google Vertex providers", () => {
               name: "lookup",
               result: "sunny",
               resultType: "text",
-              providerMetadata: { google: { functionCallId: "provider_call_1" } },
+              providerMetadata: { vertex: { functionCallId: "provider_call_1" } },
             }),
           ],
         }),
@@ -117,6 +117,91 @@ describe("Google Vertex providers", () => {
               },
             },
           ],
+        },
+      ])
+    }),
+  )
+
+  it.effect("round-trips Vertex Gemini metadata through signed content, tool calls, and usage", () =>
+    Effect.gen(function* () {
+      const model = GoogleVertex.configure({
+        accessToken: "vertex-token",
+        project: "vertex-project",
+      }).model("gemini-3.5-flash")
+      const response = yield* LLMClient.generate(LLM.request({ model, prompt: "Check the weather." })).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents({
+              candidates: [
+                {
+                  content: {
+                    role: "model",
+                    parts: [
+                      { text: "Thinking.", thought: true, thoughtSignature: "reasoning_sig" },
+                      { text: "Checking.", thoughtSignature: "text_sig" },
+                      {
+                        functionCall: { id: "provider_call_1", name: "lookup", args: { query: "weather" } },
+                        thoughtSignature: "tool_sig",
+                      },
+                    ],
+                  },
+                  finishReason: "STOP",
+                },
+              ],
+              promptFeedback: { blockReasonMessage: "Reviewed" },
+              usageMetadata: { promptTokenCount: 5, candidatesTokenCount: 2, thoughtsTokenCount: 1 },
+            }),
+          ),
+        ),
+      )
+      const reasoning = response.events.find((event) => event.type === "reasoning-end")
+      const text = response.events.find((event) => event.type === "text-delta")
+      const toolCall = response.toolCalls[0]
+
+      expect(reasoning?.providerMetadata).toEqual({ vertex: { thoughtSignature: "reasoning_sig" } })
+      expect(text?.providerMetadata).toEqual({ vertex: { thoughtSignature: "text_sig" } })
+      expect(toolCall).toMatchObject({
+        id: "provider_call_1",
+        providerMetadata: { vertex: { thoughtSignature: "tool_sig" } },
+      })
+      expect(response.usage?.providerMetadata).toEqual({
+        vertex: { promptTokenCount: 5, candidatesTokenCount: 2, thoughtsTokenCount: 1 },
+      })
+      expect(response.events.at(-1)?.providerMetadata).toEqual({
+        vertex: { promptFeedback: { blockReasonMessage: "Reviewed" } },
+      })
+
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([
+              { type: "reasoning", text: "Thinking.", providerMetadata: reasoning?.providerMetadata },
+              { type: "text", text: "Checking.", providerMetadata: text?.providerMetadata },
+              ToolCallPart.make({
+                id: toolCall.id,
+                name: toolCall.name,
+                input: toolCall.input,
+                providerMetadata: toolCall.providerMetadata,
+              }),
+            ]),
+            Message.tool({ id: toolCall.id, name: toolCall.name, result: "sunny", resultType: "text" }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.contents).toEqual([
+        {
+          role: "model",
+          parts: [
+            { text: "Thinking.", thought: true, thoughtSignature: "reasoning_sig" },
+            { text: "Checking.", thoughtSignature: "text_sig" },
+            { functionCall: { name: "lookup", args: { query: "weather" } }, thoughtSignature: "tool_sig" },
+          ],
+        },
+        {
+          role: "user",
+          parts: [{ functionResponse: { name: "lookup", response: { name: "lookup", content: "sunny" } } }],
         },
       ])
     }),

@@ -569,6 +569,57 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
+  it.effect("round-trips reassigned provider reasoning and usage metadata in its own namespace", () =>
+    Effect.gen(function* () {
+      const compatible = model.route.with({ provider: "custom-bedrock" }).model({ id: model.id })
+      const redactedData = "cmVkYWN0ZWQtdGhpbmtpbmc="
+      const response = yield* LLMClient.generate(LLMRequest.update(baseRequest, { model: compatible })).pipe(
+        Effect.provide(
+          fixedBytes(
+            eventStreamBody(
+              ["messageStart", { role: "assistant" }],
+              ["contentBlockDelta", { contentBlockIndex: 0, delta: { reasoningContent: { text: "Let me think." } } }],
+              ["contentBlockDelta", { contentBlockIndex: 0, delta: { reasoningContent: { signature: "custom_sig" } } }],
+              ["contentBlockStop", { contentBlockIndex: 0 }],
+              [
+                "contentBlockDelta",
+                { contentBlockIndex: 1, delta: { reasoningContent: { redactedContent: redactedData } } },
+              ],
+              ["contentBlockStop", { contentBlockIndex: 1 }],
+              ["messageStop", { stopReason: "end_turn" }],
+              ["metadata", { usage: { inputTokens: 5, outputTokens: 2, totalTokens: 7 } }],
+            ),
+          ),
+        ),
+      )
+
+      expect(response.message.content).toEqual([
+        {
+          type: "reasoning",
+          text: "Let me think.",
+          providerMetadata: { "custom-bedrock": { signature: "custom_sig" } },
+        },
+        { type: "reasoning", text: "", providerMetadata: { "custom-bedrock": { redactedData } } },
+      ])
+      expect(response.usage?.providerMetadata).toEqual({
+        "custom-bedrock": { inputTokens: 5, outputTokens: 2, totalTokens: 7 },
+      })
+
+      const prepared = yield* compileRequest(
+        LLM.request({ model: compatible, messages: [response.message], cache: "none" }),
+      )
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "assistant",
+          content: [
+            { reasoningContent: { reasoningText: { text: "Let me think.", signature: "custom_sig" } } },
+            { reasoningContent: { redactedContent: redactedData } },
+          ],
+        },
+      ])
+    }),
+  )
+
   it.effect("preserves reasoning signatures when contentBlockStop is missing", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(baseRequest).pipe(

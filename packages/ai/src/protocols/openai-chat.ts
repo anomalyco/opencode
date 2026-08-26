@@ -253,6 +253,7 @@ interface PendingToolDelta {
 }
 
 export interface ParserState {
+  readonly providerMetadataKey: string
   readonly tools: ToolStream.State<number>
   readonly pendingTools: Partial<Record<number, PendingToolDelta>>
   readonly toolCallEvents: ReadonlyArray<LLMEvent>
@@ -324,17 +325,18 @@ const lowerMedia = Effect.fn("OpenAIChat.lowerMedia")(function* (part: MediaPart
 const openAICompatibleReasoningContent = (native: unknown) =>
   isRecord(native) && typeof native.reasoning_content === "string" ? native.reasoning_content : undefined
 
-const reasoningField = (part: ReasoningPart) => {
-  const field = part.providerMetadata?.openai?.reasoningField
+const reasoningField = (part: ReasoningPart, providerMetadataKey: string) => {
+  const field = part.providerMetadata?.[providerMetadataKey]?.reasoningField
   return typeof field === "string" ? field : undefined
 }
 
-const reasoningDetails = (parts: ReadonlyArray<ReasoningPart>, native: unknown) => {
+const reasoningDetails = (parts: ReadonlyArray<ReasoningPart>, native: unknown, providerMetadataKey: string) => {
   const observed = parts.flatMap((part) => {
-    const details = part.providerMetadata?.openai?.reasoningDetails
+    const details = part.providerMetadata?.[providerMetadataKey]?.reasoningDetails
     return Array.isArray(details) ? details : []
   })
-  if (parts.some((part) => Array.isArray(part.providerMetadata?.openai?.reasoningDetails))) return observed
+  if (parts.some((part) => Array.isArray(part.providerMetadata?.[providerMetadataKey]?.reasoningDetails)))
+    return observed
   if (isRecord(native) && Array.isArray(native.reasoning_details)) return native.reasoning_details
 }
 
@@ -366,7 +368,7 @@ const lowerAssistantMessage = Effect.fn("OpenAIChat.lowerAssistantMessage")(func
   message: OpenAIChatRequestMessage,
   configuredField: string | undefined,
   requireReasoning: boolean,
-  options: LoweringOptions,
+  options: LoweringOptions & { readonly providerMetadataKey: string },
 ) {
   const content: TextPart[] = []
   const reasoning: ReasoningPart[] = []
@@ -388,10 +390,14 @@ const lowerAssistantMessage = Effect.fn("OpenAIChat.lowerAssistantMessage")(func
     }
   }
   const text = reasoning.map((part) => part.text).join("")
-  const details = reasoningDetails(reasoning, message.native?.openaiCompatible)
-  const observedField = reasoning.map(reasoningField).find((value) => value !== undefined)
+  const details = reasoningDetails(reasoning, message.native?.openaiCompatible, options.providerMetadataKey)
+  const observedField = reasoning
+    .map((part) => reasoningField(part, options.providerMetadataKey))
+    .find((value) => value !== undefined)
   const nativeReasoning = openAICompatibleReasoningContent(message.native?.openaiCompatible)
-  const fullyStructured = reasoning.every((part) => Array.isArray(part.providerMetadata?.openai?.reasoningDetails))
+  const fullyStructured = reasoning.every((part) =>
+    Array.isArray(part.providerMetadata?.[options.providerMetadataKey]?.reasoningDetails),
+  )
   const field = (() => {
     if (configuredField !== undefined && (requireReasoning || reasoning.length > 0 || nativeReasoning !== undefined))
       return configuredField
@@ -459,7 +465,7 @@ const lowerMessage = Effect.fn("OpenAIChat.lowerMessage")(function* (
   message: OpenAIChatRequestMessage,
   reasoningField: string | undefined,
   requireReasoning: boolean,
-  options: LoweringOptions,
+  options: LoweringOptions & { readonly providerMetadataKey: string },
 ) {
   if (message.role === "user") return [yield* lowerUserMessage(message, options)]
   if (message.role === "assistant")
@@ -495,6 +501,7 @@ const lowerMessages = Effect.fn("OpenAIChat.lowerMessages")(function* (request: 
   const mistral = ["mistral", "devstral", "codestral", "pixtral", "mixtral"].some((family) => modelID.includes(family))
   const lowering = {
     ...options,
+    providerMetadataKey: request.model.route.providerMetadataKey ?? String(request.model.provider),
     toolCallID: (id: string) => {
       if (mistral)
         return id
@@ -820,7 +827,7 @@ const mapFinishReason = Effect.fn("OpenAIChat.mapFinishReason")(function* (event
 // Providers differ on cache-hit location: OpenAI uses
 // `prompt_tokens_details.cached_tokens`, DeepSeek uses
 // `prompt_cache_hit_tokens`, and Zai uses top-level `cached_tokens`.
-const mapUsage = (usage: OpenAIChatEvent["usage"]): Usage | undefined => {
+const mapUsage = (usage: OpenAIChatEvent["usage"], providerMetadataKey: string): Usage | undefined => {
   if (!usage) return undefined
   const input = usage.prompt_tokens ?? undefined
   const output = usage.completion_tokens ?? undefined
@@ -839,7 +846,7 @@ const mapUsage = (usage: OpenAIChatEvent["usage"]): Usage | undefined => {
     cacheWriteInputTokens: cacheWrite,
     reasoningTokens: reasoning,
     totalTokens: ProviderShared.totalTokens(input, output, usage.total_tokens ?? undefined),
-    providerMetadata: { openai: usage },
+    providerMetadata: { [providerMetadataKey]: usage },
   })
 }
 
@@ -913,8 +920,12 @@ const conflictingReasoningTextDetails = (previous: Record<string, unknown>, curr
 const conflictingDetailValue = (previous: unknown, current: unknown) =>
   previous !== undefined && previous !== null && current !== undefined && current !== null && previous !== current
 
-const reasoningMetadata = (field: ParserState["reasoningField"], details?: ReadonlyArray<unknown>) => ({
-  openai: {
+const reasoningMetadata = (
+  providerMetadataKey: string,
+  field: ParserState["reasoningField"],
+  details?: ReadonlyArray<unknown>,
+) => ({
+  [providerMetadataKey]: {
     ...(field ? { reasoningField: field } : {}),
     ...(details ? { reasoningDetails: details } : {}),
   },
@@ -941,7 +952,10 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
     // Moonshot (and a few other OpenAI-compatible providers) attach usage to
     // `choice.usage` instead of the top-level `usage` field.
     const choiceUsage = (choice as unknown as { usage?: OpenAIChatEvent["usage"] })?.usage
-    const usage = mapUsage(event.usage) ?? (choiceUsage ? mapUsage(choiceUsage) : undefined) ?? state.usage
+    const usage =
+      mapUsage(event.usage, state.providerMetadataKey) ??
+      (choiceUsage ? mapUsage(choiceUsage, state.providerMetadataKey) : undefined) ??
+      state.usage
     const rawFinishReason = choice?.finish_reason
     const finishReason = rawFinishReason
       ? {
@@ -979,7 +993,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
     const detailDelta = Array.isArray(delta?.reasoning_details) ? delta.reasoning_details : undefined
     if (detailDelta !== undefined) appendReasoningDetails(state.reasoningDetails, detailDelta)
     const reasoningDetailsObserved = state.reasoningDetailsObserved || detailDelta !== undefined
-    const deltaMetadata = reasoningMetadata(reasoningField)
+    const deltaMetadata = reasoningMetadata(state.providerMetadataKey, reasoningField)
     const text = detailDelta?.length ? (detailText(detailDelta) ?? reasoning?.text) : reasoning?.text
     if (text !== undefined) lifecycle = Lifecycle.reasoningDelta(lifecycle, events, "reasoning-0", text, deltaMetadata)
     else if (
@@ -995,7 +1009,11 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
         lifecycle,
         events,
         "reasoning-0",
-        reasoningMetadata(reasoningField, reasoningDetailsObserved ? state.reasoningDetails : undefined),
+        reasoningMetadata(
+          state.providerMetadataKey,
+          reasoningField,
+          reasoningDetailsObserved ? state.reasoningDetails : undefined,
+        ),
       )
       lifecycle = Lifecycle.textDelta(lifecycle, events, "text-0", delta.content)
     }
@@ -1005,7 +1023,11 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
         lifecycle,
         events,
         "reasoning-0",
-        reasoningMetadata(reasoningField, reasoningDetailsObserved ? state.reasoningDetails : undefined),
+        reasoningMetadata(
+          state.providerMetadataKey,
+          reasoningField,
+          reasoningDetailsObserved ? state.reasoningDetails : undefined,
+        ),
       )
       lifecycle = Lifecycle.textDelta(lifecycle, events, "text-0", delta.refusal)
     }
@@ -1066,6 +1088,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
 
     return [
       {
+        providerMetadataKey: state.providerMetadataKey,
         tools: finished?.tools ?? tools,
         pendingTools,
         toolCallEvents: finished?.events ?? state.toolCallEvents,
@@ -1109,12 +1132,18 @@ const finishEvents = Effect.fn("OpenAIChat.finishEvents")(function* (state: Pars
       }
     : { normalized: hasToolCalls ? ("tool-calls" as const) : ("stop" as const) }
   const metadata = reasoningMetadata(
+    state.providerMetadataKey,
     state.reasoningField,
     state.reasoningDetailsObserved ? state.reasoningDetails : undefined,
   )
   const started =
     state.reasoningDetailsObserved && !state.reasoningEmitted
-      ? Lifecycle.reasoningStart(state.lifecycle, events, "reasoning-0", reasoningMetadata(state.reasoningField))
+      ? Lifecycle.reasoningStart(
+          state.lifecycle,
+          events,
+          "reasoning-0",
+          reasoningMetadata(state.providerMetadataKey, state.reasoningField),
+        )
       : state.lifecycle
   const ended = Lifecycle.reasoningEnd(started, events, "reasoning-0", metadata)
   const lifecycle = toolCallEvents.length ? Lifecycle.stepStart(ended, events) : ended
@@ -1141,6 +1170,7 @@ export const protocol = Protocol.make({
   stream: {
     event: Protocol.jsonEvent(OpenAIChatEvent),
     initial: (request) => ({
+      providerMetadataKey: request.model.route.providerMetadataKey ?? String(request.model.provider),
       tools: ToolStream.empty<number>(),
       pendingTools: {},
       toolCallEvents: [],

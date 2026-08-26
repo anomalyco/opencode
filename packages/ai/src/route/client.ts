@@ -89,6 +89,7 @@ export interface RouteDefaultsInput {
 export interface RoutePatch<Body, Prepared> extends RouteDefaultsInput {
   readonly id?: string
   readonly provider?: string | ProviderID
+  readonly providerMetadataKey?: string
   readonly auth?: Auth.Definition
   readonly transport?: Transport<Body, Prepared, unknown>
   readonly endpoint?: EndpointPatch<Body>
@@ -289,11 +290,16 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
       defaults: routeInput.defaults ?? {},
       body: protocol.body,
       with: (patch: RoutePatch<Body, Prepared>) => {
-        const { id, provider, auth, transport, endpoint, ...defaults } = patch
+        const { id, provider, providerMetadataKey, auth, transport, endpoint, ...defaults } = patch
         return build({
           ...routeInput,
           id: id ?? routeInput.id,
           provider: provider ?? routeInput.provider,
+          providerMetadataKey:
+            providerMetadataKey ??
+            (provider !== undefined && String(provider) !== String(routeInput.provider)
+              ? String(provider)
+              : routeInput.providerMetadataKey),
           auth: auth ?? routeInput.auth,
           endpoint: endpoint ? Endpoint.merge(routeInput.endpoint, endpoint) : routeInput.endpoint,
           transport: (transport as Transport<Body, Prepared, Frame> | undefined) ?? routeInput.transport,

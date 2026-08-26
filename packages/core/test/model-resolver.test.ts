@@ -1126,7 +1126,7 @@ describe("ModelResolver", () => {
       const mantle = yield* ModelResolver.fromCatalogModel(
         model(Provider.aisdk("@ai-sdk/amazon-bedrock/mantle"), {
           modelID: "openai.gpt-oss-120b",
-          settings: { region: "us-east-1" },
+          settings: { region: "us-east-1", topP: 0.6 },
         }),
       )
 
@@ -1158,6 +1158,7 @@ describe("ModelResolver", () => {
       expect(bedrock.route.defaults.generation).toEqual({ topP: 0.8 })
       expect(bedrock.route.defaults.http?.body).toEqual({ serviceTier: { type: "priority" } })
       expect(mantle.route.id).toBe("bedrock-mantle-responses")
+      expect(mantle.route.defaults.generation).toEqual({ topP: 0.6 })
     }),
   )
 

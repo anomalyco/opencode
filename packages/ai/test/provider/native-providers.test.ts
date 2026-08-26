@@ -2,13 +2,80 @@ import { describe, expect } from "bun:test"
 import { ConfigProvider, Effect } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
 import { LLM, Message, ToolDefinition } from "../../src/index.js"
-import { Cerebras, DeepInfra, Groq, TogetherAI } from "../../src/providers/index.js"
+import {
+  AmazonBedrock,
+  AmazonBedrockMantle,
+  Anthropic,
+  AnthropicCompatible,
+  Azure,
+  Cerebras,
+  CloudflareAIGateway,
+  CloudflareWorkersAI,
+  DeepInfra,
+  Google,
+  GoogleVertex,
+  GoogleVertexChat,
+  GoogleVertexMessages,
+  GoogleVertexResponses,
+  Groq,
+  OpenAI,
+  OpenAICompatible,
+  OpenAICompatibleResponses,
+  OpenRouter,
+  TogetherAI,
+  XAI,
+} from "../../src/providers/index.js"
 import { compileRequest } from "../../src/route/client.js"
 import { it } from "../lib/effect.js"
 import { dynamicResponse } from "../lib/http.js"
 import { sseEvents } from "../lib/sse.js"
 
 describe("native OpenAI-compatible providers", () => {
+  it.effect("assigns provider-owned metadata namespaces across native routes", () =>
+    Effect.gen(function* () {
+      const vertex = { project: "project", accessToken: "token" }
+      const providers = [
+        [OpenAI.configure({ apiKey: "test" }).chat("model"), "openai"],
+        [OpenAI.configure({ apiKey: "test" }).responses("model"), "openai"],
+        [Azure.configure({ resourceName: "resource", apiKey: "test" }).chat("model"), "azure"],
+        [Azure.configure({ resourceName: "resource", apiKey: "test" }).responses("model"), "azure"],
+        [AmazonBedrock.configure({ apiKey: "test" }).model("model"), "bedrock"],
+        [AmazonBedrockMantle.configure({ apiKey: "test" }).chat("model"), "mantle"],
+        [AmazonBedrockMantle.configure({ apiKey: "test" }).responses("model"), "mantle"],
+        [Google.configure({ apiKey: "test" }).model("model"), "google"],
+        [GoogleVertex.configure(vertex).model("model"), "vertex"],
+        [GoogleVertexChat.configure(vertex).model("model"), "vertex"],
+        [GoogleVertexResponses.configure(vertex).model("model"), "vertex"],
+        [GoogleVertexMessages.configure(vertex).model("model"), "anthropic"],
+        [Anthropic.configure({ apiKey: "test" }).model("model"), "anthropic"],
+        [
+          AnthropicCompatible.configure({ baseURL: "https://example.test/v1", provider: "minimax" }).model("model"),
+          "minimax",
+        ],
+        [
+          OpenAICompatible.configure({ baseURL: "https://example.test/v1", provider: "custom" }).model("model"),
+          "custom",
+        ],
+        [
+          OpenAICompatibleResponses.configure({ baseURL: "https://example.test/v1", provider: "custom" }).model(
+            "model",
+          ),
+          "custom",
+        ],
+        [Cerebras.configure({ apiKey: "test" }).model("model"), "cerebras"],
+        [DeepInfra.configure({ apiKey: "test" }).model("model"), "deepinfra"],
+        [TogetherAI.configure({ apiKey: "test" }).model("model"), "togetherai"],
+        [CloudflareAIGateway.configure({ accountId: "account" }).model("model"), "cloudflare-ai-gateway"],
+        [CloudflareWorkersAI.configure({ accountId: "account" }).model("model"), "cloudflare-workers-ai"],
+        [OpenRouter.configure({ apiKey: "test" }).model("model"), "openrouter"],
+        [XAI.configure({ apiKey: "test" }).chat("model"), "xai"],
+        [XAI.configure({ apiKey: "test" }).responses("model"), "xai"],
+      ] as const
+
+      for (const [model, key] of providers) expect(model.route.providerMetadataKey).toBe(key)
+    }),
+  )
+
   it.effect("preserves native Together AI and Cerebras provider and route identities", () =>
     Effect.gen(function* () {
       const together = TogetherAI.configure({ apiKey: "fixture" }).model("meta-llama/Llama-3.3-70B")

@@ -903,6 +903,70 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("uses the configured provider metadata namespace for reasoning and usage", () =>
+    Effect.gen(function* () {
+      const selected = LanguageModel.update(model, {
+        route: { ...model.route, providerMetadataKey: "vendor" },
+      })
+      const details = [{ type: "reasoning.text", text: "thinking", signature: "signed" }]
+      const response = yield* LLMClient.generate(LLMRequest.update(request, { model: selected })).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { choices: [{ delta: { reasoning: "thinking", reasoning_details: details } }] },
+              deltaChunk({ content: "Hello" }),
+              deltaChunk({}, "stop"),
+              usageChunk({ prompt_tokens: 5, completion_tokens: 2, total_tokens: 7 }),
+            ),
+          ),
+        ),
+      )
+
+      expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
+        vendor: { reasoningField: "reasoning", reasoningDetails: details },
+      })
+      expect(response.usage?.providerMetadata).toEqual({
+        vendor: { prompt_tokens: 5, completion_tokens: 2, total_tokens: 7 },
+      })
+
+      const replay = yield* compileRequest(LLM.request({ model: selected, messages: [response.message] }))
+      expect(replay.body.messages).toEqual([
+        { role: "assistant", content: "Hello", reasoning: "thinking", reasoning_details: details },
+      ])
+    }),
+  )
+
+  it.effect("falls back to the selected provider for the metadata namespace", () =>
+    Effect.gen(function* () {
+      const compatible = model.route.with({ provider: "deepseek" }).model({ id: "deepseek-chat" })
+      const selected = LanguageModel.update(compatible, {
+        route: { ...compatible.route, providerMetadataKey: undefined },
+      })
+      const response = yield* LLMClient.generate(LLMRequest.update(request, { model: selected })).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              deltaChunk({ reasoning_content: "thinking" }),
+              deltaChunk({ content: "Hello" }),
+              deltaChunk({}, "stop"),
+              usageChunk({ prompt_tokens: 5, completion_tokens: 2, total_tokens: 7 }),
+            ),
+          ),
+        ),
+      )
+
+      expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
+        deepseek: { reasoningField: "reasoning_content" },
+      })
+      expect(response.usage?.providerMetadata).toEqual({
+        deepseek: { prompt_tokens: 5, completion_tokens: 2, total_tokens: 7 },
+      })
+
+      const replay = yield* compileRequest(LLM.request({ model: selected, messages: [response.message] }))
+      expect(replay.body.messages).toEqual([{ role: "assistant", content: "Hello", reasoning_content: "thinking" }])
+    }),
+  )
+
   it.effect("parses and replays a configured custom reasoning field", () =>
     Effect.gen(function* () {
       const custom = LanguageModel.update(model, { compatibility: { reasoningField: "vendor_reasoning" } })

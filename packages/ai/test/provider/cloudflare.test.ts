@@ -126,7 +126,7 @@ describe("Cloudflare", () => {
       expect(response.reasoning).toBe("Thinking")
       expect(response.events.filter(LLMEvent.is.reasoningDelta)).toHaveLength(2)
       expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
-        openai: { reasoningField: "reasoning", reasoningDetails: merged },
+        "cloudflare-ai-gateway": { reasoningField: "reasoning", reasoningDetails: merged },
       })
 
       const replay = yield* compileRequest(LLM.request({ model, messages: [response.message] }))

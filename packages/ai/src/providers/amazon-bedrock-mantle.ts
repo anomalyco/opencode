@@ -23,13 +23,14 @@ export interface Settings extends ProviderPackage.Settings {
   readonly baseURL?: string
   readonly credentials?: Credentials
   readonly region?: string
+  readonly topP?: number
   readonly providerOptions?: OpenAIProviderOptionsInput
 }
 
 const responsesRoute = Route.make({
   id: "bedrock-mantle-responses",
   provider: id,
-  providerMetadataKey: OpenAIResponses.route.providerMetadataKey,
+  providerMetadataKey: "mantle",
   protocol: OpenAIResponses.protocol,
   endpoint: OpenAIResponses.route.endpoint,
   auth: OpenAIResponses.route.auth,
@@ -40,6 +41,7 @@ const responsesRoute = Route.make({
 const chatRoute = OpenAIChat.route.with({
   id: "bedrock-mantle-chat",
   provider: id,
+  providerMetadataKey: "mantle",
 })
 
 export const routes = [responsesRoute, chatRoute]
@@ -94,6 +96,7 @@ const config = (settings: Settings): Config => {
     apiKey: settings.auth === "sigv4" ? undefined : settings.apiKey,
     baseURL: settings.baseURL,
     credentials: settings.credentials,
+    generation: settings.topP === undefined ? undefined : { topP: settings.topP },
     headers: settings.headers === undefined ? undefined : { ...settings.headers },
     http: settings.body === undefined ? undefined : { body: { ...settings.body } },
     providerOptions: settings.providerOptions,

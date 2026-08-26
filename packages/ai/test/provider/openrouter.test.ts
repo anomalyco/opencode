@@ -295,7 +295,7 @@ describe("OpenRouter", () => {
               {
                 type: "reasoning",
                 text: "Thinking",
-                providerMetadata: { openai: { reasoningField: "reasoning", reasoningDetails: details } },
+                providerMetadata: { openrouter: { reasoningField: "reasoning", reasoningDetails: details } },
               },
             ]),
           ],
@@ -328,7 +328,7 @@ describe("OpenRouter", () => {
             Message.assistant({
               type: "reasoning",
               text: "Thinking",
-              providerMetadata: { openai: { reasoningField: "reasoning", reasoningDetails: details } },
+              providerMetadata: { openrouter: { reasoningField: "reasoning", reasoningDetails: details } },
             }),
           ],
         }),
@@ -354,7 +354,7 @@ describe("OpenRouter", () => {
             Message.assistant({
               type: "reasoning",
               text: "AB",
-              providerMetadata: { openai: { reasoningField: "reasoning", reasoningDetails: details } },
+              providerMetadata: { openrouter: { reasoningField: "reasoning", reasoningDetails: details } },
             }),
           ],
         }),

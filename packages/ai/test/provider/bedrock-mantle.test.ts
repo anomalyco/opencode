@@ -36,6 +36,23 @@ describe("Amazon Bedrock Mantle provider", () => {
         protocol: "openai-responses",
         body: { model: "openai.gpt-oss-120b", store: false },
       })
+      expect(provider.model("openai.gpt-oss-120b").route.providerMetadataKey).toBe("mantle")
+      expect(provider.responses("openai.gpt-oss-120b").route.providerMetadataKey).toBe("mantle")
+    }),
+  )
+
+  it.effect("preserves configured top-p generation defaults for Chat and Responses", () =>
+    Effect.gen(function* () {
+      const settings = { apiKey: "test-key", topP: 0.8 }
+      const chat = yield* compileRequest(
+        LLM.request({ model: AmazonBedrockMantle.chatModel("openai.gpt-oss-safeguard-20b", settings), prompt: "Hi" }),
+      )
+      const responses = yield* compileRequest(
+        LLM.request({ model: AmazonBedrockMantle.responsesModel("openai.gpt-oss-120b", settings), prompt: "Hi" }),
+      )
+
+      expect(chat.body.top_p).toBe(0.8)
+      expect(responses.body.top_p).toBe(0.8)
     }),
   )
 
@@ -107,6 +124,9 @@ describe("Amazon Bedrock Mantle provider", () => {
         LLM.request({ model, messages: [response.message, Message.user("Continue.")] }),
       )
 
+      expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
+        mantle: { itemId: "msg_95d4d0af4350432a", reasoningEncryptedContent: "mantle-state" },
+      })
       expect(prepared.body.input).toEqual([
         {
           type: "reasoning",
