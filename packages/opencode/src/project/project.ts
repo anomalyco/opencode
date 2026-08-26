@@ -10,6 +10,7 @@ import { GlobalBus } from "@/bus/global"
 import { which } from "@opencode-ai/core/util/which"
 import { Command } from "@/command"
 import { InstanceState } from "@/effect/instance-state"
+import * as Relocation from "@/project/relocation"
 import { Effect, Layer, Scope, Context, Stream, Types, Schema } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { FSUtil } from "@opencode-ai/core/fs-util"
@@ -231,6 +232,37 @@ const layer = Layer.effect(
           }
 
       if (flags.experimentalIconDiscovery) yield* discover(existing).pipe(Effect.ignore, Effect.forkIn(scope))
+
+      // A renamed or moved worktree leaves every stored reference pointing at the
+      // old location while this directory still resolves to the same project
+      // identity. If the previous worktree no longer exists on disk, migrate the
+      // stored history over so sessions stay visible instead of being orphaned.
+      if (
+        projectID !== ProjectV2.ID.global &&
+        existing.worktree !== "/" &&
+        worktree !== existing.worktree &&
+        !(yield* fs.exists(existing.worktree).pipe(Effect.orDie))
+      ) {
+        // never let a failed migration brick opening the project - degrade to
+        // pre-existing behavior (orphaned history) instead of failing startup
+        const relocated = yield* Relocation.relocateProjectData({
+          from: existing.worktree,
+          to: data.directory,
+        }).pipe(
+          Effect.catchAllCause((cause) =>
+            Effect.logError("project history relocation failed", { cause }).pipe(
+              Effect.as(Relocation.zeroRelocation),
+            ),
+          ),
+        )
+        if (relocated.sessions > 0 || relocated.events > 0) {
+          yield* Effect.logInfo("project history relocated", {
+            from: existing.worktree,
+            to: data.directory,
+            ...relocated,
+          })
+        }
+      }
 
       const result: Info = {
         ...existing,

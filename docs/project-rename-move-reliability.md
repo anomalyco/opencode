@@ -71,7 +71,14 @@ At instance startup (and when opening a directory), if a known worktree no longe
    - rewrite matching substrings inside `message.data`, `part.data`, `todo.content`, `event.data`
      scoped to those sessions' ids,
    - checkpoint WAL; run integrity + foreign-key checks; log a summary row-count.
-3. Emit a `project.relinked` event so every open client refreshes instead of showing ghosts.
+3. Failure semantics: relocation runs best-effort - a failed migration logs and continues with
+   pre-existing behavior rather than failing instance startup.
+4. Emit a `project.relinked` event so every open client refreshes instead of showing ghosts.
+
+Reference implementation shipped alongside this document:
+`packages/opencode/src/project/relocation-paths.ts` (pure splicer, unit-tested incl. unicode
+boundaries, triple-JSON depth, shallower/deeper moves, sibling-folder and other-user guards,
+1MB perf smoke) and `packages/opencode/src/project/relocation.ts` (transactional wiring).
 
 ### 3.2 Canonicalization (fixes #44538 too)
 
