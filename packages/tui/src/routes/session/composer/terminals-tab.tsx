@@ -3,6 +3,7 @@ import { TextAttributes } from "@opentui/core"
 import { Keymap } from "../../../context/keymap"
 import type { useSessionTerminals } from "../../../context/session-terminals"
 import { useTheme } from "../../../context/theme"
+import { useToast } from "../../../ui/toast"
 import { useComposerTab } from "./index"
 
 export function TerminalsTab(props: {
@@ -12,6 +13,7 @@ export function TerminalsTab(props: {
 }) {
   const composer = useComposerTab()
   const theme = useTheme()
+  const toast = useToast()
   const [selected, setSelected] = createSignal<number>()
   const session = () => props.terminals.get(props.sessionID)
   const entries = () => session()?.terminals ?? []
@@ -33,10 +35,14 @@ export function TerminalsTab(props: {
     const terminal = entries()[index]
     composer.close()
     if (terminal) {
-      void props.terminals.selectTerminal(props.sessionID, terminal.id)
+      void props.terminals
+        .selectTerminal(props.sessionID, terminal.id)
+        .catch(() => toast.show({ variant: "error", message: "Unable to load terminal" }))
       return
     }
-    void props.terminals.newTerminal(props.sessionID)
+    void props.terminals
+      .newTerminal(props.sessionID)
+      .catch(() => toast.show({ variant: "error", message: "Unable to load terminal" }))
   }
 
   Keymap.createLayer(() => ({
