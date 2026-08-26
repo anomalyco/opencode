@@ -145,21 +145,51 @@ async function rootCommit(dir: string) {
 }
 
 describe("Project.resolve", () => {
-  it.live("returns global for non-git directory", () =>
+  it.live("creates distinct deterministic projects for exact markerless directories", () =>
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireRelease(
         Effect.promise(() => tmpdir()),
         (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
       )
       const project = yield* Project.Service
+      const nested = path.join(tmp.path, "notes", "drafts")
+      yield* Effect.promise(() => fs.mkdir(nested, { recursive: true }))
 
       const result = yield* project.resolve(abs(tmp.path))
+      const repeated = yield* project.resolve(abs(path.join(tmp.path, ".")))
+      const child = yield* project.resolve(abs(nested))
 
-      expect(result.id).toBe(Project.ID.make("global"))
-      expect(path.resolve(result.directory)).toBe(path.parse(tmp.path).root)
+      expect(result.id).not.toBe(Project.ID.global)
+      expect(repeated.id).toBe(result.id)
+      expect(child.id).not.toBe(result.id)
+      expect(result.directory).toBe(yield* real(tmp.path))
+      expect(child.directory).toBe(yield* real(nested))
       expect(result.canonical).toBe(result.directory)
       expect(result.previous).toBeUndefined()
       expect(result.vcs).toBeUndefined()
+    }),
+  )
+
+  it.live("repository markers override markerless directory projects", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      const nested = path.join(tmp.path, "packages", "app")
+      yield* Effect.promise(() => fs.mkdir(nested, { recursive: true }))
+      const project = yield* Project.Service
+      const root = yield* project.resolve(abs(tmp.path))
+      const child = yield* project.resolve(abs(nested))
+
+      yield* Effect.promise(() => initRepo(tmp.path, { commit: true }))
+      const repository = yield* project.resolve(abs(nested))
+
+      expect(root.id).not.toBe(child.id)
+      expect(repository.id).not.toBe(root.id)
+      expect(repository.id).not.toBe(child.id)
+      expect(repository.directory).toBe(yield* real(tmp.path))
+      expect(repository.vcs?.type).toBe("git")
     }),
   )
 

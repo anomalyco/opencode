@@ -1,6 +1,6 @@
 export * as SessionProjector from "./projector.js"
 
-import { and, asc, desc, eq, gt, gte, inArray, lt, lte, sql } from "drizzle-orm"
+import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, lte, or, sql } from "drizzle-orm"
 import { DateTime, Effect, Layer, Schema, Stream } from "effect"
 import path from "path"
 import { Database } from "../database/database.js"
@@ -23,6 +23,8 @@ import { Worktree } from "@opencode-ai/schema/worktree"
 import { Project } from "@opencode-ai/schema/project"
 import { AbsolutePath, RelativePath } from "../schema.js"
 import type { SessionSchema } from "./schema.js"
+import { directoryProjectID } from "../project/directory-id.js"
+import { ProjectTable } from "../project/sql.js"
 
 type DatabaseService = Database.Interface["db"]
 type CurrentDurableEvent = Extract<SessionEvent.Event, { readonly durable: object }>
@@ -479,17 +481,34 @@ const layer = Layer.effectDiscard(
     yield* bus.project(Worktree.Event.Resolved, (event) =>
       Effect.gen(function* () {
         const stale = [event.data.previous, Project.ID.global].filter((id) => id !== event.data.projectID)
-        if (stale.length === 0) return
-        const rows = yield* db
-          .select({ id: SessionTable.id, directory: SessionTable.directory })
-          .from(SessionTable)
+        const markerless = yield* db
+          .select({ id: ProjectTable.id })
+          .from(ProjectTable)
           .where(
             and(
-              inArray(SessionTable.project_id, stale),
-              // Lexicographic range narrows the scan to prefix neighbors without
-              // LIKE escaping; FSUtil.contains below decides containment exactly.
-              gte(SessionTable.directory, event.data.directory),
-              lte(SessionTable.directory, AbsolutePath.make(event.data.directory + "\uffff")),
+              isNull(ProjectTable.vcs),
+              gte(ProjectTable.worktree, event.data.directory),
+              lte(ProjectTable.worktree, AbsolutePath.make(event.data.directory + "\uffff")),
+            ),
+          )
+          .all()
+          .pipe(Effect.orDie)
+        const rows = yield* db
+          .select({ id: SessionTable.id, directory: SessionTable.directory, projectID: SessionTable.project_id })
+          .from(SessionTable)
+          .where(
+            or(
+              inArray(
+                SessionTable.project_id,
+                markerless.map((item) => item.id),
+              ),
+              and(
+                inArray(SessionTable.project_id, stale),
+                // Lexicographic range narrows legacy ownership to prefix neighbors;
+                // FSUtil.contains below decides containment exactly.
+                gte(SessionTable.directory, event.data.directory),
+                lte(SessionTable.directory, AbsolutePath.make(event.data.directory + "\uffff")),
+              ),
             ),
           )
           .all()
@@ -497,16 +516,47 @@ const layer = Layer.effectDiscard(
         yield* Effect.forEach(
           rows,
           (row) => {
-            if (!FSUtil.contains(event.data.directory, row.directory)) return Effect.void
+            const directory = AbsolutePath.make(FSUtil.resolve(row.directory))
+            if (!FSUtil.contains(event.data.directory, directory)) return Effect.void
+            if (!stale.includes(row.projectID) && !markerless.some((item) => item.id === row.projectID))
+              return Effect.void
             return db
               .update(SessionTable)
               .set({
                 project_id: event.data.projectID,
-                path: RelativePath.make(path.relative(event.data.directory, row.directory).replaceAll("\\", "/")),
+                path: RelativePath.make(path.relative(event.data.directory, directory).replaceAll("\\", "/")),
                 // Self-assignment suppresses the column's $onUpdate: adoption is not activity.
                 time_updated: sql`${SessionTable.time_updated}`,
               })
               .where(eq(SessionTable.id, row.id))
+              .run()
+              .pipe(Effect.orDie)
+          },
+          { discard: true },
+        )
+        const moves = yield* db
+          .select({ id: SessionInboxTable.id, payload: SessionInboxTable.payload })
+          .from(SessionInboxTable)
+          .where(eq(SessionInboxTable.type, "move"))
+          .all()
+          .pipe(Effect.orDie)
+        yield* Effect.forEach(
+          moves,
+          (row) => {
+            const payload = Schema.decodeUnknownSync(SessionInbox.MovePayload)(row.payload)
+            const directory = AbsolutePath.make(FSUtil.resolve(payload.location.directory))
+            if (!FSUtil.contains(event.data.directory, directory)) return Effect.void
+            if (payload.projectID !== directoryProjectID(directory)) return Effect.void
+            return db
+              .update(SessionInboxTable)
+              .set({
+                payload: {
+                  ...payload,
+                  projectID: event.data.projectID,
+                  subpath: RelativePath.make(path.relative(event.data.directory, directory).replaceAll("\\", "/")),
+                },
+              })
+              .where(eq(SessionInboxTable.id, row.id))
               .run()
               .pipe(Effect.orDie)
           },

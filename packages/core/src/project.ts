@@ -16,6 +16,7 @@ import { Hash } from "@opencode-ai/util/hash"
 import { ProjectSchema } from "./project/schema.js"
 import { ProjectTable, upsertProject } from "./project/sql.js"
 import { WorktreeTable } from "./worktree/sql.js"
+import { directoryProjectID } from "./project/directory-id.js"
 
 export const ID = ProjectSchema.ID
 export type ID = ProjectSchema.ID
@@ -297,8 +298,8 @@ const layer = Layer.effect(
 
       const hg = yield* hgDiscover(input)
       if (hg) return yield* persist({ ...hg, canonical: hg.directory })
-      const directory = AbsolutePath.make(path.parse(input).root)
-      return yield* persist({ id: ID.global, directory, canonical: directory, vcs: undefined })
+      const directory = AbsolutePath.make(yield* fs.resolve(input))
+      return yield* persist({ id: directoryProjectID(directory), directory, canonical: directory, vcs: undefined })
     })
 
     return Service.of({ list, update, resolve })

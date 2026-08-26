@@ -95,14 +95,37 @@ describe("Session.create", () => {
         const { db } = yield* Database.Service
         const ref = Location.Ref.make({ directory: AbsolutePath.make(directory) })
         const nested = Location.Ref.make({ directory: AbsolutePath.make(path.join(directory, "packages", "app")) })
+        const aliased = Location.Ref.make({
+          directory: AbsolutePath.make([path.join(directory, "alias"), "..", "packages", "app"].join(path.sep)),
+        })
         const created = yield* session.create({ location: ref, title: "Before git" })
         const child = yield* session.create({ location: nested, title: "Nested before git" })
-        const originalUpdated = created.time.updated
+        const alias = yield* session.create({ location: aliased, title: "Aliased before git" })
+        const bus = yield* Bus.Service
+        const store = yield* SessionStore.Service
+        yield* session.prompt({ sessionID: created.id, text: "Preserved history", resume: false })
+        yield* SessionInbox.promote(db, bus, created.id, "steer")
+        const pending = yield* session.prompt({ sessionID: created.id, text: "Preserved inbox", resume: false })
+        yield* store.claim(created.id)
+        const before = yield* db
+          .select()
+          .from(SessionTable)
+          .where(eq(SessionTable.id, created.id))
+          .get()
+          .pipe(Effect.orDie)
+        if (!before) return yield* Effect.die(new Error("created session not found"))
 
         yield* Effect.promise(async () => {
           await $`git init -q`.cwd(directory)
           await $`git config user.email test@example.com`.cwd(directory)
           await $`git config user.name Test`.cwd(directory)
+        })
+        const unborn = yield* projects.resolve(ref.directory)
+        const unbornRoot = yield* session.get(created.id)
+        const unbornNested = yield* session.get(child.id)
+        const unbornAlias = yield* session.get(alias.id)
+
+        yield* Effect.promise(async () => {
           await fs.writeFile(path.join(directory, "README.md"), "test\n")
           await $`git add README.md`.cwd(directory)
           await $`git commit -qm initial`.cwd(directory)
@@ -113,10 +136,17 @@ describe("Session.create", () => {
         const repeat = yield* projects.resolve(ref.directory)
         const adopted = yield* session.get(created.id)
         const nestedAdopted = yield* session.get(child.id)
+        const aliasAdopted = yield* session.get(alias.id)
         const page = yield* session.list({ project: project.id })
         const log = Array.from(yield* Stream.runCollect(logEvents(session, created.id)))
 
-        expect(created.projectID).toBe(Project.ID.global)
+        expect(created.projectID).not.toBe(Project.ID.global)
+        expect(child.projectID).not.toBe(created.projectID)
+        expect(alias.projectID).toBe(child.projectID)
+        expect(unborn.id).toBe(Project.ID.global)
+        expect(unbornRoot).toMatchObject({ projectID: Project.ID.global, subpath: undefined })
+        expect(unbornNested).toMatchObject({ projectID: Project.ID.global, subpath: "packages/app" })
+        expect(unbornAlias).toMatchObject({ projectID: Project.ID.global, subpath: "packages/app" })
         expect(project.id).toBe(Project.ID.make(Hash.fast("git-remote:github.com/owner/adopted")))
         expect(repeat.id).toBe(project.id)
         expect(page.data.map((item) => item.id)).toEqual(expect.arrayContaining([created.id, child.id]))
@@ -124,16 +154,37 @@ describe("Session.create", () => {
           projectID: project.id,
           location: ref,
           subpath: undefined,
-          time: { updated: originalUpdated },
+          time: { updated: DateTime.makeUnsafe(before.time_updated) },
         })
         expect(nestedAdopted).toMatchObject({
           projectID: project.id,
           location: nested,
           subpath: RelativePath.make("packages/app"),
         })
+        expect(aliasAdopted).toMatchObject({
+          projectID: project.id,
+          location: aliased,
+          subpath: RelativePath.make("packages/app"),
+        })
         // Adoption is a project-domain fact; the session log records nothing new.
-        expect(log.map((event) => event.type)).toEqual(["session.created"])
-        expect(yield* session.messages({ sessionID: created.id })).toEqual([])
+        expect(log.map((event) => event.type)).toEqual([
+          "session.created",
+          "session.inbox.enqueued",
+          "session.inbox.delivered",
+          "session.inbox.enqueued",
+        ])
+        expect(yield* session.messages({ sessionID: created.id })).toMatchObject([
+          { id: expect.any(String), type: "user", text: "Preserved history" },
+        ])
+        expect(yield* SessionInbox.find(db, pending.id)).toMatchObject({ payload: { text: "Preserved inbox" } })
+        expect(
+          yield* db.select().from(SessionTable).where(eq(SessionTable.id, created.id)).get().pipe(Effect.orDie),
+        ).toMatchObject({
+          time_created: before.time_created,
+          time_updated: before.time_updated,
+          time_suspended: before.time_suspended,
+          resume_attempts: before.resume_attempts,
+        })
         // Repeated resolution announces the directory's identity exactly once.
         const announced = yield* db
           .select({ type: EventTable.type })
