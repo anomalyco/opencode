@@ -77,7 +77,7 @@ export function TerminalsTab(props: {
         <For each={[...entries(), undefined]}>
           {(terminal, index) => {
             const active = createMemo(() => index() === selected())
-            const current = () => terminal?.id === props.visibleTerminalID
+            const current = () => terminal !== undefined && terminal.id === props.visibleTerminalID
             return (
               <box
                 flexDirection="row"
