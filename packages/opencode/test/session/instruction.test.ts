@@ -138,6 +138,27 @@ describe("Instruction.resolve", () => {
     }),
   )
 
+  it.live("bare resolves explicit relative instructions with worktree-aware globbing", () =>
+    Effect.gen(function* () {
+      const root = yield* tmpWithFiles({
+        "shared/EXPLICIT.md": "# Shared Explicit Instructions",
+        "project/file.ts": "const value = true",
+      })
+      const directory = path.join(root, "project")
+
+      yield* Instruction.Service.use((svc) =>
+        Effect.gen(function* () {
+          expect(Array.from(yield* svc.systemPaths())).toEqual([path.join(root, "shared", "EXPLICIT.md")])
+        }),
+      ).pipe(
+        provideInstruction({ home: root, config: root }, undefined, {
+          get: () => Effect.succeed({ instructions: ["../shared/*.md"] }),
+        }),
+        provideInstance(directory, "bare"),
+      )
+    }),
+  )
+
   it.live("returns empty when AGENTS.md is at project root (already in systemPaths)", () =>
     withFiles({ "AGENTS.md": "# Root Instructions", "src/file.ts": "const x = 1" }, (dir) =>
       Effect.gen(function* () {

@@ -1,10 +1,11 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Deferred, Effect, Fiber, Layer } from "effect"
 import { InstanceRef } from "../../src/effect/instance-ref"
 import { registerDisposer } from "../../src/effect/instance-registry"
 import { InstanceBootstrap } from "../../src/project/bootstrap"
+import { InstanceOptions } from "../../src/project/instance-options"
 import { InstanceStore } from "../../src/project/instance-store"
 import { tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
@@ -37,6 +38,19 @@ const registerDisposerScoped = (disposer: (directory: string) => Promise<void>) 
     Effect.sync(() => registerDisposer((ctx) => disposer(ctx.directory))),
     (off) => Effect.sync(off),
   )
+
+describe("InstanceOptions", () => {
+  test("returns deeply frozen policies", () => {
+    const policy = InstanceOptions.resolve()
+
+    expect(Object.isFrozen(policy)).toBe(true)
+    expect(Object.isFrozen(policy.config)).toBe(true)
+    expect(Object.isFrozen(policy.discovery)).toBe(true)
+    expect(Object.isFrozen(policy.startup)).toBe(true)
+    expect(Reflect.set(policy.config, "global", false)).toBe(false)
+    expect(InstanceOptions.resolve().config.global).toBe(true)
+  })
+})
 
 describe("InstanceStore", () => {
   it.live("loads instance context", () =>

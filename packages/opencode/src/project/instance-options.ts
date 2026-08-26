@@ -19,8 +19,17 @@ export type Policy = {
   }
 }
 
+function freeze(policy: Policy): Policy {
+  return Object.freeze({
+    ...policy,
+    config: Object.freeze(policy.config),
+    discovery: Object.freeze(policy.discovery),
+    startup: Object.freeze(policy.startup),
+  })
+}
+
 const policies: Record<Profile, Policy> = {
-  default: {
+  default: freeze({
     profile: "default",
     config: {
       wellKnown: true,
@@ -37,8 +46,8 @@ const policies: Record<Profile, Policy> = {
       installConfigDependencies: true,
       lsp: true,
     },
-  },
-  bare: {
+  }),
+  bare: freeze({
     profile: "bare",
     config: {
       wellKnown: false,
@@ -55,7 +64,7 @@ const policies: Record<Profile, Policy> = {
       installConfigDependencies: false,
       lsp: false,
     },
-  },
+  }),
 }
 
 export function resolve(profile: Profile = "default") {

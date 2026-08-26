@@ -5,6 +5,8 @@
 // `OPENCODE_CONFIG_CONTENT` providing the test provider config inline.
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
+import { mkdir } from "node:fs/promises"
+import path from "node:path"
 import { reply } from "../../lib/llm-server"
 import { cliIt } from "../../lib/cli-process"
 
@@ -49,6 +51,21 @@ describe("opencode run (non-interactive subprocess)", () => {
           "text",
           "step_finish",
         ])
+      }),
+    60_000,
+  )
+
+  cliIt.concurrent(
+    "--bare boots the requested directory",
+    ({ home, llm, opencode }) =>
+      Effect.gen(function* () {
+        const directory = path.join(home, "target")
+        yield* Effect.promise(() => mkdir(directory))
+        yield* llm.text("bare directory response")
+        const result = yield* opencode.run("say hi", { bare: true, extraArgs: ["--dir", directory] })
+
+        opencode.expectExit(result, 0)
+        expect(result.stdout).toBe("bare directory response\n")
       }),
     60_000,
   )

@@ -51,6 +51,10 @@ function mergeConfigConcatArrays(target: Info, source: Info): Info {
   return merged
 }
 
+function hasConfigContent(config: Info) {
+  return Object.keys(config).some((key) => key !== "$schema" && key !== "plugin_origins")
+}
+
 function normalizeLoadedConfig(data: unknown) {
   if (!isRecord(data)) return data
   const copy = { ...data }
@@ -324,6 +328,7 @@ const layer = Layer.effect(
 
     const loadInstanceState = Effect.fn("Config.loadInstanceState")(
       function* (ctx: InstanceContext) {
+        // Bare suppresses well-known config fetches, but provider credentials still come from the normal auth store.
         const auth = yield* authSvc.all().pipe(Effect.orDie)
         const policy = InstanceOptions.resolve(ctx.profile)
         const loadedSources = new Set<string>()
@@ -361,10 +366,12 @@ const layer = Layer.effect(
           result.plugin_origins = plugins
         })
 
-        const merge = (source: string, next: Info, kind?: ConfigPlugin.Scope) => {
+        const merge = Effect.fnUntraced(function* (source: string, next: Info, kind?: ConfigPlugin.Scope) {
+          const loaded = hasConfigContent(next)
           result = mergeConfigConcatArrays(result, next)
-          return mergePluginOrigins(source, next.plugin, kind)
-        }
+          yield* mergePluginOrigins(source, next.plugin, kind)
+          return loaded
+        })
 
         for (const [key, value] of Object.entries(auth)) {
           if (value.type === "wellknown") {
@@ -404,28 +411,30 @@ const layer = Layer.effect(
               },
               authEnv,
             )
-            yield* merge(source, next, "global")
-            loadedSources.add("well-known")
+            if (yield* merge(source, next, "global")) loadedSources.add("well-known")
             yield* Effect.logDebug("loaded remote config from well-known", { url })
           }
         }
 
         if (policy.config.global) {
           const global = Object.keys(authEnv).length ? yield* loadGlobal(authEnv) : yield* getGlobal()
-          yield* merge(Global.Path.config, global, "global")
-          loadedSources.add("global")
+          if (yield* merge(Global.Path.config, global, "global")) loadedSources.add("global")
         }
 
         if (Flag.OPENCODE_CONFIG) {
-          yield* merge(Flag.OPENCODE_CONFIG, yield* loadFile(Flag.OPENCODE_CONFIG, authEnv, policy.profile !== "bare"))
-          loadedSources.add("explicit")
+          if (
+            yield* merge(
+              Flag.OPENCODE_CONFIG,
+              yield* loadFile(Flag.OPENCODE_CONFIG, authEnv, policy.profile !== "bare"),
+            )
+          )
+            loadedSources.add("explicit")
           yield* Effect.logDebug("loaded custom config", { path: Flag.OPENCODE_CONFIG })
         }
 
         if (policy.config.project && !Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
           for (const file of yield* ConfigPaths.files("opencode", ctx.directory, ctx.worktree).pipe(Effect.orDie)) {
-            yield* merge(file, yield* loadFile(file, authEnv), "local")
-            loadedSources.add("project")
+            if (yield* merge(file, yield* loadFile(file, authEnv), "local")) loadedSources.add("project")
           }
         }
 
@@ -446,12 +455,11 @@ const layer = Layer.effect(
         const deps: Fiber.Fiber<void>[] = []
 
         for (const dir of directories) {
-          loadedSources.add("config-dir")
           if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
             for (const file of ["opencode.json", "opencode.jsonc"]) {
               const source = path.join(dir, file)
               yield* Effect.logDebug(`loading config from ${source}`)
-              yield* merge(source, yield* loadFile(source, authEnv))
+              if (yield* merge(source, yield* loadFile(source, authEnv))) loadedSources.add("config-dir")
               result.agent ??= {}
               result.mode ??= {}
               result.plugin ??= []
@@ -483,13 +491,19 @@ const layer = Layer.effect(
             deps.push(dep)
           }
 
-          result.command = mergeDeep(result.command ?? {}, yield* Effect.promise(() => ConfigCommand.load(dir)))
-          result.agent = mergeDeep(result.agent ?? {}, yield* Effect.promise(() => ConfigAgent.load(dir)))
-          result.agent = mergeDeep(result.agent ?? {}, yield* Effect.promise(() => ConfigAgent.loadMode(dir)))
+          const commands = yield* Effect.promise(() => ConfigCommand.load(dir))
+          const agents = yield* Effect.promise(() => ConfigAgent.load(dir))
+          const modes = yield* Effect.promise(() => ConfigAgent.loadMode(dir))
+          result.command = mergeDeep(result.command ?? {}, commands)
+          result.agent = mergeDeep(result.agent ?? {}, agents)
+          result.agent = mergeDeep(result.agent ?? {}, modes)
           // Auto-discovered plugins under `.opencode/plugin(s)` are already local files, so ConfigPlugin.load
           // returns normalized Specs and we only need to attach origin metadata here.
           const list = yield* Effect.promise(() => ConfigPlugin.load(dir))
           yield* mergePluginOrigins(dir, list)
+          if (Object.keys(commands).length || Object.keys(agents).length || Object.keys(modes).length || list.length) {
+            loadedSources.add("config-dir")
+          }
         }
 
         if (process.env.OPENCODE_CONFIG_CONTENT) {
@@ -498,8 +512,7 @@ const layer = Layer.effect(
             dir: ctx.directory,
             source,
           })
-          yield* merge(source, next, "local")
-          loadedSources.add("explicit")
+          if (yield* merge(source, next, "local")) loadedSources.add("explicit")
           yield* Effect.logDebug("loaded custom config from OPENCODE_CONFIG_CONTENT")
         }
 
@@ -529,8 +542,7 @@ const layer = Layer.effect(
               for (const providerID of Object.keys(next.provider ?? {})) {
                 consoleManagedProviders.add(providerID)
               }
-              yield* merge(source, next, "global")
-              loadedSources.add("console-managed")
+              if (yield* merge(source, next, "global")) loadedSources.add("console-managed")
             }
           }).pipe(
             Effect.withSpan("Config.loadActiveOrgConfig"),
@@ -546,22 +558,21 @@ const layer = Layer.effect(
         if (existsSync(managedDir)) {
           for (const file of ["opencode.json", "opencode.jsonc"]) {
             const source = path.join(managedDir, file)
-            yield* merge(source, yield* loadFile(source, undefined, policy.profile !== "bare"), "global")
-            loadedSources.add("managed")
+            if (yield* merge(source, yield* loadFile(source, undefined, policy.profile !== "bare"), "global")) {
+              loadedSources.add("managed")
+            }
           }
         }
 
         // macOS managed preferences (.mobileconfig deployed via MDM) override everything
         const managed = yield* Effect.promise(() => ConfigManaged.readManagedPreferences())
         if (managed) {
-          result = mergeConfigConcatArrays(
-            result,
-            yield* loadConfig(managed.text, {
-              dir: path.dirname(managed.source),
-              source: managed.source,
-            }),
-          )
-          loadedSources.add("managed")
+          const next = yield* loadConfig(managed.text, {
+            dir: path.dirname(managed.source),
+            source: managed.source,
+          })
+          result = mergeConfigConcatArrays(result, next)
+          if (hasConfigContent(next)) loadedSources.add("managed")
         }
 
         for (const [name, mode] of Object.entries(result.mode ?? {})) {

@@ -1896,11 +1896,26 @@ describe("bare config profile", () => {
           expect(config.model).toBe("explicit/model")
           expect(config.username).toBe("explicit-user")
           expect(report.profile).toBe("bare")
+          expect(report.loaded).toEqual(["explicit"])
           expect(report.skipped).toEqual(["well-known", "global", "project", "config-dir"])
           expect(report.startup).toEqual(["internal-plugins"])
         }),
       ),
     { profile: "bare", config: { model: "project/model", username: "project-user" } },
+  )
+
+  it.instance(
+    "does not report empty explicit config as loaded",
+    () =>
+      withProcessEnv(
+        "OPENCODE_CONFIG_CONTENT",
+        "{}",
+        Effect.gen(function* () {
+          const report = yield* Config.use.getLoadReport()
+          expect(report.loaded).not.toContain("explicit")
+        }),
+      ),
+    { profile: "bare" },
   )
 
   it.live("skips global config", () =>
@@ -1947,6 +1962,32 @@ describe("bare config profile", () => {
         )
       }),
     { profile: "bare" },
+  )
+})
+
+describe("config load report", () => {
+  it.instance(
+    "does not report an empty project config as loaded",
+    () =>
+      Effect.gen(function* () {
+        const report = yield* Config.use.getLoadReport()
+        expect(report.loaded).not.toContain("project")
+      }),
+    { config: {} },
+  )
+
+  it.instance("does not report an empty config directory as loaded", () =>
+    Effect.gen(function* () {
+      const directory = yield* tmpdirScoped()
+      yield* withProcessEnv(
+        "OPENCODE_CONFIG_DIR",
+        directory,
+        Effect.gen(function* () {
+          const report = yield* Config.use.getLoadReport()
+          expect(report.loaded).not.toContain("config-dir")
+        }),
+      )
+    }),
   )
 })
 

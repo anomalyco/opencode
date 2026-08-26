@@ -135,9 +135,14 @@ export const RunCommand = effectCmd({
   instanceInput: (args) => ({ profile: args.bare ? "bare" : "default" }),
   validate: (args) => {
     if (!args.bare) return
-    const conflict = ["attach", "continue", "session", "fork", "interactive"].find(
-      (key) => args[key as keyof typeof args],
-    )
+    const conflicts = [
+      "attach",
+      "continue",
+      "session",
+      "fork",
+      "interactive",
+    ] as const satisfies readonly (keyof typeof args & string)[]
+    const conflict = conflicts.find((key) => args[key])
     if (conflict) return `--bare cannot be used with --${conflict}`
   },
   builder: (yargs: Argv) =>
@@ -1025,6 +1030,7 @@ export async function runMini(input: MiniCommandInput) {
     "dangerously-skip-permissions": false,
     dangerouslySkipPermissions: false,
     demo: input.demo ?? false,
+    // Mini is an interactive entry point; bare is intentionally limited to new non-interactive `run` sessions.
     bare: false,
   })
 }

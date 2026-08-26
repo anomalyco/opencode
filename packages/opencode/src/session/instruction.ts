@@ -79,12 +79,10 @@ const layer: Layer.Layer<
 
     const relative = Effect.fnUntraced(function* (instruction: string) {
       const ctx = yield* InstanceState.context
-      if (!InstanceOptions.resolve(ctx.profile).discovery.automaticInstructions) {
-        return yield* fs
-          .glob(instruction, { cwd: ctx.directory, absolute: true, include: "file" })
-          .pipe(Effect.catch(() => Effect.succeed([] as string[])))
-      }
-      if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
+      if (
+        !InstanceOptions.resolve(ctx.profile).discovery.automaticInstructions ||
+        !Flag.OPENCODE_DISABLE_PROJECT_CONFIG
+      ) {
         return yield* fs
           .globUp(instruction, ctx.directory, ctx.worktree)
           .pipe(Effect.catch(() => Effect.succeed([] as string[])))
