@@ -470,6 +470,7 @@ function ModelMomentumSection(props: { data: StatsModelPageData | null }) {
                 value={formatInteger(data().totals.sessions)}
               />
               <MomentumMetric label={i18n.t("model.tokenShare")} value={formatPercent(data().tokenShare)} />
+              <MomentumMetric label="7D Retention" value={formatModelRetention(data())} />
               <MomentumMetric
                 label="Rank"
                 value={formatRankLabel(data().rank)}
@@ -538,6 +539,11 @@ function MomentumMetric(props: { label: string; value: string; watermark?: strin
       <strong>{props.value}</strong>
     </div>
   )
+}
+
+function formatModelRetention(data: StatsModelPageData) {
+  if (!data.retention7d || data.retention7d.eligibleUserDays < 100) return "Pending"
+  return formatPercent(data.retention7d.rate)
 }
 
 function ModelUsageSection(props: { data: StatsModelPageData | null }) {

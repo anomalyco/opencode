@@ -8,6 +8,7 @@ import {
   type CountryEntry,
   type LeaderboardEntry,
   type MarketDay,
+  type RetentionEntry,
   type SessionCostEntry,
   type TokenCostEntry,
   type UsagePoint,
@@ -69,6 +70,7 @@ type StatsHomePageData = {
   tokenCost: TokenCostEntry[]
   cacheRatio: CacheRatioEntry[]
   sessionCost: SessionCostEntry[]
+  retention: RetentionEntry[]
   country: CountryEntry[]
 }
 
@@ -88,6 +90,7 @@ const getData = query(async () => {
     tokenCost: priceTokenCostFromCatalog(stats.tokenCost.Go, catalog),
     cacheRatio: stats.cacheRatio.Go,
     sessionCost: stats.sessionCost.Go,
+    retention: stats.retention,
     country: stats.country["2M"],
   } satisfies StatsHomePageData
 }, "getStatsHomeData")
@@ -146,6 +149,7 @@ export default function StatsHome() {
                 <Hero updatedAt={stats().updatedAt} />
                 <TopModelsSection data={stats().usage} leaderboard={stats().leaderboard} />
                 <UniqueUsersSection data={stats().users} />
+                <RetentionSection data={stats().retention} />
                 <SessionCostSection data={stats().sessionCost} />
                 <TokenCostSection data={stats().tokenCost} />
                 <CacheRatioSection data={stats().cacheRatio} />
@@ -614,6 +618,86 @@ function UniqueUsersSection(props: { data: UsagePoint[] }) {
       </Show>
     </section>
   )
+}
+
+function RetentionSection(props: { data: RetentionEntry[] }) {
+  const language = useLanguage()
+  const [activeIndex, setActiveIndex] = createSignal(0)
+
+  return (
+    <section id="retention" data-section="retention">
+      <SectionTitle
+        id="retention"
+        title="7-Day Retention"
+        description="Share of users returning to any OpenCode model seven days later, grouped by their primary model. Latest seven complete cohorts; minimum 100 eligible user-days."
+      />
+      <Show
+        when={props.data.length > 0}
+        fallback={
+          <EmptyState
+            title="No retention data"
+            description="Retention appears after seven complete user cohorts are available."
+          />
+        }
+      >
+        <div data-component="retention-chart">
+          <div data-slot="retention-heading" aria-hidden="true">
+            <span>Rank</span>
+            <strong>Model</strong>
+            <i>Retention</i>
+            <b>Rate</b>
+            <em>Eligible</em>
+          </div>
+          <ol>
+            <For each={props.data}>
+              {(item, index) => (
+                <li>
+                  <a
+                    data-active={activeIndex() === index() ? "true" : undefined}
+                    href={language.route(
+                      `${import.meta.env.BASE_URL}${modelSlug(item.provider)}/${modelSlug(item.model)}`,
+                    )}
+                    onPointerEnter={() => setActiveIndex(index())}
+                    onFocus={() => setActiveIndex(index())}
+                    onClick={() => setActiveIndex(index())}
+                    aria-label={`${item.model}, ${formatRetentionRate(item.rate)} seven-day retention, ${formatUsers(item.eligibleUserDays)} eligible user-days`}
+                  >
+                    <span>{item.rank === null ? "–" : String(item.rank).padStart(2, "0")}</span>
+                    <strong>{item.model}</strong>
+                    <RetentionMarker rate={item.rate} active={activeIndex() === index()} />
+                    <b>{formatRetentionRate(item.rate)}</b>
+                    <em>{formatUsers(item.eligibleUserDays)}</em>
+                  </a>
+                </li>
+              )}
+            </For>
+          </ol>
+        </div>
+      </Show>
+    </section>
+  )
+}
+
+function RetentionMarker(props: { rate: number; active: boolean }) {
+  const fill = createMemo(() => Math.min(100, Math.max(0, props.rate)))
+  return (
+    <i
+      data-component="retention-marker"
+      data-active={props.active ? "true" : undefined}
+      style={{ "--retention-position": `${fill()}%` } as JSX.CSSProperties}
+      aria-hidden="true"
+    >
+      <span />
+      <span />
+      <span />
+      <span />
+      <em />
+    </i>
+  )
+}
+
+function formatRetentionRate(value: number) {
+  return `${value.toFixed(1)}%`
 }
 
 function isTopModelsBlankHover(bar: HTMLElement, clientY: number) {

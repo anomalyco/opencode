@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test"
-import { buildStatsQueries, toGeoAggregate, toModelAggregate, toProviderAggregate } from "./inference"
+import {
+  buildRetentionQueries,
+  buildStatsQueries,
+  toGeoAggregate,
+  toModelAggregate,
+  toProviderAggregate,
+  toRetentionAggregate,
+} from "./inference"
 import { modelAuthor, normalizeInferenceModel, statModel, statProvider } from "./model-normalization"
 
 describe("inference stat normalization", () => {
@@ -154,6 +161,52 @@ describe("inference stat normalization", () => {
 
     expect(query).toContain("(source = 'inference-legacy' AND started_at < '2026-08-11T10:57:48.186Z')")
     expect(query).toContain("(source = 'inference' AND started_at >= '2026-08-11T10:57:48.186Z')")
+  })
+
+  test("builds complete seven-day cohort retention queries", () => {
+    const queries = buildRetentionQueries(new Date("2026-08-10T00:00:00.000Z"), new Date("2026-08-20T00:00:00.000Z"), {
+      namespace: "inference",
+      table: "generation",
+      dataset: "zen",
+    })
+
+    expect(queries).toHaveLength(1)
+    expect(queries[0]?.cohortDates).toEqual(["2026-08-10", "2026-08-11", "2026-08-12"])
+    expect(queries[0]?.query).toContain("ROW_NUMBER() OVER")
+    expect(queries[0]?.query).toContain("PARTITION BY cohort_date, user_key")
+    expect(queries[0]?.query).toContain("ORDER BY total_tokens DESC, requests DESC, model ASC")
+    expect(queries[0]?.query).toContain("WHEN '2026-08-17' THEN '2026-08-10'")
+    expect(queries[0]?.query).toContain("WHEN '2026-08-19' THEN '2026-08-12'")
+    expect(queries[0]?.query).toContain("started_at >= '2026-08-10T00:00:00.000Z'")
+    expect(queries[0]?.query).toContain("started_at < '2026-08-20T00:00:00.000Z'")
+    expect(queries[0]?.query).toContain("LEFT JOIN returned ON primary_models.user_key = returned.user_key")
+    expect(queries[0]?.query).toContain("primary_models.cohort_date = returned.cohort_date")
+    expect(queries[0]?.query).toContain("COUNT(*) AS eligible_users")
+    expect(queries[0]?.query).toContain("LIMIT 10000")
+  })
+
+  test("maps retention query results", () => {
+    expect(
+      toRetentionAggregate({
+        cohort_date: "2026-08-10",
+        dataset: "zen",
+        tier: "all",
+        provider: "deepseek",
+        model: "deepseek-v4-flash-free",
+        eligible_users: "125",
+        retained_users: "74",
+      }),
+    ).toEqual([
+      {
+        cohortDate: "2026-08-10",
+        dataset: "zen",
+        tier: "all",
+        provider: "deepseek",
+        model: "deepseek-v4-flash",
+        eligibleUsers: 125,
+        retainedUsers: 74,
+      },
+    ])
   })
 })
 
