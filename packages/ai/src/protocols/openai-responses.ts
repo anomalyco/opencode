@@ -184,7 +184,7 @@ const HOSTED_TOOLS = {
 
 const step = (state: OpenResponses.ParserState, event: OpenResponses.Event) => {
   if (event.type === "response.reasoning_text.delta")
-    return event.item_id
+    return event.item_id !== undefined
       ? Effect.succeed(
           OpenResponses.onReasoningDelta(state, event, OpenResponses.outputItemID(state, event) ?? event.item_id),
         )

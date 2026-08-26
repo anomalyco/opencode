@@ -2229,6 +2229,35 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("accepts empty IDs for native reasoning text deltas", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "response.output_item.added", output_index: 1, item: { type: "reasoning", id: "" } },
+              { type: "response.reasoning_text.delta", output_index: 1, item_id: "", delta: "Raw" },
+              {
+                type: "response.output_item.done",
+                output_index: 1,
+                item: { type: "reasoning", id: "", encrypted_content: "state" },
+              },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.message.content).toEqual([
+        {
+          type: "reasoning",
+          text: "Raw",
+          providerMetadata: { openai: { itemId: "", reasoningEncryptedContent: "state" } },
+        },
+      ])
+    }),
+  )
+
   it.effect("falls back to item ids when an output index was not registered", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(request).pipe(

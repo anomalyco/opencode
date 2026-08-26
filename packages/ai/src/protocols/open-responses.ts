@@ -346,7 +346,8 @@ export const Event = Schema.StructWithRest(
     item_id: Schema.optional(Schema.String),
     output_index: Schema.optional(Schema.Number),
     summary_index: Schema.optional(Schema.Number),
-    item: Schema.optional(StreamItem),
+    // OutputItemAdded/Done permit a null item in the Open Responses OpenAPI schema.
+    item: optionalNull(StreamItem),
     response: Schema.optional(
       Schema.StructWithRest(
         Schema.Struct({
@@ -812,7 +813,7 @@ export const providerMetadata = (state: ParserState, metadata: Record<string, un
 })
 
 const isReasoningItem = (item: StreamItem): item is StreamItem & { type: "reasoning"; id: string } =>
-  item.type === "reasoning" && typeof item.id === "string" && item.id.length > 0
+  item.type === "reasoning" && typeof item.id === "string"
 
 export type StepResult = readonly [ParserState, ReadonlyArray<LLMEvent>]
 
@@ -891,7 +892,7 @@ const reasoningMetadata = (state: ParserState, item: StreamItem & { id: string }
 // best-effort, not guaranteed.
 const onOutputItemAdded = (state: ParserState, event: Event): StepResult => {
   const item = event.item
-  if (item?.type === "message" && item.id) {
+  if (item?.type === "message" && item.id !== undefined) {
     const phase = messagePhase(item.phase)
     return [
       {
@@ -922,7 +923,7 @@ const onOutputItemAdded = (state: ParserState, event: Event): StepResult => {
   }
   if (item?.type !== "function_call" || !item.call_id) return [state, NO_EVENTS]
   const id = item.id ?? item.call_id
-  const metadata = item.id ? providerMetadata(state, { itemId: item.id }) : undefined
+  const metadata = item.id !== undefined ? providerMetadata(state, { itemId: item.id }) : undefined
   const events: LLMEvent[] = []
   const lifecycle = Lifecycle.stepStart(state.lifecycle, events)
   return [
@@ -941,7 +942,7 @@ const onOutputItemAdded = (state: ParserState, event: Event): StepResult => {
 }
 
 const onReasoningSummaryPartAdded = (state: ParserState, event: Event): StepResult => {
-  if (!event.item_id || event.summary_index === undefined) return [state, NO_EVENTS]
+  if (event.item_id === undefined || event.summary_index === undefined) return [state, NO_EVENTS]
   const item = state.reasoningItems[event.item_id]
   if (!item) return [state, NO_EVENTS]
   if (event.summary_index === 0) return [state, NO_EVENTS]
@@ -988,7 +989,7 @@ const onReasoningSummaryPartAdded = (state: ParserState, event: Event): StepResu
 }
 
 const onReasoningSummaryPartDone = (state: ParserState, event: Event): StepResult => {
-  if (!event.item_id || event.summary_index === undefined) return [state, NO_EVENTS]
+  if (event.item_id === undefined || event.summary_index === undefined) return [state, NO_EVENTS]
   const item = state.reasoningItems[event.item_id]
   if (!item) return [state, NO_EVENTS]
   return [
@@ -1013,7 +1014,7 @@ const onFunctionCallArgumentsDelta = Effect.fn("OpenResponses.onFunctionCallArgu
   state: ParserState,
   event: Event,
 ) {
-  if (!event.item_id) return [state, NO_EVENTS] satisfies StepResult
+  if (event.item_id === undefined) return [state, NO_EVENTS] satisfies StepResult
   const tool = state.tools[event.item_id]
   if (!tool) return [state, NO_EVENTS] satisfies StepResult
   const final = event.type === "response.function_call_arguments.done" ? event.arguments : undefined
@@ -1044,7 +1045,7 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
   const item = event.item
   if (!item) return [state, NO_EVENTS] satisfies StepResult
 
-  if (item.type === "message" && item.id) {
+  if (item.type === "message" && item.id !== undefined) {
     const itemPhase = messagePhase(item.phase)
     const phase = itemPhase === undefined ? state.messagePhases[item.id] : itemPhase
     const events: LLMEvent[] = []
@@ -1075,7 +1076,7 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
       : ToolStream.start(state.tools, id, {
           id: item.call_id,
           name: item.name,
-          providerMetadata: item.id ? providerMetadata(state, { itemId: item.id }) : undefined,
+          providerMetadata: item.id !== undefined ? providerMetadata(state, { itemId: item.id }) : undefined,
         })
     const result =
       item.arguments === undefined
@@ -1136,7 +1137,7 @@ const onResponseFinish = Effect.fn("OpenResponses.onResponseFinish")(function* (
           ([current, events], item) => {
             const id = item.id ?? (item.type === "function_call" ? item.call_id : undefined)
             if (
-              !id ||
+              id === undefined ||
               ((item.type !== "function_call" || !current.tools[id]) &&
                 (item.type !== "reasoning" || !current.reasoningItems[id]))
             )
@@ -1219,12 +1220,13 @@ export const providerFailure = (id: string, event: Event, fallback: string) => {
 const providerError = (state: ParserState, event: Event, fallback: string) => providerFailure(state.id, event, fallback)
 
 export const step = (state: ParserState, input: Event) => {
+  // The OpenAPI requires string IDs but imposes no minLength; empty is not missing.
   const event =
-    input.item_id && outputItemID(state, input) !== input.item_id
+    input.item_id !== undefined && outputItemID(state, input) !== input.item_id
       ? { ...input, item_id: outputItemID(state, input) }
       : input
   if (event.type === "response.output_text.delta" || event.type === "response.output_text.done") {
-    if (!event.item_id) return ProviderShared.eventError(state.id, `${event.type} is missing item_id`)
+    if (event.item_id === undefined) return ProviderShared.eventError(state.id, `${event.type} is missing item_id`)
     return Effect.succeed(
       event.type === "response.output_text.delta"
         ? onOutputTextDelta(state, event, event.item_id)
@@ -1233,7 +1235,7 @@ export const step = (state: ParserState, input: Event) => {
   }
   if (event.type === "response.refusal.delta" || event.type === "response.refusal.done") {
     const value = event.type === "response.refusal.delta" ? event.delta : event.refusal
-    if (!event.item_id || typeof value !== "string")
+    if (event.item_id === undefined || typeof value !== "string")
       return ProviderShared.eventError(state.id, `${event.type} is malformed`)
     return Effect.succeed(
       event.type === "response.refusal.delta"
@@ -1242,7 +1244,7 @@ export const step = (state: ParserState, input: Event) => {
     )
   }
   if (event.type === "response.reasoning.delta" || event.type === "response.reasoning_summary_text.delta") {
-    if (!event.item_id) return ProviderShared.eventError(state.id, `${event.type} is missing item_id`)
+    if (event.item_id === undefined) return ProviderShared.eventError(state.id, `${event.type} is missing item_id`)
     return Effect.succeed(onReasoningDelta(state, event, event.item_id))
   }
   if (
@@ -1250,24 +1252,24 @@ export const step = (state: ParserState, input: Event) => {
     event.type === "response.reasoning_summary_text.done" ||
     event.type === "response.reasoning_text.done"
   ) {
-    if (!event.item_id) return ProviderShared.eventError(state.id, `${event.type} is missing item_id`)
+    if (event.item_id === undefined) return ProviderShared.eventError(state.id, `${event.type} is missing item_id`)
     return Effect.succeed(onReasoningDone(state, event, event.item_id))
   }
   if (event.type === "response.reasoning_summary_part.added")
-    return event.item_id
+    return event.item_id !== undefined
       ? Effect.succeed(onReasoningSummaryPartAdded(state, event))
       : ProviderShared.eventError(state.id, `${event.type} is missing item_id`)
   if (event.type === "response.reasoning_summary_part.done")
-    return event.item_id
+    return event.item_id !== undefined
       ? Effect.succeed(onReasoningSummaryPartDone(state, event))
       : ProviderShared.eventError(state.id, `${event.type} is missing item_id`)
   if (event.type === "response.output_item.added") {
-    if (event.item?.type === "message" && !event.item.id)
+    if (event.item?.type === "message" && event.item.id === undefined)
       return ProviderShared.eventError(state.id, `${event.type} message is missing id`)
     const id = event.item?.id ?? (event.item?.type === "function_call" ? event.item.call_id : undefined)
     return Effect.succeed(
       onOutputItemAdded(
-        event.output_index !== undefined && id
+        event.output_index !== undefined && id !== undefined
           ? { ...state, outputItems: { ...state.outputItems, [event.output_index]: id } }
           : state,
         event,
@@ -1275,11 +1277,11 @@ export const step = (state: ParserState, input: Event) => {
     )
   }
   if (event.type === "response.function_call_arguments.delta" || event.type === "response.function_call_arguments.done")
-    return event.item_id
+    return event.item_id !== undefined
       ? onFunctionCallArgumentsDelta(state, event)
       : ProviderShared.eventError(state.id, `${event.type} is missing item_id`)
   if (event.type === "response.output_item.done") {
-    if (event.item?.type === "message" && !event.item.id)
+    if (event.item?.type === "message" && event.item.id === undefined)
       return ProviderShared.eventError(state.id, `${event.type} message is missing id`)
     return onOutputItemDone(state, event)
   }
