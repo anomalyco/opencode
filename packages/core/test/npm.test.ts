@@ -215,7 +215,7 @@ describe("Npm.add", () => {
       return yield* npm.add(spec)
     }).pipe(Effect.scoped, Effect.provide(npmLayer(path.join(tmp.path, "cache"))), Effect.runPromise)
 
-    expect(entry.directory).toEndWith("/node_modules/fixture-subdirectory-plugin")
+    expect(entry.directory).toEndWith(path.join("node_modules", "fixture-subdirectory-plugin"))
     expect(entry.entrypoint).toEndWith("/index.js")
     expect(
       await fs.stat(path.join(path.dirname(entry.directory), "fixture-subdirectory-dependency", "package.json")),
