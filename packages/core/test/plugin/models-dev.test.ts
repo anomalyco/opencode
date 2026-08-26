@@ -551,22 +551,6 @@ describe("ModelsDevPlugin", () => {
         { id: Model.VariantID.make("high"), settings: { effort: "high" } },
       ])
 
-      const deepinfra = yield* catalog.model.get(Provider.ID.make("deepinfra"), Model.ID.make("deepinfra-toggle"))
-      expect(deepinfra?.variants).toEqual([
-        { id: Model.VariantID.make("none"), settings: { reasoningEffort: "none" } },
-        { id: Model.VariantID.make("thinking"), settings: { reasoningEffort: "medium" } },
-      ])
-
-      const deepinfraEffort = yield* catalog.model.get(
-        Provider.ID.make("deepinfra"),
-        Model.ID.make("deepinfra-toggle-effort"),
-      )
-      expect(deepinfraEffort?.variants).toEqual([
-        { id: Model.VariantID.make("none"), settings: { reasoningEffort: "none" } },
-        { id: Model.VariantID.make("low"), settings: { reasoningEffort: "low" } },
-        { id: Model.VariantID.make("high"), settings: { reasoningEffort: "high" } },
-      ])
-
       const grok = yield* catalog.model.get(Provider.ID.make("xai"), Model.ID.make("grok-4.5"))
       expect(grok?.variants).toEqual(
         ["low", "medium", "high"].map((id) => ({

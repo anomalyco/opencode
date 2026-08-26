@@ -335,7 +335,6 @@ function usesAPIKeyAuth(packageName: string | undefined) {
     name === "@ai-sdk/anthropic" ||
     name === "@ai-sdk/cerebras" ||
     name === "@ai-sdk/deepinfra" ||
-    name === "@ai-sdk/groq" ||
     name === "@ai-sdk/openai-compatible" ||
     name === "@ai-sdk/google" ||
     name === "@ai-sdk/togetherai" ||
@@ -348,7 +347,6 @@ function usesAPIKeyAuth(packageName: string | undefined) {
     name === "@opencode-ai/ai/providers/anthropic-compatible" ||
     name === "@opencode-ai/ai/providers/cerebras" ||
     name === "@opencode-ai/ai/providers/deepinfra" ||
-    name === "@opencode-ai/ai/providers/groq" ||
     name === "@opencode-ai/ai/providers/openai-compatible" ||
     name === "@opencode-ai/ai/providers/google" ||
     name === "@opencode-ai/ai/providers/togetherai" ||

@@ -1,6 +1,6 @@
 import * as Anthropic from "../../src/providers/anthropic.js"
 import * as AnthropicCompatible from "../../src/providers/anthropic-compatible.js"
-import { Cerebras, DeepInfra, Groq, TogetherAI } from "../../src/providers/index.js"
+import { Cerebras, DeepInfra, TogetherAI } from "../../src/providers/index.js"
 import { CloudflareAIGateway, CloudflareWorkersAI } from "../../src/providers/cloudflare.js"
 import * as Google from "../../src/providers/google.js"
 import * as OpenAI from "../../src/providers/openai.js"
@@ -52,10 +52,12 @@ const together = TogetherAI.configure({
   apiKey: process.env.TOGETHER_API_KEY ?? process.env.TOGETHER_AI_API_KEY ?? "fixture",
 }).model("meta-llama/Llama-3.3-70B-Instruct-Turbo")
 const cerebras = Cerebras.configure({ apiKey: process.env.CEREBRAS_API_KEY ?? "fixture" }).model("gpt-oss-120b")
-const groq = Groq.configure({ apiKey: process.env.GROQ_API_KEY ?? "fixture" }).model("llama-3.3-70b-versatile")
-const deepInfra = DeepInfra.configure({ apiKey: process.env.DEEPINFRA_API_KEY ?? "fixture" })
-const deepInfraLlama = deepInfra.model("meta-llama/Llama-3.3-70B-Instruct-Turbo")
-const deepInfraReasoning = deepInfra.model("openai/gpt-oss-20b")
+const groq = OpenAICompatible.groq
+  .configure({ apiKey: process.env.GROQ_API_KEY ?? "fixture" })
+  .model("llama-3.3-70b-versatile")
+const deepInfra = DeepInfra.configure({ apiKey: process.env.DEEPINFRA_API_KEY ?? "fixture" }).model(
+  "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+)
 const openRouter = OpenRouter.configure({ apiKey: process.env.OPENROUTER_API_KEY ?? "fixture" })
 const openrouter = openRouter.model("openai/gpt-4o-mini")
 const openrouterGpt55 = openRouter.model("openai/gpt-5.5")
@@ -221,35 +223,14 @@ describeRecordedGoldenScenarios([
     prefix: "openai-compatible-chat",
     model: groq,
     requires: ["GROQ_API_KEY"],
-    scenarios: [
-      {
-        id: "text",
-        cassette: "openai-compatible-chat/groq-streams-text",
-        prompt: "Reply with exactly: Hello!",
-        maxTokens: 20,
-      },
-      { id: "tool-call", cassette: "openai-compatible-chat/groq-streams-tool-call" },
-      {
-        id: "tool-loop",
-        cassette: "openai-compatible-chat/groq-llama-3-3-70b-drives-a-tool-loop",
-        system: "Use the get_weather tool, then answer in one short sentence.",
-        timeout: 30_000,
-      },
-    ],
+    scenarios: ["text", "tool-call", { id: "tool-loop", timeout: 30_000 }],
   },
   {
     name: "DeepInfra Llama 3.3 70B",
     prefix: "deepinfra-chat",
-    model: deepInfraLlama,
+    model: deepInfra,
     requires: ["DEEPINFRA_API_KEY"],
     scenarios: ["text", "tool-call", { id: "tool-loop", timeout: 30_000 }],
-  },
-  {
-    name: "DeepInfra GPT OSS 20B",
-    prefix: "deepinfra-chat",
-    model: deepInfraReasoning,
-    requires: ["DEEPINFRA_API_KEY"],
-    scenarios: [{ id: "reasoning", maxTokens: 512, temperature: false, timeout: 30_000 }],
   },
   {
     name: "OpenRouter gpt-4o-mini",

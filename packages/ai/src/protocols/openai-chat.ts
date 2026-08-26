@@ -141,10 +141,6 @@ export const bodyFields = {
   store: Schema.optional(Schema.Boolean),
   prompt_cache_key: Schema.optional(Schema.String),
   reasoning_effort: Schema.optional(OpenAIOptions.OpenAIReasoningEffort),
-  reasoning_format: Schema.optional(Schema.String),
-  parallel_tool_calls: Schema.optional(Schema.Boolean),
-  service_tier: Schema.optional(Schema.String),
-  user: Schema.optional(Schema.String),
   tool_stream: Schema.optional(Schema.Boolean),
   max_completion_tokens: Schema.optional(Schema.Number),
   max_tokens: Schema.optional(Schema.Number),
@@ -243,11 +239,6 @@ export const OpenAIChatEvent = Schema.StructWithRest(
   Schema.Struct({
     choices: optionalNull(Schema.Array(OpenAIChatChoice)),
     usage: optionalNull(OpenAIChatUsage),
-    x_groq: optionalNull(
-      Schema.StructWithRest(Schema.Struct({ usage: optionalNull(OpenAIChatUsage) }), [
-        Schema.Record(Schema.String, Schema.Unknown),
-      ]),
-    ),
     error: optionalNull(OpenAIChatError),
   }),
   [Schema.Record(Schema.String, Schema.Unknown)],
@@ -262,7 +253,6 @@ interface PendingToolDelta {
 }
 
 export interface ParserState {
-  readonly provider: string
   readonly tools: ToolStream.State<number>
   readonly pendingTools: Partial<Record<number, PendingToolDelta>>
   readonly toolCallEvents: ReadonlyArray<LLMEvent>
@@ -703,8 +693,6 @@ const detectZaiToolStream = (
 const lowerOptions = (request: LLMRequest, supportsStore: boolean) => {
   const options = OpenAIOptions.resolve(request)
   const cacheKey = ProviderShared.promptCacheKey(request)
-  const groq =
-    String(request.model.route.provider ?? request.model.provider) === "groq" ? request.providerOptions : undefined
   return {
     ...(supportsStore && options.store !== undefined ? { store: options.store } : {}),
     // For providers that support `store`, ensure stateless `store:false` is sent
@@ -713,10 +701,6 @@ const lowerOptions = (request: LLMRequest, supportsStore: boolean) => {
     ...(supportsStore && options.store === undefined ? { store: false } : {}),
     ...(cacheKey ? { prompt_cache_key: cacheKey } : {}),
     ...(options.reasoningEffort ? { reasoning_effort: options.reasoningEffort } : {}),
-    ...(typeof groq?.reasoningFormat === "string" ? { reasoning_format: groq.reasoningFormat } : {}),
-    ...(typeof groq?.parallelToolCalls === "boolean" ? { parallel_tool_calls: groq.parallelToolCalls } : {}),
-    ...(typeof groq?.serviceTier === "string" ? { service_tier: groq.serviceTier } : {}),
-    ...(typeof groq?.user === "string" ? { user: groq.user } : {}),
   }
 }
 
@@ -828,18 +812,17 @@ const mapFinishReason = Effect.fn("OpenAIChat.mapFinishReason")(function* (event
 // Providers differ on cache-hit location: OpenAI uses
 // `prompt_tokens_details.cached_tokens`, DeepSeek uses
 // `prompt_cache_hit_tokens`, and Zai uses top-level `cached_tokens`.
-const mapUsage = (usage: OpenAIChatEvent["usage"], provider: string): Usage | undefined => {
+const mapUsage = (usage: OpenAIChatEvent["usage"]): Usage | undefined => {
   if (!usage) return undefined
   const input = usage.prompt_tokens ?? undefined
-  const reasoning = usage.completion_tokens_details?.reasoning_tokens ?? undefined
-  const correction = provider === "deepinfra" && reasoning !== undefined && reasoning > (usage.completion_tokens ?? 0)
-  const output = correction ? (usage.completion_tokens ?? 0) + reasoning : (usage.completion_tokens ?? undefined)
+  const output = usage.completion_tokens ?? undefined
   const cached =
     (usage.prompt_tokens_details?.cached_tokens ??
       (usage as { prompt_cache_hit_tokens?: number | null }).prompt_cache_hit_tokens ??
       (usage as { cached_tokens?: number | null }).cached_tokens ??
       undefined) as number | undefined
   const cacheWrite = usage.prompt_tokens_details?.cache_write_tokens ?? undefined
+  const reasoning = usage.completion_tokens_details?.reasoning_tokens ?? undefined
   const nonCached = ProviderShared.subtractTokens(input, ProviderShared.sumTokens(cached, cacheWrite))
   return new Usage({
     inputTokens: input,
@@ -848,13 +831,7 @@ const mapUsage = (usage: OpenAIChatEvent["usage"], provider: string): Usage | un
     cacheReadInputTokens: cached,
     cacheWriteInputTokens: cacheWrite,
     reasoningTokens: reasoning,
-    totalTokens: ProviderShared.totalTokens(
-      input,
-      output,
-      correction && usage.total_tokens !== undefined && usage.total_tokens !== null
-        ? usage.total_tokens + reasoning
-        : (usage.total_tokens ?? undefined),
-    ),
+    totalTokens: ProviderShared.totalTokens(input, output, usage.total_tokens ?? undefined),
     providerMetadata: { openai: usage },
   })
 }
@@ -957,11 +934,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
     // Moonshot (and a few other OpenAI-compatible providers) attach usage to
     // `choice.usage` instead of the top-level `usage` field.
     const choiceUsage = (choice as unknown as { usage?: OpenAIChatEvent["usage"] })?.usage
-    const usage =
-      mapUsage(event.usage, state.provider) ??
-      mapUsage(choiceUsage, state.provider) ??
-      (state.provider === "groq" ? mapUsage(event.x_groq?.usage, state.provider) : undefined) ??
-      state.usage
+    const usage = mapUsage(event.usage) ?? (choiceUsage ? mapUsage(choiceUsage) : undefined) ?? state.usage
     const rawFinishReason = choice?.finish_reason
     const finishReason =
       rawFinishReason
@@ -1087,7 +1060,6 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
 
     return [
       {
-        provider: state.provider,
         tools: finished?.tools ?? tools,
         pendingTools,
         toolCallEvents: finished?.events ?? state.toolCallEvents,
@@ -1163,7 +1135,6 @@ export const protocol = Protocol.make({
   stream: {
     event: Protocol.jsonEvent(OpenAIChatEvent),
     initial: (request) => ({
-      provider: String(request.model.route.provider ?? request.model.provider),
       tools: ToolStream.empty<number>(),
       pendingTools: {},
       toolCallEvents: [],

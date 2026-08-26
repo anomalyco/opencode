@@ -372,11 +372,6 @@ function toggleVariants(npm: string, modelID: string): NonNullable<Model.Info["v
       { id: Model.VariantID.make("none"), settings: { thinking: { type: "disabled" } } },
       { id: Model.VariantID.make("thinking"), settings: { thinking: { type: "enabled" } } },
     ]
-  if (npm === "@ai-sdk/deepinfra")
-    return [
-      { id: Model.VariantID.make("none"), settings: { reasoningEffort: "none" } },
-      { id: Model.VariantID.make("thinking"), settings: { reasoningEffort: "medium" } },
-    ]
   if (npm === "@jerome-benoit/sap-ai-provider-v2") {
     if (modelID.includes("gemini"))
       return [

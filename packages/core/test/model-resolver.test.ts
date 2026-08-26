@@ -891,7 +891,6 @@ describe("ModelResolver", () => {
           { reasoningEffort: "none" },
           { reasoningEffort: "none" },
         ],
-        ["@ai-sdk/groq", "@opencode-ai/ai/providers/groq", { reasoningEffort: "high" }, { reasoningEffort: "high" }],
         [
           "@ai-sdk/openai-compatible",
           "@opencode-ai/ai/providers/openai-compatible",
@@ -974,7 +973,6 @@ describe("ModelResolver", () => {
         ["@ai-sdk/google", "@opencode-ai/ai/providers/google", "api-model"],
         ["@ai-sdk/google-vertex", "@opencode-ai/ai/providers/google-vertex", "api-model"],
         ["@ai-sdk/google-vertex/anthropic", "@opencode-ai/ai/providers/google-vertex/messages", "claude-sonnet-4-6"],
-        ["@ai-sdk/groq", "@opencode-ai/ai/providers/groq", "api-model"],
         ["@ai-sdk/openai", "@opencode-ai/ai/providers/openai", "api-model"],
         ["@ai-sdk/openai-compatible", "@opencode-ai/ai/providers/openai-compatible", "api-model"],
         ["@openrouter/ai-sdk-provider", "@opencode-ai/ai/providers/openrouter", "api-model"],
@@ -1101,9 +1099,6 @@ describe("ModelResolver", () => {
           settings: { baseURL: "https://deepinfra.example/provider-root", reasoningEffort: "none" },
         }),
       )
-      const groq = yield* ModelResolver.fromCatalogModel(
-        model(Provider.aisdk("@ai-sdk/groq"), { settings: { reasoningEffort: "high" } }),
-      )
       const togetherai = yield* ModelResolver.fromCatalogModel(
         model(Provider.aisdk("@ai-sdk/togetherai"), { settings: { reasoningEffort: "high" } }),
       )
@@ -1134,9 +1129,6 @@ describe("ModelResolver", () => {
       expect(deepinfra.route.endpoint.baseURL).toBe("https://deepinfra.example/provider-root/openai")
       expect(deepinfra.route.defaults.providerOptions).toEqual({ reasoningEffort: "none" })
       expect(String(deepinfra.provider)).toBe("test-provider")
-      expect(groq.route.id).toBe("groq-chat")
-      expect(groq.route.defaults.providerOptions).toEqual({ reasoningEffort: "high" })
-      expect(String(groq.provider)).toBe("test-provider")
       expect(togetherai.route.id).toBe("togetherai-chat")
       expect(togetherai.route.defaults.providerOptions).toEqual({ reasoningEffort: "high" })
       expect(String(togetherai.provider)).toBe("test-provider")
