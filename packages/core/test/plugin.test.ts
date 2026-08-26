@@ -25,6 +25,34 @@ class Secret extends Context.Service<Secret, string>()("@opencode/test/PluginSec
 const versioned = <R>(plugin: EffectPlugin.Plugin<R>, version = "1") => ({ ...plugin, version })
 
 describe("Plugin", () => {
+  it.effect("exposes the current location to activated plugins", () =>
+    Effect.gen(function* () {
+      const plugins = yield* Plugin.Service
+      const location = yield* Location.Service
+      const seen: Location.Info[] = []
+      yield* plugins.activate([
+        versioned(
+          EffectPlugin.define({
+            id: "location-context",
+            effect: (ctx) =>
+              Effect.sync(() => {
+                seen.push(ctx.location)
+              }),
+          }),
+          "1",
+        ),
+      ])
+
+      expect(seen).toEqual([
+        new Location.Info({
+          directory: location.directory,
+          workspaceID: location.workspaceID,
+          project: location.project,
+        }),
+      ])
+    }),
+  )
+
   it.live("exposes public events through the plugin context", () =>
     Effect.gen(function* () {
       const plugins = yield* Plugin.Service

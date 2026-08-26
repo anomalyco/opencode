@@ -17,6 +17,7 @@ import { SessionInbox } from "@opencode-ai/core/session/inbox"
 import { Tool } from "@opencode-ai/core/tool"
 import { Provider } from "@opencode-ai/core/provider"
 import { Project } from "@opencode-ai/core/project"
+import { Workspace } from "@opencode-ai/core/workspace"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { define } from "@opencode-ai/plugin/promise/plugin"
 import { Money } from "@opencode-ai/schema/money"
@@ -28,6 +29,41 @@ import { host as testHost } from "./host"
 const it = testEffect(PluginTestLayer)
 
 describe("fromPromise", () => {
+  it.effect("exposes the host location including workspace and project metadata", () =>
+    Effect.gen(function* () {
+      const plugins = yield* Plugin.Service
+      const location = yield* Location.Service
+      const expected = new Location.Info({
+        directory: AbsolutePath.make("/worktree/packages/app"),
+        workspaceID: Workspace.ID.make("wrk_plugin_location"),
+        project: {
+          id: Project.ID.global,
+          directory: AbsolutePath.make("/worktree"),
+          canonical: AbsolutePath.make("/project"),
+        },
+      })
+      const host = yield* PluginHost.make(plugins).pipe(
+        Effect.provideService(Location.Service, {
+          ...location,
+          directory: expected.directory,
+          workspaceID: expected.workspaceID,
+          project: expected.project,
+        }),
+      )
+      const seen: Location.Info[] = []
+      yield* PluginPromise.fromPromise(
+        define({
+          id: "promise-location",
+          setup: (ctx) => {
+            seen.push(ctx.location)
+          },
+        }),
+      ).effect(host)
+
+      expect(seen).toEqual([expected])
+    }),
+  )
+
   it.effect("adapts plugin storage methods", () =>
     Effect.gen(function* () {
       const plugins = yield* Plugin.Service

@@ -73,6 +73,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
 
   return {
     app,
+    location: locationInfo(),
     options: {},
     agent: {
       get: (input) => {

@@ -18,6 +18,16 @@ type Overrides = Partial<Omit<Plugin.Context, "options" | "session">> & {
 export function host(overrides: Overrides = {}): Plugin.Context {
   return {
     app: overrides.app ?? { name: "test", version: "test", channel: "test" },
+    location:
+      overrides.location ??
+      new Location.Info({
+        directory: AbsolutePath.make("/workspace"),
+        project: {
+          id: Project.ID.global,
+          directory: AbsolutePath.make("/workspace"),
+          canonical: AbsolutePath.make("/workspace"),
+        },
+      }),
     options: {},
     agent: overrides.agent ?? {
       get: () => Effect.die("unused agent.get"),

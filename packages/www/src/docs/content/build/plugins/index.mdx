@@ -72,6 +72,19 @@ setup(ctx) {
 }
 ```
 
+`ctx.location` describes the location where this plugin instance is loaded. It
+includes `directory`, optional `workspaceID`, and `project` metadata (`id`,
+`directory`, and `canonical`). It is available in both Promise and Effect plugins.
+This is the plugin instance's location, not the location of every session it can
+access or event it receives.
+
+```ts
+setup(ctx) {
+  console.log(ctx.location.directory)
+  console.log(ctx.location.project.canonical)
+}
+```
+
 ### Options
 
 Pass plugin options with the object form in `opencode.json(c)`.

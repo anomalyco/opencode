@@ -126,6 +126,7 @@ export function fromPromise(plugin: Plugin) {
 
         const context2: Context = {
           app: host.app,
+          location: host.location,
           options: host.options,
           agent: {
             get: adaptApiMethod(AgentEndpoints["agent.get"], host.agent.get),
