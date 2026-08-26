@@ -102,6 +102,7 @@ export type PromptRef = {
 }
 
 const DRAFT_RETENTION_MIN_CHARS = 20
+const revealedPromptMetadata = new WeakSet<object>()
 
 function randomIndex(count: number) {
   if (count <= 0) return 0
@@ -1608,12 +1609,20 @@ export function Prompt(props: PromptProps) {
     return promptDisplay().agentColor ?? theme.border.default
   })
   const agentLabel = createMemo(() => (store.mode === "shell" ? "Shell" : promptDisplay().agentLabel))
-  const agentMetaAlpha = createFadeIn(() => !!agentLabel(), animationsEnabled)
-  const modelMetaAlpha = createFadeIn(() => !!promptDisplay().agentLabel && store.mode === "normal", animationsEnabled)
+  const animateMetadata = !revealedPromptMetadata.has(local)
+  const metadataAnimationsEnabled = () => animationsEnabled() && animateMetadata
+  const agentMetaAlpha = createFadeIn(() => !!agentLabel(), metadataAnimationsEnabled)
+  const modelMetaAlpha = createFadeIn(
+    () => !!promptDisplay().agentLabel && store.mode === "normal",
+    metadataAnimationsEnabled,
+  )
   const variantMetaAlpha = createFadeIn(
     () => !!promptDisplay().agentLabel && store.mode === "normal" && !!promptDisplay().variant,
-    animationsEnabled,
+    metadataAnimationsEnabled,
   )
+  createEffect(() => {
+    if (agentLabel()) revealedPromptMetadata.add(local)
+  })
   const borderHighlight = createMemo(() => tint(theme.border.default, highlight(), agentMetaAlpha()))
   const footerInput = () => ({ sessionID: props.sessionID, mode: store.mode })
 

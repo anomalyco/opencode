@@ -92,6 +92,15 @@ export function createTimelineVirtualizer(input: Input) {
     initialOffset: () => (input.pinned() ? Number.MAX_SAFE_INTEGER : 0),
     initialMeasurementsCache: initialMeasurements,
     estimateSize: () => fallbackItemSize,
+    // Do not replace this with TanStack's default measurer: without a ResizeObserver entry,
+    // it returns the cached height instead of reading the element (TanStack/virtual#1183).
+    // Restored sessions, deferred tools, and rewrapped content can then keep stale heights;
+    // our fixed-height, overflow-clipped rows will hide their content. Keep observer entries
+    // on the cheap precomputed path, but make explicit measurements read the real height.
+    measureElement: (element, entry) => {
+      const box = entry?.borderBoxSize[0]
+      return box ? Math.round(box.blockSize) : element.offsetHeight
+    },
     scrollToFn: (offset, options, instance) => {
       if (virtualContent) virtualContent.style.height = `${instance.getTotalSize()}px`
       elementScroll(offset, options, instance)
