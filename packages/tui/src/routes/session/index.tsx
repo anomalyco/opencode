@@ -122,7 +122,7 @@ const TRANSCRIPT_TAIL_ROWS = 40
 const TRANSCRIPT_BACKFILL_CHUNK = 60
 type PendingAction = "steer" | "queue" | "cancel"
 
-export const SessionContext = createContext<{
+const context = createContext<{
   /** Content width: terminal width minus vertical tabs, sidebar, and padding. */
   width: number
   /**
@@ -143,7 +143,7 @@ export const SessionContext = createContext<{
 }>()
 
 function use() {
-  const ctx = useContext(SessionContext)
+  const ctx = useContext(context)
   if (!ctx) throw new Error("useContext must be used within a Session component")
   return ctx
 }
@@ -1240,7 +1240,7 @@ export function Session(props: {
   const terminalHeight = createMemo(() => dimensions().height)
 
   return (
-    <SessionContext.Provider
+    <context.Provider
       value={{
         get width() {
           return contentWidth()
@@ -1412,7 +1412,7 @@ export function Session(props: {
           </Show>
         </box>
       </box>
-    </SessionContext.Provider>
+    </context.Provider>
   )
 }
 
@@ -3346,19 +3346,6 @@ export function isBackgroundSubagent(
 }
 
 type ExecuteCall = { tool: string; status: "running" | "completed" | "error"; input?: Record<string, unknown> }
-type ExecuteCallVariant =
-  | "status"
-  | "tree"
-  | "rail"
-  | "minimal"
-  | "arrows"
-  | "bullets"
-  | "circles"
-  | "chevrons"
-  | "dashes"
-  | "numbered"
-  | "dotted-rail"
-  | "rounded-rail"
 
 function executeCalls(value: unknown): ExecuteCall[] {
   if (!Array.isArray(value)) return []
@@ -3376,13 +3363,7 @@ export function executeCallSummary(call: ExecuteCall) {
   return `${call.tool}${args ? ` ${args}` : ""}`
 }
 
-export function ExecuteCallView(props: {
-  call: Accessor<ExecuteCall>
-  variant?: ExecuteCallVariant
-  index: number
-  last?: boolean
-  flush?: boolean
-}) {
+function ExecuteCallView(props: { call: Accessor<ExecuteCall> }) {
   const theme = useTheme()
   const renderer = useRenderer()
   const [expanded, setExpanded] = createSignal(false)
@@ -3395,38 +3376,10 @@ export function ExecuteCallView(props: {
     if (hover()) return theme.text.default
     return expanded() ? expandedColor() : theme.text.subdued
   })
-  const marker = createMemo(() => {
-    if (props.call().status === "error") return "✗"
-    switch (props.variant) {
-      case "tree":
-        return props.last ? "└" : "├"
-      case "rail":
-        return "│"
-      case "minimal":
-        return " "
-      case "arrows":
-        return "↳"
-      case "bullets":
-        return "•"
-      case "circles":
-        return props.call().status === "running" ? "○" : "●"
-      case "status":
-        return props.call().status === "running" ? "·" : "✓"
-      case "dashes":
-        return "─"
-      case "numbered":
-        return String(props.index + 1)
-      case "dotted-rail":
-        return "┆"
-      case "rounded-rail":
-        return props.last ? "╰" : "│"
-      default:
-        return "›"
-    }
-  })
+
   return (
     <box
-      paddingLeft={3 + (props.flush === false ? INLINE_TOOL_ICON_WIDTH : 0)}
+      paddingLeft={3}
       onMouseOver={() => expandable() && setHover(true)}
       onMouseOut={() => setHover(false)}
       onMouseUp={() => {
@@ -3436,7 +3389,7 @@ export function ExecuteCallView(props: {
     >
       <box flexDirection="row">
         <box width={INLINE_TOOL_ICON_WIDTH} flexShrink={0}>
-          <text fg={color()}>{marker()}</text>
+          <text fg={color()}>{props.call().status === "error" ? "✗" : "›"}</text>
         </box>
         <text flexGrow={1} wrapMode="none" truncate fg={color()}>
           {expanded() ? props.call().tool : executeCallSummary(props.call())}
@@ -3463,7 +3416,7 @@ export function ExecuteCallView(props: {
 }
 
 // The `execute` tool streams child tool calls through metadata, not a child session like Task.
-export function Execute(props: ToolProps & { variant?: ExecuteCallVariant; flush?: boolean }) {
+function Execute(props: ToolProps) {
   const ctx = use()
   const theme = useTheme()
   const isLoading = createMemo(() => props.part.state.status === "streaming" || props.part.state.status === "running")
@@ -3472,6 +3425,7 @@ export function Execute(props: ToolProps & { variant?: ExecuteCallVariant; flush
   const hasRuntimeError = createMemo(() => props.metadata.error === true || props.part.state.status === "error")
   const outputPreview = createMemo(() => collapseToolOutput(output(), 4, 4 * Math.max(20, ctx.width - 6)).output)
   const showOutput = createMemo(() => output() && hasRuntimeError())
+
   return (
     <>
       <InlineTool
@@ -3484,17 +3438,7 @@ export function Execute(props: ToolProps & { variant?: ExecuteCallVariant; flush
       >
         execute
       </InlineTool>
-      <Index each={calls()}>
-        {(call, index) => (
-          <ExecuteCallView
-            call={call}
-            index={index}
-            variant={props.variant}
-            last={index === calls().length - 1}
-            flush={props.flush}
-          />
-        )}
-      </Index>
+      <Index each={calls()}>{(call) => <ExecuteCallView call={call} />}</Index>
       <Show when={showOutput()}>
         <box paddingLeft={3}>
           <For each={outputPreview().split("\n")}>
