@@ -1,9 +1,17 @@
 import { describe, expect, test } from "bun:test"
-import { buildStatsQueries, toGeoAggregate, toModelAggregate, toProviderAggregate } from "./inference"
+import {
+  buildRetentionQueries,
+  buildStatsQueries,
+  toGeoAggregate,
+  toModelAggregate,
+  toProviderAggregate,
+  toRetentionAggregate,
+} from "./inference"
 import { modelAuthor, normalizeInferenceModel, statModel, statProvider } from "./model-normalization"
 
 describe("inference stat normalization", () => {
   test("normalizes model suffixes used by router/provider variants", () => {
+    expect(normalizeInferenceModel("GPT-5-Free")).toBe("gpt-5")
     expect(normalizeInferenceModel("deepseek-v4-flash-free")).toBe("deepseek-v4-flash")
     expect(normalizeInferenceModel("deepseek-v4-flash:global")).toBe("deepseek-v4-flash")
     expect(normalizeInferenceModel("mimo-v2.5-free")).toBe("mimo-v2.5")
@@ -39,6 +47,17 @@ describe("inference stat normalization", () => {
     expect(statProvider("big-pickle", "gpt-5", "opencode")).toBe("openai")
     expect(statProvider("big-pickle", "", "opencode")).toBe("unknown")
     expect(statProvider("unknown", "", "custom-provider")).toBe("custom-provider")
+  })
+
+  test("merges renamed models under their current name", () => {
+    expect(statModel("x-preview-f", "")).toBe("ox-alpha")
+    expect(statModel("xiaomi/mimo-v2.5", "")).toBe("mimo-v2.5")
+    expect(toModelAggregate(aggregate("x-preview-f", "openai"))).toMatchObject([
+      {
+        provider: "openai",
+        model: "ox-alpha",
+      },
+    ])
   })
 
   test("model aggregates prefer provider.model and use normalized model", () => {
@@ -142,6 +161,60 @@ describe("inference stat normalization", () => {
 
     expect(query).toContain("(source = 'inference-legacy' AND started_at < '2026-08-11T10:57:48.186Z')")
     expect(query).toContain("(source = 'inference' AND started_at >= '2026-08-11T10:57:48.186Z')")
+  })
+
+  test("builds complete week-over-week retention queries", () => {
+    const queries = buildRetentionQueries(new Date("2026-08-10T00:00:00.000Z"), new Date("2026-08-31T00:00:00.000Z"), {
+      namespace: "inference",
+      table: "generation",
+      dataset: "zen",
+    })
+
+    expect(queries).toHaveLength(1)
+    expect(queries[0]?.cohortDates).toEqual(["2026-08-10", "2026-08-17"])
+    expect(queries[0]?.query).toContain("AND product = 'go'")
+    expect(queries[0]?.query).toContain("COUNT(*) AS model_requests")
+    expect(queries[0]?.query).toContain(
+      "SUM(model_requests) OVER (PARTITION BY cohort_date, user_key) AS total_requests",
+    )
+    expect(queries[0]?.query).toContain("ROW_NUMBER() OVER")
+    expect(queries[0]?.query).toContain("PARTITION BY cohort_date, user_key")
+    expect(queries[0]?.query).toContain("ORDER BY model_requests DESC, model ASC")
+    expect(queries[0]?.query).toContain("total_requests >= 10")
+    expect(queries[0]?.query).toContain("CAST(model_requests AS double) / NULLIF(total_requests, 0) >= 0.8")
+    expect(queries[0]?.query).toContain("WHEN '2026-08-17' THEN '2026-08-10'")
+    expect(queries[0]?.query).toContain("WHEN '2026-08-24' THEN '2026-08-17'")
+    expect(queries[0]?.query).toContain("started_at >= '2026-08-10T00:00:00.000Z'")
+    expect(queries[0]?.query).toContain("started_at < '2026-08-31T00:00:00.000Z'")
+    expect(queries[0]?.query).toContain("LEFT JOIN returned ON primary_models.user_key = returned.user_key")
+    expect(queries[0]?.query).toContain("primary_models.cohort_date = returned.cohort_date")
+    expect(queries[0]?.query).toContain("'Go' AS tier")
+    expect(queries[0]?.query).toContain("COUNT(*) AS eligible_users")
+    expect(queries[0]?.query).toContain("LIMIT 10000")
+  })
+
+  test("maps retention query results", () => {
+    expect(
+      toRetentionAggregate({
+        cohort_date: "2026-08-10",
+        dataset: "zen",
+        tier: "all",
+        provider: "deepseek",
+        model: "deepseek-v4-flash-free",
+        eligible_users: "125",
+        retained_users: "74",
+      }),
+    ).toEqual([
+      {
+        cohortDate: "2026-08-10",
+        dataset: "zen",
+        tier: "all",
+        provider: "deepseek",
+        model: "deepseek-v4-flash",
+        eligibleUsers: 125,
+        retainedUsers: 74,
+      },
+    ])
   })
 })
 

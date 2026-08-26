@@ -100,6 +100,7 @@ function stubOps(opts?: {
   onPrompt?: (input: SessionPrompt.PromptInput) => void
   text?: string
   error?: NonNullable<SessionV1.Assistant["error"]>
+  toolError?: string
 }): TaskPromptOps {
   return {
     cancel: () => Effect.void,
@@ -107,7 +108,7 @@ function stubOps(opts?: {
     prompt: (input) =>
       Effect.sync(() => {
         opts?.onPrompt?.(input)
-        return reply(input, opts?.text ?? "done", opts?.error)
+        return reply(input, opts?.text ?? "done", opts?.error, opts?.toolError)
       }),
   }
 }
@@ -116,6 +117,7 @@ function reply(
   input: SessionPrompt.PromptInput,
   text: string,
   error?: NonNullable<SessionV1.Assistant["error"]>,
+  toolError?: string,
 ): SessionV1.WithParts {
   const id = MessageID.ascending()
   return {
@@ -143,6 +145,24 @@ function reply(
         type: "text",
         text,
       },
+      ...(toolError
+        ? [
+            {
+              id: PartID.ascending(),
+              messageID: id,
+              sessionID: input.sessionID,
+              type: "tool" as const,
+              tool: "read",
+              callID: "call-1",
+              state: {
+                status: "error" as const,
+                input: { filePath: "/external" },
+                error: toolError,
+                time: { start: Date.now(), end: Date.now() },
+              },
+            },
+          ]
+        : []),
     ],
   }
 }
@@ -304,6 +324,50 @@ describe("tool.task", () => {
       expect(failure).toBeInstanceOf(Error)
       if (!(failure instanceof Error)) throw new Error("expected Error defect")
       expect(failure.message).toBe(`Subagent failed (task_id: ${child?.id}): Network connection lost`)
+    }),
+  )
+
+  it.instance("execute surfaces terminal child tool errors with a resumable task_id", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+
+      const exit = yield* def
+        .execute(
+          {
+            description: "inspect external directory",
+            prompt: "read the external directory",
+            subagent_type: "general",
+          },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: new AbortController().signal,
+            extra: {
+              promptOps: stubOps({
+                text: "I will inspect the directory.",
+                toolError: "The user rejected permission to use this specific tool call.",
+              }),
+            },
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        )
+        .pipe(Effect.exit)
+
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isSuccess(exit)) throw new Error("expected task failure")
+      const child = (yield* sessions.children(chat.id))[0]
+      const failure = Cause.squash(exit.cause)
+      expect(failure).toBeInstanceOf(Error)
+      if (!(failure instanceof Error)) throw new Error("expected Error defect")
+      expect(failure.message).toBe(
+        `Subagent failed (task_id: ${child?.id}): The user rejected permission to use this specific tool call.`,
+      )
     }),
   )
 
