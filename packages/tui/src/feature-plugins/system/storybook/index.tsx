@@ -3,6 +3,7 @@ import { useTerminalDimensions } from "@opentui/solid"
 import { createSignal, For, type JSX } from "solid-js"
 import { StoryFooter } from "./footer"
 import { mermanLayoutsStory } from "./merman-layouts"
+import { pluginUpdatesStory } from "./plugin-updates"
 import { sessionTabsStory } from "./session-tabs"
 import { sessionLocationMissingStory } from "./session-location-missing"
 
@@ -16,7 +17,7 @@ export type Story = {
   render: (context: Plugin.Context) => JSX.Element
 }
 
-const stories: Story[] = [mermanLayoutsStory, sessionTabsStory, sessionLocationMissingStory]
+const stories: Story[] = [mermanLayoutsStory, sessionTabsStory, sessionLocationMissingStory, pluginUpdatesStory]
 
 function Commands(props: { context: Plugin.Context }) {
   props.context.keymap.layer(() => ({
