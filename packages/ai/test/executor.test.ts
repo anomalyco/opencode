@@ -327,7 +327,6 @@ describe("RequestExecutor", () => {
           retryAfterMs: 0,
           rateLimit: { retryAfterMs: 0 },
           http: {
-            requestId: "req_123",
             request: {
               method: "POST",
               url: "https://provider.test/v1/chat?api_key=secret&key=secret&debug=1",
