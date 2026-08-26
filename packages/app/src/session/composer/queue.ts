@@ -1,6 +1,7 @@
 import { createEffect, createMemo, onCleanup, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { SessionInboxInfo } from "@opencode-ai/client/promise"
+import { SessionMessage } from "@opencode-ai/schema/session-message"
 import type { ComposerDelivery } from "@/composer/adapter"
 import type { ComposerModel } from "@/composer/model"
 import type { ComposerStateTarget } from "@/composer/submission-state"
@@ -34,20 +35,18 @@ export function createSessionQueue(input: {
   const server = useServerSDK()
   const location = useWorkspaceLocation()
   const language = useLanguage()
-  const [state, setState] = createStore<{ editing?: { id: string; stash: EditStash }; busy: boolean }>({ busy: false })
+  const [state, setState] = createStore<{
+    editing?: { id: string; stash: EditStash }
+    replacement?: { original: string; replacement: string }
+    busy: boolean
+  }>({ busy: false })
 
   const queued = createMemo(() =>
     data.session.pending
       .list(input.sessionID)
       .filter((item): item is QueuedPrompt => item.type === "user" && item.delivery === "queue"),
   )
-  const rows = createMemo(() =>
-    queued().map((item) => ({
-      id: item.id,
-      text: queuedPromptText(item),
-      attachments: (item.payload.files?.length ?? 0) > 0,
-    })),
-  )
+  const rows = createMemo(() => queuedPromptRows(queued(), state.replacement))
 
   createEffect(() => {
     const editing = state.editing
@@ -63,6 +62,7 @@ export function createSessionQueue(input: {
       .catch(() => notify())
       .finally(async () => {
         await data.session.pending.sync(input.sessionID).catch(() => undefined)
+        setState("replacement", undefined)
         setState("busy", false)
       })
   }
@@ -157,9 +157,12 @@ export function createSessionQueue(input: {
     const inboxIDs = queued().map((entry) => entry.id)
     void run(async () => {
       const replacement = await editedPromptInput(input.sessionID, location().directory, item, prompt, text)
+      const id = SessionMessage.ID.create()
+      if (delivery === "queue") setState("replacement", { original: editing.id, replacement: id })
       // Admit before cancelling so a failed replacement never discards the original.
       const admitted = await data.session.prompt({
         ...replacement,
+        id,
         delivery,
         ...(delivery === "queue" ? { resume: false } : {}),
       })
@@ -203,6 +206,17 @@ export type SessionQueueView = Pick<
   SessionQueue,
   "rows" | "editing" | "working" | "busy" | "steer" | "remove" | "edit" | "reorder"
 >
+
+export function queuedPromptRows(items: QueuedPrompt[], replacement?: { original: string; replacement: string }) {
+  const replaced = replacement && items.some((item) => item.id === replacement.replacement)
+  return items
+    .filter((item) => !replaced || item.id !== replacement.original)
+    .map((item) => ({
+      id: item.id,
+      text: queuedPromptText(item),
+      attachments: (item.payload.files?.length ?? 0) > 0,
+    }))
+}
 
 export function queuedPromptText(item: QueuedPrompt) {
   const display = item.payload.metadata?.["displayText"]
