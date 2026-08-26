@@ -77,6 +77,7 @@ function resourceServer(
         templateLists: 0,
         toolLists: 0,
         initializations: 0,
+        urls: [] as string[],
       }
       const protocol = new Server(
         { name: "mcp-resources", version: "1.0.0" },
@@ -145,6 +146,7 @@ function resourceServer(
       const http = Bun.serve({
         port: 0,
         fetch: async (request) => {
+          state.urls.push(request.url)
           const body: unknown = request.method === "POST" ? await request.clone().json() : undefined
           if (typeof body === "object" && body !== null && "method" in body && body.method === "initialize") {
             state.initializations += 1
@@ -717,6 +719,40 @@ test("applies configured MCP timeouts to resource operations", async () => {
   )
   await expect(read).rejects.toThrow("Request timed out")
 })
+
+for (const entry of [
+  { name: "default", query: "", codemode: undefined, expected: "?codemode=false" },
+  { name: "explicit local code mode", query: "", codemode: true, expected: "?codemode=false" },
+  { name: "direct tools", query: "", codemode: false, expected: "" },
+  {
+    name: "existing query",
+    query: "?source=opencode",
+    codemode: undefined,
+    expected: "?source=opencode&codemode=false",
+  },
+  { name: "explicit remote code mode", query: "?codemode=true", codemode: undefined, expected: "?codemode=true" },
+  { name: "explicit remote opt-out", query: "?codemode=false", codemode: undefined, expected: "?codemode=false" },
+  { name: "portal opt-out", query: "?codemode=off", codemode: undefined, expected: "?codemode=off" },
+]) {
+  testEffect(Layer.empty).live(`remote MCP code mode preference: ${entry.name}`, () =>
+    Effect.gen(function* () {
+      const server = yield* resourceServer()
+      const config = new ConfigMCP.Remote({
+        type: "remote",
+        url: server.url + entry.query,
+        oauth: false,
+        codemode: entry.codemode,
+      })
+      const connection = yield* connect("resources", config, import.meta.dir)
+      yield* connection.tools()
+      expect(server.state.initializations).toBe(1)
+      expect(server.state.toolLists).toBe(1)
+      expect(server.state.urls.length).toBeGreaterThanOrEqual(3)
+      expect(new Set(server.state.urls)).toEqual(new Set([server.url + entry.expected]))
+      expect(config.url).toBe(server.url + entry.query)
+    }),
+  )
+}
 
 test("lists, reads, and reports MCP resource changes", async () => {
   await Effect.runPromise(

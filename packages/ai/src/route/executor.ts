@@ -40,17 +40,6 @@ const headerDetails = (headers: Headers.Headers) =>
 const normalizedHeaders = (headers: Headers.Headers) =>
   Object.fromEntries(Object.entries(headers).map(([key, value]) => [key.toLowerCase(), value]))
 
-const requestId = (headers: Record<string, string>) => {
-  return (
-    headers["x-request-id"] ??
-    headers["request-id"] ??
-    headers["x-amzn-requestid"] ??
-    headers["x-amz-request-id"] ??
-    headers["x-goog-request-id"] ??
-    headers["cf-ray"]
-  )
-}
-
 const retryAfterMs = (headers: Record<string, string>) => {
   const millis = Number(headers["retry-after-ms"])
   if (Number.isFinite(millis)) return Math.max(0, millis)
@@ -147,14 +136,12 @@ const responseHttp = (input: {
   readonly request: HttpClientRequest.HttpClientRequest
   readonly response: HttpClientResponse.HttpClientResponse
   readonly body: ReturnType<typeof responseBody>
-  readonly requestId?: string | undefined
   readonly rateLimit?: HttpRateLimitDetails | undefined
 }) =>
   new HttpContext({
     request: requestDetails(input.request),
     response: responseDetails(input.response),
     ...input.body,
-    requestId: input.requestId,
     rateLimit: input.rateLimit,
   })
 
@@ -179,7 +166,6 @@ const statusError =
             request,
             response,
             body: details,
-            requestId: requestId(headers),
             rateLimit,
           }),
         }),
@@ -216,7 +202,6 @@ export const classifyHttpFailure = (input: {
           ? undefined
           : new HttpResponseDetails({ status: input.status, headers: headerDetails(Headers.fromInput(headers)) }),
       ...details,
-      requestId: requestId(headers),
       rateLimit,
     }),
   })

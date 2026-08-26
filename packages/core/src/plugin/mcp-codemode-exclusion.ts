@@ -4,7 +4,7 @@ import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Effect } from "effect"
 
 // These servers provide Code Mode, so expose them directly instead of nesting them inside OpenCode Code Mode.
-const urls = [/^https:\/\/mcp\.cloudflare\.com\/mcp$/, /^https:\/\/executor\.sh\/[^/]+\/mcp$/]
+const urls = [/^https:\/\/executor\.sh\/[^/]+\/mcp$/]
 
 export const Plugin = define({
   id: "opencode.mcp.codemode.exclusion",

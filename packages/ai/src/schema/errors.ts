@@ -29,7 +29,6 @@ export class HttpContext extends Schema.Class<HttpContext>("AI.HttpContext")({
   response: Schema.optional(HttpResponseDetails),
   body: Schema.optional(Schema.String),
   bodyTruncated: Schema.optional(Schema.Boolean),
-  requestId: Schema.optional(Schema.String),
   rateLimit: Schema.optional(HttpRateLimitDetails),
 }) {}
 

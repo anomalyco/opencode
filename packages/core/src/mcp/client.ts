@@ -207,7 +207,10 @@ export const connect = Effect.fnUntraced(function* (
     }
     if (!URL.canParse(config.url))
       return yield* new ConnectError({ server, message: `Invalid MCP URL for "${server}"` })
-    return new StreamableHTTPClientTransport(new URL(config.url), {
+    // Prefer raw tools for our Code Mode without changing the configured URL used for OAuth identity.
+    const url = new URL(config.url)
+    if (config.codemode !== false && !url.searchParams.has("codemode")) url.searchParams.set("codemode", "false")
+    return new StreamableHTTPClientTransport(url, {
       requestInit: config.headers ? { headers: config.headers } : undefined,
       authProvider,
     })

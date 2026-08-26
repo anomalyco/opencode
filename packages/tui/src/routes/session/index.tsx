@@ -2544,11 +2544,12 @@ function TextPart(props: { last: boolean; part: SessionMessageAssistantText; mes
   return (
     <Show when={props.part.text.trim()}>
       <box paddingLeft={3} flexShrink={0}>
+        {/* Apply content before streaming so completion does not freeze the previous Markdown tokens. */}
         <markdown
           syntaxStyle={syntax()}
+          content={props.part.text.trim()}
           streaming={props.message.time.completed === undefined}
           internalBlockMode="top-level"
-          content={props.part.text.trim()}
           tableOptions={{ style: "grid", cellPaddingX: 1 }}
           conceal={ctx.markdownMode() === "rendered"}
           fg={theme.markdown.text}
