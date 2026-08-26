@@ -300,7 +300,6 @@ test("session startup prompt is submitted exactly once", async () => {
 test("error investigations repeatedly seed editable home drafts without creating sessions", async () => {
   const setup = await createTestRenderer({ width: 100, height: 30, useThread: false, kittyKeyboard: true })
   setup.renderer.start()
-  const ready = Promise.withResolvers<void>()
   const events = createEventStream()
   const cwd = process.cwd()
   const location = { directory: cwd, project: { id: "project", directory: cwd } }
@@ -332,11 +331,10 @@ test("error investigations repeatedly seed editable home drafts without creating
         },
         packages: { resolve: async () => undefined },
         args: {},
-        terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: ready.resolve }),
+        terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
         log: () => {},
       }).pipe(Effect.provide(AppNodeBuilder.build(Global.node)), Effect.provide(FileSystem.layerNoop({}))),
     )
-    await ready.promise
     await setup.waitForFrame((frame) => frame.includes("commands"))
 
     setup.mockInput.pressKey("F6")

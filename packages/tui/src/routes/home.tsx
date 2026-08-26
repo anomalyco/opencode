@@ -55,10 +55,8 @@ export function Home() {
 
   createEffect(() => {
     const composer = ref()
-    const text = route.prompt?.text
-    if (!composer || text === undefined) return
     const prompt = route.prompt
-    if (!prompt) return
+    if (!composer || prompt?.text === undefined) return
     untrack(() => composer.set(prompt))
   })
 

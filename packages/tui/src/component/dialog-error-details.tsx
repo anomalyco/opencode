@@ -3,7 +3,6 @@ import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import { useConfig } from "../config"
 import { useClipboard } from "../context/clipboard"
-import { useData } from "../context/data"
 import { Keymap } from "../context/keymap"
 import { useLocation } from "../context/location"
 import { useRoute } from "../context/route"
@@ -15,7 +14,6 @@ import { useToast } from "../ui/toast"
 
 export function DialogErrorDetails(props: { title: string; error: string; onBack: () => void }) {
   const clipboard = useClipboard()
-  const data = useData()
   const dialog = useDialog()
   const location = useLocation()
   const route = useRoute()
@@ -59,13 +57,12 @@ export function DialogErrorDetails(props: { title: string; error: string; onBack
   }
 
   const investigate = () => {
-    const target = location.ref ?? data.location.default()
     route.navigate({
       type: "home",
-      location: target,
+      location: location.ref,
       prompt: {
         ...emptyPrompt(),
-        text: `Investigate this OpenCode failure in ${target.directory}.\n\n${props.title}\n${props.error}\n\nInspect the relevant configuration and logs, identify the root cause, and suggest a fix.`,
+        text: `Investigate this error:\n\n${props.title}\n${props.error}`,
       },
     })
     dialog.clear()
@@ -118,27 +115,25 @@ export function DialogErrorDetails(props: { title: string; error: string; onBack
           </text>
         </scrollbox>
       </box>
-      <box flexDirection="row" justifyContent="space-between" paddingLeft={2} paddingRight={2}>
-        <text>
+      <box flexDirection="row" gap={3} paddingLeft={2} paddingRight={2}>
+        <text flexGrow={1}>
           <span style={{ fg: theme.text.default }}>
             <b>{scrollable() ? "↑/↓" : ""}</b>
           </span>
           <span style={{ fg: theme.text.subdued }}>{scrollable() ? " scroll" : ""}</span>
         </text>
-        <box flexDirection="row" gap={3}>
-          <text onMouseUp={investigate}>
-            <span style={{ fg: theme.text.default }}>
-              <b>i</b>
-            </span>
-            <span style={{ fg: theme.text.subdued }}> investigate</span>
-          </text>
-          <text onMouseUp={copy}>
-            <span style={{ fg: copied() ? theme.text.feedback.success.default : theme.text.default }}>
-              <b>{copied() ? "✓ copied" : "c"}</b>
-            </span>
-            <span style={{ fg: theme.text.subdued }}>{copied() ? "" : " copy details"}</span>
-          </text>
-        </box>
+        <text onMouseUp={investigate}>
+          <span style={{ fg: theme.text.default }}>
+            <b>i</b>
+          </span>
+          <span style={{ fg: theme.text.subdued }}> investigate</span>
+        </text>
+        <text onMouseUp={copy}>
+          <span style={{ fg: copied() ? theme.text.feedback.success.default : theme.text.default }}>
+            <b>{copied() ? "✓ copied" : "c"}</b>
+          </span>
+          <span style={{ fg: theme.text.subdued }}>{copied() ? "" : " copy details"}</span>
+        </text>
       </box>
     </box>
   )

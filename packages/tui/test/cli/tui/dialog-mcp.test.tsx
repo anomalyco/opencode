@@ -49,7 +49,7 @@ test("opens an investigation draft for a failed MCP server at its originating lo
     expect(fixture.route.data.location).toEqual(location)
     expect(fixture.route.data.prompt?.text).toContain("MCP server: linear")
     expect(fixture.route.data.prompt?.text).toContain("MCP error -32000: Connection closed")
-    expect(fixture.route.data.prompt?.text).toContain(location.directory)
+    expect(fixture.route.data.prompt?.text).not.toContain(location.directory)
   } finally {
     fixture.app.renderer.destroy()
   }
