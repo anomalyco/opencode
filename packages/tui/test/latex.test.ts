@@ -105,6 +105,15 @@ test("renders the next valid formula after an incomplete streaming prefix", asyn
   expect(output.markdown.getChildren()[0]?.getChildren()[0]).toBeInstanceOf(TextRenderable)
 })
 
+test("renders the final formula when completion is applied before the last text update", async () => {
+  const output = await setup("```latex\n\\frac{1}{")
+  output.markdown.streaming = false
+  output.markdown.content += "2}\n```"
+  await output.renderOnce()
+  expect(output.markdown.getChildren().filter((child) => child instanceof ScrollBoxRenderable).length).toBe(1)
+  expect(output.captureCharFrame()).not.toContain("\\frac")
+})
+
 test("retains the last valid Unicode formula while the next fraction is incomplete", async () => {
   const output = await setup("```latex\n\\frac{a_1+b_1}{c_1+d_1}")
   const previous = output.captureCharFrame()
