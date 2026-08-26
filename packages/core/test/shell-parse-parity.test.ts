@@ -4,40 +4,73 @@ import { ShellParse } from "../src/shell/parse.js"
 import { ShellScan } from "../src/shell/scan.js"
 
 describe("ShellParse portable parity", () => {
-  test("retains every scanner resource and only safe leading decoded tokens across generated syntax", async () => {
+  test("matches Tree-sitter resources, saved prefixes, and directories across generated syntax", async () => {
     for (const [shell, command] of generated()) {
-      const scanned = shell === "pwsh" ? ShellScan.scanPowerShell(command) : ShellScan.scan(command)
-      const portable = await Effect.runPromise(
-        ShellParse.scan(command, shell, "/workspace", { portable: true, env: {} }),
-      )
-
-      if (portable.analysis === "opaque") {
-        expect({ command, portable }).toEqual({
-          command,
-          portable: {
-            commands: [{ resource: command }],
-            directories: [],
-            analysis: "opaque",
-            directoryUnknown: true,
-          },
-        })
-        continue
-      }
-      if (scanned.kind === "opaque") throw new Error(`Portable parse unexpectedly completed opaque input: ${command}`)
-
-      // Legacy tree-sitter omitted cd and some redirected/PowerShell commands.
-      // Its resource subset is not the safety contract for the portable adapter.
-      expect(
-        portable.commands.map((item) => item.resource),
-        command,
-      ).toEqual(scanned.commands.map((item) => item.resource))
-      for (const [index, item] of portable.commands.entries()) {
-        if (item.save === undefined) continue
-        expect(item.save, command).toMatch(/^[A-Za-z0-9_./:@%+=,-]+(?: [A-Za-z0-9_./:@%+=,-]+)* \*$/)
-        const tokens = item.save.slice(0, -2).split(" ")
-        expect(scanned.commands[index].words.slice(0, tokens.length), command).toEqual(tokens)
-      }
+      const legacy = await Effect.runPromise(ShellParse.scan(command, shell, "/workspace"))
+      const portable = await Effect.runPromise(ShellParse.scan(command, shell, "/workspace", { portable: true }))
+      expect(portable, `${shell}: ${JSON.stringify(command)}`).toEqual(legacy)
     }
+  }, 60_000)
+
+  test.each([
+    ["/bin/bash", "git status && npm run test -- --watch"],
+    ["/bin/bash", "git\tstatus; git status | cat; git diff || echo done"],
+    ["/bin/bash", "echo \"two words\"; printf 'static text'"],
+    ["/bin/bash", "aws s3 ls; docker compose up; git remote add origin; bun run test"],
+    ["/bin/bash", "cd ~/project; cd src && cd ..; pwd"],
+    ["/bin/zsh", "cd ~/project; chdir src && cd ..; git status"],
+    ["/bin/dash", "cd src&&cd ..; pwd"],
+    ["/bin/sh", "git status; cd src; pwd"],
+    ["/bin/ksh", "git status; cd src; pwd"],
+    ["pwsh", "Get-ChildItem; Write-Output done | Out-String"],
+    ["pwsh", "Set-Location -LiteralPath C:\\tmp; Get-ChildItem"],
+    ["pwsh", "git status; npm run test; docker compose up"],
+  ])("uses the portable adapter for static commands in %s: %s", async (shell, command) => {
+    const scanned = shell === "pwsh" ? ShellScan.scanPowerShell(command) : ShellScan.scan(command)
+    expect(scanned.kind).toBe("scanned")
+    const portable = await ShellParse.scanPortable(command, shell, "/workspace")
+    expect(portable).toBeDefined()
+    expect(portable).toEqual(await Effect.runPromise(ShellParse.scan(command, shell, "/workspace")))
+  })
+
+  test.each([
+    ["/bin/bash", 'git "status"'],
+    ["/bin/bash", 'npm "run" test'],
+    ["/bin/bash", 'git remote "add" origin'],
+    ["/bin/bash", "git $(printf status) diff"],
+    ["/bin/bash", "X=value git status"],
+    ["/bin/bash", "git status && cat <input"],
+    ["/bin/bash", "cd /tmp >output"],
+    ["/bin/bash", "echo $((1 + 2))"],
+    ["/bin/bash", "((count++))"],
+    ["/bin/bash", "export X=value; unset X; git status"],
+    ["/bin/bash", "git 2 status"],
+    ["/bin/bash", "cd 123; git == value"],
+    ["/bin/bash", "cat <<EOF\nbody\nEOF"],
+    ["/bin/bash", 'cd "~/project"'],
+    ["/bin/bash", "cd before\\\nafter"],
+    ["pwsh", 'git "status"'],
+    ["pwsh", "Get-ChildItem\rRemove-Item victim"],
+    ["pwsh", "git & Write-Output q"],
+    ["pwsh", "ForEach-Object { Remove-Item $_ }"],
+    ["pwsh", "Write-Output done # comment\nGet-ChildItem"],
+    ["pwsh", 'Set-Location "$HOME/src"'],
+    ["pwsh", "return; break; continue; exit"],
+    ["pwsh", "git --flag=value"],
+    ["pwsh", "git\tstatus"],
+    ["pwsh", "Set-Location -2"],
+    ["pwsh", "Set-Location a,b"],
+    ["pwsh", "Write-Output 'safe'tail"],
+    ["pwsh", 'Write-Output "safe"tail'],
+    ["pwsh", 'Write-Output "a""b"'],
+    ["pwsh", "Write-Output 'a''b'"],
+    ["pwsh", "Write-Output pre'safe'#literal; Get-Item x"],
+    ["pwsh", "Write-Output 'safe'# '\nRemove-Item victim\n# '"],
+    ["pwsh", "Write-Output \"safe\"# '\nRemove-Item victim\n# '"],
+  ])("falls back without changing legacy behavior in %s: %s", async (shell, command) => {
+    expect(await ShellParse.scanPortable(command, shell, "/workspace")).toBeUndefined()
+    const legacy = await Effect.runPromise(ShellParse.scan(command, shell, "/workspace"))
+    expect(await Effect.runPromise(ShellParse.scan(command, shell, "/workspace", { portable: true }))).toEqual(legacy)
   })
 })
 
@@ -112,10 +145,34 @@ function generated() {
     "if true; then git status; else npm test; fi",
     "for x in a b; do echo $x; done",
     "cd /tmp/$USER && git status",
+    "echo $((1 + 2))",
+    "echo $[1 + 2]",
+    "((count++))",
+    "let count++",
+    "cd ~/project",
+    "cd ~someone/project",
+    "cd src&&cd ..",
+    "cd src&&cd..",
+    "cd -- -/outside; cd -; pushd; popd; chdir src; set-location src; sl src",
+    'git "status"',
+    'git remote "add" origin',
+    'aws s3 "ls"',
+    "git remote add origin",
+    "aws s3 ls --recursive",
     "echo <(git status)",
     'echo "unterminated',
   ])
     result.push(["/bin/bash", command])
+
+  for (const shell of ["/bin/zsh", "/bin/dash", "/bin/sh", "/bin/ksh"])
+    for (const command of [
+      "git status; npm run test",
+      "cd ~/project; cd src&&cd ..; pwd",
+      "chdir src; popd; pushd ../other; set-location src; sl src",
+      'git "status"',
+      "echo $((1 + 2))",
+    ])
+      result.push([shell, command])
 
   const powershellHeads = ["Get-ChildItem", "Write-Output", "Test-Path", "Remove-Item", "Set-Location"]
   const powershellArgs = ["", " value", " 'two words'", ' "two words"', " -Path C:\\tmp", " -LiteralPath '..\\outside'"]
@@ -157,6 +214,59 @@ function generated() {
     'Write-Output "unterminated',
   ])
     result.push(["pwsh", command])
+
+  for (const shell of ["/bin/bash", "pwsh"])
+    for (const head of [
+      "git",
+      "npm",
+      "echo",
+      "cd",
+      "Set-Location",
+      "declare",
+      "typeset",
+      "export",
+      "readonly",
+      "local",
+      "unset",
+      "unsetenv",
+      "return",
+      "break",
+      "continue",
+      "throw",
+      "exit",
+      "workflow",
+      "parallel",
+      "sequence",
+      "inlinescript",
+      "foreach",
+    ])
+      for (const arg of [
+        "",
+        " value",
+        " X=value",
+        " 123",
+        " 0x1",
+        " -2",
+        " 2 status",
+        " -",
+        " --",
+        " --flag=value",
+        " --flag:value",
+        " -j2",
+        " -a.b",
+        " -C/tmp",
+        " a,b",
+        " a,",
+        " ,a",
+        " ==",
+        " == value",
+        " =~ value",
+        " !",
+        "\tvalue",
+      ]) {
+        result.push([shell, head + arg])
+        result.push([shell, `${head}${arg}; git status`])
+      }
 
   let state = 0x5eed1234
   const random = (length: number) => {

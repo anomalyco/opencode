@@ -15,6 +15,7 @@ export const Nested = Symbol("ShellScan.Nested")
 
 type Command = { resource: string; words: string[]; [Nested]?: true }
 
+// Opaque describes a parsing limitation, not a permission decision.
 export type Result = { kind: "scanned"; commands: Command[] } | { kind: "opaque"; reason: OpaqueReason }
 
 const BASH_COMPOUND_KEYWORDS = new Set([

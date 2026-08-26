@@ -200,50 +200,32 @@ export const Plugin = {
                       Config.latest(yield* config.entries(), "experimental")?.portable_shell_scanner === true
                     const parsed = yield* ShellParse.scan(invocation.command, invocation.shell, target.absolute, {
                       portable,
-                      env: invocation.env,
                     })
-                    if (parsed.directoryUnknown)
+                    const directories = yield* Effect.forEach(parsed.directories, (directory) =>
+                      mutation.resolve({ path: path.resolve(target.absolute, directory), kind: "directory" }),
+                    )
+                    const external = [target, ...directories]
+                      .map((item) => item.externalDirectory)
+                      .filter((item) => item !== undefined)
+                      .filter(
+                        (item, index, items) => items.findIndex((other) => other.resource === item.resource) === index,
+                      )
+                    if (external.length > 0)
                       yield* permission.assert({
                         action: "external_directory",
-                        resources: ["*"],
-                        save: [],
+                        resources: external.map((item) => item.resource),
+                        save: external.map((item) => item.save),
                         sessionID: context.sessionID,
                         agent: context.agent,
-                        resourceMode: "exact",
                         source,
                       })
-                    if (!parsed.directoryUnknown) {
-                      const directories = yield* Effect.forEach(parsed.directories, (directory) =>
-                        mutation.resolve({ path: path.resolve(target.absolute, directory), kind: "directory" }),
-                      )
-                      const external = [target, ...directories]
-                        .map((item) => item.externalDirectory)
-                        .filter((item) => item !== undefined)
-                        .filter(
-                          (item, index, items) =>
-                            items.findIndex((other) => other.resource === item.resource) === index,
-                        )
-                      if (external.length > 0)
-                        yield* permission.assert({
-                          action: "external_directory",
-                          resources: external.map((item) => item.resource),
-                          save: external.map((item) => item.save),
-                          sessionID: context.sessionID,
-                          agent: context.agent,
-                          source,
-                        })
-                    }
                     if (parsed.commands.length > 0)
                       yield* permission.assert({
                         action: name,
                         resources: parsed.commands.map((command) => command.resource),
-                        save:
-                          parsed.analysis === "opaque"
-                            ? []
-                            : parsed.commands.flatMap((command) => (command.save ? [command.save] : [])),
+                        save: parsed.commands.map((command) => command.save),
                         sessionID: context.sessionID,
                         agent: context.agent,
-                        resourceMode: parsed.analysis === "opaque" ? "exact" : undefined,
                         source,
                       })
                     const workdir = yield* Environment.typeFollowing(environment.files, target.absolute).pipe(

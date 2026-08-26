@@ -2,22 +2,19 @@ export * as ShellParse from "./parse.js"
 
 import { Effect } from "effect"
 import { fileURLToPath } from "url"
+import os from "os"
 import path from "path"
 import type { Node } from "web-tree-sitter"
 import { shellParserWasm } from "#shell-parser-wasm"
 import { ShellSelect } from "./select.js"
 
 type Part = { type: string; text: string }
-const BASH_CWD = new Set(["cd", "popd", "pushd"])
-const POWERSHELL_CWD = new Set([...BASH_CWD, "chdir", "sl", "pop-location", "push-location", "set-location"])
+const CWD = new Set(["cd", "chdir", "popd", "pushd", "push-location", "set-location"])
 const POWERSHELL_PATH_FLAGS = new Set(["-literalpath", "-path"])
-const PORTABLE_BASH_SHELLS = new Set(["bash", "dash", "sh"])
 
 export type Result = {
-  commands: Array<{ resource: string; save?: string }>
+  commands: Array<{ resource: string; save: string }>
   directories: string[]
-  analysis: "complete" | "opaque"
-  directoryUnknown: boolean
 }
 
 const ARITY: Record<string, number> = {
@@ -159,15 +156,18 @@ const ARITY: Record<string, number> = {
   "yarn dlx": 3,
   "yarn run": 3,
 }
-const PREFIX_LENGTH = Math.max(...Object.keys(ARITY).map((command) => command.split(" ").length))
+const PREFIX_LENGTH = Math.max(...Object.values(ARITY))
 
 export const scan = Effect.fnUntraced(function* (
   command: string,
   shell: string,
   cwd: string,
-  options?: { portable?: boolean; env?: Record<string, string | undefined> },
+  options?: { portable?: boolean },
 ) {
-  if (options?.portable) return yield* Effect.promise(() => scanPortable(command, shell, options.env ?? process.env))
+  if (options?.portable) {
+    const result = yield* Effect.promise(() => scanPortable(command, shell, cwd))
+    if (result) return result
+  }
   return yield* scanLegacy(command, shell, cwd)
 })
 
@@ -177,7 +177,7 @@ const scanLegacy = Effect.fnUntraced(function* (command: string, shell: string, 
   const tree = (powershell ? parsers.ps : parsers.bash).parse(command)
   if (!tree) return yield* Effect.fail(new Error("Failed to parse shell command"))
 
-  const result = yield* Effect.acquireUseRelease(
+  return yield* Effect.acquireUseRelease(
     Effect.succeed(tree),
     (tree) =>
       Effect.sync(() =>
@@ -188,10 +188,7 @@ const scanLegacy = Effect.fnUntraced(function* (command: string, shell: string, 
             const tokens = command.map((part) => part.text)
             if (tokens.length === 0) return result
             const name = powershell ? tokens[0].toLowerCase() : tokens[0]
-            if (
-              (powershell ? POWERSHELL_CWD : BASH_CWD).has(name) ||
-              (ShellSelect.name(shell) === "zsh" && name === "chdir")
-            ) {
+            if (CWD.has(name)) {
               result.directories.push(...directoryArgs(command, powershell, cwd, shell))
               return result
             }
@@ -206,109 +203,59 @@ const scanLegacy = Effect.fnUntraced(function* (command: string, shell: string, 
       ),
     (tree) => Effect.sync(() => tree.delete()),
   )
-  return { ...result, analysis: "complete" as const, directoryUnknown: false }
 })
 
-async function scanPortable(command: string, shell: string, env: Record<string, string | undefined>): Promise<Result> {
+export async function scanPortable(command: string, shell: string, cwd: string): Promise<Result | undefined> {
   const powershell = ShellSelect.ps(shell)
-  const shellName = ShellSelect.name(shell)
-  const opaque: Result = {
-    commands: [{ resource: command }],
-    directories: [],
-    analysis: "opaque",
-    directoryUnknown: true,
-  }
-  // In particular, zsh loads .zshenv even for noninteractive invocations.
-  if ((!powershell && !PORTABLE_BASH_SHELLS.has(shellName)) || shellStartupUnknown(shellName, env)) return opaque
+  // Tree-sitter's resource omissions are part of the compatibility contract.
+  // Keep redirects, substitutions, groups, comments, and escapes on that path.
+  if (/[^\t\n\x20-\x7e]|[<>$`(){}#]/.test(command)) return
+  // PowerShell's argument grammar also splits punctuation and treats tabs specially.
+  if (powershell ? /[^A-Za-z0-9_./\\:~ \n;|-]/.test(command) : command.includes("\\")) return
   const { ShellScan } = await import("./scan.js")
   const result = powershell ? ShellScan.scanPowerShell(command) : ShellScan.scan(command)
-  if (result.kind === "opaque") return opaque
+  if (result.kind === "opaque") return
 
-  const directories: string[] = []
-  let directoryUnknown = false
+  const output: Result = { commands: [], directories: [] }
   for (const item of result.commands) {
-    if (directoryUnknown) break
-    const location = directoryCommand(item.words, powershell)
-    if (!location) continue
-    // Later changes may run in another branch, group, or directory stack.
+    const name = powershell ? item.words[0]?.toLowerCase() : item.words[0]
+    // These are statements or non-word Parts in the legacy grammar, not plain commands.
     if (
-      directories.length > 0 ||
-      location.wrapped ||
-      ["popd", "pushd", "pop-location", "push-location"].includes(location.name)
-    ) {
-      directoryUnknown = true
+      powershell
+        ? /^(?:break|continue|throw|return|exit|workflow|parallel|sequence|inlinescript|foreach)$/.test(name) ||
+          item.words.some((word) => word.startsWith("-") && !/^-+[A-Za-z_][A-Za-z_-]*$/.test(word))
+        : /^(?:declare|typeset|export|readonly|local|unset|unsetenv)$/.test(name) ||
+          item.words.some((word) => /^-?\d|^=(?:=|~)$/.test(word))
+    )
+      return
+    if (CWD.has(name)) {
+      // Only unquoted literal operands have the same provenance as legacy Parts.
+      if (
+        item.words.some((word) => !/^[A-Za-z0-9_./\\:@%+=,~-]+$/.test(word)) ||
+        item.resource.replace(/[ \t]+/g, " ") !== item.words.join(" ")
+      )
+        return
+      output.directories.push(
+        ...directoryArgs(
+          item.words.map((text) => ({
+            type: powershell && text.startsWith("-") ? "command_parameter" : "word",
+            text,
+          })),
+          powershell,
+          cwd,
+          shell,
+        ),
+      )
       continue
     }
-    const args = item.words.slice(1)
-    const first = command.trimStart().startsWith(item.resource) && /^cd(?:[ \t]|$)/.test(item.resource)
-    if (!powershell && args.length === 0) {
-      const home = environment(env, "HOME")
-      if (first && home && path.posix.isAbsolute(home)) directories.push(home)
-      else directoryUnknown = true
-      continue
-    }
-    const endOfOptions = !powershell && args[0] === "--"
-    if (!powershell && ["-L", "--"].includes(args[0])) args.shift()
-    if (powershell) {
-      if (POWERSHELL_PATH_FLAGS.has(args[0]?.toLowerCase())) args.shift()
-      else {
-        const parameter = /^-(?:literalpath|path):(.+)$/i.exec(args[0] ?? "")
-        if (parameter) args[0] = parameter[1]
-      }
-    }
-    const directory = args[0]
-    // Decoded words do not retain quote provenance. Never guess whether a
-    // wildcard, variable, tilde, or provider path is literal or expanded.
-    if (
-      args.length !== 1 ||
-      !directory ||
-      directory === "-" ||
-      directory === "+" ||
-      (!endOfOptions && directory.startsWith("-")) ||
-      /[$`*?{}\[\]()~]/.test(directory) ||
-      (powershell && directory.includes(":") && !/^[A-Za-z]:[\\/]/.test(directory))
-    ) {
-      directoryUnknown = true
-      continue
-    }
-    // Bare relative Bash operands use CDPATH. Prior source or prefix assignments
-    // can change the lookup environment, including through printf -vHOME.
-    if (!powershell && !/^(?:\/|\.{1,2}(?:\/|$))/.test(directory) && (!first || environment(env, "CDPATH"))) {
-      directoryUnknown = true
-      continue
-    }
-    directories.push(directory)
+    const tokens = prefix(item.words.slice(0, PREFIX_LENGTH))
+    if (!tokens.length || tokens.some((token) => !/^[A-Za-z0-9_./:@%+=,-]+$/.test(token))) return
+    // Decoding quotes or assignments must not change the saved permission.
+    const sourcePrefix = tokens.map((token) => token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("[ \\t]+")
+    if (!new RegExp(`^${sourcePrefix}(?:[ \\t]|$)`).test(item.resource)) return
+    output.commands.push({ resource: item.resource, save: `${tokens.join(" ")} *` })
   }
-  return {
-    commands: result.commands.map((item) => {
-      const tokens = prefix(item.words)
-      // Saved permissions are globs, not shell strings. Validate each decoded
-      // token separately so quoting cannot introduce wildcards or word boundaries.
-      const save = tokens.length > 0 && tokens.every((token) => /^[A-Za-z0-9_./:@%+=,-]+$/.test(token))
-      return { resource: item.resource, ...(save ? { save: `${tokens.join(" ")} *` } : {}) }
-    }),
-    directories,
-    analysis: "complete",
-    directoryUnknown,
-  }
-}
-
-function directoryCommand(words: string[], powershell: boolean) {
-  let index = 0
-  while (!powershell && ["builtin", "command"].includes(words[index] ?? "")) {
-    index = words.findIndex((word, offset) => offset > index && !word.startsWith("-"))
-    if (index < 0) return
-  }
-  const name = powershell ? powerShellCommandName(words[index]) : words[index]
-  if (!(powershell ? POWERSHELL_CWD : BASH_CWD).has(name)) return
-  return { name, wrapped: index > 0 }
-}
-
-function shellStartupUnknown(shell: string, env: Record<string, string | undefined>) {
-  return (
-    shell === "bash" &&
-    (Boolean(environment(env, "BASH_ENV")) || Object.keys(env).some((key) => key.startsWith("BASH_FUNC_")))
-  )
+  return output
 }
 
 function parts(node: Node) {
@@ -357,51 +304,38 @@ function directoryArgs(command: Part[], powershell: boolean, cwd: string, shell:
 function directoryArgument(value: string, powershell: boolean, cwd: string, shell: string) {
   const quote = value[0]
   const text = (quote === '"' || quote === "'") && value.at(-1) === quote ? value.slice(1, -1) : value
-  if (!powershell) return expandKnownDirectory(text, process.env)
+  if (!powershell) return expandKnownDirectory(text)
 
   // PowerShell exposes environment variables through $env:NAME and provides these
   // automatic directory variables. Expand only values we can determine without executing code.
   return expandKnownDirectory(
     text
-      .replace(/\$\{env:([^}]+)\}/gi, (_, key: string) => environment(process.env, key) ?? "")
-      .replace(/\$env:([A-Za-z_][A-Za-z0-9_]*)/gi, (_, key: string) => environment(process.env, key) ?? "")
+      .replace(/\$\{env:([^}]+)\}/gi, (_, key: string) => environment(key) ?? "")
+      .replace(/\$env:([A-Za-z_][A-Za-z0-9_]*)/gi, (_, key: string) => environment(key) ?? "")
       .replace(/\$(HOME|PWD|PSHOME)(?=$|[\\/])/gi, (_, key: string) => {
-        if (key.toUpperCase() === "HOME") return environment(process.env, "HOME") ?? ""
+        if (key.toUpperCase() === "HOME") return os.homedir()
         if (key.toUpperCase() === "PWD") return cwd
         return path.dirname(shell)
       }),
-    process.env,
   )
 }
 
-function expandKnownDirectory(value: string, env: Record<string, string | undefined>) {
+function expandKnownDirectory(value: string) {
   // Unknown shell expressions cannot be resolved safely during permission analysis.
-  if (value.includes("$") || value.includes("`") || value.startsWith("(") || value === "-") return
-  if (value === "~") return environment(env, "HOME")
-  if (value.startsWith("~/") || value.startsWith("~\\")) {
-    const home = environment(env, "HOME")
-    return home ? path.join(home, value.slice(2)) : undefined
-  }
-  if (value.startsWith("~")) return
+  if (value.includes("$") || value.includes("`") || value.startsWith("(")) return
+  if (value === "~") return os.homedir()
+  if (value.startsWith("~/") || value.startsWith("~\\")) return path.join(os.homedir(), value.slice(2))
   return value
 }
 
-function environment(env: Record<string, string | undefined>, key: string) {
-  if (process.platform !== "win32") return env[key]
-  const name = Object.keys(env)
-    .filter((item) => item.toLowerCase() === key.toLowerCase())
-    .sort()[0]
-  return name ? env[name] : undefined
-}
-
-function powerShellCommandName(value: string | undefined) {
-  const name = (value ?? "").toLowerCase()
-  if (/^[a-z_][a-z0-9_.-]*\\[a-z_][a-z0-9_.-]*$/i.test(name)) return name.slice(name.lastIndexOf("\\") + 1)
-  return name
+function environment(key: string) {
+  if (process.platform !== "win32") return process.env[key]
+  const name = Object.keys(process.env).find((item) => item.toLowerCase() === key.toLowerCase())
+  return name ? process.env[name] : undefined
 }
 
 function prefix(tokens: string[]) {
-  for (let length = Math.min(tokens.length, PREFIX_LENGTH); length > 0; length--) {
+  for (let length = tokens.length; length > 0; length--) {
     const arity = ARITY[tokens.slice(0, length).join(" ")]
     if (arity !== undefined) return tokens.slice(0, arity)
   }

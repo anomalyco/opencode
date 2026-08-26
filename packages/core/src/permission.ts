@@ -43,9 +43,6 @@ export const AssertInput = Schema.Struct({
   id: ID.pipe(Schema.optional),
   ...RequestFields,
   agent: Agent.ID.pipe(Schema.optional),
-  // Exact mode restricts allows to literal or action-wide grants, while retaining
-  // scoped denies and asks conservatively when affected resources are unknown.
-  resourceMode: Schema.Literals(["wildcard", "exact"]).pipe(Schema.optional),
 }).annotate({ identifier: "Permission.AssertInput" })
 export type AssertInput = typeof AssertInput.Type
 
@@ -117,7 +114,6 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Pe
 interface Pending {
   readonly request: Request
   readonly agent?: Agent.ID
-  readonly resourceMode?: AssertInput["resourceMode"]
   readonly deferred: Deferred.Deferred<void, DeclinedError | CorrectedError>
 }
 
@@ -161,26 +157,8 @@ const layer = Layer.effect(
       return agent?.permissions ?? missingAgentPermissions
     })
 
-    function evaluated(
-      input: Pick<AssertInput, "action" | "resourceMode">,
-      resource: string,
-      rules: Permission.Ruleset,
-    ) {
-      if (input.resourceMode !== "exact") return evaluate(input.action, resource, rules)
-      let ask: Permission.Rule | undefined
-      for (let index = rules.length - 1; index >= 0; index--) {
-        const rule = rules[index]
-        if (!Wildcard.match(input.action, rule.action)) continue
-        if (rule.effect === "deny") return rule
-        if (rule.resource === resource || rule.resource === "*") return ask ?? rule
-        // Scoped asks restrict earlier allows but cannot rule out a hidden denied resource.
-        if (rule.effect === "ask") ask ??= rule
-      }
-      return ask ?? { action: input.action, resource: "*", effect: "ask" as const }
-    }
-
-    function denied(input: Pick<AssertInput, "action" | "resources" | "resourceMode">, rules: Permission.Ruleset) {
-      return input.resources.some((resource) => evaluated(input, resource, rules).effect === "deny")
+    function denied(input: Pick<Request, "action" | "resources">, rules: Permission.Ruleset) {
+      return input.resources.some((resource) => evaluate(input.action, resource, rules).effect === "deny")
     }
 
     function relevant(input: AssertInput, rules: Permission.Ruleset) {
@@ -191,7 +169,7 @@ const layer = Layer.effect(
       const rules = yield* configured(input.sessionID, input.agent)
       if (denied(input, rules)) return { effect: "deny" as const, rules }
       const all = [...rules, ...(yield* savedRules())]
-      const effects = input.resources.map((resource) => evaluated(input, resource, all).effect)
+      const effects = input.resources.map((resource) => evaluate(input.action, resource, all).effect)
       const effect: Permission.Effect = effects.includes("deny") ? "deny" : effects.includes("ask") ? "ask" : "allow"
       const event = yield* hooks.trigger("permission", "evaluate", {
         sessionID: input.sessionID,
@@ -218,11 +196,11 @@ const layer = Layer.effect(
       }
     }
 
-    const create = (request: Request, agent?: Agent.ID, resourceMode?: AssertInput["resourceMode"]) =>
+    const create = (request: Request, agent?: Agent.ID) =>
       Effect.uninterruptible(
         Effect.gen(function* () {
           const deferred = yield* Deferred.make<void, DeclinedError | CorrectedError>()
-          const item = { request, agent, resourceMode, deferred }
+          const item = { request, agent, deferred }
           if (pending.has(request.id))
             return yield* Effect.die(new Error(`Duplicate pending permission ID: ${request.id}`))
           pending.set(request.id, item)
@@ -236,7 +214,7 @@ const layer = Layer.effect(
     const ask = Effect.fn("Permission.ask")(function* (input: AssertInput) {
       const result = yield* evaluateInput(input)
       const value = request(input, result.message)
-      if (result.effect === "ask") yield* create(value, input.agent, input.resourceMode)
+      if (result.effect === "ask") yield* create(value, input.agent)
       return { id: value.id, effect: result.effect }
     })
 
@@ -254,7 +232,7 @@ const layer = Layer.effect(
               })
             }
             if (result.effect === "allow") return
-            const item = yield* create(request(input, result.message), input.agent, input.resourceMode)
+            const item = yield* create(request(input, result.message), input.agent)
             return yield* restore(Deferred.await(item.deferred)).pipe(
               // Deliberate defect tunnel: leaves wrap execution in blanket `mapError`, which
               // must not convert a user's decline into model-facing tool output. The decline
@@ -320,11 +298,12 @@ const layer = Layer.effect(
               Effect.catchTag("Session.NotFoundError", () => Effect.undefined),
             )
             if (!rules) continue
-            const asserted = { ...item.request, resourceMode: item.resourceMode }
-            if (denied(asserted, rules)) continue
+            if (denied(item.request, rules)) continue
             const effective = [...rules, ...rememberedRules]
             if (
-              !item.request.resources.every((resource) => evaluated(asserted, resource, effective).effect === "allow")
+              !item.request.resources.every(
+                (resource) => evaluate(item.request.action, resource, effective).effect === "allow",
+              )
             )
               continue
             yield* bus.publish(Permission.Event.Replied, {

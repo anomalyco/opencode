@@ -158,13 +158,6 @@ const replacements = [
 ] satisfies LayerNode.Replacements
 const productionIt = testEffect(AppNodeBuilder.build(nodes, replacements))
 const it = testEffect(AppNodeBuilder.build(nodes, [...replacements, [PluginSupervisor.node, shellPluginSupervisor]]))
-const authorizedIt = testEffect(
-  AppNodeBuilder.build(nodes, [
-    [SessionExecution.node, executionNode],
-    [Global.node, tempGlobalLayer],
-    [PluginSupervisor.node, shellPluginSupervisor],
-  ]),
-)
 
 const call = (input: typeof ShellTool.Input.Type, id = "call-shell") => ({
   sessionID,
@@ -220,111 +213,6 @@ const withSession = <A, E, R>(directory: string, body: (registry: Tool.Interface
   })
 
 describe("ShellTool", () => {
-  authorizedIt.live("opaque commands cannot execute through a configured prefix grant", () =>
-    Effect.acquireUseRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) =>
-        Effect.gen(function* () {
-          if (isWindows) return
-          yield* Effect.promise(() =>
-            Bun.write(
-              path.join(tmp.path, "opencode.json"),
-              JSON.stringify({ experimental: { portable_shell_scanner: true } }),
-            ),
-          )
-          yield* withSession(tmp.path, (registry) =>
-            Effect.gen(function* () {
-              const agents = yield* Agent.Service
-              yield* agents.transform((draft) =>
-                draft.update(toolIdentity.agent, (agent) => {
-                  agent.permissions = [
-                    { action: "external_directory", resource: "*", effect: "allow" },
-                    { action: "shell", resource: "printf *", effect: "allow" },
-                  ]
-                }),
-              )
-              const permission = yield* Permission.Service
-              const bus = yield* Bus.Service
-              const asked = yield* Deferred.make<Permission.Request, Error>()
-              yield* bus.subscribe(Permission.Event.Asked).pipe(
-                Stream.runForEach((event) => Deferred.succeed(asked, event.data)),
-                Effect.forkScoped({ startImmediately: true }),
-              )
-              const command = "printf '%s' $((1)) > marker"
-              const execution = yield* executeTool(registry, call({ command }, "call-opaque-confirmation")).pipe(
-                Effect.tap((result) =>
-                  Deferred.fail(asked, new Error(`Tool settled before confirmation: ${JSON.stringify(result)}`)),
-                ),
-                Effect.forkScoped,
-              )
-              const request = yield* Deferred.await(asked).pipe(Effect.timeout("5 seconds"))
-              expect(request).toMatchObject({ action: "shell", resources: [command], save: [] })
-              expect(yield* Effect.promise(() => Bun.file(path.join(tmp.path, "marker")).exists())).toBe(false)
-              yield* permission.reply({ requestID: request.id, reply: "once" })
-              expect((yield* Fiber.join(execution)).status).toBe("completed")
-              expect(yield* Effect.promise(() => Bun.file(path.join(tmp.path, "marker")).text())).toBe("1")
-            }),
-          )
-        }),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
-    ),
-  )
-
-  authorizedIt.live("preserves directory denies and redirect resources before spawning", () =>
-    Effect.acquireUseRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) =>
-        Effect.gen(function* () {
-          if (isWindows) return
-          yield* Effect.promise(() =>
-            Bun.write(
-              path.join(tmp.path, "opencode.json"),
-              JSON.stringify({ experimental: { portable_shell_scanner: true } }),
-            ),
-          )
-          yield* withSession(tmp.path, (registry) =>
-            Effect.gen(function* () {
-              const agents = yield* Agent.Service
-              yield* agents.transform((draft) =>
-                draft.update(toolIdentity.agent, (agent) => {
-                  agent.permissions = [
-                    { action: "shell", resource: "*", effect: "allow" },
-                    { action: "external_directory", resource: "*", effect: "allow" },
-                    { action: "external_directory", resource: "/etc/*", effect: "deny" },
-                    { action: "external_directory", resource: "/tmp/*", effect: "ask" },
-                  ]
-                }),
-              )
-              const opaque = yield* executeTool(
-                registry,
-                call({ command: "printf '%s' $((1)) > marker" }, "call-unknown-directory"),
-              )
-              expect(opaque.status).toBe("error")
-              expect(yield* Effect.promise(() => Bun.file(path.join(tmp.path, "marker")).exists())).toBe(false)
-
-              yield* agents.transform((draft) =>
-                draft.update(toolIdentity.agent, (agent) => {
-                  agent.permissions = [
-                    { action: "external_directory", resource: "*", effect: "allow" },
-                    { action: "shell", resource: "true", effect: "allow" },
-                    { action: "shell", resource: "printf ok", effect: "allow" },
-                    { action: "shell", resource: "*marker*", effect: "deny" },
-                  ]
-                }),
-              )
-              const redirected = yield* executeTool(
-                registry,
-                call({ command: "true && printf ok > marker" }, "call-denied-redirect"),
-              )
-              expect(redirected.status).toBe("error")
-              expect(yield* Effect.promise(() => Bun.file(path.join(tmp.path, "marker")).exists())).toBe(false)
-            }),
-          )
-        }),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
-    ),
-  )
-
   productionIt.live(
     "registers and returns real successful output from the active Location",
     () =>
@@ -629,13 +517,14 @@ describe("ShellTool", () => {
     { timeout: 15_000 },
   )
 
-  it.live("fails closed for an experimental portable heredoc", () =>
+  it.live("does not add external-directory permission for an experimental portable heredoc", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
       (tmp) =>
         Effect.gen(function* () {
           if (isWindows) return
           reset()
+          denyAction = "external_directory"
           yield* Effect.promise(() =>
             Bun.write(
               path.join(tmp.path, "opencode.json"),
@@ -646,14 +535,65 @@ describe("ShellTool", () => {
             executeTool(registry, call({ command: "cat <<'EOF'\nhello\nEOF" }, "call-portable-heredoc")),
           )
           expect(settled.status).toBe("completed")
-          expect(assertions.map((item) => item.action)).toEqual(["external_directory", "shell"])
-          expect(assertions[0]).toMatchObject({ resources: ["*"], save: [], resourceMode: "exact" })
-          expect(assertions[1]).toMatchObject({ save: [], resourceMode: "exact" })
+          expect(assertions.map((item) => item.action)).toEqual(["shell"])
           expect(settled.content?.[0]).toMatchObject({ type: "text", text: "hello\n" })
         }),
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
     ),
   )
+
+  for (const shell of ["sh", "zsh"]) {
+    const test = isWindows || !Bun.which(shell) ? it.live.skip : it.live
+    test(
+      `preserves Tree-sitter permission assertions with the portable scanner in ${shell}`,
+      () =>
+        Effect.gen(function* () {
+          const results = yield* Effect.forEach([false, true], (portable) =>
+            Effect.acquireUseRelease(
+              Effect.promise(() => tmpdir()),
+              (tmp) =>
+                Effect.gen(function* () {
+                  reset()
+                  yield* Effect.promise(() =>
+                    Bun.write(
+                      path.join(tmp.path, "opencode.json"),
+                      JSON.stringify({ experimental: { portable_shell_scanner: portable } }),
+                    ),
+                  )
+                  yield* Effect.promise(() => fs.mkdir(path.join(tmp.path, "one", "two"), { recursive: true }))
+                  yield* withSession(tmp.path, (registry) =>
+                    Effect.gen(function* () {
+                      const selection = yield* ShellSelect.Service
+                      yield* selection.transform((draft) => draft.configure(shell))
+                      for (const [command, output] of [
+                        ["echo $((1 + 1))", "2\n"],
+                        ["cd ~ && pwd", `${realpathSync(os.homedir())}\n`],
+                        ["cd one && cd two && pwd", `${path.join(tmp.path, "one", "two")}\n`],
+                      ]) {
+                        const settled = yield* executeTool(registry, call({ command }, `call-parity-${command}`))
+                        expect(settled.status).toBe("completed")
+                        expect(settled.metadata).toMatchObject({ exit: 0 })
+                        expect(settled.content?.[0]).toMatchObject({ type: "text", text: output })
+                      }
+                    }),
+                  )
+                  expect(assertions.map((item) => item.action)).toEqual([
+                    "shell",
+                    "external_directory",
+                    "shell",
+                    "shell",
+                  ])
+                  expect(assertions[1]?.resources).toEqual([path.join(realpathSync(os.homedir()), "*")])
+                  return assertions.slice()
+                }),
+              (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+            ),
+          )
+          expect(results[1]).toEqual(results[0])
+        }),
+      { timeout: 15_000 },
+    )
+  }
 
   it.live("keeps non-zero exits useful", () =>
     Effect.acquireUseRelease(
