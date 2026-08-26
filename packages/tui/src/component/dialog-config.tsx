@@ -265,6 +265,15 @@ export const settings: Setting[] = [
     keywords: ["sound volume", "audio volume"],
   },
   {
+    title: "Persistent terminals",
+    category: "Terminal",
+    path: ["terminal", "enabled"],
+    default: false,
+    values: [false, true],
+    labels: ["off", "on"],
+    keywords: ["pty", "shell", "terminal pane"],
+  },
+  {
     title: "Window title",
     category: "Terminal",
     path: ["terminal", "title"],

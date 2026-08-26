@@ -72,6 +72,25 @@ test("validates terminal copy behavior", () => {
   expect(setting?.default).toBe(process.platform === "win32" ? "manual" : "select")
 })
 
+test("keeps persistent terminals disabled until explicitly enabled", () => {
+  const disabled = resolve({}, { terminalSuspend: true })
+  expect(disabled.terminal?.enabled ?? false).toBe(false)
+  expect(disabled.keybinds.get("theme.switch")).toMatchObject([{ key: "<leader>t" }])
+  expect(disabled.keybinds.get("terminal.toggle")).toEqual([])
+  expect(settings.find((setting) => setting.path.join(".") === "terminal.enabled")?.default).toBe(false)
+
+  const enabled = resolve({ terminal: { enabled: true } }, { terminalSuspend: true })
+  expect(enabled.keybinds.get("terminal.toggle")).toMatchObject([{ key: "<leader>t" }])
+  expect(enabled.keybinds.get("theme.switch")).toEqual([])
+
+  const customized = resolve(
+    { terminal: { enabled: true }, keybinds: { "theme.switch": "<leader>t", "terminal.toggle": "<leader>p" } },
+    { terminalSuspend: true },
+  )
+  expect(customized.keybinds.get("theme.switch")).toMatchObject([{ key: "<leader>t" }])
+  expect(customized.keybinds.get("terminal.toggle")).toMatchObject([{ key: "<leader>p" }])
+})
+
 test("uses command IDs as keybind keys", () => {
   const config = resolve({ keybinds: { "session.list": "ctrl+l" } }, { terminalSuspend: true })
 

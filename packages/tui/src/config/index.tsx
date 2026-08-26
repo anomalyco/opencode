@@ -102,6 +102,7 @@ export const Info = Schema.Struct({
   ).annotate({ description: "Diff presentation settings" }),
   terminal: Schema.optional(
     Schema.Struct({
+      enabled: Schema.optional(Schema.Boolean).annotate({ description: "Enable persistent terminal panes" }),
       title: Schema.optional(Schema.Boolean).annotate({ description: "Update the terminal window title" }),
       copy: Schema.optional(Schema.Literals(["manual", "select"])).annotate({
         description: "Copy text manually or immediately after selecting it",
@@ -231,6 +232,12 @@ export type Resolved = Omit<Info, "attention" | "cursor" | "keybinds" | "leader"
 
 export function resolve(input: Info, options: { terminalSuspend: boolean }): Resolved {
   const keybinds: TuiKeybind.KeybindOverrides = { ...input.keybinds }
+  if (input.terminal?.enabled) {
+    if (input.keybinds?.["terminal.toggle"] === undefined && input.keybinds?.["theme.switch"] === undefined) {
+      keybinds["terminal.toggle"] = "<leader>t"
+      keybinds["theme.switch"] = "none"
+    }
+  }
   if (!options.terminalSuspend) {
     keybinds["terminal.suspend"] = "none"
     if (keybinds["input.undo"] === undefined) {
