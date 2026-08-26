@@ -384,7 +384,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
               add: (tool) => draft.add(tool),
             }),
           )
-          .pipe(Effect.orDie, Effect.as({ dispose: Effect.void })),
+          .pipe(Effect.as({ dispose: Effect.void })),
       hook: (name, callback) => hooks.register("tool", name, callback),
     },
     vcs: {

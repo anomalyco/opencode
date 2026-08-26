@@ -10,7 +10,7 @@ import { Tool } from "@opencode-ai/core/tool"
 import type { Info } from "@opencode-ai/schema/tool"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { executeTool, toolDefinitions } from "./lib/tool"
-import { Cause, Deferred, Effect, Exit, Fiber, Layer, Schema, SchemaGetter, SchemaIssue, Scope } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Layer, Logger, Schema, SchemaGetter, SchemaIssue, Scope } from "effect"
 import { z } from "zod"
 import { testEffect } from "./lib/effect"
 
@@ -71,30 +71,49 @@ const transform = (service: Tool.Interface, tools: Readonly<Record<string, Info>
   )
 
 describe("Tool", () => {
-  it.effect("rejects invalid dotted namespaces", () =>
+  it.effect("logs and skips invalid dotted namespaces", () => {
+    const output: unknown[] = []
+    const logger = Logger.map(Logger.formatStructured, (entry) => {
+      output.push(entry.message)
+    })
+    return Effect.gen(function* () {
+      const service = yield* Tool.Service
+      yield* transform(service, { echo: make() }, { namespace: "slack..admin" })
+
+      expect(output).toEqual([
+        [
+          "Skipping invalid tool registration",
+          { name: "echo", namespace: "slack..admin", error: 'Invalid tool namespace: "slack..admin"' },
+        ],
+      ])
+      const snapshot = yield* service.snapshot()
+      expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["execute"])
+      expect(snapshot.codeModeCatalog).toEqual([])
+    }).pipe(Effect.provide(Logger.layer([logger])))
+  })
+
+  it.effect("skips invalid, reserved, and colliding names without dropping healthy tools", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service
-      const error = yield* transform(service, { echo: make() }, { namespace: "slack..admin" }).pipe(Effect.flip)
-
-      expect(error).toBeInstanceOf(Tool.RegistrationError)
-      expect(error.message).toBe('Invalid tool namespace: "slack..admin"')
-      expect((yield* service.snapshot()).definitions.map((tool) => tool.name)).toEqual(["execute"])
-    }),
-  )
-
-  it.effect("rejects invalid and colliding normalized names", () =>
-    Effect.gen(function* () {
-      const service = yield* Tool.Service
-      for (const name of ["", "x".repeat(65)]) {
-        const invalid = yield* transform(service, { [name]: make() }, { codemode: false }).pipe(Effect.flip)
-        expect(invalid.message).toBe(`Invalid tool name: ${name}`)
-      }
-
-      const collision = yield* transform(service, { "echo.tool": make(), echo_tool: make() }, { codemode: false }).pipe(
-        Effect.flip,
+      yield* transform(
+        service,
+        {
+          before: make(),
+          "": make(),
+          ["x".repeat(65)]: make(),
+          "echo.tool": make(),
+          echo_tool: make(),
+          execute: make(),
+          after: make(),
+        },
+        { codemode: false },
       )
-      expect(collision.message).toBe("Duplicate normalized tool name: echo_tool")
-      expect((yield* service.snapshot()).definitions.map((tool) => tool.name)).toEqual(["execute"])
+      const snapshot = yield* service.snapshot()
+      expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["after", "before", "execute"])
+      expect((yield* snapshot.execute(call("before"))).output).toEqual({ text: "before" })
+      expect((yield* snapshot.execute(call("after"))).output).toEqual({ text: "after" })
+      expect((yield* snapshot.execute(call("echo_tool")).pipe(Effect.flip)).message).toBe("Unknown tool: echo_tool")
+      expect(snapshot.codeModeCatalog).toEqual([])
     }),
   )
 
@@ -159,40 +178,72 @@ describe("Tool", () => {
     }),
   )
 
-  it.effect("validates a registration batch before installing any tools", () =>
+  it.effect("keeps healthy tools when another namespace is invalid", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service
-      const error = yield* service
-        .transform((draft) => {
-          draft.add({ ...make(), name: "first", options: { codemode: false } })
-          draft.add({ ...make(), name: "second", options: { namespace: "invalid..namespace", codemode: false } })
-        })
-        .pipe(Effect.flip)
+      yield* service.transform((draft) => {
+        draft.add({ ...make(), name: "first", options: { codemode: false } })
+        draft.add({ ...make(), name: "second", options: { namespace: "invalid..namespace", codemode: false } })
+        draft.add({ ...make(), name: "second", options: { namespace: "invalid__namespace" } })
+      })
 
-      expect(error).toBeInstanceOf(Tool.RegistrationError)
-      expect((yield* service.snapshot()).definitions.map((tool) => tool.name)).toEqual(["execute"])
+      const snapshot = yield* service.snapshot()
+      expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["first", "execute"])
+      expect(snapshot.codeModeCatalog?.map((tool) => tool.path)).toEqual(["invalid__namespace.second"])
     }),
   )
 
-  it.effect("rejects invalid tool definitions before installing any tools", () =>
+  it.effect("logs invalid tool definitions without dropping healthy tools", () => {
+    const output: unknown[] = []
+    const logger = Logger.map(Logger.formatStructured, (entry) => {
+      output.push(entry.message)
+    })
+    return Effect.gen(function* () {
+      const service = yield* Tool.Service
+      yield* service.transform((draft) => {
+        draft.add({ ...make(), name: "healthy", options: { codemode: false } })
+        draft.add({
+          name: "phone_type",
+          input: Schema.Struct({}),
+          execute: () => Effect.succeed({ content: "ok" }),
+          options: { codemode: false },
+        } as unknown as Info)
+        draft.add({ ...make(), name: "codemode" })
+      })
+
+      expect(output).toEqual([
+        [
+          "Skipping invalid tool registration",
+          {
+            name: "phone_type",
+            namespace: undefined,
+            error: expect.stringContaining('Expected string\n  at ["description"]'),
+          },
+        ],
+      ])
+      const snapshot = yield* service.snapshot()
+      expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["healthy", "execute"])
+      expect(snapshot.codeModeCatalog?.map((tool) => tool.path)).toEqual(["codemode"])
+      expect((yield* snapshot.execute(call("phone_type")).pipe(Effect.flip)).message).toBe("Unknown tool: phone_type")
+    }).pipe(Effect.provide(Logger.layer([logger])))
+  })
+
+  it.effect("skipped registrations leave existing tools and scoped cleanup intact", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service
-      const error = yield* service
-        .transform((draft) => {
-          draft.add({ ...make(), name: "healthy", options: { codemode: false } })
-          draft.add({
-            name: "phone_type",
-            input: Schema.Struct({}),
-            execute: () => Effect.succeed({ content: "ok" }),
-            options: { codemode: false },
-          } as unknown as Info)
-        })
-        .pipe(Effect.flip)
-
-      expect(error).toBeInstanceOf(Tool.RegistrationError)
-      expect(error.name).toBe("phone_type")
-      expect(error.message).toContain('Expected string\n  at ["description"]')
-      expect((yield* service.snapshot()).definitions.map((tool) => tool.name)).toEqual(["execute"])
+      yield* transform(service, { echo: constant("original") }, { codemode: false })
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          yield* service.transform((draft) => {
+            draft.add({ ...constant("invalid"), name: "echo", description: undefined } as unknown as Info)
+            draft.add({ ...make(), name: "temporary", options: { codemode: false } })
+          })
+          const snapshot = yield* service.snapshot()
+          expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["echo", "temporary", "execute"])
+          expect((yield* snapshot.execute(call("echo"))).output).toEqual({ text: "original" })
+        }),
+      )
+      expect((yield* service.snapshot()).definitions.map((tool) => tool.name)).toEqual(["echo", "execute"])
     }),
   )
 

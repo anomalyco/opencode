@@ -282,6 +282,47 @@ describe("Plugin", () => {
     }),
   )
 
+  it.effect("keeps plugins active when a tool registration is invalid", () =>
+    Effect.gen(function* () {
+      const plugins = yield* Plugin.Service
+      const tools = yield* Tool.Service
+      const agents = yield* Agent.Service
+      yield* plugins.activate([
+        {
+          id: "partial-tools",
+          version: "1",
+          effect: (ctx) =>
+            Effect.gen(function* () {
+              yield* ctx.tool.transform((draft) => {
+                const tool = {
+                  name: "healthy",
+                  description: "Healthy tool",
+                  input: Schema.Struct({}),
+                  execute: () => Effect.succeed({ content: "ok" }),
+                  options: { codemode: false },
+                }
+                draft.add({ ...tool, name: "invalid", options: { namespace: "invalid..namespace" } })
+                draft.add(tool)
+              })
+              yield* ctx.agent.transform((draft) =>
+                draft.update("configured", (agent) => {
+                  agent.description = "setup continued"
+                }),
+              )
+            }),
+        },
+      ])
+
+      expect(yield* plugins.list()).toEqual([
+        { id: Plugin.ID.make("partial-tools"), source: { type: "builtin" }, status: "active", tui: false },
+      ])
+      expect((yield* agents.get(Agent.ID.make("configured")))?.description).toBe("setup continued")
+      expect((yield* tools.snapshot()).definitions.map((tool) => tool.name)).toEqual(["healthy", "execute"])
+      yield* plugins.activate([])
+      expect((yield* tools.snapshot()).definitions.map((tool) => tool.name)).toEqual(["execute"])
+    }),
+  )
+
   it.effect("restores the previous plugin when its replacement fails", () =>
     Effect.gen(function* () {
       const plugins = yield* Plugin.Service

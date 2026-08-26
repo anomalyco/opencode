@@ -25,7 +25,7 @@ export class RegistrationError extends Schema.TaggedError<RegistrationError>()("
 export interface Interface {
   readonly transform: (
     callback: (draft: { readonly add: (tool: Tool.Info) => void }) => void,
-  ) => Effect.Effect<void, RegistrationError, Scope.Scope>
+  ) => Effect.Effect<void, never, Scope.Scope>
   readonly snapshot: (permissions?: Permission.Ruleset) => Effect.Effect<Snapshot>
 }
 
@@ -140,45 +140,35 @@ const layer = Layer.effect(
     const transform: Interface["transform"] = Effect.fn("Tool.transform")(function* (callback) {
       const tools: Array<Tool.Info> = []
       yield* Effect.sync(() => callback({ add: (tool) => tools.push(tool) }))
-      yield* Effect.forEach(
-        tools.flatMap((tool) => (tool.options?.namespace === undefined ? [] : [tool.options.namespace])),
-        validateNamespace,
-        { discard: true },
-      )
-      const entries = normalizedEntries(tools)
-      yield* Effect.forEach(entries, (entry) => validateName(normalizedName(entry.tool)), { discard: true })
-      const collision = entries.find(
-        (entry, index) => entries.findIndex((candidate) => candidate.key === entry.key) !== index,
-      )
-      if (collision)
-        return yield* Effect.fail(
-          new RegistrationError({
-            name: collision.key,
-            message: `Duplicate normalized tool name: ${collision.key}`,
-          }),
-        )
-      const reserved = entries.find((entry) => entry.tool.options?.codemode === false && entry.key === "execute")
-      if (reserved)
-        return yield* Effect.fail(
-          new RegistrationError({
-            name: reserved.key,
-            message: 'Tool name "execute" is reserved for CodeMode',
-          }),
-        )
-      if (entries.length === 0) return
-      yield* Effect.forEach(
-        entries,
-        (entry) =>
-          Effect.try({
+      const valid = yield* Effect.filter(normalizedEntries(tools), (entry) =>
+        Effect.gen(function* () {
+          if (entry.tool.options?.namespace !== undefined) yield* validateNamespace(entry.tool.options.namespace)
+          yield* validateName(normalizedName(entry.tool))
+          if (entry.tool.options?.codemode === false && entry.key === "execute")
+            return yield* new RegistrationError({
+              name: entry.key,
+              message: 'Tool name "execute" is reserved for CodeMode',
+            })
+          yield* Effect.try({
             try: () => ToolDefinition.make(definition(entry.tool)),
             catch: (error) =>
               new RegistrationError({
                 name: entry.key,
                 message: `Invalid tool definition ${entry.key}: ${schemaMakeError(error)}`,
               }),
-          }),
-        { discard: true },
+          })
+          return true
+        }).pipe(Effect.catchTag("Tool.RegistrationError", (error) => skipRegistration(entry.tool, error))),
       )
+      // Reject every ambiguous entry rather than choosing a winner.
+      const entries = yield* Effect.filter(valid, (entry) => {
+        if (!valid.some((candidate) => candidate !== entry && candidate.key === entry.key)) return Effect.succeed(true)
+        return skipRegistration(
+          entry.tool,
+          new RegistrationError({ name: entry.key, message: `Duplicate normalized tool name: ${entry.key}` }),
+        )
+      })
+      if (entries.length === 0) return
       yield* Effect.uninterruptible(
         lock.withPermit(
           Effect.gen(function* () {
@@ -269,6 +259,13 @@ function schemaMakeError(error: unknown) {
   if (error instanceof Error && SchemaIssue.isIssue(error.cause)) return formatSchemaIssue(error.cause)
   return error instanceof Error ? error.message : String(error)
 }
+
+const skipRegistration = (tool: Tool.Info, error: RegistrationError) =>
+  Effect.logError("Skipping invalid tool registration", {
+    name: tool.name,
+    namespace: tool.options?.namespace,
+    error: error.message,
+  }).pipe(Effect.as(false))
 
 const validateName = (name: string) =>
   /^[A-Za-z0-9_-]{1,64}$/.test(name)

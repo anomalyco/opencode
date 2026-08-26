@@ -35,7 +35,7 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
 import { McpTool } from "@opencode-ai/core/tool/mcp"
 import { Tool } from "@opencode-ai/core/tool"
-import { DateTime, Deferred, Effect, Exit, Fiber, Layer, PubSub, Schedule, Schema, Sink, Stream } from "effect"
+import { DateTime, Deferred, Effect, Exit, Fiber, Layer, PubSub, Ref, Schedule, Schema, Sink, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { ExitCode, makeHandle, ProcessId } from "effect/unstable/process/ChildProcessSpawner"
 import { Image } from "@opencode-ai/core/image"
@@ -1192,6 +1192,86 @@ test("serializes concurrent MCP lifecycle operations", async () => {
     ),
   )
 })
+
+testEffect(Layer.empty).live("isolates invalid MCP tools and keeps catalog updates alive", () =>
+  Effect.gen(function* () {
+    const tool = (server: string, name: string) =>
+      new MCP.Tool({
+        server: MCP.ServerName.make(server),
+        name,
+        codemode: false,
+        inputSchema: { type: "object", properties: {} },
+      })
+    const healthy = [tool("demo", "search"), tool("other", "lookup")]
+    const namespace = tool("x".repeat(65), "lookup")
+    const catalog = yield* Ref.make([tool("demo", "x".repeat(65)), ...healthy, namespace])
+
+    yield* Effect.gen(function* () {
+      const registry = yield* Tool.Service
+      const registration = yield* McpTool.Service
+      const bus = yield* Bus.Service
+      yield* registration.flush
+      expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual([
+        "demo_search",
+        "other_lookup",
+        "execute",
+      ])
+
+      yield* Ref.set(catalog, [tool("demo", "y".repeat(65)), ...healthy, tool("demo", "added"), namespace])
+      yield* bus.publish(McpEvent.ToolsChanged, { server: "demo" })
+      yield* waitForTool(registry, "demo_added")
+      expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual([
+        "demo_added",
+        "demo_search",
+        "other_lookup",
+        "execute",
+      ])
+      yield* Effect.forEach(["demo_search", "other_lookup"], (name) =>
+        executeTool(registry, {
+          sessionID: Session.ID.make("ses_mcp_invalid_catalog"),
+          ...toolIdentity,
+          call: { type: "tool-call", id: `call_${name}`, name, input: {} },
+        }).pipe(Effect.tap((result) => Effect.sync(() => expect(result).toMatchObject({ status: "completed" })))),
+      )
+
+      yield* Ref.set(catalog, [tool("demo", "status"), ...healthy, tool("demo", "added"), tool("repaired", "lookup")])
+      yield* bus.publish(McpEvent.ToolsChanged, { server: "demo" })
+      yield* waitForTool(registry, "demo_status")
+      expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual([
+        "demo_added",
+        "demo_search",
+        "demo_status",
+        "other_lookup",
+        "repaired_lookup",
+        "execute",
+      ])
+    }).pipe(
+      Effect.provide(
+        Layer.fresh(
+          AppNodeBuilder.build(LayerNode.group([Tool.node, McpTool.node, Bus.node]), [
+            [
+              MCP.node,
+              Layer.mock(MCP.Service, {
+                tools: () => Ref.get(catalog),
+                callTool: (input) =>
+                  Effect.succeed(
+                    new MCP.ToolResult({
+                      server: MCP.ServerName.make(input.server),
+                      tool: input.name,
+                      isError: false,
+                      content: [{ type: "text", text: "healthy" }],
+                    }),
+                  ),
+              }),
+            ],
+            [Permission.node, Layer.mock(Permission.Service, { assert: () => Effect.void })],
+            [Image.node, imagePassthrough],
+          ]),
+        ),
+      ),
+    )
+  }),
+)
 
 it.effect("advertises MCP output schemas to Code Mode", () =>
   Effect.gen(function* () {

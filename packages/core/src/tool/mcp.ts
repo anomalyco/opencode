@@ -115,7 +115,7 @@ export const layer = Layer.effect(
               })
             }
           })
-          .pipe(Scope.provide(next), Effect.orDie)
+          .pipe(Scope.provide(next))
         if (current) yield* Scope.close(current, Exit.void)
         current = next
       }),
