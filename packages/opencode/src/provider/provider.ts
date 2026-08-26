@@ -1879,6 +1879,14 @@ const layer = Layer.effect(
 
       const info = provider.models[modelID]
       if (!info) {
+        // For NVIDIA NIM models, the model ID itself contains slashes (e.g., "nvidia/nemotron-3-ultra-550b-a55b").
+        // Try prepending the provider ID to the model ID to handle the full model path.
+        if (providerID === "nvidia") {
+          const fullModelID = ModelV2.ID.make(`${providerID}/${modelID}`)
+          const fullInfo = provider.models[fullModelID]
+          if (fullInfo) return fullInfo
+        }
+
         const current = modelSuggestions(provider, modelID, runtimeFlags.enableExperimentalModels)
         const suggestions = current.length
           ? current
@@ -2056,6 +2064,29 @@ export function parseModel(model: string) {
     providerID: ProviderV2.ID.make(providerID),
     modelID: ModelV2.ID.make(rest.join("/")),
   }
+}
+
+// Try to resolve a model reference that may contain multiple slashes.
+// For NVIDIA NIM models, the model ID itself contains slashes (e.g., "nvidia/nemotron-3-ultra-550b-a55b"),
+// so the full reference is "nvidia/nvidia/nemotron-3-ultra-550b-a55b".
+export function parseModelRef(model: string, providers: Record<string, any>) {
+  // First try the standard split (first slash = provider)
+  const parsed = parseModel(model)
+  if (providers[parsed.providerID]?.models[parsed.modelID]) {
+    return parsed
+  }
+
+  // Try splitting on the second slash (for NVIDIA-style IDs like "nvidia/nvidia/model-name")
+  const parts = model.split("/")
+  if (parts.length >= 3) {
+    const providerID = ProviderV2.ID.make(parts[0])
+    const modelID = ModelV2.ID.make(parts.slice(1).join("/"))
+    if (providers[providerID]?.models[modelID]) {
+      return { providerID, modelID }
+    }
+  }
+
+  return parsed
 }
 
 export const node = LayerNode.make({

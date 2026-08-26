@@ -736,9 +736,10 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
     ["@ai-sdk/anthropic", "@ai-sdk/openai-compatible"].includes(model.api.npm)
   ) {
     if (["nvidia", "lilac"].includes(model.providerID)) {
+      // NIM only accepts thinking.type "enabled" or "disabled" (not "adaptive")
       return {
-        none: { chat_template_kwargs: { thinking_mode: "disabled" } },
-        thinking: { chat_template_kwargs: { thinking_mode: "enabled" } },
+        none: { thinking: { type: "disabled" } },
+        thinking: { thinking: { type: "enabled" } },
       }
     }
     return {
@@ -1232,6 +1233,28 @@ export function options(input: {
     result["thinking"] = { type: "adaptive" }
   }
 
+  // NVIDIA NIM DeepSeek v4 models require chat_template_kwargs to enable thinking.
+  // Without it, NIM silently stalls and never returns a response.
+  // See: https://github.com/anomalyco/opencode/issues/24264
+  if (
+    input.model.providerID === "nvidia" &&
+    input.model.api.npm === "@ai-sdk/openai-compatible" &&
+    modelId.includes("deepseek-v4")
+  ) {
+    result["chat_template_kwargs"] = { enable_thinking: true, thinking: true }
+  }
+
+  // NVIDIA NIM Nemotron 3 Ultra and other Nemotron reasoning models may hang
+  // without explicit thinking enablement. Enable thinking by default.
+  // See: https://github.com/anomalyco/opencode/issues/34026
+  if (
+    input.model.providerID === "nvidia" &&
+    input.model.api.npm === "@ai-sdk/openai-compatible" &&
+    modelId.includes("nemotron-3-ultra")
+  ) {
+    result["chat_template_kwargs"] = { enable_thinking: true }
+  }
+
   // Moonshot's Anthropic-compatible API uses adaptive effort rather than token budgets.
   // Request summaries so thinking content survives replay on subsequent turns.
   if (
@@ -1344,6 +1367,35 @@ export function smallOptions(model: Provider.Model) {
   if (model.providerID === "venice") {
     if (Object.keys(small).length > 0) return small
     return { veniceParameters: { disableThinking: true } }
+  }
+
+  // NVIDIA NIM DeepSeek v4 models require chat_template_kwargs even for small requests
+  // (title/summary generation). Without it, NIM silently stalls.
+  const modelId = model.api.id.toLowerCase()
+  if (
+    model.providerID === "nvidia" &&
+    model.api.npm === "@ai-sdk/openai-compatible" &&
+    modelId.includes("deepseek-v4")
+  ) {
+    return mergeDeep(small, { chat_template_kwargs: { enable_thinking: true, thinking: true } })
+  }
+
+  // NVIDIA NIM Nemotron 3 Ultra also needs thinking enabled for small requests
+  if (
+    model.providerID === "nvidia" &&
+    model.api.npm === "@ai-sdk/openai-compatible" &&
+    modelId.includes("nemotron-3-ultra")
+  ) {
+    return mergeDeep(small, { chat_template_kwargs: { enable_thinking: true } })
+  }
+
+  // NVIDIA NIM MiniMax M3 needs thinking enabled for small requests
+  if (
+    model.providerID === "nvidia" &&
+    model.api.npm === "@ai-sdk/openai-compatible" &&
+    modelId.includes("minimax-m3")
+  ) {
+    return mergeDeep(small, { thinking: { type: "enabled" } })
   }
 
   return small
