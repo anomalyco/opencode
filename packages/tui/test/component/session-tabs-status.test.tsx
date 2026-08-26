@@ -67,7 +67,7 @@ for (const orientation of ["horizontal", "vertical"] as const) {
               <ConfigProvider config={createTuiResolvedConfig({ tabs: { enabled: true } })}>
                 <RouteProvider initialRoute={{ type: "home" }}>
                   <ClientProvider api={createApi(createFetch(undefined, createEventStream()).fetch)}>
-                    <DataProvider>
+                    <DataProvider directory={temporary.path}>
                       <LocationProvider>
                         <SessionTabsProvider>
                           <ThemeProvider mode="dark" source={emptyThemeSource}>
