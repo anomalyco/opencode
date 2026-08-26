@@ -1,4 +1,4 @@
-import { createContext, onCleanup, onMount, Show, useContext, type ParentProps } from "solid-js"
+import { onCleanup, onMount, Show, type ParentProps } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Portal } from "solid-js/web"
 
@@ -14,16 +14,35 @@ type TitlebarRightSlot = {
   setMount: (mount: HTMLElement) => void
 }
 
-const TitlebarRightContext = createContext<TitlebarRightSlot>()
+// Module-level singleton slot. The provider and consumers all reference this
+// instance, which sidesteps SolidJS context propagation issues across lazy-loaded
+// route chunks where useSlot would otherwise throw "must be used within
+// TitlebarRightProvider" even though the provider is mounted.
+const [slotStore, setSlotStore] = createStore<{ mount?: HTMLElement; registrations: symbol[] }>({
+  registrations: [],
+})
+
+const slot: TitlebarRightSlot = {
+  mount: () => slotStore.mount,
+  setMount: (mount) => setSlotStore("mount", mount),
+  createRegistration() {
+    const id = Symbol()
+    return {
+      active: () => slotStore.registrations.at(-1) === id,
+      register: () => setSlotStore("registrations", (items) => [...items, id]),
+      unregister: () => setSlotStore("registrations", (items) => items.filter((item) => item !== id)),
+    }
+  },
+}
 
 export function TitlebarRightProvider(props: ParentProps) {
-  return (
-    <TitlebarRightContext.Provider value={createTitlebarRightSlot()}>{props.children}</TitlebarRightContext.Provider>
-  )
+  return <>{props.children}</>
 }
 
 export function createTitlebarRightSlot(): TitlebarRightSlot {
-  const [store, setStore] = createStore<{ mount?: HTMLElement; registrations: symbol[] }>({ registrations: [] })
+  const [store, setStore] = createStore<{ mount?: HTMLElement; registrations: symbol[] }>({
+    registrations: [],
+  })
   return {
     mount: () => store.mount,
     setMount: (mount) => setStore("mount", mount),
@@ -39,12 +58,10 @@ export function createTitlebarRightSlot(): TitlebarRightSlot {
 }
 
 export function TitlebarRightMount() {
-  const slot = useTitlebarRightSlot()
   return <div ref={slot.setMount} id="opencode-titlebar-right" class="flex shrink-0 items-center justify-end gap-0" />
 }
 
 export function TitlebarRight(props: ParentProps) {
-  const slot = useTitlebarRightSlot()
   const registration = slot.createRegistration()
   onMount(() => {
     registration.register()
@@ -56,10 +73,4 @@ export function TitlebarRight(props: ParentProps) {
       {(mount) => <Portal mount={mount}>{props.children}</Portal>}
     </Show>
   )
-}
-
-function useTitlebarRightSlot() {
-  const slot = useContext(TitlebarRightContext)
-  if (!slot) throw new Error("TitlebarRight must be used within TitlebarRightProvider")
-  return slot
 }
