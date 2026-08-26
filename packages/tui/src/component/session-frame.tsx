@@ -9,7 +9,6 @@ import { useSessionTerminals } from "../context/session-terminals"
 import { usePromptRef } from "../context/prompt"
 import { Session } from "../routes/session"
 import { Sidebar } from "../routes/session/sidebar"
-import { createAnimatable, tween } from "../ui/animation"
 import { SESSION_SIDEBAR_WIDTH } from "../ui/layout"
 import { useToast } from "../ui/toast"
 import { TerminalPane } from "./terminal-pane"
@@ -62,21 +61,8 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
   const showTerminal = () => !!selectedTerminal() && !showSidebar()
   const overlaySidebar = () => showSidebar() && !wide()
   const rightVisible = () => showTerminal() || (showSidebar() && !overlaySidebar())
-  const rightWidth = createAnimatable(
-    { width: SESSION_SIDEBAR_WIDTH },
-    {
-      transition: tween({ duration: 0.2, ease: (progress) => 1 - (1 - progress) ** 3 }),
-      enabled: () => config.data.animations ?? true,
-    },
-  )
-  createEffect(() => {
-    const width = showTerminal()
-      ? Math.max(1, Math.floor((dimensions().width - props.verticalTabsWidth) / 2))
-      : rightVisible()
-        ? SESSION_SIDEBAR_WIDTH
-        : 0
-    rightWidth.animate({ width })
-  })
+  const rightWidth = () =>
+    showTerminal() ? Math.max(1, Math.floor((dimensions().width - props.verticalTabsWidth) / 2)) : SESSION_SIDEBAR_WIDTH
   const toggleSidebar = () => {
     batch(() => {
       const visible = showSidebar()
@@ -148,8 +134,8 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
           />
         </Show>
       </box>
-      <Show when={rightVisible() || Math.round(rightWidth.value().width) > 0}>
-        <box flexShrink={0} width={Math.round(rightWidth.value().width)} minWidth={0} minHeight={0}>
+      <Show when={rightVisible()}>
+        <box flexShrink={0} width={rightWidth()} minWidth={0} minHeight={0}>
           <Show
             when={showSidebar()}
             fallback={
