@@ -26,6 +26,8 @@ export const handler = Effect.fn("cli.web-ui.handler")(function* (options?: { re
 
 function serveUI(request: HttpServerRequest.HttpServerRequest, url: URL, assets: AssetMap) {
   const key = url.pathname.replace(/^\//, "")
+  if (key.startsWith("_assets/") && assets[key] === undefined)
+    return Effect.succeed(HttpServerResponse.empty({ status: 404, headers: { "cache-control": "no-store" } }))
   const name = assets[key] !== undefined ? key : "index.html"
   const file = assets[name]
   if (!file) return Effect.succeed(HttpServerResponse.empty({ status: 404 }))

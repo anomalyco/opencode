@@ -29,33 +29,44 @@ export default defineConfig({
       injectRegister: false,
       manifest: false,
       workbox: {
-        cleanupOutdatedCaches: true,
         clientsClaim: false,
-        skipWaiting: false,
+        skipWaiting: true,
         inlineWorkboxRuntime: true,
-        navigateFallback: "/index.html",
-        navigateFallbackDenylist: [/^\/api(?:\/|$)/],
-        globPatterns: [
-          "index.html",
-          "site.webmanifest",
-          "favicon*",
-          "apple-touch-icon*",
-          "web-app-manifest*",
-          "assets/index-*.{js,css}",
-          "assets/session-*.js",
-          "assets/IBMPlexMono-Text-*.woff2",
-          "assets/Inter.ttf",
-          "assets/JetBrainsMonoNerdFontMono-Regular.woff2",
-        ],
+        // Always fetch the current HTML. Precaching a partial build can strand it without its chunks after an upgrade.
+        navigateFallback: null,
+        globPatterns: [],
         runtimeCaching: [
           {
-            urlPattern: ({ url }) => url.origin === self.location.origin && url.pathname.startsWith("/assets/"),
+            urlPattern: ({ url }) =>
+              url.origin === self.location.origin &&
+              (url.pathname.startsWith("/_assets/") || url.pathname.startsWith("/assets/")),
             handler: "CacheFirst",
             options: {
               cacheName: "opencode-assets",
-              cacheableResponse: {
-                statuses: [200],
-              },
+              plugins: [
+                {
+                  cachedResponseWillBeUsed: async ({ request, cachedResponse }) => {
+                    if (
+                      cachedResponse?.status === 200 &&
+                      !/^(text\/html|application\/xhtml\+xml)\b/i.test(cachedResponse.headers.get("content-type") ?? "")
+                    )
+                      return cachedResponse
+                    // Keep old tabs' precached chunks usable without retaining their stale HTML navigation handler.
+                    const response = await caches.match(request, {
+                      cacheName: `workbox-precache-v2-${self.location.origin}/`,
+                    })
+                    return response?.status === 200 &&
+                      !/^(text\/html|application\/xhtml\+xml)\b/i.test(response.headers.get("content-type") ?? "")
+                      ? response
+                      : null
+                  },
+                  cacheWillUpdate: async ({ response }) =>
+                    response.status === 200 &&
+                    !/^(text\/html|application\/xhtml\+xml)\b/i.test(response.headers.get("content-type") ?? "")
+                      ? response
+                      : null,
+                },
+              ],
               expiration: {
                 maxEntries: 1000,
               },
@@ -72,6 +83,7 @@ export default defineConfig({
     port: 3000,
   },
   build: {
+    assetsDir: "_assets",
     target: "esnext",
     sourcemap: true,
   },
