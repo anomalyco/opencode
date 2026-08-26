@@ -1,4 +1,4 @@
-import type { Config, Path, Project, ProviderAuthResponse } from "@/runtime/server/types"
+import type { Config, Path, Project } from "@/runtime/server/types"
 import type {
   LocationGetInput,
   LocationGetOutput,
@@ -17,14 +17,6 @@ import { QueryClient, queryOptions } from "@tanstack/solid-query"
 import type { ServerScope } from "@/runtime/server/scope"
 import type { ServerApi } from "@/runtime/server/api"
 import { sameDirectory } from "@/workspaces/paths"
-
-type GlobalStore = {
-  path: Path
-  project: Project[]
-  provider_auth: ProviderAuthResponse
-  config: Config
-  reload: undefined | "pending" | "complete"
-}
 
 function waitForPaint() {
   return new Promise<void>((resolve) => {
@@ -110,16 +102,13 @@ export async function bootstrapGlobal(input: {
     readonly worktree: WorktreeApi
   }
   scope: ServerScope
-  setGlobalStore: SetStoreFunction<GlobalStore>
   queryClient: QueryClient
 }) {
   const slow = [
     () => input.queryClient.fetchQuery(loadGlobalConfigQuery(input.scope)),
     () => input.queryClient.fetchQuery(loadPathQuery(input.scope, null, input.serverAPI.location)),
     () =>
-      input.queryClient
-        .fetchQuery(loadProjectsQuery(input.scope, input.serverAPI.project, input.serverAPI.worktree))
-        .then((data) => input.setGlobalStore("project", data)),
+      input.queryClient.fetchQuery(loadProjectsQuery(input.scope, input.serverAPI.project, input.serverAPI.worktree)),
   ]
   await runAll(slow)
 }

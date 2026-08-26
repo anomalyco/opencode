@@ -64,6 +64,25 @@ describe("query keys", () => {
     expect(calls.toSorted()).toEqual(["a", "b"])
   })
 
+  test("refreshes shared project metadata after invalidation", async () => {
+    let name = "Before"
+    const projects = {
+      list: async () => [{ id: "a", canonical: "/a", name, time: { created: 1, updated: 1 }, sandboxes: [] }],
+    } as unknown as ProjectApi
+    const worktrees = {
+      list: async () => [{ directory: "/a" }],
+    } as unknown as WorktreeApi
+    const queryClient = new QueryClient()
+    const query = loadProjectsQuery(ServerScope.local, projects, worktrees)
+
+    expect((await queryClient.fetchQuery(query))[0]?.name).toBe("Before")
+
+    name = "After"
+    await queryClient.invalidateQueries({ queryKey: query.queryKey, exact: true })
+
+    expect((await queryClient.fetchQuery(query))[0]?.name).toBe("After")
+  })
+
   test("keeps projects whose directory inventory cannot load", async () => {
     const projects = {
       list: async () => [

@@ -5,7 +5,13 @@ import { getOwner, onCleanup, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/runtime/i18n/language"
 import { type ServerSDK } from "./client"
-import { bootstrapDirectory, bootstrapGlobal, loadGlobalConfigQuery, loadPathQuery } from "./global-sync/bootstrap"
+import {
+  bootstrapDirectory,
+  bootstrapGlobal,
+  loadGlobalConfigQuery,
+  loadPathQuery,
+  loadProjectsQuery,
+} from "./global-sync/bootstrap"
 import { createChildStoreManager } from "./global-sync/child-store"
 import type { ProjectMeta } from "./global-sync/types"
 import { formatServerError } from "@/runtime/server/errors"
@@ -61,8 +67,14 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
       { ...queryOptionsApi.path(), enabled: connected() },
     ],
   }))
+  const projectQuery = useQuery(() => ({
+    ...loadProjectsQuery(serverSDK.scope, serverSDK.api.project, serverSDK.api.worktree),
+    enabled: connected(),
+  }))
   const [globalStore, setGlobalStore] = createStore<GlobalStore>({
-    project: [],
+    get project() {
+      return projectQuery.data ?? []
+    },
     provider_auth: {},
     get path() {
       const EMPTY = { state: "", config: "", worktree: "", directory: "", home: "" }
@@ -79,17 +91,6 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
   })
 
   const queryClient = useQueryClient()
-  const setProjects = (next: Project[] | ((draft: Project[]) => Project[])) => {
-    setGlobalStore("project", next)
-  }
-
-  const setBootStore = ((...input: unknown[]) => {
-    if (input[0] === "project" && Array.isArray(input[1])) {
-      setProjects(input[1] as Project[])
-      return input[1]
-    }
-    return (setGlobalStore as (...args: unknown[]) => unknown)(...input)
-  }) as typeof setGlobalStore
 
   const bootstrap = useQuery(() => ({
     queryKey: [serverSDK.scope, "bootstrap"],
@@ -97,21 +98,12 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
       await bootstrapGlobal({
         serverAPI: serverSDK.api,
         scope: serverSDK.scope,
-        setGlobalStore: setBootStore,
         queryClient,
       })
       return Date.now()
     },
     enabled: connected(),
   }))
-
-  const set = ((...input: unknown[]) => {
-    if (input[0] === "project" && (Array.isArray(input[1]) || typeof input[1] === "function")) {
-      setProjects(input[1] as Project[] | ((draft: Project[]) => Project[]))
-      return input[1]
-    }
-    return (setGlobalStore as (...args: unknown[]) => unknown)(...input)
-  }) as typeof setGlobalStore
 
   const paused = () => untrack(() => globalStore.reload) !== undefined
 
@@ -269,7 +261,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
 
   return {
     data: globalStore,
-    set,
+    set: setGlobalStore,
     child: children.child,
     disableMcp: children.disableMcp,
     // bootstrap,

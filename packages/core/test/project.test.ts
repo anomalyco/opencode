@@ -100,6 +100,19 @@ describe("Project.update", () => {
         commands: { start: "bun install" },
       })
 
+      expect(yield* project.update({ projectID: id, name: "Renamed" })).toMatchObject({
+        id,
+        name: "Renamed",
+        icon: { color: "blue", override: "data:image/png;base64,test" },
+        commands: { start: "bun install" },
+      })
+      expect(yield* project.update({ projectID: id, icon: { color: "green" } })).toMatchObject({
+        id,
+        name: "Renamed",
+        icon: { color: "green", override: "data:image/png;base64,test" },
+        commands: { start: "bun install" },
+      })
+
       expect(
         yield* project.update({
           projectID: id,

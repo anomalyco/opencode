@@ -38,7 +38,7 @@ import {
 } from "@/workspaces/paths"
 import { listAllSessions } from "@/session/list"
 import type { ServerScope } from "@/runtime/server/scope"
-import { normalizeProjectInfo } from "@/runtime/server/global-sync/utils"
+import { loadProjectsQuery } from "@/runtime/server/global-sync/bootstrap"
 import "@/settings/settings.css"
 
 type Workspace = {
@@ -59,16 +59,7 @@ export const SettingsWorkspaces: Component<{ activeDirectory?: string }> = (prop
   })
 
   const projectQuery = useQuery(() => ({
-    queryKey: [serverSDK.scope, "settings-workspace-projects"] as const,
-    queryFn: async () =>
-      Promise.all(
-        (await serverSDK.api.project.list()).map(async (project) => {
-          const worktrees = await serverSDK.api.worktree
-            .list({ projectID: project.id })
-            .catch(() => [{ directory: project.canonical }, ...project.sandboxes.map((directory) => ({ directory }))])
-          return normalizeProjectInfo({ ...project, worktrees })
-        }),
-      ),
+    ...loadProjectsQuery(serverSDK.scope, serverSDK.api.project, serverSDK.api.worktree),
     refetchOnMount: "always",
   }))
   const workspaces = createMemo(() => workspaceInventory(projectQuery.data ?? []))
