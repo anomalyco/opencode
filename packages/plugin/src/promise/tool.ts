@@ -22,9 +22,16 @@ export type Info<
   ) => Promise<Tool.Result<Output>>
 }
 
+type Definition<
+  Input extends Tool.ValueSchema<any> = Tool.ValueSchema<any>,
+  Output extends Tool.ValueSchema<any> | undefined = Tool.ValueSchema<any> | undefined,
+> = Omit<Info<Input, Output>, "name" | "options">
+
 interface ToolDraft {
   add<Input extends Tool.ValueSchema<any>, Output extends Tool.ValueSchema<any> | undefined>(
-    tool: Info<Input, Output>,
+    ...args:
+      | [tool: Info<Input, Output>]
+      | [name: string, definition: Definition<Input, Output>, options?: Tool.Options]
   ): void
 }
 

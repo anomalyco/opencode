@@ -298,11 +298,16 @@ export function fromPromise(plugin: Plugin) {
               register(
                 host.tool.transform((draft) =>
                   callback({
-                    add: (tool: Info) =>
+                    add: (...args) => {
+                      const tool: Info =
+                        args.length === 1
+                          ? args[0]
+                          : { ...args[1], name: args[0], ...(args[2] === undefined ? {} : { options: args[2] }) }
                       draft.add({
                         ...tool,
                         execute: (input, context) => executePromiseTool(tool, input, context),
-                      }),
+                      })
+                    },
                   }),
                 ),
               ),

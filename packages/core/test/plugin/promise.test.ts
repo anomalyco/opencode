@@ -561,17 +561,19 @@ describe("fromPromise", () => {
         id: "promise-tool",
         setup: async (ctx) => {
           await ctx.tool.transform((tools) => {
-            tools.add({
-              name: "hello",
-              options: { codemode: false },
-              description: "Hello",
-              input: Schema.Struct({ name: Schema.String }),
-              output: Schema.String,
-              execute: async ({ name }, context) => {
-                await context.progress({ phase: "greeting" })
-                return { output: `Hello, ${name}!` }
+            tools.add(
+              "hello",
+              {
+                description: "Hello",
+                input: Schema.Struct({ name: Schema.String }),
+                output: Schema.String,
+                execute: async ({ name }, context) => {
+                  await context.progress({ phase: "greeting" })
+                  return { output: `Hello, ${name}!` }
+                },
               },
-            })
+              { codemode: false },
+            )
           })
         },
       })
