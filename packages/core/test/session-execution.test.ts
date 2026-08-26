@@ -323,11 +323,12 @@ describe("SessionExecution lifecycle", () => {
 })
 
 describe("SessionRestart background recovery", () => {
-  projected.effect("records orphaned background work without waking an idle parent", () =>
+  projected.effect("admits orphaned shell notices without waking and delivers them once on the next run", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service
       const store = yield* SessionStore.Service
       const jobs = yield* Job.Service
+      const bus = yield* Bus.Service
       const parent = Session.ID.make("ses_background_recovery_parent")
       const child = Session.ID.make("ses_background_recovery_child")
       yield* seedSessions(database, [parent])
@@ -346,34 +347,43 @@ describe("SessionRestart background recovery", () => {
       const restarted = yield* Job.make.pipe(Effect.provideService(Scope.Scope, scope))
       const context = yield* buildExecution(
         scope,
-        ({ sessionID }) => Effect.sync(() => void drained.push(sessionID)),
+        ({ sessionID }) =>
+          Effect.sync(() => void drained.push(sessionID)).pipe(
+            Effect.andThen(SessionInbox.promote(database.db, bus, sessionID, "steer")),
+            Effect.asVoid,
+          ),
         undefined,
         restarted,
       )
       const restart = Context.get(context, SessionRestart.Service)
       yield* restart.resumeSuspendedSessions
 
-      const messages = yield* store.context(parent)
-      expect(messages.filter((message) => message.type === "synthetic")).toMatchObject([
+      expect((yield* store.context(parent)).filter((message) => message.type === "synthetic")).toEqual([])
+      expect(yield* SessionInbox.list(database.db, parent)).toMatchObject([
         {
-          description: "sleep 60",
-          text: expect.stringContaining("server restarted"),
-          metadata: {
-            source: "shell",
-            jobID: "call-background-shell",
-            shellID: "sh_background_orphan",
-            state: "cancelled",
+          type: "synthetic",
+          payload: {
+            description: "sleep 60",
+            text: expect.stringContaining("server restarted"),
+            metadata: {
+              source: "shell",
+              jobID: "call-background-shell",
+              shellID: "sh_background_orphan",
+              state: "cancelled",
+            },
           },
         },
       ])
-      expect(yield* SessionInbox.list(database.db, parent)).toEqual([])
-      expect((yield* store.context(child)).filter((message) => message.type === "synthetic")).toMatchObject([
+      expect(yield* SessionInbox.list(database.db, child)).toMatchObject([
         {
-          metadata: {
-            source: "shell",
-            jobID: "call-child-shell",
-            shellID: "sh_child_orphan",
-            state: "cancelled",
+          type: "synthetic",
+          payload: {
+            metadata: {
+              source: "shell",
+              jobID: "call-child-shell",
+              shellID: "sh_child_orphan",
+              state: "cancelled",
+            },
           },
         },
       ])
@@ -382,6 +392,13 @@ describe("SessionRestart background recovery", () => {
       expect(yield* restarted.pendingBackground).toEqual([])
 
       yield* restart.resumeSuspendedSessions
+      expect(yield* SessionInbox.list(database.db, parent)).toHaveLength(1)
+      expect(drained).toEqual([])
+      const execution = Context.get(context, SessionExecution.Service)
+      yield* execution.resume(parent)
+      expect(yield* SessionInbox.list(database.db, parent)).toEqual([])
+      expect((yield* store.context(parent)).filter((message) => message.type === "synthetic")).toHaveLength(1)
+      yield* execution.resume(parent)
       expect((yield* store.context(parent)).filter((message) => message.type === "synthetic")).toHaveLength(1)
     }),
   )
@@ -410,7 +427,6 @@ describe("SessionRestart background recovery", () => {
   projected.effect("preserves a shell result persisted before its completion notification", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service
-      const store = yield* SessionStore.Service
       const jobs = yield* Job.Service
       const sessionID = Session.ID.make("ses_background_completed_shell")
       yield* seedSessions(database, [sessionID])
@@ -436,15 +452,63 @@ describe("SessionRestart background recovery", () => {
       const context = yield* buildExecution(scope, () => Effect.void, undefined, restarted)
       yield* Context.get(context, SessionRestart.Service).resumeSuspendedSessions
 
-      expect((yield* store.context(sessionID)).filter((message) => message.type === "synthetic")).toMatchObject([
+      expect(yield* SessionInbox.list(database.db, sessionID)).toMatchObject([
         {
-          text: expect.stringContaining("recovered output"),
-          metadata: { source: "shell", shellID: "sh_completed", state: "completed" },
+          type: "synthetic",
+          payload: {
+            text: expect.stringContaining("recovered output"),
+            metadata: { source: "shell", shellID: "sh_completed", state: "completed" },
+          },
         },
       ])
       expect(yield* restarted.pendingBackground).toEqual([])
     }),
   )
+
+  for (const delivered of [false, true]) {
+    projected.effect(`does not duplicate a shell notification already ${delivered ? "delivered" : "admitted"}`, () =>
+      Effect.gen(function* () {
+        const database = yield* Database.Service
+        const bus = yield* Bus.Service
+        const jobs = yield* Job.Service
+        const sessions = yield* Session.Service
+        const sessionID = Session.ID.make("ses_shell_notification_retry")
+        yield* seedSessions(database, [sessionID])
+        yield* seedBackground(jobs, sessionID, [
+          { id: "call-shell-notified", shellID: "sh_notified", command: "echo done" },
+        ])
+        const background = (yield* jobs.pendingBackground)[0]
+        if (!background) return yield* Effect.die("background record missing")
+        yield* sessions.synthetic({
+          id: background.notificationID,
+          sessionID,
+          text: "Command already completed",
+          metadata: { source: "shell", shellID: "sh_notified", state: "completed" },
+          resume: false,
+        })
+        if (delivered) yield* SessionInbox.promote(database.db, bus, sessionID, "steer")
+
+        const scope = yield* Scope.make()
+        yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+        const restarted = yield* Job.make.pipe(Effect.provideService(Scope.Scope, scope))
+        const context = yield* buildExecution(scope, () => Effect.void, undefined, restarted)
+        yield* Context.get(context, SessionRestart.Service).resumeSuspendedSessions
+
+        expect(yield* restarted.pendingBackground).toEqual([])
+        expect(yield* SessionInbox.list(database.db, sessionID)).toHaveLength(delivered ? 0 : 1)
+        yield* SessionInbox.promote(database.db, bus, sessionID, "steer")
+        expect(yield* sessions.messages({ sessionID })).toMatchObject([
+          {
+            id: background.notificationID,
+            type: "synthetic",
+            text: "Command already completed",
+            metadata: { state: "completed" },
+          },
+        ])
+        expect(yield* sessions.messages({ sessionID })).toHaveLength(1)
+      }),
+    )
+  }
 
   projected.effect("acknowledges recovery markers when their owning session is deleted", () =>
     Effect.gen(function* () {
@@ -465,11 +529,12 @@ describe("SessionRestart background recovery", () => {
     }),
   )
 
-  projected.effect("records cancellation before resuming an interrupted parent", () =>
+  projected.effect("delivers cancellation at the resumed parent's next step", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service
       const jobs = yield* Job.Service
       const store = yield* SessionStore.Service
+      const bus = yield* Bus.Service
       const parent = Session.ID.make("ses_background_claimed_parent")
       yield* seedSessions(database, [parent], { time_suspended: Date.now() })
       yield* seedBackground(jobs, parent, [{ id: "call-claimed-shell", shellID: "sh_claimed", command: "sleep 60" }])
@@ -481,7 +546,8 @@ describe("SessionRestart background recovery", () => {
       const context = yield* buildExecution(
         scope,
         ({ sessionID }) =>
-          store.context(sessionID).pipe(
+          SessionInbox.promote(database.db, bus, sessionID, "steer").pipe(
+            Effect.andThen(store.context(sessionID)),
             Effect.orDie,
             Effect.flatMap((messages) =>
               Deferred.succeed(
@@ -497,8 +563,8 @@ describe("SessionRestart background recovery", () => {
       const execution = Context.get(context, SessionExecution.Service)
       yield* Context.get(context, SessionRestart.Service).resumeSuspendedSessions
       expect(yield* Deferred.await(observed)).toEqual([
-        expect.stringContaining("Command cancelled because the server restarted"),
         "The server restarted while you were working. Continue from where you left off without repeating completed work.",
+        expect.stringContaining("Command cancelled because the server restarted"),
       ])
       yield* execution.awaitIdle(parent)
       expect(yield* SessionInbox.list(database.db, parent)).toEqual([])

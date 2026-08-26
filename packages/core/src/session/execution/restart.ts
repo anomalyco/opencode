@@ -111,9 +111,9 @@ export const layer = (options?: Options) =>
                 ? (background.error ?? "Command failed")
                 : "Command cancelled"
 
-        yield* bus.publish(
-          SessionEvent.Synthetic,
-          {
+        yield* sessions
+          .synthetic({
+            id: background.notificationID,
             sessionID: recovery.sessionID,
             description: recovery.command,
             text: `<shell id="${background.id}" state="${state}" command="${recovery.command}">\n${text}\n</shell>`,
@@ -123,9 +123,10 @@ export const layer = (options?: Options) =>
               shellID: recovery.shellID,
               state,
             },
-          },
-          { commit: () => jobs.completeBackground(background.notificationID) },
-        )
+            resume: false,
+          })
+          .pipe(Effect.orDie)
+        yield* jobs.completeBackground(background.notificationID)
       })
 
       const recoverSubagent = Effect.fnUntraced(function* (
