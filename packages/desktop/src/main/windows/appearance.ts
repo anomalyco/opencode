@@ -72,8 +72,10 @@ export function getBackgroundColor() {
 
 export function setTitlebar(win: BrowserWindow, theme: Partial<TitlebarTheme> = {}) {
   titlebarThemes.set(win, theme)
-  // The macOS frame follows nativeTheme, not the renderer theme.
-  if (process.platform === "darwin") nativeTheme.themeSource = theme.scheme ?? theme.mode ?? "system"
+  // Native window controls follow nativeTheme, not the renderer theme.
+  if (process.platform === "darwin" || process.platform === "win32") {
+    nativeTheme.themeSource = theme.scheme ?? theme.mode ?? "system"
+  }
   updateTitlebar(win)
 }
 

@@ -54,7 +54,7 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
   const titlebarZoom = () => (windows() ? Math.max(zoom(), minTitlebarZoom) : zoom())
   const minHeight = () => {
     if (mac()) return `${titlebarHeight / zoom()}px`
-    if (windows()) return `${titlebarHeight / Math.min(titlebarZoom(), 1)}px`
+    if (windows()) return `env(titlebar-area-height, ${titlebarHeight / Math.min(titlebarZoom(), 1)}px)`
     return undefined
   }
   const windowsControlsWidth = () => `${windowsControlsBaseWidth / Math.max(titlebarZoom(), 1)}px`
@@ -324,7 +324,7 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
               <div
                 class="h-full flex-1 overflow-hidden flex flex-row items-center gap-1.5 px-2 md:pr-3"
                 classList={{
-                  "pt-2": !bottom(),
+                  "pt-2": !bottom() && !windows(),
                   "pb-2": bottom(),
                   "md:pl-2": macTrafficLights(),
                   "md:pl-4": !macTrafficLights(),
