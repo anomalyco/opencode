@@ -71,7 +71,6 @@ OpenCode Goをサブスクライブできるのは、1つのワークスペー�
 - **DeepSeek V4 Flash**
 - **DeepSeek V4 Flash Vision Exp**
 - **Hy3**
-- **Ox Alpha Free** (期間限定)
 
 新しいモデルをテストして追加するにつれて、モデルのリストは変更される場合があります。
 
@@ -113,7 +112,6 @@ OpenCode Goには以下の制限が含まれています：
 | DeepSeek V4 Flash            | 7,600                     | 18,900           | 37,800           |
 | DeepSeek V4 Flash Vision Exp | 3,800                     | 9,450            | 18,900           |
 | Hy3                          | 4,300                     | 10,750           | 21,500           |
-| Ox Alpha Free                | -                         | -                | -                |
 
 推定値は、観測されたリクエストパターンに基づいています：
 
@@ -171,13 +169,10 @@ OpenCode Goには以下の制限が含まれています：
 | DeepSeek V4 Flash Vision Exp (Off-Peak) | $0.22  | $0.66  | $0.007      | -            | $15   |
 | DeepSeek V4 Flash Vision Exp (Peak)     | $0.44  | $1.32  | $0.014      | -            | $15   |
 | Hy3                                     | $0.14  | $0.58  | $0.035      | -            | $60   |
-| Ox Alpha Free                           | -      | -      | -           | -            | -     |
 
 **DeepSeek V4 Flash / V4 Flash Vision Exp / V4 Pro:** Peak時間は月曜日から金曜日の01:00-04:00と06:00-10:00 UTCで、週末を含むそれ以外の時間はすべてOff-Peakです。[詳しく見る](https://api-docs.deepseek.com/quick_start/pricing/)。
 
 **DeepSeek V4 Flash Vision Exp:** 画像はサイズに基づいてトークンに変換され、テキストトークンと合わせて入力トークンとして課金されます。 [詳しく見る](https://api-docs.deepseek.com/quick_start/pricing/)。
-
-**Ox Alpha Free:** 期間限定で無料です。
 
 現在の利用状況は**<a href={console}>コンソール</a>**で追跡できます。
 
@@ -236,7 +231,6 @@ Goでは月額$10を支払い、その6倍の利用枠を提供することを�
 | Qwen3.7 Plus                 | qwen3.7-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus                 | qwen3.6-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Hy3                          | hy3                          | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| Ox Alpha Free                | ox-alpha-free                | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 
 OpenCode設定の[model id](/docs/config/#models)は、`opencode-go/<model-id>`という形式を使用します。たとえば、Kimi K3の場合は、設定で`opencode-go/kimi-k3`を使用します。
 
@@ -278,7 +272,6 @@ https://opencode.ai/zen/go/v1/models
 | DeepSeek V4 Flash            | 使用なし             | 0日         |
 | DeepSeek V4 Flash Vision Exp | 使用なし             | 0日         |
 | Hy3                          | 使用なし             | 0日         |
-| Ox Alpha Free                | 使用なし             | 0日         |
 
 - **Grok 4.6:** ZDRでは、保存データに依存する重要なAPI機能（ステートフルなResponses API、Files and Collections、Batch APIなど）が無効になります。[詳しく見る](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr)。
 - **GPT 5.6 Luna:** 不正使用監視ログはすべてのAPI機能の使用時に生成され、最大30日間保持されます。[詳しく見る](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring)。

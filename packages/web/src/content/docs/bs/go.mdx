@@ -81,7 +81,6 @@ Trenutna lista modela uključuje:
 - **DeepSeek V4 Flash**
 - **DeepSeek V4 Flash Vision Exp**
 - **Hy3**
-- **Ox Alpha Free** (ograničeno vrijeme)
 
 Lista modela se može mijenjati dok testiramo i dodajemo nove.
 
@@ -123,7 +122,6 @@ Tabela ispod pruža procijenjeni broj zahtjeva na osnovu tipičnih obrazaca kori
 | DeepSeek V4 Flash            | 7,600              | 18,900            | 37,800            |
 | DeepSeek V4 Flash Vision Exp | 3,800              | 9,450             | 18,900            |
 | Hy3                          | 4,300              | 10,750            | 21,500            |
-| Ox Alpha Free                | -                  | -                 | -                 |
 
 Procjene se zasnivaju na zapaženim obrascima zahtjeva:
 
@@ -181,13 +179,10 @@ Procjene se također zasnivaju na sljedećim cijenama po 1M tokena i mjesečnoj 
 | DeepSeek V4 Flash Vision Exp (Off-Peak) | $0.22  | $0.66  | $0.007      | -            | $15       |
 | DeepSeek V4 Flash Vision Exp (Peak)     | $0.44  | $1.32  | $0.014      | -            | $15       |
 | Hy3                                     | $0.14  | $0.58  | $0.035      | -            | $60       |
-| Ox Alpha Free                           | -      | -      | -           | -            | -         |
 
 **DeepSeek V4 Flash / V4 Flash Vision Exp / V4 Pro:** Peak sati su 01:00-04:00 i 06:00-10:00 UTC od ponedjeljka do petka; svi ostali sati, uključujući vikende, su Off-Peak. [Saznajte više](https://api-docs.deepseek.com/quick_start/pricing/).
 
 **DeepSeek V4 Flash Vision Exp:** Slike se pretvaraju u tokene na osnovu svojih dimenzija i naplaćuju kao ulazni tokeni zajedno s tekstualnim tokenima. [Saznajte više](https://api-docs.deepseek.com/quick_start/pricing/).
-
-**Ox Alpha Free:** Besplatan ograničeno vrijeme.
 
 Svoju trenutnu potrošnju možete pratiti u **<a href={console}>konzoli</a>**.
 
@@ -248,7 +243,6 @@ Također možete pristupiti Go modelima putem sljedećih API endpointa.
 | Qwen3.7 Plus                 | qwen3.7-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus                 | qwen3.6-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Hy3                          | hy3                          | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| Ox Alpha Free                | ox-alpha-free                | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 
 [Model id](/docs/config/#models) u vašoj OpenCode konfiguraciji
 koristi format `opencode-go/<model-id>`. Na primjer, za Kimi K3, koristili biste
@@ -292,7 +286,6 @@ https://opencode.ai/zen/go/v1/models
 | DeepSeek V4 Flash            | Ne koristi se     | 0 dana               |
 | DeepSeek V4 Flash Vision Exp | Ne koristi se     | 0 dana               |
 | Hy3                          | Ne koristi se     | 0 dana               |
-| Ox Alpha Free                | Ne koristi se     | 0 dana               |
 
 - **Grok 4.6:** ZDR onemogućava važne API funkcije koje zavise od pohranjenih podataka, uključujući Responses API s očuvanjem stanja, Files and Collections i Batch API. [Saznajte više](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
 - **GPT 5.6 Luna:** Zapisi o nadzoru zloupotrebe generišu se za svako korištenje API funkcija i čuvaju do 30 dana. [Saznajte više](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).

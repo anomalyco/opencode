@@ -71,7 +71,6 @@ Mevcut model listesi şunları içerir:
 - **DeepSeek V4 Flash**
 - **DeepSeek V4 Flash Vision Exp**
 - **Hy3**
-- **Ox Alpha Free** (sınırlı bir süre için)
 
 Test edip yenilerini ekledikçe model listesi değişebilir.
 
@@ -113,7 +112,6 @@ Aşağıdaki tablo, tipik Go kullanım modellerine dayalı tahmini bir istek say
 | DeepSeek V4 Flash            | 7,600              | 18,900         | 37,800      |
 | DeepSeek V4 Flash Vision Exp | 3,800              | 9,450          | 18,900      |
 | Hy3                          | 4,300              | 10,750         | 21,500      |
-| Ox Alpha Free                | -                  | -              | -           |
 
 Tahminler, gözlemlenen istek modellerine dayanır:
 
@@ -171,13 +169,10 @@ Tahminler ayrıca 1M token başına aşağıdaki fiyatlara ve her modelle birlik
 | DeepSeek V4 Flash Vision Exp (Off-Peak) | $0.22  | $0.66  | $0.007      | -            | $15      |
 | DeepSeek V4 Flash Vision Exp (Peak)     | $0.44  | $1.32  | $0.014      | -            | $15      |
 | Hy3                                     | $0.14  | $0.58  | $0.035      | -            | $60      |
-| Ox Alpha Free                           | -      | -      | -           | -            | -        |
 
 **DeepSeek V4 Flash / V4 Flash Vision Exp / V4 Pro:** Peak saatleri pazartesiden cumaya 01:00-04:00 ve 06:00-10:00 UTC'dir; hafta sonları dahil diğer tüm saatler Off-Peak'tir. [Daha fazla bilgi](https://api-docs.deepseek.com/quick_start/pricing/).
 
 **DeepSeek V4 Flash Vision Exp:** Görseller boyutlarına göre token'lara dönüştürülür ve metin token'larıyla birlikte girdi token'ları olarak ücretlendirilir. [Daha fazla bilgi](https://api-docs.deepseek.com/quick_start/pricing/).
-
-**Ox Alpha Free:** Sınırlı bir süre için ücretsiz.
 
 Mevcut kullanımınızı **<a href={console}>konsoldan</a>** takip edebilirsiniz.
 
@@ -236,7 +231,6 @@ Go modellerine aşağıdaki API uç noktaları aracılığıyla da erişebilirsi
 | Qwen3.7 Plus                 | qwen3.7-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus                 | qwen3.6-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Hy3                          | hy3                          | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| Ox Alpha Free                | ox-alpha-free                | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 
 OpenCode yapılandırmanızdaki [model id](/docs/config/#models) formatı `opencode-go/<model-id>` şeklindedir. Örneğin, Kimi K3 için yapılandırmanızda `opencode-go/kimi-k3` kullanmalısınız.
 
@@ -278,7 +272,6 @@ https://opencode.ai/zen/go/v1/models
 | DeepSeek V4 Flash            | Kullanılmaz   | 0 gün        |
 | DeepSeek V4 Flash Vision Exp | Kullanılmaz   | 0 gün        |
 | Hy3                          | Kullanılmaz   | 0 gün        |
-| Ox Alpha Free                | Kullanılmaz   | 0 gün        |
 
 - **Grok 4.6:** ZDR, durum bilgisi tutan Responses API, Files and Collections ve Batch API dahil olmak üzere saklanan verilere bağlı önemli API özelliklerini devre dışı bırakır. [Daha fazla bilgi](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
 - **GPT 5.6 Luna:** Tüm API özelliklerinin kullanımı için kötüye kullanım izleme günlükleri oluşturulur ve 30 güne kadar saklanır. [Daha fazla bilgi](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).

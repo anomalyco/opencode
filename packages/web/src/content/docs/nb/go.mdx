@@ -81,7 +81,6 @@ Den nåværende listen over modeller inkluderer:
 - **DeepSeek V4 Flash**
 - **DeepSeek V4 Flash Vision Exp**
 - **Hy3**
-- **Ox Alpha Free** (i en begrenset periode)
 
 Listen over modeller kan endres etter hvert som vi tester og legger til nye.
 
@@ -123,7 +122,6 @@ Tabellen nedenfor gir et estimert antall forespørsler basert på typiske bruksm
 | DeepSeek V4 Flash            | 7,600                    | 18,900               | 37,800                 |
 | DeepSeek V4 Flash Vision Exp | 3,800                    | 9,450                | 18,900                 |
 | Hy3                          | 4,300                    | 10,750               | 21,500                 |
-| Ox Alpha Free                | -                        | -                    | -                      |
 
 Estimatene er basert på observerte forespørselsmønstre:
 
@@ -181,13 +179,10 @@ Estimatene er også basert på følgende priser per 1M tokens og den månedlige 
 | DeepSeek V4 Flash Vision Exp (Off-Peak) | $0.22  | $0.66  | $0.007      | -            | $15  |
 | DeepSeek V4 Flash Vision Exp (Peak)     | $0.44  | $1.32  | $0.014      | -            | $15  |
 | Hy3                                     | $0.14  | $0.58  | $0.035      | -            | $60  |
-| Ox Alpha Free                           | -      | -      | -           | -            | -    |
 
 **DeepSeek V4 Flash / V4 Flash Vision Exp / V4 Pro:** Peak-tidene er 01:00-04:00 og 06:00-10:00 UTC fra mandag til fredag; alle andre tider, inkludert helger, er Off-Peak. [Les mer](https://api-docs.deepseek.com/quick_start/pricing/).
 
 **DeepSeek V4 Flash Vision Exp:** Bilder konverteres til tokens basert på dimensjonene og faktureres som input-tokens sammen med tekst-tokens. [Les mer](https://api-docs.deepseek.com/quick_start/pricing/).
-
-**Ox Alpha Free:** Gratis i en begrenset periode.
 
 Du kan spore din nåværende bruk i **<a href={console}>konsollen</a>**.
 
@@ -248,7 +243,6 @@ Du kan også få tilgang til Go-modeller gjennom følgende API-endepunkter.
 | Qwen3.7 Plus                 | qwen3.7-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus                 | qwen3.6-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Hy3                          | hy3                          | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| Ox Alpha Free                | ox-alpha-free                | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 
 [Modell-ID-en](/docs/config/#models) i din OpenCode-konfigurasjon
 bruker formatet `opencode-go/<model-id>`. For eksempel, for Kimi K3, vil du
@@ -292,7 +286,6 @@ https://opencode.ai/zen/go/v1/models
 | DeepSeek V4 Flash            | Brukes ikke   | 0 dager         |
 | DeepSeek V4 Flash Vision Exp | Brukes ikke   | 0 dager         |
 | Hy3                          | Brukes ikke   | 0 dager         |
-| Ox Alpha Free                | Brukes ikke   | 0 dager         |
 
 - **Grok 4.6:** ZDR deaktiverer viktige API-funksjoner som er avhengige av lagrede data, inkludert den tilstandsbaserte Responses API, Files and Collections og Batch API. [Les mer](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
 - **GPT 5.6 Luna:** Logger for overvåking av misbruk genereres for all bruk av API-funksjoner og oppbevares i opptil 30 dager. [Les mer](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).

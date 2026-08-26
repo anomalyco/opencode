@@ -21,7 +21,6 @@ import { useI18n } from "../context/i18n"
 import { useLanguage } from "../context/language"
 import { localizedUrl } from "../lib/language"
 import { findModelCatalogEntry, loadModelCatalog, type ModelCatalog } from "./model-catalog"
-import { geoMapHeight, geoMapWidth, worldBorderPath, worldCountryMarkers, worldCountryPaths } from "./geo-map"
 import { SectionHeading } from "./section-heading"
 import { setStatsPageCacheHeaders } from "./stats-cache"
 import { ComparisonCardsSection, uniqueComparisonPairs, type ComparisonModelRef } from "./compare-cards"
@@ -317,7 +316,7 @@ function ChartSection(props: {
   )
 }
 
-function SectionTitle(props: { id: string; title: string; description: string }) {
+function SectionTitle(props: { id: string; title: string; description?: string }) {
   return <SectionHeading href={`#${props.id}`} title={props.title} description={props.description} />
 }
 
@@ -1074,20 +1073,9 @@ function MarketShareList(props: {
 
 function GeoBreakdownSection(props: { data: CountryEntry[] }) {
   const i18n = useI18n()
-  const language = useLanguage()
   const [activeCountry, setActiveCountry] = createSignal<string>()
-  const countryById = createMemo(
-    () =>
-      new Map(
-        props.data.flatMap((country) => {
-          const id = countryNumericId(country.country)
-          return id ? [[id, country] as const] : []
-        }),
-      ),
-  )
   const maxTokens = createMemo(() => Math.max(0, ...props.data.map((country) => country.tokens)) || 1)
   const topCountries = createMemo(() => props.data.slice(0, 15))
-  const active = createMemo(() => props.data.find((country) => country.country === activeCountry()) ?? props.data[0])
 
   return (
     <section
@@ -1099,34 +1087,12 @@ function GeoBreakdownSection(props: { data: CountryEntry[] }) {
       }}
     >
       <SectionBridge label={i18n.t("nav.marketShare").toUpperCase()} href="#market-share" />
-      <SectionTitle id="geo-breakdown" title={i18n.t("home.geoTitle")} description={i18n.t("home.geoDescription")} />
+      <SectionTitle id="geo-breakdown" title={i18n.t("home.geoTitle")} />
       <Show
         when={props.data.length > 0}
         fallback={<EmptyState title={i18n.t("home.noGeoTitle")} description={i18n.t("home.noGeoDescription")} />}
       >
         <div data-component="geo-breakdown">
-          <div data-slot="geo-map-panel">
-            <GeoWorldMap
-              countryById={countryById()}
-              activeCountry={activeCountry()}
-              maxTokens={maxTokens()}
-              onActiveCountryChange={setActiveCountry}
-            />
-            <Show when={active()}>
-              {(country) => (
-                <div data-slot="geo-active-country">
-                  <span>#{String(country().rank).padStart(2, "0")}</span>
-                  <strong>
-                    {formatCountryName(country().country, language.tag(language.locale()), i18n.t("home.unknown"))}
-                  </strong>
-                  <p>
-                    <b>{formatGeoTokens(country().tokens)}</b>
-                    <em>{formatGeoShare(country().share)}</em>
-                  </p>
-                </div>
-              )}
-            </Show>
-          </div>
           <GeoCountryList
             data={topCountries()}
             activeCountry={activeCountry()}
@@ -1136,92 +1102,6 @@ function GeoBreakdownSection(props: { data: CountryEntry[] }) {
         </div>
       </Show>
     </section>
-  )
-}
-
-function GeoWorldMap(props: {
-  countryById: Map<string, CountryEntry>
-  activeCountry: string | undefined
-  maxTokens: number
-  onActiveCountryChange: (country: string | undefined) => void
-}) {
-  const i18n = useI18n()
-  const opacityScale = createMemo(() => scaleSqrt().domain([0, props.maxTokens]).range([0.26, 0.96]).clamp(true))
-  const countryOpacity = (country: CountryEntry | undefined) => {
-    if (!country || country.tokens <= 0) return 0
-    const opacity = opacityScale()(country.tokens)
-    if (props.activeCountry === country.country) return 1
-    if (!props.activeCountry) return opacity
-    return Math.max(0.18, opacity * 0.36)
-  }
-
-  return (
-    <svg
-      data-component="geo-world-map"
-      viewBox={`0 0 ${geoMapWidth} ${geoMapHeight}`}
-      role="img"
-      aria-label={i18n.t("home.worldMap")}
-    >
-      <title>{i18n.t("home.geoMapTitle")}</title>
-      <g data-slot="geo-countries">
-        <For each={worldCountryPaths}>
-          {(country) => {
-            const entry = () => props.countryById.get(country.id)
-            return (
-              <path
-                d={country.path}
-                data-country-id={country.id}
-                data-has-data={entry() ? "true" : undefined}
-                data-active={entry()?.country === props.activeCountry ? "true" : undefined}
-                style={{ "--geo-country-opacity": String(countryOpacity(entry())) } as JSX.CSSProperties}
-                aria-hidden="true"
-                onPointerEnter={() => {
-                  const item = entry()
-                  if (!item) return
-                  props.onActiveCountryChange(item.country)
-                }}
-                onClick={() => {
-                  const item = entry()
-                  if (!item) return
-                  props.onActiveCountryChange(item.country)
-                }}
-              />
-            )
-          }}
-        </For>
-      </g>
-      <g data-slot="geo-country-markers">
-        <For each={worldCountryMarkers}>
-          {(country) => {
-            const entry = () => props.countryById.get(country.id)
-            return (
-              <Show when={entry()}>
-                <circle
-                  cx={country.marker.x}
-                  cy={country.marker.y}
-                  data-country-id={country.id}
-                  r={entry()?.country === props.activeCountry ? 3.4 : 2.4}
-                  data-active={entry()?.country === props.activeCountry ? "true" : undefined}
-                  style={{ "--geo-country-opacity": String(countryOpacity(entry())) } as JSX.CSSProperties}
-                  aria-hidden="true"
-                  onPointerEnter={() => {
-                    const item = entry()
-                    if (!item) return
-                    props.onActiveCountryChange(item.country)
-                  }}
-                  onClick={() => {
-                    const item = entry()
-                    if (!item) return
-                    props.onActiveCountryChange(item.country)
-                  }}
-                />
-              </Show>
-            )
-          }}
-        </For>
-      </g>
-      <path data-slot="geo-borders" d={worldBorderPath} aria-hidden="true" />
-    </svg>
   )
 }
 

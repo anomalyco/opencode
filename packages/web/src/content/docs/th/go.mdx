@@ -71,7 +71,6 @@ OpenCode Go ทำงานเหมือนกับผู้ให้บร�
 - **DeepSeek V4 Flash**
 - **DeepSeek V4 Flash Vision Exp**
 - **Hy3**
-- **Ox Alpha Free** (ในช่วงเวลาจำกัด)
 
 รายชื่อโมเดลอาจมีการเปลี่ยนแปลงเมื่อเราทำการทดสอบและเพิ่มโมเดลใหม่ๆ
 
@@ -113,7 +112,6 @@ OpenCode Go มีขีดจำกัดดังต่อไปนี้:
 | DeepSeek V4 Flash            | 7,600                  | 18,900              | 37,800            |
 | DeepSeek V4 Flash Vision Exp | 3,800                  | 9,450               | 18,900            |
 | Hy3                          | 4,300                  | 10,750              | 21,500            |
-| Ox Alpha Free                | -                      | -                   | -                 |
 
 การประมาณการนี้อ้างอิงจากรูปแบบการใช้งาน request ที่สังเกตพบ:
 
@@ -171,13 +169,10 @@ OpenCode Go มีขีดจำกัดดังต่อไปนี้:
 | DeepSeek V4 Flash Vision Exp (Off-Peak) | $0.22  | $0.66  | $0.007      | -            | $15   |
 | DeepSeek V4 Flash Vision Exp (Peak)     | $0.44  | $1.32  | $0.014      | -            | $15   |
 | Hy3                                     | $0.14  | $0.58  | $0.035      | -            | $60   |
-| Ox Alpha Free                           | -      | -      | -           | -            | -     |
 
 **DeepSeek V4 Flash / V4 Flash Vision Exp / V4 Pro:** ช่วงเวลา Peak คือ 01:00-04:00 และ 06:00-10:00 UTC ตั้งแต่วันจันทร์ถึงวันศุกร์ ส่วนเวลาอื่นทั้งหมด รวมถึงวันหยุดสุดสัปดาห์ เป็น Off-Peak [ดูข้อมูลเพิ่มเติม](https://api-docs.deepseek.com/quick_start/pricing/)
 
 **DeepSeek V4 Flash Vision Exp:** รูปภาพจะถูกแปลงเป็น token ตามขนาด และคิดค่าบริการเป็น input token รวมกับ text token [ดูข้อมูลเพิ่มเติม](https://api-docs.deepseek.com/quick_start/pricing/)
-
-**Ox Alpha Free:** ใช้งานฟรีในช่วงเวลาจำกัด
 
 คุณสามารถติดตามการใช้งานปัจจุบันของคุณได้ใน **<a href={console}>console</a>**
 
@@ -236,7 +231,6 @@ OpenCode Go มีขีดจำกัดดังต่อไปนี้:
 | Qwen3.7 Plus                 | qwen3.7-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus                 | qwen3.6-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Hy3                          | hy3                          | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| Ox Alpha Free                | ox-alpha-free                | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 
 [model id](/docs/config/#models) ใน OpenCode config ของคุณจะใช้รูปแบบ `opencode-go/<model-id>` ตัวอย่างเช่น สำหรับ Kimi K3 คุณจะใช้ `opencode-go/kimi-k3` ใน config ของคุณ
 
@@ -278,7 +272,6 @@ https://opencode.ai/zen/go/v1/models
 | DeepSeek V4 Flash            | ไม่นำไปใช้  | 0 วัน              |
 | DeepSeek V4 Flash Vision Exp | ไม่นำไปใช้  | 0 วัน              |
 | Hy3                          | ไม่นำไปใช้  | 0 วัน              |
-| Ox Alpha Free                | ไม่นำไปใช้  | 0 วัน              |
 
 - **Grok 4.6:** ZDR ปิดใช้งานฟีเจอร์ API สำคัญที่ต้องอาศัยข้อมูลที่จัดเก็บไว้ ซึ่งรวมถึง Responses API แบบมีสถานะ, Files and Collections และ Batch API [ดูข้อมูลเพิ่มเติม](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr)
 - **GPT 5.6 Luna:** ระบบจะสร้างบันทึกการตรวจสอบการใช้งานในทางที่ผิดสำหรับการใช้งานฟีเจอร์ API ทั้งหมด และเก็บรักษาไว้นานสูงสุด 30 วัน [ดูข้อมูลเพิ่มเติม](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring)
