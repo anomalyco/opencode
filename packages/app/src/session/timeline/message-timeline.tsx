@@ -481,7 +481,6 @@ function MessageTimelineView(
   const backgroundHintPresence = createAnimatedPresence(backgroundHintPartID, () => backgroundHintRef() ?? null)
   return (
     <VirtualizedTimeline
-      workspaceSession={workspaceSession}
       bottomSpacer={
         <Show when={backgroundHintPresence.present()}>
           <div
