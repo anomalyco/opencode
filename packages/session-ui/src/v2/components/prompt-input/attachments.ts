@@ -78,6 +78,7 @@ export type PromptInputV2AttachmentConfig = {
   onError: (error: unknown) => void
   readClipboardImage?: () => Promise<File | null>
   getPathForFile?: (file: File) => string
+  store?: (file: File) => Promise<{ id: string; url: string }>
 }
 
 export function createPromptInputV2Attachments(
@@ -102,8 +103,7 @@ export function createPromptInputV2Attachments(
       if (toast) input.warn()
       return false
     }
-    const url = await dataUrl(file, mime)
-    if (!url) return false
+    const blob = input.store ? await input.store(file) : await blobReference(file)
     const sourcePath = input.getPathForFile?.(file) || undefined
     // Native clipboard images arrive with a fresh timestamped filename on every paste, so identical
     // clipboard content is matched on bytes alone.
@@ -112,7 +112,7 @@ export function createPromptInputV2Attachments(
       .some(
         (part) =>
           part.type === "image" &&
-          part.dataUrl === url &&
+          part.blob.id === blob.id &&
           (sourcePath
             ? part.sourcePath === sourcePath
             : !part.sourcePath && (clipboard || part.filename === file.name)),
@@ -127,7 +127,7 @@ export function createPromptInputV2Attachments(
       filename: file.name,
       sourcePath,
       mime,
-      dataUrl: url,
+      blob,
     }
     target.prompt.set([...target.prompt.current(), attachment], target.cursor)
     return true
@@ -219,20 +219,14 @@ export function createPromptInputV2Attachments(
   }
 }
 
-function dataUrl(file: File, mime: string) {
-  return new Promise<string>((resolve) => {
-    const reader = new FileReader()
-    reader.addEventListener("error", () => resolve(""))
-    reader.addEventListener("load", () => {
-      const value = typeof reader.result === "string" ? reader.result : ""
-      const index = value.indexOf(",")
-      resolve(index === -1 ? value : `data:${mime};base64,${value.slice(index + 1)}`)
-    })
-    reader.readAsDataURL(file)
-  })
-}
-
 const imageMimes = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"])
+
+async function blobReference(file: File) {
+  const id = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", await file.arrayBuffer())))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("")
+  return { id, url: URL.createObjectURL(file) }
+}
 const imageExtensions = new Map([
   ["gif", "image/gif"],
   ["jpeg", "image/jpeg"],

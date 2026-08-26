@@ -1,13 +1,16 @@
 import { Toaster, toast, type ToasterProps } from "solid-sonner"
+import { isRTL } from "@kobalte/core/i18n"
 import type { ComponentProps, JSX } from "solid-js"
 import { createContext, onCleanup, onMount, splitProps, useContext } from "solid-js"
 import { Portal } from "solid-js/web"
+import { useI18n } from "../../context/i18n"
 import "./button-v2.css"
 import "./toast-v2.css"
 
 export interface ToastV2RegionProps extends ToasterProps {}
 
 function ToastV2Region(props: ToastV2RegionProps) {
+  const i18n = useI18n()
   const [local, rest] = splitProps(props, ["class", "className", "style", "toastOptions", "swipeDirections"])
   onMount(() => {
     const sync = () => {
@@ -44,8 +47,8 @@ function ToastV2Region(props: ToastV2RegionProps) {
   return (
     <Portal>
       <Toaster
-        position="bottom-right"
-        offset={{ right: 32, bottom: 48 }}
+        position={isRTL(i18n.locale()) ? "bottom-left" : "bottom-right"}
+        offset={isRTL(i18n.locale()) ? { left: 32, bottom: 48 } : { right: 32, bottom: 48 }}
         mobileOffset={16}
         gap={12}
         duration={5000}
@@ -56,7 +59,7 @@ function ToastV2Region(props: ToastV2RegionProps) {
           ...local.toastOptions,
           unstyled: true,
           closeButton: true,
-          closeButtonAriaLabel: local.toastOptions?.closeButtonAriaLabel ?? "Dismiss",
+          closeButtonAriaLabel: local.toastOptions?.closeButtonAriaLabel ?? i18n.t("ui.common.dismiss"),
         }}
         {...rest}
       />
@@ -96,13 +99,14 @@ function ToastV2Actions(props: ComponentProps<"div">) {
 }
 
 function ToastV2CloseButton(props: ComponentProps<"button">) {
+  const i18n = useI18n()
   const toastId = useContext(ToastV2Context)
   const [local, rest] = splitProps(props, ["children", "onClick"])
   return (
     <button
       type="button"
       data-slot="toast-v2-close-button"
-      aria-label="Dismiss"
+      aria-label={i18n.t("ui.common.dismiss")}
       {...rest}
       onClick={(event) => {
         if (typeof local.onClick === "function") local.onClick(event)
