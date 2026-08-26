@@ -3,13 +3,15 @@ import { Effect } from "effect"
 import { Provider } from "@opencode-ai/core/provider"
 
 describe("Provider", () => {
-  test("loads Vertex native provider entrypoints", async () => {
+  test("loads bundled native provider entrypoints", async () => {
     const packages = [
+      "@opencode-ai/ai/providers/cerebras",
       "@opencode-ai/ai/providers/google-vertex",
       "@opencode-ai/ai/providers/google-vertex/gemini",
       "@opencode-ai/ai/providers/google-vertex/chat",
       "@opencode-ai/ai/providers/google-vertex/responses",
       "@opencode-ai/ai/providers/google-vertex/messages",
+      "@opencode-ai/ai/providers/togetherai",
     ]
 
     for (const specifier of packages) {

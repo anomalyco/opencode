@@ -613,6 +613,27 @@ interface ReferenceDraft {
 }
 ```
 
+### Generate
+
+Generate text with a selected model without creating a session, invoking tools, or adding to session history.
+
+```ts
+const review = await ctx.generate.text({
+  model: { providerID: "anthropic", id: "claude-sonnet-4-6" },
+  prompt: "Review this proposed action.",
+})
+```
+
+### Permissions
+
+Inspect or resolve pending permission requests.
+
+```ts
+const pending = await ctx.permission.list({ sessionID })
+const request = await ctx.permission.get({ sessionID, requestID })
+await ctx.permission.reply({ sessionID, requestID, reply: "once" })
+```
+
 ### Sessions
 
 Create or read a session.
@@ -620,6 +641,7 @@ Create or read a session.
 ```ts
 const created = await ctx.session.create({ title: "Review" })
 const session = await ctx.session.get({ sessionID })
+const messages = await ctx.session.context({ sessionID })
 ```
 
 Change the agent or model used by subsequent requests.
@@ -655,6 +677,7 @@ Schemas: [`Session.Info`](/api#schema-Session.Info), [`Model.Ref`](/api#schema-M
 interface SessionContext {
   create(input?: SessionCreateInput, requestOptions?: RequestOptions): Promise<SessionInfo>
   get(input: SessionGetInput, requestOptions?: RequestOptions): Promise<SessionInfo>
+  context(input: SessionContextInput, requestOptions?: RequestOptions): Promise<readonly SessionMessageInfo[]>
   switchAgent(input: SessionSwitchAgentInput, requestOptions?: RequestOptions): Promise<void>
   switchModel(input: SessionSwitchModelInput, requestOptions?: RequestOptions): Promise<void>
   prompt(input: SessionPromptInput, requestOptions?: RequestOptions): Promise<SessionInboxUser>
@@ -992,6 +1015,46 @@ interface SessionHookContext {
     callback: (event: SessionHooks[Name]) => Promise<void> | void,
     options?: { providerID?: string },
   ): Promise<Registration>
+}
+```
+
+### Permissions
+
+Review permission decisions after configured rules are evaluated and before an action runs or a permission prompt is
+published. Hooks run for `allow` and `ask` decisions. An explicit configured `deny` is final and does not invoke the
+hook.
+
+```ts
+await ctx.permission.hook("evaluate", async (event) => {
+  if (event.action === "read") return
+
+  const messages = await ctx.session.context({ sessionID: event.sessionID })
+  const review = await ctx.generate.text({
+    model: { providerID: "anthropic", id: "claude-sonnet-4-6" },
+    prompt: buildSafetyPrompt({ messages, action: event.action, resources: event.resources }),
+  })
+  const decision = parseDecision(review.text)
+
+  event.effect = decision.effect
+  event.message = decision.reason
+})
+```
+
+The hook may set `effect` to `allow`, `ask`, or `deny`. When set, `message` is included in an escalated permission
+request or used as the denial reason.
+
+#### Reference
+
+```ts
+interface PermissionEvaluation {
+  readonly sessionID: string
+  readonly agent?: string
+  readonly action: string
+  readonly resources: readonly string[]
+  readonly metadata?: Record<string, unknown>
+  readonly source?: { type: "tool"; messageID: string; id: string }
+  effect: "allow" | "ask" | "deny"
+  message?: string
 }
 ```
 

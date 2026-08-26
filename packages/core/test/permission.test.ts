@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Cause, Deferred, Effect, Fiber, Layer } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Layer } from "effect"
 import { Agent } from "@opencode-ai/core/agent"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -10,6 +10,7 @@ import { Location } from "@opencode-ai/core/location"
 import { Permission } from "@opencode-ai/core/permission"
 import { PermissionTable } from "@opencode-ai/core/permission/sql"
 import { PermissionSaved } from "@opencode-ai/core/permission/saved"
+import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -26,7 +27,15 @@ const current = Layer.succeed(
 )
 const it = testEffect(
   AppNodeBuilder.build(
-    LayerNode.group([Database.node, Bus.node, SessionStore.node, PermissionSaved.node, Agent.node, Permission.node]),
+    LayerNode.group([
+      Database.node,
+      Bus.node,
+      SessionStore.node,
+      PermissionSaved.node,
+      Agent.node,
+      PluginHooks.node,
+      Permission.node,
+    ]),
     [[Location.node, current]],
   ),
 )
@@ -112,31 +121,6 @@ describe("Permission", () => {
     }),
   )
 
-  it.effect("proves only unconditional configured allows", () =>
-    Effect.gen(function* () {
-      const service = yield* Permission.Service
-      const input = { sessionID: Session.ID.make("ses_test"), action: "shell" }
-
-      yield* setup([{ action: "shell", resource: "*", effect: "allow" }])
-      expect(yield* service.allowsAll(input)).toBe(true)
-
-      yield* setRules([
-        { action: "shell", resource: "*", effect: "allow" },
-        { action: "shell", resource: "rm *", effect: "deny" },
-      ])
-      expect(yield* service.allowsAll(input)).toBe(false)
-
-      yield* setRules([{ action: "shell", resource: "git *", effect: "allow" }])
-      expect(yield* service.allowsAll(input)).toBe(false)
-
-      yield* setRules([
-        { action: "shell", resource: "rm *", effect: "deny" },
-        { action: "shell", resource: "*", effect: "allow" },
-      ])
-      expect(yield* service.allowsAll(input)).toBe(true)
-    }),
-  )
-
   it.effect("evaluates against an explicit provider-turn agent", () =>
     Effect.gen(function* () {
       yield* setup([{ action: "read", resource: "*", effect: "allow" }])
@@ -169,6 +153,74 @@ describe("Permission", () => {
       const blocked = yield* service.assert(assertion()).pipe(Effect.flip)
       expect(blocked).toBeInstanceOf(Permission.BlockedError)
       expect(yield* service.list()).toEqual([])
+    }),
+  )
+
+  it.effect("lets plugins review allow and ask decisions without overriding configured denies", () =>
+    Effect.gen(function* () {
+      const hooks = yield* PluginHooks.Service
+      const seen: string[] = []
+      yield* hooks.register("permission", "evaluate", (event) =>
+        Effect.sync(() => {
+          seen.push(event.effect)
+          event.effect = event.action === "write" ? "deny" : "allow"
+          event.message = "Reviewed by policy"
+        }),
+      )
+      const service = yield* Permission.Service
+
+      yield* setup([{ action: "read", resource: "*", effect: "allow" }])
+      expect(yield* service.ask(assertion())).toMatchObject({ effect: "allow" })
+
+      yield* setRules([])
+      expect(yield* service.ask(assertion({ id: Permission.ID.create("per_ask") }))).toMatchObject({ effect: "allow" })
+      expect(yield* service.list()).toEqual([])
+
+      const blocked = yield* service
+        .assert(assertion({ id: Permission.ID.create("per_write"), action: "write" }))
+        .pipe(Effect.flip)
+      expect(blocked).toBeInstanceOf(Permission.BlockedError)
+      expect(blocked.message).toBe("Reviewed by policy")
+
+      yield* setRules([{ action: "read", resource: "*", effect: "deny" }])
+      expect(yield* service.ask(assertion({ id: Permission.ID.create("per_deny") }))).toMatchObject({ effect: "deny" })
+      expect(seen).toEqual(["allow", "ask", "ask"])
+    }),
+  )
+
+  it.effect("publishes the reviewer message when a plugin escalates to ask", () =>
+    Effect.gen(function* () {
+      yield* setup([{ action: "read", resource: "*", effect: "allow" }])
+      const hooks = yield* PluginHooks.Service
+      yield* hooks.register("permission", "evaluate", (event) =>
+        Effect.sync(() => {
+          event.effect = "ask"
+          event.message = "Confirm production access"
+        }),
+      )
+      const service = yield* Permission.Service
+      const result = yield* service.ask(assertion())
+
+      expect(result.effect).toBe("ask")
+      expect(yield* service.get(result.id)).toMatchObject({ message: "Confirm production access" })
+    }),
+  )
+
+  it.effect("allows cancellation while a permission reviewer is running", () =>
+    Effect.gen(function* () {
+      yield* setup([{ action: "read", resource: "*", effect: "allow" }])
+      const hooks = yield* PluginHooks.Service
+      const started = yield* Deferred.make<void>()
+      yield* hooks.register("permission", "evaluate", () =>
+        Deferred.succeed(started, undefined).pipe(Effect.andThen(Effect.never)),
+      )
+      const service = yield* Permission.Service
+      const fiber = yield* service.assert(assertion()).pipe(Effect.forkScoped)
+
+      yield* Deferred.await(started)
+      yield* Fiber.interrupt(fiber)
+      const exit = yield* Fiber.await(fiber)
+      expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBe(true)
     }),
   )
 

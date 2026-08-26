@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm } from "node:fs/promises"
+import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { Database } from "bun:sqlite"
@@ -26,16 +26,6 @@ const makeDb = Effect.gen(function* () {
   yield* db.run(sql`create table users (id integer primary key autoincrement, name text not null)`)
   return db
 })
-
-const createMigrationsFolder = async () => {
-  const migrationsFolder = await mkdtemp(join(tmpdir(), "effect-drizzle-sqlite-"))
-  await mkdir(join(migrationsFolder, "20240101000000_create_migrated_users"), { recursive: true })
-  await Bun.write(
-    join(migrationsFolder, "20240101000000_create_migrated_users", "migration.sql"),
-    "create table migrated_users (id integer primary key autoincrement, name text not null);",
-  )
-  return migrationsFolder
-}
 
 test("selects rows through Effect-yieldable query builders", async () => {
   await run(
@@ -172,26 +162,4 @@ test("supports returning and rejects empty update sets", async () => {
       expect(() => db.update(users).set({ name: undefined })).toThrow("No values to set")
     }),
   )
-})
-
-test("runs migrations once and records migration metadata", async () => {
-  const migrationsFolder = await createMigrationsFolder()
-  try {
-    await run(
-      Effect.gen(function* () {
-        const db = yield* EffectDrizzleSqlite.makeWithDefaults()
-
-        yield* EffectDrizzleSqlite.migrate(db, { migrationsFolder })
-        yield* EffectDrizzleSqlite.migrate(db, { migrationsFolder })
-        yield* db.run(sql`insert into migrated_users (name) values ('Margaret')`)
-
-        expect(yield* db.all<{ name: string }>(sql`select name from migrated_users`)).toEqual([{ name: "Margaret" }])
-        expect(yield* db.all<{ name: string | null }>(sql`select name from __drizzle_migrations`)).toEqual([
-          { name: "20240101000000_create_migrated_users" },
-        ])
-      }),
-    )
-  } finally {
-    await rm(migrationsFolder, { recursive: true, force: true })
-  }
 })

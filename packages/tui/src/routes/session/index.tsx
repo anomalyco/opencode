@@ -459,7 +459,7 @@ export function Session(props: { verticalTabsWidth: number }) {
   function isAwayFromBottom() {
     if (revealingOlderRows || revealingNewerRows || ensureAllRowsPending || navigationMessage()) return true
     if (visibleEnd() < rows.length) return true
-    return scroll.scrollTop < Math.max(0, scroll.scrollHeight - scroll.viewport.height) - 1
+    return scroll.scrollTop < Math.max(0, scroll.scrollHeight - scroll.viewport.height)
   }
   function updateAwayFromBottom() {
     const preserveWindow = revealingOlderRows || revealingNewerRows || !!ensureAllRowsPending
@@ -768,8 +768,13 @@ export function Session(props: { verticalTabsWidth: number }) {
       title: "Rename session",
       id: "session.rename",
       group: "Session",
-      slash: { name: "rename" },
-      run: () => DialogSessionRename.show(dialog, route.sessionID, session()?.title),
+      slash: { name: "rename", arguments: true as const },
+      run: (input?: string) => {
+        if (input === undefined) return DialogSessionRename.show(dialog, route.sessionID, session()?.title)
+        void client.api.session
+          .rename({ sessionID: route.sessionID, title: input.trim() })
+          .catch((error) => toast.error(error))
+      },
     },
     {
       title: "Jump to message",
@@ -1661,7 +1666,11 @@ function SessionPartView(props: { partRef: PartRef; message: (messageID: string)
       {(item) => (
         <Switch>
           <Match when={item().type === "text"}>
-            <TextPart part={item() as SessionMessageAssistantText} last={false} />
+            <TextPart
+              part={item() as SessionMessageAssistantText}
+              message={message() as SessionMessageAssistant}
+              last={false}
+            />
           </Match>
           <Match when={item().type === "reasoning"}>
             <ReasoningPart
@@ -1823,6 +1832,9 @@ function SessionGroupView(props: {
     })
   const grouped = createMemo(() => parts(props.refs))
   const pending = createMemo(() => parts(props.pending))
+  const completed = createMemo(
+    () => props.completed || (grouped().length > 0 && grouped().every((part) => part.time.completed !== undefined)),
+  )
   const label = createMemo(() => {
     const counts = grouped().reduce<Record<string, number>>((result, part) => {
       const tool = toolDisplay(part.name)
@@ -1833,7 +1845,7 @@ function SessionGroupView(props: {
     const tools = Object.entries(counts).map(
       ([name, count]) => `${count} ${count === 1 ? name : name === "search" ? "searches" : `${name}s`}`,
     )
-    return `${props.completed ? "Explored" : "Exploring"} — ${tools.join(", ")}`
+    return `${completed() ? "Explored" : "Exploring"} — ${tools.join(", ")}`
   })
   return (
     <Show when={grouped().length > 0 || pending().length > 0}>
@@ -1843,11 +1855,11 @@ function SessionGroupView(props: {
       >
         <Show when={grouped().length > 0}>
           <InlineToolRow
-            icon={props.completed ? "→" : "✱"}
+            icon={completed() ? "→" : "✱"}
             color={hover() ? theme.text.default : theme.text.subdued}
-            complete={props.completed}
+            complete={completed()}
             pending={label()}
-            spinner={!props.completed}
+            spinner={!completed()}
             onMouseOver={() => setHover(true)}
             onMouseOut={() => setHover(false)}
             onMouseUp={() => {
@@ -2475,7 +2487,7 @@ function ReasoningHeader(props: {
   )
 }
 
-function TextPart(props: { last: boolean; part: SessionMessageAssistantText }) {
+function TextPart(props: { last: boolean; part: SessionMessageAssistantText; message: SessionMessageAssistant }) {
   const ctx = use()
   const theme = useTheme()
   const { currentSyntax: syntax } = useThemes()
@@ -2485,7 +2497,7 @@ function TextPart(props: { last: boolean; part: SessionMessageAssistantText }) {
       <box paddingLeft={3} flexShrink={0}>
         <markdown
           syntaxStyle={syntax()}
-          streaming={true}
+          streaming={props.message.time.completed === undefined}
           internalBlockMode="top-level"
           content={props.part.text.trim()}
           tableOptions={{ style: "grid", cellPaddingX: 1 }}

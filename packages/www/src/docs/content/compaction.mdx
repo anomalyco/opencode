@@ -67,7 +67,7 @@ Add `compaction` to any [OpenCode configuration file](/config):
 
 | Field         | Default | V2 behavior                                                                                                                                   |
 | ------------- | ------: | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `auto`        |  `true` | Runs the preflight context-size check. It does not disable manual compaction or one-shot provider-overflow recovery.                          |
+| `auto`        |  `true` | Enables preflight context-size checks and one-shot provider-overflow recovery. Disabling it does not affect manual compaction.                |
 | `keep.tokens` | `15000` | Approximate number of tokens from the newest serialized conversation context to retain beside the summary.                                    |
 | `buffer`      | `20000` | Safety reserve below an explicit input limit. Without one, it is the minimum context reserve and the model output allowance wins when larger. |
 

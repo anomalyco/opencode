@@ -102,6 +102,38 @@ describe("AI.Usage", () => {
     expect(error.reason._tag).toBe("InvalidProviderOutput")
   })
 
+  test("sseFraming ignores retry directives without ending the stream", async () => {
+    const encoder = new TextEncoder()
+    const frames = await Effect.runPromise(
+      ProviderShared.sseFraming(
+        Stream.make(
+          encoder.encode("retry: 1000\n\n"),
+          encoder.encode('data: {"first":true}\n\n'),
+          encoder.encode("retry: 2000\n\n"),
+          encoder.encode('data: {"second":true}\n\n'),
+        ).pipe(Stream.rechunk(1)),
+      ).pipe(Stream.runCollect),
+    )
+
+    expect(Array.from(frames)).toEqual(['{"first":true}', '{"second":true}'])
+  })
+
+  test("sseFraming preserves event data around retry directives", async () => {
+    const encoder = new TextEncoder()
+    const frames = await Effect.runPromise(
+      ProviderShared.sseFraming(
+        Stream.make(
+          encoder.encode("event: update\ndata: first\n"),
+          encoder.encode("retry: 1000\n"),
+          encoder.encode("data: second\n\n"),
+        ).pipe(Stream.rechunk(1)),
+        new Set(["update"]),
+      ).pipe(Stream.runCollect),
+    )
+
+    expect(Array.from(frames)).toEqual(["first\nsecond"])
+  })
+
   test("visibleOutputTokens clamps reasoning > output to zero", () => {
     expect(new Usage({ outputTokens: 10, reasoningTokens: 4 }).visibleOutputTokens).toBe(6)
     expect(new Usage({ outputTokens: 10 }).visibleOutputTokens).toBe(10)

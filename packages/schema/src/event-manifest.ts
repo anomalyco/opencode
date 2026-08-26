@@ -5,6 +5,7 @@ import { Agent } from "./agent.js"
 import { Catalog } from "./catalog.js"
 import { Command } from "./command.js"
 import { Config } from "./config.js"
+import { Credential } from "./credential.js"
 import { Durable } from "./durable-event-manifest.js"
 import { Event } from "./event.js"
 import { FileSystem } from "./filesystem.js"
@@ -39,6 +40,7 @@ const coreDefinitions = Event.inventory(...SessionEvent.Definitions)
 
 const foundationDefinitions = Event.inventory(
   ...ModelsDev.Event.Definitions,
+  ...Credential.Event.Definitions,
   ...Integration.Event.Definitions,
   ...Catalog.Event.Definitions,
   ...Agent.Event.Definitions,
@@ -50,6 +52,7 @@ const featureDefinitions = Event.inventory(
   ...Reference.Event.Definitions,
   ...Permission.Event.Definitions,
   ...Plugin.Event.Definitions,
+  ...Project.Event.Definitions,
   ...Worktree.Event.Definitions,
   ...Command.Event.Definitions,
   ...Config.Event.Definitions,
@@ -85,7 +88,6 @@ export const Definitions = Event.inventory(
   ...McpEvent.Definitions,
   ...LegacyEventV1.Definitions,
   ...FileSystemV1.Event.Definitions,
-  ...Project.Event.Definitions,
   ...SessionStatusEvent.Definitions,
   ...SessionCompactionEvent.Definitions,
   ...VcsEvent.Definitions,

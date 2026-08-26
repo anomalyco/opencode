@@ -288,10 +288,30 @@ export function createMermaidCodeBlockRenderer(
     } catch (error) {
       if (error instanceof MermaidSyntaxError) {
         const previous = key ? lastGood.get(key) : undefined
-        if (!previous || previous.kind !== kind) return undefined
-        const diagram = new StaticDiagramRenderable(ctx, previous)
-        claimLastGood(key!, previous, diagram, lastGood)
-        return diagram
+        if (previous?.kind === kind) {
+          const diagram = new StaticDiagramRenderable(ctx, previous)
+          claimLastGood(key!, previous, diagram, lastGood)
+          return diagram
+        }
+
+        const lines = token.text.split("\n")
+        if (error.lineNumber <= 2 || lines.slice(error.lineNumber).some((line) => line.trim())) return undefined
+
+        try {
+          const prepared = prepareDiagram(
+            kind,
+            lines.slice(0, error.lineNumber - 1).join("\n"),
+            options,
+            layoutMaxWidth,
+          )
+          if (!prepared.height) return undefined
+          const diagram = new StaticDiagramRenderable(ctx, prepared)
+          if (key) claimLastGood(key, prepared, diagram, lastGood)
+          return diagram
+        } catch (error) {
+          if (error instanceof MermaidSyntaxError || error instanceof DiagramCanvasSizeError) return undefined
+          throw error
+        }
       }
       if (error instanceof DiagramCanvasSizeError) return undefined
       throw error

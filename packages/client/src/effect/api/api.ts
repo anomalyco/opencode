@@ -1333,6 +1333,15 @@ export type CredentialUpdateOperation<E = never> = (
   input: CredentialUpdateInput,
 ) => Effect.Effect<CredentialUpdateOutput, E>
 
+export type CredentialActivateInput = {
+  readonly credentialID: Credential.ID
+  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+}
+export type CredentialActivateOutput = void
+export type CredentialActivateOperation<E = never> = (
+  input: CredentialActivateInput,
+) => Effect.Effect<CredentialActivateOutput, E>
+
 export type CredentialRemoveInput = {
   readonly credentialID: Credential.ID
   readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
@@ -1344,6 +1353,7 @@ export type CredentialRemoveOperation<E = never> = (
 
 export interface CredentialApi<E = never> {
   readonly update: CredentialUpdateOperation<E>
+  readonly activate: CredentialActivateOperation<E>
   readonly remove: CredentialRemoveOperation<E>
 }
 

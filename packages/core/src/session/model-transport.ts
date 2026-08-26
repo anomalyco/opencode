@@ -50,6 +50,7 @@ interface Channel {
 interface State {
   readonly lock: Semaphore.Semaphore
   closed: boolean
+  httpFallback: boolean
   channel?: Channel
 }
 
@@ -119,7 +120,7 @@ export const makeLayer = (connector: WebSocketConnector) =>
       const state = (sessionID: SessionSchema.ID) => {
         const current = states.get(sessionID)
         if (current) return current
-        const created = { lock: Semaphore.makeUnsafe(1), closed: false }
+        const created = { lock: Semaphore.makeUnsafe(1), closed: false, httpFallback: false }
         states.set(sessionID, created)
         return created
       }
@@ -241,7 +242,9 @@ export const makeLayer = (connector: WebSocketConnector) =>
                           channel.active?.lifecycle.delivery === "terminal" ||
                           (error.reason._tag === "Transport" && error.reason.code === "queue-overflow")
                             ? "accepted"
-                            : "ambiguous",
+                            : error.reason._tag === "Transport" && error.reason.code === "1009"
+                              ? "rejected"
+                              : "ambiguous",
                       }),
                     ),
               ),
@@ -274,6 +277,7 @@ export const makeLayer = (connector: WebSocketConnector) =>
             phase: "queue",
             delivery: "not-sent",
           })
+        if (owner.httpFallback) return fallback(exchange)
         const key = affinity(exchange)
         const now = yield* Clock.currentTimeMillis
         const current = owner.channel
@@ -420,6 +424,26 @@ export const makeLayer = (connector: WebSocketConnector) =>
               yield* poison(owner, channel, error)
             }),
           ),
+          Stream.catch((error) => {
+            if (
+              error.reason._tag !== "Transport" ||
+              error.reason.code !== "1009" ||
+              error.reason.delivery !== "rejected"
+            )
+              return Stream.fail(error)
+            owner.httpFallback = true
+            return Stream.unwrap(
+              Effect.logWarning("session websocket request too large; using http", {
+                sessionTransport: "websocket",
+                phase: "close",
+                delivery: "rejected",
+                code: error.reason.code,
+              }).pipe(
+                Effect.andThen(metric("fallback", { reason: "message_too_large" })),
+                Effect.as(exchange.fallback()),
+              ),
+            )
+          }),
         )
         const complete = Effect.sync(() => {
           if (owner.channel !== channel || channel.pending?.token !== token) return

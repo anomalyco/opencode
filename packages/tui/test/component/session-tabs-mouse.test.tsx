@@ -5,7 +5,10 @@ import { expect, test } from "bun:test"
 import { createSignal } from "solid-js"
 import { ConfigProvider } from "../../src/config"
 import { EMPTY_SESSION_TAB_STATUS, SessionTabs, type SessionTabsController } from "../../src/component/session-tabs"
+import { Keymap } from "../../src/context/keymap"
 import { ThemeProvider } from "../../src/context/theme"
+import { DialogProvider } from "../../src/ui/dialog"
+import { ToastProvider } from "../../src/ui/toast"
 import { emptyThemeSource } from "../fixture/fixture"
 import { TestTuiContexts } from "../fixture/tui-environment"
 import { createTuiResolvedConfig } from "../fixture/tui-runtime"
@@ -57,6 +60,110 @@ test("releasing a transcript selection over tab controls does not activate them"
 
     await app.mockMouse.click(58, 0)
     expect(added()).toBe(1)
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("the tab context menu keeps preview tabs open without offering promotion for permanent tabs", async () => {
+  const [active, setActive] = createSignal("first")
+  const promoted: string[] = []
+  const controller = {
+    tabs: () => [
+      { sessionID: "first", title: "First" },
+      { sessionID: "second", title: "Second" },
+    ],
+    current: active,
+    select: setActive,
+    close() {},
+    move() {},
+    isPreview: (sessionID: string) => sessionID === "second",
+    promote: (sessionID: string) => promoted.push(sessionID),
+    status: () => EMPTY_SESSION_TAB_STATUS,
+  } satisfies SessionTabsController
+  const app = await testRender(
+    () => (
+      <TestTuiContexts>
+        <ConfigProvider config={createTuiResolvedConfig({ tabs: { enabled: true } })}>
+          <Keymap.Provider>
+            <ThemeProvider mode="dark" source={emptyThemeSource}>
+              <ToastProvider>
+                <DialogProvider>
+                  <SessionTabs controller={controller} animations={false} />
+                </DialogProvider>
+              </ToastProvider>
+            </ThemeProvider>
+          </Keymap.Provider>
+        </ConfigProvider>
+      </TestTuiContexts>
+    ),
+    { width: 60, height: 8 },
+  )
+
+  try {
+    app.renderer.start()
+    await app.waitForFrame((frame) => frame.includes("Second"))
+
+    await app.mockMouse.click(5, 0, MouseButton.RIGHT)
+    await app.waitForFrame((frame) => frame.includes("Rename"))
+    expect(app.captureCharFrame()).not.toContain("Keep open")
+
+    await app.mockMouse.click(5, 0)
+    await app.mockMouse.click(40, 0, MouseButton.RIGHT)
+    await app.waitForFrame((frame) => frame.includes("Keep open"))
+    const frame = app.captureCharFrame().split("\n")
+    const row = frame.findIndex((line) => line.includes("Keep open"))
+    await app.mockMouse.click(frame[row]!.indexOf("Keep open"), row)
+
+    expect(promoted).toEqual(["second"])
+    expect(active()).toBe("first")
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("double-clicking a preview tab keeps it open without promoting permanent tabs", async () => {
+  const [active, setActive] = createSignal("first")
+  const promoted: string[] = []
+  const controller = {
+    tabs: () => [
+      { sessionID: "first", title: "First" },
+      { sessionID: "second", title: "Second" },
+    ],
+    current: active,
+    select: setActive,
+    close() {},
+    move() {},
+    isPreview: (sessionID: string) => sessionID === "second",
+    promote: (sessionID: string) => promoted.push(sessionID),
+    status: () => EMPTY_SESSION_TAB_STATUS,
+  } satisfies SessionTabsController
+  const app = await testRender(
+    () => (
+      <TestTuiContexts>
+        <ConfigProvider config={createTuiResolvedConfig({ tabs: { enabled: true } })}>
+          <ThemeProvider mode="dark" source={emptyThemeSource}>
+            <SessionTabs controller={controller} animations={false} />
+          </ThemeProvider>
+        </ConfigProvider>
+      </TestTuiContexts>
+    ),
+    { width: 60, height: 8 },
+  )
+
+  try {
+    app.renderer.start()
+    await app.waitForFrame((frame) => frame.includes("Second"))
+
+    await app.mockMouse.doubleClick(5, 0)
+    expect(promoted).toEqual([])
+
+    await app.mockMouse.click(40, 0)
+    expect(active()).toBe("second")
+    expect(promoted).toEqual([])
+
+    await app.mockMouse.click(40, 0)
+    expect(promoted).toEqual(["second"])
   } finally {
     app.renderer.destroy()
   }

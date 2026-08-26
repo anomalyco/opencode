@@ -26,7 +26,7 @@
         "headers": {
           "content-type": "application/json"
         },
-        "body": "{\"model\":\"gpt-5.5\",\"input\":[{\"role\":\"system\",\"content\":\"Show concise reasoning when the provider supports visible reasoning summaries.\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Think briefly, then reply exactly with: Hello!\"}]}],\"store\":false,\"include\":[\"reasoning.encrypted_content\"],\"reasoning\":{\"effort\":\"low\",\"summary\":\"auto\"},\"text\":{\"verbosity\":\"low\"},\"max_output_tokens\":120,\"stream\":true}"
+        "body": "{\"model\":\"gpt-5.5\",\"input\":[{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Think briefly, then reply exactly with: Hello!\"}]}],\"store\":false,\"include\":[\"reasoning.encrypted_content\"],\"reasoning\":{\"effort\":\"low\",\"summary\":\"auto\"},\"text\":{\"verbosity\":\"low\"},\"max_output_tokens\":120,\"stream\":true,\"instructions\":\"Show concise reasoning when the provider supports visible reasoning summaries.\"}"
       },
       "response": {
         "status": 200,

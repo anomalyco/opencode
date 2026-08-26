@@ -6749,6 +6749,90 @@
         "summary": "Remove credential"
       }
     },
+    "/api/credential/{credentialID}/activate": {
+      "post": {
+        "tags": ["credential"],
+        "operationId": "v2.credential.activate",
+        "parameters": [
+          {
+            "name": "credentialID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Activate a stored integration credential.",
+        "summary": "Activate credential"
+      }
+    },
     "/api/project": {
       "get": {
         "tags": ["project"],
@@ -6792,6 +6876,89 @@
         },
         "description": "List known projects.",
         "summary": "List projects"
+      }
+    },
+    "/api/project/{projectID}": {
+      "patch": {
+        "tags": ["project"],
+        "operationId": "v2.project.update",
+        "parameters": [
+          {
+            "name": "projectID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Project",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Project"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ProjectNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Update project display metadata and workspace commands.",
+        "summary": "Update project",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "icon": {
+                    "$ref": "#/components/schemas/Project.Icon"
+                  },
+                  "commands": {
+                    "$ref": "#/components/schemas/Project.Commands"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
       }
     },
     "/api/project/current": {
@@ -9568,6 +9735,735 @@
         "x-websocket": true
       }
     },
+    "/api/experimental/session/{sessionID}/terminal": {
+      "get": {
+        "tags": ["persistentPty"],
+        "operationId": "server.experimental.persistentPty.list",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PersistentPty.Info"
+                      }
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["persistentPty"],
+        "operationId": "server.experimental.persistentPty.create",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/PersistentPty.Info"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PersistentPty.CreateInput"
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
+    "/api/experimental/persistent-pty/shutdown": {
+      "post": {
+        "tags": ["persistentPty"],
+        "operationId": "server.experimental.persistentPty.shutdown",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/experimental/persistent-pty/{ptyID}": {
+      "get": {
+        "tags": ["persistentPty"],
+        "operationId": "server.experimental.persistentPty.get",
+        "parameters": [
+          {
+            "name": "ptyID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^pty"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/PersistentPty.Info"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "PtyNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PtyNotFoundErrorEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": ["persistentPty"],
+        "operationId": "server.experimental.persistentPty.update",
+        "parameters": [
+          {
+            "name": "ptyID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^pty"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/PersistentPty.Info"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "PtyNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PtyNotFoundErrorEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PersistentPty.UpdateInput"
+              }
+            }
+          },
+          "required": true
+        }
+      },
+      "delete": {
+        "tags": ["persistentPty"],
+        "operationId": "server.experimental.persistentPty.remove",
+        "parameters": [
+          {
+            "name": "ptyID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^pty"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "PtyNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PtyNotFoundErrorEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/experimental/persistent-pty/{ptyID}/snapshot": {
+      "get": {
+        "tags": ["persistentPty"],
+        "operationId": "server.experimental.persistentPty.snapshot",
+        "parameters": [
+          {
+            "name": "ptyID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^pty"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/PersistentPty.Snapshot"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "PtyNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PtyNotFoundErrorEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/experimental/persistent-pty/{ptyID}/connect-token": {
+      "post": {
+        "tags": ["persistentPty"],
+        "operationId": "server.experimental.persistentPty.connectToken",
+        "parameters": [
+          {
+            "name": "ptyID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^pty"
+            },
+            "required": true
+          },
+          {
+            "name": "x-opencode-ticket",
+            "in": "header",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/PtyTicket.ConnectToken"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ForbiddenError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "PtyNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PtyNotFoundErrorEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/experimental/persistent-pty/{ptyID}/connect": {
+      "get": {
+        "tags": ["persistentPty"],
+        "operationId": "v2.persistentPty.connect",
+        "parameters": [
+          {
+            "name": "ptyID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^pty"
+            },
+            "required": true
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "role",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "attachment_id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "takeover",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "input_protocol",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ticket",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ForbiddenError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "PtyNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PtyNotFoundErrorEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Stream persistent PTY output through the OpenCode server.",
+        "summary": "Connect to a persistent PTY",
+        "x-websocket": true
+      }
+    },
     "/api/shell": {
       "get": {
         "tags": ["shell"],
@@ -10464,7 +11360,7 @@
             }
           }
         },
-        "description": "Create a worktree for a project.",
+        "description": "Create a worktree for a project and run its configured setup script.",
         "summary": "Create worktree",
         "requestBody": {
           "content": {
@@ -10476,6 +11372,9 @@
                     "type": "string"
                   },
                   "from": {
+                    "type": "string"
+                  },
+                  "branch": {
                     "type": "string"
                   },
                   "directory": {
@@ -10961,6 +11860,129 @@
         },
         "description": "List uncommitted working-copy changes relative to the requested location.",
         "summary": "VCS status"
+      }
+    },
+    "/api/vcs/branches": {
+      "get": {
+        "tags": ["vcs"],
+        "operationId": "v2.vcs.branches",
+        "parameters": [
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "location": {
+                      "$ref": "#/components/schemas/Location.InfoEncoded"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Vcs.BranchList"
+                    }
+                  },
+                  "required": ["location", "data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "List local and remote branches available at the requested location.",
+        "summary": "VCS branches"
       }
     },
     "/api/vcs/diff": {
@@ -14339,6 +15361,9 @@
           },
           "requireFinishReason": {
             "type": "boolean"
+          },
+          "requireAssistantAfterTool": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false
@@ -14581,6 +15606,9 @@
           },
           "source": {
             "$ref": "#/components/schemas/Permission.Source"
+          },
+          "message": {
+            "type": "string"
           }
         },
         "required": ["id", "sessionID", "action", "resources"],
@@ -14663,6 +15691,201 @@
           }
         },
         "required": ["id", "projectID", "action", "resource"],
+        "additionalProperties": false
+      },
+      "PersistentPty.CreateInput": {
+        "type": "object",
+        "properties": {
+          "command": {
+            "type": "string"
+          },
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "cwd": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "env": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "size": {
+            "type": "object",
+            "properties": {
+              "cols": {
+                "type": "integer",
+                "exclusiveMinimum": 0
+              },
+              "rows": {
+                "type": "integer",
+                "exclusiveMinimum": 0
+              }
+            },
+            "required": ["cols", "rows"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["command", "args", "cwd", "title", "env"],
+        "additionalProperties": false
+      },
+      "PersistentPty.Info": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^pty"
+          },
+          "title": {
+            "type": "string"
+          },
+          "command": {
+            "type": "string"
+          },
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "cwd": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["running", "exited"]
+          },
+          "pid": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "exitCode": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "sessionID": {
+            "type": "string",
+            "pattern": "^ses"
+          },
+          "foregroundProcess": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "size": {
+            "type": "object",
+            "properties": {
+              "cols": {
+                "type": "integer",
+                "exclusiveMinimum": 0
+              },
+              "rows": {
+                "type": "integer",
+                "exclusiveMinimum": 0
+              }
+            },
+            "required": ["cols", "rows"],
+            "additionalProperties": false
+          },
+          "output": {
+            "type": "object",
+            "properties": {
+              "head": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "tail": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": ["head", "tail"],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "command",
+          "args",
+          "cwd",
+          "status",
+          "pid",
+          "sessionID",
+          "foregroundProcess",
+          "size",
+          "output"
+        ],
+        "additionalProperties": false
+      },
+      "PersistentPty.Snapshot": {
+        "type": "object",
+        "properties": {
+          "info": {
+            "$ref": "#/components/schemas/PersistentPty.Info"
+          },
+          "text": {
+            "type": "string"
+          },
+          "checkpoint": {
+            "type": "string",
+            "format": "byte",
+            "contentEncoding": "base64"
+          },
+          "cursor": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "y": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": ["x", "y"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["info", "text", "checkpoint", "cursor"],
+        "additionalProperties": false
+      },
+      "PersistentPty.UpdateInput": {
+        "type": "object",
+        "properties": {
+          "attachmentID": {
+            "type": "string"
+          },
+          "size": {
+            "type": "object",
+            "properties": {
+              "cols": {
+                "type": "integer",
+                "exclusiveMinimum": 0
+              },
+              "rows": {
+                "type": "integer",
+                "exclusiveMinimum": 0
+              }
+            },
+            "required": ["cols", "rows"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["size"],
         "additionalProperties": false
       },
       "Plugin.Info": {
@@ -14863,6 +16086,23 @@
       "Project.Vcs": {
         "type": "string",
         "enum": ["git", "hg"]
+      },
+      "ProjectNotFoundErrorEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["ProjectNotFoundError"]
+          },
+          "projectID": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "projectID", "message"],
+        "additionalProperties": false
       },
       "Prompt.AgentAttachment": {
         "type": "object",
@@ -17122,6 +18362,12 @@
         },
         "additionalProperties": false
       },
+      "Vcs.BranchList": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
       "Vcs.FileStatus": {
         "type": "object",
         "properties": {
@@ -17367,6 +18613,10 @@
     {
       "name": "pty",
       "description": "Experimental location-scoped PTY routes."
+    },
+    {
+      "name": "persistentPty",
+      "description": "Prototype persistent PTY routes."
     },
     {
       "name": "shell",

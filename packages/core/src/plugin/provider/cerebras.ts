@@ -7,20 +7,12 @@ export const CerebrasPlugin = define({
   effect: Effect.fn(function* (ctx) {
     yield* ctx.catalog.transform((evt) => {
       for (const item of evt.provider.list()) {
-        if (!Provider.isAISDK(item.provider.package)) continue
-        if (Provider.packageName(item.provider.package) !== "@ai-sdk/cerebras") continue
+        const name = Provider.packageName(item.provider.package)
+        if (name !== "@ai-sdk/cerebras" && name !== "@opencode-ai/ai/providers/cerebras") continue
         evt.provider.update(item.provider.id, (provider) => {
           provider.headers = { ...provider.headers, "X-Cerebras-3rd-Party-Integration": "opencode" }
         })
       }
     })
-    yield* ctx.aisdk.hook(
-      "sdk",
-      Effect.fn(function* (evt) {
-        if (evt.package !== "@ai-sdk/cerebras") return
-        const mod = yield* Effect.promise(() => import("@ai-sdk/cerebras"))
-        evt.sdk = mod.createCerebras(evt.options)
-      }),
-    )
   }),
 })

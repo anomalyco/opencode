@@ -2996,7 +2996,7 @@ describe("V2 mini transport", () => {
     await transport.close()
   })
 
-  test("refreshes catalogs on connection and location-scoped invalidations", async () => {
+  test("refreshes catalogs on connection, location-scoped invalidations, and global credential switches", async () => {
     const events = feed()
     events.push(connected())
     const client = sdk({ streams: [events] })
@@ -3031,6 +3031,19 @@ describe("V2 mini transport", () => {
         data: {},
       })
     events.push({
+      id: "evt_credential.updated",
+      created: 0,
+      type: "credential.updated",
+      data: {},
+    })
+    for (const credentialID of ["credential", null])
+      events.push({
+        id: `evt_credential.switched.${credentialID}`,
+        created: 0,
+        type: "credential.switched",
+        data: { credentialID, integrationID: "integration" },
+      })
+    events.push({
       id: "evt_foreign_catalog",
       created: 0,
       type: "catalog.updated",
@@ -3044,10 +3057,10 @@ describe("V2 mini transport", () => {
       location: { directory: "/project", workspaceID: "work-2" },
       data: {},
     })
-    while (refreshes < 7) await Bun.sleep(0)
+    while (refreshes < 9) await Bun.sleep(0)
     await Bun.sleep(0)
 
-    expect(refreshes).toBe(7)
+    expect(refreshes).toBe(9)
     await transport.close()
   })
 

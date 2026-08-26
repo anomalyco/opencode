@@ -96,7 +96,17 @@ const layer = Layer.effect(
 
     const announcing = new Set<string>()
     const persist = Effect.fnUntraced(function* (project: Resolved) {
+      const previous = yield* db
+        .select({ canonical: ProjectTable.worktree })
+        .from(ProjectTable)
+        .where(eq(ProjectTable.id, project.id))
+        .get()
+        .pipe(Effect.orDie)
       yield* upsertProject(db, project).pipe(Effect.orDie)
+      if (previous && previous.canonical !== project.canonical) {
+        const row = yield* db.select().from(ProjectTable).where(eq(ProjectTable.id, project.id)).get().pipe(Effect.orDie)
+        if (row) yield* bus.publish(ProjectSchema.Event.Updated, fromRow(row))
+      }
       if (!project.vcs) return project
       const directories: Array<{ projectID: ID; directory: AbsolutePath; strategy?: string }> = [
         { projectID: project.id, directory: project.canonical },

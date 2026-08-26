@@ -103,6 +103,7 @@ export type Outcome =
   | Pick<SessionMessage.CompactionFailed, "status" | "error">
 
 export interface Interface extends State.Transformable<Draft> {
+  readonly enabled: () => boolean
   readonly required: (input: RequiredInput) => boolean
   readonly compact: (input: AutoInput) => Effect.Effect<Outcome>
   readonly compactManual: (input: ManualInput) => Effect.Effect<Outcome>
@@ -405,6 +406,7 @@ const make = (dependencies: Dependencies) => {
   return Service.of({
     transform: state.transform,
     reload: state.reload,
+    enabled: () => state.get().auto,
     required,
     compact,
     compactManual,

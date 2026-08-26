@@ -48,6 +48,7 @@ const builtins = new Map<string, () => Promise<unknown>>([
   ["@opencode-ai/ai/providers/azure", () => import("@opencode-ai/ai/providers/azure")],
   ["@opencode-ai/ai/providers/azure/chat", () => import("@opencode-ai/ai/providers/azure/chat")],
   ["@opencode-ai/ai/providers/azure/responses", () => import("@opencode-ai/ai/providers/azure/responses")],
+  ["@opencode-ai/ai/providers/cerebras", () => import("@opencode-ai/ai/providers/cerebras")],
   ["@opencode-ai/ai/providers/google", () => import("@opencode-ai/ai/providers/google")],
   ["@opencode-ai/ai/providers/google-vertex", () => import("@opencode-ai/ai/providers/google-vertex")],
   ["@opencode-ai/ai/providers/google-vertex/gemini", () => import("@opencode-ai/ai/providers/google-vertex/gemini")],
@@ -65,6 +66,7 @@ const builtins = new Map<string, () => Promise<unknown>>([
   ["@opencode-ai/ai/providers/openai/responses", () => import("@opencode-ai/ai/providers/openai/responses")],
   ["@opencode-ai/ai/providers/openai-compatible", () => import("@opencode-ai/ai/providers/openai-compatible")],
   ["@opencode-ai/ai/providers/openrouter", () => import("@opencode-ai/ai/providers/openrouter")],
+  ["@opencode-ai/ai/providers/togetherai", () => import("@opencode-ai/ai/providers/togetherai")],
   ["@opencode-ai/ai/providers/xai", () => import("@opencode-ai/ai/providers/xai")],
 ])
 

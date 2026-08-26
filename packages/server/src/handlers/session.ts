@@ -1,5 +1,6 @@
 import { Session } from "@opencode-ai/core/session"
 import { SessionStats } from "@opencode-ai/core/session/stats"
+import { SessionTitle } from "@opencode-ai/core/session/title"
 import { SessionTransfer } from "@opencode-ai/core/session/transfer"
 import { InstructionEntry } from "@opencode-ai/core/session/instruction-entry"
 import { DateTime, Effect, Stream } from "effect"
@@ -247,9 +248,14 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.rename",
         Effect.fn(function* (ctx) {
-          yield* session
-            .rename({ sessionID: ctx.params.sessionID, title: ctx.payload.title })
-            .pipe(Effect.catchTag("Session.NotFoundError", missingSession))
+          if (ctx.payload.title) {
+            yield* session
+              .rename({ sessionID: ctx.params.sessionID, title: ctx.payload.title })
+              .pipe(Effect.catchTag("Session.NotFoundError", missingSession))
+            return HttpApiSchema.NoContent.make()
+          }
+          const title = yield* SessionTitle.Service
+          yield* title.generate(ctx.params.sessionID)
           return HttpApiSchema.NoContent.make()
         }),
       )

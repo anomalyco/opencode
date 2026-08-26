@@ -332,8 +332,8 @@ const layer = Layer.effect(
       // a blocked first step leaves pending inputs untouched.
       yield* InstructionState.prepare(db, bus, selected.instructions, selected.session.id)
       const promoted = promotable ? yield* SessionInbox.promote(db, bus, selected.session.id, promotable) : 0
-      if (promoted > 0)
-        yield* FiberMap.run(titles, sessionID, title.generateForFirstPrompt(sessionID).pipe(Effect.ignore), {
+      if (promoted > 0 && !selected.session.parentID && SessionTitle.isUntitled(selected.session))
+        yield* FiberMap.run(titles, sessionID, title.generate(sessionID).pipe(Effect.ignore), {
           onlyIfMissing: true,
         })
       // Promoted input opens a fresh step allowance.
@@ -508,6 +508,7 @@ const layer = Layer.effect(
           // restart the step instead of surfacing the provider error.
           if (
             recoverOverflow &&
+            compaction.enabled() &&
             !publisher.record().outputStarted &&
             isContextOverflowFailure(overflowFailure ?? streamFailure) &&
             (yield* restore(compaction.compact(compactionInput))).status === "completed"

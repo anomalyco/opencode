@@ -149,6 +149,23 @@ describe("Bus", () => {
     }),
   )
 
+  it.effect("omits ambient and explicit locations for global events", () =>
+    Effect.gen(function* () {
+      const bus = yield* Bus.Service
+      const event = yield* bus.publish(
+        GlobalMessage,
+        { text: "hello" },
+        {
+          global: true,
+          location: { directory: AbsolutePath.make("explicit"), workspaceID: Workspace.ID.make("wrk_explicit") },
+        },
+      )
+
+      expect(event).not.toHaveProperty("location")
+      expect(event.type).toBe("test.global")
+    }),
+  )
+
   itWithoutLocation.effect("omits location when no location is available", () =>
     Effect.gen(function* () {
       const bus = yield* Bus.Service

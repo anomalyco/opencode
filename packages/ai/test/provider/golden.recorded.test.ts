@@ -1,5 +1,6 @@
 import * as Anthropic from "../../src/providers/anthropic.js"
 import * as AnthropicCompatible from "../../src/providers/anthropic-compatible.js"
+import { Cerebras, TogetherAI } from "../../src/providers/index.js"
 import { CloudflareAIGateway, CloudflareWorkersAI } from "../../src/providers/cloudflare.js"
 import * as Google from "../../src/providers/google.js"
 import * as OpenAI from "../../src/providers/openai.js"
@@ -47,11 +48,10 @@ const cloudflareWorkersAITools = cloudflareWorkers.model("@cf/openai/gpt-oss-20b
 const deepseek = OpenAICompatible.deepseek
   .configure({ apiKey: process.env.DEEPSEEK_API_KEY ?? "fixture" })
   .model("deepseek-chat")
-const together = OpenAICompatible.togetherai
-  .configure({
-    apiKey: process.env.TOGETHER_AI_API_KEY ?? "fixture",
-  })
-  .model("meta-llama/Llama-3.3-70B-Instruct-Turbo")
+const together = TogetherAI.configure({
+  apiKey: process.env.TOGETHER_API_KEY ?? process.env.TOGETHER_AI_API_KEY ?? "fixture",
+}).model("meta-llama/Llama-3.3-70B-Instruct-Turbo")
+const cerebras = Cerebras.configure({ apiKey: process.env.CEREBRAS_API_KEY ?? "fixture" }).model("gpt-oss-120b")
 const groq = OpenAICompatible.groq
   .configure({ apiKey: process.env.GROQ_API_KEY ?? "fixture" })
   .model("llama-3.3-70b-versatile")
@@ -193,8 +193,27 @@ describeRecordedGoldenScenarios([
     name: "TogetherAI Llama 3.3 70B",
     prefix: "openai-compatible-chat",
     model: together,
-    requires: ["TOGETHER_AI_API_KEY"],
-    scenarios: ["text", "tool-call"],
+    requires: ["TOGETHER_API_KEY"],
+    scenarios: [
+      {
+        id: "text",
+        cassette: "openai-compatible-chat/togetherai-streams-text",
+        prompt: "Reply with exactly: Hello!",
+        maxTokens: 20,
+      },
+      { id: "tool-call", cassette: "openai-compatible-chat/togetherai-streams-tool-call" },
+    ],
+  },
+  {
+    name: "Cerebras GPT OSS 120B",
+    prefix: "cerebras-chat",
+    model: cerebras,
+    requires: ["CEREBRAS_API_KEY"],
+    scenarios: [
+      { id: "text", maxTokens: 256, temperature: false },
+      { id: "tool-call", maxTokens: 512, temperature: false },
+      { id: "tool-loop", maxTokens: 512, temperature: false, timeout: 30_000 },
+    ],
   },
   {
     name: "Groq Llama 3.3 70B",

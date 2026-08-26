@@ -5,6 +5,7 @@ import { CacheHint, LLM, AIError, LLMRequest, Message, ToolCallPart, ToolDefinit
 import { Auth, LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import * as AnthropicMessages from "../../src/protocols/anthropic-messages.js"
+import { GoogleVertexMessages } from "../../src/providers.js"
 import { continuationRequest, nativeAnthropicMessagesContinuation } from "../continuation-scenarios.js"
 import { it } from "../lib/effect.js"
 import { dynamicResponse, fixedResponse } from "../lib/http.js"
@@ -26,6 +27,12 @@ const compileUnsignedReasoning = (model: LLMRequest["model"]) =>
       cache: "none",
     }),
   )
+
+const vertexOpus48 = GoogleVertexMessages.configure({
+  accessToken: "test",
+  location: "global",
+  project: "test",
+}).model("claude-opus-4-8")
 
 const request = LLM.request({
   id: "req_1",
@@ -281,6 +288,149 @@ describe("Anthropic Messages route", () => {
             { type: "text", text: "<system-update>\nOne.\n</system-update>" },
             { type: "text", text: "<system-update>\nTwo.\n</system-update>" },
           ],
+        },
+      ])
+    }),
+  )
+
+  it.effect("keeps a terminal Vertex system update in the tool-result turn", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: vertexOpus48,
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: {} })]),
+            Message.tool({ id: "call_1", name: "lookup", result: "Done." }),
+            Message.system("Operator update."),
+          ],
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "assistant",
+          content: [{ type: "tool_use", id: "call_1", name: "lookup", input: {} }],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "call_1",
+              content: '"Done."',
+              is_error: undefined,
+              cache_control: undefined,
+            },
+            {
+              type: "text",
+              text: "<system-update>\nOperator update.\n</system-update>",
+              cache_control: undefined,
+            },
+          ],
+        },
+      ])
+    }),
+  )
+
+  it.effect("preserves folded tool-result system updates across multi-turn Vertex history", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: vertexOpus48,
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: {} })]),
+            Message.tool({ id: "call_1", name: "lookup", result: "Done." }),
+            Message.system("Operator update."),
+            Message.assistant("Acknowledged."),
+            Message.user("Next step."),
+          ],
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "assistant",
+          content: [{ type: "tool_use", id: "call_1", name: "lookup", input: {} }],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "call_1",
+              content: '"Done."',
+              is_error: undefined,
+              cache_control: undefined,
+            },
+            {
+              type: "text",
+              text: "<system-update>\nOperator update.\n</system-update>",
+              cache_control: undefined,
+            },
+          ],
+        },
+        { role: "assistant", content: [{ type: "text", text: "Acknowledged." }] },
+        { role: "user", content: [{ type: "text", text: "Next step." }] },
+      ])
+    }),
+  )
+
+  it.effect("keeps a terminal direct Anthropic system update native", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: opus48,
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: {} })]),
+            Message.tool({ id: "call_1", name: "lookup", result: "Done." }),
+            Message.system("Operator update."),
+          ],
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "assistant",
+          content: [{ type: "tool_use", id: "call_1", name: "lookup", input: {} }],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "call_1",
+              content: '"Done."',
+              is_error: undefined,
+              cache_control: undefined,
+            },
+          ],
+        },
+        {
+          role: "system",
+          content: [{ type: "text", text: "Operator update.", cache_control: undefined }],
+        },
+      ])
+    }),
+  )
+
+  it.effect("keeps an ordinary terminal Vertex system update native", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: vertexOpus48,
+          messages: [Message.user("Before."), Message.system("Operator update.")],
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        { role: "user", content: [{ type: "text", text: "Before." }] },
+        {
+          role: "system",
+          content: [{ type: "text", text: "Operator update.", cache_control: undefined }],
         },
       ])
     }),

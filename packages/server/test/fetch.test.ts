@@ -64,6 +64,16 @@ it.live("serves the HttpApi and enforces Basic auth like the Node server", () =>
   }).pipe(Effect.scoped),
 )
 
+it.live("activates credentials through the HttpApi", () =>
+  Effect.gen(function* () {
+    const handler = yield* ServerFetch.make(options)
+    const response = yield* Effect.promise(() =>
+      handler(new Request("http://opencode.local/api/credential/cred_missing/activate", { method: "POST" })),
+    )
+    expect(response.status).toBe(204)
+  }).pipe(Effect.scoped),
+)
+
 it.live("serves unauthenticated and answers CORS preflight when no password is configured", () =>
   Effect.gen(function* () {
     const handler = yield* ServerFetch.make(options)

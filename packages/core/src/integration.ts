@@ -166,6 +166,8 @@ export interface Interface extends State.Transformable<Draft> {
       /** User-facing label for the stored credential. */
       readonly label?: string
     }) => Effect.Effect<void, AuthorizationError>
+    /** Selects a stored credential as the active integration connection. */
+    readonly activate: (credentialID: Credential.ID) => Effect.Effect<void>
     /** Updates a stored credential exposed as a connection. */
     readonly update: (
       credentialID: Credential.ID,
@@ -329,6 +331,17 @@ const layer = Layer.effect(
       finalize: () => bus.publish(Integration.Event.Updated, {}).pipe(Effect.asVoid),
     })
 
+    const createCredential = Effect.fnUntraced(function* (input: Parameters<Credential.Interface["create"]>[0]) {
+      if (input.label !== undefined) return yield* credentials.create(input)
+      const name = state.get().integrations.get(input.integrationID)?.ref.name ?? input.integrationID
+      const labels = new Set((yield* credentials.list(input.integrationID)).map((credential) => credential.label))
+      const label =
+        Array.from({ length: labels.size + 1 }, (_, index) => (index === 0 ? name : `${name} ${index + 1}`)).find(
+          (candidate) => !labels.has(candidate),
+        ) ?? name
+      return yield* credentials.create({ ...input, label })
+    })
+
     const resolveConnections = (entry: Entry | undefined, saved: readonly Credential.Info[]) => {
       const credentials = saved
         .map((credential) => ({
@@ -348,6 +361,7 @@ const layer = Layer.effect(
       Info.make({
         id: entry.ref.id,
         name: entry.ref.name,
+        ...(entry.ref.metadata === undefined ? {} : { metadata: entry.ref.metadata }),
         methods: entry.methods,
         connections,
       })
@@ -394,7 +408,7 @@ const layer = Layer.effect(
               ?.implementations.get(attempt.methodID)
             const persistence = yield* Effect.sync(() => attempt.label ?? implementation?.label?.(exit.value)).pipe(
               Effect.flatMap((label) =>
-                credentials.create({
+                createCredential({
                   integrationID: attempt.integrationID,
                   label,
                   value: exit.value,
@@ -421,8 +435,6 @@ const layer = Layer.effect(
             // Persisting attempts cannot be cancelled, expired, or claimed again.
             yield* SynchronizedRef.update(attempts, (current) => new Map(current).set(attemptID, terminal))
             if (Exit.isFailure(persistence)) yield* Effect.failCause(persistence.cause)
-            yield* bus.publish(Integration.Event.ConnectionUpdated, { integrationID: attempt.integrationID })
-            yield* bus.publish(Integration.Event.Updated, {})
           }).pipe(Effect.ensuring(close(attempt.scope)))
         }),
       )
@@ -452,13 +464,11 @@ const layer = Layer.effect(
             return
           }
 
-          const persistence = yield* credentials
-            .create({
-              integrationID: attempt.integrationID,
-              label: attempt.label,
-              value: Credential.Key.make({ type: "key", key: exit.value }),
-            })
-            .pipe(Effect.asVoid, Effect.exit)
+          const persistence = yield* createCredential({
+            integrationID: attempt.integrationID,
+            label: attempt.label,
+            value: Credential.Key.make({ type: "key", key: exit.value }),
+          }).pipe(Effect.asVoid, Effect.exit)
           const settledAt = yield* Clock.currentTimeMillis
           const terminal: TerminalCommandAttempt = Exit.isSuccess(persistence)
             ? {
@@ -476,9 +486,6 @@ const layer = Layer.effect(
               }
           yield* SynchronizedRef.update(commandAttempts, (current) => new Map(current).set(attemptID, terminal))
           yield* close(attempt.scope)
-          if (Exit.isFailure(persistence)) return
-          yield* bus.publish(Integration.Event.ConnectionUpdated, { integrationID: attempt.integrationID })
-          yield* bus.publish(Integration.Event.Updated, {})
         }),
       )
     })
@@ -702,7 +709,7 @@ const layer = Layer.effect(
           if (!method.form && Object.keys(answer).length > 0) {
             return yield* new AuthorizationError({ cause: new Error("Key method does not accept a form answer") })
           }
-          yield* credentials.create({
+          yield* createCredential({
             integrationID: input.integrationID,
             label: input.label,
             value: Credential.Key.make({
@@ -711,25 +718,21 @@ const layer = Layer.effect(
               ...(Object.keys(answer).length > 0 ? { configuration: answer } : {}),
             }),
           })
-          yield* bus.publish(Integration.Event.ConnectionUpdated, { integrationID: input.integrationID })
-          yield* bus.publish(Integration.Event.Updated, {})
         }),
-        update: Effect.fn("Integration.connection.update")(function* (credentialID, updates) {
+        activate: Effect.fn("Integration.connection.activate")(function* (credentialID) {
           const credential = yield* credentials.get(credentialID)
-          yield* credentials.update(credentialID, updates)
-          if (credential) {
-            yield* bus.publish(Integration.Event.ConnectionUpdated, { integrationID: credential.integrationID })
-          }
-          yield* bus.publish(Integration.Event.Updated, {})
+          if (!credential) return
+          const active = resolveConnections(
+            state.get().integrations.get(credential.integrationID),
+            yield* credentials.list(credential.integrationID),
+          )[0]
+          if (active?.type === "credential" && active.id === credentialID) return
+          yield* credentials.activate(credentialID)
         }),
-        remove: Effect.fn("Integration.connection.remove")(function* (credentialID) {
-          const credential = yield* credentials.get(credentialID)
-          yield* credentials.remove(credentialID)
-          if (credential) {
-            yield* bus.publish(Integration.Event.ConnectionUpdated, { integrationID: credential.integrationID })
-          }
-          yield* bus.publish(Integration.Event.Updated, {})
-        }),
+        update: Effect.fn("Integration.connection.update")((credentialID, updates) =>
+          credentials.update(credentialID, updates),
+        ),
+        remove: Effect.fn("Integration.connection.remove")((credentialID) => credentials.remove(credentialID)),
       },
       oauth: {
         connect: connectOAuth,

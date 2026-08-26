@@ -80,11 +80,30 @@ export type SessionTabsController = Pick<ContextController, "tabs" | "current" |
   newTab?: () => boolean
   add?: () => void
   detail?: (sessionID: string) => string | undefined
+  isPreview?: (sessionID: string) => boolean
+  promote?: (sessionID: string) => void
   status(sessionID: string): SessionTabsStatus
 }
 const NEW_SESSION_TAB: SessionTab = { sessionID: "new", title: NEW_SESSION_TAB_TITLE }
 const glowTextColor = (base: RGBA, glow: RGBA, index: number, width: number, level = 1) =>
   tint(base, glow, 0.12 * unreadGlowIntensity(index, width) * level)
+
+function createPreviewDoubleClick(tabs: SessionTabsController) {
+  let previous: { sessionID: string; time: number } | undefined
+  return (sessionID: string) => {
+    if (!tabs.isPreview?.(sessionID)) {
+      previous = undefined
+      return
+    }
+    const now = Date.now()
+    if (previous?.sessionID === sessionID && now - previous.time < 300) {
+      previous = undefined
+      tabs.promote?.(sessionID)
+      return
+    }
+    previous = { sessionID, time: now }
+  }
+}
 
 function createNumberIgnition(runs: () => boolean, prompt: () => number, animations: () => boolean) {
   const ignition = createAnimatable({ level: 0 }, { enabled: animations, transition: tween({ duration: 0.7 }) })
@@ -253,6 +272,9 @@ function TabContextMenu(props: { state: TabContextMenuState; tabs: SessionTabsCo
       ...(props.tabs.add ? [{ title: "New tab", run: () => props.tabs.add?.() }] : []),
       ...(sessionID
         ? [
+            ...(props.tabs.promote && props.tabs.isPreview?.(sessionID)
+              ? [{ title: "Keep open", run: () => props.tabs.promote?.(sessionID) }]
+              : []),
             {
               title: "Rename",
               run: () => DialogSessionRename.show(dialog, sessionID, props.state.title),
@@ -366,6 +388,7 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
   const [addHovered, setAddHovered] = createSignal(false)
   const marquee = createTabMarquee(animations)
   const hovered = marquee.hovered
+  const handleClick = createPreviewDoubleClick(tabs)
   // OpenTUI captures the first drag target, which may differ from the tab pressed on a fast move.
   const [dragging, setDragging] = createSignal<string>()
   const [preview, setPreview] = createSignal<{ sessionID: string; index: number }>()
@@ -651,6 +674,7 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                       return
                     }
                     didDrag = false
+                    handleClick(tab.sessionID)
                     marquee.enter(tab.sessionID, title(), hoveredTitleWidth())
                     setDragging(tab.sessionID)
                   }}
@@ -738,7 +762,10 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                         fg={foreground()}
                         wrapMode="none"
                         selectable={false}
-                        attributes={selected() ? TextAttributes.BOLD : undefined}
+                        attributes={
+                          (selected() ? TextAttributes.BOLD : 0) |
+                            (tabs.isPreview?.(tab.sessionID) ? TextAttributes.ITALIC : 0) || undefined
+                        }
                       >
                         <Show
                           when={scrolling() || titleGlow.value().level > 0 || titleFades()}
@@ -900,6 +927,7 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
   const [addHovered, setAddHovered] = createSignal(false)
   const marquee = createTabMarquee(animations)
   const hovered = marquee.hovered
+  const handleClick = createPreviewDoubleClick(tabs)
   // OpenTUI captures the first drag target, which may differ from the tab pressed on a fast move.
   const [dragging, setDragging] = createSignal<string>()
   // A drag reorders a local preview and persists one move on release instead of writing
@@ -1274,6 +1302,7 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
                 }
                 didDrag = false
                 releaseCloseHold()
+                handleClick(tab.sessionID)
                 marquee.enter(tab.sessionID, title(), hoveredTitleWidth())
                 setDragging(tab.sessionID)
               }}
@@ -1300,7 +1329,9 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
                   fg={foreground()}
                   wrapMode="none"
                   selectable={false}
-                  attributes={bold()}
+                  attributes={
+                    (bold() ?? 0) | (tabs.isPreview?.(tab.sessionID) ? TextAttributes.ITALIC : 0) || undefined
+                  }
                 >
                   <Show when={scrolling() || glows() || titleFades()} fallback={visibleTitle()}>
                     <Index each={visibleTitleParts()}>

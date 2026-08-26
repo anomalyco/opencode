@@ -823,6 +823,24 @@ export type ModelsDevRefreshed = {
   data: {}
 }
 
+export type CredentialUpdated = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "credential.updated"
+  location?: LocationRef
+  data: {}
+}
+
+export type CredentialSwitched = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "credential.switched"
+  location?: LocationRef
+  data: { integrationID: string; credentialID: string | null }
+}
+
 export type IntegrationUpdated = {
   id: string
   created: number
@@ -830,15 +848,6 @@ export type IntegrationUpdated = {
   type: "integration.updated"
   location?: LocationRef
   data: {}
-}
-
-export type IntegrationConnectionUpdated = {
-  id: string
-  created: number
-  metadata?: { [x: string]: any }
-  type: "integration.connection.updated"
-  location?: LocationRef
-  data: { integrationID: string }
 }
 
 export type CatalogUpdated = {
@@ -1310,8 +1319,10 @@ export type ToolContent1 = ToolTextContent | ToolFileContent1
 
 export type ModelCompatibility = {
   reasoningField?: ModelReasoningField
+  requireReasoning?: boolean
   maxTokensField?: ModelMaxTokensField
   requireFinishReason?: boolean
+  requireAssistantAfterTool?: boolean
 }
 
 export type ModelCost = {
@@ -1407,6 +1418,24 @@ export type Project = {
   sandboxes: Array<string>
 }
 
+export type ProjectUpdated = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "project.updated"
+  location?: LocationRef
+  data: {
+    id: string
+    canonical: string
+    vcs?: ProjectVcs
+    name?: string
+    icon?: ProjectIcon
+    commands?: ProjectCommands
+    time: ProjectTime
+    sandboxes: Array<string>
+  }
+}
+
 export type FormAnswer = { [x: string]: FormValue }
 
 export type PermissionRequest = {
@@ -1417,6 +1446,7 @@ export type PermissionRequest = {
   save?: Array<string>
   metadata?: { [x: string]: JsonValue }
   source?: PermissionSource
+  message?: string
 }
 
 export type PermissionAsked = {
@@ -1433,6 +1463,7 @@ export type PermissionAsked = {
     save?: Array<string>
     metadata?: { [x: string]: any }
     source?: PermissionSource
+    message?: string
   }
 }
 
@@ -2102,14 +2133,16 @@ export type SessionMessagesResponse = {
 export type IntegrationInfo = {
   id: string
   name: string
+  metadata?: { [x: string]: any }
   methods: Array<IntegrationMethod>
   connections: Array<ConnectionInfo>
 }
 
 export type V2Event =
   | ModelsDevRefreshed
+  | CredentialUpdated
+  | CredentialSwitched
   | IntegrationUpdated
-  | IntegrationConnectionUpdated
   | CatalogUpdated
   | AgentUpdated
   | SessionCreated
@@ -2164,6 +2197,7 @@ export type V2Event =
   | PermissionReplied
   | PluginAdded
   | PluginUpdated
+  | ProjectUpdated
   | WorktreeUpdated
   | WorktreeResolved
   | CommandUpdated
@@ -4348,6 +4382,15 @@ export type CredentialUpdateInput = {
 }
 
 export type CredentialUpdateOutput = void
+
+export type CredentialActivateInput = {
+  readonly credentialID: { readonly credentialID: string }["credentialID"]
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type CredentialActivateOutput = void
 
 export type CredentialRemoveInput = {
   readonly credentialID: { readonly credentialID: string }["credentialID"]

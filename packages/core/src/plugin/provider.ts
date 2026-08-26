@@ -26,7 +26,6 @@ import { OpencodePlugin } from "./provider/opencode.js"
 import { OpenRouterPlugin } from "./provider/openrouter.js"
 import { PerplexityPlugin } from "./provider/perplexity.js"
 import { SapAICorePlugin } from "./provider/sap-ai-core.js"
-import { TogetherAIPlugin } from "./provider/togetherai.js"
 import { VercelPlugin } from "./provider/vercel.js"
 import { VenicePlugin } from "./provider/venice.js"
 import { VLLMPlugin } from "./provider/vllm.js"
@@ -62,7 +61,6 @@ export const ProviderPlugins: PluginInternal.InternalPlugin[] = [
   OpenRouterPlugin,
   PerplexityPlugin,
   SapAICorePlugin,
-  TogetherAIPlugin,
   VercelPlugin,
   VenicePlugin,
   VLLMPlugin,
