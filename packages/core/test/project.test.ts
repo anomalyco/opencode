@@ -156,7 +156,7 @@ describe("Project.resolve", () => {
       yield* Effect.promise(() => fs.mkdir(nested, { recursive: true }))
 
       const result = yield* project.resolve(abs(tmp.path))
-      const repeated = yield* project.resolve(abs(path.join(tmp.path, ".")))
+      const repeated = yield* project.resolve(abs(`${tmp.path}${path.sep}.`))
       const child = yield* project.resolve(abs(nested))
 
       expect(result.id).not.toBe(Project.ID.global)

@@ -55,7 +55,7 @@ const liveIt = testEffect(
 )
 
 describe("Session.move", () => {
-  liveIt.live("reconciles a queued markerless move when its destination becomes a repository", () =>
+  liveIt.live("reconciles a queued markerless move through an unborn repository", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
@@ -80,8 +80,13 @@ describe("Session.move", () => {
             await $`git init -q`.cwd(root)
             await $`git config user.email test@example.com`.cwd(root)
             await $`git config user.name Test`.cwd(root)
-            await $`git commit --allow-empty -qm initial`.cwd(root)
           })
+          const unborn = yield* projects.resolve(destination)
+          const provisional = (yield* session.inbox(created.id))[0]
+          expect(unborn.id).toBe(Project.ID.global)
+          expect(provisional).toMatchObject({ type: "move", payload: { projectID: Project.ID.global } })
+
+          yield* Effect.promise(() => $`git commit --allow-empty -qm initial`.cwd(root).quiet())
           const project = yield* projects.resolve(destination)
           const reconciled = (yield* session.inbox(created.id))[0]
 
