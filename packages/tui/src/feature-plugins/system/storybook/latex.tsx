@@ -1,7 +1,7 @@
 import type { Plugin } from "@opencode-ai/plugin/tui"
 import { createMarkdownCodeBlockRenderer } from "@opentui/core"
 import { useTerminalDimensions } from "@opentui/solid"
-import { createEffect, createMemo, createSignal, For, onCleanup } from "solid-js"
+import { createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import { useTheme, useThemes } from "../../../context/theme"
 import { createLatexCodeBlockRenderer } from "../latex"
 import type { Story } from "./index"
@@ -44,17 +44,12 @@ function LatexStory(props: { context: Plugin.Context }) {
   const themes = useThemes()
   const [selected, setSelected] = createSignal(0)
   const [length, setLength] = createSignal<number>()
-  const previews = (["auto", "cells"] as const).map((mode) => ({
-    title: mode === "auto" ? "Automatic rendering" : "Unicode rendering",
-    render: createMarkdownCodeBlockRenderer({
-      latex: createLatexCodeBlockRenderer(props.context.renderer, () => ({
-        text: theme.text.default,
-        subdued: theme.text.subdued,
-        background: theme.background.default,
-        mode,
-      })),
-    }),
-  }))
+  const render = createMarkdownCodeBlockRenderer({
+    latex: createLatexCodeBlockRenderer(props.context.renderer, () => ({
+      text: theme.text.default,
+      subdued: theme.text.subdued,
+    })),
+  })
   const fixture = createMemo(() => fixtures[selected()])
   const source = createMemo(() => fixture().source.slice(0, length()))
   const streaming = createMemo(() => source().length < fixture().source.length)
@@ -104,24 +99,18 @@ function LatexStory(props: { context: Plugin.Context }) {
             <span style={{ fg: streaming() ? theme.text.default : theme.text.subdued }}>{source()}</span>
             <span>{fixture().source.slice(source().length)}</span>
           </text>
-          <For each={previews}>
-            {(preview) => (
-              <>
-                <text fg={theme.text.subdued}>{preview.title}</text>
-                <markdown
-                  width="100%"
-                  content={markdown()}
-                  streaming={streaming()}
-                  syntaxStyle={themes.currentSyntax()}
-                  internalBlockMode="top-level"
-                  conceal={true}
-                  fg={theme.markdown.text}
-                  bg={theme.background.default}
-                  renderNode={preview.render}
-                />
-              </>
-            )}
-          </For>
+          <text fg={theme.text.subdued}>Unicode rendering</text>
+          <markdown
+            width="100%"
+            content={markdown()}
+            streaming={streaming()}
+            syntaxStyle={themes.currentSyntax()}
+            internalBlockMode="top-level"
+            conceal={true}
+            fg={theme.markdown.text}
+            bg={theme.background.default}
+            renderNode={render}
+          />
         </box>
       </scrollbox>
       <StoryFooter

@@ -10,7 +10,6 @@ import pkg from "../package.json"
 import { buildAppArchive } from "./app-assets"
 import { verifyArtifact, verifySimulationGraph } from "./verify-artifact"
 import { resolveOpencodePty } from "./opencode-pty"
-import { mathGraphicsPlugin } from "./math-graphics"
 
 const dir = path.resolve(import.meta.dirname, "..")
 const binary = "opencode2"
@@ -125,14 +124,7 @@ export default { path: file, version: ${JSON.stringify(opencodePty.version)}, sh
   const result = await Bun.build({
     entrypoints: ["./src/index.ts"],
     tsconfig: "./tsconfig.json",
-    plugins: [
-      appAssetsPlugin,
-      solidPlugin,
-      parcelWatcherPlugin,
-      opencodePtyPlugin,
-      simulationGraphPlugin,
-      mathGraphicsPlugin(item),
-    ],
+    plugins: [appAssetsPlugin, solidPlugin, parcelWatcherPlugin, opencodePtyPlugin, simulationGraphPlugin],
     external: ["node-gyp"],
     format: "esm",
     minify: true,
