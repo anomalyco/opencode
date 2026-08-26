@@ -38,9 +38,9 @@ try {
     const archive = join(temporary, `${name}.tgz`)
 
     if (pkg.dependencies) {
-      const unpacked = Object.keys(pkg.dependencies).filter(
-        (dependency) => dependency.startsWith("@opencode-ai/") && !archives.has(dependency),
-      )
+      const unpacked = Object.entries(pkg.dependencies)
+        .filter(([dependency, version]) => version.startsWith("workspace:") && !archives.has(dependency))
+        .map(([dependency]) => dependency)
       if (unpacked.length > 0)
         throw new Error(`${pkg.name} has unpacked workspace dependencies: ${unpacked.join(", ")}`)
       pkg.dependencies = Object.fromEntries(
