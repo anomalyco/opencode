@@ -4,7 +4,8 @@ import { Resource } from "sst/resource"
 import { DatabaseError } from "../database"
 import type { GeoStatMetric } from "./geo"
 import { ModelStatRepo, type ModelStatMetric } from "./model"
-import type { ProviderStatMetric } from "./provider"
+import { statProvider } from "./model-normalization"
+import { isMissingRetentionTable } from "./retention"
 import { DATA_SITE_TIERS, normalizeTier } from "./stat"
 
 export type UsageProduct = "All Users" | "Zen" | "Go" | "Enterprise"
@@ -23,6 +24,15 @@ export type LeaderboardEntry = {
 export type TokenCostEntry = { model: string; total: number; input: number; output: number; cached: number }
 export type CacheRatioEntry = { model: string; ratio: number; cached: number; uncached: number; total: number }
 export type SessionCostEntry = { model: string; cost: number; tokens: number }
+export type RetentionEntry = {
+  model: string
+  provider: string
+  author: string
+  rate: number
+  eligibleUserDays: number
+  retainedUserDays: number
+  rank: number | null
+}
 export type CountryEntry = { country: string; continent: string; tokens: number; share: number; rank: number }
 export type ModelUsagePoint = { date: string; tokens: number; users: number; sessions: number; cost: number }
 export type ModelMixEntry = { label: string; tokens: number; share: number }
@@ -54,6 +64,7 @@ export type StatsModelData = {
   totalModels: number
   tokenShare: number
   tokenChange: number
+  retention7d: RetentionEntry | null
   totals: {
     sessions: number
     uniqueUsers: number
@@ -114,6 +125,7 @@ export type StatsHomeData = {
   tokenCost: Record<TokenProduct, TokenCostEntry[]>
   cacheRatio: Record<TokenProduct, CacheRatioEntry[]>
   sessionCost: Record<TokenProduct, SessionCostEntry[]>
+  retention: RetentionEntry[]
   country: Record<UsageRange, CountryEntry[]>
 }
 
@@ -129,6 +141,9 @@ const DAY_MS = 86_400_000
 const TOKEN_SCALE = 1_000_000
 const DOLLARS_PER_MICROCENT = 1 / 100_000_000
 const METRIC_MODEL_LIMIT = 10
+const RETENTION_MODEL_LIMIT = 15
+const RETENTION_MIN_ELIGIBLE_USER_DAYS = 100
+const RETENTION_COHORT_DAYS = 7
 const TOP_MODEL_SEGMENT_LIMIT = 9
 // Preserve the response shape while the public site presents Go and Free as one cohort.
 const SITE_PRODUCT = "Go"
@@ -140,13 +155,17 @@ type StatMetricRow = Omit<ModelStatMetric, "updatedAt"> & {
   periodStart: number
   updatedAt: number
 }
-type ProviderMetricRow = Omit<ProviderStatMetric, "updatedAt"> & {
-  periodStart: number
-  updatedAt: number
-}
 type GeoMetricRow = Omit<GeoStatMetric, "updatedAt"> & {
   periodStart: number
   updatedAt: number
+}
+export type RetentionMetricRow = {
+  cohortDate: string
+  updatedAt: number
+  provider: string
+  model: string
+  eligibleUsers: number
+  retainedUsers: number
 }
 
 type DateWindow = { start: number; end: number; previousStart: number; previousEnd: number }
@@ -171,12 +190,12 @@ type RawRow = Record<string, unknown>
 export function getStatsHomeData(): Effect.Effect<StatsHomeData, StatsDataError> {
   return Effect.tryPromise({
     try: async () => {
-      const [modelRows, providerRows, geoRows] = await Promise.all([
+      const [modelRows, geoRows, retentionRows] = await Promise.all([
         listModelDaily(),
-        listProviderDaily(),
         listGeoDaily(),
+        listRetentionDaily(),
       ])
-      return buildStatsHomeData(modelRows, providerRows, geoRows)
+      return buildStatsHomeData(modelRows, geoRows, retentionRows)
     },
     catch: (cause) => new StatsDataError(cause),
   })
@@ -188,7 +207,7 @@ export function getStatsModelData(
 ): Effect.Effect<StatsModelData | null, StatsDataError> {
   return Effect.tryPromise({
     try: async () => {
-      const modelRows = await listModelDaily()
+      const [modelRows, retentionRows] = await Promise.all([listModelDaily(), listRetentionDaily()])
       const normalized = modelRows.flatMap(normalizeStatRow)
       const resolvedModel = resolveModelName(model, normalized, provider)
       if (!resolvedModel) return null
@@ -200,6 +219,7 @@ export function getStatsModelData(
           provider: resolveModelProvider(resolvedModel, normalized, provider),
         }),
         provider,
+        retentionRows,
       )
     },
     catch: (cause) => new StatsDataError(cause),
@@ -241,23 +261,6 @@ async function listModelDaily(): Promise<ModelStatMetric[]> {
   }))
 }
 
-async function listProviderDaily(): Promise<ProviderStatMetric[]> {
-  return (
-    await queryRows(
-      `select period_key, updated_at, tier, provider, total_tokens from provider_stat
-    where grain = 'day' and client = 'all' and source = 'all'
-    and tier in (${SITE_TIER_PLACEHOLDERS}) order by period_key`,
-      DATA_SITE_TIERS,
-    )
-  ).map((row) => ({
-    periodKey: stringValue(row.period_key),
-    updatedAt: dateValue(row.updated_at),
-    tier: stringValue(row.tier),
-    provider: stringValue(row.provider),
-    totalTokens: numberValue(row.total_tokens),
-  }))
-}
-
 async function listGeoDaily(opts?: { provider?: string; model?: string }): Promise<GeoStatMetric[]> {
   const scope =
     opts?.model && opts.provider
@@ -283,6 +286,27 @@ async function listGeoDaily(opts?: { provider?: string; model?: string }): Promi
     continent: stringValue(row.continent),
     totalTokens: numberValue(row.total_tokens),
   }))
+}
+
+async function listRetentionDaily(): Promise<RetentionMetricRow[]> {
+  try {
+    return (
+      await queryRows(
+        `select cohort_date, updated_at, provider, model, eligible_users, retained_users
+      from model_retention where dataset = 'zen' and tier = 'all' order by cohort_date`,
+      )
+    ).map((row) => ({
+      cohortDate: stringValue(row.cohort_date),
+      updatedAt: dateValue(row.updated_at).getTime(),
+      provider: stringValue(row.provider),
+      model: stringValue(row.model),
+      eligibleUsers: numberValue(row.eligible_users),
+      retainedUsers: numberValue(row.retained_users),
+    }))
+  } catch (cause) {
+    if (isMissingRetentionTable(cause)) return []
+    throw cause
+  }
 }
 
 async function queryRows(query: string, params: string[] = []) {
@@ -336,13 +360,12 @@ export const getStatsModelComparisonData = (
 
 function buildStatsHomeData(
   modelRows: ModelStatMetric[],
-  providerRows: ProviderStatMetric[],
   geoRows: GeoStatMetric[],
+  retentionRows: RetentionMetricRow[],
 ): StatsHomeData {
   const normalized = modelRows.flatMap(normalizeStatRow)
-  const providers = providerRows.flatMap(normalizeProviderRow)
   const geo = geoRows.flatMap(normalizeGeoRow)
-  const periods = [...normalized, ...providers, ...geo]
+  const periods = [...normalized, ...geo]
   if (periods.length === 0) return emptyStatsHomeData()
 
   const earliest = Math.min(...periods.map((row) => row.periodStart))
@@ -377,7 +400,7 @@ function buildStatsHomeData(
     leaderboard: createUsageProductRecord((product) =>
       createRangeRecord((range) => buildLeaderboard(normalized, product, getWindow("1W", earliest, latest))),
     ),
-    market: createRangeRecord((range) => buildMarketShare(providers, "Go", range, getWindow(range, earliest, latest))),
+    market: createRangeRecord((range) => buildMarketShare(normalized, "Go", range, getWindow(range, earliest, latest))),
     tokenCost: createTokenProductRecord((product) =>
       buildTokenCost(normalized, product, getWindow("1W", earliest, latest)),
     ),
@@ -387,6 +410,9 @@ function buildStatsHomeData(
     sessionCost: createTokenProductRecord((product) =>
       buildSessionCost(normalized, product, getWindow("1W", earliest, latest)),
     ),
+    retention: buildRetentionEntries(retentionRows)
+      .filter((item) => item.rank !== null)
+      .slice(0, RETENTION_MODEL_LIMIT),
     country: createRangeRecord((range) => buildCountryStats(geo, getWindow(range, earliest, latest))),
   }
 }
@@ -396,6 +422,7 @@ function buildStatsModelData(
   modelRows: ModelStatMetric[],
   geoRows: GeoStatMetric[],
   providerParam?: string,
+  retentionRows: RetentionMetricRow[] = [],
 ): StatsModelData | null {
   const normalized = modelRows.flatMap(normalizeStatRow)
   const geo = geoRows.flatMap(normalizeGeoRow)
@@ -431,6 +458,7 @@ function buildStatsModelData(
   const peerRank = rankIndex >= 0 ? rankIndex + 1 : 1
   const totalTokens = windowPeers.reduce((sum, item) => sum + item.totalTokens, 0)
   const peerTokens = rankPeers.reduce((sum, item) => sum + item.totalTokens, 0)
+  const retention7d = buildRetentionEntries(retentionRows).find((item) => item.model === model) ?? null
 
   return {
     updatedAt: Number.isFinite(latestUpdate) ? new Date(latestUpdate).toISOString() : null,
@@ -443,6 +471,7 @@ function buildStatsModelData(
     totalModels: windowPeers.length,
     tokenShare: totalTokens > 0 ? round((current.totalTokens / totalTokens) * 100, 2) : 0,
     tokenChange: percentChange(current.totalTokens, previous.totalTokens),
+    retention7d,
     totals: {
       sessions: current.sessions,
       uniqueUsers: current.uniqueUsers,
@@ -539,8 +568,39 @@ function emptyStatsHomeData(): StatsHomeData {
     tokenCost: createTokenProductRecord(() => []),
     cacheRatio: createTokenProductRecord(() => []),
     sessionCost: createTokenProductRecord(() => []),
+    retention: [],
     country: createRangeRecord(() => []),
   }
+}
+
+export function buildRetentionEntries(rows: RetentionMetricRow[]): RetentionEntry[] {
+  const cohortDates = [...new Set(rows.map((row) => row.cohortDate))].toSorted().slice(-RETENTION_COHORT_DAYS)
+  const aggregate = rows
+    .filter((row) => cohortDates.includes(row.cohortDate))
+    .reduce<Map<string, Omit<RetentionEntry, "author" | "rate" | "rank">>>((result, row) => {
+      const current = result.get(row.model)
+      result.set(row.model, {
+        model: row.model,
+        provider: current?.provider ?? row.provider,
+        eligibleUserDays: (current?.eligibleUserDays ?? 0) + row.eligibleUsers,
+        retainedUserDays: (current?.retainedUserDays ?? 0) + row.retainedUsers,
+      })
+      return result
+    }, new Map())
+  const entries = [...aggregate.values()].map((item) => ({
+    ...item,
+    author: formatProvider(item.provider),
+    rate: item.eligibleUserDays > 0 ? round((item.retainedUserDays / item.eligibleUserDays) * 100, 1) : 0,
+  }))
+  const ranks = new Map(
+    entries
+      .filter((item) => item.eligibleUserDays >= RETENTION_MIN_ELIGIBLE_USER_DAYS)
+      .toSorted((a, b) => b.rate - a.rate || b.eligibleUserDays - a.eligibleUserDays || a.model.localeCompare(b.model))
+      .map((item, index) => [item.model, index + 1]),
+  )
+  return entries
+    .map((item) => ({ ...item, rank: ranks.get(item.model) ?? null }))
+    .toSorted((a, b) => (a.rank ?? Number.MAX_SAFE_INTEGER) - (b.rank ?? Number.MAX_SAFE_INTEGER))
 }
 
 function buildUsagePoints(
@@ -602,15 +662,20 @@ function buildLeaderboard(rows: StatMetricRow[], product: UsageProduct, rankWind
     }))
 }
 
-function buildMarketShare(rows: ProviderMetricRow[], product: UsageProduct, range: UsageRange, window: DateWindow) {
+function buildMarketShare(rows: StatMetricRow[], product: UsageProduct, range: UsageRange, window: DateWindow) {
+  const providerOrder = aggregateByProvider(rowsForProduct(rows, product, window.start, window.end))
+    .filter((item) => item.provider !== "unknown")
+    .toSorted((a, b) => b.tokens - a.tokens || a.provider.localeCompare(b.provider))
+    .slice(0, 8)
+    .map((item) => item.provider)
+
   return createBuckets(window, range).flatMap((bucket) => {
-    const total = aggregateByProvider(rowsForProduct(rows, product, bucket.start, bucket.end)).toSorted(
-      (a, b) => b.tokens - a.tokens,
-    )
+    const total = aggregateByProvider(rowsForProduct(rows, product, bucket.start, bucket.end))
     const totalTokens = total.reduce((sum, item) => sum + item.tokens, 0)
     if (totalTokens === 0) return []
 
-    const authors = total.slice(0, 8)
+    const byProvider = new Map(total.map((item) => [item.provider, item.tokens]))
+    const authors = providerOrder.map((provider) => ({ provider, tokens: byProvider.get(provider) ?? 0 }))
     const knownTokens = authors.reduce((sum, item) => sum + item.tokens, 0)
     const withOther = [...authors, { provider: "Other", tokens: Math.max(totalTokens - knownTokens, 0) }].filter(
       (item) => item.tokens > 0,
@@ -773,7 +838,7 @@ function aggregateByModelName(rows: StatMetricRow[]) {
   )
 }
 
-function aggregateByProvider(rows: ProviderMetricRow[]) {
+function aggregateByProvider(rows: { provider: string; totalTokens: number }[]) {
   return Object.values(
     rows.reduce<Record<string, { provider: string; tokens: number }>>((result, row) => {
       result[row.provider] = {
@@ -917,23 +982,8 @@ function normalizeStatRow(row: ModelStatMetric): StatMetricRow[] {
       periodStart,
       updatedAt,
       tier: normalizeTier(row.tier),
-      provider: row.provider || "unknown",
+      provider: statProvider(row.model, undefined, row.provider) || "unknown",
       model: row.model || "unknown",
-    },
-  ]
-}
-
-function normalizeProviderRow(row: ProviderStatMetric): ProviderMetricRow[] {
-  const periodStart = periodKeyTime(row.periodKey)
-  const updatedAt = dateTime(row.updatedAt)
-  if (!Number.isFinite(periodStart) || !Number.isFinite(updatedAt)) return []
-  return [
-    {
-      ...row,
-      periodStart,
-      updatedAt,
-      tier: normalizeTier(row.tier),
-      provider: row.provider || "unknown",
     },
   ]
 }
@@ -948,7 +998,7 @@ function normalizeGeoRow(row: GeoStatMetric): GeoMetricRow[] {
       periodStart,
       updatedAt,
       tier: normalizeTier(row.tier),
-      provider: row.provider || "all",
+      provider: row.provider === "all" ? "all" : statProvider(row.model, undefined, row.provider) || "unknown",
       model: row.model || "all",
       country: row.country || "ZZ",
       continent: row.continent || "",
@@ -987,6 +1037,7 @@ function formatProvider(provider: string) {
     deepseek: "DeepSeek",
     google: "Google",
     minimax: "MiniMax",
+    meta: "Meta",
     moonshot: "Moonshot",
     moonshotai: "Moonshot",
     nvidia: "NVIDIA",
