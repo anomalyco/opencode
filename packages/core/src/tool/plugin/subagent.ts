@@ -78,27 +78,6 @@ export const Plugin = {
       return text.length > 0 ? text : NO_TEXT
     })
 
-    const injectCompletion = Effect.fn("SubagentTool.injectCompletion")(function* (
-      parentID: SessionSchema.ID,
-      childID: SessionSchema.ID,
-      agent: string,
-      description: string,
-      state: "completed" | "error" | "cancelled",
-      text: string,
-    ) {
-      const recovery = (yield* runtime.job.recoverable).find(
-        (job) => job.id === childID && job.recovery.kind === "subagent",
-      )
-      yield* runtime.session.synthetic({
-        ...(recovery ? { id: recovery.notificationID } : {}),
-        sessionID: parentID,
-        text: `<subagent sessionID="${childID}" state="${state}" description="${description}">\n${text}\n</subagent>`,
-        description,
-        metadata: { source: "subagent", childID, agent, state },
-      })
-      if (recovery) yield* runtime.job.acknowledge(recovery.notificationID)
-    })
-
     const notifyWhenDone = Effect.fn("SubagentTool.notifyWhenDone")(function* (
       parentID: SessionSchema.ID,
       childID: SessionSchema.ID,
@@ -110,22 +89,26 @@ export const Plugin = {
       if (notifications.has(key)) return
       notifications.add(key)
       yield* runtime.job.wait({ id: childID }).pipe(
-        Effect.flatMap((result) => {
-          if (result.info?.status === "completed")
-            return injectCompletion(parentID, childID, agent, description, "completed", result.info.output ?? NO_TEXT)
-          if (result.info?.status === "error")
-            return injectCompletion(
-              parentID,
-              childID,
-              agent,
+        Effect.flatMap((result) =>
+          Effect.gen(function* () {
+            const info = result.info
+            if (!info || info.status === "running") return
+            const text =
+              info.status === "completed"
+                ? (info.output ?? NO_TEXT)
+                : info.status === "error"
+                  ? (info.error ?? "Subagent failed")
+                  : "Subagent cancelled"
+            yield* runtime.session.synthetic({
+              ...(info.notificationID ? { id: info.notificationID } : {}),
+              sessionID: parentID,
+              text: `<subagent sessionID="${childID}" state="${info.status}" description="${description}">\n${text}\n</subagent>`,
               description,
-              "error",
-              result.info.error ?? "Subagent failed",
-            )
-          if (result.info?.status === "cancelled")
-            return injectCompletion(parentID, childID, agent, description, "cancelled", "Subagent cancelled")
-          return Effect.void
-        }),
+              metadata: { source: "subagent", childID, agent, state: info.status },
+            })
+            if (info.notificationID) yield* runtime.job.completeBackground(info.notificationID)
+          }),
+        ),
         Effect.ensuring(Effect.sync(() => notifications.delete(key))),
         Effect.forkIn(scope, { startImmediately: true }),
       )

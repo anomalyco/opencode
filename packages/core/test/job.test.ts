@@ -159,17 +159,18 @@ describe("Job", () => {
       }
       const job = yield* jobs.start({ type: "shell", recovery, run: Deferred.await(latch).pipe(Effect.as("done")) })
 
-      expect((yield* jobs.recoverable).find((item) => item.id === job.id)).toBeUndefined()
-      yield* jobs.background(job.id)
+      expect((yield* jobs.pendingBackground).find((item) => item.id === job.id)).toBeUndefined()
+      const background = yield* jobs.background(job.id)
 
-      const running = (yield* jobs.recoverable).find((item) => item.id === job.id)
+      const running = (yield* jobs.pendingBackground).find((item) => item.id === job.id)
       expect(running).toMatchObject({ id: job.id, recovery, status: "running" })
       expect(running?.notificationID).toStartWith("msg_")
+      expect(background?.notificationID).toBe(running?.notificationID)
 
       yield* Deferred.succeed(latch, undefined)
       yield* jobs.wait({ id: job.id })
 
-      const completed = (yield* jobs.recoverable).find((item) => item.id === job.id)
+      const completed = (yield* jobs.pendingBackground).find((item) => item.id === job.id)
       expect(completed).toMatchObject({
         id: job.id,
         notificationID: running?.notificationID,
@@ -179,8 +180,8 @@ describe("Job", () => {
       })
       if (!completed) return yield* Effect.die("background marker missing")
 
-      yield* jobs.acknowledge(completed.notificationID)
-      expect((yield* jobs.recoverable).find((item) => item.id === job.id)).toBeUndefined()
+      yield* jobs.completeBackground(completed.notificationID)
+      expect((yield* jobs.pendingBackground).find((item) => item.id === job.id)).toBeUndefined()
     }),
   )
 
@@ -204,16 +205,16 @@ describe("Job", () => {
       yield* jobs.backgroundAll({ sessionID: parentSessionID })
       expect(yield* Fiber.join(waiting)).toMatchObject({ type: "backgrounded", info: { id: job.id } })
 
-      const marker = (yield* jobs.recoverable).find((item) => item.id === job.id)
+      const marker = (yield* jobs.pendingBackground).find((item) => item.id === job.id)
       expect(marker).toMatchObject({ id: job.id, recovery, status: "running" })
       if (!marker) return yield* Effect.die("background marker missing")
 
       yield* jobs.cancel(job.id)
-      expect((yield* jobs.recoverable).find((item) => item.id === job.id)).toMatchObject({
+      expect((yield* jobs.pendingBackground).find((item) => item.id === job.id)).toMatchObject({
         notificationID: marker.notificationID,
         status: "cancelled",
       })
-      yield* jobs.acknowledge(marker.notificationID)
+      yield* jobs.completeBackground(marker.notificationID)
     }),
   )
 
@@ -236,10 +237,10 @@ describe("Job", () => {
       yield* Deferred.succeed(latch, undefined)
       yield* jobs.wait({ id: job.id })
 
-      const marker = (yield* jobs.recoverable).find((item) => item.id === job.id)
+      const marker = (yield* jobs.pendingBackground).find((item) => item.id === job.id)
       expect(marker).toMatchObject({ id: job.id, status: "error", error: "shell failed" })
       if (!marker) return yield* Effect.die("background marker missing")
-      yield* jobs.acknowledge(marker.notificationID)
+      yield* jobs.completeBackground(marker.notificationID)
     }),
   )
 
@@ -261,10 +262,36 @@ describe("Job", () => {
       yield* Scope.close(scope, Exit.void)
 
       const current = yield* Job.make
-      const marker = (yield* current.recoverable).find((item) => item.id === job.id)
+      const marker = (yield* current.pendingBackground).find((item) => item.id === job.id)
       expect(marker).toMatchObject({ id: job.id, status: "running" })
       if (!marker) return yield* Effect.die("background marker missing")
-      yield* current.acknowledge(marker.notificationID)
+      yield* current.completeBackground(marker.notificationID)
+    }),
+  )
+
+  it.live("preserves running background ownership when its work is interrupted", () =>
+    Effect.gen(function* () {
+      const jobs = yield* Job.Service
+      const interrupted = yield* Deferred.make<void>()
+      const job = yield* jobs.start({
+        type: "subagent",
+        recovery: {
+          kind: "subagent",
+          parentSessionID: SessionSchema.ID.make("ses_interrupted_parent"),
+          childSessionID: SessionSchema.ID.make("ses_interrupted_child"),
+          agent: "explore",
+          description: "Continue after shutdown",
+        },
+        run: Deferred.await(interrupted).pipe(Effect.andThen(Effect.interrupt)),
+      })
+      yield* jobs.background(job.id)
+      yield* Deferred.succeed(interrupted, undefined)
+      yield* jobs.wait({ id: job.id })
+
+      const marker = (yield* jobs.pendingBackground).find((item) => item.id === job.id)
+      expect(marker).toMatchObject({ id: job.id, status: "running" })
+      if (!marker) return yield* Effect.die("background marker missing")
+      yield* jobs.completeBackground(marker.notificationID)
     }),
   )
 

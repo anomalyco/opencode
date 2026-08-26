@@ -328,7 +328,7 @@ describe("SessionRestart background recovery", () => {
       yield* seedBackground(jobs, child, [{ id: "call-child-shell", shellID: "sh_child_orphan", command: "sleep 30" }])
 
       expect(yield* store.listSuspended()).toEqual([])
-      expect(yield* jobs.recoverable).toHaveLength(2)
+      expect(yield* jobs.pendingBackground).toHaveLength(2)
 
       const drained: Session.ID[] = []
       const scope = yield* Scope.make()
@@ -369,7 +369,7 @@ describe("SessionRestart background recovery", () => {
       ])
       expect(drained).toEqual([])
       expect(yield* claims(database)).toEqual({ [parent]: false, [child]: false })
-      expect(yield* restarted.recoverable).toEqual([])
+      expect(yield* restarted.pendingBackground).toEqual([])
 
       yield* restart.resumeSuspendedSessions
       expect((yield* store.context(parent)).filter((message) => message.type === "synthetic")).toHaveLength(1)
@@ -393,7 +393,7 @@ describe("SessionRestart background recovery", () => {
 
       expect((yield* store.context(parent)).filter((message) => message.type === "synthetic")).toEqual([])
       expect(yield* jobs.get("call-running-shell")).toMatchObject({ status: "running" })
-      expect(yield* jobs.recoverable).toHaveLength(1)
+      expect(yield* jobs.pendingBackground).toHaveLength(1)
     }),
   )
 
@@ -432,7 +432,7 @@ describe("SessionRestart background recovery", () => {
           metadata: { source: "shell", shellID: "sh_completed", state: "completed" },
         },
       ])
-      expect(yield* restarted.recoverable).toEqual([])
+      expect(yield* restarted.pendingBackground).toEqual([])
     }),
   )
 
@@ -451,7 +451,7 @@ describe("SessionRestart background recovery", () => {
       const context = yield* buildExecution(scope, () => Effect.void, undefined, restarted)
       yield* Context.get(context, SessionRestart.Service).resumeSuspendedSessions
 
-      expect(yield* restarted.recoverable).toEqual([])
+      expect(yield* restarted.pendingBackground).toEqual([])
     }),
   )
 
@@ -552,7 +552,7 @@ describe("SessionRestart background recovery", () => {
           },
         },
       ])
-      expect(yield* restarted.recoverable).toEqual([])
+      expect(yield* restarted.pendingBackground).toEqual([])
       yield* restart.resumeSuspendedSessions
       expect(yield* SessionInbox.list(database.db, parent)).toHaveLength(1)
     }),
@@ -604,7 +604,7 @@ describe("SessionRestart background recovery", () => {
       expect(yield* SessionInbox.list(database.db, parent)).toMatchObject([
         { payload: { text: expect.stringContaining("Recovered result"), metadata: { state: "completed" } } },
       ])
-      expect(yield* restarted.recoverable).toEqual([])
+      expect(yield* restarted.pendingBackground).toEqual([])
     }),
   )
 
@@ -657,7 +657,7 @@ describe("SessionRestart background recovery", () => {
           },
         },
       ])
-      expect(yield* restarted.recoverable).toEqual([])
+      expect(yield* restarted.pendingBackground).toEqual([])
     }),
   )
 })

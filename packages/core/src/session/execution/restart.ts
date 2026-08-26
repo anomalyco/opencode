@@ -95,9 +95,9 @@ export const layer = (options?: Options) =>
 
       return Service.of({
         resumeSuspendedSessions: Effect.gen(function* () {
-          const recoverable = yield* jobs.recoverable
+          const pending = yield* jobs.pendingBackground
           yield* store.releaseChildClaims(
-            recoverable.flatMap((background) =>
+            pending.flatMap((background) =>
               background.recovery.kind === "subagent" ? [background.recovery.childSessionID] : [],
             ),
           )
@@ -106,7 +106,7 @@ export const layer = (options?: Options) =>
           // them would only inject a stray continuation into a live turn.
           const orphaned = (yield* store.listSuspended()).filter((sessionID) => !active.has(sessionID))
           yield* Effect.forEach(
-            recoverable,
+            pending,
             (background) =>
               Effect.gen(function* () {
                 if ((yield* jobs.get(background.id))?.status === "running") return
@@ -134,11 +134,11 @@ export const layer = (options?: Options) =>
                           state,
                         },
                       },
-                      { commit: () => jobs.acknowledge(background.notificationID) },
+                      { commit: () => jobs.completeBackground(background.notificationID) },
                     )
                     return
                   }
-                  yield* jobs.acknowledge(background.notificationID)
+                  yield* jobs.completeBackground(background.notificationID)
                   return
                 }
 
@@ -149,7 +149,7 @@ export const layer = (options?: Options) =>
                   !child ||
                   child.parentID !== recovery.parentSessionID
                 ) {
-                  yield* jobs.acknowledge(background.notificationID)
+                  yield* jobs.completeBackground(background.notificationID)
                   return
                 }
 
@@ -181,7 +181,7 @@ export const layer = (options?: Options) =>
                       },
                     }),
                   })
-                  yield* jobs.acknowledge(background.notificationID)
+                  yield* jobs.completeBackground(background.notificationID)
                   yield* execution.wake(recovery.parentSessionID)
                 })
 

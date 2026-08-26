@@ -64,6 +64,7 @@ export type Info = {
   output?: string
   error?: string
   metadata?: Record<string, unknown>
+  notificationID?: SessionMessage.ID
 }
 
 type Active = {
@@ -75,7 +76,6 @@ type Active = {
   blockingSessions: Map<SessionSchema.ID, number>
   isBackgrounded: boolean
   recovery?: Recovery
-  notificationID?: SessionMessage.ID
 }
 
 type State = {
@@ -147,8 +147,8 @@ export interface Interface {
   readonly background: (id: string) => Effect.Effect<Info | undefined>
   readonly backgroundAll: (input: BackgroundAllInput) => Effect.Effect<Info[]>
   readonly cancel: (id: string) => Effect.Effect<Info | undefined>
-  readonly recoverable: Effect.Effect<readonly Background[]>
-  readonly acknowledge: (notificationID: SessionMessage.ID) => Effect.Effect<void>
+  readonly pendingBackground: Effect.Effect<readonly Background[]>
+  readonly completeBackground: (notificationID: SessionMessage.ID) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Job") {}
@@ -189,6 +189,18 @@ export const make = Effect.gen(function* () {
     scope: yield* Scope.Scope,
   }
 
+  const persistBackground = Effect.fnUntraced(function* (job: Active) {
+    if (!job.recovery || !job.info.notificationID) return
+    yield* kv.set(`${backgroundPrefix}${job.info.notificationID}`, {
+      id: job.info.id,
+      notificationID: job.info.notificationID,
+      recovery: job.recovery,
+      status: job.info.status,
+      ...(job.info.output !== undefined ? { output: job.info.output } : {}),
+      ...(job.info.error !== undefined ? { error: job.info.error } : {}),
+    })
+  })
+
   const settle = Effect.fnUntraced(function* (id: string, token: object, exit: Exit.Exit<string, unknown>) {
     const completed_at = yield* Clock.currentTimeMillis
     const result = yield* SynchronizedRef.modifyEffect(
@@ -215,15 +227,7 @@ export const make = Effect.gen(function* () {
             ...(Exit.isFailure(exit) ? { error: errorText(Cause.squash(exit.cause)) } : {}),
           },
         }
-        if (next.recovery && next.notificationID)
-          yield* kv.set(`${backgroundPrefix}${next.notificationID}`, {
-            id,
-            notificationID: next.notificationID,
-            recovery: next.recovery,
-            status,
-            ...(next.info.output !== undefined ? { output: next.info.output } : {}),
-            ...(next.info.error !== undefined ? { error: next.info.error } : {}),
-          })
+        if (status !== "cancelled") yield* persistBackground(next)
         return [{ info: snapshot(next), done: job.done, scope: job.scope }, new Map(jobs).set(id, next)] as readonly [
           FinishResult,
           Map<string, Active>,
@@ -283,6 +287,7 @@ export const make = Effect.gen(function* () {
                 status: "running" as const,
                 started_at,
                 metadata: input.metadata,
+                ...(input.notificationID ? { notificationID: input.notificationID } : {}),
               },
               done,
               backgrounded,
@@ -291,7 +296,6 @@ export const make = Effect.gen(function* () {
               blockingSessions: new Map<SessionSchema.ID, number>(),
               isBackgrounded: false,
               recovery: input.recovery,
-              notificationID: input.notificationID,
             }
             return [{ info: snapshot(job), scope, token }, new Map(jobs).set(id, job)] as readonly [
               StartResult,
@@ -362,15 +366,12 @@ export const make = Effect.gen(function* () {
           ...job,
           isBackgrounded: true,
           blockingSessions: new Map<SessionSchema.ID, number>(),
-          ...(job.recovery ? { notificationID: job.notificationID ?? SessionMessage.ID.create() } : {}),
+          info: {
+            ...job.info,
+            ...(job.recovery ? { notificationID: job.info.notificationID ?? SessionMessage.ID.create() } : {}),
+          },
         }
-        if (next.recovery && next.notificationID)
-          yield* kv.set(`${backgroundPrefix}${next.notificationID}`, {
-            id,
-            notificationID: next.notificationID,
-            recovery: next.recovery,
-            status: "running",
-          })
+        yield* persistBackground(next)
         return [{ info: snapshot(next), backgrounded: job.backgrounded }, new Map(jobs).set(id, next)] as readonly [
           BackgroundResult,
           Map<string, Active>,
@@ -397,15 +398,12 @@ export const make = Effect.gen(function* () {
             ...job,
             isBackgrounded: true,
             blockingSessions: new Map<SessionSchema.ID, number>(),
-            ...(job.recovery ? { notificationID: job.notificationID ?? SessionMessage.ID.create() } : {}),
+            info: {
+              ...job.info,
+              ...(job.recovery ? { notificationID: job.info.notificationID ?? SessionMessage.ID.create() } : {}),
+            },
           }
-          if (updated.recovery && updated.notificationID)
-            yield* kv.set(`${backgroundPrefix}${updated.notificationID}`, {
-              id,
-              notificationID: updated.notificationID,
-              recovery: updated.recovery,
-              status: "running",
-            })
+          yield* persistBackground(updated)
           results.push({ info: snapshot(updated), backgrounded: job.backgrounded })
           next.set(id, updated)
         }
@@ -438,13 +436,7 @@ export const make = Effect.gen(function* () {
             completed_at,
           },
         }
-        if (next.recovery && next.notificationID)
-          yield* kv.set(`${backgroundPrefix}${next.notificationID}`, {
-            id,
-            notificationID: next.notificationID,
-            recovery: next.recovery,
-            status: "cancelled",
-          })
+        yield* persistBackground(next)
         return [{ info: snapshot(next), done: job.done, scope: job.scope }, new Map(jobs).set(id, next)] as readonly [
           FinishResult,
           Map<string, Active>,
@@ -456,7 +448,7 @@ export const make = Effect.gen(function* () {
     return result.info
   })
 
-  const recoverable: Interface["recoverable"] = Effect.gen(function* () {
+  const pendingBackground: Interface["pendingBackground"] = Effect.gen(function* () {
     const recovered: Background[] = []
     let after: string | undefined
     do {
@@ -465,13 +457,23 @@ export const make = Effect.gen(function* () {
       after = page.next
     } while (after)
     return recovered
-  }).pipe(Effect.withSpan("Job.recoverable"))
+  }).pipe(Effect.withSpan("Job.pendingBackground"))
 
-  const acknowledge: Interface["acknowledge"] = Effect.fn("Job.acknowledge")((notificationID) =>
+  const completeBackground: Interface["completeBackground"] = Effect.fn("Job.completeBackground")((notificationID) =>
     kv.remove(`${backgroundPrefix}${notificationID}`),
   )
 
-  return Service.of({ get, start, wait, block, background, backgroundAll, cancel, recoverable, acknowledge })
+  return Service.of({
+    get,
+    start,
+    wait,
+    block,
+    background,
+    backgroundAll,
+    cancel,
+    pendingBackground,
+    completeBackground,
+  })
 })
 
 const layer = Layer.effect(Service, make)
