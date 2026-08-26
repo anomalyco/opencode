@@ -30,6 +30,13 @@ test("compaction prompt gives update instructions for a prior summary", () => {
   expect(prompt).toContain('Update "Objective" and "Next Move" to reflect the current work state.')
 })
 
+test("replay prompt summarizes preceding messages", () => {
+  const prompt = SessionCompaction.buildReplayPrompt()
+  expect(prompt).toContain("conversation messages above")
+  expect(prompt).toContain("Do not continue the task or call tools")
+  expect(prompt).not.toContain("<conversation>")
+})
+
 test("compaction describes tool media without embedding base64", () => {
   const base64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB"
   const serialized = SessionCompaction.serializeToolContent([

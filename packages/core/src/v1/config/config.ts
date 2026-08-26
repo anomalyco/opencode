@@ -164,6 +164,10 @@ export const Info = Schema.Struct({
       reserved: Schema.optional(NonNegativeInt).annotate({
         description: "Token buffer for compaction. Leaves enough window to avoid overflow during compaction.",
       }),
+      preserve_prefix_cache: Schema.optional(Schema.Boolean).annotate({
+        description:
+          "Reuse the current request prefix during compaction for supported OpenAI-compatible providers. Falls back to serialized compaction when replay is unsafe (experimental, default: false)",
+      }),
     }),
   ),
   experimental: Schema.optional(
