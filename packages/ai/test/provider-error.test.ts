@@ -18,13 +18,19 @@ describe("provider error classification", () => {
     expect(messages.every(isContextOverflow)).toBe(true)
   })
 
-  test("classifies request size failures separately from context overflow", () => {
-    const failures = [
-      classifyProviderFailure({ message: "request too large", status: 413 }),
+  test("classifies Anthropic request_too_large as recoverable overflow", () => {
+    expect(
       classifyProviderFailure({
         message: '{"error":{"type":"request_too_large","message":"Request exceeds the maximum size"}}',
         status: 400,
       }),
+    ).toMatchObject({ _tag: "InvalidRequest", classification: "context-overflow" })
+    expect(isContextOverflow("413 status code (no body)")).toBe(true)
+  })
+
+  test("classifies generic request size failures separately from context overflow", () => {
+    const failures = [
+      classifyProviderFailure({ message: "request too large", status: 413 }),
       classifyProviderFailure({ message: "upstream request entity too large", status: 502 }),
     ]
 
@@ -33,7 +39,6 @@ describe("provider error classification", () => {
         expect.objectContaining({ _tag: "InvalidRequest", classification: "payload-too-large" }),
       ),
     )
-    expect(isContextOverflow("413 status code (no body)")).toBe(false)
   })
 
   test("does not classify rate limits as context overflow", () => {
