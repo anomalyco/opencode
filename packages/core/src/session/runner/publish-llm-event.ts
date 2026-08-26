@@ -29,6 +29,10 @@ const asRecord = (value: unknown): Record<string, unknown> =>
 export interface StepRecord {
   /** The model produced visible output this attempt, which bars transparent retries and overflow recovery. */
   readonly outputStarted: boolean
+  /** The model produced a non-whitespace answer or accepted tool call. */
+  readonly responseProduced: boolean
+  /** The provider started any local or hosted tool input, accepted or partial. */
+  readonly hasToolActivity: boolean
   readonly providerFailed: boolean
   /** The step's recorded assistant failure, if any. */
   readonly failure?: SessionError.Error
@@ -96,6 +100,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
   let stepFailed = false
   let providerFailed = false
   let outputStarted = false
+  let responseProduced = false
   let stepStreamed = false
   let stepFailure: SessionError.Error | undefined
   let stepSettlement: StepRecord["finish"]
@@ -393,6 +398,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
         })
         return
       case "text-delta":
+        if (event.text.trim().length > 0) responseProduced = true
         yield* text.append(event.id, event.text, providerState(event.providerMetadata))
         return
       case "text-end":
@@ -436,6 +442,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
         return
       case "tool-call": {
         outputStarted = true
+        responseProduced = true
         const tool = tools.get(event.id) ?? (yield* startToolInput(event))
         if (toolInput.has(event.id)) yield* endToolInput(event)
         if (tool.name !== event.name)
@@ -586,6 +593,8 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     /** Immutable snapshot of everything recorded for this step so far. */
     record: (): StepRecord => ({
       outputStarted,
+      responseProduced,
+      hasToolActivity: tools.size > 0,
       providerFailed,
       failure: stepFailure,
       finish: stepSettlement,

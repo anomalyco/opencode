@@ -29,6 +29,9 @@ import { MAX_STEPS_PROMPT } from "./max-steps.js"
 
 const CONTINUE_AFTER_INCOMPLETE_STREAM =
   "The previous response was interrupted. Continue from where you left off without repeating completed content."
+const CONTINUE_AFTER_MISSING_RESPONSE =
+  "The previous response stopped without producing an answer or tool call. Continue the task without repeating completed work."
+const MISSING_RESPONSE_CONTINUATION_LIMIT = 1
 
 const layer = Layer.effect(
   Service,
@@ -83,6 +86,7 @@ const layer = Layer.effect(
       let continuing = input.continuation !== undefined
       let step = input.continuation?.step ?? 1
       let entering = true
+      let missingResponseContinuations = 0
       const promotable = input.promotable ?? "input"
       if (!force && !continuing) {
         const pending = yield* SessionInbox.nextPromotable(db, sessionID, "input")
@@ -177,7 +181,10 @@ const layer = Layer.effect(
                     yield* FiberMap.run(titles, sessionID, title.generate(sessionID).pipe(Effect.ignore), {
                       onlyIfMissing: true,
                     })
-                  if (promoted > 0) step = 1
+                  if (promoted > 0) {
+                    step = 1
+                    missingResponseContinuations = 0
+                  }
                   return { _tag: "Ready" as const, context: yield* context.load(selected) }
                 }),
               )
@@ -189,7 +196,19 @@ const layer = Layer.effect(
       while (true) {
         const next = yield* advanceToStep()
         if (next._tag !== "Ready") return next
-        continuing = yield* runStep(next.context, step)
+        const result = yield* runStep(next.context, step)
+        const continueAfterMissingResponse =
+          result.responseMissing && missingResponseContinuations < MISSING_RESPONSE_CONTINUATION_LIMIT
+        if (continueAfterMissingResponse) {
+          missingResponseContinuations++
+          yield* bus.publish(SessionEvent.Synthetic, { sessionID, text: CONTINUE_AFTER_MISSING_RESPONSE })
+        } else if (result.responseMissing) {
+          yield* bus.publish(SessionEvent.Synthetic, {
+            sessionID,
+            text: "The model stopped again without producing an answer or tool call. Automatic continuation has stopped; await the user's next instruction.",
+          })
+        }
+        continuing = result.needsContinuation || continueAfterMissingResponse
         step++
         force = false
         entering = false
@@ -257,7 +276,7 @@ const layer = Layer.effect(
               : Effect.succeed(false),
           ),
         })
-        if (outcome._tag === "Completed") return outcome.needsContinuation
+        if (outcome._tag === "Completed") return outcome
         if (outcome._tag === "Retry" || outcome._tag === "Continue") {
           yield* retry({ cause: outcome.cause, error: outcome.error, assistantMessageID }).pipe(
             Pull.catchDone(() =>
