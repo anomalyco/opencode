@@ -111,7 +111,6 @@ export const dict = {
   "home.marketChart": "모델 작성자별 시장 점유율",
   "home.noData": "데이터 없음",
   "home.geoTitle": "지역별 분포",
-  "home.geoDescription": "국가별 사용 토큰입니다.",
   "home.noGeoTitle": "지역 데이터 없음",
   "home.noGeoDescription": "이 범위에 맞는 지역 행이 없습니다.",
   "home.worldMap": "국가별 토큰 사용량 세계 지도",
