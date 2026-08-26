@@ -3,7 +3,7 @@ export * as MCPCodeModeExclusionPlugin from "./mcp-codemode-exclusion.js"
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Effect } from "effect"
 
-// These servers execute code themselves, so expose them directly instead of nesting code execution.
+// These servers provide Code Mode, so expose them directly instead of nesting them inside OpenCode Code Mode.
 const urls = [/^https:\/\/executor\.sh\/[^/]+\/mcp$/]
 
 export const Plugin = define({
@@ -13,16 +13,6 @@ export const Plugin = define({
       for (const [, server] of draft.list()) {
         if (server.codemode !== undefined) continue
         if (server.type === "local") {
-          const command = server.command[0]
-            ?.split(/[\\/]/)
-            .at(-1)
-            ?.replace(/\.exe$/i, "")
-          if (
-            command === "blender-mcp" ||
-            ((command === "uvx" || (command === "uv" && server.command[1] === "tool" && server.command[2] === "run")) &&
-              server.command.slice(1).some((arg) => /^blender-mcp(?:@[^/\\]+)?$/.test(arg)))
-          )
-            server.codemode = false
           if (server.command[0] === "executor" && server.command[1] === "mcp") server.codemode = false
           continue
         }
