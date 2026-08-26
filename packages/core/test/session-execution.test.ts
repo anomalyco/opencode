@@ -26,10 +26,20 @@ import { Context, Deferred, Effect, Exit, Fiber, Layer, LayerMap, Scope } from "
 import { eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 
-const it = testEffect(AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SessionStore.node, Job.node])))
+const it = testEffect(
+  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SessionStore.node, Job.node, Session.node])),
+)
 const projected = testEffect(
   AppNodeBuilder.build(
-    LayerNode.group([Database.node, Bus.node, SessionStore.node, SessionProjector.node, Job.node, KV.node]),
+    LayerNode.group([
+      Database.node,
+      Bus.node,
+      SessionStore.node,
+      SessionProjector.node,
+      Job.node,
+      KV.node,
+      Session.node,
+    ]),
   ),
 )
 
@@ -919,6 +929,20 @@ function buildExecution(
     const bus = yield* Bus.Service
     const store = yield* SessionStore.Service
     const jobs = overrideJobs ?? (yield* Job.Service)
+    const sessions = yield* Session.Service
+    const sessionLayer = Layer.effect(
+      Session.Service,
+      Effect.gen(function* () {
+        const execution = yield* SessionExecution.Service
+        return Session.Service.of({
+          ...sessions,
+          synthetic: (input) =>
+            sessions
+              .synthetic({ ...input, resume: false })
+              .pipe(Effect.tap(() => (input.resume === false ? Effect.void : execution.wake(input.sessionID)))),
+        })
+      }),
+    )
     const runner = Layer.succeed(
       SessionRunner.Service,
       SessionRunner.Service.of({ drain: (input) => drain(input).pipe(Effect.as({ type: "complete" as const })) }),
@@ -934,7 +958,8 @@ function buildExecution(
     )
     return yield* Layer.buildWithScope(
       SessionRestart.layer(options).pipe(
-        Layer.provideMerge(SessionExecution.layer),
+        Layer.provideMerge(sessionLayer),
+        Layer.provideMerge(Layer.fresh(SessionExecution.layer)),
         Layer.provide(Layer.succeed(Database.Service, database)),
         Layer.provide(Layer.succeed(Bus.Service, bus)),
         Layer.provide(Layer.succeed(SessionStore.Service, store)),

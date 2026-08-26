@@ -3,11 +3,10 @@ export * as SessionRestart from "./restart.js"
 import { Context, Effect, Layer } from "effect"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { Bus } from "../../bus.js"
-import { Database } from "../../database/database.js"
 import { Job } from "../../job.js"
+import { Session } from "../../session.js"
 import { SessionEvent } from "../event.js"
 import { SessionExecution } from "../execution.js"
-import { SessionInbox } from "../inbox.js"
 import { SessionSchema } from "../schema.js"
 import { SessionStore } from "../store.js"
 
@@ -66,7 +65,7 @@ export const layer = (options?: Options) =>
       const execution = yield* SessionExecution.Service
       const bus = yield* Bus.Service
       const jobs = yield* Job.Service
-      const database = yield* Database.Service
+      const sessions = yield* Session.Service
       const scope = yield* Effect.scope
       const maxAttempts = options?.maxAttempts ?? DEFAULT_MAX_ATTEMPTS
 
@@ -147,26 +146,21 @@ export const layer = (options?: Options) =>
               : result.status === "error"
                 ? (result.error ?? "Subagent failed")
                 : "Subagent cancelled"
-          yield* SessionInbox.admit(database.db, bus, {
-            id: background.notificationID,
-            sessionID: recovery.parentSessionID,
-            item: SessionInbox.Item.make({
-              type: "synthetic",
-              delivery: "steer",
-              payload: {
-                description: recovery.description,
-                text: `<subagent sessionID="${recovery.childSessionID}" state="${result.status}" description="${recovery.description}">\n${text}\n</subagent>`,
-                metadata: {
-                  source: "subagent",
-                  childID: recovery.childSessionID,
-                  agent: recovery.agent,
-                  state: result.status,
-                },
+          yield* sessions
+            .synthetic({
+              id: background.notificationID,
+              sessionID: recovery.parentSessionID,
+              description: recovery.description,
+              text: `<subagent sessionID="${recovery.childSessionID}" state="${result.status}" description="${recovery.description}">\n${text}\n</subagent>`,
+              metadata: {
+                source: "subagent",
+                childID: recovery.childSessionID,
+                agent: recovery.agent,
+                state: result.status,
               },
-            }),
-          })
+            })
+            .pipe(Effect.orDie)
           yield* jobs.completeBackground(background.notificationID)
-          yield* execution.wake(recovery.parentSessionID)
         })
 
         if (background.status !== "running") {
@@ -250,5 +244,5 @@ export const layer = (options?: Options) =>
 export const node = makeGlobalNode({
   service: Service,
   layer: layer(),
-  deps: [SessionStore.node, SessionExecution.node, Bus.node, Job.node, Database.node],
+  deps: [SessionStore.node, SessionExecution.node, Bus.node, Job.node, Session.node],
 })
