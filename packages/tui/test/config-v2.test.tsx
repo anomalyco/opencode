@@ -66,10 +66,6 @@ test("validates terminal copy behavior", () => {
   expect(decodeInfo({ terminal: { copy: "manual" } })).toEqual({ terminal: { copy: "manual" } })
   expect(decodeInfo({ terminal: { copy: "select" } })).toEqual({ terminal: { copy: "select" } })
   expect(() => decodeInfo({ terminal: { copy: "always" } })).toThrow()
-
-  const setting = settings.find((setting) => setting.path.join(".") === "terminal.copy")
-  expect(setting?.values).toEqual(["manual", "select"])
-  expect(setting?.default).toBe(process.platform === "win32" ? "manual" : "select")
 })
 
 test("keeps persistent terminals disabled until explicitly enabled", () => {
@@ -78,6 +74,9 @@ test("keeps persistent terminals disabled until explicitly enabled", () => {
   expect(disabled.keybinds.get("theme.switch")).toMatchObject([{ key: "<leader>t" }])
   expect(disabled.keybinds.get("terminal.toggle")).toEqual([])
   expect(settings.find((setting) => setting.path.join(".") === "terminal.enabled")?.default).toBe(false)
+  expect(settings.filter((setting) => setting.category === "Terminal").map((setting) => setting.title)).toEqual([
+    "Enabled",
+  ])
 
   const enabled = resolve({ terminal: { enabled: true } }, { terminalSuspend: true })
   expect(enabled.keybinds.get("terminal.toggle")).toMatchObject([{ key: "<leader>t" }])
