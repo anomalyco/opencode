@@ -256,7 +256,6 @@ export const dict = {
   "zen.privacy.exceptionsLink": "aşağıdaki istisnalar",
 
   "go.title": "OpenCode Go | Herkes için düşük maliyetli kodlama modelleri",
-  "go.banner.text": "Ox Alpha Free sınırlı bir süre için Go'da kullanılabilir",
   "go.meta.description":
     "Go ayda 10$'dır; cömert kullanım limitleri ve önde gelen kodlama modellerine güvenilir erişim sunar.",
   "go.hero.title": "Herkes için düşük maliyetli kodlama modelleri",
