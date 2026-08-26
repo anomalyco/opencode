@@ -159,6 +159,8 @@ const source = {
   "ui.tool.loaded": "Loaded",
   "ui.tool.loadedFile": "Loaded {{path}}",
   "ui.tool.loadedSkill": "Loaded {{name}} skill",
+  "ui.tool.loadedSkills.one": "Loaded {{name}} skill",
+  "ui.tool.loadedSkills.other": "Loaded {{name}} skills",
   "ui.tool.list": "List",
   "ui.tool.glob": "Glob",
   "ui.tool.grep": "Grep",

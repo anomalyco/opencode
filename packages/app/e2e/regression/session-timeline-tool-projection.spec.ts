@@ -212,18 +212,35 @@ test("labels skill tools from IDs and result metadata", async ({ page }) => {
   await expect(group.locator('[data-component="tag"]')).toHaveText("2")
   await group.getByRole("button").click()
 
-  for (const [id, name] of [
-    [pending, "frontend-design"],
-    [completed, "OpenCode"],
-  ] as const) {
-    const skill = page.locator(`[data-timeline-part-id="${id}"]`)
-    const loaded = skill.locator('[data-component="tool-loaded-item"]')
-    await expect(loaded).toHaveAttribute("aria-label", `Loaded ${name} skill`)
-    await expect(loaded).toHaveCSS("line-height", "16px")
-    await expect(loaded.locator('[data-slot="tool-loaded-label"]')).toHaveText("Loaded")
-    await expect(loaded.locator('[data-slot="tool-loaded-kind"]')).toHaveText("skill")
-    await expect(loaded.locator('[data-component="text-shimmer"]')).toHaveAttribute("aria-label", name)
-  }
+  const loaded = group.locator('[data-component="tool-loaded-item"]')
+  await expect(loaded).toHaveCount(1)
+  await expect(loaded).toHaveAttribute("aria-label", "Loaded frontend-design, OpenCode skills")
+  await expect(loaded).toHaveCSS("line-height", "16px")
+  await expect(loaded.locator('[data-slot="tool-loaded-label"]')).toHaveText("Loaded")
+  await expect(loaded.locator('[data-slot="tool-loaded-kind"]')).toHaveText("skills")
+  const names = loaded.locator('[data-component="text-shimmer"]')
+  await expect(names).toHaveCount(2)
+  await expect(names.nth(0)).toHaveAttribute("aria-label", "frontend-design")
+  await expect(names.nth(1)).toHaveAttribute("aria-label", "OpenCode")
+})
+
+test("groups only consecutive successful skill tools", async ({ page }) => {
+  const parts = [
+    toolPart("prt_skill_first", "skill", "completed", { id: "ocpr" }),
+    toolPart("prt_skill_second", "skill", "completed", { id: "effect" }),
+    toolPart("prt_skill_third", "skill", "completed", { id: "ui-pr-screenshots" }),
+    toolPart("prt_skill_break", "read", "completed", { path: "src/a.ts" }),
+    toolPart("prt_skill_last", "skill", "completed", { id: "opencode" }),
+  ]
+  await setupTimeline(page, { messages: [userMessage(), assistantMessage(parts)] })
+
+  const group = page.locator(`[data-timeline-part-ids="${parts.map((part) => part.id).join(",")}"]`)
+  await group.getByRole("button").click()
+
+  const loaded = group.locator('[data-component="tool-loaded-item"]')
+  await expect(loaded).toHaveCount(2)
+  await expect(loaded.nth(0)).toHaveAttribute("aria-label", "Loaded ocpr, effect, ui-pr-screenshots skills")
+  await expect(loaded.nth(1)).toHaveAttribute("aria-label", "Loaded opencode skill")
 })
 
 function questionInput() {

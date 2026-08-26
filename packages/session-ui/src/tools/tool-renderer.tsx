@@ -500,6 +500,24 @@ export function CurrentContextToolGroup(props: {
     const index = text.indexOf(tools)
     return { text, before: text.slice(0, index).trim(), after: text.slice(index + tools.length).trim() }
   })
+  const items = createMemo(() =>
+    props.tools.reduce<SessionMessageAssistantTool[][]>((groups, tool) => {
+      const previous = groups.at(-1)
+      if (
+        tool.name === "skill" &&
+        tool.state.status !== "error" &&
+        skillToolName(currentToolInput(tool), currentToolMetadata(tool)) &&
+        previous?.[0]?.name === "skill" &&
+        previous[0].state.status !== "error" &&
+        skillToolName(currentToolInput(previous[0]), currentToolMetadata(previous[0]))
+      ) {
+        previous.push(tool)
+        return groups
+      }
+      groups.push([tool])
+      return groups
+    }, []),
+  )
   const change = (open: boolean) => {
     props.onOpenChange(open)
     props.onSizeChange?.()
@@ -530,27 +548,76 @@ export function CurrentContextToolGroup(props: {
         }
       >
         <div data-component="context-tool-group-list">
-          <Index each={props.tools}>
-            {(tool) => {
+          <Index each={items()}>
+            {(group) => {
+              const tool = createMemo(() => group()[0]!)
               const trigger = createMemo(() => currentContextToolTrigger(tool(), i18n))
+              const skills = createMemo(() =>
+                group().flatMap((item) => {
+                  const name = skillToolName(currentToolInput(item), currentToolMetadata(item))
+                  return name ? [name] : []
+                }),
+              )
+              const marker = "__OPENCODE_LOADED_SKILL__"
+              const loaded = createMemo(() => i18n.plural("ui.tool.loadedSkills", skills().length, { name: marker }))
               return (
                 <div data-slot="context-tool-group-item">
                   <Show
                     when={tool().state.status !== "error" && ["read", "glob", "grep", "list"].includes(tool().name)}
                     fallback={
-                      <ToolDisplay
-                        id={tool().id}
-                        tool={tool().name}
-                        input={currentToolInput(tool())}
-                        metadata={currentToolMetadata(tool())}
-                        output={currentToolOutput(tool())}
-                        error={currentToolError(tool())}
-                        status={tool().state.status}
-                        defaultOpen={false}
-                        deferContent
-                        virtualizeDiff={false}
-                        onContentRendered={props.onSizeChange}
-                      />
+                      <Show
+                        when={tool().name === "skill" && group().length > 1 && skills().length === group().length}
+                        fallback={
+                          <ToolDisplay
+                            id={tool().id}
+                            tool={tool().name}
+                            input={currentToolInput(tool())}
+                            metadata={currentToolMetadata(tool())}
+                            output={currentToolOutput(tool())}
+                            error={currentToolError(tool())}
+                            status={tool().state.status}
+                            defaultOpen={false}
+                            deferContent
+                            virtualizeDiff={false}
+                            onContentRendered={props.onSizeChange}
+                          />
+                        }
+                      >
+                        <div
+                          data-component="tool-loaded-item"
+                          data-timeline-part-ids={group()
+                            .map((item) => item.id)
+                            .join(",")}
+                          aria-label={i18n.plural("ui.tool.loadedSkills", skills().length, {
+                            name: skills().join(", "),
+                          })}
+                        >
+                          <span data-slot="tool-loaded-label" aria-hidden="true">
+                            {loaded().split(marker)[0]?.trim()}
+                          </span>
+                          <span data-slot="tool-loaded-value" aria-hidden="true">
+                            <For each={skills()}>
+                              {(name, index) => (
+                                <>
+                                  <Show when={index() > 0}>, </Show>
+                                  <TextShimmer
+                                    as="span"
+                                    text={name}
+                                    active={["streaming", "running"].includes(group()[index()]!.state.status)}
+                                  />
+                                </>
+                              )}
+                            </For>
+                          </span>
+                          <Show when={loaded().split(marker)[1]?.trim()}>
+                            {(suffix) => (
+                              <span data-slot="tool-loaded-kind" aria-hidden="true">
+                                {suffix()}
+                              </span>
+                            )}
+                          </Show>
+                        </div>
+                      </Show>
                     }
                   >
                     <div data-component="tool-trigger">
