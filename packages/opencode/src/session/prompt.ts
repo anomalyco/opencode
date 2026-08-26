@@ -56,7 +56,7 @@ import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionReminders } from "./reminders"
 import { SessionTools } from "./tools"
 import { LLMEvent } from "@opencode-ai/llm"
-import { JudgeAgent } from "@opencode-ai/core/harness"
+import { JudgeAgent, QualityGate } from "@opencode-ai/core/harness"
 import { model as nativeModel } from "./llm/native-request"
 
 // @ts-ignore
@@ -143,6 +143,7 @@ const layer = Layer.effect(
     const flags = yield* RuntimeFlags.Service
     const database = yield* Database.Service
     const judge = yield* JudgeAgent.Service
+    const qualityGate = yield* QualityGate.Service
     const { db } = database
     const ops = Effect.fn("SessionPrompt.ops")(function* () {
       return {
@@ -1076,6 +1077,15 @@ const layer = Layer.effect(
         .join("\n")
         .trim()
       const execution = yield* loop({ sessionID: input.sessionID }).pipe(Effect.exit)
+
+      // 1. Completion marker reached: Immediately run deterministic QualityGate
+      yield* qualityGate.evaluateSession(input.sessionID).pipe(
+        Effect.tapError((error) => Effect.logError("quality gate evaluation failed", { error })),
+        Effect.orElseSucceed(() => undefined),
+        Effect.orDie,
+      )
+
+      // 2. Classify task and run Judge evaluation in background
       yield* Effect.gen(function* () {
         const taskModel = yield* getModel(message.info.model.providerID, message.info.model.modelID, input.sessionID)
         const judgeModel = yield* Effect.try({
@@ -1085,17 +1095,17 @@ const layer = Layer.effect(
         if (Option.isNone(judgeModel)) return
         const classification = yield* judge.classify(originalPrompt, judgeModel.value).pipe(
           Effect.orElseSucceed(() => ({
-            isTask: false,
-            taskType: undefined,
+            isTask: true,
+            taskType: "general",
             taskSubType: undefined,
-            taskSubTypes: undefined,
-            summary: undefined,
+            taskSubTypes: ["general"],
+            summary: originalPrompt,
           })),
         )
         if (!classification.isTask) return
         const taskID = yield* judge.registerTask({
           prompt: originalPrompt,
-          taskType: classification.taskType,
+          taskType: classification.taskType || "general",
           taskSubType: classification.taskSubType,
           taskSubTypes: classification.taskSubTypes,
           taskModel: `${message.info.model.providerID}/${message.info.model.modelID}`,
@@ -1670,6 +1680,7 @@ export const node = LayerNode.make({
     RuntimeFlags.node,
     Database.node,
     JudgeAgent.node,
+    QualityGate.node,
   ],
 })
 

@@ -144,14 +144,23 @@ const layer = Layer.effect(
       return yield* Effect.void
     })
 
-    // 4. Retrieve Active Version for a domain category
+    // 4. Retrieve Active Version for a domain category (with fallback to general)
     const getActiveVersion = Effect.fn("HarnessVersion.getActiveVersion")(function* (domainCategory: string) {
-      const activeRow = yield* db
+      let activeRow = yield* db
         .select()
         .from(harness_version)
         .where(and(eq(harness_version.domain_category, domainCategory), eq(harness_version.is_active, true)))
         .get()
         .pipe(Effect.orElseSucceed(() => undefined))
+
+      if (!activeRow && domainCategory !== "general") {
+        activeRow = yield* db
+          .select()
+          .from(harness_version)
+          .where(and(eq(harness_version.domain_category, "general"), eq(harness_version.is_active, true)))
+          .get()
+          .pipe(Effect.orElseSucceed(() => undefined))
+      }
 
       if (!activeRow) return null
 

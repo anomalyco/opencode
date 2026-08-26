@@ -70,19 +70,34 @@ Requested Changes: ${fb.changes_requested ?? "None"}
         )
         .join("\n---\n")
 
-      // 3. Meta-prompt optimization via LLM
+      // 3. Fetch existing active rules for consolidation & pruning
+      const activeVer = yield* versionSvc
+        .getActiveVersion(task.task_type || "general")
+        .pipe(Effect.orElseSucceed(() => null))
+
+      const existingRules = activeVer && Array.isArray(activeVer.extractedRules)
+        ? activeVer.extractedRules.filter((r): r is string => typeof r === "string")
+        : []
+
+      // 4. Meta-prompt optimization & rule consolidation via LLM
       const res = yield* LLM.generateObject({
         // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
         model: model as Parameters<typeof LLM.generateObject>[0]["model"],
-        system: "You are an Expert Prompt Engineer and Harness Strategist. Analyze the prompts used, reiteration/retry patterns, subtask outputs, and user feedback to produce an evolved system prompt, tuned inference parameters, tool overrides, and strategy rules for future tasks.",
+        system:
+          "You are an Expert Prompt Engineer and Harness Strategist (Sakana AI RHI Meta-Optimizer). Analyze the task execution, user feedback, flaws, and existing rules to produce an evolved system prompt and a consolidated set of rules.\n\nCRITICAL PRUNING DIRECTIVES:\n1. Consolidate and merge overlapping lessons into a maximum of 7-10 high-impact, non-conflicting rules.\n2. Discard redundant, obsolete, or overly narrow one-off rules.\n3. Ensure temperature stays bounded between 0.0 and 1.0.",
         prompt: `
+Task Domain: ${task.task_type || "general"}
+
 Original Task Prompt:
 ${task.task_prompt}
 
-Subtask Prompts, Reiteration Analysis, Outputs & User Feedback Trace:
+Existing Domain Rules (Consolidate & Prune):
+${existingRules.map((r) => `- ${r}`).join("\n") || "None"}
+
+Subtask Execution, Outputs & User Feedback Trace:
 ${feedbackTrace || "No explicit subtask feedback."}
 
-Task Error (if any):
+Task Evaluation & Errors (if any):
 ${task.task_error ?? "None"}
         `.trim(),
         schema: EvolvedStrategy,
@@ -91,7 +106,7 @@ ${task.task_error ?? "None"}
 
       const strategy = res.object
 
-      // 4. Save versioned candidate proposal into harness_version
+      // 5. Save versioned candidate proposal into harness_version
       const candidateVersionID = yield* versionSvc.proposeCandidate({
         domainCategory: strategy.taskCategory || task.task_type || "general",
         systemPrompt: strategy.refinedSystemPrompt,

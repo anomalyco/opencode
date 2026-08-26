@@ -10,6 +10,7 @@ import { Config } from "../config"
 import { makeLocationNode } from "../effect/app-node"
 import { harness_task, harness_subtask_feedback } from "./schema"
 import { QualityGate } from "./quality-gate"
+import { PromptFinalizer } from "./improving_prompt_finalizer"
 import { eq } from "drizzle-orm"
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -128,9 +129,8 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const { db } = yield* Database.Service
     const todosSvc = yield* SessionTodo.Service
-
-    // QUALITY GATE: added service
     const qualityGate = yield* QualityGate.Service
+    const finalizerSvc = yield* PromptFinalizer.Service
 
     const configOption = yield* Effect.serviceOption(Config.Service)
 
@@ -142,7 +142,7 @@ const layer = Layer.effect(
         // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
         model: model as Parameters<typeof LLM.generateObject>[0]["model"],
         system:
-          "You are a Judge Agent. Analyze the user prompt and determine if it is an actionable task. Output taskType (e.g., 'web', 'backend', 'devops', 'refactor', 'bugfix') and taskSubTypes as a list of sub-domain tags (e.g., ['css-theme', 'ui-component', 'type-check']).",
+          "You are a Judge Agent. Analyze the user prompt and determine if it is an actionable coding, engineering, building, or assistance task. If the prompt requests creating, modifying, running, explaining, fixing, or testing code/software, mark isTask: true. Output taskType (e.g., 'web', 'backend', 'devops', 'refactor', 'bugfix', 'game-dev', 'general') and taskSubTypes as a list of sub-domain tags (e.g., ['python', 'cli', 'unit-test']).",
         prompt,
         schema: Classification,
         generation: { temperature: 0 },
@@ -460,6 +460,14 @@ ${input.userResponse ?? "None"}
           )
       }
 
+      // Trigger recursive self-improving prompt evolution, rule extraction, and regression testing
+      yield* finalizerSvc
+        .finalizeAndEvolve(input.taskID, model)
+        .pipe(
+          Effect.tapError((err) => Effect.logError("Harness evolution pipeline failed", { err })),
+          Effect.orElseSucceed(() => undefined),
+        )
+
       return finalEvaluation
     })
 
@@ -478,5 +486,6 @@ export const node = makeLocationNode({
     Database.node,
     SessionTodo.node,
     QualityGate.node,
+    PromptFinalizer.node,
   ],
 })
