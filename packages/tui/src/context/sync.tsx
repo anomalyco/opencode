@@ -477,12 +477,14 @@ export const {
         ...(args.continue ? [sessionListPromise] : []),
       ])
         .then(async () => {
-          const providersResponse = providersPromise.then((x) => x.data!)
-          const providerListResponse = providerListPromise.then((x) => x.data!)
+          const providersResponse = providersPromise.then((x) => x.data ?? { providers: [], default: {} })
+          const providerListResponse = providerListPromise.then(
+            (x) => x.data ?? { all: [], default: {}, connected: [] },
+          )
           const capabilitiesResponse = capabilitiesPromise
           const consoleStateResponse = consoleStatePromise
           const agentsResponse = agentsPromise.then((x) => x.data ?? [])
-          const configResponse = configPromise.then((x) => x.data!)
+          const configResponse = configPromise.then((x) => x.data ?? {})
           const sessionListResponse = args.continue ? sessionListPromise : undefined
 
           return Promise.all([
@@ -503,14 +505,14 @@ export const {
             const sessions = responses[6]
 
             batch(() => {
-              setStore("provider", reconcile(providers.providers))
-              setStore("provider_default", reconcile(providers.default))
-              setStore("provider_next", reconcile(providerList))
+              setStore("provider", reconcile(providers?.providers ?? []))
+              setStore("provider_default", reconcile(providers?.default ?? {}))
+              setStore("provider_next", reconcile(providerList ?? { all: [], default: {}, connected: [] }))
               setStore("capabilities", "experimentalBackgroundSubagents", capabilities?.backgroundSubagents === true)
-              setStore("console_state", reconcile(consoleState))
-              setStore("agent", reconcile(agents))
-              setStore("config", reconcile(config))
-              if (sessions !== undefined) setStore("session", reconcile(sessions))
+              setStore("console_state", reconcile(consoleState ?? emptyConsoleState))
+              setStore("agent", reconcile(agents ?? []))
+              setStore("config", reconcile(config ?? {}))
+              if (sessions !== undefined) setStore("session", reconcile(sessions ?? []))
             })
           })
         })
@@ -519,7 +521,7 @@ export const {
           // non-blocking
           void Promise.all([
             ...(args.continue ? [] : [sessionListPromise.then((sessions) => setStore("session", reconcile(sessions)))]),
-            consoleStatePromise.then((consoleState) => setStore("console_state", reconcile(consoleState))),
+            consoleStatePromise.then((consoleState) => setStore("console_state", reconcile(consoleState ?? emptyConsoleState))),
             sdk.client.command.list({ workspace }).then((x) => setStore("command", reconcile(x.data ?? []))),
             sdk.client.lsp.status({ workspace }).then((x) => setStore("lsp", reconcile(x.data ?? []))),
             sdk.client.mcp.status({ workspace }).then((x) => setStore("mcp", reconcile(x.data ?? {}))),
@@ -531,7 +533,7 @@ export const {
               setStore("session_status", reconcile(x.data ?? {}))
             }),
             sdk.client.provider.auth({ workspace }).then((x) => setStore("provider_auth", reconcile(x.data ?? {}))),
-            sdk.client.vcs.get({ workspace }).then((x) => setStore("vcs", reconcile(x.data))),
+            sdk.client.vcs.get({ workspace }).then((x) => setStore("vcs", reconcile(x.data ?? undefined))),
             project.workspace.sync(),
           ]).then(() => {
             setStore("status", "complete")

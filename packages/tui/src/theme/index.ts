@@ -264,7 +264,7 @@ export function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
   }
 
   const resolved = Object.fromEntries(
-    Object.entries(theme.theme)
+    Object.entries(theme.theme ?? {})
       .filter(([key]) => key !== "selectedListItemText" && key !== "backgroundMenu" && key !== "thinkingOpacity")
       .map(([key, value]) => {
         return [key, resolveColor(value as ColorValue)]
