@@ -130,7 +130,6 @@ jobs:
       - name: Verify packed workerd SDK
         if: runner.os == 'Linux'
         timeout-minutes: 15
-        working-directory: packages/sdk
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             bun turbo verify:package --filter=@opencode-ai/sdk
