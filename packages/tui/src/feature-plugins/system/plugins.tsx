@@ -169,6 +169,7 @@ export function PluginsDialog(props: {
           <DialogErrorDetails
             title={`${entry().runtime === "tui" ? "TUI" : "Server"} plugin: ${label(entry(), props.context)}`}
             error={pluginError(entry()) ?? "Unknown plugin error"}
+            context={`Status: failed\nRuntime: ${entry().runtime}\nSource: ${pluginSource(entry(), props.context)}`}
             onBack={() => {
               setDetail()
               dialog.setSize("medium")
@@ -183,6 +184,11 @@ export function PluginsDialog(props: {
 function label(entry: Entry, context: Plugin.Context) {
   if (entry.runtime === "tui") return entry.id ?? entry.target
   return entry.plugin.id ?? source(entry.plugin, context)
+}
+
+function pluginSource(entry: Entry, context: Plugin.Context) {
+  if (entry.runtime === "tui") return entry.target
+  return source(entry.plugin, context)
 }
 
 function source(plugin: PluginInfo, context: Plugin.Context) {

@@ -12,7 +12,7 @@ import { emptyPrompt } from "../prompt/history"
 import { useDialog } from "../ui/dialog"
 import { useToast } from "../ui/toast"
 
-export function DialogErrorDetails(props: { title: string; error: string; onBack: () => void }) {
+export function DialogErrorDetails(props: { title: string; error: string; context?: string; onBack: () => void }) {
   const clipboard = useClipboard()
   const dialog = useDialog()
   const location = useLocation()
@@ -62,7 +62,7 @@ export function DialogErrorDetails(props: { title: string; error: string; onBack
       location: location.ref,
       prompt: {
         ...emptyPrompt(),
-        text: `Investigate this error:\n\n${props.title}\n${props.error}`,
+        text: `Investigate why this OpenCode component failed in the current project.\n\n${props.title}${props.context ? `\n${props.context}` : ""}\nError: ${props.error}\n\nInspect the relevant project and global OpenCode configuration, startup or loading behavior, required environment variables or credentials, dependencies, and logs. Identify the root cause and recommend a fix.`,
       },
     })
     dialog.clear()

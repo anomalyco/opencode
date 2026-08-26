@@ -47,8 +47,13 @@ test("opens an investigation draft for a failed MCP server at its originating lo
     expect(fixture.route.data.type).toBe("home")
     if (fixture.route.data.type !== "home") throw new Error("Expected investigation to open a new session")
     expect(fixture.route.data.location).toEqual(location)
+    expect(fixture.route.data.prompt?.text).toContain("OpenCode component failed in the current project")
     expect(fixture.route.data.prompt?.text).toContain("MCP server: linear")
+    expect(fixture.route.data.prompt?.text).toContain("Status: failed")
+    expect(fixture.route.data.prompt?.text).toContain("Configuration: mcp.servers.linear")
+    expect(fixture.route.data.prompt?.text).toContain("Integration: mcp_linear")
     expect(fixture.route.data.prompt?.text).toContain("MCP error -32000: Connection closed")
+    expect(fixture.route.data.prompt?.text).toContain("project and global OpenCode configuration")
     expect(fixture.route.data.prompt?.text).not.toContain(location.directory)
   } finally {
     fixture.app.renderer.destroy()
