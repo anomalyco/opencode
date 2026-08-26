@@ -29,12 +29,10 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
     (sessionID) => sessions.refresh(sessionID).catch(() => undefined),
   )
   const session = () => sessions.get(props.sessionID)
-  const terminals = () => session()?.terminals ?? []
   const selectedTerminal = () => {
     if (!config.data.session.terminal) return
     const value = session()
-    if (value?.hidden) return
-    return value?.terminals.find((terminal) => terminal.id === value.selectedTerminalID) ?? value?.terminals.at(-1)
+    return value.terminals.find((terminal) => terminal.id === value.selectedTerminalID)
   }
   createEffect(
     on(
@@ -54,7 +52,7 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
   const rightPane = createMemo(() => {
     if (sidebarOpen() && sidebarVisible()) return "sidebar"
     if (selectedTerminal()) return "terminal"
-    if (sidebarVisible() && !session()?.hidden) return "sidebar"
+    if (sidebarVisible()) return "sidebar"
   })
   const toggleSidebar = () => {
     batch(() => {
@@ -65,11 +63,11 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
         })
         .catch(toast.error)
       setSidebarOpen(!visible)
-      if (!visible && selectedTerminal()) void sessions.hideTerminal(props.sessionID).catch(toast.error)
+      if (!visible && selectedTerminal()) void sessions.selectTerminal(props.sessionID, null).catch(toast.error)
     })
   }
   createEffect(() => {
-    if (!restoreTerminalFocus() || terminals().length > 0) return
+    if (!restoreTerminalFocus() || selectedTerminal()) return
     setRestoreTerminalFocus(false)
     prompt.current?.focus()
   })
@@ -139,13 +137,13 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
           <Show
             when={rightPane() === "sidebar"}
             fallback={
-              <Show keyed when={selectedTerminal()}>
-                {(terminal) => (
+              <Show keyed when={selectedTerminal()?.id}>
+                {(ptyID) => (
                   <TerminalPane
-                    ptyID={terminal.id}
-                    autoFocus={restoreTerminalFocus() || sessions.shouldFocus(terminal.id)}
+                    ptyID={ptyID}
+                    autoFocus={restoreTerminalFocus() || sessions.shouldFocus(ptyID)}
                     onAutoFocus={() => {
-                      sessions.clearFocus(terminal.id)
+                      sessions.clearFocus(ptyID)
                       setRestoreTerminalFocus(false)
                     }}
                     onFocusChange={setTerminalFocused}

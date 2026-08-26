@@ -7,14 +7,8 @@ import { useData } from "./data"
 import { useEvent } from "./event"
 import { useStorage } from "./storage"
 
-type SessionTerminals = {
-  terminals: PersistentPtyInfo[]
-  selectedTerminalID?: string
-  hidden?: boolean
-}
-
 type SessionTerminalsState = {
-  sessions: Record<string, SessionTerminals>
+  sessions: Record<string, string | null>
 }
 
 export const { use: useSessionTerminals, provider: SessionTerminalsProvider } = createSimpleContext({
@@ -25,56 +19,62 @@ export const { use: useSessionTerminals, provider: SessionTerminalsProvider } = 
     const data = useData()
     const event = useEvent()
     const [focus, setFocus] = createSignal<string>()
-    const [store, update] = useStorage().store<SessionTerminalsState>("session-terminals-v1", {
+    const storage = useStorage()
+    const [store, update] = storage.store<SessionTerminalsState>("session-terminal-selection", {
       initial: { sessions: {} },
     })
-
-    const save = (sessionID: string, terminals: PersistentPtyInfo[], selectedTerminalID?: string) =>
-      update((draft) => {
-        const current = draft.sessions[sessionID]?.selectedTerminalID
-        const selected = selectedTerminalID ?? current
-        draft.sessions[sessionID] = {
-          terminals,
-          selectedTerminalID: terminals.some((terminal) => terminal.id === selected) ? selected : terminals.at(-1)?.id,
-          ...(selectedTerminalID === undefined && draft.sessions[sessionID]?.hidden ? { hidden: true } : {}),
-        }
-      })
+    const [terminals, updateTerminals] = storage.memory<Record<string, PersistentPtyInfo[]>>("session-terminals", {
+      initial: {},
+    })
 
     const refresh = async (sessionID: string) => {
-      await save(sessionID, await client.api.experimental.persistentPty.list({ sessionID }))
+      if (!terminals[sessionID]) updateTerminals((draft) => (draft[sessionID] = []))
+      const result = await client.api.experimental.persistentPty.list({ sessionID })
+      updateTerminals((draft) => (draft[sessionID] = result))
+      const selected = store.sessions[sessionID]
+      if (!selected || result.some((terminal) => terminal.id === selected)) return
+      await update((draft) => {
+        if (draft.sessions[sessionID] !== selected) return
+        draft.sessions[sessionID] = null
+      })
+    }
+
+    const selectTerminal = async (sessionID: string, ptyID: string | null) => {
+      if (ptyID !== null && !terminals[sessionID]?.some((terminal) => terminal.id === ptyID)) return
+      setFocus(ptyID ?? undefined)
+      await update((draft) => {
+        draft.sessions[sessionID] = ptyID
+      })
     }
 
     for (const type of ["persistent-pty.added", "persistent-pty.removed"] as const) {
       onCleanup(
         event.on(type, (evt) => {
-          if (!config.session.terminal || !store.sessions[evt.data.sessionID]) return
+          if (!config.session.terminal || !terminals[evt.data.sessionID]) return
           void refresh(evt.data.sessionID).catch((error) =>
             console.error("Failed to refresh persistent terminal panes", error),
           )
         }),
       )
     }
+    onCleanup(
+      event.on("server.connected", () => {
+        if (!config.session.terminal) return
+        Object.keys(terminals).forEach((sessionID) => {
+          void refresh(sessionID).catch((error) => console.error("Failed to refresh persistent terminal panes", error))
+        })
+      }),
+    )
 
     return {
       get(sessionID: string) {
-        return store.sessions[sessionID]
+        return {
+          terminals: terminals[sessionID] ?? [],
+          selectedTerminalID: store.sessions[sessionID] ?? null,
+        }
       },
       refresh,
-      selectTerminal(sessionID: string, ptyID: string) {
-        setFocus(ptyID)
-        return update((draft) => {
-          const session = draft.sessions[sessionID]
-          if (!session?.terminals.some((terminal) => terminal.id === ptyID)) return
-          session.selectedTerminalID = ptyID
-          delete session.hidden
-        })
-      },
-      hideTerminal(sessionID: string) {
-        return update((draft) => {
-          const session = draft.sessions[sessionID]
-          if (session) session.hidden = true
-        })
-      },
+      selectTerminal,
       async newTerminal(sessionID: string): Promise<PersistentPtyInfo> {
         const session = data.session.get(sessionID)
         const terminal = await client.api.experimental.persistentPty.create({
@@ -85,8 +85,8 @@ export const { use: useSessionTerminals, provider: SessionTerminalsProvider } = 
           title: "Terminal",
           env: {},
         })
-        setFocus(terminal.id)
-        await save(sessionID, await client.api.experimental.persistentPty.list({ sessionID }), terminal.id)
+        await refresh(sessionID)
+        await selectTerminal(sessionID, terminal.id)
         return terminal
       },
       shouldFocus(ptyID: string) {

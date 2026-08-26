@@ -903,15 +903,19 @@ export function Session(props: {
             id: "terminal.toggle",
             group: "Session",
             run: () => {
+              const sessionID = route.sessionID
               if (props.visibleTerminalID) {
                 promptRef.current?.focus()
-                void terminals.hideTerminal(route.sessionID).catch(toast.error)
+                void terminals.selectTerminal(sessionID, null).catch(toast.error)
               } else {
-                const state = terminals.get(route.sessionID)
-                const terminal =
-                  state?.terminals.find((item) => item.id === state.selectedTerminalID) ?? state?.terminals.at(-1)
-                if (terminal) void terminals.selectTerminal(route.sessionID, terminal.id).catch(terminalError)
-                else void terminals.newTerminal(route.sessionID).catch(terminalError)
+                void terminals
+                  .refresh(sessionID)
+                  .then(async () => {
+                    const terminal = terminals.get(sessionID).terminals.at(-1)
+                    if (terminal) return terminals.selectTerminal(sessionID, terminal.id)
+                    await terminals.newTerminal(sessionID)
+                  })
+                  .catch(terminalError)
               }
               dialog.clear()
             },
@@ -934,7 +938,7 @@ export function Session(props: {
             enabled: props.visibleTerminalID !== undefined,
             run: () => {
               promptRef.current?.focus()
-              void terminals.hideTerminal(route.sessionID).catch(toast.error)
+              void terminals.selectTerminal(route.sessionID, null).catch(toast.error)
               dialog.clear()
             },
           },
