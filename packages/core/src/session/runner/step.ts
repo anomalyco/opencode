@@ -90,6 +90,7 @@ export const make = Effect.gen(function* () {
     // Provider and tool fibers retain per-source order without a shared writer queue.
     // A local execution starts only after its Tool.Called publication completes.
     let overflowFailure: ProviderErrorEvent | undefined
+    // Read to the end, not just the finish event, so the next request can reuse this response.
     const providerStream = llm.stream(input.prepared.request, input.prepared.options).pipe(
       Stream.runForEach((event) =>
         Effect.gen(function* () {
@@ -121,8 +122,7 @@ export const make = Effect.gen(function* () {
       Effect.ensuring(publisher.flush()),
     )
 
-    // Consume through natural EOF: the provider's completion hook commits transport checkpoints.
-    // Only streaming, tool joins, and overflow compaction are interruptible during closeout.
+    // Keep the final tool and Step events uninterruptible, even when the work itself is cancelled.
     return yield* Effect.uninterruptibleMask((restore) =>
       Effect.gen(function* () {
         const stream = yield* restore(providerStream).pipe(Effect.exit)
