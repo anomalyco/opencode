@@ -7,7 +7,7 @@ import { compileRequest } from "../../src/route/client.js"
 import { it } from "../lib/effect.js"
 import { weatherTool } from "../recorded-scenarios.js"
 
-it.effect("Groq reuses Chat streaming and omits optional provider controls by default", () =>
+it.effect("Groq reuses Chat streaming and defaults to parsed reasoning", () =>
   Effect.gen(function* () {
     expect(Groq.protocol.stream).toBe(OpenAIChat.protocol.stream)
     const model = Groq.configure({ apiKey: "fixture" }).model("llama-3.3-70b-versatile")
@@ -15,16 +15,12 @@ it.effect("Groq reuses Chat streaming and omits optional provider controls by de
     const compiled = yield* compileRequest(
       LLM.request({ model, prompt: "Hello", tools: [weatherTool], generation: { maxTokens: 64 } }),
     )
-    expect(compiled.body).toMatchObject({ max_completion_tokens: 64, stream_options: { include_usage: true } })
-    for (const key of [
-      "store",
-      "max_tokens",
-      "reasoning_format",
-      "include_reasoning",
-      "parallel_tool_calls",
-      "service_tier",
-      "user",
-    ])
+    expect(compiled.body).toMatchObject({
+      max_completion_tokens: 64,
+      stream_options: { include_usage: true },
+      reasoning_format: "parsed",
+    })
+    for (const key of ["store", "max_tokens", "include_reasoning", "parallel_tool_calls", "service_tier", "user"])
       expect(compiled.body[key]).toBeUndefined()
     expect(compiled.body.tools?.[0]?.function).not.toHaveProperty("strict")
   }),
@@ -40,7 +36,6 @@ it.effect("Groq lowers its own options for custom catalog identities and endpoin
         body: { custom: "value" },
         providerOptions: {
           reasoningEffort: "default",
-          reasoningFormat: "parsed",
           parallelToolCalls: true,
           serviceTier: "flex",
           user: "test-user",
@@ -49,7 +44,7 @@ it.effect("Groq lowers its own options for custom catalog identities and endpoin
       { provider: "custom-groq" },
     )
     const compiled = yield* compileRequest(
-      LLM.request({ model, prompt: "Hello", providerOptions: { parallelToolCalls: false } }),
+      LLM.request({ model, prompt: "Hello", providerOptions: { parallelToolCalls: false, includeReasoning: false } }),
     )
     expect(model.route.endpoint.baseURL).toBe("https://gateway.example/v1")
     expect(model.route.defaults.headers).toEqual({ "x-client": "test" })
@@ -93,12 +88,21 @@ it.effect("Groq replays reasoning only when present and preserves explicit reaso
   }),
 )
 
-it.effect("Groq validates option types and rejects conflicting reasoning controls", () =>
+it.effect("Groq omits reasoning_format for the GPT-OSS family by default", () =>
   Effect.gen(function* () {
-    for (const providerOptions of [
-      { reasoningFormat: "parsed", includeReasoning: false },
-      { parallelToolCalls: "false" },
-    ]) {
+    for (const id of ["openai/gpt-oss-20b", "openai/gpt-oss-120b", "openai/gpt-oss-safeguard-20b"]) {
+      const compiled = yield* compileRequest(
+        LLM.request({ model: Groq.configure({ apiKey: "fixture" }).model(id), prompt: "Hello" }),
+      )
+      expect(compiled.body.reasoning_format).toBeUndefined()
+      expect(compiled.body.include_reasoning).toBeUndefined()
+    }
+  }),
+)
+
+it.effect("Groq validates option types", () =>
+  Effect.gen(function* () {
+    for (const providerOptions of [{ includeReasoning: "false" }, { parallelToolCalls: "false" }]) {
       const error = yield* compileRequest(
         LLM.request({ model: Groq.configure({ apiKey: "fixture" }).model("qwen"), prompt: "Hello", providerOptions }),
       ).pipe(Effect.flip)

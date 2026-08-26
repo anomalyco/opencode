@@ -14,7 +14,7 @@ import type { OpenAIProviderOptionsInput } from "./openai-options.js"
 export const id = ProviderID.make("groq")
 
 export type ProviderOptions = Pick<OpenAIProviderOptionsInput, "reasoningEffort"> & {
-  readonly reasoningFormat?: "parsed" | "raw" | "hidden" | (string & {})
+  /** Controls visible reasoning on GPT-OSS; other models always use parsed reasoning. */
   readonly includeReasoning?: boolean
   readonly parallelToolCalls?: boolean
   readonly serviceTier?: "on_demand" | "flex" | "auto" | "performance" | (string & {})
@@ -34,7 +34,6 @@ export interface Settings extends ProviderPackage.Settings {
 }
 
 const Options = Schema.Struct({
-  reasoningFormat: Schema.optional(Schema.String),
   includeReasoning: Schema.optional(Schema.Boolean),
   parallelToolCalls: Schema.optional(Schema.Boolean),
   serviceTier: Schema.optional(Schema.String),
@@ -46,7 +45,7 @@ export const protocol = Protocol.make({
   body: {
     schema: Schema.Struct({
       ...OpenAIChat.bodyFields,
-      reasoning_format: Schema.optional(Schema.String),
+      reasoning_format: Schema.optional(Schema.Literal("parsed")),
       include_reasoning: Schema.optional(Schema.Boolean),
       parallel_tool_calls: Schema.optional(Schema.Boolean),
       service_tier: Schema.optional(Schema.String),
@@ -56,12 +55,11 @@ export const protocol = Protocol.make({
       const options = yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(Options))(
         request.providerOptions ?? {},
       )
-      if (options.reasoningFormat !== undefined && options.includeReasoning !== undefined)
-        return yield* ProviderShared.invalidRequest("Groq reasoningFormat and includeReasoning are mutually exclusive")
+      const gptOSS = request.model.id.startsWith("openai/gpt-oss-")
       return {
         ...(yield* OpenAIChat.fromRequest(request)),
-        reasoning_format: options.reasoningFormat,
-        include_reasoning: options.includeReasoning,
+        reasoning_format: gptOSS ? undefined : ("parsed" as const),
+        include_reasoning: gptOSS ? options.includeReasoning : undefined,
         parallel_tool_calls: options.parallelToolCalls,
         service_tier: options.serviceTier,
         user: options.user,

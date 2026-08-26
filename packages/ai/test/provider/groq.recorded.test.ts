@@ -101,7 +101,7 @@ describe("Groq recorded", () => {
           const compiled = yield* compileRequest(request)
           expect(compiled.body.stream_options).toEqual({ include_usage: true })
           expect(compiled.body.store).toBeUndefined()
-          expect(compiled.body.reasoning_format).toBeUndefined()
+          expect(compiled.body.reasoning_format).toBe(item.reasoning ? undefined : "parsed")
           expect(compiled.body.tools[0].function.strict).toBeUndefined()
           if (!item.reasoning) expect(compiled.body.parallel_tool_calls).toBe(true)
 
@@ -135,7 +135,7 @@ describe("Groq recorded", () => {
               expect.arrayContaining([expect.objectContaining({ role: "assistant", reasoning: first.reasoning })]),
             )
           }
-          expect(replay.body.reasoning_format).toBeUndefined()
+          expect(replay.body.reasoning_format).toBe(item.reasoning ? undefined : "parsed")
 
           const second = yield* LLMClient.generate(followUp)
           expect(second.finishReason.normalized).toBe("stop")
@@ -156,7 +156,7 @@ describe("Groq recorded", () => {
         const request = LLM.request({
           model: configure({
             apiKey,
-            providerOptions: { reasoningFormat: "parsed", reasoningEffort: "default" },
+            providerOptions: { reasoningEffort: "default" },
           }).model("qwen/qwen3.6-27b"),
           prompt:
             "What is 173 multiplied by 219? Think through the arithmetic, then reply with only the final integer.",

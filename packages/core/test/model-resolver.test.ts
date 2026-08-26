@@ -918,8 +918,8 @@ describe("ModelResolver", () => {
         [
           "@ai-sdk/groq",
           "@opencode-ai/ai/providers/groq",
-          { reasoningEffort: "high", reasoningFormat: "parsed" },
-          { reasoningEffort: "high", reasoningFormat: "parsed" },
+          { reasoningEffort: "high", parallelToolCalls: false },
+          { reasoningEffort: "high", parallelToolCalls: false },
         ],
         [
           "@ai-sdk/togetherai",
@@ -1111,7 +1111,7 @@ describe("ModelResolver", () => {
       )
       const groq = yield* ModelResolver.fromCatalogModel(
         model(Provider.aisdk("@ai-sdk/groq"), {
-          settings: { reasoningEffort: "high", reasoningFormat: "parsed" },
+          settings: { reasoningEffort: "high", parallelToolCalls: false },
         }),
       )
       const xai = yield* ModelResolver.fromCatalogModel(
@@ -1146,7 +1146,7 @@ describe("ModelResolver", () => {
       expect(String(togetherai.provider)).toBe("test-provider")
       expect(groq.route.id).toBe("groq-chat")
       expect(groq.route.protocol).toBe("groq-chat")
-      expect(groq.route.defaults.providerOptions).toEqual({ reasoningEffort: "high", reasoningFormat: "parsed" })
+      expect(groq.route.defaults.providerOptions).toEqual({ reasoningEffort: "high", parallelToolCalls: false })
       expect(String(groq.provider)).toBe("test-provider")
       expect(xai.route.id).toBe("openai-responses")
       expect(xai.route.defaults.providerOptions).toEqual({
