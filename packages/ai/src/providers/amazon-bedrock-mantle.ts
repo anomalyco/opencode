@@ -1,5 +1,5 @@
 import { Auth } from "../route/auth.js"
-import type { Route as RouteDef, RouteDefaultsInput } from "../route/client.js"
+import { Route, type RouteDefaultsInput } from "../route/client.js"
 import type { ProviderPackage } from "../provider-package.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
 import { OpenAIResponses } from "../protocols/openai-responses.js"
@@ -26,9 +26,15 @@ export interface Settings extends ProviderPackage.Settings {
   readonly providerOptions?: OpenAIProviderOptionsInput
 }
 
-const responsesRoute = OpenAIResponses.route.with({
+const responsesRoute = Route.make({
   id: "bedrock-mantle-responses",
   provider: id,
+  providerMetadataKey: OpenAIResponses.route.providerMetadataKey,
+  protocol: OpenAIResponses.protocol,
+  endpoint: OpenAIResponses.route.endpoint,
+  auth: OpenAIResponses.route.auth,
+  transport: OpenAIResponses.httpTransport,
+  defaults: OpenAIResponses.route.defaults,
 })
 
 const chatRoute = OpenAIChat.route.with({
@@ -38,7 +44,7 @@ const chatRoute = OpenAIChat.route.with({
 
 export const routes = [responsesRoute, chatRoute]
 
-const configuredRoute = <Body, Prepared>(route: RouteDef<Body, Prepared>, input: Config) => {
+const configuredRoute = <Body, Prepared>(route: Route<Body, Prepared>, input: Config) => {
   const region = input.region ?? input.credentials?.region ?? "us-east-1"
   const credentials = input.credentials === undefined ? undefined : { ...input.credentials, region }
   return route.with({
