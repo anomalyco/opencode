@@ -109,7 +109,6 @@ export const dict = {
   "home.marketChart": "Частка ринку за автором моделі",
   "home.noData": "Немає даних",
   "home.geoTitle": "Географічний розріз",
-  "home.geoDescription": "Токени, використані за країнами.",
   "home.noGeoTitle": "Немає геоданих",
   "home.noGeoDescription": "Жодні географічні рядки не відповідали цьому діапазону.",
   "home.worldMap": "Карта світу використання токенів за країнами",
