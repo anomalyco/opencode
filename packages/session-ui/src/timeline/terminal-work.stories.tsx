@@ -62,6 +62,17 @@ export const UserCommandCompleted = {
   ),
 }
 
+export const CollapsedShell = {
+  render: () => (
+    <CurrentSessionTimelineStory
+      title="Collapsed completed shell"
+      description="A focused shell disclosure responds to the keyboard without scrolling its containing surface."
+      document={terminalPassedDocument}
+      width="720px"
+    />
+  ),
+}
+
 export const TestsPassed = {
   render: () => (
     <CurrentSessionTimelineStory

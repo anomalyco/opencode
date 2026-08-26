@@ -26,6 +26,8 @@
     "test:unit:watch": "bun test --conditions=solid --watch --preload ./happydom.ts ./src",
     "test:e2e": "playwright test",
     "test:e2e:local": "playwright test",
+    "test:components": "playwright test --config playwright.components.config.ts",
+    "test:components:ui": "playwright test --config playwright.components.config.ts --ui",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:report": "playwright show-report e2e/playwright-report",
     "test:service-worker": "bun run build && playwright test --config e2e/service-worker/playwright.config.ts",

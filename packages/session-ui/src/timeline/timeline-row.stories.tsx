@@ -156,6 +156,29 @@ export const MixedDirectionRtl = {
   ),
 }
 
+export const MovedLocation = {
+  render: () => (
+    <CurrentSessionTimelineStory
+      title="Moved Session location"
+      description="A changed working directory stays compact, truncates, and exposes its tooltip."
+      document={{
+        ...thinkingDocument,
+        status: { type: "idle" },
+        messages: [
+          ...thinkingDocument.messages,
+          {
+            id: "msg_story_location",
+            type: "location-switched",
+            location: { directory: `/Users/usrnk1/Developer/opencode/${"nested-directory/".repeat(24)}session` },
+            time: { created: 1_735_689_633_000 },
+          },
+        ],
+      }}
+      width="480px"
+    />
+  ),
+}
+
 export const InstructionsUpdatedSingle = {
   render: () => (
     <CurrentSessionTimelineStory

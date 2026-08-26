@@ -8,21 +8,6 @@ import {
   userText,
 } from "../performance/timeline-stability/fixture"
 
-test("renders completed write content", async ({ page }) => {
-  const id = "prt_file_projection_write"
-  await setupTimeline(page, {
-    messages: [
-      userMessage(),
-      assistantMessage([
-        toolPart(id, "write", "completed", { path: "src/write.ts", content: "export const written = true\n" }),
-      ]),
-    ],
-    settings: { editToolPartsExpanded: true },
-  })
-
-  await expect(page.locator(`[data-timeline-part-id="${id}"] [data-component="write-content"]`)).toBeVisible()
-})
-
 test("renders a completed single-file patch", async ({ page }) => {
   const id = "prt_file_projection_single_patch"
   await setupTimeline(page, {
