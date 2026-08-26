@@ -360,7 +360,8 @@ export function Session(props: {
   createEffect(() => {
     if (restored || !synced() || !rowsSynced() || !scroll || scroll.isDestroyed) return
     restored = true
-    restoreScrollPosition()
+    // Initial synchronization can finish after the reader has already navigated.
+    if (!isAwayFromBottom()) restoreScrollPosition()
   })
   let awayTimer: ReturnType<typeof setTimeout> | undefined
   onCleanup(() => {
