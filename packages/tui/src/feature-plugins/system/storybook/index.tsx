@@ -5,6 +5,7 @@ import { StoryFooter } from "./footer"
 import { mermanLayoutsStory } from "./merman-layouts"
 import { sessionTabsStory } from "./session-tabs"
 import { sessionLocationMissingStory } from "./session-location-missing"
+import { codeModeExecuteStory } from "./code-mode-execute"
 
 /**
  * A story is a full-screen, fixture-driven simulation of a real production component. Stories own
@@ -16,7 +17,7 @@ export type Story = {
   render: (context: Plugin.Context) => JSX.Element
 }
 
-const stories: Story[] = [mermanLayoutsStory, sessionTabsStory, sessionLocationMissingStory]
+const stories: Story[] = [mermanLayoutsStory, sessionTabsStory, sessionLocationMissingStory, codeModeExecuteStory]
 
 function Commands(props: { context: Plugin.Context }) {
   props.context.keymap.layer(() => ({
