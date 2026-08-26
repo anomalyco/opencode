@@ -143,7 +143,8 @@ export function TerminalPane(props: {
     },
     { priority: 100 },
   )
-  const onFocused = () => props.onFocusChange?.(terminal?.focused === true)
+  // Blur emits this event before updating the terminal's own focused flag.
+  const onFocused = () => props.onFocusChange?.(renderer.currentFocusedRenderable === terminal)
   renderer.on(CliRenderEvents.FOCUSED_RENDERABLE, onFocused)
   createEffect(() => {
     if (!props.autoFocus || !terminal) return
