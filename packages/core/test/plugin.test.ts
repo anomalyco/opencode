@@ -43,7 +43,7 @@ describe("Plugin", () => {
     }),
   )
 
-  it.effect("routes explicit MCP locations through the plugin runtime", () =>
+  it.effect("exposes MCP reads and transforms and routes explicit read locations", () =>
     Effect.gen(function* () {
       const plugins = yield* Plugin.Service
       const runtime = yield* PluginRuntime.Service
@@ -72,10 +72,6 @@ describe("Plugin", () => {
                       data: [],
                     }
                   }),
-                add: (ref) => Effect.sync(() => routed.push(`add:${ref.directory}`)),
-                remove: (ref) => Effect.sync(() => routed.push(`remove:${ref.directory}`)),
-                connect: (ref) => Effect.sync(() => routed.push(`connect:${ref.directory}`)),
-                disconnect: (ref) => Effect.sync(() => routed.push(`disconnect:${ref.directory}`)),
               },
             },
           }),
@@ -83,14 +79,9 @@ describe("Plugin", () => {
       )
       const location = { directory: target }
 
-      yield* host.mcp
-        .add({ location, server: "routed", config: { type: "local", command: ["unused"], disabled: true } })
-        .pipe(Effect.orDie)
-      yield* host.mcp.remove({ location, server: "routed" }).pipe(Effect.orDie)
-      yield* host.mcp.connect({ location, server: "routed" }).pipe(Effect.orDie)
-      yield* host.mcp.disconnect({ location, server: "routed" }).pipe(Effect.orDie)
+      expect(Object.keys(host.mcp).sort()).toEqual(["list", "reload", "transform"])
       expect((yield* host.mcp.list({ location }).pipe(Effect.orDie)).location.directory).toBe(target)
-      expect(routed).toEqual(["add:/target", "remove:/target", "connect:/target", "disconnect:/target", "list:/target"])
+      expect(routed).toEqual(["list:/target"])
     }),
   )
 

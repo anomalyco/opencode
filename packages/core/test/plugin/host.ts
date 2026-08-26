@@ -77,10 +77,6 @@ export function host(overrides: Overrides = {}): Plugin.Context {
     },
     mcp: overrides.mcp ?? {
       list: () => Effect.die("unused mcp.list"),
-      add: () => Effect.die("unused mcp.add"),
-      remove: () => Effect.die("unused mcp.remove"),
-      connect: () => Effect.die("unused mcp.connect"),
-      disconnect: () => Effect.die("unused mcp.disconnect"),
       transform: () => Effect.die("unused mcp.transform"),
       reload: () => Effect.die("unused mcp.reload"),
     },

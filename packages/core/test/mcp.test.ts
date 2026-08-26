@@ -1032,6 +1032,58 @@ test("adds, disconnects, and reconnects MCP servers at runtime", async () => {
   )
 })
 
+testEffect(resourceMcpLayer(new ConfigMCP.Local({ type: "local", command: ["unused"], disabled: true }))).live(
+  "manages live MCP servers entirely through scoped transforms",
+  () =>
+    Effect.gen(function* () {
+      const service = yield* MCP.Service
+
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          yield* service.transform((draft) => {
+            draft.set("dynamic", {
+              type: "local",
+              command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-output-schema.ts")],
+            })
+          })
+          expect((yield* service.servers()).find((server) => server.name === "dynamic")?.status.status).toBe(
+            "connected",
+          )
+          expect(yield* service.tools()).toHaveLength(2)
+
+          const settings = { disabled: true }
+          yield* service.transform((draft) => {
+            draft.update("dynamic", (server) => {
+              server.disabled = settings.disabled
+            })
+          })
+          expect((yield* service.servers()).find((server) => server.name === "dynamic")?.status.status).toBe("disabled")
+          expect(yield* service.tools()).toEqual([])
+
+          settings.disabled = false
+          yield* service.reload()
+          expect((yield* service.servers()).find((server) => server.name === "dynamic")?.status.status).toBe(
+            "connected",
+          )
+          expect(yield* service.tools()).toHaveLength(2)
+
+          const removed = yield* service.transform((draft) => draft.remove("dynamic"))
+          expect((yield* service.servers()).some((server) => server.name === "dynamic")).toBe(false)
+          expect(yield* service.tools()).toEqual([])
+
+          yield* removed.dispose
+          expect((yield* service.servers()).find((server) => server.name === "dynamic")?.status.status).toBe(
+            "connected",
+          )
+          expect(yield* service.tools()).toHaveLength(2)
+        }),
+      )
+
+      expect((yield* service.servers()).map((server) => server.name)).toEqual([MCP.ServerName.make("resources")])
+      expect(yield* service.tools()).toEqual([])
+    }),
+)
+
 test("restores runtime MCP config when a transform is disposed", async () => {
   await Effect.runPromise(
     Effect.scoped(

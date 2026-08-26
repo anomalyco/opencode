@@ -260,10 +260,6 @@ export function fromPromise(plugin: Plugin) {
           },
           mcp: {
             list: adaptApiMethod(McpEndpoints["mcp.list"], host.mcp.list),
-            add: adaptApiMethod(McpEndpoints["mcp.add"], host.mcp.add),
-            remove: adaptApiMethod(McpEndpoints["mcp.remove"], host.mcp.remove),
-            connect: adaptApiMethod(McpEndpoints["mcp.connect"], host.mcp.connect),
-            disconnect: adaptApiMethod(McpEndpoints["mcp.disconnect"], host.mcp.disconnect),
             transform: transform(host.mcp),
             reload: () => run(host.mcp.reload()),
           },

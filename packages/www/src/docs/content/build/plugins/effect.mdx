@@ -533,32 +533,43 @@ interface IntegrationDomain extends Omit<IntegrationApi<unknown>, "wellknown"> {
 
 ### MCP
 
-List servers and change connection state.
+List MCP servers and their current connection state.
 
 ```ts
 effect: (ctx) =>
   Effect.gen(function* () {
     const mcp = ctx.mcp
     const servers = yield* mcp.list().pipe(Effect.orDie)
-    yield* mcp.connect({ server: "docs" }).pipe(Effect.orDie)
-    yield* mcp.disconnect({ server: "docs" }).pipe(Effect.orDie)
     yield* Effect.logInfo("MCP servers", { count: servers.data.length })
   }),
 ```
 
-Add servers through the API, or transform and reload their configuration.
+Plugins manage MCP servers only through transforms. Use `draft.set` to add or replace a server, `draft.update` to
+change its configuration, and `draft.remove` to remove it. Inspect configuration with `draft.list` and `draft.get`.
 
 ```ts
 effect: (ctx) =>
   Effect.gen(function* () {
     const mcp = ctx.mcp
-    yield* mcp
-      .add({ server: "docs", config: { type: "remote", url: "https://mcp.example.com" } })
-      .pipe(Effect.orDie)
     yield* mcp.transform((draft) => {
+      const servers = draft.list()
+      const docs = draft.get("docs")
+      draft.set("docs", { type: "remote", url: "https://mcp.example.com" })
       draft.update("docs", (server) => (server.disabled = false))
       draft.remove("legacy")
     })
+  }),
+```
+
+Set `disabled: true` in a transform to disable a server and disconnect it, or `disabled: false` to enable it and allow
+OpenCode to connect. OpenCode reconciles server lifecycle from the transformed configuration.
+
+Call `reload()` after external state used by a transform changes to reapply transforms and reconcile the servers.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const mcp = ctx.mcp
     yield* mcp.reload()
   }),
 ```
@@ -575,7 +586,7 @@ interface MCPDraft {
   remove(name: string): void
 }
 
-interface MCPDomain extends Omit<McpApi<unknown>, "resource"> {
+interface MCPDomain extends Pick<McpApi<unknown>, "list"> {
   readonly transform: Transform<MCPDraft>
   readonly reload: () => Effect.Effect<void>
 }

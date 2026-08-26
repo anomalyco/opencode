@@ -242,12 +242,14 @@ describe("fromPromise", () => {
       const promisePlugin = define({
         id: "promise-client-reads",
         setup: async (ctx) => {
+          expect(Object.keys(ctx.mcp).sort()).toEqual(["list", "reload", "transform"])
           const results = await Promise.all([
             ctx.agent.list(),
             ctx.catalog.provider.list(),
             ctx.catalog.model.list(),
             ctx.command.list(),
             ctx.integration.list(),
+            ctx.mcp.list(),
             ctx.plugin.list(),
             ctx.reference.list(),
             ctx.skill.list(),
@@ -259,7 +261,7 @@ describe("fromPromise", () => {
 
       yield* PluginPromise.fromPromise(promisePlugin).effect(host)
 
-      expect(seen).toHaveLength(8)
+      expect(seen).toHaveLength(9)
       expect(new Set(seen).size).toBe(1)
     }),
   )

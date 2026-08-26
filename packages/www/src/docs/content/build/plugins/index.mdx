@@ -488,25 +488,14 @@ interface IntegrationDraft {
 
 ### MCP
 
-List MCP servers or change their connection state.
+List MCP servers and their current connection state.
 
 ```ts
 const servers = await ctx.mcp.list()
-await ctx.mcp.connect({ server: "docs" })
-await ctx.mcp.disconnect({ server: "docs" })
 ```
 
-Add or remove a server through the connected API.
-
-```ts
-await ctx.mcp.add({
-  server: "docs",
-  config: { type: "remote", url: "https://mcp.example.com" },
-})
-await ctx.mcp.remove({ server: "legacy" })
-```
-
-Register a transform to inspect, set, update, or remove server configuration.
+Plugins manage MCP servers only through transforms. Use `draft.set` to add or replace a server, `draft.update` to
+change its configuration, and `draft.remove` to remove it. Inspect configuration with `draft.list` and `draft.get`.
 
 ```ts
 await ctx.mcp.transform((draft) => {
@@ -520,7 +509,10 @@ await ctx.mcp.transform((draft) => {
 })
 ```
 
-Reload MCP configuration after external state used by a transform changes.
+Set `disabled: true` in a transform to disable a server and disconnect it, or `disabled: false` to enable it and allow
+OpenCode to connect. OpenCode reconciles server lifecycle from the transformed configuration.
+
+Call `reload()` after external state used by a transform changes to reapply transforms and reconcile the servers.
 
 ```ts
 await ctx.mcp.reload()
@@ -534,10 +526,6 @@ Schemas: [`Mcp.Server`](/api#schema-Mcp.Server), [`Mcp.LocalConfigEncoded`](/api
 ```ts
 interface MCPContext {
   list(input?: McpListInput, requestOptions?: RequestOptions): Promise<McpListOutput>
-  add(input: McpAddInput, requestOptions?: RequestOptions): Promise<void>
-  remove(input: McpRemoveInput, requestOptions?: RequestOptions): Promise<void>
-  connect(input: McpConnectInput, requestOptions?: RequestOptions): Promise<void>
-  disconnect(input: McpDisconnectInput, requestOptions?: RequestOptions): Promise<void>
   transform(callback: (draft: MCPDraft) => void): Promise<Registration>
   reload(): Promise<void>
 }
