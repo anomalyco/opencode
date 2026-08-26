@@ -48,10 +48,9 @@ type Frame = {
 type Chunk = string | { raw: string }
 
 export const MAX_MARKDOWN_BYTES = 5 * 1024 * 1024
+const CONTENT_BYTES = MAX_MARKDOWN_BYTES - 64 * 1024
 
-export function convertHTMLToMarkdown(html: string, maxBytes = MAX_MARKDOWN_BYTES) {
-  // Leave room for closing syntax without exhausting smaller output budgets.
-  const contentBytes = maxBytes - Math.min(64 * 1024, Math.floor(maxBytes / 2))
+export function convertHTMLToMarkdown(html: string) {
   const output: Chunk[] = []
   const stack: Frame[] = []
   const encoder = new TextEncoder()
@@ -90,7 +89,7 @@ export function convertHTMLToMarkdown(html: string, maxBytes = MAX_MARKDOWN_BYTE
     return characters.slice(0, low).join("")
   }
   const append = (value: string, content = false) => {
-    const limit = content ? contentBytes : maxBytes
+    const limit = content ? CONTENT_BYTES : MAX_MARKDOWN_BYTES
     if (!value || outputBytes >= limit) return
     const bytes = encoder.encode(value)
     const remaining = limit - outputBytes
@@ -217,7 +216,7 @@ export function convertHTMLToMarkdown(html: string, maxBytes = MAX_MARKDOWN_BYTE
       prefixQuote()
       const wrapper = encoder.encode(`${fence}${padding}${padding}${fence}`).byteLength
       appendRaw(
-        `${fence}${padding}${sliceBytes(code.text, Math.max(0, contentBytes - outputBytes - wrapper))}${padding}${fence}`,
+        `${fence}${padding}${sliceBytes(code.text, Math.max(0, CONTENT_BYTES - outputBytes - wrapper))}${padding}${fence}`,
       )
       return
     }
@@ -236,12 +235,12 @@ export function convertHTMLToMarkdown(html: string, maxBytes = MAX_MARKDOWN_BYTE
       const candidate = `${prefix}${payload}${payload.endsWith("\n") ? "" : "\n"}${fence}`
       const value = quote ? candidate.replace(/^/gm, quote) : candidate
       const valueBytes = encoder.encode(value).byteLength
-      if (outputBytes + valueBytes <= contentBytes) {
+      if (outputBytes + valueBytes <= CONTENT_BYTES) {
         appendRaw(value)
         block()
         return
       }
-      const excess = valueBytes - Math.max(0, contentBytes - outputBytes)
+      const excess = valueBytes - Math.max(0, CONTENT_BYTES - outputBytes)
       payload = sliceBytes(payload, Math.max(0, encoder.encode(payload).byteLength - Math.ceil(excess)))
     }
   }
@@ -384,7 +383,7 @@ export function convertHTMLToMarkdown(html: string, maxBytes = MAX_MARKDOWN_BYTE
         const alt = (attributes.alt ?? "").replace(/([\\\]])/g, "\\$1")
         const close = `](${destination(attributes.src ?? "")}${title(attributes.title)})`
         const open = "!["
-        const available = contentBytes - outputBytes - encoder.encode(open + close).byteLength
+        const available = CONTENT_BYTES - outputBytes - encoder.encode(open + close).byteLength
         inline(`${open}${sliceBytes(alt, Math.max(0, available))}${close}`, true)
         return
       }
@@ -659,5 +658,5 @@ export function convertHTMLToMarkdown(html: string, maxBytes = MAX_MARKDOWN_BYTE
     pendingText += chunk
   }
   flushText()
-  return sliceBytes(normalized.join("").trim(), maxBytes)
+  return sliceBytes(normalized.join("").trim(), MAX_MARKDOWN_BYTES)
 }
