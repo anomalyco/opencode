@@ -5,6 +5,7 @@ import type { DesktopMenuAction } from "../desktop-menu"
 import { ServerConnection } from "./server"
 import type { WslServersPlatform } from "../wsl/types"
 import type { UpdaterPlatform } from "../updater"
+import type { DraftStore } from "@/utils/draft-store"
 
 type PickerPaths = string | string[] | null
 type OpenDirectoryPickerOptions = { title?: string; multiple?: boolean }
@@ -63,6 +64,9 @@ type PlatformBase = {
 
   /** Storage mechanism, defaults to localStorage */
   storage?: (name?: string) => SyncStorage | AsyncStorage
+
+  /** Prompt drafts, history, and their blobs. */
+  draftStore?: DraftStore
 
   /** Stable platform window identity for window-scoped persistence */
   windowID?: string
