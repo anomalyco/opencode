@@ -175,10 +175,21 @@ export const Plugin = {
                             new ToolFailure({ message: `Subagent session not found: ${input.sessionID}`, error }),
                         ),
                       )
-              if (existing !== undefined && existing.parentID !== context.sessionID)
-                return yield* new ToolFailure({
-                  message: `Session ${existing.id} is not a child of the current session`,
-                })
+              if (existing !== undefined) {
+                let ancestor = existing
+                while (ancestor.parentID !== undefined && ancestor.parentID !== context.sessionID)
+                  ancestor = yield* runtime.session
+                    .get(ancestor.parentID)
+                    .pipe(
+                      Effect.mapError(
+                        (error) => new ToolFailure({ message: `Parent session not found: ${ancestor.parentID}`, error }),
+                      ),
+                    )
+                if (ancestor.parentID === undefined)
+                  return yield* new ToolFailure({
+                    message: `Session ${existing.id} is not a child of the current session`,
+                  })
+              }
               // Continuing with a different agent switches the child, mirroring create semantics
               // where the agent's configured model wins over the inherited one.
               if (existing !== undefined && existing.agent !== agent.id) {

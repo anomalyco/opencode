@@ -436,7 +436,7 @@ describe("SubagentTool", () => {
     ),
   )
 
-  it.live("rejects unrelated children and switches agents on continuation", () =>
+  it.live("rejects unrelated sessions, continues descendants, and switches agents on continuation", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
       (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
@@ -457,6 +457,12 @@ describe("SubagentTool", () => {
             title: "fallback review",
             agent: Agent.ID.make("fallback"),
             model: parentModel,
+          })
+          const descendant = yield* sessions.create({
+            parentID: switched.id,
+            title: "nested review",
+            agent: Agent.ID.make("reviewer"),
+            model: childModel,
           })
           yield* withSubagent(parent.location)
           const locations = yield* LocationServiceMap.Service
@@ -487,6 +493,10 @@ describe("SubagentTool", () => {
               type: "tool.execution",
               message: `Session ${unrelated.id} is not a child of the current session`,
             },
+          })
+          expect(yield* call(descendant.id, "call-descendant-child")).toMatchObject({
+            status: "completed",
+            metadata: { sessionID: descendant.id, status: "completed" },
           })
           expect(yield* call(switched.id, "call-switched-child")).toMatchObject({
             status: "completed",
