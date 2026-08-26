@@ -53,10 +53,11 @@ describe("provider error retention", () => {
         )
         expect(error.message).toContain("Slow down")
         expect(error.reason._tag).toBe(entry.name === "Gemini" ? "ProviderInternal" : "RateLimit")
-        expect(error.body).toBe(body)
-        expect(error.http).toMatchObject({ status: 200, headers: { "x-provider-trace": "trace-1" } })
-        expect(error.http?.url).toStartWith("https://provider.test/")
-        expect(error.cause).toBeUndefined()
+        expect(error.reason.body).toBe(body)
+        expect(error.reason.http).toMatchObject({ status: 200, headers: { "x-provider-trace": "trace-1" } })
+        expect(error.reason.http?.url).toStartWith("https://provider.test/")
+        expect(error.reason.cause).toBeUndefined()
+        expect(error.cause).toBe(error.reason)
       }),
     )
   }
@@ -68,9 +69,9 @@ describe("provider error retention", () => {
         LLM.request({ model: Anthropic.configure(options).model("claude"), prompt: "hello" }),
       ).pipe(Effect.provide(fixedResponse(sseEvents(body))), Effect.flip)
       expect(error.reason._tag).toBe("InvalidProviderOutput")
-      expect(error.body).toBe(body)
-      expect(error.cause).toBeInstanceOf(Error)
-      expect(error.http?.status).toBe(200)
+      expect(error.reason.body).toBe(body)
+      expect(error.reason.cause).toBeInstanceOf(Error)
+      expect(error.reason.http?.status).toBe(200)
     }),
   )
 
@@ -90,8 +91,8 @@ describe("provider error retention", () => {
       )
 
       expect(error.reason._tag).toBe("RateLimit")
-      expect(error.body).toBe(body)
-      expect(error.http).toMatchObject({
+      expect(error.reason.body).toBe(body)
+      expect(error.reason.http).toMatchObject({
         url: "https://provider.test/responses",
         status: 200,
         headers: { "x-provider-trace": "fallback-1" },

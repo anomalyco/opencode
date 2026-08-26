@@ -90,12 +90,12 @@ export const model = (input: ModelInput) => {
     generate: Effect.fn("OpenAIImages.generate")(function* (request: ImageRequestFor<OpenAIImageOptions>, execute) {
       const mask = request.options?.mask
       if (mask !== undefined && (request.images?.length ?? 0) === 0)
-        return yield* ImageInputs.invalid(ADAPTER, "An OpenAI image mask requires at least one input image")
+        return yield* ImageInputs.invalid("An OpenAI image mask requires at least one input image")
       const http = mergeHttpOptions(request.model.http, request.http)
       const sourceImages = request.images ?? []
       const multipartImages = yield* Effect.forEach(sourceImages, (image) => {
         if (image.type === "bytes") return Effect.succeed({ data: image.data, mediaType: image.mediaType })
-        if (image.type === "url") return ImageInputs.decodeDataUrl(image.url, ADAPTER)
+        if (image.type === "url") return ImageInputs.decodeDataUrl(image.url)
         return Effect.undefined
       })
       const multipartMask =
@@ -104,7 +104,7 @@ export const model = (input: ModelInput) => {
           : mask.type === "bytes"
             ? { data: mask.data, mediaType: mask.mediaType }
             : mask.type === "url"
-              ? yield* ImageInputs.decodeDataUrl(mask.url, ADAPTER)
+              ? yield* ImageInputs.decodeDataUrl(mask.url)
               : undefined
       const useMultipart =
         sourceImages.length > 0 &&
@@ -147,7 +147,7 @@ export const model = (input: ModelInput) => {
         return undefined
       })
       if (references.some((image) => image === undefined))
-        return yield* ImageInputs.invalid(ADAPTER, "OpenAI Images accepts image URLs, data URLs, bytes, and file IDs")
+        return yield* ImageInputs.invalid("OpenAI Images accepts image URLs, data URLs, bytes, and file IDs")
       const maskReference =
         mask === undefined
           ? undefined
@@ -159,7 +159,7 @@ export const model = (input: ModelInput) => {
                 ? { file_id: mask.id }
                 : undefined
       if (mask !== undefined && maskReference === undefined)
-        return yield* ImageInputs.invalid(ADAPTER, "OpenAI Images accepts masks as URLs, data URLs, bytes, or file IDs")
+        return yield* ImageInputs.invalid("OpenAI Images accepts masks as URLs, data URLs, bytes, or file IDs")
       const requestBody = mergeJsonRecords(
         {
           model: request.model.id,

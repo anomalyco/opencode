@@ -1,7 +1,7 @@
 import { EventStreamCodec } from "@smithy/eventstream-codec"
 import { fromUtf8, toUtf8 } from "@smithy/util-utf8"
 import { Effect, Encoding, Stream } from "effect"
-import { AIError } from "../schema/index.js"
+import { AIError, AIErrorReason } from "../schema/index.js"
 import { Framing } from "../route/framing.js"
 import { ProviderShared } from "./shared.js"
 
@@ -86,7 +86,12 @@ const consumeFrames = (route: string) => (state: FrameBufferState, chunk: Uint8A
         payload,
         "Failed to parse Bedrock Converse event-stream payload",
       ).pipe(
-        Effect.mapError((error) => new AIError({ ...error, message: error.message, cause: error.cause, body })),
+        Effect.mapError(
+          (error) =>
+            new AIError({
+              reason: AIErrorReason.make({ ...error.reason, message: error.message, cause: error.reason.cause, body }),
+            }),
+        ),
       )) as Record<string, unknown>
       delete parsed.p
       out.push({

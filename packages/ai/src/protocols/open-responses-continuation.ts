@@ -1,4 +1,4 @@
-import { AIError, TransportReason } from "../schema/index.js"
+import { AIError, TransportError } from "../schema/index.js"
 import type { ChannelCheckpoint, ChannelObservation, WebSocketChannelDriver } from "../route/transport/index.js"
 import { Effect, Option, Schema } from "effect"
 import * as ProviderShared from "./shared.js"
@@ -99,17 +99,17 @@ const incremental = (
 const code = (event: OpenResponses.Event) => event.code || event.error?.code || event.response?.error?.code || undefined
 
 const rejected = (
-  input: DriverInput,
   observation: Extract<ChannelObservation, { readonly type: "provider-failure" }>,
   recovery: "retry-full" | "rotate-and-retry-full",
 ): ChannelObservation => ({
   type: "rejected",
   recovery,
   error: new AIError({
-    ...observation.error,
-    message: observation.error.message,
-    cause: observation.error.cause,
-    reason: new TransportReason({
+    reason: new TransportError({
+      message: observation.error.message,
+      body: observation.error.reason.body,
+      http: observation.error.reason.http,
+      cause: observation.error.reason.cause,
       transport: "websocket",
       operation: "read",
       phase: "receive",
@@ -145,9 +145,8 @@ export const driver = (input: DriverInput): WebSocketChannelDriver => {
         if (event.type === "response.output_item.done" && event.item) output.push(event.item)
         if (observation.type === "provider-failure") {
           const rejection = code(event)
-          if (rejection === "previous_response_not_found") return rejected(input, observation, "retry-full")
-          if (rejection === "websocket_connection_limit_reached")
-            return rejected(input, observation, "rotate-and-retry-full")
+          if (rejection === "previous_response_not_found") return rejected(observation, "retry-full")
+          if (rejection === "websocket_connection_limit_reached") return rejected(observation, "rotate-and-retry-full")
         }
         if (observation.type !== "completed") return observation
         const responseID = event.response?.id

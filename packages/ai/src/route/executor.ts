@@ -7,7 +7,7 @@ import {
   HttpClientRequest,
   HttpClientResponse,
 } from "effect/unstable/http"
-import { HttpContext, HttpRateLimitDetails, AIError, TransportReason } from "../schema/index.js"
+import { HttpContext, HttpRateLimitDetails, AIError, TransportError } from "../schema/index.js"
 import { classifyProviderFailure } from "../provider-error.js"
 
 export interface Interface {
@@ -142,9 +142,6 @@ export const httpFailure = (input: {
   const retryAfter = retryAfterMs(headers)
   const rateLimit = rateLimitDetails(headers, retryAfter)
   return new AIError({
-    message: input.message,
-    body: input.responseBody,
-    cause: input.cause,
     reason: classifyProviderFailure({
       message: input.message,
       status: input.status,
@@ -152,11 +149,12 @@ export const httpFailure = (input: {
       rawBody: input.responseBody,
       retryAfterMs: retryAfter,
       rateLimit,
+      cause: input.cause,
+      http:
+        input.status === undefined || input.url === undefined
+          ? undefined
+          : new HttpContext({ url: input.url, status: input.status, headers }),
     }),
-    http:
-      input.status === undefined || input.url === undefined
-        ? undefined
-        : new HttpContext({ url: input.url, status: input.status, headers }),
   })
 }
 
@@ -187,10 +185,10 @@ const httpError = (input: {
   const request = HttpClientError.isHttpClientError(input.error) ? input.error.request : input.request
   const transportError = (failure: { readonly message: string; readonly code?: string | undefined }) =>
     new AIError({
-      message: failure.message,
-      cause: source,
-      http: input.http,
-      reason: new TransportReason({
+      reason: new TransportError({
+        message: failure.message,
+        cause: source,
+        http: input.http,
         transport: "http",
         operation: input.operation,
         code: failure.code,

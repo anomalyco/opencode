@@ -22,9 +22,9 @@ import {
   LanguageModel,
   ProviderID,
   ProviderMetadata,
-  TransportReason,
+  TransportError,
   ToolResultValue,
-  UnknownProviderReason,
+  UnknownProviderError,
   type ContentPart,
   type LLMRequest,
   type ToolDefinition,
@@ -798,10 +798,11 @@ function llmError(error: unknown) {
   if (error instanceof AIError) return error
   if (APICallError.isInstance(error)) return apiCallError(error)
   return new AIError({
-    message: unknownErrorMessage(error),
-    reason: new UnknownProviderReason({}),
-    body: errorBody(error),
-    cause: error,
+    reason: new UnknownProviderError({
+      message: unknownErrorMessage(error),
+      body: errorBody(error),
+      cause: error,
+    }),
   })
 }
 
@@ -818,11 +819,11 @@ function apiCallError(error: APICallError) {
   })
   if (error.statusCode !== undefined || !error.isRetryable) return failure
   return new AIError({
-    message: failure.message,
-    body: failure.body,
-    http: failure.http,
-    cause: failure.cause,
-    reason: new TransportReason({
+    reason: new TransportError({
+      message: failure.message,
+      body: failure.reason.body,
+      http: failure.reason.http,
+      cause: failure.reason.cause,
       transport: "http",
       operation: "request",
       code: error.name,

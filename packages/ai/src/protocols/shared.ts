@@ -4,8 +4,8 @@ import { Effect, Schema, Stream } from "effect"
 import * as Sse from "effect/unstable/encoding/Sse"
 import { Headers, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import {
-  InvalidProviderOutputReason,
-  InvalidRequestReason,
+  InvalidProviderOutputError,
+  InvalidRequestError,
   AIError,
   HttpContext,
   type ContentPart,
@@ -99,10 +99,7 @@ export const sumTokens = (...values: ReadonlyArray<number | undefined>): number 
 
 export const eventError = (route: string, message: string, body?: string, cause?: unknown) =>
   new AIError({
-    message,
-    body,
-    cause,
-    reason: new InvalidProviderOutputReason({ route }),
+    reason: new InvalidProviderOutputError({ route, message, body, cause }),
   })
 
 export const parseJson = (route: string, input: string, message: string) =>
@@ -253,9 +250,7 @@ export const sseFraming = (
  */
 export const invalidRequest = (message: string, cause?: unknown) =>
   new AIError({
-    message,
-    reason: new InvalidRequestReason({}),
-    cause,
+    reason: new InvalidRequestError({ message, cause }),
   })
 
 export const imageResponse = Effect.fn("ProviderShared.imageResponse")(function* (
@@ -268,10 +263,12 @@ export const imageResponse = Effect.fn("ProviderShared.imageResponse")(function*
     Effect.mapError(
       (cause) =>
         new AIError({
-          message: `Failed to read the ${name} response`,
-          reason: new InvalidProviderOutputReason({ route }),
-          http,
-          cause,
+          reason: new InvalidProviderOutputError({
+            route,
+            message: `Failed to read the ${name} response`,
+            http,
+            cause,
+          }),
         }),
     ),
   )
@@ -279,11 +276,7 @@ export const imageResponse = Effect.fn("ProviderShared.imageResponse")(function*
     body,
     invalid: (message: string, cause?: unknown) =>
       new AIError({
-        message,
-        reason: new InvalidProviderOutputReason({ route }),
-        body,
-        http,
-        cause,
+        reason: new InvalidProviderOutputError({ route, message, body, http, cause }),
       }),
   }
 })

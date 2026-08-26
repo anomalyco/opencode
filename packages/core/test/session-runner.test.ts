@@ -8,10 +8,10 @@ import {
   LanguageModel,
   SystemPart,
   ToolFailure,
-  TransportReason,
-  InvalidProviderOutputReason,
-  InvalidRequestReason,
-  RateLimitReason,
+  TransportError,
+  InvalidProviderOutputError,
+  InvalidRequestError,
+  RateLimitError,
 } from "@opencode-ai/ai"
 import * as OpenAIChat from "@opencode-ai/ai/protocols/openai-chat"
 import { TestLLM } from "@opencode-ai/ai/testing"
@@ -555,8 +555,8 @@ const setup = Effect.gen(function* () {
 
 const providerUnavailable = () =>
   new AIError({
-    message: "Provider unavailable",
-    reason: new TransportReason({
+    reason: new TransportError({
+      message: "Provider unavailable",
       transport: "http",
       operation: "request",
     }),
@@ -564,8 +564,8 @@ const providerUnavailable = () =>
 
 const streamDisconnected = () =>
   new AIError({
-    message: "The socket connection was closed unexpectedly",
-    reason: new TransportReason({
+    reason: new TransportError({
+      message: "The socket connection was closed unexpectedly",
       transport: "http",
       operation: "read",
     }),
@@ -573,8 +573,8 @@ const streamDisconnected = () =>
 
 const continuationRejected = (recovery: "retry-full" | "rotate-and-retry-full") =>
   new AIError({
-    message: "Continuation rejected",
-    reason: new TransportReason({
+    reason: new TransportError({
+      message: "Continuation rejected",
       transport: "websocket",
       operation: "read",
       phase: "receive",
@@ -585,8 +585,8 @@ const continuationRejected = (recovery: "retry-full" | "rotate-and-retry-full") 
 
 const incompleteStream = () =>
   new AIError({
-    message: "The provider response ended unexpectedly.",
-    reason: new InvalidProviderOutputReason({
+    reason: new InvalidProviderOutputError({
+      message: "The provider response ended unexpectedly.",
       classification: "incomplete-stream",
     }),
   })
@@ -596,14 +596,12 @@ const INCOMPLETE_STREAM_CONTINUATION =
 
 const invalidRequest = () =>
   new AIError({
-    message: "Invalid request",
-    reason: new InvalidRequestReason({}),
+    reason: new InvalidRequestError({ message: "Invalid request" }),
   })
 
 const rateLimited = (retryAfterMs?: number) =>
   new AIError({
-    message: "Rate limited",
-    reason: new RateLimitReason({ retryAfterMs }),
+    reason: new RateLimitError({ message: "Rate limited", retryAfterMs }),
   })
 
 const setupOverflowRecovery = Effect.gen(function* () {
@@ -2809,8 +2807,8 @@ describe("SessionRunnerLLM", () => {
       yield* TestLLM.push(
         Stream.fail(
           new AIError({
-            message: "prompt too long",
-            reason: new InvalidRequestReason({
+            reason: new InvalidRequestError({
+              message: "prompt too long",
               classification: "context-overflow",
             }),
           }),
@@ -5443,15 +5441,17 @@ describe("SessionRunnerLLM", () => {
     Effect.gen(function* () {
       const session = yield* setup
       const failure = new AIError({
-        message: "Invalid request",
-        reason: new InvalidRequestReason({ parameter: "tools" }),
-        body: '{"error":{"message":"Unsupported tool schema","parameter":"tools"}}',
-        http: new HttpContext({
-          url: "https://provider.test/responses",
-          status: 400,
-          headers: { "x-request-id": "failed-request" },
+        reason: new InvalidRequestError({
+          message: "Invalid request",
+          parameter: "tools",
+          body: '{"error":{"message":"Unsupported tool schema","parameter":"tools"}}',
+          http: new HttpContext({
+            url: "https://provider.test/responses",
+            status: 400,
+            headers: { "x-request-id": "failed-request" },
+          }),
+          cause: new Error("upstream request rejected"),
         }),
-        cause: new Error("upstream request rejected"),
       })
       yield* TestLLM.push(Stream.fail(failure))
 
@@ -5463,7 +5463,7 @@ describe("SessionRunnerLLM", () => {
         type: "provider.invalid-request",
         message: failure.message,
         status: 400,
-        body: failure.body,
+        body: failure.reason.body,
         http: {
           url: "https://provider.test/responses",
           status: 400,
@@ -5483,8 +5483,7 @@ describe("SessionRunnerLLM", () => {
     Effect.gen(function* () {
       const session = yield* setup
       const failure = new AIError({
-        message: "Invalid JSON input for tool call echo",
-        reason: new InvalidProviderOutputReason({}),
+        reason: new InvalidProviderOutputError({ message: "Invalid JSON input for tool call echo" }),
       })
       yield* TestLLM.push(
         TestLLM.failAfter(
@@ -5696,8 +5695,7 @@ describe("SessionRunnerLLM", () => {
     Effect.gen(function* () {
       const session = yield* setup
       const failure = new AIError({
-        message: "Invalid hosted tool input",
-        reason: new InvalidProviderOutputReason({}),
+        reason: new InvalidProviderOutputError({ message: "Invalid hosted tool input" }),
       })
       yield* TestLLM.push(
         TestLLM.failAfter(
@@ -5727,8 +5725,7 @@ describe("SessionRunnerLLM", () => {
     Effect.gen(function* () {
       const session = yield* setup
       const failure = new AIError({
-        message: "Provider failed after malformed input",
-        reason: new InvalidProviderOutputReason({}),
+        reason: new InvalidProviderOutputError({ message: "Provider failed after malformed input" }),
       })
       yield* TestLLM.push(
         TestLLM.failAfter(

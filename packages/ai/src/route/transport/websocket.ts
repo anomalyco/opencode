@@ -1,7 +1,13 @@
 import { Cause, Effect, Queue, Stream } from "effect"
 import { Headers } from "effect/unstable/http"
 import { Socket } from "effect/unstable/socket"
-import { AIError, TransportReason, type HttpContext, type TransportOperation } from "../../schema/index.js"
+import {
+  AIError,
+  AIErrorReason,
+  TransportError,
+  type HttpContext,
+  type TransportOperation,
+} from "../../schema/index.js"
 import * as HttpTransport from "./http.js"
 import type { Transport } from "./index.js"
 import type {
@@ -39,17 +45,17 @@ const transportError = (
     readonly operation: TransportOperation
     readonly url?: string
     readonly code?: string
-    readonly phase?: TransportReason["phase"]
-    readonly delivery?: TransportReason["delivery"]
+    readonly phase?: TransportError["phase"]
+    readonly delivery?: TransportError["delivery"]
     readonly body?: string
     readonly cause?: unknown
   },
 ) =>
   new AIError({
-    message,
-    body: input.body,
-    cause: input.cause,
-    reason: new TransportReason({
+    reason: new TransportError({
+      message,
+      body: input.body,
+      cause: input.cause,
       transport: "websocket",
       operation: input.operation,
       url: input.url,
@@ -61,22 +67,16 @@ const transportError = (
 
 const annotateTransportError = (
   error: AIError,
-  input: { readonly phase: TransportReason["phase"]; readonly delivery: TransportReason["delivery"] },
+  input: { readonly phase: TransportError["phase"]; readonly delivery: TransportError["delivery"] },
 ) =>
   error.reason._tag === "Transport"
     ? new AIError({
-        message: error.message,
-        cause: error.cause,
-        body: error.body,
-        http: error.http,
-        reason: new TransportReason({
-          transport: error.reason.transport,
-          operation: error.reason.operation,
-          code: error.reason.code,
-          url: error.reason.url,
+        reason: new TransportError({
+          ...error.reason,
+          message: error.reason.message,
+          cause: error.reason.cause,
           phase: input.phase,
           delivery: input.delivery,
-          recovery: error.reason.recovery,
         }),
       })
     : error
@@ -367,11 +367,12 @@ export const makeDirect = (connector: WebSocketConnector): WebSocketChannelExecu
         Effect.mapError(
           (error) =>
             new AIError({
-              message: error.message,
-              reason: error.reason,
-              body: error.body,
-              cause: error.cause,
-              http: error.http ?? connection.http,
+              reason: AIErrorReason.make({
+                ...error.reason,
+                message: error.reason.message,
+                cause: error.reason.cause,
+                http: error.reason.http ?? connection.http,
+              }),
             }),
         ),
       )
@@ -395,11 +396,12 @@ export const makeDirect = (connector: WebSocketConnector): WebSocketChannelExecu
               Effect.mapError(
                 (error) =>
                   new AIError({
-                    message: error.message,
-                    reason: error.reason,
-                    cause: error.cause,
-                    http: error.http,
-                    body: frame,
+                    reason: AIErrorReason.make({
+                      ...error.reason,
+                      message: error.reason.message,
+                      cause: error.reason.cause,
+                      body: frame,
+                    }),
                   }),
               ),
               Effect.map((observation) =>
@@ -407,11 +409,12 @@ export const makeDirect = (connector: WebSocketConnector): WebSocketChannelExecu
                   ? {
                       ...observation,
                       error: new AIError({
-                        message: observation.error.message,
-                        reason: observation.error.reason,
-                        http: observation.error.http,
-                        cause: observation.error.cause,
-                        body: frame,
+                        reason: AIErrorReason.make({
+                          ...observation.error.reason,
+                          message: observation.error.reason.message,
+                          cause: observation.error.reason.cause,
+                          body: frame,
+                        }),
                       }),
                     }
                   : observation,
@@ -423,11 +426,12 @@ export const makeDirect = (connector: WebSocketConnector): WebSocketChannelExecu
           Stream.mapError(
             (error) =>
               new AIError({
-                message: error.message,
-                reason: error.reason,
-                body: error.body,
-                cause: error.cause,
-                http: error.http ?? connection.http,
+                reason: AIErrorReason.make({
+                  ...error.reason,
+                  message: error.reason.message,
+                  cause: error.reason.cause,
+                  http: error.reason.http ?? connection.http,
+                }),
               }),
           ),
         ),

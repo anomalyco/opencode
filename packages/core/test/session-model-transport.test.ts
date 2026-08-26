@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { AIError, HttpContext, TransportReason } from "@opencode-ai/ai"
+import { AIError, HttpContext, TransportError } from "@opencode-ai/ai"
 import type {
   ChannelObservation,
   WebSocketChannelExchange,
@@ -16,10 +16,9 @@ const session = Session.ID.make("ses_transport")
 const otherSession = Session.ID.make("ses_transport_other")
 const queue = <A, E = never>() => Effect.runSync(Queue.unbounded<A, E>())
 
-const error = (message: string, delivery?: TransportReason["delivery"]) =>
+const error = (message: string, delivery?: TransportError["delivery"]) =>
   new AIError({
-    message,
-    reason: new TransportReason({ transport: "websocket", operation: "write", phase: "send", delivery }),
+    reason: new TransportError({ message, transport: "websocket", operation: "write", phase: "send", delivery }),
   })
 
 const exchange = (
@@ -220,8 +219,8 @@ describe("SessionModelTransport", () => {
                 type: "rejected",
                 recovery: "retry-full",
                 error: new AIError({
-                  message: "missing response",
-                  reason: new TransportReason({
+                  reason: new TransportError({
+                    message: "missing response",
                     transport: "websocket",
                     operation: "read",
                     phase: "receive",
@@ -260,8 +259,8 @@ describe("SessionModelTransport", () => {
             type: "rejected",
             recovery: "rotate-and-retry-full",
             error: new AIError({
-              message: "connection limit",
-              reason: new TransportReason({
+              reason: new TransportError({
+                message: "connection limit",
                 transport: "websocket",
                 operation: "read",
                 phase: "receive",
@@ -585,8 +584,8 @@ describe("SessionModelTransport", () => {
                   messages,
                   Cause.fail(
                     new AIError({
-                      message: "message too big",
-                      reason: new TransportReason({
+                      reason: new TransportError({
+                        message: "message too big",
                         transport: "websocket",
                         operation: "read",
                         code: "1009",
@@ -634,11 +633,15 @@ describe("SessionModelTransport", () => {
         headers: { "x-request-id": "one" },
       })
       const failure = new AIError({
-        message: "send failed",
-        reason: new TransportReason({ transport: "websocket", operation: "write", code: "ECONNRESET" }),
-        body: '{"error":"connection reset"}',
-        http: fromConnection ? undefined : http,
-        cause,
+        reason: new TransportError({
+          message: "send failed",
+          transport: "websocket",
+          operation: "write",
+          code: "ECONNRESET",
+          body: '{"error":"connection reset"}',
+          http: fromConnection ? undefined : http,
+          cause,
+        }),
       })
       let fallbacks = 0
       let closed = 0
@@ -671,13 +674,22 @@ describe("SessionModelTransport", () => {
             _tag: "Failure",
             failure: {
               message: "send failed",
-              body: failure.body,
-              http,
-              reason: { _tag: "Transport", phase: "send", delivery: "ambiguous", code: "ECONNRESET" },
+              reason: {
+                _tag: "Transport",
+                message: "send failed",
+                body: failure.reason.body,
+                http,
+                phase: "send",
+                delivery: "ambiguous",
+                code: "ECONNRESET",
+              },
             },
           })
           if (result._tag !== "Failure") throw new Error("Expected transport failure")
-          expect(result.failure.cause).toBe(cause)
+          expect(result.failure.reason).toBeInstanceOf(TransportError)
+          expect(result.failure.reason).toBeInstanceOf(Error)
+          expect(result.failure.cause).toBe(result.failure.reason)
+          expect(result.failure.reason.cause).toBe(cause)
           expect(fallbacks).toBe(0)
           expect(closed).toBe(1)
         }),

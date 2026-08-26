@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { AIError, HttpContext, InvalidRequestReason, RateLimitReason } from "@opencode-ai/ai"
+import { AIError, HttpContext, InvalidRequestError, RateLimitError } from "@opencode-ai/ai"
 import { DateTime, Effect, Fiber, Option, Schema, Stream } from "effect"
 import { asc, eq, sql } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
@@ -601,14 +601,16 @@ describe("SessionProjector", () => {
       const second = SessionMessage.ID.make("msg_retry_second")
       const error = toSessionError(
         new AIError({
-          message: "Rate limited",
-          reason: new RateLimitReason({ retryAfterMs: 2000 }),
-          http: new HttpContext({
-            url: "https://provider.test/responses",
-            status: 429,
-            headers: { "retry-after": "2" },
+          reason: new RateLimitError({
+            message: "Rate limited",
+            retryAfterMs: 2000,
+            http: new HttpContext({
+              url: "https://provider.test/responses",
+              status: 429,
+              headers: { "retry-after": "2" },
+            }),
+            body: '{"error":"rate limited"}',
           }),
-          body: '{"error":"rate limited"}',
         }),
       )
       yield* bus.publish(SessionEvent.Step.Started, { sessionID, assistantMessageID: first, agent: build, model })
@@ -793,15 +795,18 @@ describe("SessionProjector", () => {
       const failedID = SessionMessage.ID.make("msg_failed")
       const error = toSessionError(
         new AIError({
-          message: "Failed",
-          reason: new InvalidRequestReason({ parameter: "messages", classification: "context-overflow" }),
-          body: '{"error":"context limit"}',
-          http: new HttpContext({
-            url: "https://provider.test/responses",
-            status: 400,
-            headers: { "x-request-id": "failed-request" },
+          reason: new InvalidRequestError({
+            message: "Failed",
+            parameter: "messages",
+            classification: "context-overflow",
+            body: '{"error":"context limit"}',
+            http: new HttpContext({
+              url: "https://provider.test/responses",
+              status: 400,
+              headers: { "x-request-id": "failed-request" },
+            }),
+            cause: new Error("upstream failure", { cause: new Error("socket disconnected") }),
           }),
-          cause: new Error("upstream failure", { cause: new Error("socket disconnected") }),
         }),
       )
       yield* db

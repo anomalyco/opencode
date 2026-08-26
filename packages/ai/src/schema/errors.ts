@@ -18,42 +18,61 @@ export class HttpRateLimitDetails extends Schema.Class<HttpRateLimitDetails>("AI
   reset: Schema.optional(Schema.Record(Schema.String, Schema.String)),
 }) {}
 
-export class InvalidRequestReason extends Schema.Class<InvalidRequestReason>("AI.Error.InvalidRequest")({
-  _tag: Schema.tag("InvalidRequest"),
-  parameter: Schema.optional(Schema.String),
-  classification: Schema.optional(ProviderFailureClassification),
-}) {}
+const ReasonFields = {
+  message: Schema.String,
+  // Preserve the complete original response or triggering event before decoding narrows it.
+  body: Schema.optional(Schema.String),
+  http: Schema.optional(HttpContext),
+  cause: Schema.optional(Schema.Defect({ includeStack: true })),
+}
 
-export class NoRouteReason extends Schema.Class<NoRouteReason>("AI.Error.NoRoute")({
-  _tag: Schema.tag("NoRoute"),
+export class InvalidRequestError extends Schema.TaggedError<InvalidRequestError>("AI.Error.InvalidRequest")(
+  "InvalidRequest",
+  {
+    ...ReasonFields,
+    parameter: Schema.optional(Schema.String),
+    classification: Schema.optional(ProviderFailureClassification),
+  },
+) {}
+
+export class NoRouteError extends Schema.TaggedError<NoRouteError>("AI.Error.NoRoute")("NoRoute", {
+  ...ReasonFields,
   route: RouteID,
   provider: ProviderID,
   model: ModelID,
 }) {}
 
-export class AuthenticationReason extends Schema.Class<AuthenticationReason>("AI.Error.Authentication")({
-  _tag: Schema.tag("Authentication"),
-  kind: Schema.Literals(["missing", "invalid", "expired", "insufficient-permissions", "unknown"]),
-}) {}
+export class AuthenticationError extends Schema.TaggedError<AuthenticationError>("AI.Error.Authentication")(
+  "Authentication",
+  {
+    ...ReasonFields,
+    kind: Schema.Literals(["missing", "invalid", "expired", "insufficient-permissions", "unknown"]),
+  },
+) {}
 
-export class RateLimitReason extends Schema.Class<RateLimitReason>("AI.Error.RateLimit")({
-  _tag: Schema.tag("RateLimit"),
+export class RateLimitError extends Schema.TaggedError<RateLimitError>("AI.Error.RateLimit")("RateLimit", {
+  ...ReasonFields,
   retryAfterMs: Schema.optional(Schema.Number),
   rateLimit: Schema.optional(HttpRateLimitDetails),
 }) {}
 
-export class QuotaExceededReason extends Schema.Class<QuotaExceededReason>("AI.Error.QuotaExceeded")({
-  _tag: Schema.tag("QuotaExceeded"),
-}) {}
+export class QuotaExceededError extends Schema.TaggedError<QuotaExceededError>("AI.Error.QuotaExceeded")(
+  "QuotaExceeded",
+  ReasonFields,
+) {}
 
-export class ContentPolicyReason extends Schema.Class<ContentPolicyReason>("AI.Error.ContentPolicy")({
-  _tag: Schema.tag("ContentPolicy"),
-}) {}
+export class ContentPolicyError extends Schema.TaggedError<ContentPolicyError>("AI.Error.ContentPolicy")(
+  "ContentPolicy",
+  ReasonFields,
+) {}
 
-export class ProviderInternalReason extends Schema.Class<ProviderInternalReason>("AI.Error.ProviderInternal")({
-  _tag: Schema.tag("ProviderInternal"),
-  retryAfterMs: Schema.optional(Schema.Number),
-}) {}
+export class ProviderInternalError extends Schema.TaggedError<ProviderInternalError>("AI.Error.ProviderInternal")(
+  "ProviderInternal",
+  {
+    ...ReasonFields,
+    retryAfterMs: Schema.optional(Schema.Number),
+  },
+) {}
 
 export const TransportType = Schema.Literals(["http", "websocket"])
 export type TransportType = typeof TransportType.Type
@@ -61,8 +80,8 @@ export type TransportType = typeof TransportType.Type
 export const TransportOperation = Schema.Literals(["request", "read", "write"])
 export type TransportOperation = typeof TransportOperation.Type
 
-export class TransportReason extends Schema.Class<TransportReason>("AI.Error.Transport")({
-  _tag: Schema.tag("Transport"),
+export class TransportError extends Schema.TaggedError<TransportError>("AI.Error.Transport")("Transport", {
+  ...ReasonFields,
   transport: TransportType,
   operation: TransportOperation,
   code: Schema.optional(Schema.String),
@@ -76,41 +95,42 @@ export class TransportReason extends Schema.Class<TransportReason>("AI.Error.Tra
   ),
 }) {}
 
-export class InvalidProviderOutputReason extends Schema.Class<InvalidProviderOutputReason>(
+export class InvalidProviderOutputError extends Schema.TaggedError<InvalidProviderOutputError>(
   "AI.Error.InvalidProviderOutput",
-)({
-  _tag: Schema.tag("InvalidProviderOutput"),
+)("InvalidProviderOutput", {
+  ...ReasonFields,
   classification: Schema.optional(Schema.Literals(["incomplete-stream"])),
   route: Schema.optional(Schema.String),
 }) {}
 
-export class UnknownProviderReason extends Schema.Class<UnknownProviderReason>("AI.Error.UnknownProvider")({
-  _tag: Schema.tag("UnknownProvider"),
-}) {}
+export class UnknownProviderError extends Schema.TaggedError<UnknownProviderError>("AI.Error.UnknownProvider")(
+  "UnknownProvider",
+  ReasonFields,
+) {}
 
 export const AIErrorReason = Schema.Union([
-  InvalidRequestReason,
-  NoRouteReason,
-  AuthenticationReason,
-  RateLimitReason,
-  QuotaExceededReason,
-  ContentPolicyReason,
-  ProviderInternalReason,
-  TransportReason,
-  InvalidProviderOutputReason,
-  UnknownProviderReason,
+  InvalidRequestError,
+  NoRouteError,
+  AuthenticationError,
+  RateLimitError,
+  QuotaExceededError,
+  ContentPolicyError,
+  ProviderInternalError,
+  TransportError,
+  InvalidProviderOutputError,
+  UnknownProviderError,
 ]).pipe(Schema.toTaggedUnion("_tag"))
 export type AIErrorReason = Schema.Schema.Type<typeof AIErrorReason>
 
 export class AIError extends Schema.TaggedError<AIError>()("AI.Error", {
-  message: Schema.String,
   reason: AIErrorReason,
-  // Raw provider payload as a string, so classified failures never lose the
-  // original error detail even when the pretty message is a summary.
-  body: Schema.optional(Schema.String),
-  http: Schema.optional(HttpContext),
-  cause: Schema.optional(Schema.Defect({ includeStack: true })),
-}) {}
+}) {
+  override readonly cause = this.reason
+
+  override get message(): string {
+    return this.reason.message
+  }
+}
 
 /**
  * Failure type for tool execute handlers. Handlers must map their internal

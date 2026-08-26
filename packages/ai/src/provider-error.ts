@@ -1,14 +1,15 @@
 import { Option, Schema } from "effect"
 import {
-  AuthenticationReason,
-  ContentPolicyReason,
-  InvalidRequestReason,
+  AuthenticationError,
+  ContentPolicyError,
+  InvalidRequestError,
   AIError,
   ProviderErrorEvent,
-  ProviderInternalReason,
-  QuotaExceededReason,
-  RateLimitReason,
-  UnknownProviderReason,
+  ProviderInternalError,
+  QuotaExceededError,
+  RateLimitError,
+  UnknownProviderError,
+  type HttpContext,
   type HttpRateLimitDetails,
 } from "./schema/index.js"
 
@@ -82,6 +83,8 @@ export interface ProviderFailure {
   // Raw wire payload, scanned for failure signals (codes, overflow phrases)
   // that the summary message does not carry. Not shown to users.
   readonly rawBody?: string | undefined
+  readonly http?: HttpContext | undefined
+  readonly cause?: unknown
   readonly retryAfterMs?: number | undefined
   readonly rateLimit?: HttpRateLimitDetails | undefined
 }
@@ -89,6 +92,7 @@ export interface ProviderFailure {
 // Keep HTTP failures and provider-reported stream failures on one typed path so
 // session retry policy never needs provider-specific string matching.
 export function classifyProviderFailure(input: ProviderFailure): AIError["reason"] {
+  const details = { message: input.message, body: input.rawBody, http: input.http, cause: input.cause }
   const body = input.rawBody ?? ""
   const codes = [input.code, ...providerCodes(body), ...providerCodes(input.message)]
     .filter((code): code is string => code !== undefined)
@@ -105,47 +109,53 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
       codes.includes("request_too_large") ||
       isContextOverflow(text))
   )
-    return new InvalidRequestReason({ classification: "context-overflow" })
+    return new InvalidRequestError({ ...details, classification: "context-overflow" })
   if (input.status === 413 || isPayloadTooLarge(text))
-    return new InvalidRequestReason({ classification: "payload-too-large" })
-  if (CONTENT_POLICY_TEXT.test(text)) return new ContentPolicyReason({})
+    return new InvalidRequestError({ ...details, classification: "payload-too-large" })
+  if (CONTENT_POLICY_TEXT.test(text)) return new ContentPolicyError(details)
   if (codes.some((code) => QUOTA_CODES.has(code)) || (input.status === 429 && QUOTA_TEXT.test(text)))
-    return new QuotaExceededReason({})
-  if (input.status === 401) return new AuthenticationReason({ kind: "invalid" })
-  if (input.status === 403) return new AuthenticationReason({ kind: "insufficient-permissions" })
-  if (codes.includes("authentication_error")) return new AuthenticationReason({ kind: "invalid" })
-  if (codes.includes("permission_error")) return new AuthenticationReason({ kind: "insufficient-permissions" })
+    return new QuotaExceededError(details)
+  if (input.status === 401) return new AuthenticationError({ ...details, kind: "invalid" })
+  if (input.status === 403) return new AuthenticationError({ ...details, kind: "insufficient-permissions" })
+  if (codes.includes("authentication_error")) return new AuthenticationError({ ...details, kind: "invalid" })
+  if (codes.includes("permission_error"))
+    return new AuthenticationError({ ...details, kind: "insufficient-permissions" })
   if (
     codes.some((code) => code.includes("rate_limit") || code === "too_many_requests" || code === "throttlingexception")
   )
-    return new RateLimitReason({
+    return new RateLimitError({
+      ...details,
       retryAfterMs: input.retryAfterMs,
       rateLimit: input.rateLimit,
     })
   if (RATE_LIMIT_TEXT.test(text))
-    return new RateLimitReason({
+    return new RateLimitError({
+      ...details,
       retryAfterMs: input.retryAfterMs,
       rateLimit: input.rateLimit,
     })
-  if (NETWORK_ERROR_TEXT.test(text)) return new ProviderInternalReason({})
+  if (NETWORK_ERROR_TEXT.test(text)) return new ProviderInternalError(details)
   if (codes.some((code) => SERVER_CODES.has(code) || code.includes("exhausted") || code.includes("unavailable")))
-    return new ProviderInternalReason({
+    return new ProviderInternalError({
+      ...details,
       retryAfterMs: input.retryAfterMs,
     })
   if (input.status === 429) {
-    return new RateLimitReason({
+    return new RateLimitError({
+      ...details,
       retryAfterMs: input.retryAfterMs,
       rateLimit: input.rateLimit,
     })
   }
   if (input.status === 408 || input.status === 409 || (input.status !== undefined && input.status >= 500))
-    return new ProviderInternalReason({
+    return new ProviderInternalError({
+      ...details,
       retryAfterMs: input.retryAfterMs,
     })
-  if (codes.some((code) => INVALID_REQUEST_CODES.has(code))) return new InvalidRequestReason({})
+  if (codes.some((code) => INVALID_REQUEST_CODES.has(code))) return new InvalidRequestError(details)
   if (input.status === 400 || input.status === 404 || input.status === 413 || input.status === 422)
-    return new InvalidRequestReason({})
-  return new UnknownProviderReason({})
+    return new InvalidRequestError(details)
+  return new UnknownProviderError(details)
 }
 
 function providerCodes(value: string) {

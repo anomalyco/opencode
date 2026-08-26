@@ -649,8 +649,6 @@ const step = (state: ParserState, event: BedrockEvent) =>
         event.exception.details.message ?? event.exception.details.originalMessage ?? "Bedrock Converse stream error"
       const body = ProviderShared.encodeJson(event)
       return yield* new AIError({
-        message,
-        body,
         reason: classifyProviderFailure({
           message,
           code: event.exception.type,

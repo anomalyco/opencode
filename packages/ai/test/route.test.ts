@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
 import * as OpenAIChat from "../src/protocols/openai-chat.js"
-import { AIError, HttpContext, InvalidProviderOutputReason, LLM } from "../src/index.js"
+import { AIError, HttpContext, InvalidProviderOutputError, LLM } from "../src/index.js"
 import { Anthropic } from "../src/providers.js"
 import { Auth, Framing, HttpTransport, LLMClient, Route } from "../src/route.js"
 import { fixedResponse, truncatedStream } from "./lib/http.js"
@@ -71,9 +71,9 @@ describe("Route diagnostics", () => {
       )
 
       expect(error.reason._tag).toBe("InvalidProviderOutput")
-      expect(error.body).toBe(frame)
-      expect(error.cause).toMatchObject({ _tag: "SchemaError" })
-      expect(error.http).toEqual(
+      expect(error.reason.body).toBe(frame)
+      expect(error.reason.cause).toMatchObject({ _tag: "SchemaError" })
+      expect(error.reason.http).toEqual(
         new HttpContext({ url: "https://provider.test/v1/chat/completions", status: 200, headers }),
       )
     }),
@@ -90,8 +90,8 @@ describe("Route diagnostics", () => {
 
       expect(error.reason._tag).toBe("RateLimit")
       expect(error.message).toBe("Rate limit exceeded")
-      expect(error.body).toBe(frame)
-      expect(error.http?.headers["x-request-id"]).toBe("req_stream")
+      expect(error.reason.body).toBe(frame)
+      expect(error.reason.http?.headers["x-request-id"]).toBe("req_stream")
     }),
   )
 
@@ -118,11 +118,12 @@ describe("Route diagnostics", () => {
               step: (_state, event) =>
                 Effect.fail(
                   new AIError({
-                    message: "Parser failed",
-                    reason: new InvalidProviderOutputReason({}),
-                    body: body ?? JSON.stringify(event),
-                    http,
-                    cause,
+                    reason: new InvalidProviderOutputError({
+                      message: "Parser failed",
+                      body: body ?? JSON.stringify(event),
+                      http,
+                      cause,
+                    }),
                   }),
                 ),
             },
@@ -133,9 +134,9 @@ describe("Route diagnostics", () => {
         ).pipe(Effect.provide(fixedResponse(sseEvents(frame), { headers })), Effect.flip)
 
         expect(error.message).toBe("Parser failed")
-        expect(error.body).toBe(body ?? frame)
-        expect(error.cause).toBe(cause)
-        expect(error.http).toBe(http)
+        expect(error.reason.body).toBe(body ?? frame)
+        expect(error.reason.cause).toBe(cause)
+        expect(error.reason.http).toBe(http)
       }),
     ),
   )
@@ -174,9 +175,9 @@ describe("Route diagnostics", () => {
 
       expect(error.reason._tag).toBe("InvalidProviderOutput")
       expect(error.message).toContain("Invalid JSON input for anthropic-messages tool call web_search")
-      expect(error.body).toBe(body)
-      expect(error.cause).toBeInstanceOf(Error)
-      expect(error.http).toMatchObject({ status: 200, headers })
+      expect(error.reason.body).toBe(body)
+      expect(error.reason.cause).toBeInstanceOf(Error)
+      expect(error.reason.http).toMatchObject({ status: 200, headers })
     }),
   )
 
@@ -184,10 +185,11 @@ describe("Route diagnostics", () => {
     Effect.gen(function* () {
       const cause = new Error("frame checksum mismatch")
       const failure = new AIError({
-        message: "Invalid frame",
-        reason: new InvalidProviderOutputReason({}),
-        body: "original frame representation",
-        cause,
+        reason: new InvalidProviderOutputError({
+          message: "Invalid frame",
+          body: "original frame representation",
+          cause,
+        }),
       })
       const failing = route.with({
         transport: HttpTransport.httpJson({ framing: { id: "failure", frame: () => Stream.fail(failure) } }),
@@ -196,11 +198,11 @@ describe("Route diagnostics", () => {
         LLM.request({ model: failing.model({ id: "test" }), prompt: "Hello" }),
       ).pipe(Effect.provide(fixedResponse("wire bytes", { headers })), Effect.flip)
 
-      expect(error.body).toBe(failure.body)
-      expect(error.cause).toBe(cause)
+      expect(error.reason.body).toBe(failure.reason.body)
+      expect(error.reason.cause).toBe(cause)
       expect(error.message).toBe(failure.message)
-      expect(error.http?.status).toBe(200)
-      expect(error.http?.headers).toEqual(headers)
+      expect(error.reason.http?.status).toBe(200)
+      expect(error.reason.http?.headers).toEqual(headers)
     }),
   )
 
@@ -210,9 +212,9 @@ describe("Route diagnostics", () => {
       const error = yield* LLMClient.generate(request).pipe(Effect.provide(truncatedStream([], cause)), Effect.flip)
 
       expect(error.reason).toMatchObject({ _tag: "Transport", operation: "read" })
-      expect(error.cause).toBe(cause)
-      expect(error.http?.status).toBe(200)
-      expect(error.body).toBeUndefined()
+      expect(error.reason.cause).toBe(cause)
+      expect(error.reason.http?.status).toBe(200)
+      expect(error.reason.body).toBeUndefined()
     }),
   )
 
@@ -221,8 +223,8 @@ describe("Route diagnostics", () => {
       const error = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse("", { headers })), Effect.flip)
 
       expect(error.reason).toMatchObject({ _tag: "InvalidProviderOutput", classification: "incomplete-stream" })
-      expect(error.http?.headers).toEqual(headers)
-      expect(error.body).toBeUndefined()
+      expect(error.reason.http?.headers).toEqual(headers)
+      expect(error.reason.body).toBeUndefined()
     }),
   )
 })

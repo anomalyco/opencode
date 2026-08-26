@@ -803,7 +803,7 @@ describe("Bedrock Converse route", () => {
       const error = yield* LLMClient.generate(baseRequest).pipe(Effect.provide(fixedBytes(body)), Effect.flip)
 
       expect(error).toMatchObject({ reason: { _tag: "RateLimit" }, message: "Slow down" })
-      expect(JSON.parse(error.body ?? "")).toEqual({
+      expect(JSON.parse(error.reason.body ?? "")).toEqual({
         headers: {
           ":message-type": { type: "string", value: "exception" },
           ":exception-type": { type: "string", value: "throttlingException" },
@@ -811,7 +811,7 @@ describe("Bedrock Converse route", () => {
         },
         body: JSON.stringify(payload),
       })
-      expect(error.http).toMatchObject({
+      expect(error.reason.http).toMatchObject({
         status: 200,
         headers: { "content-type": "application/vnd.amazon.eventstream" },
       })
@@ -863,7 +863,7 @@ describe("Bedrock Converse route", () => {
         reason: { _tag: "InvalidProviderOutput" },
         message: "BadStream: Stream failed",
       })
-      expect(JSON.parse(error.body ?? "")).toMatchObject({
+      expect(JSON.parse(error.reason.body ?? "")).toMatchObject({
         headers: { ":error-code": { value: "BadStream" } },
         body: "",
       })
@@ -882,9 +882,9 @@ describe("Bedrock Converse route", () => {
         Effect.flip,
       )
       expect(error.reason._tag).toBe("InvalidProviderOutput")
-      expect(JSON.parse(error.body ?? "")).toEqual({ headers, body })
-      expect(error.cause).toBeInstanceOf(Error)
-      expect(error.http?.status).toBe(200)
+      expect(JSON.parse(error.reason.body ?? "")).toEqual({ headers, body })
+      expect(error.reason.cause).toBeInstanceOf(Error)
+      expect(error.reason.http?.status).toBe(200)
     }),
   )
 

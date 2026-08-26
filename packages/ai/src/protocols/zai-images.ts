@@ -69,7 +69,7 @@ export const model = (input: ModelInput) => {
     id: ADAPTER,
     generate: Effect.fn("ZAIImages.generate")(function* (request: ImageRequestFor<ZAIImageOptions>, execute) {
       if ((request.images?.length ?? 0) > 0)
-        return yield* ImageInputs.invalid(ADAPTER, "Z.ai hosted image generation does not support image inputs")
+        return yield* ImageInputs.invalid("Z.ai hosted image generation does not support image inputs")
       const http = mergeHttpOptions(request.model.http, request.http)
       const requestBody = mergeJsonRecords(
         { model: request.model.id, prompt: request.prompt },

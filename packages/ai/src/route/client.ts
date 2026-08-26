@@ -12,13 +12,14 @@ import * as ProviderShared from "../protocols/shared.js"
 import type { ProtocolID, ProviderOptions } from "../schema/index.js"
 import {
   AIError,
+  AIErrorReason,
   GenerationOptions,
   HttpOptions,
   LLMRequest,
   LLMResponse,
   LanguageModel,
   LLMEvent,
-  InvalidProviderOutputReason,
+  InvalidProviderOutputError,
   ProviderID,
   mergeGenerationOptions,
   mergeHttpOptions,
@@ -232,8 +233,8 @@ const streamError = (route: string, message: string, cause: Cause.Cause<unknown>
 
 const incompleteStreamError = (route: string) =>
   new AIError({
-    message: "The provider response ended unexpectedly.",
-    reason: new InvalidProviderOutputReason({
+    reason: new InvalidProviderOutputError({
+      message: "The provider response ended unexpectedly.",
       classification: "incomplete-stream",
       route,
     }),
@@ -329,15 +330,16 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
                 (frame: Frame, event: Frame | Event = frame) =>
                 (error: AIError) =>
                   new AIError({
-                    message: error.message,
-                    reason: error.reason,
-                    cause: error.cause,
-                    http: error.http,
-                    body:
-                      error.body !== undefined && error.body !== ProviderShared.encodeJson(event)
-                        ? error.body
-                        : (execution.body?.(frame) ??
-                          (typeof frame === "string" ? frame : ProviderShared.encodeJson(frame))),
+                    reason: AIErrorReason.make({
+                      ...error.reason,
+                      message: error.reason.message,
+                      cause: error.reason.cause,
+                      body:
+                        error.reason.body !== undefined && error.reason.body !== ProviderShared.encodeJson(event)
+                          ? error.reason.body
+                          : (execution.body?.(frame) ??
+                            (typeof frame === "string" ? frame : ProviderShared.encodeJson(frame))),
+                    }),
                   })
               const events = execution.frames.pipe(
                 Stream.mapEffect((frame) =>
@@ -382,11 +384,12 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
                 Stream.mapError(
                   (error) =>
                     new AIError({
-                      message: error.message,
-                      reason: error.reason,
-                      body: error.body,
-                      cause: error.cause,
-                      http: error.http ?? execution.http,
+                      reason: AIErrorReason.make({
+                        ...error.reason,
+                        message: error.reason.message,
+                        cause: error.reason.cause,
+                        http: error.reason.http ?? execution.http,
+                      }),
                     }),
                 ),
               )

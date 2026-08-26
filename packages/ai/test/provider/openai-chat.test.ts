@@ -1457,7 +1457,7 @@ describe("OpenAI Chat route", () => {
       expect(error.message).toContain("OpenAI Chat tool call delta is missing id or name")
       expect(error.reason._tag).toBe("InvalidProviderOutput")
       if (error.reason._tag !== "InvalidProviderOutput") return
-      expect(decodeJson(error.body ?? "")).toMatchObject({
+      expect(decodeJson(error.reason.body ?? "")).toMatchObject({
         choices: [{ finish_reason: "tool_calls" }],
       })
     }),

@@ -2,19 +2,20 @@ import { describe, expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
 import { HttpClientError, HttpClientRequest } from "effect/unstable/http"
 import {
-  AuthenticationReason,
-  ContentPolicyReason,
-  InvalidProviderOutputReason,
-  InvalidRequestReason,
+  AuthenticationError,
+  ContentPolicyError,
+  InvalidProviderOutputError,
+  InvalidRequestError,
   AIError,
-  NoRouteReason,
+  AIErrorReason,
+  NoRouteError,
   ModelID,
   ProviderID,
-  ProviderInternalReason,
-  QuotaExceededReason,
-  RateLimitReason,
-  TransportReason,
-  UnknownProviderReason,
+  ProviderInternalError,
+  QuotaExceededError,
+  RateLimitError,
+  TransportError,
+  UnknownProviderError,
   ToolFailure,
   HttpContext,
 } from "@opencode-ai/ai"
@@ -27,29 +28,73 @@ import { toSessionError } from "@opencode-ai/core/session/to-session-error"
 import { SessionRunnerRetry } from "@opencode-ai/core/session/runner/retry"
 import { SessionError } from "@opencode-ai/schema/session-error"
 
-const llm = (reason: AIError["reason"], message = "Provider failed", http?: HttpContext) =>
-  new AIError({ message, reason, http })
+const llm = (reason: AIError["reason"], message = reason.message, http?: HttpContext) =>
+  new AIError({ reason: AIErrorReason.make({ ...reason, message, cause: reason.cause, http }) })
 
 describe("toSessionError", () => {
+  test("preserves tagged reason and native cause identity during generic enrichment", () => {
+    const cause = new Error("native failure")
+    const error = new AIError({ reason: new RateLimitError({ message: "rate limited", retryAfterMs: 123, cause }) })
+    const http = new HttpContext({ url: "https://provider.test/responses", status: 429, headers: {} })
+    const enriched = new AIError({
+      reason: AIErrorReason.make({ ...error.reason, message: error.message, cause: error.reason.cause, http }),
+    })
+    expect(enriched.reason).toBeInstanceOf(RateLimitError)
+    expect(enriched.reason).toBeInstanceOf(Error)
+    expect(enriched.message).toBe("rate limited")
+    expect(enriched.cause).toBe(enriched.reason)
+    expect(enriched.reason.cause).toBe(cause)
+    expect(enriched.reason.http).toBe(http)
+    expect(toSessionError(enriched).reason).toEqual({ _tag: "RateLimit", retryAfterMs: 123 })
+  })
+
+  test("serializes native causes only once and omits diagnostics from reason JSON", () => {
+    let calls = 0
+    const cause = Object.assign(new Error("SDK failure"), {
+      toJSON() {
+        calls++
+        return { requestBodyValues: { prompt: "private prompt" } }
+      },
+    })
+    const error = toSessionError(
+      new AIError({
+        reason: new UnknownProviderError({ message: "Provider failed", body: "body", cause }),
+      }),
+    )
+    expect(calls).toBe(1)
+    expect(error).toEqual({
+      type: "provider.unknown",
+      message: "Provider failed",
+      body: "body",
+      reason: { _tag: "UnknownProvider" },
+      cause: { name: "Error", message: "SDK failure", stack: expect.any(String) },
+    })
+  })
+
   test("maps every AI error reason to the open wire type", () => {
-    expect(toSessionError(llm(new RateLimitReason({ retryAfterMs: 123 }), "rate"))).toEqual({
+    expect(toSessionError(llm(new RateLimitError({ message: "rate", retryAfterMs: 123 }), "rate"))).toEqual({
       type: "provider.rate-limit",
       message: "rate",
       reason: { _tag: "RateLimit", retryAfterMs: 123 },
     })
-    expect(toSessionError(llm(new AuthenticationReason({ kind: "invalid" }))).type).toBe("provider.auth")
-    expect(toSessionError(llm(new QuotaExceededReason({}))).type).toBe("provider.quota")
-    expect(toSessionError(llm(new ContentPolicyReason({}))).type).toBe("provider.content-filter")
-    expect(toSessionError(llm(new TransportReason({ transport: "http", operation: "request" }))).type).toBe(
-      "provider.transport",
+    expect(toSessionError(llm(new AuthenticationError({ message: "failed", kind: "invalid" }))).type).toBe(
+      "provider.auth",
     )
-    expect(toSessionError(llm(new ProviderInternalReason({}))).type).toBe("provider.internal")
-    expect(toSessionError(llm(new InvalidProviderOutputReason({}))).type).toBe("provider.invalid-output")
-    expect(toSessionError(llm(new InvalidRequestReason({}))).type).toBe("provider.invalid-request")
+    expect(toSessionError(llm(new QuotaExceededError({ message: "failed" }))).type).toBe("provider.quota")
+    expect(toSessionError(llm(new ContentPolicyError({ message: "failed" }))).type).toBe("provider.content-filter")
+    expect(
+      toSessionError(llm(new TransportError({ message: "failed", transport: "http", operation: "request" }))).type,
+    ).toBe("provider.transport")
+    expect(toSessionError(llm(new ProviderInternalError({ message: "failed" }))).type).toBe("provider.internal")
+    expect(toSessionError(llm(new InvalidProviderOutputError({ message: "failed" }))).type).toBe(
+      "provider.invalid-output",
+    )
+    expect(toSessionError(llm(new InvalidRequestError({ message: "failed" }))).type).toBe("provider.invalid-request")
     expect(
       toSessionError(
         llm(
-          new NoRouteReason({
+          new NoRouteError({
+            message: "failed",
             route: "route",
             provider: ProviderID.make("provider"),
             model: ModelID.make("model"),
@@ -57,7 +102,7 @@ describe("toSessionError", () => {
         ),
       ).type,
     ).toBe("provider.no-route")
-    expect(toSessionError(llm(new UnknownProviderReason({}))).type).toBe("provider.unknown")
+    expect(toSessionError(llm(new UnknownProviderError({ message: "failed" }))).type).toBe("provider.unknown")
   })
 
   test("preserves the permission rejection type without exposing internal fields", () => {
@@ -90,11 +135,14 @@ describe("toSessionError", () => {
     })
     const error = toSessionError(
       new AIError({
-        message: "too large",
-        reason: new InvalidRequestReason({ classification: "context-overflow", parameter: "messages" }),
-        body: '{"error":"context limit"}',
-        http,
-        cause,
+        reason: new InvalidRequestError({
+          message: "too large",
+          classification: "context-overflow",
+          parameter: "messages",
+          body: '{"error":"context limit"}',
+          http,
+          cause,
+        }),
       }),
     )
     const codec = Schema.fromJsonString(SessionError.Error)
@@ -139,9 +187,7 @@ describe("toSessionError", () => {
     })
     const error = toSessionError(
       new AIError({
-        message: "Connection failed",
-        reason: new TransportReason({ transport: "http", operation: "request" }),
-        cause,
+        reason: new TransportError({ message: "Connection failed", transport: "http", operation: "request", cause }),
       }),
     )
     expect(error.cause).toEqual({
@@ -162,10 +208,10 @@ describe("toSessionError", () => {
   test("serializes non-Error causes without losing JSON diagnostics", () => {
     const cause = { code: "invalid_response", detail: ["empty", 1] }
     expect(
-      toSessionError(new AIError({ message: "failed", reason: new UnknownProviderReason({}), cause })).cause,
+      toSessionError(new AIError({ reason: new UnknownProviderError({ message: "failed", cause }) })).cause,
     ).toEqual(cause)
     expect(
-      toSessionError(new AIError({ message: "failed", reason: new UnknownProviderReason({}), cause: 1n })).cause,
+      toSessionError(new AIError({ reason: new UnknownProviderError({ message: "failed", cause: 1n }) })).cause,
     ).toBe("1")
   })
 
@@ -173,9 +219,7 @@ describe("toSessionError", () => {
     const cause = Effect.runSync(Schema.decodeUnknownEffect(Schema.String)(undefined).pipe(Effect.flip))
     const error = toSessionError(
       new AIError({
-        message: "Invalid provider output",
-        reason: new InvalidProviderOutputReason({}),
-        cause,
+        reason: new InvalidProviderOutputError({ message: "Invalid provider output", cause }),
       }),
     )
     expect(error.cause).toEqual({ name: cause.name, message: cause.message, stack: expect.any(String) })
@@ -196,18 +240,25 @@ describe("toSessionError", () => {
 
   test("retries only rate limits, provider-internal failures, and transport failures", () => {
     const eligible = [
-      llm(new RateLimitReason({})),
-      llm(new ProviderInternalReason({})),
-      llm(new TransportReason({ transport: "http", operation: "request" })),
+      llm(new RateLimitError({ message: "failed" })),
+      llm(new ProviderInternalError({ message: "failed" })),
+      llm(new TransportError({ message: "failed", transport: "http", operation: "request" })),
     ]
     const ineligible = [
-      llm(new AuthenticationReason({ kind: "invalid" })),
-      llm(new QuotaExceededReason({})),
-      llm(new ContentPolicyReason({})),
-      llm(new InvalidProviderOutputReason({})),
-      llm(new InvalidRequestReason({})),
-      llm(new NoRouteReason({ route: "route", provider: ProviderID.make("provider"), model: ModelID.make("model") })),
-      llm(new UnknownProviderReason({})),
+      llm(new AuthenticationError({ message: "failed", kind: "invalid" })),
+      llm(new QuotaExceededError({ message: "failed" })),
+      llm(new ContentPolicyError({ message: "failed" })),
+      llm(new InvalidProviderOutputError({ message: "failed" })),
+      llm(new InvalidRequestError({ message: "failed" })),
+      llm(
+        new NoRouteError({
+          message: "failed",
+          route: "route",
+          provider: ProviderID.make("provider"),
+          model: ModelID.make("model"),
+        }),
+      ),
+      llm(new UnknownProviderError({ message: "failed" })),
     ]
 
     expect(eligible.map(SessionRunnerRetry.isRetryable)).toEqual([true, true, true])
@@ -216,9 +267,10 @@ describe("toSessionError", () => {
 
   test("retries transport failures only when delivery is absent or not sent", () => {
     const retryable = [
-      llm(new TransportReason({ transport: "http", operation: "request" })),
+      llm(new TransportError({ message: "failed", transport: "http", operation: "request" })),
       llm(
-        new TransportReason({
+        new TransportError({
+          message: "failed",
           transport: "websocket",
           operation: "request",
           delivery: "not-sent",
@@ -228,7 +280,8 @@ describe("toSessionError", () => {
     ]
     const ineligible = [
       llm(
-        new TransportReason({
+        new TransportError({
+          message: "failed",
           transport: "websocket",
           operation: "write",
           delivery: "ambiguous",
@@ -236,7 +289,8 @@ describe("toSessionError", () => {
         }),
       ),
       llm(
-        new TransportReason({
+        new TransportError({
+          message: "failed",
           transport: "websocket",
           operation: "read",
           delivery: "accepted",
@@ -244,7 +298,8 @@ describe("toSessionError", () => {
         }),
       ),
       llm(
-        new TransportReason({
+        new TransportError({
+          message: "failed",
           transport: "websocket",
           operation: "read",
           delivery: "rejected",
@@ -268,11 +323,13 @@ describe("toSessionError", () => {
 
     expect(
       SessionRunnerRetry.isRetryable(
-        llm(new ProviderInternalReason({}), "do not retry", http({ "x-should-retry": "false" })),
+        llm(new ProviderInternalError({ message: "failed" }), "do not retry", http({ "x-should-retry": "false" })),
       ),
     ).toBeFalse()
     expect(
-      SessionRunnerRetry.isRetryable(llm(new InvalidRequestReason({}), "retry", http({ "x-should-retry": "true" }))),
+      SessionRunnerRetry.isRetryable(
+        llm(new InvalidRequestError({ message: "failed" }), "retry", http({ "x-should-retry": "true" })),
+      ),
     ).toBeTrue()
   })
 })

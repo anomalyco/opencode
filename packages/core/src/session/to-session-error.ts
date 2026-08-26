@@ -1,4 +1,4 @@
-import { AIError, ToolFailure } from "@opencode-ai/ai"
+import { AIError, AIErrorReason, ToolFailure } from "@opencode-ai/ai"
 import { Schema } from "effect"
 import { Tool } from "@opencode-ai/schema/tool"
 import { SessionError } from "@opencode-ai/schema/session-error"
@@ -60,15 +60,21 @@ export function toSessionError(cause: unknown): SessionError.Error {
 }
 
 function providerError(type: string, error: AIError): SessionError.Error {
+  // The durable projection owns diagnostics; encode classification without the native cause.
+  const reason = Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Json))(
+    Schema.encodeSync(Schema.toCodecJson(AIErrorReason))(
+      AIErrorReason.make({ ...error.reason, message: error.message, cause: undefined }),
+    ),
+  )
   return {
     type,
     message: error.message,
-    ...(error.http === undefined ? {} : { status: error.http.status, http: { ...error.http } }),
-    ...(error.body === undefined ? {} : { body: error.body }),
-    reason: Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Json))(
-      Schema.encodeSync(Schema.toCodecJson(AIError.fields.reason))(error.reason),
+    ...(error.reason.http === undefined ? {} : { status: error.reason.http.status, http: { ...error.reason.http } }),
+    ...(error.reason.body === undefined ? {} : { body: error.reason.body }),
+    reason: Object.fromEntries(
+      Object.entries(reason).filter(([key]) => !["message", "body", "http", "cause"].includes(key)),
     ),
-    ...(error.cause === undefined ? {} : { cause: serializeCause(error.cause) }),
+    ...(error.reason.cause === undefined ? {} : { cause: serializeCause(error.reason.cause) }),
   }
 }
 

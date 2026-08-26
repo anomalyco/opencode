@@ -1392,8 +1392,6 @@ const onError = (event: AnthropicEvent) => {
   const body = ProviderShared.encodeJson(event)
   return Effect.fail(
     new AIError({
-      message,
-      body,
       reason: classifyProviderFailure({ message, code: event.error?.type, rawBody: body }),
     }),
   )

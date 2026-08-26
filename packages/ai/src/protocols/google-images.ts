@@ -268,12 +268,11 @@ const googleImagePart = (image: ImageInput): Effect.Effect<Record<string, unknow
     return Effect.succeed({ inlineData: { mimeType: image.mediaType, data: Encoding.encodeBase64(image.data) } })
   if (image.type === "file-uri") return Effect.succeed({ fileData: { mimeType: image.mediaType, fileUri: image.uri } })
   if (image.type === "url")
-    return ImageInputs.decodeDataUrl(image.url, ADAPTER).pipe(
+    return ImageInputs.decodeDataUrl(image.url).pipe(
       Effect.flatMap((decoded) => {
         if (decoded === undefined)
           return Effect.fail(
             ImageInputs.invalid(
-              ADAPTER,
               "Google generateContent does not fetch public image URLs; use bytes, a data URL, or a Gemini file URI",
             ),
           )
@@ -283,7 +282,7 @@ const googleImagePart = (image: ImageInput): Effect.Effect<Record<string, unknow
       }),
     )
   return Effect.fail(
-    ImageInputs.invalid(ADAPTER, "Google generateContent requires Gemini file URIs rather than provider file IDs"),
+    ImageInputs.invalid("Google generateContent requires Gemini file URIs rather than provider file IDs"),
   )
 }
 

@@ -530,7 +530,7 @@ describe("OpenAI-compatible Chat route", () => {
         reason: { _tag: "ProviderInternal" },
         message: "Provider reported a network error (finish_reason: network_error)",
       })
-      expect(decodeJson(error.body ?? "")).toMatchObject({
+      expect(decodeJson(error.reason.body ?? "")).toMatchObject({
         id: "chatcmpl_fixture",
         choices: [{ finish_reason: "network_error" }],
       })
@@ -562,7 +562,7 @@ describe("OpenAI-compatible Chat route", () => {
       )
 
       expect(error).toMatchObject({ reason: { _tag: "ProviderInternal" }, message: "Provider disconnected" })
-      expect(decodeJson(error.body ?? "")).toMatchObject({
+      expect(decodeJson(error.reason.body ?? "")).toMatchObject({
         id: "chatcmpl_error",
         error: { code: 502, message: "Provider disconnected", details: { upstream: "vendor" } },
         trace_id: "trace_1",
@@ -602,7 +602,7 @@ describe("OpenAI-compatible Chat route", () => {
       expect(error.message).toContain("OpenAI Chat received content after the finish reason")
       expect(error.reason._tag).toBe("InvalidProviderOutput")
       if (error.reason._tag !== "InvalidProviderOutput") return
-      expect(decodeJson(error.body ?? "")).toMatchObject({
+      expect(decodeJson(error.reason.body ?? "")).toMatchObject({
         choices: [{ delta: { tool_calls: [{ id: "call_1" }] } }],
       })
     }),

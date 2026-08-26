@@ -605,8 +605,6 @@ const step = (state: ParserState, event: GeminiEvent) => {
     const body = ProviderShared.encodeJson(event)
     return Effect.fail(
       new AIError({
-        message: event.error.message,
-        body,
         reason: classifyProviderFailure({
           message: event.error.message,
           status: typeof event.error.code === "number" ? event.error.code : undefined,

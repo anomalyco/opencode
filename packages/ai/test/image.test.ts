@@ -15,10 +15,10 @@ describe("Image", () => {
           const error = yield* Image.generate({ model, prompt: "hello" }).pipe(Effect.flip)
           expect(error.reason._tag).toBe("InvalidProviderOutput")
           expect(error.message).toContain("invalid response")
-          expect(error.body).toBe(body)
-          expect(error.http).toMatchObject({ status: 200, headers: { "x-image-trace": "trace-1" } })
-          expect(error.http?.url).toStartWith("https://image.test/")
-          expect(error.cause).toBeInstanceOf(Error)
+          expect(error.reason.body).toBe(body)
+          expect(error.reason.http).toMatchObject({ status: 200, headers: { "x-image-trace": "trace-1" } })
+          expect(error.reason.http?.url).toStartWith("https://image.test/")
+          expect(error.reason.cause).toBeInstanceOf(Error)
         }).pipe(
           Effect.provide(
             ImageClient.layer.pipe(
@@ -562,7 +562,7 @@ describe("Image", () => {
           expect(error.reason._tag).toBe("InvalidProviderOutput")
           if (error.reason._tag !== "InvalidProviderOutput") return
           expect(error.message).toContain("finish reasons: IMAGE_SAFETY")
-          expect(JSON.parse(error.body ?? "")).toEqual({
+          expect(JSON.parse(error.reason.body ?? "")).toEqual({
             promptFeedback: { blockReason: "SAFETY" },
             candidates: [
               {

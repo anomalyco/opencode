@@ -13,7 +13,7 @@ import {
   ToolCallPart,
   ToolDefinition,
   ToolResultPart,
-  TransportReason,
+  TransportError,
   Usage,
 } from "../../src/index.js"
 import {
@@ -53,11 +53,11 @@ const baseChannelDriver = (message: string): WebSocketChannelDriver => ({
       return Effect.succeed({
         type: "provider-failure",
         error: new AIError({
-          message: "provider rejected request",
-          body: frame,
-          cause: new Error("provider cause"),
-          http: new HttpContext({ url: "https://provider.test", status: 200, headers: { "x-trace": "trace-1" } }),
-          reason: new TransportReason({
+          reason: new TransportError({
+            message: "provider rejected request",
+            body: frame,
+            cause: new Error("provider cause"),
+            http: new HttpContext({ url: "https://provider.test", status: 200, headers: { "x-trace": "trace-1" } }),
             transport: "websocket",
             operation: "read",
             phase: "receive",
@@ -750,10 +750,10 @@ describe("OpenAI Responses route", () => {
         expect(observation.type).toBe("rejected")
         if (observation.type !== "rejected") continue
         expect(observation.error.message).toBe("provider rejected request")
-        expect(observation.error.cause).toBeInstanceOf(Error)
-        expect(observation.error.cause).toMatchObject({ message: "provider cause" })
-        expect(observation.error.http).toMatchObject({ status: 200, headers: { "x-trace": "trace-1" } })
-        expect(ProviderShared.decodeJson(observation.error.body ?? "")).toMatchObject({
+        expect(observation.error.reason.cause).toBeInstanceOf(Error)
+        expect(observation.error.reason.cause).toMatchObject({ message: "provider cause" })
+        expect(observation.error.reason.http).toMatchObject({ status: 200, headers: { "x-trace": "trace-1" } })
+        expect(ProviderShared.decodeJson(observation.error.reason.body ?? "")).toMatchObject({
           type: "error",
           error: { code: expect.any(String) },
         })
@@ -1124,8 +1124,8 @@ describe("OpenAI Responses route", () => {
   it.effect("marks post-send WebSocket failures with delivery state", () =>
     Effect.gen(function* () {
       const failure = new AIError({
-        message: "socket closed",
-        reason: new TransportReason({
+        reason: new TransportError({
+          message: "socket closed",
           transport: "websocket",
           operation: "read",
           phase: "close",
@@ -4602,7 +4602,7 @@ describe("OpenAI Responses route", () => {
 
       expect(error.reason).toMatchObject({ _tag: "UnknownProvider" })
       expect(error.message).toContain('"error":null')
-      expect(error.body).toBe(error.message)
+      expect(error.reason.body).toBe(error.message)
     }),
   )
 
@@ -4615,7 +4615,7 @@ describe("OpenAI Responses route", () => {
 
       expect(error.reason).toMatchObject({ _tag: "ProviderInternal" })
       expect(error.message).toContain('"type":"error"')
-      expect(error.body).toBe(error.message)
+      expect(error.reason.body).toBe(error.message)
     }),
   )
 
@@ -4628,7 +4628,7 @@ describe("OpenAI Responses route", () => {
 
       expect(error.reason).toMatchObject({ _tag: "UnknownProvider" })
       expect(error.message).toContain('"resp_failed_3"')
-      expect(error.body).toBe(error.message)
+      expect(error.reason.body).toBe(error.message)
     }),
   )
 

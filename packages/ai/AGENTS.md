@@ -21,11 +21,11 @@ Per-type constructors live on the type, not as top-level re-exports. Use `Messag
 
 ## Errors
 
-- `AIError.message` is the readable explanation; `reason` contains classification and behavior-specific fields only.
-- `AIError.body` is the sole original-response or triggering-event payload field. Preserve original text before schema decoding removes fields; do not replace the complete event with only its nested error.
-- `AIError.http` describes an observed HTTP response with required `url`, `status`, and response `headers`. Do not invent status codes or derive a separate request ID from headers.
-- `AIError.cause` retains the underlying exception, not the classified reason. Reclassification and transport recovery must preserve body, HTTP context, and cause.
-- Error `message` and `cause` are non-enumerable: copy them explicitly when constructing an enriched error from an existing one.
+- `AIError` wraps a union of tagged reason errors. It stores only `reason`, derives `message` from the reason, and exposes the reason as its `cause`.
+- Each reason owns its readable `message`, category-specific fields, and optional `body`, `http`, and underlying exception in `cause`.
+- `reason.body` is the sole original-response or triggering-event payload field. Preserve original text before schema decoding removes fields; do not replace the complete event with only its nested error.
+- `reason.http` describes an observed HTTP response with required `url`, `status`, and response `headers`. Do not invent status codes or derive a separate request ID from headers.
+- Reclassification and transport recovery must preserve the reason's body, HTTP context, and underlying cause. Error `message` and `cause` are non-enumerable: copy them explicitly when constructing an enriched reason with its constructor or `AIErrorReason.make`.
 
 ## Architecture
 

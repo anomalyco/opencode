@@ -1,6 +1,6 @@
 import { Config, Effect, Redacted } from "effect"
 import { Headers } from "effect/unstable/http"
-import { AuthenticationReason, InvalidRequestReason, AIError, type HttpOptions } from "../schema/index.js"
+import { AuthenticationError, InvalidRequestError, AIError, type HttpOptions } from "../schema/index.js"
 
 export class MissingCredentialError extends Error {
   readonly _tag = "MissingCredentialError"
@@ -137,13 +137,10 @@ export function bearerHeader(name: string, source?: Secret | Credential) {
 const toAIError = (error: AuthError): AIError => {
   if (error instanceof MissingCredentialError || error instanceof Config.ConfigError) {
     return new AIError({
-      message:
-        error instanceof MissingCredentialError ? error.message : `Failed to resolve auth config: ${error.message}`,
-      cause: error,
       reason:
         error instanceof MissingCredentialError
-          ? new AuthenticationReason({ kind: "missing" })
-          : new InvalidRequestReason({}),
+          ? new AuthenticationError({ message: error.message, cause: error, kind: "missing" })
+          : new InvalidRequestError({ message: `Failed to resolve auth config: ${error.message}`, cause: error }),
     })
   }
   return error

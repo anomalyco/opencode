@@ -106,7 +106,7 @@ export const model = (input: ModelInput) => {
         return undefined
       })
       if (imageReferences.some((image) => image === undefined))
-        return yield* ImageInputs.invalid(ADAPTER, "xAI Images accepts image URLs, data URLs, bytes, and file IDs")
+        return yield* ImageInputs.invalid("xAI Images accepts image URLs, data URLs, bytes, and file IDs")
       const requestBody = mergeJsonRecords(
         {
           model: request.model.id,

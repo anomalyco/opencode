@@ -10,7 +10,7 @@ import {
   type WebSocketConnection,
   type WebSocketConnector,
 } from "@opencode-ai/ai/route"
-import { AIError, TransportReason, type TransportOperation } from "@opencode-ai/ai"
+import { AIError, AIErrorReason, TransportError, type TransportOperation } from "@opencode-ai/ai"
 import { Hash } from "@opencode-ai/util/hash"
 import { Cause, Clock, Context, Effect, Fiber, Layer, Metric, Queue, Scope, Semaphore, Stream } from "effect"
 import { Socket } from "effect/unstable/socket"
@@ -68,31 +68,24 @@ const transportError = (
     readonly operation: TransportOperation
     readonly url?: string
     readonly code?: string
-    readonly phase?: TransportReason["phase"]
-    readonly delivery?: TransportReason["delivery"]
+    readonly phase?: TransportError["phase"]
+    readonly delivery?: TransportError["delivery"]
   },
 ) =>
   new AIError({
-    message,
-    reason: new TransportReason({ transport: "websocket", ...input }),
+    reason: new TransportError({ message, transport: "websocket", ...input }),
   })
 
 const annotate = (
   error: AIError,
-  input: { readonly phase: TransportReason["phase"]; readonly delivery: TransportReason["delivery"] },
+  input: { readonly phase: TransportError["phase"]; readonly delivery: TransportError["delivery"] },
 ) => {
   if (error.reason._tag !== "Transport") return error
   return new AIError({
-    message: error.message,
-    body: error.body,
-    http: error.http,
-    cause: error.cause,
-    reason: new TransportReason({
-      transport: error.reason.transport,
-      operation: error.reason.operation,
-      code: error.reason.code,
-      url: error.reason.url,
-      recovery: error.reason.recovery,
+    reason: new TransportError({
+      ...error.reason,
+      message: error.message,
+      cause: error.reason.cause,
       ...input,
     }),
   })
@@ -348,11 +341,12 @@ export const makeLayer = (connector: WebSocketConnector) =>
         )
         if (sent._tag === "Failure") {
           const failure = new AIError({
-            message: sent.failure.message,
-            reason: sent.failure.reason,
-            body: sent.failure.body,
-            cause: sent.failure.cause,
-            http: sent.failure.http ?? channel.connection.http,
+            reason: AIErrorReason.make({
+              ...sent.failure.reason,
+              message: sent.failure.message,
+              cause: sent.failure.reason.cause,
+              http: sent.failure.reason.http ?? channel.connection.http,
+            }),
           })
           const notSent = failure.reason._tag === "Transport" && failure.reason.delivery === "not-sent"
           yield* closeChannel(owner, channel)
