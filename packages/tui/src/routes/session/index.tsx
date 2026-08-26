@@ -459,7 +459,7 @@ export function Session(props: { verticalTabsWidth: number }) {
   function isAwayFromBottom() {
     if (revealingOlderRows || revealingNewerRows || ensureAllRowsPending || navigationMessage()) return true
     if (visibleEnd() < rows.length) return true
-    return scroll.scrollTop < Math.max(0, scroll.scrollHeight - scroll.viewport.height) - 1
+    return scroll.scrollTop < Math.max(0, scroll.scrollHeight - scroll.viewport.height)
   }
   function updateAwayFromBottom() {
     const preserveWindow = revealingOlderRows || revealingNewerRows || !!ensureAllRowsPending
