@@ -244,6 +244,29 @@ describe("Job", () => {
     }),
   )
 
+  it.live("durably backgrounds recoverable work that has already failed", () =>
+    Effect.gen(function* () {
+      const jobs = yield* Job.Service
+      const job = yield* jobs.start({
+        type: "shell",
+        recovery: {
+          kind: "shell",
+          sessionID: SessionSchema.ID.make("ses_immediate_error"),
+          shellID: "shell_immediate_error",
+          command: "exit 1",
+        },
+        run: Effect.fail(new Error("shell failed")),
+      })
+      expect((yield* jobs.wait({ id: job.id })).info?.status).toBe("error")
+
+      const background = yield* jobs.background(job.id)
+      expect(background?.notificationID).toStartWith("msg_")
+      expect(yield* jobs.pendingBackground).toMatchObject([
+        { id: job.id, notificationID: background?.notificationID, status: "error", error: "shell failed" },
+      ])
+    }),
+  )
+
   it.live("recovers a background marker after its process-local registry closes", () =>
     Effect.gen(function* () {
       const scope = yield* Scope.make()

@@ -339,7 +339,8 @@ export const make = Effect.gen(function* () {
       state.jobs,
       Effect.fnUntraced(function* (jobs): Effect.fn.Return<readonly [BackgroundResult, Map<string, Active>]> {
         const job = jobs.get(id)
-        if (!job || job.info.status !== "running") return [{}, jobs]
+        // Recoverable work may finish before the caller backgrounds it.
+        if (!job || (job.info.status !== "running" && !job.recovery)) return [{}, jobs]
         if (job.isBackgrounded) return [{ info: snapshot(job) }, jobs]
         const next = yield* markBackground(job)
         return [{ info: snapshot(next), backgrounded: job.backgrounded }, new Map(jobs).set(id, next)]

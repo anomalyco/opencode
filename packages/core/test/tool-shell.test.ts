@@ -790,7 +790,7 @@ describe("ShellTool", () => {
     ),
   )
 
-  it.live("persists a silent background command's exit code before notification admission", () =>
+  it.live("persists a silent command that finishes before backgrounding", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
       (tmp) => {
@@ -799,6 +799,7 @@ describe("ShellTool", () => {
           Effect.gen(function* () {
             const bus = yield* Bus.Service
             const jobs = yield* Job.Service
+            const shell = yield* Shell.Service
             const persisted = yield* Deferred.make<readonly Job.Background[]>()
             yield* bus.project(SessionEvent.InboxEnqueued, (event) =>
               event.data.sessionID === sessionID && event.data.item.type === "synthetic"
@@ -808,20 +809,14 @@ describe("ShellTool", () => {
                   )
                 : Effect.void,
             )
-            const release = path.join(tmp.path, "release")
-            yield* executeTool(
-              registry,
-              call(
-                {
-                  command: isWindows
-                    ? `while (!(Test-Path -LiteralPath '${release}')) { Start-Sleep -Milliseconds 50 }; exit 7`
-                    : `while [ ! -e '${release}' ]; do sleep 0.05; done; exit 7`,
-                  background: true,
-                },
-                "call-background-silent-nonzero",
-              ),
-            )
-            yield* Effect.promise(() => Bun.write(release, ""))
+            yield* executeTool(registry, {
+              ...call({ command: "exit 7", background: true }, "call-background-silent-nonzero"),
+              // The command can finish while its initial progress update is being published.
+              progress: (update) =>
+                typeof update.shellID === "string"
+                  ? shell.wait(ShellSchema.ID.make(update.shellID)).pipe(Effect.orDie, Effect.asVoid)
+                  : Effect.void,
+            })
 
             expect(yield* Deferred.await(persisted)).toMatchObject([
               {
