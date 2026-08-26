@@ -124,7 +124,7 @@ function TabIndicator(props: {
     if (props.status.attention === "permission") return "!"
     if (props.status.attention === "question") return "?"
     if (runs()) return spinner().frames[0]
-    return props.label
+    return props.label === "+" ? "+" : "▪"
   }
   return (
     <box width={props.width + 1} flexShrink={0} flexDirection="row" justifyContent="flex-end" paddingRight={1}>
@@ -419,6 +419,16 @@ export function SessionTabs(
   } = {},
 ) {
   const keymap = Keymap.use()
+  const [numbers, setNumbers] = createSignal(false)
+  createEffect(() => {
+    if (!keymap.control()) {
+      setNumbers(false)
+      return
+    }
+    // Brief Control chords should not flash the tab numbers.
+    const timeout = setTimeout(() => setNumbers(true), 150)
+    onCleanup(() => clearTimeout(timeout))
+  })
 
   return (
     <Switch>
@@ -427,7 +437,7 @@ export function SessionTabs(
           controller={props.controller}
           animations={props.animations}
           spinner={props.spinner}
-          numbers={keymap.control()}
+          numbers={numbers()}
           width={props.width}
         />
       </Match>
@@ -436,7 +446,7 @@ export function SessionTabs(
           controller={props.controller}
           animations={props.animations}
           spinner={props.spinner}
-          numbers={keymap.control()}
+          numbers={numbers()}
         />
       </Match>
     </Switch>

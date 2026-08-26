@@ -32,6 +32,7 @@ for (const orientation of ["horizontal", "vertical"] as const) {
     const [active, setActive] = createSignal("second")
     const [animations, setAnimations] = createSignal(false)
     const [spinner, setSpinner] = createSignal<TabSpinner>("dots")
+    const [newTab, setNewTab] = createSignal(false)
     let theme!: ReturnType<typeof useTheme>
     function Colors() {
       theme = orientation === "vertical" ? useTheme("elevated") : useTheme()
@@ -43,6 +44,7 @@ for (const orientation of ["horizontal", "vertical"] as const) {
         { sessionID: "second", title: "Second" },
       ],
       current: active,
+      newTab,
       select: setActive,
       close() {},
       move() {},
@@ -86,7 +88,21 @@ for (const orientation of ["horizontal", "vertical"] as const) {
 
     try {
       app.renderer.start()
+      await app.waitForFrame((frame) => frame.includes("\u25aa First") && frame.includes("\u25aa Second"))
+      const pressed = performance.now()
+      await app.mockInput.pressKeys(["\x1b[57442;5u"])
       await app.waitForFrame((frame) => frame.includes("1 First") && frame.includes("2 Second"))
+      expect(performance.now() - pressed).toBeGreaterThanOrEqual(150)
+      await app.mockInput.pressKeys(["\x1b[57442;1:3u"])
+      await app.waitForFrame((frame) => frame.includes("\u25aa First"))
+
+      await app.mockInput.pressKeys(["\x1b[57442;5u"])
+      await app.renderOnce()
+      await app.mockInput.pressKeys(["\x1b[57442;1:3u"])
+      await Bun.sleep(175)
+      await app.renderOnce()
+      expect(app.captureCharFrame()).toContain("\u25aa First")
+
       const titleColumn = app
         .captureCharFrame()
         .split("\n")
@@ -96,9 +112,9 @@ for (const orientation of ["horizontal", "vertical"] as const) {
         { status: { busy: true }, label: TAB_SPINNERS.dots.frames[0] },
         { status: { busy: true, attention: "question" }, label: "?" },
         { status: { busy: true, attention: "permission" }, label: "!" },
-        { status: { unread: "activity" }, label: "1" },
-        { status: { unread: "error" }, label: "1" },
-        { status: {}, label: "1" },
+        { status: { unread: "activity" }, label: "\u25aa" },
+        { status: { unread: "error" }, label: "\u25aa" },
+        { status: {}, label: "\u25aa" },
       ]
       for (const selected of [false, true]) {
         setActive(selected ? "first" : "second")
@@ -116,12 +132,12 @@ for (const orientation of ["horizontal", "vertical"] as const) {
           const rows = app.captureCharFrame().split("\n")
           expect(rows[orientation === "vertical" ? 2 : 1]?.trim()).toBe(orientation === "vertical" ? "project" : "")
           if (state.status.unread) {
-            const number = app
+            const indicator = app
               .captureSpans()
               .lines.flatMap((line) => line.spans)
-              .find((span) => span.text.trim() === "1")
-            expect(number).toBeDefined()
-            expect(number!.fg.toInts()).toEqual(
+              .find((span) => span.text.trim() === "\u25aa")
+            expect(indicator).toBeDefined()
+            expect(indicator!.fg.toInts()).toEqual(
               (state.status.unread === "error" ? theme.text.feedback.error.default : theme.text.status.unread).toInts(),
             )
           }
@@ -153,6 +169,9 @@ for (const orientation of ["horizontal", "vertical"] as const) {
       await app.waitForFrame((frame) => frame.includes("1 First"))
       app.renderer.emit("blur")
       await app.waitForFrame((frame) => frame.includes("? First"))
+
+      setNewTab(true)
+      await app.waitForFrame((frame) => frame.includes("+ New session"))
     } finally {
       app.renderer.destroy()
     }
