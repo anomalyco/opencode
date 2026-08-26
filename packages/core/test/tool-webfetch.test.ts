@@ -62,6 +62,8 @@ const call = (input: typeof WebFetchTool.Input.Type, id = "call-webfetch") => ({
 })
 
 describe("WebFetchTool helpers", () => {
+  const maxBytes = 4 * 1024
+
   test("defaults format and rejects invalid timeout controls", () => {
     const decode = Schema.decodeUnknownSync(WebFetchTool.Input)
     expect(decode({ url: "https://example.com" })).toEqual({ url: "https://example.com", format: "markdown" })
@@ -114,18 +116,24 @@ describe("WebFetchTool helpers", () => {
     expect(WebFetchTool.convertHTMLToMarkdown(html)).toBe("before after")
   })
 
-  test("is deterministic and bounded for malformed maximum-size input", () => {
-    const html = `<main><p>${"visible &amp; text ".repeat(250_000)}</main></p></unknown>`
+  test("is deterministic and bounded for malformed input across parser chunks", () => {
+    const html = `<main><p>${"visible &amp; text ".repeat(4_096)}</main></p></unknown>`
     const first = WebFetchTool.convertHTMLToMarkdown(html)
     expect(WebFetchTool.convertHTMLToMarkdown(html)).toBe(first)
     expect(first.startsWith("visible & text visible & text")).toBe(true)
     expect(first.length).toBeLessThanOrEqual(html.length)
   })
 
+  test("defaults to the production byte budget with room for closing syntax", () => {
+    const output = WebFetchTool.convertHTMLToMarkdown("x".repeat(WebFetchTool.MAX_RESPONSE_BYTES))
+    expect(WebFetchTool.MAX_RESPONSE_BYTES).toBe(5 * 1024 * 1024)
+    expect(output).toHaveLength(WebFetchTool.MAX_RESPONSE_BYTES - 64 * 1024)
+  })
+
   test("bounds deeply nested list output and fragmented code fences", () => {
     const lists = `${"<ul><li>item".repeat(2_000)}${"</li></ul>".repeat(2_000)}`
     const quotes = `${"<blockquote><p>item".repeat(2_000)}${"</p></blockquote>".repeat(2_000)}`
-    const code = `<pre>${"` x ".repeat(250_000)}</pre>`
+    const code = `<pre>${"` x ".repeat(4_096)}</pre>`
     expect(WebFetchTool.convertHTMLToMarkdown(lists).length).toBeLessThan(lists.length * 4)
     expect(WebFetchTool.convertHTMLToMarkdown(quotes).length).toBeLessThan(quotes.length * 4)
     expect(() => WebFetchTool.convertHTMLToMarkdown(code)).not.toThrow()
@@ -251,7 +259,7 @@ describe("WebFetchTool helpers", () => {
   })
 
   test("keeps each near-boundary inline construct closed and UTF-8-safe", () => {
-    const payload = "😀".repeat(WebFetchTool.MAX_RESPONSE_BYTES / 4)
+    const payload = "😀".repeat(maxBytes / 4)
     const cases = [
       [`<strong>${payload}</strong>`, /^\*\*[\s\S]*\*\*$/],
       [`<a href="/docs">${payload}</a>`, /^\[[\s\S]*\]\(\/docs\)$/],
@@ -259,22 +267,26 @@ describe("WebFetchTool helpers", () => {
       [`<code>${payload}</code>`, /^`[\s\S]*`$/],
     ] as const
     for (const [html, pattern] of cases) {
-      const output = WebFetchTool.convertHTMLToMarkdown(html)
-      expect(Buffer.byteLength(output)).toBeLessThanOrEqual(WebFetchTool.MAX_RESPONSE_BYTES)
+      const output = WebFetchTool.convertHTMLToMarkdown(html, maxBytes)
+      expect(Buffer.byteLength(output)).toBeLessThanOrEqual(maxBytes)
+      expect(output).toContain("😀")
+      expect(output).not.toContain(payload)
       expect(output).not.toContain("�")
       expect(output).toMatch(pattern)
     }
   })
 
   test("keeps near-boundary block constructs syntactically complete", () => {
-    const payload = "x".repeat(WebFetchTool.MAX_RESPONSE_BYTES)
+    const payload = "x".repeat(maxBytes)
     const table = WebFetchTool.convertHTMLToMarkdown(
       `<table><tr><th>Name</th></tr><tr><td>${payload}</td></tr></table>`,
+      maxBytes,
     )
-    const list = WebFetchTool.convertHTMLToMarkdown(`<ul><li>${payload}</li></ul><ul><li>nested</li></ul>`)
-    const code = WebFetchTool.convertHTMLToMarkdown(`<pre>${payload}</pre>`)
+    const list = WebFetchTool.convertHTMLToMarkdown(`<ul><li>${payload}</li></ul><ul><li>nested</li></ul>`, maxBytes)
+    const code = WebFetchTool.convertHTMLToMarkdown(`<pre>${payload}</pre>`, maxBytes)
     for (const output of [table, list, code]) {
-      expect(Buffer.byteLength(output)).toBeLessThanOrEqual(WebFetchTool.MAX_RESPONSE_BYTES)
+      expect(Buffer.byteLength(output)).toBeLessThanOrEqual(maxBytes)
+      expect(output).not.toContain(payload)
       expect(output).not.toContain("�")
     }
     expect(table).toMatch(/^\| Name \|\n\| --- \|\n\| [\s\S]* \|$/)
@@ -284,9 +296,9 @@ describe("WebFetchTool helpers", () => {
   })
 
   test("keeps quoted code within budget with a safe closed fence", () => {
-    const html = `<blockquote><pre>${"`".repeat(32)}${"~".repeat(32)}${"x".repeat(WebFetchTool.MAX_RESPONSE_BYTES)}</pre></blockquote>`
-    const output = WebFetchTool.convertHTMLToMarkdown(html)
-    expect(Buffer.byteLength(output)).toBeLessThanOrEqual(WebFetchTool.MAX_RESPONSE_BYTES)
+    const html = `<blockquote><pre>${"`".repeat(32)}${"~".repeat(32)}${"x".repeat(maxBytes)}</pre></blockquote>`
+    const output = WebFetchTool.convertHTMLToMarkdown(html, maxBytes)
+    expect(Buffer.byteLength(output)).toBeLessThanOrEqual(maxBytes)
     const lines = output.split("\n")
     expect(lines[0]).toMatch(/^> (`{33}|~{33})$/)
     expect(lines.at(-1)).toBe(lines[0])
@@ -300,9 +312,9 @@ describe("WebFetchTool helpers", () => {
   })
 
   test("keeps multiline quoted code closed at the content budget", () => {
-    const html = `<blockquote><pre>${"x\n".repeat(WebFetchTool.MAX_RESPONSE_BYTES / 2)}</pre></blockquote><p>tail</p>`
-    const output = WebFetchTool.convertHTMLToMarkdown(html)
-    expect(Buffer.byteLength(output)).toBeLessThanOrEqual(WebFetchTool.MAX_RESPONSE_BYTES)
+    const html = `<blockquote><pre>${"x\n".repeat(maxBytes / 2)}</pre></blockquote><p>tail</p>`
+    const output = WebFetchTool.convertHTMLToMarkdown(html, maxBytes)
+    expect(Buffer.byteLength(output)).toBeLessThanOrEqual(maxBytes)
     expect((output.match(/(`{3}|~{3})/g) ?? []).length).toBe(2)
     expect(output.includes("\uFFFD")).toBe(false)
     expect(output.endsWith("tail")).toBe(true)
