@@ -2,6 +2,7 @@ import { expect, test } from "bun:test"
 import { createVirtualizer, defaultRangeExtractor, Virtualizer } from "@tanstack/solid-virtual"
 import { createRoot, createSignal } from "solid-js"
 import { filterVirtualIndexes } from "@/session/timeline/virtual-items"
+import { remeasureTimeline } from "@/session/timeline/measurement"
 
 test("end anchoring survives consecutive resizes when the first scroll write is clamped", () => {
   const writes: { offset: number; adjustments?: number }[] = []
@@ -137,6 +138,40 @@ test("explicit measurement refreshes a cached row size with a custom measurer", 
 
   expect(virtualizer.itemSizeCache.get(0)).toBe(120)
   expect(virtualizer.getTotalSize()).toBe(120)
+})
+
+test("remeasuring a moved session preserves the actual heights of mounted rows", () => {
+  const root = document.createElement("div")
+  const content = document.createElement("div")
+  root.appendChild(content)
+  const heights = [120, 180, 240]
+  heights.forEach((height, index) => {
+    const element = document.createElement("div")
+    element.dataset.index = String(index)
+    Object.defineProperty(element, "offsetHeight", { value: height })
+    content.appendChild(element)
+  })
+
+  const virtualizer = new Virtualizer<HTMLDivElement, HTMLDivElement>({
+    count: heights.length,
+    estimateSize: () => 60,
+    initialRect: { width: 400, height: 600 },
+    getScrollElement: () => root,
+    scrollToFn: () => {},
+    observeElementRect: () => {},
+    observeElementOffset: () => {},
+    measureElement: (element) => element.offsetHeight,
+  })
+
+  virtualizer._willUpdate()
+  virtualizer.getTotalSize()
+  content.querySelectorAll<HTMLDivElement>("[data-index]").forEach((element) => virtualizer.measureElement(element))
+  expect(virtualizer.getTotalSize()).toBe(540)
+
+  remeasureTimeline(virtualizer, content)
+
+  expect(heights.map((_, index) => virtualizer.itemSizeCache.get(index))).toEqual(heights)
+  expect(virtualizer.getTotalSize()).toBe(540)
 })
 
 test("initial rect projects rows before a scroll element connects", () => {

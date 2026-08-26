@@ -18,6 +18,7 @@ import { createStore } from "solid-js/store"
 import type { createTimelineProjection } from "./projection"
 import { observeElementOffsetReconnectAware } from "./observe-element-offset"
 import { filterVirtualIndexes } from "./virtual-items"
+import { remeasureTimeline } from "./measurement"
 
 const fallbackItemSize = 60
 const pendingMarkdown = '[data-component="markdown"]:not([data-markdown-ready])'
@@ -237,7 +238,7 @@ export function createTimelineVirtualizer(input: Input) {
     const key = input.sessionKey()
     if (measuredSessionKey !== key) {
       measuredSessionKey = key
-      virtualizer.measure()
+      remeasureTimeline(virtualizer, virtualContent)
     }
   })
 
