@@ -9,6 +9,7 @@ import { WebFetchTool } from "../../src/tool/webfetch"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { Tool } from "@/tool/tool"
 import { testEffect } from "../lib/effect"
+import { isScrapeEnabled, setScrapeState, SCRAPE_DISABLED_MESSAGE } from "../../src/cli/cmd/scrape-state"
 
 const it = testEffect(
   LayerNode.compile(LayerNode.group([httpClient, Truncate.node, Agent.node]), [
@@ -115,5 +116,24 @@ describe("tool.webfetch", () => {
           expect(result.attachments).toBeUndefined()
         }),
     ),
+  )
+
+  it.instance("blocks fetch when scraping is disabled", () =>
+    Effect.gen(function* () {
+      const wasEnabled = isScrapeEnabled()
+      try {
+        setScrapeState(false)
+        expect(isScrapeEnabled()).toBe(false)
+
+        const result = yield* withFetch(
+          () => new Response("should not reach here", { status: 200 }),
+          (url) => exec({ url: new URL("/blocked", url).toString(), format: "text" }),
+        )
+        expect(result.output).toBe(SCRAPE_DISABLED_MESSAGE)
+        expect(result.title).toBe("WebFetch")
+      } finally {
+        setScrapeState(wasEnabled)
+      }
+    }),
   )
 })

@@ -5,6 +5,8 @@ import { existsSync, mkdirSync, writeFileSync, readdirSync, statSync, unlinkSync
 import { join, dirname } from "path"
 import { homedir } from "os"
 import { execFile } from "child_process"
+import { isScrapeEnabled, setScrapeState, SCRAPE_DISABLED_MESSAGE } from "./scrape-state"
+
 
 const HTML_ENTITY_MAP: Record<string, string> = {
   amp: "&",
@@ -88,23 +90,6 @@ function extractMeta(html: string): Record<string, string> {
 }
 
 const CRAWLER_PROFILE_DIR = join(homedir(), ".opencode", ".crawler-profile")
-const SCRAPE_STATE_FILE = join(homedir(), ".opencode", ".scrape-enabled")
-
-function isScrapeEnabled(): boolean {
-  try {
-    if (!existsSync(SCRAPE_STATE_FILE)) return true
-    const content = require("fs").readFileSync(SCRAPE_STATE_FILE, "utf-8").trim()
-    return content === "on"
-  } catch {
-    return true
-  }
-}
-
-function setScrapeState(enabled: boolean): void {
-  const dir = dirname(SCRAPE_STATE_FILE)
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
-  writeFileSync(SCRAPE_STATE_FILE, enabled ? "on" : "off")
-}
 
 function removeStaleLocks(dir: string) {
   if (!existsSync(dir)) return
@@ -402,7 +387,7 @@ export const ScrapeCommand = effectCmd({
       })
       .option("browser", {
         alias: "b",
-        describe: "Force browser mode for all URLs (needed for LinkedIn, JS-heavy sites)",
+        describe: "Use browser mode (enabled by default for dynamic scrape)",
         type: "boolean",
         default: false,
       })
@@ -452,7 +437,7 @@ export const ScrapeCommand = effectCmd({
     }
 
     if (!isScrapeEnabled()) {
-      return yield* fail("Scraping is disabled. Enable it with: opencode dynamic scrape on")
+      return yield* fail(SCRAPE_DISABLED_MESSAGE)
     }
 
     const urls: string[] = []
@@ -489,7 +474,9 @@ export const ScrapeCommand = effectCmd({
     const maxChars = args["max-chars"] ?? 20_000
     const doScroll = args.scroll !== false
     const maxScrolls = args["max-scrolls"] ?? 30
-    const useBrowser = args.browser || urls.some(isLinkedInUrl)
+    // This command is registered as `opencode dynamic scrape`; rendering in a
+    // browser is its core contract, rather than a LinkedIn-only optimization.
+    const useBrowser = true
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19)
     const format = args.format ?? "zip"
