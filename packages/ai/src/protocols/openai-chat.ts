@@ -935,7 +935,6 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
       return yield* new AIError({
         reason: classifyProviderFailure({
           message: event.error.message,
-          code: event.error.code === undefined || event.error.code === null ? undefined : String(event.error.code),
           status: typeof event.error.code === "number" ? event.error.code : undefined,
           rawBody: body,
         }),

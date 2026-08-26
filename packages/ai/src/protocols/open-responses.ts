@@ -1190,7 +1190,6 @@ const providerErrorMessage = (event: Event, nested: OpenResponsesErrorPayload | 
 
 export const providerFailure = (event: Event, fallback: string, body = ProviderShared.encodeJson(event)) => {
   const nested = event.error ?? event.response?.error ?? undefined
-  const code = event.code || nested?.code || undefined
   const summary = providerErrorMessage(event, nested)
   const message = summary ?? (body === "{}" ? fallback : body)
   const status =
@@ -1206,7 +1205,7 @@ export const providerFailure = (event: Event, fallback: string, body = ProviderS
     summary === undefined &&
     status === undefined
       ? new ProviderInternalError({ message, body })
-      : classifyProviderFailure({ message, code, status, rawBody: body })
+      : classifyProviderFailure({ message, status, rawBody: body })
   return new AIError({ reason })
 }
 

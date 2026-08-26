@@ -761,6 +761,28 @@ it.effect("classifies data-only AI SDK authentication errors", () =>
   }),
 )
 
+Object.entries({
+  json: '{"message":"Request failed"}',
+  malformed: "<html>Request failed</html>",
+  empty: "",
+}).forEach(([kind, responseBody]) => {
+  it.effect(`classifies SDK data alongside the original ${kind} response body`, () =>
+    Effect.gen(function* () {
+      const cause = apiCallError({
+        message: "Request failed",
+        statusCode: 400,
+        data: { error: { code: "authentication_error" } },
+        responseBody,
+      })
+      const error = yield* streamFailure(cause)
+      expect(error.reason).toMatchObject({ _tag: "Authentication", kind: "invalid" })
+      expect(SessionRunnerRetry.isRetryable(error)).toBeFalse()
+      expect(error.reason.body).toBe(responseBody)
+      expect(error.reason.cause).toBe(cause)
+    }),
+  )
+})
+
 it.effect("detects context overflow from data-only AI SDK errors", () =>
   Effect.gen(function* () {
     const error = yield* streamFailure(
@@ -786,8 +808,8 @@ it.effect("retries status-less AI SDK transport failures", () =>
       _tag: "Transport",
       transport: "http",
       operation: "request",
-      code: "AI_APICallError",
     })
+    expect(error.reason).not.toHaveProperty("code")
     expect(SessionRunnerRetry.isRetryable(error)).toBeTrue()
     expect(error.reason).toBeInstanceOf(TransportError)
     expect(error.reason).toBeInstanceOf(Error)

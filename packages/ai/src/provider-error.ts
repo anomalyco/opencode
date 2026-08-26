@@ -79,10 +79,11 @@ const NETWORK_ERROR_TEXT = /network[-_\s]error/i
 export interface ProviderFailure {
   readonly message: string
   readonly status?: number | undefined
-  readonly code?: string | undefined
   // Raw wire payload, scanned for failure signals (codes, overflow phrases)
   // that the summary message does not carry. Not shown to users.
   readonly rawBody?: string | undefined
+  // Some SDKs supply parsed error data separately from the original response text.
+  readonly data?: unknown
   readonly http?: HttpContext | undefined
   readonly cause?: unknown
   readonly retryAfterMs?: number | undefined
@@ -94,9 +95,9 @@ export interface ProviderFailure {
 export function classifyProviderFailure(input: ProviderFailure): AIError["reason"] {
   const details = { message: input.message, body: input.rawBody, http: input.http, cause: input.cause }
   const body = input.rawBody ?? ""
-  const codes = [input.code, ...providerCodes(body), ...providerCodes(input.message)]
-    .filter((code): code is string => code !== undefined)
-    .map((code) => code.toLowerCase())
+  const codes = [...providerCodes(input.data), ...providerCodes(body), ...providerCodes(input.message)].map((code) =>
+    code.toLowerCase(),
+  )
   // Scan the raw payload too so signals missing from the summary message
   // (e.g. overflow phrases nested in a JSON error body) still classify.
   const text = [input.message, body].filter((value) => value.length > 0).join("\n")
@@ -158,11 +159,16 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
   return new UnknownProviderError(details)
 }
 
-function providerCodes(value: string) {
-  const decoded = Option.getOrUndefined(decodeJson(value))
+function providerCodes(value: unknown) {
+  const decoded = typeof value === "string" ? Option.getOrUndefined(decodeJson(value)) : value
   if (!isRecord(decoded)) return []
   const error = isRecord(decoded.error) ? decoded.error : undefined
-  return [decoded.code, error?.code, error?.type].filter((value): value is string => typeof value === "string")
+  const response = isRecord(decoded.response) ? decoded.response : undefined
+  const responseError = response && isRecord(response.error) ? response.error : undefined
+  const exception = isRecord(decoded.exception) ? decoded.exception : undefined
+  return [decoded.code, error?.code, error?.type, error?.status, responseError?.code, exception?.type].filter(
+    (value): value is string => typeof value === "string",
+  )
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

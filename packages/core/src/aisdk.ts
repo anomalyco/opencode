@@ -807,12 +807,11 @@ function llmError(error: unknown) {
 }
 
 function apiCallError(error: APICallError) {
-  const details = providerErrorDetails(error)
   const failure = RequestExecutor.httpFailure({
-    message: details.message,
+    message: providerErrorMessage(error),
     url: error.url,
     status: error.statusCode,
-    code: details.code,
+    data: error.data,
     responseHeaders: error.responseHeaders,
     responseBody: error.responseBody ?? errorBody(error.data),
     cause: error,
@@ -826,7 +825,6 @@ function apiCallError(error: APICallError) {
       cause: failure.reason.cause,
       transport: "http",
       operation: "request",
-      code: error.name,
       url: error.url,
     }),
   })
@@ -838,10 +836,9 @@ function errorBody(value: unknown) {
   return ProviderShared.encodeJson(value)
 }
 
-const ProviderErrorCode = Schema.Union([Schema.String, Schema.Finite])
 const ProviderErrorDetail = Schema.Struct({
   message: Schema.optionalKey(Schema.String),
-  code: Schema.optionalKey(ProviderErrorCode),
+  code: Schema.optionalKey(Schema.Union([Schema.String, Schema.Finite])),
 })
 const ProviderErrorBody = Schema.Struct({
   ...ProviderErrorDetail.fields,
@@ -856,7 +853,7 @@ function unknownErrorMessage(error: unknown) {
   return message.trim() === "" ? "Provider request failed" : message
 }
 
-function providerErrorDetails(error: APICallError) {
+function providerErrorMessage(error: APICallError) {
   const data = Option.getOrUndefined(decodeProviderError(error.data))
   const body = Option.getOrUndefined(decodeProviderError(error.responseBody))
   const details = [data?.error, data, body?.error, body]
@@ -865,11 +862,7 @@ function providerErrorDetails(error: APICallError) {
   const code = value === undefined ? undefined : String(value)
   const prefix =
     error.statusCode === undefined ? "Provider request failed" : `Provider request failed with HTTP ${error.statusCode}`
-  return {
-    code,
-    message:
-      error.message.trim() !== "" ? error.message : (message ?? (code === undefined ? prefix : `${prefix}: ${code}`)),
-  }
+  return error.message.trim() !== "" ? error.message : (message ?? (code === undefined ? prefix : `${prefix}: ${code}`))
 }
 
 export const node = makeLocationNode({ service: Service, layer: locationLayer, deps: [] })

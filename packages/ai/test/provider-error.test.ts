@@ -111,6 +111,39 @@ describe("provider error classification", () => {
 })
 
 describe("provider error rawBody classification", () => {
+  test("classifies provider envelopes without separate code inputs", () => {
+    const cases = [
+      ['{"type":"error","error":{"type":"overloaded_error","message":"Try again"}}', "ProviderInternal"],
+      ['{"error":{"code":"insufficient_quota","message":"Request failed"}}', "QuotaExceeded"],
+      [
+        '{"type":"response.failed","response":{"error":{"code":"authentication_error","message":"Denied"}}}',
+        "Authentication",
+      ],
+      ['{"error":{"code":429,"status":"RESOURCE_EXHAUSTED","message":"Try again"}}', "ProviderInternal"],
+      ['{"exception":{"type":"throttlingException","details":{"message":"Try again"}}}', "RateLimit"],
+    ] as const
+    for (const [rawBody, expected] of cases) {
+      const reason = classifyProviderFailure({ message: "Request failed", rawBody })
+      expect(reason._tag).toBe(expected)
+      expect(reason.body).toBe(rawBody)
+      expect(reason).not.toHaveProperty("code")
+    }
+  })
+
+  test("classifies separately supplied SDK data without replacing the response body", () => {
+    const data = { error: { code: "authentication_error" } }
+    for (const value of [data, JSON.stringify(data)]) {
+      const reason = classifyProviderFailure({
+        message: "Request failed",
+        status: 400,
+        rawBody: '{"message":"Request failed"}',
+        data: value,
+      })
+      expect(reason._tag).toBe("Authentication")
+      expect(reason.body).toBe('{"message":"Request failed"}')
+    }
+  })
+
   test("classifies overflow signals buried in the raw payload when the summary is vague", () => {
     const reason = classifyProviderFailure({
       message: "Request failed",

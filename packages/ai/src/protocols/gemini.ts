@@ -608,7 +608,6 @@ const step = (state: ParserState, event: GeminiEvent) => {
         reason: classifyProviderFailure({
           message: event.error.message,
           status: typeof event.error.code === "number" ? event.error.code : undefined,
-          code: typeof event.error.status === "string" ? event.error.status : undefined,
           rawBody: body,
         }),
       }),

@@ -133,7 +133,7 @@ export const httpFailure = (input: {
   readonly message: string
   readonly url?: string | undefined
   readonly status?: number | undefined
-  readonly code?: string | undefined
+  readonly data?: unknown
   readonly responseHeaders?: Record<string, string> | undefined
   readonly responseBody?: string | undefined
   readonly cause?: unknown
@@ -145,7 +145,7 @@ export const httpFailure = (input: {
     reason: classifyProviderFailure({
       message: input.message,
       status: input.status,
-      code: input.code,
+      data: input.data,
       rawBody: input.responseBody,
       retryAfterMs: retryAfter,
       rateLimit,
