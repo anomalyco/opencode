@@ -6,6 +6,7 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Global } from "@opencode-ai/util/global"
 import path from "node:path"
 import { createEventStream, createFetch, directory, json } from "./fixture/tui-client"
+import { tmpdir } from "./fixture/fixture"
 
 test("SIGHUP clears title and disposes scoped resources once", async () => {
   const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
@@ -291,6 +292,104 @@ test("session startup prompt is submitted exactly once", async () => {
 
     expect(bodies).toHaveLength(1)
     expect(bodies[0]).toMatchObject({ text: "RESUME_READY" })
+  } finally {
+    if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+    await server.stop()
+  }
+})
+
+test.each([false, true])("uses the resolved launch directory for new prompts (fallback: %s)", async (fallback) => {
+  await using state = await tmpdir()
+  const setup = await createTestRenderer({ width: 100, height: 30, useThread: false, kittyKeyboard: true })
+  setup.renderer.start()
+  const target = fallback ? directory : process.cwd()
+  const location = { directory: target, project: { id: "project", directory: target, canonical: target } }
+  const requests: URL[] = []
+  const created = Promise.withResolvers<unknown>()
+  const submitted = Promise.withResolvers<unknown>()
+  const ready = Promise.withResolvers<void>()
+  const events = createEventStream()
+  let session: unknown
+  const calls = createFetch(async (url, request) => {
+    requests.push(url)
+    if (url.searchParams.has("location[directory]") && url.searchParams.get("location[directory]") !== target)
+      return json({ message: "Directory does not exist on the server" }, { status: 500 })
+    if (url.pathname === "/api/fs/list") return json({ location, data: [] })
+    if (url.pathname === "/api/location") return json(location)
+    if (url.pathname === "/api/agent")
+      return json({ location, data: [{ id: "build", mode: "primary", hidden: false, permissions: [] }] })
+    if (url.pathname === "/api/model")
+      return json({ location, data: [{ id: "model", providerID: "provider", name: "Remote Model", variants: [] }] })
+    if (url.pathname === "/api/provider") return json({ location, data: [{ id: "provider", name: "Provider" }] })
+    if (url.pathname === "/api/session" && request.method === "POST") {
+      const input: unknown = await request.json()
+      if (typeof input !== "object" || input === null) throw new Error("Expected a session input")
+      created.resolve(input)
+      session = {
+        ...input,
+        projectID: "project",
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        time: { created: 0, updated: 0 },
+      }
+      return json({ data: session })
+    }
+    if (/^\/api\/session\/[^/]+\/prompt$/.test(url.pathname)) {
+      submitted.resolve(await request.json())
+      return json({ data: {} })
+    }
+    if (/^\/api\/session\/[^/]+\/(message|inbox|permission)$/.test(url.pathname)) return json({ data: [], cursor: {} })
+    if (session && /^\/api\/session\/[^/]+$/.test(url.pathname)) return json({ data: session })
+    return undefined
+  }, events)
+  const server = Bun.serve({ port: 0, fetch: (request) => calls.fetch(request) })
+
+  try {
+    const { run } = await import("../src/app")
+    const task = Effect.runPromise(
+      run({
+        app: { name: "test", version: "test", channel: "test" },
+        server: { endpoint: { url: server.url.toString() } },
+        config: {
+          get: async () => ({ animations: false, tabs: { enabled: false }, keybinds: { "session.new": "f6" } }),
+          update: async () => ({}),
+        },
+        packages: { resolve: async () => undefined },
+        terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: ready.resolve }),
+        args: {},
+        log: () => {},
+      }).pipe(Effect.provide(Global.layerWith({ state: state.path })), Effect.provide(FileSystem.layerNoop({}))),
+    )
+
+    await ready.promise
+    await setup.waitForFrame((frame) => frame.includes("Build · Remote Model Provider"))
+    setup.mockInput.pressKey("F6")
+    await setup.renderOnce()
+    await setup.mockInput.typeText("REMOTE_READY")
+    await setup.waitForFrame((frame) => frame.includes("REMOTE_READY"))
+    setup.mockInput.pressEnter()
+    expect(
+      await Promise.race([
+        submitted.promise,
+        Bun.sleep(2_000).then(() => {
+          throw new Error("prompt was not submitted in the resolved server directory")
+        }),
+      ]),
+    ).toMatchObject({ text: "REMOTE_READY" })
+    expect(await created.promise).toMatchObject({ location: { directory: target } })
+    expect(requests[0]?.pathname).toBe("/api/fs/list")
+    expect(requests[0]?.searchParams.get("location[directory]")).toBe(process.cwd())
+    expect(
+      requests.filter((url) => url.pathname === "/api/location" && !url.searchParams.has("location[directory]")),
+    ).toHaveLength(fallback ? 1 : 0)
+    expect(
+      requests
+        .slice(1)
+        .filter((url) => url.searchParams.has("location[directory]"))
+        .every((url) => url.searchParams.get("location[directory]") === target),
+    ).toBe(true)
+    setup.renderer.destroy()
+    await task
   } finally {
     if (!setup.renderer.isDestroyed) setup.renderer.destroy()
     await server.stop()

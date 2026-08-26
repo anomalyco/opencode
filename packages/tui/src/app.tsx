@@ -38,7 +38,6 @@ import {
   TuiStartupProvider,
   TuiTerminalEnvironmentProvider,
   useTuiApp,
-  useTuiPaths,
   useTuiStartup,
   useTuiTerminalEnvironment,
   type TuiApp,
@@ -375,7 +374,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                           >
                                             <ClientProvider api={api} url={input.server.endpoint.url} service={service}>
                                               <PermissionProvider>
-                                                <DataProvider>
+                                                <DataProvider directory={directory}>
                                                   <LocationProvider>
                                                     <SessionTabsProvider>
                                                       <SessionTerminalsProvider>
@@ -460,7 +459,6 @@ function App(props: { pair?: DialogPairCredentials }) {
   const log = useLog({ component: "app" })
   const app = useTuiApp()
   const startup = useTuiStartup()
-  const paths = useTuiPaths()
   const config = useConfig()
   const devtools = createMemo(() => config.data.debug?.devtools ?? app.channel === "local")
   const route = useRoute()
@@ -727,7 +725,7 @@ function App(props: { pair?: DialogPairCredentials }) {
             type: "home",
             location: newSessionLocation(
               config.data.session.new_location,
-              paths.cwd,
+              data.location.default().directory,
               current,
               location.error?.location,
             ),

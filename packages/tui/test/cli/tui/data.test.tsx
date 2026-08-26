@@ -45,7 +45,7 @@ const config = createTuiResolvedConfig()
 function DataProvider(props: ParentProps) {
   return (
     <ConfigProvider config={config}>
-      <DataProviderBase>
+      <DataProviderBase directory={process.cwd()}>
         <LocationProvider>
           <SyncLocation />
           {props.children}

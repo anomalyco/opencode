@@ -142,7 +142,7 @@ async function renderMcp(options?: { failed?: boolean; location?: { directory: s
             <ToastProvider>
               <RouteProvider initialRoute={{ type: "session", sessionID: "ses_existing" }}>
                 <ClientProvider api={createApi(calls.fetch)}>
-                  <DataProvider>
+                  <DataProvider directory={process.cwd()}>
                     <LocationProvider>
                       <ThemeProvider mode="dark" source={emptyThemeSource}>
                         <DialogProvider>

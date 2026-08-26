@@ -39,6 +39,7 @@ async function renderSessionTabs(
     sessionTimes?: Record<string, { idle?: number; viewed?: number }>
     sessionOutcomes?: Record<string, "succeeded" | "failed" | "interrupted">
     newLocation?: "launch" | "inherit"
+    launchDirectory?: string
     tabsEnabled?: boolean
     viewFailures?: number
     preview?: boolean
@@ -168,7 +169,7 @@ async function renderSessionTabs(
               initialRoute={options?.home ? { type: "home" } : { type: "session", sessionID: initialSessionID }}
             >
               <ClientProvider api={createApi(calls.fetch)}>
-                <DataProvider>
+                <DataProvider directory={options?.launchDirectory ?? directory}>
                   <LocationProvider>
                     <SessionTabsProvider>
                       <Probe />
@@ -892,13 +893,17 @@ test("tracks a temporary new session tab across close and creation", async () =>
   }
 })
 
-test("add opens the new session tab in the launch directory by default", async () => {
-  const setup = await renderSessionTabs("first", { sessionDirectories: { first: `${directory}/worktree` } })
+test("add opens the new session tab in the resolved server launch directory", async () => {
+  const launchDirectory = `${directory}/server`
+  const setup = await renderSessionTabs("first", {
+    launchDirectory,
+    sessionDirectories: { first: `${directory}/worktree` },
+  })
 
   try {
     await wait(() => setup.tabs.current() === "first" && setup.data.session.get("first") !== undefined)
     setup.tabs.add()
-    expect(setup.route.data).toEqual({ type: "home", location: { directory } })
+    expect(setup.route.data).toEqual({ type: "home", location: { directory: launchDirectory } })
     await wait(() => setup.tabs.newTab())
     expect(setup.tabs.tabs().map((tab) => tab.sessionID)).toEqual(["first"])
   } finally {

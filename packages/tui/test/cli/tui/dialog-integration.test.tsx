@@ -304,7 +304,7 @@ async function renderIntegration() {
           <Keymap.Provider>
             <ToastProvider>
               <ClientProvider api={createApi(calls.fetch)}>
-                <DataProvider>
+                <DataProvider directory={process.cwd()}>
                   <LocationProvider>
                     <ThemeProvider mode="dark" source={emptyThemeSource}>
                       <DialogProvider>
