@@ -5,11 +5,18 @@ export type MathNode =
   | { type: "symbol"; value: string; role?: SymbolRole }
   | { type: "text"; value: string }
   | { type: "space"; width: number }
-  | { type: "fraction"; numerator: MathNode; denominator: MathNode; bar: boolean }
+  | {
+      type: "fraction"
+      numerator: MathNode
+      denominator: MathNode
+      bar: boolean
+      numeratorAlign?: "left" | "right"
+    }
   | { type: "root"; body: MathNode; index?: MathNode }
   | { type: "scripts"; base: MathNode; superscript?: MathNode; subscript?: MathNode }
   | { type: "delimited"; left: string; body: MathNode; right: string }
-  | { type: "matrix"; rows: MathNode[][]; environment: MatrixEnvironment }
+  | { type: "matrix"; rows: MathNode[][]; environment: MatrixEnvironment; columns?: string }
+  | { type: "brace"; body: MathNode; position: "over" | "under" }
   | { type: "accent"; accent: AccentKind; body: MathNode }
   | { type: "variant"; variant: MathVariant; body: MathNode }
   | { type: "operator"; value: string; limits: boolean }

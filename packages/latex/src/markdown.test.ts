@@ -57,6 +57,9 @@ test.each(["latex", "math", "tex", "LATEX title=example"])("renders a %s fence",
 test.each([
   String.raw`\frac{1}{`,
   String.raw`\unsupported{x}`,
+  String.raw`\cfrac[x]{1}{2}`,
+  String.raw`\left\unknown x\right)`,
+  String.raw`\begin{array}{p{2cm}}x\end{array}`,
   String.raw`\documentclass{article}
 \begin{document}
 Hello
@@ -67,6 +70,22 @@ Hello
   expect(block).toBeInstanceOf(CodeRenderable)
   if (!(block instanceof CodeRenderable)) throw new Error("Expected source fallback")
   expect(block.content).toBe(source)
+})
+
+test.each([
+  String.raw`\sqrt[\frac{1}{2}]{x}`,
+  String.raw`\left\|v\right\|`,
+  String.raw`\left(A\rightarrow B\right)`,
+  String.raw`\begin{aligned}a&=b+c\\&=d\end{aligned}`,
+  String.raw`\displaylines{x=1\\y=2}`,
+  String.raw`\cfrac[l]{1}{12345}`,
+  String.raw`\underbrace{a+b+c}_{n}`,
+  String.raw`\begin{array}{l|r}a&wide\\long&b\end{array}`,
+])("renders structured math through the Markdown adapter: %s", async (source) => {
+  const output = await setup(`\`\`\`latex\n${source}\n\`\`\``)
+  expect(output.markdown.getChildren()[0]).toBeInstanceOf(ScrollBoxRenderable)
+  expect(output.markdown.getChildren()[0]?.getChildren()[0]).toBeInstanceOf(TextRenderable)
+  expect(output.captureCharFrame()).not.toContain("\\")
 })
 
 test("renders the next valid formula after an incomplete streaming prefix", async () => {
@@ -182,15 +201,11 @@ test("subdues structure and emphasizes relations using the theme", async () => {
   const output = await setup("```latex\nx=\\sqrt{\\frac{1}{2}}\n```")
   const formula = output.markdown.getChildren()[0]?.getChildren()[0]
   if (!(formula instanceof TextRenderable)) throw new Error("Expected Unicode math")
-  expect(
-    formula.chunks.find((chunk) => chunk.text === "\u2500")?.fg?.equals(RGBA.fromHex(output.palette.subdued)),
-  ).toBe(true)
-  expect(
-    formula.chunks.find((chunk) => chunk.text === "\u221a")?.fg?.equals(RGBA.fromHex(output.palette.subdued)),
-  ).toBe(true)
-  expect(
-    formula.chunks.find((chunk) => chunk.text === "\u256d")?.fg?.equals(RGBA.fromHex(output.palette.subdued)),
-  ).toBe(true)
+  for (const mark of ["\u2500", "\u2502", "\u256d", "\u256f", "\u2570"]) {
+    expect(formula.chunks.find((chunk) => chunk.text === mark)?.fg?.equals(RGBA.fromHex(output.palette.subdued))).toBe(
+      true,
+    )
+  }
   expect(formula.chunks.find((chunk) => chunk.text === "x")?.fg?.equals(RGBA.fromHex(output.palette.text))).toBe(true)
   expect(formula.chunks.find((chunk) => chunk.text === "=")?.attributes).toBe(TextAttributes.BOLD)
 
@@ -201,15 +216,11 @@ test("subdues structure and emphasizes relations using the theme", async () => {
   const updated = output.markdown.getChildren()[0]?.getChildren()[0]
   if (!(updated instanceof TextRenderable)) throw new Error("Expected Unicode math")
   expect(updated.chunks.find((chunk) => chunk.text === "x")?.fg?.equals(RGBA.fromHex(output.palette.text))).toBe(true)
-  expect(
-    updated.chunks.find((chunk) => chunk.text === "\u2500")?.fg?.equals(RGBA.fromHex(output.palette.subdued)),
-  ).toBe(true)
-  expect(
-    updated.chunks.find((chunk) => chunk.text === "\u221a")?.fg?.equals(RGBA.fromHex(output.palette.subdued)),
-  ).toBe(true)
-  expect(
-    updated.chunks.find((chunk) => chunk.text === "\u256d")?.fg?.equals(RGBA.fromHex(output.palette.subdued)),
-  ).toBe(true)
+  for (const mark of ["\u2500", "\u2502", "\u256d", "\u256f", "\u2570"]) {
+    expect(updated.chunks.find((chunk) => chunk.text === mark)?.fg?.equals(RGBA.fromHex(output.palette.subdued))).toBe(
+      true,
+    )
+  }
 })
 
 test.each([String.raw`\text{${"\u4e2d\u6587"}}=x`, String.raw`\frac{\text{${"\u4e2d\u6587"}}}{abcd}=x`])(

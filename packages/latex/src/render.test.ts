@@ -31,7 +31,7 @@ describe("renderLatexToString", () => {
   })
 
   test("renders roots with a vinculum", () => {
-    expect(renderLatexToString(String.raw`\sqrt{x^2+y^2}`)).toBe([" ╭───────", "√ x² + y²"].join("\n"))
+    expect(renderLatexToString(String.raw`\sqrt{x^2+y^2}`)).toBe([" ╭───────", "╰╯x² + y²"].join("\n"))
   })
 
   test("renders matrices with stretching delimiters", () => {
@@ -69,7 +69,7 @@ describe("renderLatexToString", () => {
   test("renders common textbook structures", () => {
     const result = renderLatexToString(String.raw`\left[\frac{-b \pm \sqrt{b^2-4ac}}{2a}\right]`)
     expect(result).toContain("±")
-    expect(result).toContain("√")
+    expect(result).toContain("╰╯")
     expect(result).toContain("─")
     expect(result).toContain("⎡")
     expect(result).toContain("⎦")

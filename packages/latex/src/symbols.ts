@@ -286,6 +286,8 @@ export const delimiterTable: Readonly<Record<string, string>> = {
   rvert: "│",
   lVert: "║",
   rVert: "║",
+  lbrace: "{",
+  rbrace: "}",
   langle: "⟨",
   rangle: "⟩",
   lfloor: "⌊",

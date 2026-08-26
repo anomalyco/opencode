@@ -205,11 +205,17 @@ class Parser {
     if (command === "\\") return { type: "row", body: [] }
     if (command === "begin") return this.parseEnvironment()
     if (command === "frac" || command === "dfrac" || command === "tfrac" || command === "cfrac") {
+      this.skipMathWhitespace()
+      const alignment =
+        command === "cfrac" && this.peek() === "[" ? /^\[([lr]?)\]/.exec(this.source.slice(this.position)) : undefined
+      if (alignment === null) this.fail("Unsupported \\cfrac alignment; expected [l], [r], or []")
+      if (alignment) this.position += alignment[0].length
       return {
         type: "fraction",
         numerator: this.parseArgument(),
         denominator: this.parseArgument(),
         bar: true,
+        ...(alignment?.[1] ? { numeratorAlign: alignment[1] === "l" ? "left" : "right" } : {}),
       }
     }
     if (command === "binom" || command === "dbinom" || command === "tbinom") {
@@ -237,7 +243,11 @@ class Parser {
       return { type: "accent", accent: accents[command], body: this.parseArgument() }
     }
     if (command in variants) {
-      return { type: "variant", variant: variants[command], body: this.parseArgument() }
+      return {
+        type: "variant",
+        variant: variants[command],
+        body: command === "textrm" ? { type: "text", value: this.readTextGroup() } : this.parseArgument(),
+      }
     }
     if (command === "text" || command === "mbox") return { type: "text", value: this.readTextGroup() }
     if (command === "operatorname") {
@@ -255,11 +265,8 @@ class Parser {
       const base = this.parseArgument()
       return { type: "overunder", base, under }
     }
-    if (command === "overbrace") {
-      return { type: "overunder", base: this.parseArgument(), over: { type: "symbol", value: "⏞" } }
-    }
-    if (command === "underbrace") {
-      return { type: "overunder", base: this.parseArgument(), under: { type: "symbol", value: "⏟" } }
+    if (command === "overbrace" || command === "underbrace") {
+      return { type: "brace", body: this.parseArgument(), position: command === "overbrace" ? "over" : "under" }
     }
     if (command === "textcolor") {
       const color = this.readRawGroup()
@@ -286,10 +293,14 @@ class Parser {
       }
     }
     if (command === "mod" || command === "bmod") return { type: "operator", value: "mod", limits: false }
+    if (command === "displaylines") {
+      this.skipMathWhitespace()
+      this.expect("{")
+      return this.parseMatrix("gathered", "}")
+    }
     if (
       command === "limits" ||
       command === "nolimits" ||
-      command === "displaylines" ||
       command === "displaystyle" ||
       command === "textstyle" ||
       command === "scriptstyle" ||
@@ -316,7 +327,8 @@ class Parser {
       }
     }
     if (command === "backslash") return { type: "symbol", value: "\\" }
-    if (command in delimiterTable) return { type: "symbol", value: delimiterTable[command] }
+    const delimiter = delimiterTable[`\\${command}`] ?? delimiterTable[command]
+    if (delimiter !== undefined) return { type: "symbol", value: delimiter }
     if (command === "{" || command === "}") return { type: "symbol", value: command }
     if (command === "%" || command === "#" || command === "$" || command === "&" || command === "_") {
       return { type: "symbol", value: command }
@@ -335,18 +347,20 @@ class Parser {
       const content = this.readUntilEnd(rawEnvironment)
       return { type: "text", value: content }
     }
-    if (environment === "array" && this.peekAfterWhitespace() === "{") this.readRawGroup()
+    const columns = environment === "array" ? this.readRawGroup().replace(/\s/g, "") : undefined
+    if (columns !== undefined && (!/^[lcr|]+$/.test(columns) || !/[lcr]/.test(columns))) {
+      this.fail("Unsupported array columns; expected l, c, r, and |")
+    }
+    return this.parseMatrix(environment, `\\end{${rawEnvironment}}`, columns)
+  }
 
+  private parseMatrix(environment: MatrixEnvironment, end: string, columns?: string): MathNode {
     const rows: MathNode[][] = []
     let cells: MathNode[] = []
 
     while (!this.done()) {
       this.skipMathWhitespace()
-      if (this.isEndEnvironment(rawEnvironment)) {
-        this.consumeEndEnvironment(rawEnvironment)
-        if (cells.length > 0 || rows.length === 0) rows.push(cells)
-        return { type: "matrix", rows, environment }
-      }
+      if (this.source.startsWith(end, this.position) && cells.length === 0) break
 
       const cellStart = this.position
       const cell = row(
@@ -354,12 +368,9 @@ class Parser {
           () =>
             this.peek() === "&" ||
             this.source.startsWith("\\\\", this.position) ||
-            this.isEndEnvironment(rawEnvironment),
+            this.source.startsWith(end, this.position),
         ),
       )
-      if (this.position === cellStart) {
-        this.fail(`Unexpected "${this.peek()}" in ${rawEnvironment}`)
-      }
       cells.push(cell)
       this.skipMathWhitespace()
 
@@ -374,15 +385,23 @@ class Parser {
         cells = []
         continue
       }
+      if (this.source.startsWith(end, this.position)) break
+      // Empty cells are valid only when a cell, row, or closing delimiter advances the parser.
+      if (this.position === cellStart) this.fail(`Unexpected "${this.peek()}" in ${environment}`)
     }
 
-    return this.fail(`Missing \\end{${rawEnvironment}}`)
+    if (!this.source.startsWith(end, this.position)) this.fail(`Missing ${end}`)
+    this.expect(end)
+    if (cells.length > 0 || rows.length === 0) rows.push(cells)
+    return { type: "matrix", rows, environment, ...(columns !== undefined ? { columns } : {}) }
   }
 
   private parseLeftRight(): MathNode {
     const left = this.readDelimiter()
-    const body = row(this.parseRow(() => this.source.startsWith("\\right", this.position)))
-    if (!this.source.startsWith("\\right", this.position)) this.fail("Missing \\right")
+    const atRight = () =>
+      this.source.startsWith("\\right", this.position) && !/[A-Za-z@]/.test(this.source[this.position + 6] ?? "")
+    const body = row(this.parseRow(atRight))
+    if (!atRight()) this.fail("Missing \\right")
     this.readCommand()
     const right = this.readDelimiter()
     return { type: "delimited", left, body, right }
@@ -424,10 +443,17 @@ class Parser {
 
   private readDelimiter(): string {
     this.skipMathWhitespace()
-    let token: string
-    if (this.peek() === "\\") token = this.readCommand()
-    else token = this.source[this.position++] ?? ""
-    return delimiterTable[token] ?? delimiterTable[`\\${token}`] ?? token
+    if (this.done()) this.fail("Expected a delimiter")
+    const start = this.position
+    if (this.peek() === "\\") {
+      const command = this.readCommand()
+      const delimiter = delimiterTable[`\\${command}`] ?? delimiterTable[command]
+      if (delimiter !== undefined) return delimiter
+      if (this.strict) this.fail(`Unsupported delimiter \\${command}`, start)
+      return `\\${command}`
+    }
+    const token = this.source[this.position++]
+    return delimiterTable[token] ?? token
   }
 
   private readCommand(): string {
@@ -484,17 +510,14 @@ class Parser {
 
   private readTextGroup(): string {
     return this.readRawGroup()
-      .replace(/\\([{}%#$&_])/g, "$1")
+      .replace(/\\([A-Za-z@]+|.)/g, (match, command: string) => {
+        if ("{}%#$&_ ".includes(command)) return command
+        if (command === "textbackslash") return "\\"
+        if (command === "!") return ""
+        if (command in spacingCommands) return " ".repeat(Math.max(1, spacingCommands[command]))
+        return match
+      })
       .replace(/~/g, " ")
-      .replace(/\\textbackslash\b/g, "\\")
-  }
-
-  private isEndEnvironment(environment: string): boolean {
-    return this.source.startsWith(`\\end{${environment}}`, this.position)
-  }
-
-  private consumeEndEnvironment(environment: string): void {
-    this.position += `\\end{${environment}}`.length
   }
 
   private readUntilEnd(environment: string): string {
@@ -518,12 +541,6 @@ class Parser {
       }
       break
     }
-  }
-
-  private peekAfterWhitespace(): string {
-    let offset = this.position
-    while (offset < this.source.length && /\s/.test(this.source[offset])) offset++
-    return this.source[offset] ?? ""
   }
 
   private expect(value: string): void {

@@ -91,7 +91,7 @@ function layoutNode(node: MathNode, context: LayoutContext): Box {
     case "space":
       return blank(node.width, 1, 0)
     case "fraction":
-      return layoutFraction(node.numerator, node.denominator, node.bar, context)
+      return layoutFraction(node, context)
     case "root":
       return layoutRoot(node.body, node.index, context)
     case "scripts":
@@ -99,7 +99,9 @@ function layoutNode(node: MathNode, context: LayoutContext): Box {
     case "delimited":
       return layoutDelimited(node.left, node.body, node.right, context)
     case "matrix":
-      return layoutMatrix(node.rows, node.environment, context)
+      return layoutMatrix(node, context)
+    case "brace":
+      return layoutBrace(node, context)
     case "accent":
       return layoutAccent(node.accent, node.body, context)
     case "variant":
@@ -130,9 +132,9 @@ function layoutRow(nodes: MathNode[], context: LayoutContext): Box {
   return hpack(boxes)
 }
 
-function layoutFraction(numeratorNode: MathNode, denominatorNode: MathNode, bar: boolean, context: LayoutContext): Box {
-  const numerator = layoutNode(numeratorNode, context)
-  const denominator = layoutNode(denominatorNode, context)
+function layoutFraction(node: Extract<MathNode, { type: "fraction" }>, context: LayoutContext): Box {
+  const numerator = layoutNode(node.numerator, context)
+  const denominator = layoutNode(node.denominator, context)
   const width = Math.max(numerator.width, denominator.width) + 2
   // Barless fractions (binomials) still reserve an axis row so surrounding
   // atoms and their stretching parentheses align between the two entries.
@@ -143,8 +145,14 @@ function layoutFraction(numeratorNode: MathNode, denominatorNode: MathNode, bar:
   const baseline = numerator.height
   const result = blank(width, height, baseline)
 
-  overlay(result, numerator, Math.floor((width - numerator.width) / 2), 0)
-  if (bar) drawHorizontal(result, numerator.height, 0, width, "─", context.style)
+  const numeratorX =
+    node.numeratorAlign === "left"
+      ? 1
+      : node.numeratorAlign === "right"
+        ? width - numerator.width - 1
+        : Math.floor((width - numerator.width) / 2)
+  overlay(result, numerator, numeratorX, 0)
+  if (node.bar) drawHorizontal(result, numerator.height, 0, width, "─", context.style)
   overlay(result, denominator, Math.floor((width - denominator.width) / 2), numerator.height + gap)
   return result
 }
@@ -153,36 +161,42 @@ function layoutRoot(bodyNode: MathNode, indexNode: MathNode | undefined, context
   const body = layoutNode(bodyNode, context)
   const index = indexNode ? layoutNode(indexNode, context) : undefined
   const indexWidth = index ? Math.max(0, index.width - 1) : 0
+  // The index ends beside the overbar, never inside the hook or radicand.
+  const top = Math.max(0, (index?.height ?? 1) - 1)
   const bodyX = indexWidth + 2
   const width = bodyX + body.width
-  const height = body.height + 1
-  const baseline = body.baseline + 1
+  const height = top + body.height + 1
+  const baseline = top + body.baseline + 1
   const result = blank(width, height, baseline)
 
-  setCell(result, bodyX - 1, 0, "╭", context.style)
-  drawHorizontal(result, 0, bodyX, body.width, "─", context.style)
-  setCell(result, bodyX - 2, baseline, "√", context.style)
-  overlay(result, body, bodyX, 1)
+  setCell(result, bodyX - 1, top, "╭", context.style)
+  drawHorizontal(result, top, bodyX, body.width, "─", context.style)
+  for (let y = top + 1; y < height - 1; y++) setCell(result, bodyX - 1, y, "│", context.style)
+  setCell(result, bodyX - 2, height - 1, "╰", context.style)
+  setCell(result, bodyX - 1, height - 1, "╯", context.style)
+  overlay(result, body, bodyX, top + 1)
   if (index) overlay(result, index, 0, 0)
   return result
 }
 
 function layoutScripts(node: Extract<MathNode, { type: "scripts" }>, context: LayoutContext): Box {
-  if (node.base.type === "operator" && node.base.limits && context.displayMode) {
-    return layoutOverUnder(node.base, node.superscript, node.subscript, context)
+  const superscriptNode = node.superscript && simpleNodeText(node.superscript) !== "" ? node.superscript : undefined
+  const subscriptNode = node.subscript && simpleNodeText(node.subscript) !== "" ? node.subscript : undefined
+  if (node.base.type === "brace" || (node.base.type === "operator" && node.base.limits && context.displayMode)) {
+    return layoutOverUnder(node.base, superscriptNode, subscriptNode, context)
   }
 
   const base = layoutNode(node.base, context)
-  if (context.compactScripts) {
-    const superscript = mapScript(node.superscript ? simpleNodeText(node.superscript) : "", superscripts)
-    const subscript = mapScript(node.subscript ? simpleNodeText(node.subscript) : "", subscripts)
+  if (context.compactScripts && base.height === 1) {
+    const superscript = mapScript(superscriptNode ? simpleNodeText(superscriptNode) : "", superscripts)
+    const subscript = mapScript(subscriptNode ? simpleNodeText(subscriptNode) : "", subscripts)
     if (superscript !== undefined && subscript !== undefined) {
       return hpack([base, textBox(superscript + subscript, context.style)])
     }
   }
 
-  const superscript = node.superscript ? layoutNode(node.superscript, context) : undefined
-  const subscript = node.subscript ? layoutNode(node.subscript, context) : undefined
+  const superscript = superscriptNode ? layoutNode(superscriptNode, context) : undefined
+  const subscript = subscriptNode ? layoutNode(subscriptNode, context) : undefined
   const scriptWidth = Math.max(superscript?.width ?? 0, subscript?.width ?? 0)
   const topHeight = superscript?.height ?? 0
   const bottomHeight = subscript?.height ?? 0
@@ -225,44 +239,63 @@ function layoutDelimited(left: string, bodyNode: MathNode, right: string, contex
   return hpack([leftBox, body, rightBox])
 }
 
-function layoutMatrix(
-  rows: MathNode[][],
-  environment: Extract<MathNode, { type: "matrix" }>["environment"],
-  context: LayoutContext,
-): Box {
-  const cellRows = rows.map((row) => row.map((cell) => layoutNode(cell, context)))
-  const columnCount = Math.max(0, ...cellRows.map((row) => row.length))
+function layoutMatrix(node: Extract<MathNode, { type: "matrix" }>, context: LayoutContext): Box {
+  const cellRows = node.rows.map((row) => row.map((cell) => layoutNode(cell, context)))
+  const columns = node.columns?.match(/[lcr]/g)
+  const rules = node.columns?.split(/[lcr]/).map((rule) => rule.length) ?? []
+  const columnCount = Math.max(columns?.length ?? 0, ...cellRows.map((row) => row.length))
   const columnWidths = Array.from({ length: columnCount }, (_, column) =>
     Math.max(0, ...cellRows.map((row) => row[column]?.width ?? 0)),
   )
   const rowAscents = cellRows.map((row) => Math.max(0, ...row.map((cell) => cell.baseline)))
   const rowDescents = cellRows.map((row) => Math.max(0, ...row.map((cell) => cell.height - cell.baseline - 1)))
   const rowHeights = rowAscents.map((ascent, index) => ascent + 1 + rowDescents[index])
-  const columnGap = environment === "cases" ? 2 : environment === "aligned" || environment === "align" ? 2 : 1
-  const width = columnWidths.reduce((sum, value) => sum + value, 0) + Math.max(0, columnCount - 1) * columnGap
-  const height = Math.max(1, rowHeights.reduce((sum, value) => sum + value, 0) + Math.max(0, rows.length - 1))
+  const aligned = node.environment === "aligned" || node.environment === "align"
+  const columnGap = node.environment === "cases" || aligned ? 2 : 1
+  const gaps = Array.from({ length: columnCount + 1 }, (_, boundary) => {
+    const edge = boundary === 0 || boundary === columnCount
+    return rules[boundary] ? rules[boundary] + (edge ? 1 : 2) : edge ? 0 : columnGap
+  })
+  const width = columnWidths.reduce((sum, value) => sum + value, 0) + gaps.reduce((sum, value) => sum + value, 0)
+  const height = Math.max(1, rowHeights.reduce((sum, value) => sum + value, 0) + Math.max(0, node.rows.length - 1))
   const result = blank(width, height, Math.floor(height / 2))
   let y = 0
 
   for (let rowIndex = 0; rowIndex < cellRows.length; rowIndex++) {
-    let x = 0
+    let x = gaps[0]
     const cells = cellRows[rowIndex]
     for (let column = 0; column < columnCount; column++) {
       const cell = cells[column]
       const columnWidth = columnWidths[column]
       if (cell) {
-        const centered = environment !== "aligned" && environment !== "align" && environment !== "cases"
+        const alignment =
+          columns?.[column] ?? (node.environment === "cases" ? "l" : aligned ? (column % 2 === 0 ? "r" : "l") : "c")
         const cellX =
-          x + (centered ? Math.floor((columnWidth - cell.width) / 2) : column % 2 === 0 ? columnWidth - cell.width : 0)
+          x +
+          (alignment === "l"
+            ? 0
+            : alignment === "r"
+              ? columnWidth - cell.width
+              : Math.floor((columnWidth - cell.width) / 2))
         const cellY = y + rowAscents[rowIndex] - cell.baseline
         overlay(result, cell, cellX, cellY)
       }
-      x += columnWidth + columnGap
+      x += columnWidth + gaps[column + 1]
     }
     y += rowHeights[rowIndex] + 1
   }
 
-  const delimiters = matrixDelimiters(environment)
+  let boundaryX = 0
+  for (let boundary = 0; boundary <= columnCount; boundary++) {
+    for (let rule = 0; rule < (rules[boundary] ?? 0); rule++) {
+      for (let row = 0; row < height; row++) {
+        setCell(result, boundaryX + (boundary === 0 ? 0 : 1) + rule, row, "│", context.style)
+      }
+    }
+    boundaryX += gaps[boundary] + (columnWidths[boundary] ?? 0)
+  }
+
+  const delimiters = matrixDelimiters(node.environment)
   return delimiters
     ? hpack([
         delimiterBox(delimiters[0], height, result.baseline, true, context.style),
@@ -270,6 +303,20 @@ function layoutMatrix(
         delimiterBox(delimiters[1], height, result.baseline, false, context.style),
       ])
     : result
+}
+
+function layoutBrace(node: Extract<MathNode, { type: "brace" }>, context: LayoutContext): Box {
+  const body = layoutNode(node.body, context)
+  const over = node.position === "over"
+  const width = Math.max(3, body.width)
+  const result = blank(width, body.height + 1, body.baseline + (over ? 1 : 0))
+  const y = over ? 0 : body.height
+  overlay(result, body, Math.floor((width - body.width) / 2), over ? 1 : 0)
+  drawHorizontal(result, y, 0, width, "─", context.style)
+  setCell(result, 0, y, over ? "╭" : "╰", context.style)
+  setCell(result, width - 1, y, over ? "╮" : "╯", context.style)
+  setCell(result, Math.floor((width - 1) / 2), y, over ? "┴" : "┬", context.style)
+  return result
 }
 
 function layoutAccent(
