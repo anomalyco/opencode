@@ -570,7 +570,12 @@ const finish = (state: ParserState): ReadonlyArray<LLMEvent> => {
       googleMetadata({ thoughtSignature: state.reasoningSignature }),
     )
   if (state.textSignature !== undefined)
-    lifecycle = Lifecycle.textEnd(lifecycle, events, "text-0", googleMetadata({ thoughtSignature: state.textSignature }))
+    lifecycle = Lifecycle.textEnd(
+      lifecycle,
+      events,
+      "text-0",
+      googleMetadata({ thoughtSignature: state.textSignature }),
+    )
   Lifecycle.finish(lifecycle, events, {
     reason: {
       normalized:
@@ -675,8 +680,9 @@ const step = (state: ParserState, event: GeminiEvent) => {
           id,
           name: part.functionCall.name,
           input,
-          providerMetadata:
-            part.thoughtSignature ? googleMetadata({ thoughtSignature: part.thoughtSignature }) : undefined,
+          providerMetadata: part.thoughtSignature
+            ? googleMetadata({ thoughtSignature: part.thoughtSignature })
+            : undefined,
         }),
       )
       hasToolCalls = true

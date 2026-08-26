@@ -5,14 +5,7 @@
     "route": "openai-responses",
     "transport": "http",
     "model": "gpt-5.5",
-    "tags": [
-      "prefix:openai-responses",
-      "provider:openai",
-      "flagship",
-      "tool",
-      "tool-loop",
-      "golden"
-    ],
+    "tags": ["prefix:openai-responses", "provider:openai", "flagship", "tool", "tool-loop", "golden"],
     "name": "openai-responses/openai-responses-gpt-5-5-tool-loop",
     "recordedAt": "2026-08-20T06:30:22.262Z"
   },

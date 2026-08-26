@@ -89,9 +89,7 @@ describe("provider error classification", () => {
 
   test("classifies network error text as provider internal", () => {
     expect(
-      ["network error", "network-error", "network_error"].map(
-        (message) => classifyProviderFailure({ message })._tag,
-      ),
+      ["network error", "network-error", "network_error"].map((message) => classifyProviderFailure({ message })._tag),
     ).toEqual(["ProviderInternal", "ProviderInternal", "ProviderInternal"])
   })
 
