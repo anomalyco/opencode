@@ -573,9 +573,8 @@ export const Terminal = (props: TerminalProps) => {
           if (!result) return
           if (result.response.status === 200 && result.data?.ticket) return result.data.ticket
           if (result.response.status === 404 || result.response.status === 405) return
-          if (result.response.status === 403)
-            throw new Error("PTY connect ticket rejected by origin or CSRF checks. Check the server CORS config.")
-          throw new Error(`PTY connect ticket failed with ${result.response.status}`)
+          if (result.response.status === 403) throw new Error(language.t("terminal.connectTicket.csrfError"))
+          throw new Error(language.t("terminal.connectTicket.statusError", { status: result.response.status }))
         }
         // return sdk()
         //   .api.pty.connectToken({
@@ -742,6 +741,7 @@ export const Terminal = (props: TerminalProps) => {
     <div
       ref={container}
       data-component="terminal"
+      dir="ltr"
       data-prevent-autofocus
       tabIndex={-1}
       style={{ "background-color": terminalColors().background }}

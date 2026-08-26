@@ -6,7 +6,7 @@ import { homedir, tmpdir } from "node:os"
 import { join } from "node:path"
 import { getCACertificates, setDefaultCACertificates } from "node:tls"
 import type { Event } from "electron"
-import { app } from "electron"
+import { app, BrowserWindow } from "electron"
 
 import { Deferred, Effect, Fiber } from "effect"
 import contextMenu from "electron-context-menu"
@@ -48,6 +48,7 @@ import { spawnWslSidecar } from "./wsl/sidecar"
 import { migrate } from "./migrate"
 import { cleanupStoreFiles } from "./store-cleanup"
 import { startBackgroundCli } from "./background-cli"
+import { setNativeTranslations } from "./native-translations"
 
 const APP_NAMES: Record<string, string> = {
   dev: "OpenCode Dev",
@@ -171,7 +172,7 @@ const main = Effect.gen(function* () {
     setAppQuitting()
     void stopSidecars().finally(() => {
       app.relaunch()
-      app.exit(0)
+      app.quit()
     })
   }
 
@@ -245,7 +246,7 @@ const main = Effect.gen(function* () {
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.on(signal, () => {
       setAppQuitting()
-      void stopSidecars().finally(() => app.exit(0))
+      void stopSidecars().finally(() => app.quit())
     })
   }
 
@@ -271,6 +272,14 @@ const main = Effect.gen(function* () {
   registerRendererProtocol()
   setDockIcon()
   const updater = setupAutoUpdater(stopSidecars)
+  const menuDeps = {
+    trigger: (id: string) => {
+      const win = getLastFocusedWindow()
+      if (win) sendMenuCommand(win, id)
+    },
+    checkForUpdates: () => void showUpdaterDialog(updater, true),
+    relaunch,
+  }
   registerIpcHandlers({
     killSidecar: () => killSidecar(),
     relaunch,
@@ -298,6 +307,9 @@ const main = Effect.gen(function* () {
     setBackgroundColor: (color) => setBackgroundColor(color),
     exportDebugLogs: () => exportDebugLogs(),
     recordFatalRendererError: (error) => writeLog("renderer", "fatal renderer error", { ...error }, "error"),
+    setNativeTranslations: (bundle) => {
+      if (setNativeTranslations(bundle)) createMenu(menuDeps)
+    },
   })
   registerWslIpcHandlers(wslServers)
   void updater.start()
@@ -396,21 +408,17 @@ const main = Effect.gen(function* () {
 
   yield* Fiber.await(loadingTask)
 
+  app.on("window-all-closed", () => {
+    if (process.platform === "darwin") return
+    app.quit()
+  })
+  app.on("activate", () => {
+    if (BrowserWindow.getAllWindows().length > 0) return
+    restoreMainWindows()
+  })
+
   const windows = restoreMainWindows()
-  if (windows.length) {
-    createMenu({
-      trigger: (id) => {
-        const win = getLastFocusedWindow()
-        if (win) sendMenuCommand(win, id)
-      },
-      checkForUpdates: () => {
-        void showUpdaterDialog(updater, true)
-      },
-      relaunch: () => {
-        relaunch()
-      },
-    })
-  }
+  if (windows.length) createMenu(menuDeps)
 })
 
 Effect.runFork(main)
