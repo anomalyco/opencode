@@ -78,7 +78,8 @@ describe("Tool", () => {
       const service = yield* Tool.Service
       yield* transform(service, { echo: make() }, { namespace: "acme", codemode: false })
       yield* service.transform((draft) => {
-        expect(draft.list().map(([id]) => id)).toEqual(["acme_echo"])
+        expect(draft.list().map((tool) => tool.id)).toEqual(["acme_echo"])
+        expect(draft.get("acme_echo")?.id).toBe("acme_echo")
         expect(draft.get("acme_echo")?.name).toBe("echo")
         expect(draft.get("missing")).toBeUndefined()
       })

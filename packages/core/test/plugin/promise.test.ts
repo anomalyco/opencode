@@ -657,7 +657,8 @@ describe("fromPromise", () => {
                 options: { codemode: false },
                 execute: async () => ({ output: description }),
               })
-              expect(draft.list().map(([id]) => id)).toEqual(["reloadable"])
+              expect(draft.list().map((tool) => tool.id)).toEqual(["reloadable"])
+              expect(draft.get("reloadable")?.id).toBe("reloadable")
               expect(draft.get("reloadable")?.name).toBe("reloadable")
               expect(draft.get("missing")).toBeUndefined()
             })

@@ -857,7 +857,7 @@ effect: (ctx) =>
 Call `yield* ctx.tool.reload()` after changing source data captured by the callback. Reload replays active transforms
 without changing their order; it does not rerun the plugin effect.
 
-`list()` returns `[id, tool]` pairs and `get()` returns `undefined` when the effective name is not present. Use
+Tools have an `id` containing their effective name, and `get()` returns `undefined` when that ID is not present. Use
 `update` and `remove` with the effective tool name, including its namespace (`acme_greeting` above). Dots in
 namespaces and unsupported characters in tool names become `_`. Missing names are ignored; creating a tool requires
 `add` with a complete definition. Updates preserve the name and namespace. Assign new schemas or options to replace
@@ -887,8 +887,8 @@ Schemas: [`Tool.Content`](/api#schema-Tool.Content), [`Tool.TextContent`](/api#s
 
 ```ts
 interface ToolDraft {
-  list(): readonly (readonly [string, Tool.Info])[]
-  get(id: string): Tool.Info | undefined
+  list(): readonly (Tool.Info & { readonly id: string })[]
+  get(id: string): (Tool.Info & { readonly id: string }) | undefined
   add<Input extends Tool.ValueSchema<any>, Output extends Tool.ValueSchema<any> | undefined>(
     tool: Tool.Info<Input, Output>,
   ): void

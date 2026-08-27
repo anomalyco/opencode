@@ -99,7 +99,7 @@ export function fromPromise(plugin: Plugin) {
 
         const run = <A, E>(effect: Effect.Effect<A, E>) => Effect.runPromiseWith(context)(effect)
 
-        const promiseTool = (tool: Tool.Info): Info => {
+        const promiseTool = (tool: Tool.Info & { readonly id: string }): Info & { readonly id: string } => {
           const execute = tool.execute
           return {
             ...tool,
@@ -310,7 +310,7 @@ export function fromPromise(plugin: Plugin) {
               register(
                 host.tool.transform((draft) =>
                   callback({
-                    list: () => draft.list().map(([id, tool]) => [id, promiseTool(tool)] as const),
+                    list: () => draft.list().map((tool) => promiseTool(tool)),
                     get: (id) => {
                       const tool = draft.get(id)
                       return tool ? promiseTool(tool) : undefined
