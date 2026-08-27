@@ -4679,15 +4679,15 @@ describe("SessionRunnerLLM", () => {
       expect((yield* Fiber.join(run).pipe(Effect.flip)).message).toBe("Provider blocked the response")
 
       const assistant = requireAssistant(yield* session.context(sessionID))
-      const bus = yield* recordedStepSettlementEvents(sessionID, assistant.id)
-      expect(bus.map((event) => event.type)).toEqual([
+      const events = yield* recordedStepSettlementEvents(sessionID, assistant.id)
+      expect(events.map((event) => event.type)).toEqual([
         "session.step.started.1",
         "session.tool.called.1",
         "session.tool.success.2",
         "session.step.failed.1",
       ])
       expect(
-        bus.filter((event) => event.type.startsWith("session.step.") && event.type !== "session.step.started.1"),
+        events.filter((event) => event.type.startsWith("session.step.") && event.type !== "session.step.started.1"),
       ).toHaveLength(1)
     }),
   )
@@ -5668,14 +5668,14 @@ describe("SessionRunnerLLM", () => {
 
       const context = yield* session.context(sessionID)
       const assistant = requireAssistant(context)
-      const bus = yield* recordedStepSettlementEvents(sessionID, assistant.id)
-      expect(bus.map((event) => event.type)).toEqual([
+      const events = yield* recordedStepSettlementEvents(sessionID, assistant.id)
+      expect(events.map((event) => event.type)).toEqual([
         "session.step.started.1",
         "session.tool.called.1",
         "session.tool.failed.2",
         "session.step.failed.1",
       ])
-      expect(bus[2]?.data.error).toMatchObject({ type: "unknown", message: "unexpected tool defect" })
+      expect(events[2]?.data.error).toMatchObject({ type: "unknown", message: "unexpected tool defect" })
     }),
   )
 
@@ -5708,15 +5708,15 @@ describe("SessionRunnerLLM", () => {
         "Provider did not return a tool result",
       )
       const assistant = requireAssistant(yield* session.context(sessionID))
-      const bus = yield* recordedStepSettlementEvents(sessionID, assistant.id)
-      expect(bus.map((event) => event.type)).toEqual([
+      const events = yield* recordedStepSettlementEvents(sessionID, assistant.id)
+      expect(events.map((event) => event.type)).toEqual([
         "session.step.started.1",
         "session.tool.called.1",
         "session.tool.failed.2",
         "session.step.failed.1",
       ])
       expect(
-        bus.filter((event) => event.type.startsWith("session.step.") && event.type !== "session.step.started.1"),
+        events.filter((event) => event.type.startsWith("session.step.") && event.type !== "session.step.started.1"),
       ).toHaveLength(1)
       yield* replaySessionProjection(sessionID)
 
@@ -5737,15 +5737,15 @@ describe("SessionRunnerLLM", () => {
       yield* runPrompt(session, "Settle hosted tool before ending")
 
       const assistant = requireAssistant(yield* session.context(sessionID))
-      const bus = yield* recordedStepSettlementEvents(sessionID, assistant.id)
-      expect(bus.map((event) => event.type)).toEqual([
+      const events = yield* recordedStepSettlementEvents(sessionID, assistant.id)
+      expect(events.map((event) => event.type)).toEqual([
         "session.step.started.1",
         "session.tool.called.1",
         "session.tool.failed.2",
         "session.step.ended.1",
       ])
       expect(
-        bus.filter((event) => event.type.startsWith("session.step.") && event.type !== "session.step.started.1"),
+        events.filter((event) => event.type.startsWith("session.step.") && event.type !== "session.step.started.1"),
       ).toHaveLength(1)
     }),
   )
@@ -5776,8 +5776,8 @@ describe("SessionRunnerLLM", () => {
       expect(yield* Fiber.join(run).pipe(Effect.flip)).toBe(failure)
 
       const assistant = requireAssistant(yield* session.context(sessionID))
-      const bus = yield* recordedStepSettlementEvents(sessionID, assistant.id)
-      expect(bus.map((event) => ({ type: event.type, id: event.data.id }))).toEqual([
+      const events = yield* recordedStepSettlementEvents(sessionID, assistant.id)
+      expect(events.map((event) => ({ type: event.type, id: event.data.id }))).toEqual([
         { type: "session.step.started.1", id: undefined },
         { type: "session.tool.called.1", id: "call-local-raw-failure" },
         { type: "session.tool.called.1", id: "call-hosted-raw-failure-pair" },
@@ -5786,7 +5786,7 @@ describe("SessionRunnerLLM", () => {
         { type: "session.step.failed.1", id: undefined },
       ])
       expect(
-        bus.filter((event) => event.type.startsWith("session.step.") && event.type !== "session.step.started.1"),
+        events.filter((event) => event.type.startsWith("session.step.") && event.type !== "session.step.started.1"),
       ).toHaveLength(1)
     }),
   )
@@ -5805,15 +5805,15 @@ describe("SessionRunnerLLM", () => {
       expect(yield* runPrompt(session, "Fail hosted tool on raw failure").pipe(Effect.flip)).toBe(failure)
       expect(requests).toHaveLength(1)
       const assistant = requireAssistant(yield* session.context(sessionID))
-      const bus = yield* recordedStepSettlementEvents(sessionID, assistant.id)
-      expect(bus.map((event) => event.type)).toEqual([
+      const events = yield* recordedStepSettlementEvents(sessionID, assistant.id)
+      expect(events.map((event) => event.type)).toEqual([
         "session.step.started.1",
         "session.tool.called.1",
         "session.tool.failed.2",
         "session.step.failed.1",
       ])
       expect(
-        bus.filter((event) => event.type.startsWith("session.step.") && event.type !== "session.step.started.1"),
+        events.filter((event) => event.type.startsWith("session.step.") && event.type !== "session.step.started.1"),
       ).toHaveLength(1)
       yield* replaySessionProjection(sessionID)
       expect(yield* session.context(sessionID)).toMatchObject([
