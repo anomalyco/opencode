@@ -1135,13 +1135,11 @@ interface ShellCreateBefore {
 
 ### Tools
 
-Inspect or replace `tool` and `input` before top-level tool lookup, including for unknown names. `inputSchema` is
-no longer provided. Corrected names still use the request's existing aliases and availability checks. Code Mode's
-internal name resolution is unchanged.
+Inspect or replace tool input before execution.
 
 ```ts
 await ctx.tool.hook("execute.before", (event) => {
-  if (event.tool === "reead") event.tool = "read"
+  if (event.tool === "read") console.log(event.input)
 })
 ```
 

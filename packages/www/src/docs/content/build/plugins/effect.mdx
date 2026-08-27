@@ -1183,9 +1183,7 @@ interface ShellHookDomain {
 
 ### Tools
 
-Before hooks may replace `tool` and `input`, or fail with `Tool.Error`. Top-level calls run the hook before lookup,
-including for unknown names; `inputSchema` is no longer provided. Corrected names still use the request's existing
-aliases and availability checks. Code Mode's internal name resolution is unchanged.
+Before hooks may replace input or fail with `Tool.Error`.
 
 ```ts
 effect: (ctx) =>
