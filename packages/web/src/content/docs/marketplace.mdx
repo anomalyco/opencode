@@ -1,0 +1,559 @@
+---
+title: Marketplace
+description: Install and manage plugins, skills, agents, commands, MCP servers, and reusable bundles without editing opencode.json.
+---
+
+Marketplace distributes related plugins, skills, agents, commands, MCP servers, and instruction files as one managed
+package. Open **Settings → Marketplace** in the desktop app, or run **Marketplace** from the TUI command palette.
+
+A package may remain installed while disabled. Named skills and MCP servers can also be enabled or disabled
+independently.
+
+> Marketplace operations do not write Marketplace state or generated component entries to `opencode.json` or
+> `opencode.jsonc`.
+
+---
+
+## State and runtime model
+
+OpenCode separates three kinds of state:
+
+1. **User configuration** remains in `opencode.json` or `opencode.jsonc`.
+2. **Marketplace application state** is stored in the OpenCode SQLite database.
+3. **Effective runtime configuration** is assembled in memory from the user configuration and active Marketplace
+   install plans.
+
+The SQLite registry stores catalog sources, installed packages, component switches, artifact references, and a
+monotonic revision. Active plans are projected into the runtime `plugin`, `skills`, `agent`, `command`, `mcp`, and
+`instructions` fields only while OpenCode is running.
+
+When user configuration is saved, OpenCode removes unchanged Marketplace projections before writing the file. A value
+that the user changed is retained as user-owned configuration. If multiple active packages provide the same logical
+resource, the later provider wins; disabling or uninstalling it exposes the next provider without reconstructing a
+chain of config-file edits.
+
+Every registry mutation uses the revision observed by the client. A stale desktop or TUI client receives a revision
+conflict instead of silently overwriting newer state.
+
+---
+
+## Use Marketplace
+
+The desktop app provides **Discover**, **Installed**, **Updates**, and **Sources** views. The item details panel shows
+publisher, source, trust, license, install contents, artifact provenance, and component switches. Install and update
+confirmation shows requested capabilities and configuration conflicts before anything is committed.
+
+In the TUI:
+
+- run **Marketplace** from the command palette to browse and manage packages;
+- run **Marketplace sources**, or press `Ctrl+S` from Marketplace, to manage catalogs;
+- press `Ctrl+R` to refresh catalogs, `Ctrl+U` to update all packages, or `Ctrl+P` to prune the cache;
+- press `Enter` on an installed item to manage its components;
+- press `Space` in the package list to enable or disable the complete package;
+- press `Ctrl+D` in the component view to uninstall it;
+- in **Marketplace sources**, press `Ctrl+A` to add, `Ctrl+D` to remove, `Enter` to enable or disable, and `Ctrl+B` to
+  return.
+
+### Use the CLI
+
+List package keys and installation status, optionally revalidating every enabled source first:
+
+```bash
+opencode plugin marketplace list --refresh
+```
+
+Keys use `source:catalog:item`. Pass the key printed by `list` to `install`:
+
+```bash
+opencode plugin marketplace install team:team-local:review
+opencode plugin marketplace update
+```
+
+`install` and `update` reject community or private catalogs unless `--accept-untrusted` is supplied. They also reject
+configuration conflicts unless `--force` is supplied. Inspect the plan summary, source, and requested capabilities
+before using either flag. `update` applies all eligible updates atomically and never performs an implicit semantic-version
+downgrade.
+
+### Add a catalog
+
+Add a source from the **Sources** view or with the CLI:
+
+```bash
+opencode plugin marketplace add https://git.example.com/ai/agent-marketplace.git
+```
+
+A source may be:
+
+- an HTTPS URL to a Marketplace JSON file;
+- a GitHub repository URL;
+- `github:owner/repository`;
+- an SSH Git repository such as `ssh://git@git.example.com:2222/ai/agent-marketplace.git`;
+- an SCP-style Git repository such as `git@git.example.com:ai/agent-marketplace.git`;
+- an HTTP loopback URL for local development;
+- a local catalog file, local catalog directory, or `file://` URL.
+
+For a GitHub repository URL or `github:` shorthand, OpenCode discovers `.opencode/marketplace.json`, root
+`marketplace.json`, `.agents/plugins/marketplace.json`, `.github/plugin/marketplace.json`,
+`.plugin/marketplace.json`, and `.claude-plugin/marketplace.json`. GitLab and Gitea `.git` URLs continue to use their
+conventional raw-file routes. Local directories use the same catalog locations.
+
+SSH and SCP-style sources are cloned with the normal Git and SSH configuration of the OpenCode server process. The
+checkout follows the remote default branch and is refreshed when catalogs are refreshed. OpenCode retains the entered
+Git reference for display and profile export while loading the catalog from its managed local checkout. HTTP
+`header_env` bindings do not apply to SSH; use an SSH agent, key, and host configuration instead.
+
+API clients may set a source `format` to `opencode` or `codex` to restrict discovery to that family of catalog paths.
+The default, `auto`, checks both formats.
+
+OpenCode adapts Codex, GitHub Copilot, and Claude Code plugin catalogs to the common install plan. It recognizes local,
+GitHub, Git URL/subdirectory, and npm plugin sources and checks `.codex-plugin/plugin.json`, `.plugin/plugin.json`,
+root `plugin.json`, `.github/plugin/plugin.json`, and `.claude-plugin/plugin.json`. Declared skills and MCP servers are
+materialized normally. A skills directory is expanded into its individual `SKILL.md` packages, so every skill gets
+its own switch after installation. Capabilities that OpenCode cannot execute, such as lifecycle hooks, Copilot
+extensions, or Claude language servers, are shown as incompatible instead of being silently installed.
+
+### Official compatible catalogs
+
+These upstream repositories are the best-maintained reference sources for their respective formats:
+
+```bash title="OpenAI Codex plugins"
+opencode plugin marketplace add https://github.com/openai/plugins --name "OpenAI Plugins"
+```
+
+```bash title="GitHub Copilot plugins"
+opencode plugin marketplace add https://github.com/github/copilot-plugins --name "GitHub Copilot"
+```
+
+```bash title="Claude Code plugins"
+opencode plugin marketplace add https://github.com/anthropics/claude-plugins-official --name "Claude Code"
+```
+
+GitHub also maintains `github/awesome-copilot`, a broader community index. Prefer `github/copilot-plugins` when you
+want the smaller first-party catalog. Catalog trust remains `community` until OpenCode itself distributes and pins a
+source; inspect the requested capabilities and accept the trust prompt before installation. Use `--name` to set a
+display name and `--trust private` for a private catalog.
+
+### Private GitLab and authenticated HTTPS catalogs
+
+Map request header names to environment variables with repeatable `--header-env NAME=ENV` options. The environment
+variable must be visible to the OpenCode server process; its value is resolved only when a request is made.
+
+```bash title="Private GitLab token"
+export GITLAB_TOKEN="glpat-..."
+opencode plugin marketplace add https://gitlab.example.com/ai/agent-marketplace.git \
+  --name "Team Marketplace" \
+  --trust private \
+  --header-env PRIVATE-TOKEN=GITLAB_TOKEN
+```
+
+For a service that expects an `Authorization` header, store the complete header value, including its scheme, in the
+environment variable:
+
+```bash
+export MARKETPLACE_AUTH="Bearer ..."
+opencode plugin marketplace add https://catalog.example.com/marketplace.json \
+  --trust private \
+  --header-env Authorization=MARKETPLACE_AUTH
+```
+
+Headers are sent to the catalog and same-origin subresources. They are removed on cross-origin redirects and are never
+stored, returned by the API, or exported. A `401`, `403`, or `404` never falls back to stale executable content.
+
+### Local filesystem catalogs
+
+Use an absolute path in the desktop app. The CLI also accepts relative paths and resolves them from the current working
+directory.
+
+```bash title="Linux or macOS"
+opencode plugin marketplace add ~/opencode-marketplaces/team --trust private
+opencode plugin marketplace add /opt/opencode/catalogs/team/marketplace.json --trust private
+```
+
+```powershell title="Windows PowerShell"
+opencode plugin marketplace add 'C:\Users\Alice\opencode-marketplaces\team' --trust private
+opencode plugin marketplace add '\\fileserver\ai\team-marketplace' --trust private
+```
+
+Equivalent file URLs are supported on every platform, for example `file:///Users/alice/catalogs/team/marketplace.json` or
+`file:///C:/Users/Alice/catalogs/team/marketplace.json`. OpenCode stores the canonical file URL in SQLite while retaining
+the entered path as the display/export reference.
+
+A local catalog can keep assets beside the catalog and reference them with safe `./` paths. Relative plugin files,
+skill paths or URLs, instructions, and icons are resolved from the catalog directory. Plugins, skills, and instructions
+are copied into the content-addressed immutable cache before activation, so an installed package remains usable if the
+source directory later becomes unavailable. `..` traversal is rejected. File artifacts must resolve inside the local
+source directory, and network catalogs cannot reference `file://` artifacts.
+
+```json title="team/marketplace.json"
+{
+  "schema": "opencode.marketplace/v1",
+  "id": "team-local",
+  "name": "Team Local Marketplace",
+  "items": [
+    {
+      "id": "review",
+      "name": "Review",
+      "description": "Local review plugin and skill",
+      "kind": "bundle",
+      "version": "1.0.0",
+      "install": {
+        "plugins": ["./plugins/review.ts"],
+        "skills": {
+          "items": [{ "id": "review", "name": "review", "url": "./skills/review/" }]
+        },
+        "instructions": ["./instructions/review.md"]
+      }
+    }
+  ]
+}
+```
+
+Local source paths are machine-specific. A profile that contains them is reproducible only on machines where the same
+path or file URL exists.
+
+Catalogs are labelled `official`, `verified`, `community`, or `private`. Official and verified provenance is reserved
+for catalogs distributed by OpenCode; user-added catalogs can be community or private. The label does not sandbox
+installed code.
+
+Private source credentials are referenced through `header_env` environment-variable bindings. Secret values are
+resolved only at request time, never stored in SQLite, returned by the API, or exported in profiles. Sensitive headers
+are forwarded to subresources only on the same origin and are stripped from cross-origin redirects.
+
+Installed packages remain manageable when their source is disabled, removed, offline, or no longer publishes the
+item. OpenCode uses the local package snapshot and materialized artifacts for the installed view and uninstall flow.
+
+---
+
+## Install and update lifecycle
+
+Installation is split into planning and execution:
+
+1. **Plan** reports trust warnings, requested capabilities, and configuration conflicts, materializes all executable
+   bytes, and returns a short-lived one-time `plan_id`.
+2. **Materialize** reads local or downloads remote plugin files, skills, and instructions, validates their structure,
+   and creates immutable local artifacts.
+3. **Commit** consumes that exact plan once and stores the package and artifact references in one revision-checked
+   registry mutation. Apply never downloads a second copy of the reviewed artifact.
+4. **Activate** invalidates the effective configuration and connects newly enabled MCP servers.
+
+Community and private catalogs require explicit trust acceptance. Conflicting plugin, agent, command, or MCP providers
+require explicit confirmation before installation.
+
+Updates compare semantic versions when possible and also detect changed SHA-256 install-plan digests. **Update all** does not
+perform an implicit semantic-version downgrade. Existing component choices are retained when the updated package still
+declares those components.
+
+### Enable and disable components
+
+Disabling a package removes its active plan from runtime while keeping the installation and per-component choices.
+Re-enabling it restores all components that were not disabled individually.
+
+An explicitly disabled MCP server remains disabled when the complete package is turned off and on. Enabling its own
+switch makes it eligible for automatic connection again.
+
+Uninstall removes the package provider from the registry and recomputes the effective overlay. User-modified values are
+preserved; shared resources fall back to the next active provider.
+
+---
+
+## Content-addressed artifact cache
+
+Marketplace stores local and remote catalog responses, item manifests, icons, plugin files, skill files, and instruction
+files by their SHA-256 digest in the OpenCode cache directory. Identical bytes are stored once, even when referenced by multiple
+packages or sources.
+
+Local or remote plugin, skill, and instruction content is materialized into immutable local trees before activation. Relative paths are
+validated so an artifact cannot escape its materialization root.
+
+Refresh requests use `ETag` and `Last-Modified` when a source provides them. OpenCode may use a previously validated
+response for transient network failures, `408`, `429`, and server errors. It never fails open to stale executable
+content after `401`, `403`, or `404`, and strict plan materialization never falls back to stale bytes. Cached objects
+are SHA-256 verified when read. Redirect count, individual artifact size, package size, file count, skill count, path
+length, local traversal, and symbolic links are bounded. Installed artifact digests are retained during cache pruning.
+
+The desktop app and TUI expose cache statistics and pruning. The API also provides `POST /marketplace/cache/prune`.
+
+---
+
+## Profiles and reproducibility locks
+
+Export the current package set to a file:
+
+```bash
+opencode plugin marketplace export marketplace-team.json --name team
+```
+
+Omit the file to print JSON to stdout:
+
+```bash
+opencode plugin marketplace export --name team
+```
+
+The `opencode.marketplace.profile/v2` profile contains sources, source format, package coordinates, versions, listing
+and plan digests, priority, package state, and skill and MCP switches. Entries are stably sorted. Credentials, internal
+plans, cache paths, artifact bytes, and installation bookkeeping are excluded. OpenCode also accepts v1 profiles.
+
+Plan and atomically apply a profile in merge or replace mode:
+
+```bash
+opencode plugin marketplace import marketplace-team.json --mode merge --accept-untrusted
+```
+
+For byte-level verification, export and verify a lock containing materialized and artifact digests:
+
+```bash
+opencode plugin marketplace lock marketplace.lock.json
+opencode plugin marketplace verify marketplace.lock.json
+```
+
+---
+
+## Catalog format
+
+A catalog uses the `opencode.marketplace/v1` schema:
+
+```json title=".opencode/marketplace.json"
+{
+  "schema": "opencode.marketplace/v1",
+  "id": "acme",
+  "name": "Acme Marketplace",
+  "items": [
+    {
+      "id": "review-suite",
+      "name": "Review Suite",
+      "description": "Review changes with reusable workflows and documentation tools.",
+      "kind": "plugin",
+      "version": "1.0.0",
+      "publisher": {
+        "name": "Acme"
+      },
+      "icon": {
+        "src-light": "./assets/review-suite-light.png",
+        "src-dark": "./assets/review-suite-dark.png"
+      },
+      "brand_color": "#10A37F",
+      "install": {
+        "plugins": ["@acme/opencode-review@1.0.0"],
+        "skills": {
+          "items": [
+            {
+              "id": "review",
+              "name": "review",
+              "description": "Review the current changes.",
+              "url": "./skills/review/"
+            },
+            {
+              "id": "release-notes",
+              "name": "release-notes",
+              "description": "Prepare release notes.",
+              "url": "./skills/release-notes/"
+            }
+          ]
+        },
+        "mcp": {
+          "docs": {
+            "type": "remote",
+            "url": "https://docs.example.com/mcp"
+          }
+        }
+      }
+    }
+  ]
+}
+```
+
+### Catalog and item fields
+
+At the catalog root, `schema`, `id`, `name`, and `items` are required. A catalog may also provide `description`,
+`publisher`, `homepage`, and `updated_at`. A publisher requires `name` and may include an absolute HTTP or HTTPS `url`
+and a presentation-only `verified` flag. Publisher metadata never upgrades the trust of a user-added source.
+
+Every item requires:
+
+- `id`: stable identifier within the catalog;
+- `name` and `description`: user-facing metadata;
+- `kind`: `plugin`, `skill`, `agent`, `command`, `mcp`, or `bundle`;
+- `version`: preferably a semantic version so update and downgrade ordering is well-defined;
+- `install`: the configuration and artifacts materialized by the package.
+
+Optional item metadata includes:
+
+- `publisher`, `homepage`, `repository`, and `license`;
+- `tags`, which participate in desktop search, and `featured`, which sorts the item before non-featured items;
+- `icon` and `brand_color`;
+- `compatibility`, described below;
+- `permissions`, additional human-readable warnings shown alongside capabilities inferred from the install plan;
+- `setup`, an array of setup notes, and `requires_restart`, a restart hint.
+
+`setup` and `requires_restart` are preserved in package metadata, but OpenCode does not execute setup steps or restart
+itself automatically. URLs in publisher, homepage, and repository metadata must be absolute HTTP or HTTPS URLs without
+embedded credentials.
+
+Use stable identifiers for catalogs, items, and named skills. An identifier is at most 128 characters and cannot
+contain a colon, a control character, or be empty. Colons are reserved for the `source:catalog:item` package key.
+
+### Compatibility requirements
+
+Use `compatibility` to prevent installation on unsupported hosts:
+
+```json
+{
+  "compatibility": {
+    "opencode": ">=1.18.0 <2",
+    "platforms": ["linux", "darwin", "win32"],
+    "architectures": ["x64", "arm64"],
+    "runtimes": ["bun"],
+    "capabilities": ["plugins", "skills"]
+  }
+}
+```
+
+`opencode` is a semver range. Platform and architecture values follow Node's `process.platform` and `process.arch`.
+The current runtime advertises `bun` and `node`; available capabilities are `plugins`, `skills`, `agents`, `commands`,
+`mcp`, and `instructions`. Comparisons are case-insensitive. Every listed runtime and capability is required, while the
+current platform and architecture need only appear in their respective allowed lists. Unknown requirements make the
+item incompatible and block planning, installation, profile application, and update-all.
+
+### Icons
+
+An item may use a single image:
+
+```json
+{
+  "icon": "./assets/review-suite.png"
+}
+```
+
+For theme-specific artwork, use `src-light` and optionally `src-dark`. Icon values may be a `./` path relative to the
+catalog file, an absolute HTTP or HTTPS URL, or a base64 PNG, JPEG, WebP, or GIF data URL. Relative paths must remain
+inside the catalog directory. `brand_color` accepts a six-digit hex color for the fallback background.
+
+### Individually controlled skills
+
+Declare named skills under `install.skills.items`. Each item requires an `id` and the actual skill `name`, and may point
+to a dedicated `path` or `url`. A catalog-relative `path` is treated as a skill directory and materialized; a relative
+`url` may target either a directory ending in `/` or a `SKILL.md` file. Multiple skills may share a source. Set
+`enabled` to `false` to install a skill initially disabled.
+
+Legacy `install.skills.paths` and `install.skills.urls` arrays remain supported. Each source without metadata appears as
+one component derived from its path or URL.
+
+### Other install-plan fields
+
+An install plan may also define:
+
+- `plugins`: package strings or `[package, options]` tuples accepted by the `plugin` configuration field;
+- `agents`: named agent and subagent configuration;
+- `commands`: named slash commands;
+- `mcp`: named local or remote MCP server configuration;
+- `instructions`: persistent instruction paths or URLs.
+
+Catalog-relative plugin files, skill sources, instruction files, and local MCP command entries beginning with `./` are
+materialized into the immutable cache. Other values retain the same shape and meaning as their corresponding OpenCode
+configuration fields. An MCP entry with `enabled: false` or `disabled: true` is installed initially disabled and can be
+enabled independently after installation.
+
+---
+
+## Dedicated Marketplace API
+
+Desktop and TUI clients use the domain API instead of replacing the global configuration object:
+
+```text
+GET    /marketplace
+POST   /marketplace/refresh
+GET    /marketplace/icon/{key}/{variant}
+POST   /marketplace/plan
+POST   /marketplace/install
+POST   /marketplace/update-all
+POST   /marketplace/update/plan
+POST   /marketplace/update/apply
+DELETE /marketplace/install/{key}
+PATCH  /marketplace/install/{key}
+POST   /marketplace/source
+PATCH  /marketplace/source/{id}
+DELETE /marketplace/source/{id}
+POST   /marketplace/profile
+POST   /marketplace/profile/plan
+POST   /marketplace/profile/apply
+GET    /marketplace/lock
+POST   /marketplace/lock/verify
+GET    /marketplace/audit
+POST   /marketplace/cache/prune
+```
+
+Registry mutations accept `expected_revision`; DELETE mutations carry it in the query string. Install, update apply,
+and profile apply also require a one-time `plan_id`. `GET /marketplace` supports `cursor` and `limit`. Public responses
+omit resolved source headers, materialized plans, internal artifact references, and other machine-local state.
+
+Generated clients expose these endpoints under `client.marketplace`, using the operation names `get`, `refresh`,
+`icon`, `plan`, `install`, `updateAll`, `updatePlan`, `updateApply`, `uninstall`, `toggle`, `sourceAdd`, `sourceToggle`,
+`sourceRemove`, `profileExport`, `profilePlan`, `profileApply`, `lockExport`, `lockVerify`, `audit`, and `cachePrune`.
+
+The mutation contract is:
+
+1. Read `state.revision` from `GET /marketplace`.
+2. For an install, update, or profile import, request a plan and review its trust warning, compatibility, permissions,
+   conflicts, and digests.
+3. Apply the returned `plan_id` with the observed `expected_revision`. Plans expire after five minutes and can be
+   consumed only once.
+4. On `revision`, refetch and plan again instead of replaying the stale mutation.
+
+`POST /marketplace/update-all` is the single-call convenience operation used by the CLI. The two-phase
+`/marketplace/update/plan` and `/marketplace/update/apply` pair allows API clients to review one aggregate plan before
+applying it. Mutation failures use `reason` values `conflict`, `revision`, `trust`, `not_found`, `materialization`,
+`incompatible`, `plan_not_found`, `plan_expired`, or `plan_consumed`.
+
+`GET /marketplace` accepts up to 200 listings per page and returns `next_cursor` when another page exists. The icon
+endpoint accepts `src-light` or `src-dark` as `variant` and returns a data URL when a local icon can be served safely.
+`GET /marketplace/audit` defaults to 100 entries and accepts a `limit` from 1 to 500. Cache pruning accepts an optional
+`max_age_days`, defaults to 30 days, and always retains artifacts referenced by installed packages.
+
+---
+
+## Limits and troubleshooting
+
+Marketplace enforces these limits before activation:
+
+- catalog response: 2 MiB and 2,000 items;
+- catalog, item, and named-skill identifier: 128 characters;
+- icon: 5 MiB;
+- individual plugin, skill, or instruction artifact: 16 MiB;
+- one materialized package: 64 MiB, 512 files, and 128 discovered skills;
+- relative artifact path: 512 UTF-8 bytes;
+- redirects: five.
+
+Common failures have deterministic recovery paths:
+
+- **Item not found** — run `opencode plugin marketplace list --refresh` and use the printed key.
+- **Revision conflict** — another client changed the registry; refetch the view and repeat the plan.
+- **Plan expired, consumed, or missing** — create a new plan. Never retry an old `plan_id`.
+- **Trust or configuration conflict** — inspect the source and plan, then confirm in the UI or use the explicit CLI
+  flags `--accept-untrusted` and `--force`.
+- **Private HTTPS source returns 401 or 403** — verify that the named environment variable is available to the server
+  process and that `--header-env` maps the service's exact header name.
+- **SSH clone fails** — verify the repository with the same OS account, SSH agent, keys, and `~/.ssh/config` used by
+  the OpenCode server process.
+- **Materialization fails** — check size and file-count limits, unsafe `..` traversal, symbolic links, and missing
+  `SKILL.md` or plugin manifest files.
+
+---
+
+## Security
+
+Marketplace is a discovery, materialization, and configuration mechanism, not a sandbox.
+
+- Plugins execute code inside OpenCode.
+- Local MCP servers execute commands on your machine.
+- Remote MCP servers receive requests and may require credentials.
+- Skills and instructions influence agent behavior.
+- Agents and commands can change model, tool, and permission configuration.
+
+Review the publisher, source, repository, requested capabilities, and planned configuration before installation. Prefer
+trusted catalogs for executable plugins and pin package versions when reproducibility matters.
+
+## Pre-release migration policy
+
+Marketplace has not shipped with the intermediate storage formats used during development. OpenCode creates the final
+Marketplace tables through the normal database schema migration and intentionally does **not** import experimental
+`registry.json` files or Marketplace fields written to configuration by earlier feature-branch commits.

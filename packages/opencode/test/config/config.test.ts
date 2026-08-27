@@ -34,6 +34,7 @@ import fs from "fs/promises"
 import os from "os"
 import { pathToFileURL } from "url"
 import { Global } from "@opencode-ai/core/global"
+import * as MarketplaceRegistry from "@/marketplace/registry"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { Filesystem } from "@/util/filesystem"
 import { ConfigPlugin } from "@/config/plugin"
@@ -98,12 +99,15 @@ const configLayer = (
     client?: HttpClient.HttpClient
   } = {},
 ) =>
-  LayerNode.compile(LayerNode.group([Config.node, FSUtil.node, Env.node, CrossSpawnSpawner.node]), [
-    [Auth.node, options.auth ?? AuthTest.empty],
-    [Account.node, options.account ?? AccountTest.empty],
-    [Npm.node, NpmTest.noop],
-    [httpClient, Layer.succeed(HttpClient.HttpClient, options.client ?? unexpectedHttp)],
-  ])
+  LayerNode.compile(
+    LayerNode.group([Config.node, MarketplaceRegistry.node, FSUtil.node, Env.node, CrossSpawnSpawner.node]),
+    [
+      [Auth.node, options.auth ?? AuthTest.empty],
+      [Account.node, options.account ?? AccountTest.empty],
+      [Npm.node, NpmTest.noop],
+      [httpClient, Layer.succeed(HttpClient.HttpClient, options.client ?? unexpectedHttp)],
+    ],
+  )
 
 const layer = configLayer()
 
@@ -167,15 +171,17 @@ const withInstanceDir = <A, E, R>(dir: string, effect: Effect.Effect<A, E, R>) =
 const withGlobalConfigDir = <A, E, R>(dir: string, effect: Effect.Effect<A, E, R>) =>
   Effect.acquireUseRelease(
     Effect.gen(function* () {
-      const previous = Global.Path.config
+      const previous = { config: Global.Path.config, data: Global.Path.data }
       ;(Global.Path as { config: string }).config = dir
+      ;(Global.Path as { data: string }).data = path.join(dir, "data")
       yield* clearEffect(true)
       return previous
     }),
     () => effect,
     (previous) =>
       Effect.gen(function* () {
-        ;(Global.Path as { config: string }).config = previous
+        ;(Global.Path as { config: string }).config = previous.config
+        ;(Global.Path as { data: string }).data = previous.data
         yield* clearEffect(true)
       }),
   )
@@ -394,6 +400,86 @@ it.effect("updates global config and omits empty shell key in jsonc", () =>
       expect(parsed.shell).toBeUndefined()
       expect(parsed.model).toBe("test/model")
     }),
+  ),
+)
+
+it.effect("stores marketplace installs in SQLite outside the global json config", () =>
+  withGlobalConfig(
+    {
+      config: {
+        command: {
+          keep: { template: "keep" },
+        },
+      },
+    },
+    ({ dir }) =>
+      Effect.gen(function* () {
+        const registry = yield* MarketplaceRegistry.Service
+        const file = path.join(dir, "opencode.json")
+        const before = yield* FSUtil.use.readFileString(file)
+        const plan = { commands: { review: { template: "review" } } }
+        const stored = yield* registry.replace({
+          revision: 0,
+          installed: {
+            "community:tools:review": {
+              source: "community",
+              catalog: "tools",
+              item: "review",
+              name: "Review",
+              kind: "command",
+              version: "1.0.0",
+              fingerprint: "review-v1",
+              installed_at: "2026-07-29T00:00:00.000Z",
+              updated_at: "2026-07-29T00:00:00.000Z",
+              plan,
+              active_plan: plan,
+              receipt: {},
+            },
+          },
+        })
+        yield* Config.use.invalidate()
+
+        const result = yield* Config.use.getGlobal()
+        expect(yield* FSUtil.use.readFileString(file)).toBe(before)
+        expect(result.command).toEqual({ keep: { template: "keep" }, review: { template: "review" } })
+        expect(result.marketplace?.revision).toBe(stored.state.revision)
+        expect((yield* registry.read()).installed?.["community:tools:review"]?.item).toBe("review")
+        expect(yield* FSUtil.use.existsSafe(path.join(Global.Path.data, "marketplace", "registry.json"))).toBe(false)
+      }),
+  ),
+)
+
+it.effect("stores marketplace sources in SQLite outside jsonc without changing comments", () =>
+  withGlobalConfig(
+    {
+      config: {
+        model: "test/model",
+      },
+      name: "opencode.jsonc",
+    },
+    ({ dir }) =>
+      Effect.gen(function* () {
+        const registry = yield* MarketplaceRegistry.Service
+        const file = path.join(dir, "opencode.jsonc")
+        const before = yield* FSUtil.use.readFileString(file)
+        const result = yield* registry.replace({
+          revision: 0,
+          sources: [
+            {
+              id: "community",
+              name: "Community",
+              url: "https://example.test/catalog.json",
+              trust: "community",
+            },
+          ],
+        })
+        yield* Config.use.invalidate()
+
+        expect(yield* FSUtil.use.readFileString(file)).toBe(before)
+        const effective = yield* Config.use.getGlobal()
+        expect(effective.marketplace?.sources?.map((source) => source.id)).toEqual(["community"])
+        expect(effective.marketplace?.revision).toBe(result.state.revision)
+      }),
   ),
 )
 

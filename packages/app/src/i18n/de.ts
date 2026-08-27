@@ -3,6 +3,29 @@ import { dict as en } from "./en"
 type Keys = keyof typeof en
 
 export const dict = {
+  "marketplace.component.enabled": "Aktiviert",
+  "marketplace.component.disabled": "Deaktiviert",
+  "marketplace.component.plugin.title": "Plugin",
+  "marketplace.component.plugin.description": "Alle Funktionen dieses Plugins ein- oder ausschalten.",
+  "marketplace.component.plugin.toggle": "Plugin {{name}} umschalten",
+  "marketplace.component.plugin.enabled": "{{name}} aktiviert",
+  "marketplace.component.plugin.disabled": "{{name}} deaktiviert",
+  "marketplace.component.skills.title": "Skills",
+  "marketplace.component.skills.description": "Wähle, welche enthaltenen Arbeitsabläufe für Agenten verfügbar sind.",
+  "marketplace.component.skill.toggle": "Skill {{name}} umschalten",
+  "marketplace.component.skill.enabled": "Skill {{name}} aktiviert",
+  "marketplace.component.skill.disabled": "Skill {{name}} deaktiviert",
+  "marketplace.component.mcp.title": "MCP-Server",
+  "marketplace.component.mcp.description":
+    "Aktivierte Server starten automatisch mit dem Plugin. Hier deaktivierte Server bleiben ausgeschaltet.",
+  "marketplace.component.mcp.toggle": "MCP-Server {{name}} umschalten",
+  "marketplace.component.mcp.enabled": "MCP-Server {{name}} aktiviert",
+  "marketplace.component.mcp.disabled": "MCP-Server {{name}} deaktiviert",
+  "marketplace.toggle.conflict.title": "Plugin-Einstellungen konnten nicht geändert werden",
+  "marketplace.toggle.conflict.description": "Löse zuerst diese Einstellungskonflikte: {{settings}}",
+  "marketplace.toggle.preserved.title": "Einstellungen beibehalten",
+  "marketplace.toggle.preserved.description": "Benutzerdefinierte Einstellungen wurden beibehalten: {{settings}}",
+
   "command.category.suggested": "Vorgeschlagen",
   "command.category.view": "Ansicht",
   "command.category.project": "Projekt",

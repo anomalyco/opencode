@@ -1,0 +1,128 @@
+/* Marketplace is rendered inside Settings V2; keep its visual state on the shared V2 tokens and primitives. */
+[data-component="marketplace-panel"] {
+  box-sizing: border-box;
+  color: var(--v2-text-text-base);
+  background: var(--v2-background-bg-base);
+}
+
+[data-component="marketplace-panel"] .text-text-strong,
+[data-component="marketplace-panel"] .text-text-base {
+  color: var(--v2-text-text-base);
+}
+
+[data-component="marketplace-panel"] .text-text-weak {
+  color: var(--v2-text-text-muted);
+}
+
+[data-component="marketplace-panel"] [data-slot="marketplace-header"] {
+  flex: none;
+  padding: 40px 40px 20px;
+  background: linear-gradient(to bottom, var(--v2-background-bg-base) calc(100% - 12px), transparent);
+}
+
+[data-component="marketplace-panel"] [data-slot="marketplace-title"] {
+  font-size: 15px;
+  font-weight: 640;
+  line-height: 1;
+  color: var(--v2-text-text-base);
+}
+
+[data-component="marketplace-panel"] [data-slot="marketplace-subtitle"],
+[data-component="marketplace-panel"] [data-slot="marketplace-toolbar"] {
+  color: var(--v2-text-text-muted);
+}
+
+[data-component="marketplace-panel"] [data-slot="marketplace-tabs"] {
+  flex: none;
+  margin: 0 40px;
+  border-color: var(--v2-border-border-base);
+}
+
+[data-component="marketplace-panel"] [data-slot="marketplace-content"] {
+  box-sizing: border-box;
+  padding: 12px 40px 40px;
+}
+
+[data-component="marketplace-panel"] [data-slot="marketplace-pane"],
+[data-component="marketplace-panel"] [data-slot="marketplace-source-form"],
+[data-component="marketplace-panel"] [data-slot="marketplace-source-card"],
+[data-component="marketplace-panel"] [data-slot="marketplace-component-list"],
+[data-component="marketplace-panel"] [data-slot="marketplace-modal"] {
+  border: 0;
+  background-color: var(--v2-background-bg-layer-01);
+  box-shadow: inset 0 0 0 0.5px var(--v2-border-border-muted);
+}
+
+[data-component="marketplace-panel"] [data-slot="marketplace-filters"] {
+  border-color: var(--v2-border-border-base);
+}
+
+[data-component="marketplace-panel"] [data-slot="marketplace-filters"] [data-component="text-input-v2"] {
+  width: auto;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+[data-component="marketplace-panel"] [data-slot="marketplace-filters"] [data-component="select-v2-root"],
+[data-component="marketplace-panel"] [data-slot="marketplace-filters"] [data-component="select-v2"] {
+  width: 7rem;
+  flex: none;
+}
+
+[data-component="marketplace-panel"] [data-slot="marketplace-source-form"] [data-component="text-input-v2"],
+[data-component="marketplace-panel"] [data-slot="marketplace-source-form"] [data-component="select-v2-root"],
+[data-component="marketplace-panel"] [data-slot="marketplace-source-form"] [data-component="select-v2"] {
+  width: 100%;
+  min-width: 0;
+}
+
+[data-component="marketplace-panel"] [data-slot="marketplace-list-item"] {
+  color: var(--v2-text-text-base);
+  outline: none;
+  transition: background-color 85ms ease-out;
+}
+
+[data-component="marketplace-panel"] [data-slot="marketplace-list-item"]:hover {
+  background-color: var(--v2-overlay-simple-overlay-hover);
+}
+
+[data-component="marketplace-panel"] [data-slot="marketplace-list-item"][data-selected] {
+  background-color: var(--v2-background-bg-layer-02);
+}
+
+[data-component="marketplace-panel"] [data-slot="marketplace-list-item"]:focus-visible {
+  outline: 2px solid var(--v2-border-border-focus);
+  outline-offset: -2px;
+}
+
+[data-component="marketplace-panel"] [data-slot="marketplace-status"] {
+  color: var(--v2-text-text-muted);
+  background-color: var(--v2-background-bg-layer-02);
+  box-shadow: inset 0 0 0 0.5px var(--v2-border-border-muted);
+}
+
+[data-component="marketplace-panel"] [data-slot="marketplace-component-list"] > div {
+  border-color: var(--v2-border-border-base);
+}
+
+[data-component="marketplace-panel"] [data-slot="marketplace-modal-backdrop"] {
+  background: color-mix(in srgb, var(--v2-background-bg-base) 82%, transparent);
+}
+
+[data-component="marketplace-panel"] [data-slot="marketplace-modal"] {
+  box-shadow: var(--v2-elevation-floating);
+}
+
+@media (max-width: 760px) {
+  [data-component="marketplace-panel"] [data-slot="marketplace-header"] {
+    padding: 24px 24px 16px;
+  }
+
+  [data-component="marketplace-panel"] [data-slot="marketplace-tabs"] {
+    margin-inline: 24px;
+  }
+
+  [data-component="marketplace-panel"] [data-slot="marketplace-content"] {
+    padding: 12px 24px 24px;
+  }
+}
