@@ -397,6 +397,7 @@
         "@effect/platform-node": "catalog:",
         "@effect/sql-sqlite-bun": "catalog:",
         "@opencode-ai/http-recorder": "workspace:*",
+        "@opencode-ai/test": "workspace:*",
         "@parcel/watcher-darwin-arm64": "2.5.1",
         "@parcel/watcher-darwin-x64": "2.5.1",
         "@parcel/watcher-linux-arm64-glibc": "2.5.1",
@@ -873,6 +874,15 @@
         "vite-plugin-solid": "2.11.12",
       },
     },
+    "packages/test": {
+      "name": "@opencode-ai/test",
+      "version": "0.0.0",
+      "devDependencies": {
+        "@tsconfig/bun": "catalog:",
+        "@types/bun": "catalog:",
+        "@typescript/native-preview": "catalog:",
+      },
+    },
     "packages/theme": {
       "name": "@opencode-ai/theme",
       "version": "0.0.0",
@@ -917,6 +927,7 @@
         "uqr": "0.1.3",
       },
       "devDependencies": {
+        "@opencode-ai/test": "workspace:*",
         "@tsconfig/bun": "catalog:",
         "@types/bun": "catalog:",
         "@typescript/native-preview": "catalog:",
@@ -2208,6 +2219,8 @@
     "@opencode-ai/stats-server": ["@opencode-ai/stats-server@workspace:packages/stats/server"],
 
     "@opencode-ai/storybook": ["@opencode-ai/storybook@workspace:packages/storybook"],
+
+    "@opencode-ai/test": ["@opencode-ai/test@workspace:packages/test"],
 
     "@opencode-ai/theme": ["@opencode-ai/theme@workspace:packages/theme"],
 
