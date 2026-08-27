@@ -6,6 +6,7 @@ import { useToast } from "../ui/toast"
 
 type Setting = {
   title: string
+  description?: string
   category: string
   path: string[]
   default: unknown
@@ -86,12 +87,13 @@ export const settings: Setting[] = [
     keywords: ["syntax", "concealment", "rendering"],
   },
   {
-    title: "Grouping",
+    title: "Tool grouping",
+    description: "Group reads and searches.",
     category: "Session",
     path: ["session", "grouping"],
     default: "auto",
     values: ["none", "auto"],
-    keywords: ["transcript", "messages"],
+    keywords: ["transcript", "messages", "reads", "searches"],
   },
   {
     title: "Transcript images",
@@ -355,6 +357,7 @@ export function DialogConfig(props: { current?: string }) {
   const options = createMemo(() =>
     settings.map((setting, index) => ({
       title: setting.title,
+      description: setting.description,
       category: setting.category,
       searchText: setting.keywords?.join(" "),
       footer: display(setting),
