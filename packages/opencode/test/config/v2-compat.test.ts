@@ -21,7 +21,7 @@ import { TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 const source = "test:v2-compat"
-const lower = (input: unknown) => ConfigParse.schema(ConfigV1.Info, ConfigV2Compat.lower(input, source).value, source)
+const lower = (input: unknown) => ConfigParse.schema(ConfigV1.Info, ConfigV2Compat.lower(input).value, source)
 
 const it = testEffect(
   LayerNode.compile(LayerNode.group([Config.node, FSUtil.node, Env.node, CrossSpawnSpawner.node]), [
@@ -415,87 +415,48 @@ describe("ConfigV2Compat.lower", () => {
     })
   })
 
-  test("lowers ordered permission rules and renamed actions", () => {
-    const config = lower({
-      permissions: [
-        { action: "*", resource: "*", effect: "deny" },
-        { action: "shell", resource: "*", effect: "deny" },
-        { action: "shell", resource: "git status", effect: "allow" },
-        { action: "subagent", resource: "explore", effect: "allow" },
-        { action: "question", resource: "*", effect: "ask" },
-      ],
-    })
-
-    expect(config.permission).toEqual({
-      "*": "deny",
-      bash: { "*": "deny", "git status": "allow" },
-      task: { explore: "allow" },
-      question: "ask",
-    })
-  })
-
-  test("retains final duplicate permission rules in their effective order", () => {
-    const config = lower({
-      permissions: [
+  test("silently ignores native permission settings", () => {
+    const cases = [
+      [{ action: "shell", resource: "*", effect: "deny" }],
+      [
         { action: "read", resource: "*", effect: "allow" },
-        { action: "read", resource: "secret", effect: "deny" },
-        { action: "read", resource: "*", effect: "deny" },
+        { action: "*", resource: "*", effect: "deny" },
+        { action: "read", resource: "public", effect: "allow" },
       ],
+      [],
+      "secret-permission-value",
+      [{ action: "read", resource: "secret-permission-value", effect: "invalid" }],
+    ]
+    cases.forEach((permissions) => {
+      const result = ConfigV2Compat.lower({ username: "keep-me", permissions })
+      expect(ConfigParse.schema(ConfigV1.Info, result.value, source)).toEqual({ username: "keep-me" })
+      expect(result.diagnostics).toEqual([])
     })
-
-    expect(config.permission).toEqual({ read: { secret: "deny", "*": "deny" } })
-    expect(Object.keys(typeof config.permission?.read === "object" ? config.permission.read : {})).toEqual([
-      "secret",
-      "*",
-    ])
   })
 
-  test("combines legacy and native permissions with legacy rules last", () => {
+  test("preserves legacy permissions and their order without combining native rules", () => {
     const config = lower({
-      permission: { bash: "deny", edit: "deny" },
+      permission: { bash: "deny", "*": "ask", edit: "deny" },
       permissions: [{ action: "shell", resource: "*", effect: "allow" }],
     })
 
-    expect(config.permission).toEqual({ bash: "deny", edit: "deny" })
-    expect(Object.keys(config.permission ?? {})).toEqual(["bash", "edit"])
+    expect(config.permission).toEqual({ bash: "deny", "*": "ask", edit: "deny" })
+    expect(Object.keys(config.permission ?? {})).toEqual(["bash", "*", "edit"])
     expect(
       lower({ permission: "deny", permissions: [{ action: "read", resource: "*", effect: "allow" }] }).permission,
-    ).toEqual({ read: "allow", "*": "deny" })
+    ).toEqual({ "*": "deny" })
+    expect(() => lower({ permission: { read: "invalid" }, permissions: [] })).toThrow("ConfigInvalidError")
   })
 
-  test("rejects permission rules that would change action precedence", () => {
-    expect(() =>
-      lower({
-        permissions: [
-          { action: "read", resource: "*", effect: "allow" },
-          { action: "*", resource: "*", effect: "deny" },
-          { action: "read", resource: "public", effect: "allow" },
-        ],
-      }),
-    ).toThrow("ConfigInvalidError")
-  })
-
-  test("rejects unsupported resource, action, and home-expansion permissions", () => {
-    expect(() =>
-      lower({ permissions: [{ action: "webfetch", resource: "https://internal.example/*", effect: "deny" }] }),
-    ).toThrow("ConfigInvalidError")
-    expect(() => lower({ permissions: [{ action: "sh*", resource: "*", effect: "deny" }] })).toThrow(
-      "ConfigInvalidError",
-    )
-    expect(() => lower({ permissions: [{ action: "bash", resource: "*", effect: "deny" }] })).toThrow(
-      "ConfigInvalidError",
-    )
-    expect(() => lower({ permissions: [{ action: "shell", resource: "$HOME/private/*", effect: "deny" }] })).toThrow(
-      "ConfigInvalidError",
-    )
-  })
-
-  test("rejects malformed native global and agent permission rules", () => {
-    expect(() => lower({ permissions: "deny" })).toThrow("ConfigInvalidError")
-    expect(() => lower({ permissions: [{ action: "read", resource: "*", effect: "permit" }] })).toThrow(
-      "ConfigInvalidError",
-    )
-    expect(() => lower({ agents: { reviewer: { permissions: [{ action: "read" }] } } })).toThrow("ConfigInvalidError")
+  test("ignores native agent permissions without rejecting supported agent fields", () => {
+    const result = ConfigV2Compat.lower({
+      agents: { reviewer: { system: "Review carefully", permissions: [{ action: "read" }] } },
+    })
+    expect(ConfigParse.schema(ConfigV1.Info, result.value, source).agent?.reviewer).toMatchObject({
+      prompt: "Review carefully",
+      permission: {},
+    })
+    expect(result.diagnostics).toEqual([])
   })
 
   test("lowers agent selections, variants, system prompts, and disabled states", () => {
@@ -530,7 +491,7 @@ describe("ConfigV2Compat.lower", () => {
       steps: 4,
       disable: true,
     })
-    expect(config.agent?.reviewer?.permission).toEqual({ read: { "*.ts": "allow", "secret.ts": "deny" } })
+    expect(config.agent?.reviewer?.permission).toEqual({})
     expect(config.agent?.quick).toMatchObject({ model: "openai/gpt-4.1", variant: "fast", disable: false })
   })
 
@@ -557,7 +518,7 @@ describe("ConfigV2Compat.lower", () => {
       prompt: "Legacy prompt",
       permission: { bash: "deny", edit: "deny" },
     })
-    expect(config.agent?.native?.permission).toEqual({ bash: "deny" })
+    expect(config.agent?.native?.permission).toEqual({})
   })
 
   test("keeps legacy commands when native commands use the same name", () => {
@@ -617,7 +578,7 @@ describe("ConfigV2Compat.lower", () => {
     })
   })
 
-  test("lowers native permission rules while ignoring unsupported plugins and providers", () => {
+  test("ignores unsupported permissions, plugins, and providers", () => {
     const config = lower({
       permissions: [{ action: "read", resource: "*", effect: "allow" }],
       plugins: [{ package: "@example/native-plugin" }],
@@ -625,7 +586,7 @@ describe("ConfigV2Compat.lower", () => {
       policies: [{ action: "provider.use", effect: "deny", resource: "openai" }],
     })
 
-    expect(config.permission).toEqual({ read: "allow" })
+    expect(config.permission).toBeUndefined()
     expect(config.plugin).toBeUndefined()
     expect(config.provider).toBeUndefined()
     expect(config.experimental?.policies).toBeUndefined()
@@ -754,12 +715,12 @@ describe("V2 configuration loading", () => {
       expect(config.skills).toEqual({ paths: ["./skills"], urls: ["https://example.com/skills"] })
       expect(config.mcp?.native).toEqual({ type: "remote", url: "https://native.example.com/mcp", enabled: true })
       expect(config.experimental?.mcp_timeout).toBe(9000)
-      expect(config.permission).toMatchObject({ bash: { "*": "deny", "git status": "allow" } })
+      expect(config.permission).toBeUndefined()
       expect(config.agent?.reviewer).toMatchObject({
         model: "anthropic/claude-sonnet",
         variant: "thinking",
         prompt: "Review carefully.",
-        permission: { task: { explore: "deny" } },
+        permission: {},
       })
       expect(config.command?.review).toMatchObject({
         template: "Review $ARGUMENTS",

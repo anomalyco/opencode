@@ -548,6 +548,34 @@ it.effect("native project MCP servers override inherited V1 disabled state", () 
   ),
 )
 
+it.effect("ignores native project permissions without changing inherited V1 rules", () =>
+  withConfigTree(
+    {
+      global: {
+        permission: { read: "deny", bash: "ask" },
+        agent: { reviewer: { permission: { edit: "deny" } } },
+      },
+      project: {
+        permissions: [{ action: "read", resource: "*", effect: "allow" }],
+        agents: {
+          reviewer: {
+            system: "Review carefully",
+            permissions: [{ action: "edit", resource: "*", effect: "allow" }],
+          },
+        },
+      },
+    },
+    Effect.gen(function* () {
+      const config = yield* Config.use.get()
+      expect(config.permission).toEqual({ read: "deny", bash: "ask" })
+      expect(config.agent?.reviewer).toMatchObject({
+        prompt: "Review carefully",
+        permission: { edit: "deny" },
+      })
+    }),
+  ),
+)
+
 it.instance(
   "loads formatter boolean config",
   Effect.gen(function* () {

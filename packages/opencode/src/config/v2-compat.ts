@@ -2,12 +2,9 @@ export * as ConfigV2Compat from "./v2-compat"
 
 import { isDeepStrictEqual } from "node:util"
 import { Option, Schema } from "effect"
-import { Permission } from "@opencode-ai/schema/permission"
 import { NonNegativeInt, PositiveInt } from "@opencode-ai/core/schema"
 import { ConfigAttachmentV1 } from "@opencode-ai/core/v1/config/attachment"
 import { ConfigLSPV1 } from "@opencode-ai/core/v1/config/lsp"
-import { ConfigPermissionV1 } from "@opencode-ai/core/v1/config/permission"
-import { InvalidError } from "@opencode-ai/core/v1/config/error"
 
 export interface Diagnostic {
   readonly kind: "invalid" | "unsupported" | "conflict"
@@ -77,7 +74,6 @@ const Agent = Schema.Struct({
   color: Schema.optional(Schema.String.check(Schema.isPattern(/^#[0-9a-fA-F]{6}$/))),
   steps: Schema.optional(PositiveInt),
   disabled: Schema.optional(Schema.Boolean),
-  permissions: Schema.optional(Permission.Ruleset),
 })
 const Command = Schema.Struct({
   template: Schema.String,
@@ -89,12 +85,9 @@ const Command = Schema.Struct({
 
 const decodeRecord = Schema.decodeUnknownOption(Record, decodeOptions)
 const decodeLspEntry = Schema.decodeUnknownOption(ConfigLSPV1.Entry, decodeOptions)
-const decodePermissions = Schema.decodeUnknownOption(Permission.Ruleset, decodeOptions)
-const decodeLegacyPermissions = Schema.decodeUnknownOption(ConfigPermissionV1.Info, decodeOptions)
 const builtinServers = new Set<string>(ConfigLSPV1.builtinServerIds)
-const scalarPermissions = new Set(["todowrite", "question", "webfetch", "websearch", "doom_loop"])
 
-export function lower(input: unknown, source = "configuration"): Result {
+export function lower(input: unknown): Result {
   const parsed = decodeRecord(input)
   if (Option.isNone(parsed)) return { value: input, diagnostics: [] }
 
@@ -109,16 +102,7 @@ export function lower(input: unknown, source = "configuration"): Result {
   normalizeCompaction(parsed.value, result, diagnostics)
   normalizeExperimental(parsed.value, result, diagnostics)
 
-  if (Object.hasOwn(parsed.value, "permissions"))
-    result.permission = lowerPermissions(
-      parsed.value.permissions,
-      result.permission,
-      source,
-      ["permissions"],
-      diagnostics,
-    )
-
-  normalizeAgents(parsed.value, result, source, diagnostics)
+  normalizeAgents(parsed.value, result, diagnostics)
   normalizeCommands(parsed.value, result, diagnostics)
   normalizeMcp(parsed.value, result, diagnostics)
   normalizeLsp(parsed.value, result, diagnostics)
@@ -199,12 +183,7 @@ function normalizeExperimental(
     preferLegacy(result, "subagent_depth", depth, ["experimental", "subagent_depth"], diagnostics)
 }
 
-function normalizeAgents(
-  input: Record<string, unknown>,
-  result: Record<string, unknown>,
-  source: string,
-  diagnostics: Diagnostic[],
-) {
+function normalizeAgents(input: Record<string, unknown>, result: Record<string, unknown>, diagnostics: Diagnostic[]) {
   if (!Object.hasOwn(input, "agents")) return
   const agents = decodeValue(Record, input.agents, ["agents"], diagnostics)
   if (agents === undefined) return
@@ -212,22 +191,14 @@ function normalizeAgents(
   const merged: Record<string, unknown> = Option.isSome(legacy) ? { ...legacy.value } : {}
   for (const [name, value] of Object.entries(agents)) {
     const path = ["agents", name]
-    // A shadowed native agent must not introduce new fatal permission failures.
     if (Object.hasOwn(merged, name)) {
       if (!isDeepStrictEqual(merged[name], value)) conflict(path, diagnostics)
       continue
     }
-    const record = decodeRecord(value)
-    const permissions =
-      Option.isSome(record) && Object.hasOwn(record.value, "permissions")
-        ? lowerPermissions(record.value.permissions, undefined, source, [...path, "permissions"], diagnostics)
-        : undefined
     const parsed = decodeValue(Agent, value, path, diagnostics)
     if (parsed === undefined) continue
     if (parsed.request?.headers !== undefined) unsupported([...path, "request", "headers"], diagnostics)
-    const agent = lowerAgent(parsed)
-    if (permissions !== undefined) agent.permission = permissions
-    setOwn(merged, name, agent)
+    setOwn(merged, name, lowerAgent(parsed))
   }
   if (Object.hasOwn(result, "agent") && Option.isNone(legacy)) return
   if (Object.keys(merged).length > 0 || Option.isSome(legacy)) result.agent = merged
@@ -353,98 +324,6 @@ function normalizeLsp(input: Record<string, unknown>, result: Record<string, unk
       return false
     }),
   )
-}
-
-function lowerPermissions(input: unknown, legacy: unknown, source: string, path: string[], diagnostics: Diagnostic[]) {
-  const native = decodePermissions(input)
-  if (Option.isNone(native)) return invalidPermissions(source, path, "Invalid native permission rules")
-
-  const previous = legacy === undefined ? Option.none() : decodeLegacyPermissions(legacy)
-  if (legacy !== undefined && Option.isNone(previous))
-    return invalidPermissions(source, path, "Existing legacy permissions are invalid")
-
-  const inherited = Option.isSome(previous)
-    ? Object.entries(previous.value).flatMap(([action, value]) =>
-        typeof value === "string"
-          ? [{ action: nativeAction(action), resource: "*", effect: value }]
-          : Object.entries(value).map(([resource, effect]) => ({ action: nativeAction(action), resource, effect })),
-      )
-    : []
-  const normalized = [...native.value, ...inherited].map((rule, index) => {
-    if (["bash", "task", "write", "patch"].includes(rule.action))
-      return invalidPermissions(
-        source,
-        [...path, String(index), "action"],
-        "Permission action cannot be lowered safely",
-      )
-    if (rule.action !== "*" && /[*?]/.test(rule.action))
-      return invalidPermissions(
-        source,
-        [...path, String(index), "action"],
-        "Wildcard permission actions cannot be lowered safely",
-      )
-    if (/^\d+$/.test(rule.action) || /^\d+$/.test(rule.resource))
-      return invalidPermissions(source, [...path, String(index)], "Numeric permission keys cannot preserve rule order")
-
-    const action = rule.action === "shell" ? "bash" : rule.action === "subagent" ? "task" : rule.action
-    if (scalarPermissions.has(action) && rule.resource !== "*")
-      return invalidPermissions(
-        source,
-        [...path, String(index), "resource"],
-        "Permission action does not support resource-specific rules in V1",
-      )
-    if (!["read", "edit", "external_directory"].includes(action) && /^(?:~|\$HOME)/.test(rule.resource))
-      return invalidPermissions(
-        source,
-        [...path, String(index), "resource"],
-        "Permission resource has incompatible home-directory expansion",
-      )
-    return { action, resource: rule.resource, effect: rule.effect }
-  })
-
-  const last = new Map(normalized.map((rule, index) => [JSON.stringify([rule.action, rule.resource]), index]))
-  const remaining = normalized.filter((rule, index) => last.get(JSON.stringify([rule.action, rule.resource])) === index)
-  const groups = new Map<string, typeof remaining>()
-  for (const [index, rule] of remaining.entries()) {
-    const group = groups.get(rule.action)
-    if (group !== undefined && remaining[index - 1]?.action !== rule.action)
-      return invalidPermissions(source, path, "Permission action order cannot be represented safely in V1")
-    if (group !== undefined) {
-      group.push(rule)
-      continue
-    }
-    groups.set(rule.action, [rule])
-  }
-
-  if (
-    native.value.some((rule) =>
-      inherited.some(
-        (previous) =>
-          previous.action === rule.action && previous.resource === rule.resource && previous.effect !== rule.effect,
-      ),
-    )
-  )
-    conflict(path, diagnostics)
-
-  return Object.fromEntries(
-    Array.from(groups, ([action, rules]) => [
-      action,
-      rules.length === 1 && rules[0]?.resource === "*"
-        ? rules[0].effect
-        : Object.fromEntries(rules.map((rule) => [rule.resource, rule.effect])),
-    ]),
-  )
-}
-
-function nativeAction(action: string) {
-  if (action === "bash") return "shell"
-  if (action === "task") return "subagent"
-  if (action === "write" || action === "patch") return "edit"
-  return action
-}
-
-function invalidPermissions(source: string, path: string[], message: string): never {
-  throw new InvalidError({ path: source, message, issues: [{ path, message }] })
 }
 
 function lowerSelection(input: Schema.Schema.Type<typeof Selection>) {
