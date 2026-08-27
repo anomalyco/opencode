@@ -237,9 +237,9 @@ jobs:
         working-directory: packages/app
         run: bunx playwright install chromium
 
-      - name: Run app e2e tests
+      - name: Run app e2e tests against production build
         if: env.E2E_ENABLED == 'true'
-        run: bun --cwd packages/app test:e2e:local
+        run: bun --cwd packages/app test:e2e:built
         env:
           CI: true
         timeout-minutes: 30

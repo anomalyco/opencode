@@ -144,7 +144,7 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
   )
   page.on("close", () => void transport.dispose())
 
-  await page.route("**/*", async (route) => {
+  await page.route("**/api/**", async (route) => {
     const url = new URL(route.request().url())
     const appPort = new URL(
       process.env.PLAYWRIGHT_BASE_URL ?? `http://127.0.0.1:${process.env.PLAYWRIGHT_PORT ?? "3000"}`,

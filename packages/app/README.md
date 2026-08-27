@@ -31,7 +31,7 @@ Your app is ready to be deployed!
 
 ## E2E Testing
 
-Playwright starts the Vite dev server automatically via `webServer`, and UI tests expect an opencode backend at `localhost:4096` by default.
+Locally, Playwright starts the Vite dev server automatically via `webServer`, or reuses one already running at the configured address. The browser suite uses isolated API fixtures rather than a live opencode backend.
 
 ```bash
 bunx playwright install chromium
@@ -39,11 +39,35 @@ bun run test:e2e:local
 bun run test:e2e:local -- --grep "settings"
 ```
 
+CI builds the app once and runs the same suite against Vite preview, serving production assets from `dist`. Managed built runs never reuse an existing server, so a running dev server cannot silently replace the production build. To run this mode locally:
+
+```bash
+bun run test:e2e:built
+bun run test:e2e:built -- --grep "settings"
+```
+
+To test an already-running dev server without starting or building a server:
+
+```bash
+PLAYWRIGHT_BASE_URL=http://127.0.0.1:4444 bun run test:e2e
+```
+
+For an already-running production build, also set `PLAYWRIGHT_BUILD=1` so the fixture API uses the app's origin:
+
+```bash
+PLAYWRIGHT_BUILD=1 PLAYWRIGHT_BASE_URL=http://127.0.0.1:4444 bun run test:e2e
+```
+
+External targets must use HTTP because fixture URLs use HTTP. `PLAYWRIGHT_BASE_URL` skips server startup and building in either mode.
+
+Compiled CLI startup and service lifecycle coverage runs separately in CI via `packages/cli/script/service-smoke.ts`.
+
 Environment options:
 
-- `PLAYWRIGHT_SERVER_HOST` / `PLAYWRIGHT_SERVER_PORT` (backend address, default: `localhost:4096`)
-- `PLAYWRIGHT_PORT` (Vite dev server port, default: `3000`)
-- `PLAYWRIGHT_BASE_URL` (override base URL, default: `http://localhost:<PLAYWRIGHT_PORT>`)
+- `PLAYWRIGHT_BUILD=1` (build and preview locally; always enabled when `CI` is set)
+- `PLAYWRIGHT_SERVER_HOST` / `PLAYWRIGHT_SERVER_PORT` (dev fixture API address, default: `127.0.0.1:4096`; built runs use the app's origin, matching production)
+- `PLAYWRIGHT_PORT` (managed dev or preview server port, default: `3000`)
+- `PLAYWRIGHT_BASE_URL` (use an externally managed app instead of starting a server; otherwise defaults to `http://127.0.0.1:<PLAYWRIGHT_PORT>`)
 
 ## Deployment
 
