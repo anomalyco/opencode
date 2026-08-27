@@ -50,7 +50,7 @@ describe("config plugin reloads", () => {
       const result = yield* references.list()
       expect(result.map((reference) => reference.name)).toEqual(["external", "shared", "first", "second"])
       expect(result.find((reference) => reference.name === "shared")?.path).toBe(
-        AbsolutePath.make("/config/second/shared"),
+        AbsolutePath.make(path.resolve("/config/second/shared")),
       )
     }).pipe(
       Effect.provide(
