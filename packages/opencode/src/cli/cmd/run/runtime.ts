@@ -31,7 +31,9 @@ export { runPromptQueue } from "./runtime.queue"
 type BootContext = Pick<
   RunInput,
   "sdk" | "directory" | "sessionID" | "sessionTitle" | "resume" | "agent" | "model" | "variant"
->
+> & {
+  server?: { baseUrl: string; fetch?: typeof fetch; headers?: RequestInit["headers"] }
+}
 
 type CreateSessionInput = {
   agent: string | undefined
@@ -545,6 +547,8 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     await mod.runPromptQueue({
       footer,
       initialInput: input.initialInput,
+      getSessionID: () => state.sessionID,
+      getTelegramServer: () => ctx.server,
       trace: log,
       onSend: (prompt) => {
         state.shown = true
@@ -772,6 +776,7 @@ export async function runInteractiveLocalMode(input: RunLocalInput): Promise<voi
       return {
         sdk,
         directory: input.directory,
+        server: { baseUrl: "http://opencode.internal", fetch: input.fetch },
         sessionID: "",
         sessionTitle: undefined,
         resume: false,
@@ -800,6 +805,9 @@ export async function runInteractiveMode(
       boot: async () => ({
         sdk: input.sdk,
         directory: input.directory,
+        server: input.sdkOptions
+          ? { baseUrl: input.sdkOptions.baseUrl, fetch: input.sdkOptions.fetch, headers: input.sdkOptions.headers }
+          : undefined,
         sessionID: input.sessionID,
         sessionTitle: input.sessionTitle,
         resume: input.resume,
