@@ -1135,13 +1135,22 @@ interface ShellCreateBefore {
 
 ### Tools
 
-Inspect or replace tool input before execution.
+Inspect or replace the tool name and input before a top-level call is resolved. This hook also runs for unknown
+names, so a plugin can repair a misspelled model call. `inputSchema` is no longer part of the event because no tool
+has been resolved yet.
 
 ```ts
 await ctx.tool.hook("execute.before", (event) => {
-  if (event.tool === "read") console.log(event.input)
+  if (event.tool === "reead") event.tool = "read"
 })
 ```
+
+The corrected name goes through the existing request alias and availability checks. Input validation and execution
+use the resolved tool from the captured request snapshot. After hooks report that resolved tool's name. This does
+not rename the registered tool or rewrite the model's original call in session history.
+
+Code Mode still resolves its internal tool paths in the interpreter. Known internal calls retain their before/after
+hooks and input mutation behavior, but unknown paths do not reach this hook and internal names cannot be repaired.
 
 Inspect successful results or failures after execution.
 

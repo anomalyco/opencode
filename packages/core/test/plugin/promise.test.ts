@@ -778,6 +778,51 @@ describe("fromPromise", () => {
     }),
   )
 
+  it.effect("repairs unknown top-level tool calls through Promise before hooks", () =>
+    Effect.gen(function* () {
+      const plugins = yield* Plugin.Service
+      const registry = yield* Tool.Service
+      const host = yield* PluginHost.make(plugins)
+      const seen: string[] = []
+      yield* host.tool.transform((draft) =>
+        draft.add({
+          name: "echo",
+          description: "Echo",
+          options: { codemode: false },
+          input: Schema.Struct({ text: Schema.String }),
+          output: Schema.String,
+          execute: ({ text }) => Effect.succeed({ output: text }),
+        }),
+      )
+      yield* PluginPromise.fromPromise(
+        define({
+          id: "promise-tool-repair",
+          setup: async (ctx) => {
+            await ctx.tool.hook("execute.before", async (event) => {
+              expect(event).not.toHaveProperty("inputSchema")
+              seen.push(event.tool)
+              event.tool = "echo"
+              event.input = { text: "repaired" }
+            })
+            await ctx.tool.hook("execute.after", (event) => {
+              seen.push(event.tool)
+            })
+          },
+        }),
+      ).effect(host)
+      const snapshot = yield* registry.snapshot()
+      expect(
+        yield* snapshot.execute({
+          sessionID: Session.ID.make("ses_promise_repair"),
+          agent: Agent.ID.make("build"),
+          messageID: SessionMessage.ID.make("msg_promise_repair"),
+          call: { type: "tool-call", id: "repair", name: "typo", input: {} },
+        }),
+      ).toMatchObject({ output: "repaired" })
+      expect(seen).toEqual(["typo", "echo"])
+    }),
+  )
+
   it.effect("returns content-only plugin results through Code Mode", () =>
     Effect.gen(function* () {
       const plugins = yield* Plugin.Service

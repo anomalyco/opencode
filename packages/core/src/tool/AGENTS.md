@@ -45,6 +45,8 @@ Type safety ends at registration. The registry validates model input and declare
 
 `Tool.Service` is Location-scoped. Do not make the registry process-global or construct a separate application-tool service for each Location.
 
+Top-level `execute.before` hooks run before request alias resolution, availability checks, and captured-tool lookup. They may repair the call's name and input; no input schema is available at this boundary. Code Mode still resolves internal paths itself, and its known-tool hooks only affect input. After hooks retain the resolved tool's name.
+
 ## Permissions
 
 The registry has no `Permission.Service` dependency and performs no execution authorization. Registration options may attach a permission action solely to preserve whole-tool definition filtering. Most registrations default to their effective name; `edit`, `write`, and `patch` use the shared `edit` action.

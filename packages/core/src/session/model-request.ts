@@ -358,15 +358,10 @@ export const layer = Layer.effect(
           ? { webSocket: transport.bind(session.id) }
           : {}),
       }
-      const executeTool: Prepared["executeTool"] = (input) => {
-        const tool = hooked.get(input.call.name)
-        // A registered tool absent from the hooked set was removed or renamed by a hook.
-        if (!tool && registry.has(input.call.name))
-          return new Tool.Error({ message: `Tool is not available for this request: ${input.call.name}` })
-        return tools
-          .execute(tool ? { ...input, call: { ...input.call, name: tool.name } } : input)
+      const executeTool: Prepared["executeTool"] = (input) =>
+        tools
+          .execute({ ...input, definitions: hooked })
           .pipe(Effect.catchCauseFilter(declineDefect, (decline) => Effect.fail(decline)))
-      }
       return {
         request,
         options,
