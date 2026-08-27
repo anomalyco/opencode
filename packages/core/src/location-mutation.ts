@@ -120,6 +120,6 @@ const layer = Layer.effect(
 
 export const node = makeLocationNode({
   service: Service,
-  layer: layer.pipe(Layer.orDie),
+  layer,
   deps: [FSUtil.node, Location.node, ProjectMarkers.node],
 })

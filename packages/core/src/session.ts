@@ -1209,7 +1209,7 @@ const SHELL_MAX_CAPTURE_BYTES = 1024 * 1024
 
 export const node = makeGlobalNode({
   service: Service,
-  layer: layer.pipe(Layer.orDie),
+  layer,
   deps: [
     Job.node,
     SessionEnvironment.node,
