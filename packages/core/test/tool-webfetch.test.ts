@@ -573,6 +573,22 @@ describe("WebFetchTool registration", () => {
     }),
   )
 
+  it.effect("does not retry ordinary 403 responses", () =>
+    Effect.gen(function* () {
+      reset()
+      respond = () => Effect.succeed(new Response("forbidden", { status: 403 }))
+      const registry = yield* Tool.Service
+      const url = "https://example.com/forbidden"
+
+      expect(yield* executeTool(registry, call({ url, format: "text" }))).toEqual({
+        status: "error",
+        error: { type: "unknown", message: `StatusCode: non 2xx status code (403 GET ${url})` },
+      })
+      expect(requests).toHaveLength(1)
+      expect(requests[0]?.headers["user-agent"]).toBe(webFetchUserAgent)
+    }),
+  )
+
   it.effect("times out stalled requests", () =>
     Effect.gen(function* () {
       reset()
