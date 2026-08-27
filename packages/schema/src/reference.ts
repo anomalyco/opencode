@@ -21,6 +21,7 @@ export const GitSource = Schema.Struct({
   type: Schema.Literal("git"),
   repository: Schema.String,
   branch: Schema.String.pipe(optional),
+  refresh: Schema.DurationFromString.pipe(optional),
   description: Schema.String.pipe(optional),
   hidden: Schema.Boolean.pipe(optional),
 }).annotate({ identifier: "Reference.GitSource" })

@@ -6,6 +6,9 @@ import { optional } from "../schema.js"
 export class Git extends Schema.Class<Git>("Config.Reference.Git")({
   repository: Schema.String,
   branch: Schema.String.pipe(optional),
+  refresh: Schema.DurationFromString.pipe(optional).annotate({
+    description: 'Interval between refresh attempts (default: "1 hour")',
+  }),
   description: Schema.String.pipe(optional),
   hidden: Schema.Boolean.pipe(optional),
 }) {}

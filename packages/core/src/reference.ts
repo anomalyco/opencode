@@ -1,7 +1,7 @@
 export * as Reference from "./reference.js"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { Context, Effect, Layer, Scope, Types } from "effect"
+import { Context, Duration, Effect, Layer, Scope, Types } from "effect"
 import { Reference } from "@opencode-ai/schema/reference"
 import { Global } from "@opencode-ai/util/global"
 import { Bus } from "./bus.js"
@@ -48,6 +48,20 @@ const layer = Layer.effect(
     const cache = yield* RepositoryCache.Service
     const scope = yield* Scope.Scope
     const materialized = new Map<string, Info>()
+    const materialize = (name: string, source: GitSource) => {
+      const repository = Repository.parse(source.repository)
+      if (!repository || !Repository.isRemote(repository)) return Effect.void
+      return cache.ensure({ reference: repository, branch: source.branch, refresh: source.refresh }).pipe(
+        Effect.catchCause((cause) =>
+          Effect.logWarning("failed to materialize reference", {
+            name,
+            repository: source.repository,
+            cause,
+          }),
+        ),
+        Effect.forkIn(scope),
+      )
+    }
     const state = State.create<Data, Draft>({
       name: "reference",
       initial: () => ({ sources: new Map() }),
@@ -75,6 +89,13 @@ const layer = Layer.effect(
             }
             const repository = Repository.parse(source.repository)
             if (!repository || !Repository.isRemote(repository)) continue
+            if (source.refresh !== undefined) {
+              const refresh = Duration.toMillis(source.refresh)
+              if (!Number.isFinite(refresh) || refresh <= 0) {
+                yield* Effect.logWarning("reference refresh must be a finite positive duration", { name })
+                continue
+              }
+            }
             if (source.branch) {
               try {
                 Repository.validateBranch(source.branch)
@@ -92,16 +113,7 @@ const layer = Layer.effect(
                 source,
               }),
             )
-            yield* cache.ensure({ reference: repository, branch: source.branch, refresh: true }).pipe(
-              Effect.catchCause((cause) =>
-                Effect.logWarning("failed to materialize reference", {
-                  name,
-                  repository: source.repository,
-                  cause,
-                }),
-              ),
-              Effect.forkIn(scope),
-            )
+            yield* materialize(name, source)
           }
           yield* bus.publish(Reference.Event.Updated, {})
         }),
@@ -111,6 +123,10 @@ const layer = Layer.effect(
       transform: state.transform,
       reload: state.reload,
       list: Effect.fn("Reference.list")(function* () {
+        yield* Effect.forEach(materialized.entries(), ([name, reference]) => {
+          if (reference.source.type === "local") return Effect.void
+          return materialize(name, reference.source)
+        })
         return Array.from(materialized.values())
       }),
     })

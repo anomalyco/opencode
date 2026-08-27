@@ -1,7 +1,7 @@
 import path from "path"
 import fs from "fs/promises"
 import { describe, expect } from "bun:test"
-import { Effect, Fiber, Layer, Logger, PubSub, Schema, Stream } from "effect"
+import { Effect, Fiber, Layer, Logger, Option, PubSub, Schema, Stream } from "effect"
 import { FastCheck } from "effect/testing"
 import { Config } from "@opencode-ai/core/config"
 import { AgentsDirectory, Directory, Document, Event, Info } from "@opencode-ai/schema/config"
@@ -552,16 +552,31 @@ describe("Config", () => {
   it.effect("migrates arbitrary v1 configuration into valid v2 configuration", () =>
     Effect.sync(() => {
       FastCheck.assert(
-        FastCheck.property(Schema.toArbitrary(ConfigV1.Info)(FastCheck), (info) => {
-          const parsed = Schema.decodeUnknownSync(ConfigV1.Info)(
-            Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(
-              Schema.encodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(info),
-            ),
-          )
-          Schema.decodeUnknownSync(Info)(ConfigMigrateV1.migrate(parsed), { errors: "all" })
-        }),
+        FastCheck.property(
+          Schema.toArbitrary(ConfigV1.Info)(FastCheck).filter((info) =>
+            Option.isSome(Schema.encodeUnknownOption(ConfigV1.Info)(info)),
+          ),
+          (info) => {
+            const parsed = Schema.decodeUnknownSync(ConfigV1.Info)(
+              JSON.parse(JSON.stringify(Schema.encodeSync(ConfigV1.Info)(info))),
+            )
+            Schema.decodeUnknownSync(Info)(ConfigMigrateV1.migrate(parsed), { errors: "all" })
+          },
+        ),
         { numRuns: 100 },
       )
+    }),
+  )
+
+  it.effect("migrates v1 Git reference refresh intervals as configuration strings", () =>
+    Effect.sync(() => {
+      const v1 = Schema.decodeUnknownSync(ConfigV1.Info)({
+        references: { effect: { repository: "Effect-TS/effect", refresh: "15 minutes" } },
+      })
+      const migrated = ConfigMigrateV1.migrate(v1)
+
+      expect(Schema.decodeUnknownSync(Info)(migrated).references?.effect).toBeDefined()
+      expect(migrated.references?.effect).toEqual({ repository: "Effect-TS/effect", refresh: "900000 millis" })
     }),
   )
 

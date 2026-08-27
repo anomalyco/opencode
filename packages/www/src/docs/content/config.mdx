@@ -408,11 +408,14 @@ context.
     "effect": {
       "repository": "Effect-TS/effect",
       "branch": "main",
+      "refresh": "15 minutes",
     },
   },
 }
 ```
 
+Git references refresh once per hour by default.
+Set `refresh` to a finite positive duration such as `"15 minutes"` to change the interval.
 See the [references guide](/references) for shorthand, visibility, and path resolution.
 
 ### Plugins

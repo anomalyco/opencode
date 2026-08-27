@@ -19,6 +19,7 @@ Configure references by alias in `opencode.json` or `opencode.jsonc`:
     "effect": {
       "repository": "Effect-TS/effect",
       "branch": "main",
+      "refresh": "15 minutes",
       "description": "Use for Effect implementation details",
     },
   },
@@ -71,6 +72,7 @@ Git URLs, host/path forms, and SCP-style remotes are supported.
     "effect": {
       "repository": "Effect-TS/effect",
       "branch": "main",
+      "refresh": "15 minutes",
     },
     "internal-sdk": {
       "repository": "git@gitlab.example.com:platform/sdk.git",
@@ -106,15 +108,18 @@ installation, for example, `Effect-TS/effect` is stored at:
 ~/.local/share/opencode/repos/github.com/Effect-TS/effect
 ```
 
-Missing repositories are cloned. Existing checkouts are fetched and reset to
-the requested branch, or to the remote default branch when `branch` is omitted.
-Materialization runs asynchronously when references load or reload, so a new
-reference can appear before its checkout is ready. Clone and refresh failures
-are logged and do not stop other references from loading.
+Missing repositories are cloned. Existing checkouts are refreshed in the
+background at the configured `refresh` interval, which defaults to one hour,
+then reset to the requested branch, or to the remote default branch when
+`branch` is omitted. Failed refresh attempts retain the existing checkout and
+are not retried until the next interval.
+Materialization runs asynchronously when references load, reload, or attach,
+so a new reference can appear before its checkout is ready. Clone and refresh
+failures are logged and do not stop other references from loading.
 
 <Callout type="warning">
-  The cache has one checkout per normalized remote, not one per branch. Do not configure the same repository at multiple
-  branches; only one branch can be exposed. Avoid editing cached checkouts because a refresh resets them.
+  The cache has one checkout per normalized remote and branch. Avoid editing automatically refreshed checkouts because a
+  refresh resets them.
 </Callout>
 
 ## Description and visibility
@@ -160,6 +165,7 @@ applicable edit permission.
 | `path`        | Required | No       | Local directory path                          |
 | `repository`  | No       | Required | Remote Git repository                         |
 | `branch`      | No       | Optional | Branch to fetch and check out                 |
+| `refresh`     | No       | Optional | Interval between refresh attempts (default: 1 hour) |
 | `description` | Optional | Optional | Guidance describing when agents should use it |
 | `hidden`      | Optional | Optional | Hide it from interactive client selectors     |
 

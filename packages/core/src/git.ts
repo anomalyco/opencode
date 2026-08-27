@@ -77,6 +77,7 @@ export interface Interface {
       directory: AbsolutePath
       branch?: string
       depth?: number
+      nonInteractive?: boolean
     }) => Effect.Effect<Repository, OperationError>
     readonly create: (input: {
       worktree: AbsolutePath
@@ -95,9 +96,13 @@ export interface Interface {
   }
   readonly sync: {
     readonly fetchRemotes: (repository: Repository, input?: { prune?: boolean }) => Effect.Effect<void, OperationError>
+    readonly fetchOrigin: (
+      repository: Repository,
+      input?: { prune?: boolean; nonInteractive?: boolean },
+    ) => Effect.Effect<void, OperationError>
     readonly fetchBranch: (
       repository: Repository,
-      input: { remote?: string; branch: string; force?: boolean },
+      input: { remote?: string; branch: string; force?: boolean; nonInteractive?: boolean },
     ) => Effect.Effect<void, OperationError>
     readonly checkoutRemoteBranch: (
       repository: Repository,
@@ -229,11 +234,12 @@ const layer = Layer.effect(
       operation: OperationError["operation"],
       directory: AbsolutePath,
       args: string[],
+      options?: { nonInteractive?: boolean },
     ) {
       const result = yield* execute(
         directory,
         proc,
-      )(args).pipe(
+      )(args, options).pipe(
         Effect.mapError((cause) => new OperationError({ operation, directory, message: cause.message, cause })),
       )
       if (result.exitCode === 0) return
@@ -249,16 +255,23 @@ const layer = Layer.effect(
       directory: AbsolutePath
       branch?: string
       depth?: number
+      nonInteractive?: boolean
     }) {
-      yield* operation("clone", AbsolutePath.make(path.dirname(input.directory)), [
+      yield* operation(
         "clone",
-        "--depth",
-        String(input.depth ?? 100),
-        ...(input.branch ? ["--branch", input.branch] : []),
-        "--",
-        input.remote,
-        input.directory,
-      ])
+        AbsolutePath.make(path.dirname(input.directory)),
+        [
+          ...(input.nonInteractive ? ["-c", "credential.interactive=false"] : []),
+          "clone",
+          "--depth",
+          String(input.depth ?? 100),
+          ...(input.branch ? ["--branch", input.branch] : []),
+          "--",
+          input.remote,
+          input.directory,
+        ],
+        { nonInteractive: input.nonInteractive },
+      )
       const repository = yield* discover(input.directory)
       if (repository) return repository
       return yield* new OperationError({
@@ -268,20 +281,41 @@ const layer = Layer.effect(
       })
     })
 
-    const fetch = Effect.fn("Git.sync.fetchRemotes")(function* (
-      repository: Repository,
-      input: { prune?: boolean } = {},
-    ) {
+    const fetch = Effect.fn("Git.sync.fetchRemotes")(function* (repository: Repository, input = {}) {
       yield* operation("fetch", repository.worktree, ["fetch", "--all", ...(input.prune === false ? [] : ["--prune"])])
+    })
+
+    const fetchOrigin = Effect.fn("Git.sync.fetchOrigin")(function* (repository: Repository, input = {}) {
+      yield* operation(
+        "fetch",
+        repository.worktree,
+        [
+          ...(input.nonInteractive ? ["-c", "credential.interactive=false"] : []),
+          "fetch",
+          "origin",
+          ...(input.prune === false ? [] : ["--prune"]),
+        ],
+        { nonInteractive: input.nonInteractive },
+      )
     })
 
     const fetchBranch = Effect.fn("Git.sync.fetchBranch")(function* (
       repository: Repository,
-      input: { remote?: string; branch: string; force?: boolean },
+      input: { remote?: string; branch: string; force?: boolean; nonInteractive?: boolean },
     ) {
       const remoteName = input.remote ?? "origin"
       const spec = `refs/heads/${input.branch}:refs/remotes/${remoteName}/${input.branch}`
-      yield* operation("fetch", repository.worktree, ["fetch", remoteName, input.force === false ? spec : `+${spec}`])
+      yield* operation(
+        "fetch",
+        repository.worktree,
+        [
+          ...(input.nonInteractive ? ["-c", "credential.interactive=false"] : []),
+          "fetch",
+          remoteName,
+          input.force === false ? spec : `+${spec}`,
+        ],
+        { nonInteractive: input.nonInteractive },
+      )
     })
 
     const checkout = Effect.fn("Git.sync.checkoutRemoteBranch")(function* (
@@ -689,7 +723,7 @@ const layer = Layer.effect(
       repo: { discover, clone, create },
       remote: { get: remote },
       history: { head, branch, defaultRemoteBranch: remoteHead, rootCommits: roots },
-      sync: { fetchRemotes: fetch, fetchBranch, checkoutRemoteBranch: checkout, resetHard: reset },
+      sync: { fetchRemotes: fetch, fetchOrigin, fetchBranch, checkoutRemoteBranch: checkout, resetHard: reset },
       worktree: { create: worktreeCreate, remove: worktreeRemove, list: worktreeList },
       index: { refresh, ignored },
       tree: {
@@ -717,13 +751,14 @@ function run(cwd: string, proc: AppProcess.Interface) {
 }
 
 function execute(cwd: string, proc: AppProcess.Interface) {
-  return (args: string[]) =>
+  return (args: string[], options?: { nonInteractive?: boolean }) =>
     proc
       .run(
         ChildProcess.make("git", args, {
           cwd,
           extendEnv: true,
           stdin: "ignore",
+          ...(options?.nonInteractive ? { env: { GIT_TERMINAL_PROMPT: "0" } } : {}),
         }),
       )
       .pipe(

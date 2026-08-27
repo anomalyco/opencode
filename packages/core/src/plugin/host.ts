@@ -336,7 +336,8 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
           callback({
             add: (name, source) => draft.add(name, Schema.decodeUnknownSync(Reference.Source)(source)),
             remove: draft.remove,
-            list: draft.list,
+            list: () =>
+              draft.list().map(([name, source]) => [name, Schema.encodeSync(Reference.Source)(source)]),
           })
         }),
     },

@@ -41,6 +41,19 @@ describe("Repository", () => {
     })
   })
 
+  test("preserves SSH GitHub remotes", () => {
+    expect(Repository.parseRemote("ssh://git@github.com/owner/repo.git")).toMatchObject({
+      host: "github.com",
+      path: "owner/repo",
+      remote: "ssh://git@github.com/owner/repo.git",
+    })
+    expect(Repository.parseRemote("git+ssh://git@github.com/owner/repo.git")).toMatchObject({
+      host: "github.com",
+      path: "owner/repo",
+      remote: "ssh://git@github.com/owner/repo.git",
+    })
+  })
+
   test("keeps local file repositories distinct from remote repositories", () => {
     const localPath = path.resolve("repo.git")
     const reference = Repository.parse(pathToFileURL(localPath).href)

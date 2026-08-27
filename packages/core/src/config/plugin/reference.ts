@@ -4,7 +4,7 @@ import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Document } from "@opencode-ai/schema/config"
 import { ConfigReference } from "@opencode-ai/schema/config/reference"
 import path from "path"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { Config } from "../../config.js"
 import { Reference } from "../../reference.js"
 import { AbsolutePath } from "../../schema.js"
@@ -20,7 +20,7 @@ export const Plugin = define({
     const global = yield* Global.Service
     const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.reference.reload())
     yield* ctx.reference.transform((draft) => {
-      const entries = new Map<string, Reference.Source>()
+      const entries = new Map<string, Parameters<typeof draft.add>[1]>()
       for (const doc of loaded.entries.filter((entry): entry is Document => entry.type === "document")) {
         const directory = doc.path ? path.dirname(doc.path) : location.directory
         for (const [name, entry] of Object.entries(doc.info.references ?? {})) {
@@ -38,13 +38,16 @@ export const Plugin = define({
                   ...(description === undefined ? {} : { description }),
                   ...(hidden === undefined ? {} : { hidden }),
                 })
-              : Reference.GitSource.make({
-                  type: "git",
-                  repository: typeof entry === "string" ? entry : entry.repository,
-                  ...(entry.branch === undefined ? {} : { branch: entry.branch }),
-                  ...(description === undefined ? {} : { description }),
-                  ...(hidden === undefined ? {} : { hidden }),
-                }),
+              : Schema.encodeSync(Reference.GitSource)(
+                  Reference.GitSource.make({
+                    type: "git",
+                    repository: entry.repository,
+                    ...(entry.branch === undefined ? {} : { branch: entry.branch }),
+                    ...(entry.refresh === undefined ? {} : { refresh: entry.refresh }),
+                    ...(description === undefined ? {} : { description }),
+                    ...(hidden === undefined ? {} : { hidden }),
+                  }),
+                ),
           )
         }
       }

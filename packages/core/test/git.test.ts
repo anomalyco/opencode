@@ -6,7 +6,7 @@ import { Effect } from "effect"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Git } from "@opencode-ai/core/git"
 import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
-import { branch, commit, gitRemote } from "./fixture/git"
+import { branch, commit, git, gitRemote } from "./fixture/git"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
@@ -70,6 +70,34 @@ describe("Git", () => {
         yield* git.sync.resetHard(repository, "origin/feature/docs")
         expect(yield* git.history.branch(repository)).toBe("feature/docs")
         expect(yield* read(path.join(target, "README.md"))).toBe("feature\n")
+      }),
+    ),
+  )
+
+  it.live("fetches all remotes by default", () =>
+    withRemote((fixture) =>
+      Effect.gen(function* () {
+        const service = yield* Git.Service
+        const target = AbsolutePath.make(path.join(fixture.root, "checkout"))
+        const repository = yield* service.repo.clone({ remote: fixture.remote, directory: target })
+        yield* Effect.promise(() => git(target, "remote", "add", "other", path.join(fixture.root, "missing.git")))
+
+        const error = yield* Effect.flip(service.sync.fetchRemotes(repository))
+
+        expect(error.operation).toBe("fetch")
+      }),
+    ),
+  )
+
+  it.live("fetches only origin when requested", () =>
+    withRemote((fixture) =>
+      Effect.gen(function* () {
+        const service = yield* Git.Service
+        const target = AbsolutePath.make(path.join(fixture.root, "checkout"))
+        const repository = yield* service.repo.clone({ remote: fixture.remote, directory: target })
+        yield* Effect.promise(() => git(target, "remote", "add", "other", path.join(fixture.root, "missing.git")))
+
+        yield* service.sync.fetchOrigin(repository)
       }),
     ),
   )

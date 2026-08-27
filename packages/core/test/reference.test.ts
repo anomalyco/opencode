@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Effect, Exit, Layer, Scope } from "effect"
+import { Duration, Effect, Exit, Layer, Scope } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -10,7 +10,7 @@ import { RepositoryCache } from "@opencode-ai/core/repository-cache"
 import { it } from "./lib/effect"
 
 const cache = Layer.mock(RepositoryCache.Service, {
-  ensure: () => Effect.die("unexpected Git materialization"),
+  ensure: () => Effect.never,
 })
 const referenceLayer = AppNodeBuilder.build(Reference.node, [[RepositoryCache.node, cache]])
 
@@ -37,11 +37,16 @@ describe("Reference", () => {
     }).pipe(Effect.provide(referenceLayer)),
   )
 
-  it.effect("derives Git paths without exposing cache operations", () =>
+  it.effect("derives Git paths while materializing asynchronously", () =>
     Effect.gen(function* () {
       const references = yield* Reference.Service
       const repository = Repository.parseRemote("owner/repo")
-      const source = Reference.GitSource.make({ type: "git", repository: "owner/repo", branch: "main" })
+      const source = Reference.GitSource.make({
+        type: "git",
+        repository: "owner/repo",
+        branch: "main",
+        refresh: Duration.minutes(15),
+      })
       yield* references.transform((editor) => editor.add("sdk", source))
 
       expect(yield* references.list()).toEqual([
@@ -73,6 +78,22 @@ describe("Reference", () => {
           source,
         }),
       ])
+    }).pipe(Effect.scoped, Effect.provide(referenceLayer)),
+  )
+
+  it.effect("rejects non-finite or non-positive Git refresh intervals", () =>
+    Effect.gen(function* () {
+      const references = yield* Reference.Service
+      yield* Effect.forEach([Duration.zero, Duration.infinity], (refresh, index) =>
+        references.transform((editor) =>
+          editor.add(
+            `sdk-${index}`,
+            Reference.GitSource.make({ type: "git", repository: "owner/repo", refresh }),
+          ),
+        ),
+      )
+
+      expect(yield* references.list()).toEqual([])
     }).pipe(Effect.scoped, Effect.provide(referenceLayer)),
   )
 })

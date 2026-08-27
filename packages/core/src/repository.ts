@@ -67,7 +67,7 @@ export function parse(input: string): Reference | undefined {
     return buildRemote({
       host: url.host,
       segments,
-      remote: url.host === "github.com" ? githubRemote(segments.join("/")) : cleaned,
+      remote: url.host === "github.com" && url.protocol !== "ssh:" ? githubRemote(segments.join("/")) : cleaned,
       protocol: url.protocol,
     })
   } catch {

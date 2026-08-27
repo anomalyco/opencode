@@ -2,6 +2,7 @@ export * as ConfigMigrateV1 from "./migrate.js"
 
 import { Info } from "@opencode-ai/schema/config"
 import { ConfigAgent } from "@opencode-ai/schema/config/agent"
+import { ConfigReference } from "@opencode-ai/schema/config/reference"
 import { Schema } from "effect"
 import { ConfigV1 } from "./config.js"
 import { ConfigAgentV1 } from "./agent.js"
@@ -18,6 +19,7 @@ const decodeInfo = Schema.decodeUnknownSync(Schema.fromJsonString(Info), decodeO
 const encodeInfo = Schema.encodeSync(Info)
 const decodeAgent = Schema.decodeUnknownSync(Schema.fromJsonString(ConfigAgent.Info), decodeOptions)
 const encodeAgent = Schema.encodeSync(ConfigAgent.Info)
+const encodeReference = Schema.encodeSync(ConfigReference.Info)
 export function migrate(info: typeof ConfigV1.Info.Type) {
   return encodeInfo(
     decodeInfo(
@@ -50,7 +52,7 @@ export function migrate(info: typeof ConfigV1.Info.Type) {
         skills: info.skills && [...(info.skills.paths ?? []), ...(info.skills.urls ?? [])],
         commands: commands(info.command),
         instructions: info.instructions,
-        references: info.references ?? info.reference,
+        references: info.references ? encodeReference(info.references) : info.reference ? encodeReference(info.reference) : undefined,
         experimental: experimental(info),
         plugins: info.plugin?.map((plugin) =>
           typeof plugin === "string" ? plugin : { package: plugin[0], options: plugin[1] },

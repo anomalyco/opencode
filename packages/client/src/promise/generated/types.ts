@@ -397,6 +397,7 @@ export type ReferenceGitSource = {
   type: "git"
   repository: string
   branch?: string
+  refresh?: string
   description?: string
   hidden?: boolean
 }
@@ -1958,7 +1959,7 @@ export type ConfigEntry =
         references?: {
           [x: string]:
             | string
-            | { repository: string; branch?: string; description?: string; hidden?: boolean }
+            | { repository: string; branch?: string; refresh?: string; description?: string; hidden?: boolean }
             | { path: string; description?: string; hidden?: boolean }
         }
         websearch?: false | { provider: "random" | (string & {}) }
