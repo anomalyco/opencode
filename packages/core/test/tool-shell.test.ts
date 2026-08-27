@@ -1298,6 +1298,17 @@ describe("ShellTool", () => {
             const shell = yield* Shell.Service
             if (!shellID) return
             const id = ShellSchema.ID.make(shellID)
+            const info = yield* shell.get(id)
+            expect(settled.content).toEqual([
+              {
+                type: "text",
+                text: `Command moved to the background (shell ID: ${shellID}).\nOutput is streaming to: ${info.file}`,
+              },
+              {
+                type: "text",
+                text: "You will be notified when the command finishes. Avoid checking its progress unless you need the output before completion.",
+              },
+            ])
             expect((yield* shell.list()).map((info) => info.id)).toContain(id)
             expect((yield* shell.wait(id)).status).toBe("timeout")
             expect((yield* Fiber.join(admitted)).valueOrUndefined?.data.item.payload).toMatchObject({
@@ -1523,19 +1534,20 @@ describe("ShellTool", () => {
             const settled = yield* Fiber.join(waiting)
             const shellID = typeof settled.metadata?.shellID === "string" ? settled.metadata.shellID : undefined
             expect(settled.metadata).toMatchObject({ truncated: false })
-            expect(settled.content?.[0]).toEqual({
-              type: "text",
-              text: "The command was moved to the background.",
-            })
-            expect(settled.content?.[1]).toMatchObject({
-              type: "text",
-              text: expect.stringContaining("DO NOT sleep, poll"),
-            })
             expect(shellID).toStartWith("sh_")
 
             const shell = yield* Shell.Service
             if (!shellID) return
             const id = ShellSchema.ID.make(shellID)
+            const info = yield* shell.get(id)
+            expect(settled.content?.[0]).toEqual({
+              type: "text",
+              text: `Command moved to the background (shell ID: ${shellID}).\nOutput is streaming to: ${info.file}`,
+            })
+            expect(settled.content?.[1]).toEqual({
+              type: "text",
+              text: "You will be notified when the command finishes. Avoid checking its progress unless you need the output before completion.",
+            })
             yield* Effect.sleep(Duration.millis(100))
             expect((yield* shell.get(id)).status).toBe("running")
             expect((yield* shell.list()).map((info) => info.id)).toContain(id)
