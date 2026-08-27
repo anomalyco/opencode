@@ -42,8 +42,8 @@ export const commit = Effect.fn("InstructionState.commit")(function* (
   observation: Observation,
 ) {
   if (!observation.initial && Object.keys(observation.delta).length === 0) return
-  // The rendered text is frozen into the durable event: replaying it later would
-  // require the Location-scoped registry that produced it.
+  // The rendered text is frozen into the durable event because re-rendering it
+  // later would require the original Location-scoped instruction sources.
   const text = observation.initial ? "" : yield* renderUpdateText(db, instructions, observation)
   yield* bus.publish(
     SessionEvent.InstructionsUpdated,
