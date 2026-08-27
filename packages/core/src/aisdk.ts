@@ -482,8 +482,7 @@ function toolMessage(input: LLMRequest["messages"][number]) {
     const value = part.result.value.filter((item) => {
       if (item.type !== "file") return true
       if (!item.mime.startsWith("image/") && item.mime !== "application/pdf") return true
-      const data = /^data:[^;,]+(?:;[^,]*)*;base64,(.*)$/s.exec(item.uri)?.[1] ?? item.uri
-      media.push({ type: "file", mediaType: item.mime, data, filename: item.name })
+      media.push({ type: "file", mediaType: item.mime, data: fileData(item.uri), filename: item.name })
       return false
     })
     return toolResultPart({
@@ -507,7 +506,7 @@ function text(part: ContentPart) {
 function userPart(part: ContentPart): UserContent {
   if (part.type === "text") return [{ type: "text", text: part.text }]
   if (part.type === "media")
-    return [{ type: "file", mediaType: part.mediaType, data: part.data, filename: part.filename }]
+    return [{ type: "file", mediaType: part.mediaType, data: fileData(part.data), filename: part.filename }]
   return []
 }
 
@@ -516,7 +515,7 @@ function assistantPart(part: ContentPart): AssistantContent {
     case "text":
       return [{ type: "text", text: part.text }]
     case "media":
-      return [{ type: "file", mediaType: part.mediaType, data: part.data, filename: part.filename }]
+      return [{ type: "file", mediaType: part.mediaType, data: fileData(part.data), filename: part.filename }]
     case "reasoning":
       return [{ type: "reasoning", text: part.text, providerOptions: metadataProviderOptions(part.providerMetadata) }]
     case "tool-call":
@@ -533,6 +532,15 @@ function assistantPart(part: ContentPart): AssistantContent {
     case "tool-result":
       return toolResultPart(part)
   }
+}
+
+function fileData(data: Extract<ContentPart, { type: "media" }>["data"]) {
+  if (typeof data !== "string") return data
+  const base64 = /^data:[^;,]+(?:;[^,]*)*;base64,(.*)$/s.exec(data)?.[1]
+  if (base64 !== undefined) return base64
+  if (!URL.canParse(data)) return data
+  const url = new URL(data)
+  return url.protocol === "http:" || url.protocol === "https:" ? url : data
 }
 
 function toolResultPart(part: ContentPart): ToolResultContent[] {

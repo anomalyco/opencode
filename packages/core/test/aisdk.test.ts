@@ -363,7 +363,100 @@ it.effect("projects replay metadata onto AI SDK prompt parts", () =>
   }),
 )
 
-it.effect("moves a tool image through the real Mistral provider as a user message", () =>
+it.effect("normalizes file data across AI SDK prompt parts", () =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    yield* aisdk.hook.sdk((event) => {
+      event.sdk = { languageModel: () => ({ provider: event.model.providerID }) }
+    })
+
+    const resolved = yield* aisdk.model(model("opaque-provider"))
+    const bytes = new Uint8Array([0, 1, 2, 3])
+    const prepared = yield* compileRequest(
+      LLM.request({
+        model: resolved,
+        messages: [
+          Message.user([
+            { type: "media", mediaType: "image/png", data: bytes, filename: "bytes.png" },
+            { type: "media", mediaType: "image/png", data: "AAAA", filename: "base64.png" },
+            {
+              type: "media",
+              mediaType: "image/png",
+              data: "data:image/png;charset=utf-8;base64,AQID",
+              filename: "inline.png",
+            },
+            { type: "media", mediaType: "image/png", data: "https://example.com/image.png" },
+            { type: "media", mediaType: "image/png", data: "s3://bucket/image.png" },
+          ]),
+          Message.assistant({
+            type: "media",
+            mediaType: "application/pdf",
+            data: "http://example.com/document.pdf",
+            filename: "document.pdf",
+          }),
+          Message.tool({
+            id: "call_1",
+            name: "screenshot",
+            result: {
+              type: "content",
+              value: [{ type: "file", uri: "data:image/png;base64,BAUG", mime: "image/png", name: "tool.png" }],
+            },
+          }),
+        ],
+      }),
+    )
+
+    expect(prepared.body.prompt).toEqual([
+      {
+        role: "user",
+        content: [
+          { type: "file", mediaType: "image/png", data: bytes, filename: "bytes.png" },
+          { type: "file", mediaType: "image/png", data: "AAAA", filename: "base64.png" },
+          { type: "file", mediaType: "image/png", data: "AQID", filename: "inline.png" },
+          {
+            type: "file",
+            mediaType: "image/png",
+            data: new URL("https://example.com/image.png"),
+            filename: undefined,
+          },
+          { type: "file", mediaType: "image/png", data: "s3://bucket/image.png", filename: undefined },
+        ],
+      },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "file",
+            mediaType: "application/pdf",
+            data: new URL("http://example.com/document.pdf"),
+            filename: "document.pdf",
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call_1",
+            toolName: "screenshot",
+            output: { type: "text", value: "Media attached in the following user message." },
+            providerOptions: undefined,
+          },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Attached media from tool result:" },
+          { type: "file", mediaType: "image/png", data: "BAUG", filename: "tool.png" },
+        ],
+      },
+    ])
+  }),
+)
+
+it.effect("normalizes user and tool media through the real Mistral provider", () =>
   Effect.gen(function* () {
     const aisdk = yield* AISDK.Service
     let body: { messages?: unknown[] } | undefined
@@ -403,7 +496,14 @@ it.effect("moves a tool image through the real Mistral provider as a user messag
       LLM.request({
         model: resolved,
         messages: [
-          Message.user("Inspect the screenshot."),
+          Message.user([
+            { type: "text", text: "Inspect the attachments." },
+            { type: "media", mediaType: "image/png", data: new Uint8Array([0, 1, 2, 3]) },
+            { type: "media", mediaType: "image/png", data: "AQID" },
+            { type: "media", mediaType: "image/png", data: "data:image/png;base64,BAUG" },
+            { type: "media", mediaType: "image/png", data: "http://example.com/image.png" },
+            { type: "media", mediaType: "application/pdf", data: "https://example.com/document.pdf" },
+          ]),
           Message.assistant({ type: "tool-call", id: "call_1", name: "screenshot", input: {} }),
           Message.tool({
             type: "tool-result",
@@ -414,6 +514,12 @@ it.effect("moves a tool image through the real Mistral provider as a user messag
               value: [
                 { type: "text", text: "Screenshot captured" },
                 { type: "file", uri: "data:image/png;base64,AAAA", mime: "image/png", name: "screen.png" },
+                {
+                  type: "file",
+                  uri: "https://example.com/tool-document.pdf",
+                  mime: "application/pdf",
+                  name: "tool-document.pdf",
+                },
               ],
             },
           }),
@@ -422,7 +528,17 @@ it.effect("moves a tool image through the real Mistral provider as a user messag
     ).pipe(Effect.provide(client))
 
     expect(body?.messages).toEqual([
-      { role: "user", content: [{ type: "text", text: "Inspect the screenshot." }] },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Inspect the attachments." },
+          { type: "image_url", image_url: "data:image/png;base64,AAECAw==" },
+          { type: "image_url", image_url: "data:image/png;base64,AQID" },
+          { type: "image_url", image_url: "data:image/png;base64,BAUG" },
+          { type: "image_url", image_url: "http://example.com/image.png" },
+          { type: "document_url", document_url: "https://example.com/document.pdf" },
+        ],
+      },
       {
         role: "assistant",
         content: "",
@@ -445,6 +561,7 @@ it.effect("moves a tool image through the real Mistral provider as a user messag
         content: [
           { type: "text", text: "Attached media from tool result:" },
           { type: "image_url", image_url: "data:image/png;base64,AAAA" },
+          { type: "document_url", document_url: "https://example.com/tool-document.pdf" },
         ],
       },
     ])
