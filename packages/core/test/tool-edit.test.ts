@@ -16,7 +16,7 @@ import { Tool } from "@opencode-ai/core/tool"
 import { EditTool } from "@opencode-ai/core/tool/plugin/edit"
 import { transformEnvironmentFiles } from "./fixture/environment"
 import { location } from "./fixture/location"
-import { tmpdir } from "./fixture/tmpdir"
+import { tmpdir, withTempDir } from "./fixture/tmpdir"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { testEffect } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
@@ -138,12 +138,6 @@ const call = (input: typeof EditTool.Input.Type, id = "call-edit") => ({
 })
 
 const it = testEffect(Layer.empty)
-const withTempDir = <A, E, R>(body: (tmp: Awaited<ReturnType<typeof tmpdir>>) => Effect.Effect<A, E, R>) =>
-  Effect.acquireUseRelease(
-    Effect.promise(() => tmpdir()),
-    body,
-    (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-  )
 
 describe("EditTool", () => {
   it.live("registers and replaces relative exact text through FileMutation once", () =>
