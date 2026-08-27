@@ -18,6 +18,11 @@ const selected = Info.make({
   package: Provider.aisdk("@ai-sdk/mistral"),
 })
 const runtime = LanguageModel.make({ id: "gemini", provider: "test-provider", route: OpenAIChat.route })
+const bedrock = Info.make({
+  ...Info.default(Provider.ID.amazonBedrock, ID.make("bedrock-model")),
+  package: Provider.aisdk("@ai-sdk/amazon-bedrock"),
+  settings: { region: "" },
+})
 
 const catalog = Layer.mock(Catalog.Service, {
   provider: {
@@ -26,7 +31,7 @@ const catalog = Layer.mock(Catalog.Service, {
     available: () => Effect.die("unused"),
   },
   model: {
-    get: () => Effect.succeed(selected),
+    get: (_providerID, modelID) => Effect.succeed(modelID === bedrock.id ? bedrock : selected),
     all: () => Effect.die("unused"),
     available: () => Effect.die("unused"),
     default: () => Effect.die("unused"),
@@ -95,5 +100,21 @@ resolverIt.effect("resolves dynamic models with their catalog metadata", () =>
       cost: selected.cost,
       limit: selected.limit,
     })
+  }),
+)
+
+it.effect("reports missing Bedrock region as a configuration failure rather than an unsupported package", () =>
+  Effect.gen(function* () {
+    const generate = yield* Generate.Service
+    const error = yield* generate
+      .text({
+        prompt: "Hi",
+        model: Ref.make({ providerID: bedrock.providerID, id: bedrock.id }),
+      })
+      .pipe(Effect.flip)
+
+    expect(error).toBeInstanceOf(Generate.UnavailableError)
+    expect(error.message).toContain("Set region or AWS_REGION")
+    expect(error.message).not.toContain("Unsupported package")
   }),
 )

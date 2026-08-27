@@ -335,6 +335,8 @@ OpenAI Responses has one semantic route and uses HTTP by default. Advanced calle
 
 Vertex Gemini, Vertex Chat, Vertex Responses, and Vertex Messages are separate API entrypoints. All accept `project`, `location`, and an optional `accessToken`; when no explicit token or auth override is supplied they lazily use Google Application Default Credentials. Vertex Gemini instead selects express mode when `apiKey` or `GOOGLE_VERTEX_API_KEY` is present. Vertex Chat targets MaaS models through the OpenAI-compatible Chat Completions endpoint, while Vertex Responses targets Grok models and defaults `store` to `false` as required by Vertex. `providers/google-vertex` remains the default alias for `providers/google-vertex/gemini`.
 
+Bedrock Converse and Mantle resolve the region from explicit `region`, then existing `credentials.region`, then `AWS_REGION`; there is no default region. Missing or blank regions fail with a typed configuration error when selecting a model, not when importing the package or creating an unconfigured facade. A custom `baseURL` with bearer `apiKey` authentication can omit the region because neither endpoint construction nor signing needs it. SigV4 still requires a region, and the resolved region is used for both the generated endpoint and signing. AWS profile-region discovery and credential refresh are not provided by this resolution step.
+
 Tuned Vertex Gemini deployments use model ids shaped like `endpoints/1234567890` and require OAuth or ADC; Vertex express-mode API keys support publisher models only.
 
 ```ts

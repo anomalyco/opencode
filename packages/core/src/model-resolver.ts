@@ -1,8 +1,10 @@
 export * as ModelResolver from "./model-resolver.js"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { LanguageModel } from "@opencode-ai/ai"
+import { AIError, LanguageModel } from "@opencode-ai/ai"
+import { BedrockRegion } from "@opencode-ai/ai/providers/amazon-bedrock-region"
 import { Auth } from "@opencode-ai/ai/route"
+import { isRecord } from "@opencode-ai/ai/utils/record"
 import { Context, Effect, Layer, Schema } from "effect"
 import { produce } from "immer"
 import { AISDK } from "./aisdk.js"
@@ -54,6 +56,7 @@ export class UnresolvedProviderVariablesError extends Schema.TaggedError<Unresol
 }
 
 export type Error =
+  | AIError
   | VariantUnavailableError
   | UnsupportedPackageError
   | UnresolvedProviderVariablesError
@@ -113,7 +116,7 @@ export const fromCatalogModel = (
   model: Info,
   credential?: Credential.Value,
   dependencies?: Dependencies,
-): Effect.Effect<LanguageModel, UnsupportedPackageError | UnresolvedProviderVariablesError> =>
+): Effect.Effect<LanguageModel, AIError | UnsupportedPackageError | UnresolvedProviderVariablesError> =>
   resolveCatalogModel(model, credential, dependencies).pipe(
     Effect.flatMap((resolved) => validateProviderVariables(model, resolved)),
   )
@@ -175,7 +178,7 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
           : runtime.compatibility,
       })
     },
-    catch: () => unsupported(resolved),
+    catch: (error) => (error instanceof AIError ? error : unsupported(resolved)),
   })
 })
 
@@ -204,7 +207,15 @@ function prepareProviderSettings(
 ): Effect.Effect<Readonly<Record<string, unknown>>, UnresolvedProviderVariablesError> {
   const baseURL = settings.baseURL
   if (typeof baseURL !== "string") return Effect.succeed(settings)
-  return prepareProviderURL(model, baseURL).pipe(
+  const region = model.package?.startsWith("@opencode-ai/ai/providers/amazon-bedrock")
+    ? BedrockRegion.resolve(
+        typeof settings.region === "string" ? settings.region : undefined,
+        isRecord(settings.credentials) && typeof settings.credentials.region === "string"
+          ? settings.credentials.region
+          : undefined,
+      )
+    : undefined
+  return prepareProviderURL(model, region === undefined ? baseURL : baseURL.replaceAll("${AWS_REGION}", region)).pipe(
     Effect.map((prepared) => (prepared === baseURL ? settings : { ...settings, baseURL: prepared })),
   )
 }

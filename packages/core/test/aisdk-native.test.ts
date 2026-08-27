@@ -268,6 +268,7 @@ describe("AISDKNative", () => {
           region: "eu-west-1",
         },
         baseURL: "https://bedrock-mantle.eu-west-1.api.aws/v1",
+        region: "eu-west-1",
         providerOptions: { store: false },
       },
     })

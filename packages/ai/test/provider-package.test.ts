@@ -36,7 +36,7 @@ describe("provider package entrypoints", () => {
     expect(modules[0].model).toBe(modules[1].model)
     expect(modules[8].model).toBe(modules[9].model)
     expect(modules[12].model).toBe(modules[13].model)
-    expect(modules[19].model).toBe(modules[20].model)
+    expect(modules[19].model).toBe(modules[21].model)
   })
 
   test("maps DeepInfra package settings onto its native executable model", async () => {

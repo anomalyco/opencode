@@ -4,6 +4,7 @@ import type { ProviderPackage } from "../provider-package.js"
 import { ProviderID, type ModelID } from "../schema/index.js"
 import * as BedrockConverse from "../protocols/bedrock-converse.js"
 import type { BedrockCredentials } from "../protocols/bedrock-converse.js"
+import { BedrockRegion } from "./amazon-bedrock-region.js"
 
 export const id = ProviderID.make("amazon-bedrock")
 
@@ -11,7 +12,7 @@ export type Config = RouteDefaultsInput & {
   readonly apiKey?: string
   readonly headers?: Record<string, string>
   readonly credentials?: BedrockCredentials
-  /** AWS region. Defaults to `us-east-1` when neither this nor `credentials.region` is set. */
+  /** AWS region. Falls back to `credentials.region`, then `AWS_REGION`. */
   readonly region?: string
   /** Override the computed `https://bedrock-runtime.<region>.amazonaws.com` URL. */
   readonly baseURL?: string
@@ -27,25 +28,29 @@ export interface Settings extends ProviderPackage.Settings {
 }
 export const routes = [BedrockConverse.route]
 
-const bedrockBaseURL = (region: string) => `https://bedrock-runtime.${region}.amazonaws.com`
-
 const configuredRoute = (input: Config) => {
   const { apiKey, credentials, region, baseURL, ...rest } = input
-  const resolvedRegion = region ?? credentials?.region ?? "us-east-1"
+  const resolvedRegion = BedrockRegion.resolve(region, credentials?.region)
+  if (resolvedRegion !== undefined || baseURL === undefined || apiKey === undefined)
+    BedrockRegion.require(resolvedRegion, "Amazon Bedrock")
   return BedrockConverse.route.with({
     ...rest,
     provider: id,
     providerMetadataKey: "bedrock",
-    endpoint: { baseURL: baseURL ?? bedrockBaseURL(resolvedRegion) },
-    auth: apiKey === undefined ? BedrockConverse.sigV4Auth(credentials) : Auth.bearer(apiKey),
+    endpoint: { baseURL: baseURL ?? `https://bedrock-runtime.${resolvedRegion}.amazonaws.com` },
+    auth:
+      apiKey === undefined
+        ? BedrockConverse.sigV4Auth(
+            credentials === undefined ? undefined : { ...credentials, region: resolvedRegion ?? credentials.region },
+          )
+        : Auth.bearer(apiKey),
   })
 }
 
 export const configure = (input: Config = {}) => {
-  const route = configuredRoute(input)
   return {
     id,
-    model: (modelID: string | ModelID) => route.model({ id: modelID }),
+    model: (modelID: string | ModelID) => configuredRoute(input).model({ id: modelID }),
     configure,
   }
 }

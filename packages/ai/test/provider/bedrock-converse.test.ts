@@ -858,6 +858,7 @@ describe("Bedrock Converse route", () => {
     Effect.gen(function* () {
       const unsignedModel = AmazonBedrock.configure({
         baseURL: "https://bedrock-runtime.test",
+        region: "us-east-1",
       }).model("anthropic.claude-3-5-sonnet-20240620-v1:0")
       const error = yield* LLMClient.generate(LLMRequest.update(baseRequest, { model: unsignedModel })).pipe(
         Effect.provide(fixedBytes(eventStreamBody(["messageStop", { stopReason: "end_turn" }]))),

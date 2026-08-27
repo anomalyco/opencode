@@ -6,6 +6,7 @@ import { OpenAIResponses } from "../protocols/openai-responses.js"
 import { BedrockAuth, type Credentials } from "../protocols/utils/bedrock-auth.js"
 import { ProviderID, type ModelID } from "../schema/index.js"
 import { withOpenAIOptions, type OpenAIProviderOptionsInput } from "./openai-options.js"
+import { BedrockRegion } from "./amazon-bedrock-region.js"
 
 export const id = ProviderID.make("amazon-bedrock")
 
@@ -13,6 +14,7 @@ export type Config = RouteDefaultsInput & {
   readonly apiKey?: string
   readonly baseURL?: string
   readonly credentials?: Credentials
+  /** AWS region. Falls back to `credentials.region`, then `AWS_REGION`. */
   readonly region?: string
   readonly providerOptions?: OpenAIProviderOptionsInput
 }
@@ -47,8 +49,11 @@ const chatRoute = OpenAIChat.route.with({
 export const routes = [responsesRoute, chatRoute]
 
 const configuredRoute = <Body, Prepared>(route: Route<Body, Prepared>, input: Config) => {
-  const region = input.region ?? input.credentials?.region ?? "us-east-1"
-  const credentials = input.credentials === undefined ? undefined : { ...input.credentials, region }
+  const region = BedrockRegion.resolve(input.region, input.credentials?.region)
+  if (region !== undefined || input.baseURL === undefined || input.apiKey === undefined)
+    BedrockRegion.require(region, "Amazon Bedrock Mantle")
+  const credentials =
+    input.credentials === undefined ? undefined : { ...input.credentials, region: region ?? input.credentials.region }
   return route.with({
     endpoint: { baseURL: input.baseURL ?? `https://bedrock-mantle.${region}.api.aws/v1` },
     auth:
@@ -64,15 +69,13 @@ const defaults = (input: Config) => {
 }
 
 export const configure = (input: Config = {}) => {
-  const configuredResponsesRoute = configuredRoute(responsesRoute, input)
-  const configuredChatRoute = configuredRoute(chatRoute, input)
   const modelDefaults = defaults(input)
   const responses = (modelID: string | ModelID) =>
-    configuredResponsesRoute
+    configuredRoute(responsesRoute, input)
       .with(withOpenAIOptions(modelID, modelDefaults))
       .model<OpenAIProviderOptionsInput>({ id: modelID })
   const chat = (modelID: string | ModelID) =>
-    configuredChatRoute
+    configuredRoute(chatRoute, input)
       .with(withOpenAIOptions(modelID, modelDefaults))
       .model<OpenAIProviderOptionsInput>({ id: modelID })
 

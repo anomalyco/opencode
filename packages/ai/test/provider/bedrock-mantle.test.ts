@@ -47,7 +47,7 @@ describe("Amazon Bedrock Mantle provider", () => {
 
   it.effect("preserves configured top-p generation defaults for Chat and Responses", () =>
     Effect.gen(function* () {
-      const settings = { apiKey: "test-key", topP: 0.8 }
+      const settings = { apiKey: "test-key", region: "us-east-1", topP: 0.8 }
       const chat = yield* compileRequest(
         LLM.request({ model: AmazonBedrockMantle.chatModel("openai.gpt-oss-safeguard-20b", settings), prompt: "Hi" }),
       )
@@ -109,7 +109,9 @@ describe("Amazon Bedrock Mantle provider", () => {
 
   it.effect("replays reasoning with Mantle's message-prefixed item ids", () =>
     Effect.gen(function* () {
-      const model = AmazonBedrockMantle.configure({ apiKey: "test-key" }).responses("openai.gpt-oss-120b")
+      const model = AmazonBedrockMantle.configure({ apiKey: "test-key", region: "us-east-1" }).responses(
+        "openai.gpt-oss-120b",
+      )
       const item = { type: "reasoning", id: "msg_95d4d0af4350432a", encrypted_content: "mantle-state" }
       const response = yield* LLMClient.generate(LLM.request({ model, prompt: "Think." })).pipe(
         Effect.provide(

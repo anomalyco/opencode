@@ -1,6 +1,7 @@
 export * as AISDKNative from "./aisdk-native.js"
 
 import { isRecord } from "@opencode-ai/ai/utils/record"
+import { BedrockRegion } from "@opencode-ai/ai/providers/amazon-bedrock-region"
 import { Provider } from "./provider.js"
 
 export interface Mapping {
@@ -178,17 +179,15 @@ function mapBedrockSettings(
         : undefined
   const region = bedrockRegion(settings)
   const credentials = mapBedrockCredentials(settings, region)
+  const baseURL = typeof baseSettings.baseURL === "string" ? baseSettings.baseURL : settings.endpoint
   return {
     ...baseSettings,
-    ...(typeof baseSettings.baseURL === "string" && region !== undefined
-      ? { baseURL: baseSettings.baseURL.replaceAll("${AWS_REGION}", region) }
-      : {}),
-    ...(typeof settings.baseURL !== "string" && typeof settings.endpoint === "string"
-      ? { baseURL: settings.endpoint }
+    ...(typeof baseURL === "string"
+      ? { baseURL: region === undefined ? baseURL : baseURL.replaceAll("${AWS_REGION}", region) }
       : {}),
     ...(apiKey === undefined ? {} : { apiKey }),
     ...(credentials === undefined ? {} : { credentials }),
-    ...(typeof settings.region === "string" ? { region: settings.region } : {}),
+    ...(region === undefined ? {} : { region }),
     ...(typeof settings.topP === "number" ? { topP: settings.topP } : {}),
   }
 }
@@ -265,11 +264,10 @@ function mapBedrockCredentials(settings: Readonly<Record<string, unknown>>, regi
 
 function bedrockRegion(settings: Readonly<Record<string, unknown>>) {
   const credentials = isRecord(settings.credentials) ? settings.credentials : settings
-  return typeof settings.region === "string"
-    ? settings.region
-    : typeof credentials.region === "string"
-      ? credentials.region
-      : undefined
+  return BedrockRegion.resolve(
+    typeof settings.region === "string" ? settings.region : undefined,
+    typeof credentials.region === "string" ? credentials.region : undefined,
+  )
 }
 
 function mapOpenAIOptions(settings: Readonly<Record<string, unknown>>) {

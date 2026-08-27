@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { LLM, LanguageModel, Message } from "@opencode-ai/ai"
+import { AIError, LLM, LanguageModel, Message } from "@opencode-ai/ai"
 import { OpenAIChat } from "@opencode-ai/ai/protocols"
 import { compileRequest } from "@opencode-ai/ai/route/client"
 import { ConfigProvider, Effect, Layer } from "effect"
@@ -9,6 +9,7 @@ import { Integration } from "@opencode-ai/core/integration"
 import { Compatibility, ID, Info, VariantID } from "@opencode-ai/core/model"
 import { Provider } from "@opencode-ai/core/provider"
 import { ModelResolver } from "@opencode-ai/core/model-resolver"
+import { toSessionError } from "@opencode-ai/core/session/to-session-error"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { AISDK } from "@opencode-ai/core/aisdk"
 import { Npm } from "@opencode-ai/util/npm"
@@ -213,6 +214,103 @@ describe("ModelResolver", () => {
         )
 
         expect(resolved.route.endpoint.baseURL).toBe("https://bedrock-mantle.us-west-2.api.aws/openai/v1")
+      }),
+    ),
+  )
+
+  it.effect("resolves Bedrock environment regions before mapping credentials and endpoint templates", () =>
+    withEnv({ AWS_REGION: "eu-west-1" }, () =>
+      Effect.gen(function* () {
+        for (const packageName of ["@ai-sdk/amazon-bedrock", "@ai-sdk/amazon-bedrock/mantle"]) {
+          for (const field of ["baseURL", "endpoint"]) {
+            for (const region of [undefined, "us-west-2"]) {
+              const resolved = yield* ModelResolver.fromCatalogModel(
+                model(Provider.aisdk(packageName), {
+                  settings: {
+                    ...(region === undefined ? {} : { region }),
+                    [field]: "https://gateway.${AWS_REGION}.test/v1",
+                    accessKeyId: "test-access-key",
+                    secretAccessKey: "test-secret-key",
+                  },
+                }),
+              )
+              const expected = region ?? "eu-west-1"
+              expect(resolved.route.endpoint.baseURL).toBe(`https://gateway.${expected}.test/v1`)
+              const headers = yield* resolved.route.auth.apply({
+                request: LLM.request({ model: resolved, prompt: "Hi" }),
+                method: "POST",
+                url: `${resolved.route.endpoint.baseURL}/test`,
+                body: "{}",
+                headers: Headers.empty,
+              })
+              expect(headers.authorization).toContain(`/${expected}/bedrock`)
+            }
+          }
+        }
+      }),
+    ),
+  )
+
+  it.effect("uses explicit and credential regions for direct native Bedrock endpoint templates", () =>
+    Effect.gen(function* () {
+      for (const environment of [undefined, "eu-west-1"]) {
+        yield* withEnv({ AWS_REGION: environment }, () =>
+          Effect.gen(function* () {
+            for (const packageName of [
+              "@opencode-ai/ai/providers/amazon-bedrock",
+              "@opencode-ai/ai/providers/amazon-bedrock/mantle",
+            ]) {
+              for (const region of [undefined, "us-west-2"]) {
+                const resolved = yield* ModelResolver.fromCatalogModel(
+                  model(packageName, {
+                    settings: {
+                      ...(region === undefined ? {} : { region }),
+                      baseURL: "https://gateway.${AWS_REGION}.test/v1",
+                      credentials: {
+                        region: "us-east-2",
+                        accessKeyId: "test-access-key",
+                        secretAccessKey: "test-secret-key",
+                      },
+                    },
+                  }),
+                )
+                const expected = region ?? "us-east-2"
+                expect(resolved.route.endpoint.baseURL).toBe(`https://gateway.${expected}.test/v1`)
+                const headers = yield* resolved.route.auth.apply({
+                  request: LLM.request({ model: resolved, prompt: "Hi" }),
+                  method: "POST",
+                  url: `${resolved.route.endpoint.baseURL}/test`,
+                  body: "{}",
+                  headers: Headers.empty,
+                })
+                expect(headers.authorization).toContain(`/${expected}/bedrock`)
+              }
+            }
+          }),
+        )
+      }
+    }),
+  )
+
+  it.effect("preserves missing-region initialization errors through native resolution and session display", () =>
+    withEnv({ AWS_REGION: undefined }, () =>
+      Effect.gen(function* () {
+        for (const packageName of [
+          Provider.aisdk("@ai-sdk/amazon-bedrock"),
+          Provider.aisdk("@ai-sdk/amazon-bedrock/mantle"),
+          "@opencode-ai/ai/providers/amazon-bedrock",
+          "@opencode-ai/ai/providers/amazon-bedrock/mantle",
+        ]) {
+          const error = yield* ModelResolver.fromCatalogModel(
+            model(packageName),
+            Credential.Key.make({ type: "key", key: "test" }),
+          ).pipe(Effect.flip)
+          expect(error).toBeInstanceOf(AIError)
+          expect(toSessionError(error)).toMatchObject({
+            type: "provider.invalid-request",
+            message: expect.stringContaining("Set region or AWS_REGION"),
+          })
+        }
       }),
     ),
   )
