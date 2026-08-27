@@ -7,7 +7,7 @@ import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { GoogleVertexPlugin } from "@opencode-ai/core/plugin/provider/google-vertex"
 import { Provider } from "@opencode-ai/core/provider"
-import type { LanguageModelV3 } from "@ai-sdk/provider"
+import { fakeSelectorSdk } from "../fixture/selector"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
@@ -46,19 +46,6 @@ function withEnv<A, E, R>(vars: Record<string, string | undefined>, effect: () =
         }),
       ),
   )
-}
-
-function fakeSelectorSdk(calls: string[]) {
-  const make = (method: string) => (id: string) => {
-    calls.push(`${method}:${id}`)
-    return { modelId: id, provider: method, specificationVersion: "v3" } as unknown as LanguageModelV3
-  }
-  return {
-    responses: make("responses"),
-    messages: make("messages"),
-    chat: make("chat"),
-    languageModel: make("languageModel"),
-  }
 }
 
 void mock.module("@ai-sdk/google-vertex", () => ({

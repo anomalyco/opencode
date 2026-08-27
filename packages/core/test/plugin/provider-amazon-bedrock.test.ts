@@ -1,6 +1,5 @@
 import { AISDK } from "@opencode-ai/core/aisdk"
 import { describe, expect } from "bun:test"
-import type { LanguageModelV3 } from "@ai-sdk/provider"
 import { Effect } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Model } from "@opencode-ai/core/model"
@@ -8,6 +7,7 @@ import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { AmazonBedrockPlugin } from "@opencode-ai/core/plugin/provider/amazon-bedrock"
 import { Provider } from "@opencode-ai/core/provider"
+import { fakeSelectorSdk } from "../fixture/selector"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
@@ -44,19 +44,6 @@ function withEnv<A, E, R>(vars: Record<string, string | undefined>, fx: () => Ef
         })
       }),
   )
-}
-
-function fakeSelectorSdk(calls: string[]) {
-  const make = (method: string) => (id: string) => {
-    calls.push(`${method}:${id}`)
-    return { modelId: id, provider: method, specificationVersion: "v3" } as unknown as LanguageModelV3
-  }
-  return {
-    responses: make("responses"),
-    messages: make("messages"),
-    chat: make("chat"),
-    languageModel: make("languageModel"),
-  }
 }
 
 function bedrockBaseURL(sdk: unknown, modelID = "anthropic.claude-sonnet-4-5") {
