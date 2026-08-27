@@ -64,7 +64,7 @@ export const resolvePath = (directory: string, input: string, home = Global.Path
     directory,
     input === "~"
       ? home
-      : input.startsWith("~/") || input.startsWith("~\\")
+      : input.startsWith("~/") || (process.platform === "win32" && input.startsWith("~\\"))
         ? path.join(home, input.slice(2))
         : input,
   )

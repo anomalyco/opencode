@@ -202,8 +202,12 @@ describe("LocationMutation", () => {
     const home = path.resolve("/Users/aiden")
     expect(LocationMutation.resolvePath("/project", "~", home)).toBe(home)
     expect(LocationMutation.resolvePath("/project", "~/notes.md", home)).toBe(path.resolve(home, "notes.md"))
-    expect(LocationMutation.resolvePath("/project", "~\\notes.md", home)).toBe(path.resolve(home, "notes.md"))
     expect(LocationMutation.resolvePath("/project", "~draft.md", home)).toBe(path.resolve("/project", "~draft.md"))
+    expect(LocationMutation.resolvePath("/project", "~\\notes.md", home)).toBe(
+      process.platform === "win32"
+        ? path.resolve(home, "notes.md")
+        : path.resolve("/project", "~\\notes.md"),
+    )
   })
 
   it.live("resolves a tilde path as an external home target", () =>
