@@ -267,6 +267,39 @@ describe("server session", () => {
     expect(store.data.message.root.map((message) => message.id)).toEqual([user.id, assistant.id])
   })
 
+  test("clamps oversized message requests to the server page limit", async () => {
+    const requests: { sessionID: string; limit: number; cursor?: string }[] = []
+    const all = Array.from({ length: 400 }, (_, index) => ({
+      id: `msg_${String(399 - index).padStart(3, "0")}`,
+      type: "user" as const,
+      text: "hello",
+      time: { created: 400 - index },
+    }))
+    const client = {
+      session: {
+        messages: () => {
+          throw new Error("legacy message endpoint called")
+        },
+      },
+    } as unknown as OpencodeClient
+    const messageApi = {
+      list: async (input: { sessionID: string; limit: number; cursor?: string }) => {
+        requests.push(input)
+        const start = input.cursor ? Number(input.cursor) : 0
+        const page = all.slice(start, start + input.limit)
+        const end = start + page.length
+        return { data: page, cursor: { previous: null, next: end < all.length ? String(end) : null } }
+      },
+    } as unknown as MessageApi
+    const store = createServerSession(client, {} as SessionApi, messageApi)
+    store.remember(session("root"))
+
+    await store.sync("root", { messageLimit: 400 })
+
+    expect(requests.map((request) => request.limit)).toEqual([200, 200])
+    expect(store.data.message.root).toHaveLength(400)
+  })
+
   test("extends a current page to include the user for split assistant turns", async () => {
     const user = { id: "msg_1_user", type: "user", text: "hello", time: { created: 1 } } as const
     const assistant = (id: string, created: number) => ({
