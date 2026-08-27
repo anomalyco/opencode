@@ -6,6 +6,48 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { jsonSchema } from "ai"
+import { ProviderTest } from "../fake/provider"
+
+describe("ProviderTransform.maxOutputTokens", () => {
+  test.each([
+    ["deepseek-v4-pro", 384_000],
+    ["deepseek/deepseek-v4-flash", 384_000],
+    ["deepseek-ai/DeepSeek-V4-Pro", 393_216],
+    ["accounts/fireworks/models/deepseek-v4-pro", 384_000],
+  ])("uses the declared output limit for %s", (id, output) => {
+    const model = ProviderTest.model({
+      api: { id, url: "https://example.com", npm: "@ai-sdk/openai-compatible" },
+      limit: { context: 1_000_000, output },
+    })
+
+    expect(ProviderTransform.maxOutputTokens(model)).toBe(output)
+  })
+
+  test("keeps the default cap for other model families", () => {
+    const model = ProviderTest.model({ limit: { context: 1_000_000, output: 384_000 } })
+
+    expect(ProviderTransform.maxOutputTokens(model)).toBe(ProviderTransform.OUTPUT_TOKEN_MAX)
+  })
+
+  test("respects an explicit runtime cap for DeepSeek V4", () => {
+    const model = ProviderTest.model({
+      api: { id: "deepseek-v4-pro", url: "https://example.com", npm: "@ai-sdk/openai-compatible" },
+      limit: { context: 1_000_000, output: 384_000 },
+    })
+
+    expect(ProviderTransform.maxOutputTokens(model, 64_000)).toBe(64_000)
+    expect(ProviderTransform.maxOutputTokens(model, 512_000)).toBe(384_000)
+  })
+
+  test("uses the default cap when the DeepSeek V4 output limit is unknown", () => {
+    const model = ProviderTest.model({
+      api: { id: "deepseek-v4-pro", url: "https://example.com", npm: "@ai-sdk/openai-compatible" },
+      limit: { context: 1_000_000, output: 0 },
+    })
+
+    expect(ProviderTransform.maxOutputTokens(model)).toBe(ProviderTransform.OUTPUT_TOKEN_MAX)
+  })
+})
 
 describe("ProviderTransform.options - setCacheKey", () => {
   const sessionID = "test-session-123"
