@@ -376,7 +376,7 @@ describe("GoogleVertexPlugin", () => {
     }),
   )
 
-  it.effect("keeps Google auth fetch for OpenAI-compatible Vertex endpoints", () =>
+  it.effect("wraps an injected transport with Google auth for OpenAI-compatible Vertex endpoints", () =>
     Effect.gen(function* () {
       googleAuthOptions.length = 0
       const fetchCalls: { input: Parameters<typeof fetch>[0]; init?: RequestInit }[] = []
@@ -393,31 +393,21 @@ describe("GoogleVertexPlugin", () => {
           })
         }),
       )
-      const originalFetch = fetch
-      ;(globalThis as typeof globalThis & { fetch: typeof fetch }).fetch = (async (
-        input: Parameters<typeof fetch>[0],
-        init?: RequestInit,
-      ) => {
-        fetchCalls.push({ input, init })
-        return new Response("ok")
-      }) as typeof fetch
-      yield* Effect.acquireUseRelease(
-        Effect.void,
-        () =>
-          aisdk.runSDK({
-            model: Model.Info.make({
-              ...Model.Info.default(Provider.ID.make("google-vertex"), Model.ID.make("gemini")),
-              modelID: Model.ID.make("gemini"),
-              package: "aisdk:@ai-sdk/openai-compatible",
-            }),
-            package: "@ai-sdk/openai-compatible",
-            options: { name: "google-vertex" },
-          }),
-        () =>
-          Effect.sync(() => {
-            ;(globalThis as typeof globalThis & { fetch: typeof fetch }).fetch = originalFetch
-          }),
-      )
+      yield* aisdk.runSDK({
+        model: Model.Info.make({
+          ...Model.Info.default(Provider.ID.make("google-vertex"), Model.ID.make("gemini")),
+          modelID: Model.ID.make("gemini"),
+          package: "aisdk:@ai-sdk/openai-compatible",
+        }),
+        package: "@ai-sdk/openai-compatible",
+        options: {
+          name: "google-vertex",
+          fetch: async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+            fetchCalls.push({ input, init })
+            return new Response("ok")
+          },
+        },
+      })
       const vertexCalls = fetchCalls.filter((call) => call.input === "https://vertex.example")
       expect(vertexCalls).toHaveLength(1)
       expect(googleAuthOptions).toEqual([{ scopes: ["https://www.googleapis.com/auth/cloud-platform"] }])
