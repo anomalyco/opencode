@@ -2,9 +2,20 @@ import type { SessionApi } from "@opencode-ai/client/effect/api"
 import type { GenerationOptionsFields, Message, SystemPart } from "@opencode-ai/ai"
 import type { Agent } from "@opencode-ai/schema/agent"
 import type { Model } from "@opencode-ai/schema/model"
+import type { PromptInput } from "@opencode-ai/schema/prompt-input"
 import type { Session } from "@opencode-ai/schema/session"
+import type { SessionInbox } from "@opencode-ai/schema/session-inbox"
+import type { SessionMessage } from "@opencode-ai/schema/session-message"
 import type { JsonSchema, Types } from "effect"
 import type { ModelHooks } from "./registration.js"
+
+export interface SessionPrompt {
+  readonly sessionID: Session.ID
+  readonly messageID: SessionMessage.ID
+  prompt: Types.DeepMutable<PromptInput.Prompt>
+  metadata?: Record<string, unknown>
+  delivery: SessionInbox.Delivery
+}
 
 export interface SessionContext {
   readonly sessionID: Session.ID
@@ -42,6 +53,7 @@ export interface SessionHttpResponse {
 }
 
 export interface SessionHooks {
+  readonly prompt: SessionPrompt
   readonly context: SessionContext
   readonly "model.request": SessionModelRequest
   readonly "http.request": SessionHttpRequest

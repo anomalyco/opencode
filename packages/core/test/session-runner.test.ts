@@ -81,6 +81,8 @@ import { TestClock } from "effect/testing"
 import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { asc, desc, eq, sql } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
+import { promptLocationLayer } from "./fixture/prompt-location"
+import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import { permissionLayer } from "./lib/permission"
 import { agentHost, catalogHost, host } from "./plugin/host"
 import { CodeModeInstructions } from "@opencode-ai/core/codemode/instructions"
@@ -467,6 +469,7 @@ const it = testEffect(
     ]),
     [
       [Bus.node, Bus.configured({ persist: true })],
+      [LocationServiceMap.node, promptLocationLayer],
       [LayerNodePlatform.llmClient, client],
       [Permission.node, permission],
       [Catalog.node, promptCatalog],

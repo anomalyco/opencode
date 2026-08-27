@@ -33,6 +33,8 @@ import { SessionStore } from "@opencode-ai/core/session/store"
 import { SessionTransfer } from "@opencode-ai/core/session/transfer"
 import { Workspace } from "@opencode-ai/core/workspace"
 import { testEffect } from "./lib/effect"
+import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
+import { promptLocationLayer } from "./fixture/prompt-location"
 import { globalProjectLayer } from "./lib/project"
 import { tmpdir } from "./fixture/tmpdir"
 
@@ -50,6 +52,7 @@ const it = testEffect(
     [
       [Bus.node, Bus.configured({ persist: true })],
       [Project.node, globalProjectLayer],
+      [LocationServiceMap.node, promptLocationLayer],
       [SessionExecution.node, SessionExecution.noopLayer],
     ],
   ),
@@ -963,7 +966,7 @@ describe("Session.create", () => {
     }),
   )
 
-  it.live("runs a shell command and projects the started/ended shell message", () =>
+  liveIt.live("runs a shell command and projects the started/ended shell message", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
         const session = yield* Session.Service
@@ -988,7 +991,7 @@ describe("Session.create", () => {
     ),
   )
 
-  it.live("still emits shell ended for a failing command", () =>
+  liveIt.live("still emits shell ended for a failing command", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
         const session = yield* Session.Service

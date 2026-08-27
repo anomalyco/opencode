@@ -1011,6 +1011,33 @@ await registration.dispose()
 
 ### Sessions
 
+Intercept incoming user prompts before attachment and skill resolution and durable inbox admission:
+
+```ts
+await ctx.session.hook("prompt", (event) => {
+  event.prompt.text = event.prompt.text.replaceAll("company-secret", "[redacted]")
+  event.prompt.files ??= []
+  event.prompt.files.push({ uri: "file:///project/policy.md" })
+  event.metadata = { ...event.metadata, source: "company-policy" }
+  event.delivery = "queue"
+})
+```
+
+The hook receives an owned, mutable draft with `text`, `files`, agent mentions (`agents`), and selected `skills`, plus
+`metadata` and `delivery` (`"steer"` by default, or `"queue"`). Files and skills added by hooks use the normal resolution
+and validation path. If you rewrite text, update or remove attachment `mention` offsets that no longer match it. Agent
+mentions do not switch the session's active agent. Session and message IDs are readonly and cannot redirect admission.
+
+Hooks run in registration order after the session's location plugins are ready. Edits become the canonical persisted user
+input; unlike `context`, `prompt` does not run on each model call. Commands that submit through `session.prompt` also run
+this hook. Synthetic messages, shell messages, and compaction/move controls do not. Prompt hooks cannot be scoped by model
+provider because admission is separate from model resolution. Use an unscoped registration.
+
+Retries of an ID already pending or delivered return the original admission without rerunning hooks or resolving the
+retried payload. Concurrent submissions can run hooks more than once before either admission commits, but only the first
+successful admission wins. Keep hooks retry-safe; they are not an exactly-once side-effect boundary. A failed or interrupted
+preparation admits no prompt. This hook transforms input and does not expose a typed rejection API.
+
 Modify assembled system instructions, messages, tools, generation settings, or provider options immediately before model
 dispatch.
 
@@ -1080,7 +1107,10 @@ await ctx.session.hook("http.response", (event) => {
 #### Reference
 
 ```ts
+import type { SessionPrompt } from "@opencode-ai/plugin/promise/session"
+
 interface SessionHooks {
+  prompt: SessionPrompt
   context: SessionContextHook
   "model.request": SessionModelRequestHook
   "http.request": SessionHttpRequestHook
@@ -1111,7 +1141,7 @@ interface SessionHookContext {
   hook<Name extends keyof SessionHooks>(
     name: Name,
     callback: (event: SessionHooks[Name]) => Promise<void> | void,
-    options?: { providerID?: string },
+    options?: Name extends "prompt" ? never : { providerID?: string },
   ): Promise<Registration>
 }
 ```

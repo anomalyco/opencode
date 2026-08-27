@@ -26,6 +26,7 @@ import { ModelResolver } from "./model-resolver.js"
 import { MCP } from "./mcp/index.js"
 import { Permission } from "./permission.js"
 import { Plugin } from "./plugin.js"
+import { PluginHooks } from "./plugin/hooks.js"
 import { PluginSupervisor } from "./plugin/supervisor.js"
 import { Worktree } from "./worktree.js"
 import { Pty } from "./pty.js"
@@ -69,6 +70,7 @@ const locationServiceNodes = [
   ModelResolver.node,
   AISDK.node,
   Plugin.node,
+  PluginHooks.node,
   PluginSupervisor.node,
   Worktree.refreshNode,
   FileSystemSearch.node,
