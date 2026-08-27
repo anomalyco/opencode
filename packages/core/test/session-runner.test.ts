@@ -14,7 +14,6 @@ import {
 } from "@opencode-ai/ai"
 import * as OpenAIChat from "@opencode-ai/ai/protocols/openai-chat"
 import { TestLLM } from "@opencode-ai/ai/testing"
-import { Expected } from "@opencode-ai/test/session-message"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Database } from "@opencode-ai/core/database/database"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
@@ -84,6 +83,7 @@ import { asc, desc, eq, sql } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 import { promptLocationLayer } from "./fixture/prompt-location"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
+import { Expected } from "./lib/session-message"
 import { permissionLayer } from "./lib/permission"
 import { agentHost, catalogHost, host } from "./plugin/host"
 import { CodeModeInstructions } from "@opencode-ai/core/codemode/instructions"
@@ -849,19 +849,14 @@ const verifyPartialFlushOnFailure = (kind: FragmentKind) =>
     expect(yield* session.resume(sessionID).pipe(Effect.flip)).toBe(failure)
     expect(yield* session.context(sessionID)).toMatchObject([
       Expected.user(prompt),
-      {
-        type: "assistant",
-        finish: "error",
-        error: { type: "provider.transport", message: "Provider unavailable" },
-        content: [
-          kind === "tool input"
-            ? Expected.failedTool(
-                { id: fragmentID(kind, "partial") },
-                { error: { type: "provider.transport", message: "Provider unavailable" } },
-              )
-            : fixture.expectedContent,
-        ],
-      },
+      Expected.assistant({ finish: "error", error: { type: "provider.transport", message: "Provider unavailable" } }, [
+        kind === "tool input"
+          ? Expected.failedTool(
+              { id: fragmentID(kind, "partial") },
+              { error: { type: "provider.transport", message: "Provider unavailable" } },
+            )
+          : fixture.expectedContent,
+      ]),
     ])
     expect(requests).toHaveLength(1)
   })
@@ -886,16 +881,11 @@ const verifyPartialFlushOnInterruption = (kind: FragmentKind) =>
     yield* Fiber.interrupt(fiber)
     expect(yield* session.context(sessionID)).toMatchObject([
       Expected.user(prompt),
-      {
-        type: "assistant",
-        finish: "error",
-        error: { type: "aborted", message: "Step interrupted" },
-        content: [
-          kind === "tool input"
-            ? Expected.failedTool({ id: fragmentID(kind, "interrupted") }, {})
-            : fixture.expectedContent,
-        ],
-      },
+      Expected.assistant({ finish: "error", error: { type: "aborted", message: "Step interrupted" } }, [
+        kind === "tool input"
+          ? Expected.failedTool({ id: fragmentID(kind, "interrupted") }, {})
+          : fixture.expectedContent,
+      ]),
     ])
   })
 
@@ -1062,10 +1052,7 @@ describe("SessionRunnerLLM", () => {
       expect(executions).toEqual([])
       expect(yield* session.context(sessionID)).toMatchObject([
         Expected.user("Original message"),
-        {
-          type: "assistant",
-          content: [Expected.failedTool({ id: "call-removed" }, { error: { type: "tool.execution" } })],
-        },
+        Expected.assistant({}, [Expected.failedTool({ id: "call-removed" }, { error: { type: "tool.execution" } })]),
       ])
     }),
   )
@@ -1225,12 +1212,9 @@ describe("SessionRunnerLLM", () => {
       expect(Array.from(yield* Fiber.join(progressFiber))[0]?.data.metadata).toEqual({ phase: "reading" })
       expect(yield* session.context(sessionID)).toMatchObject([
         Expected.user("Use application context"),
-        {
-          type: "assistant",
-          content: [
-            Expected.completedTool({ id: "call-location" }, { content: [Expected.text('{"answer":"HELLO"}')] }),
-          ],
-        },
+        Expected.assistant({}, [
+          Expected.completedTool({ id: "call-location" }, { content: [Expected.text('{"answer":"HELLO"}')] }),
+        ]),
       ])
     }),
   )
@@ -1282,12 +1266,9 @@ describe("SessionRunnerLLM", () => {
       expect(executions).toEqual(["advertised"])
       expect(yield* session.context(sessionID)).toMatchObject([
         Expected.user("Use the reloaded tool"),
-        {
-          type: "assistant",
-          content: [
-            Expected.completedTool({ id: "call-reloaded" }, { content: [Expected.text('{"value":"advertised"}')] }),
-          ],
-        },
+        Expected.assistant({}, [
+          Expected.completedTool({ id: "call-reloaded" }, { content: [Expected.text('{"value":"advertised"}')] }),
+        ]),
       ])
     }),
   )
@@ -3017,13 +2998,13 @@ describe("SessionRunnerLLM", () => {
       const context = yield* session.context(sessionID)
       expect(context).toMatchObject([
         Expected.user("Echo this"),
-        Expected.assistant("tool-calls", [
+        Expected.assistant({ finish: "tool-calls" }, [
           Expected.completedTool(
             { id: "call-echo", name: "echo" },
             { input: { text: "hello" }, content: [Expected.text("hello")] },
           ),
         ]),
-        Expected.assistant("stop", [Expected.text("Done")]),
+        Expected.assistant({ finish: "stop" }, [Expected.text("Done")]),
       ])
       const assistant = requireAssistant(context)
       expect(yield* recordedStepSettlementTypes(sessionID, assistant.id)).toEqual([
@@ -3146,21 +3127,18 @@ describe("SessionRunnerLLM", () => {
 
       expect(yield* session.context(sessionID)).toMatchObject([
         Expected.user("Think first"),
-        {
-          type: "assistant",
-          content: [
-            {
-              type: "reasoning",
-              text: "Signed thought",
-              state: { signature: "sig_1" },
-            },
-            {
-              type: "reasoning",
-              text: "Encrypted thought",
-              state: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" },
-            },
-          ],
-        },
+        Expected.assistant({}, [
+          {
+            type: "reasoning",
+            text: "Signed thought",
+            state: { signature: "sig_1" },
+          },
+          {
+            type: "reasoning",
+            text: "Encrypted thought",
+            state: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" },
+          },
+        ]),
       ])
 
       yield* admit(session, "Continue")
@@ -3208,10 +3186,9 @@ describe("SessionRunnerLLM", () => {
 
       expect(yield* session.context(sessionID)).toMatchObject([
         Expected.user("Check first"),
-        {
-          type: "assistant",
-          content: [{ type: "text", text: "Checking.", state: { itemId: "msg_commentary", phase: "commentary" } }],
-        },
+        Expected.assistant({}, [
+          { type: "text", text: "Checking.", state: { itemId: "msg_commentary", phase: "commentary" } },
+        ]),
       ])
 
       yield* admit(session, "Continue")
@@ -3399,7 +3376,7 @@ describe("SessionRunnerLLM", () => {
       expect(requests).toHaveLength(1)
       expect(yield* session.context(sessionID)).toMatchObject([
         Expected.user("Run once"),
-        Expected.assistant("stop", [Expected.text("Once")]),
+        Expected.assistant({ finish: "stop" }, [Expected.text("Once")]),
       ])
     }),
   )
@@ -3824,15 +3801,12 @@ describe("SessionRunnerLLM", () => {
       expect(messageRoles(requests[0])).toEqual(["user", "assistant", "tool"])
       expect(yield* session.context(sessionID)).toMatchObject([
         Expected.user("Recover interrupted tool"),
-        {
-          type: "assistant",
-          content: [
-            Expected.failedTool(
-              { id: "call-interrupted" },
-              { error: { type: "aborted", message: "Tool execution interrupted: echo" } },
-            ),
-          ],
-        },
+        Expected.assistant({}, [
+          Expected.failedTool(
+            { id: "call-interrupted" },
+            { error: { type: "aborted", message: "Tool execution interrupted: echo" } },
+          ),
+        ]),
       ])
     }),
   )
@@ -3888,21 +3862,18 @@ describe("SessionRunnerLLM", () => {
 
       expect(yield* session.context(sessionID)).toMatchObject([
         Expected.user("Recover interrupted subagent"),
-        {
-          type: "assistant",
-          content: [
-            Expected.failedTool(
-              { id: "call-interrupted-subagent" },
-              {
-                error: {
-                  type: "aborted",
-                  message: "Tool execution interrupted: subagent (sessionID: ses_existing_child)",
-                },
-                metadata: { sessionID: "ses_existing_child", status: "running", internal: "private" },
+        Expected.assistant({}, [
+          Expected.failedTool(
+            { id: "call-interrupted-subagent" },
+            {
+              error: {
+                type: "aborted",
+                message: "Tool execution interrupted: subagent (sessionID: ses_existing_child)",
               },
-            ),
-          ],
-        },
+              metadata: { sessionID: "ses_existing_child", status: "running", internal: "private" },
+            },
+          ),
+        ]),
       ])
       const modelResult = JSON.stringify(requests[0]?.messages.at(-1))
       expect(modelResult).toContain("ses_existing_child")
@@ -3988,7 +3959,7 @@ describe("SessionRunnerLLM", () => {
       expect(messageRoles(requests[0])).toEqual(["user", "assistant", "tool"])
       expect(yield* session.context(sessionID)).toMatchObject([
         Expected.user("Recover interrupted tool input"),
-        { type: "assistant", content: [Expected.failedTool({ id: "call-pending-interrupted" }, {})] },
+        Expected.assistant({}, [Expected.failedTool({ id: "call-pending-interrupted" }, {})]),
       ])
     }),
   )
@@ -4174,16 +4145,13 @@ describe("SessionRunnerLLM", () => {
       expect(requests).toHaveLength(2)
       expect(yield* session.context(sessionID)).toMatchObject([
         Expected.user("Call missing"),
-        {
-          type: "assistant",
-          content: [
-            Expected.failedTool(
-              { id: "call-missing" },
-              { error: { type: "tool.execution", message: "Unknown tool: missing" } },
-            ),
-          ],
-        },
-        Expected.assistant("stop", [Expected.text("Recovered")]),
+        Expected.assistant({}, [
+          Expected.failedTool(
+            { id: "call-missing" },
+            { error: { type: "tool.execution", message: "Unknown tool: missing" } },
+          ),
+        ]),
+        Expected.assistant({ finish: "stop" }, [Expected.text("Recovered")]),
       ])
     }),
   )
@@ -4202,16 +4170,10 @@ describe("SessionRunnerLLM", () => {
       const context = yield* session.context(sessionID)
       expect(context).toMatchObject([
         Expected.user("Call defect"),
-        {
-          type: "assistant",
-          content: [
-            Expected.failedTool(
-              { id: "call-defect" },
-              { error: { type: "unknown", message: "unexpected tool defect" } },
-            ),
-          ],
-        },
-        Expected.assistant("stop", [Expected.text("Recovered")]),
+        Expected.assistant({}, [
+          Expected.failedTool({ id: "call-defect" }, { error: { type: "unknown", message: "unexpected tool defect" } }),
+        ]),
+        Expected.assistant({ finish: "stop" }, [Expected.text("Recovered")]),
       ])
       const assistant = requireAssistant(context)
       expect(yield* recordedStepSettlementTypes(sessionID, assistant.id)).toEqual([
@@ -4252,10 +4214,9 @@ describe("SessionRunnerLLM", () => {
       expect(requests).toHaveLength(2)
       expect(yield* session.context(sessionID)).toMatchObject([
         Expected.user("Call blocked"),
-        {
-          type: "assistant",
-          content: [Expected.failedTool({ id: "call-blocked" }, { error: { message: "Permission blocked" } })],
-        },
+        Expected.assistant({}, [
+          Expected.failedTool({ id: "call-blocked" }, { error: { message: "Permission blocked" } }),
+        ]),
         { type: "assistant", finish: "stop" },
       ])
     }),
@@ -4289,15 +4250,12 @@ describe("SessionRunnerLLM", () => {
       expect(requests).toHaveLength(1)
       expect(yield* session.context(sessionID)).toMatchObject([
         Expected.user("Call declined"),
-        {
-          type: "assistant",
-          content: [
-            Expected.failedTool(
-              { id: "call-declined" },
-              { error: { type: "aborted", message: "The user declined this tool call" } },
-            ),
-          ],
-        },
+        Expected.assistant({}, [
+          Expected.failedTool(
+            { id: "call-declined" },
+            { error: { type: "aborted", message: "The user declined this tool call" } },
+          ),
+        ]),
       ])
     }),
   )
@@ -4331,10 +4289,9 @@ describe("SessionRunnerLLM", () => {
       expect(requests).toHaveLength(2)
       expect(yield* session.context(sessionID)).toMatchObject([
         Expected.user("Call corrected"),
-        {
-          type: "assistant",
-          content: [Expected.failedTool({ id: "call-corrected" }, { error: { message: "Use another tool" } })],
-        },
+        Expected.assistant({}, [
+          Expected.failedTool({ id: "call-corrected" }, { error: { message: "Use another tool" } }),
+        ]),
         { type: "assistant", finish: "stop" },
       ])
     }),
@@ -4356,20 +4313,17 @@ describe("SessionRunnerLLM", () => {
       expect(requests).toHaveLength(2)
       expect(yield* session.context(sessionID)).toMatchObject([
         { type: "user" },
-        {
-          type: "assistant",
-          content: [
-            Expected.failedTool(
-              { id: "call-permission" },
-              {
-                error: {
-                  type: "permission.rejected",
-                  message: "Permission denied: edit",
-                },
+        Expected.assistant({}, [
+          Expected.failedTool(
+            { id: "call-permission" },
+            {
+              error: {
+                type: "permission.rejected",
+                message: "Permission denied: edit",
               },
-            ),
-          ],
-        },
+            },
+          ),
+        ]),
         { type: "assistant", finish: "stop" },
       ])
       expect(yield* recordedEventTypes(sessionID)).not.toContain("session.step.failed.1")
@@ -4405,15 +4359,12 @@ describe("SessionRunnerLLM", () => {
       expect(requests).toHaveLength(1)
       expect(yield* session.context(sessionID)).toMatchObject([
         Expected.user("Ask then stop"),
-        {
-          type: "assistant",
-          content: [
-            Expected.failedTool(
-              { id: "call-question" },
-              { error: { type: "aborted", message: "The user dismissed this question" } },
-            ),
-          ],
-        },
+        Expected.assistant({}, [
+          Expected.failedTool(
+            { id: "call-question" },
+            { error: { type: "aborted", message: "The user dismissed this question" } },
+          ),
+        ]),
       ])
     }),
   )
@@ -4440,10 +4391,9 @@ describe("SessionRunnerLLM", () => {
       const context = yield* session.context(sessionID)
       expect(context).toMatchObject([
         Expected.user("Settle before failing"),
-        {
-          type: "assistant",
-          content: [Expected.completedTool({ id: "call-before-failure" }, { content: [Expected.text("settle")] })],
-        },
+        Expected.assistant({}, [
+          Expected.completedTool({ id: "call-before-failure" }, { content: [Expected.text("settle")] }),
+        ]),
       ])
       const assistant = requireAssistant(context)
       expect(yield* recordedStepSettlementTypes(sessionID, assistant.id)).toEqual([
@@ -4476,15 +4426,12 @@ describe("SessionRunnerLLM", () => {
       const context = yield* session.context(sessionID)
       expect(context).toMatchObject([
         Expected.user("Interrupt blocked tool"),
-        {
-          type: "assistant",
-          content: [
-            Expected.failedTool(
-              { id: "call-before-interrupt" },
-              { error: { type: "aborted", message: "Tool execution interrupted" } },
-            ),
-          ],
-        },
+        Expected.assistant({}, [
+          Expected.failedTool(
+            { id: "call-before-interrupt" },
+            { error: { type: "aborted", message: "Tool execution interrupted" } },
+          ),
+        ]),
       ])
       const assistant = requireAssistant(context)
       expect(yield* recordedStepSettlementTypes(sessionID, assistant.id)).toEqual([
@@ -4498,7 +4445,7 @@ describe("SessionRunnerLLM", () => {
 
       expect(yield* session.context(sessionID)).toMatchObject([
         Expected.user("Interrupt blocked tool"),
-        { type: "assistant", content: [Expected.failedTool({ id: "call-before-interrupt" }, {})] },
+        Expected.assistant({}, [Expected.failedTool({ id: "call-before-interrupt" }, {})]),
       ])
       requests.length = 0
       yield* TestLLM.push([])
@@ -4552,17 +4499,12 @@ describe("SessionRunnerLLM", () => {
       expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBe(true)
       expect(yield* session.context(sessionID)).toMatchObject([
         Expected.user("Interrupt tool settlement"),
-        {
-          type: "assistant",
-          finish: "error",
-          error: { type: "aborted", message: "Step interrupted" },
-          content: [
-            Expected.failedTool(
-              { id: "call-await-interrupt" },
-              { error: { type: "aborted", message: "Tool execution interrupted" } },
-            ),
-          ],
-        },
+        Expected.assistant({ finish: "error", error: { type: "aborted", message: "Step interrupted" } }, [
+          Expected.failedTool(
+            { id: "call-await-interrupt" },
+            { error: { type: "aborted", message: "Tool execution interrupted" } },
+          ),
+        ]),
       ])
       const eventTypes = yield* recordedEventTypes(sessionID)
       expect(eventTypes.filter((type) => type === "session.tool.failed.2")).toHaveLength(1)
@@ -4603,8 +4545,8 @@ describe("SessionRunnerLLM", () => {
       expect(executions).toEqual(["done"])
       expect(yield* session.context(sessionID)).toMatchObject([
         Expected.user("Finish at the limit"),
-        { type: "assistant", content: [Expected.completedTool({ id: "call-terminal" }, {})] },
-        { type: "assistant", content: [Expected.failedTool({ id: "call-forbidden" }, {})] },
+        Expected.assistant({}, [Expected.completedTool({ id: "call-terminal" }, {})]),
+        Expected.assistant({}, [Expected.failedTool({ id: "call-forbidden" }, {})]),
       ])
     }),
   )
@@ -4797,12 +4739,7 @@ describe("SessionRunnerLLM", () => {
       expect(requests).toHaveLength(1)
       expect(yield* session.context(sessionID)).toMatchObject([
         Expected.user("Fail after output"),
-        {
-          type: "assistant",
-          finish: "error",
-          error: { message: "prompt too long" },
-          content: [Expected.text("Partial")],
-        },
+        Expected.assistant({ finish: "error", error: { message: "prompt too long" } }, [Expected.text("Partial")]),
       ])
     }),
   )
@@ -4842,7 +4779,7 @@ describe("SessionRunnerLLM", () => {
       expect(eventTypes.filter((type) => type === "session.step.started.1")).toHaveLength(2)
       expect(yield* session.context(sessionID)).toMatchObject([
         { type: "user" },
-        Expected.assistant("stop", [Expected.text("Recovered")]),
+        Expected.assistant({ finish: "stop" }, [Expected.text("Recovered")]),
       ])
       yield* replaySessionProjection(sessionID)
       expect((yield* session.context(sessionID)).filter((message) => message.type === "assistant")).toHaveLength(1)
@@ -4885,7 +4822,7 @@ describe("SessionRunnerLLM", () => {
       expect(yield* recordedEventTypes(sessionID)).not.toContain("session.retry.scheduled.1")
       expect(yield* session.context(sessionID)).toMatchObject([
         { type: "user" },
-        Expected.assistant("stop", [Expected.text("Recovered")]),
+        Expected.assistant({ finish: "stop" }, [Expected.text("Recovered")]),
       ])
     }),
   )
@@ -4918,7 +4855,7 @@ describe("SessionRunnerLLM", () => {
       expect(requests).toHaveLength(2)
       expect(yield* session.context(sessionID)).toMatchObject([
         { type: "user" },
-        Expected.assistant("stop", [Expected.text("Recovered")]),
+        Expected.assistant({ finish: "stop" }, [Expected.text("Recovered")]),
       ])
     }),
   )
@@ -4943,7 +4880,7 @@ describe("SessionRunnerLLM", () => {
       expect(yield* recordedEventTypes(sessionID)).toContain("session.retry.scheduled.1")
       expect(yield* session.context(sessionID)).toMatchObject([
         { type: "user" },
-        Expected.assistant("stop", [Expected.text("Recovered")]),
+        Expected.assistant({ finish: "stop" }, [Expected.text("Recovered")]),
       ])
     }),
   )
@@ -5002,17 +4939,12 @@ describe("SessionRunnerLLM", () => {
       const context = yield* session.context(sessionID)
       expect(context).toMatchObject([
         Expected.user("Continue partial output"),
-        {
-          type: "assistant",
-          finish: "error",
-          error: { type: "provider.invalid-output" },
-          content: [Expected.text("Partial")],
-        },
+        Expected.assistant({ finish: "error", error: { type: "provider.invalid-output" } }, [Expected.text("Partial")]),
         {
           type: "synthetic",
           text: INCOMPLETE_STREAM_CONTINUATION,
         },
-        Expected.assistant("stop", [Expected.text(" continuation")]),
+        Expected.assistant({ finish: "stop" }, [Expected.text(" continuation")]),
       ])
       const assistants = context.filter((message) => message.type === "assistant")
       expect(new Set(assistants.map((message) => message.id)).size).toBe(2)
@@ -5049,9 +4981,9 @@ describe("SessionRunnerLLM", () => {
       })
       expect(yield* session.context(sessionID)).toMatchObject([
         { type: "user" },
-        Expected.assistant("error", [Expected.text("Partial")]),
+        Expected.assistant({ finish: "error" }, [Expected.text("Partial")]),
         { type: "synthetic", text: INCOMPLETE_STREAM_CONTINUATION },
-        Expected.assistant("stop", [Expected.text(" continuation")]),
+        Expected.assistant({ finish: "stop" }, [Expected.text(" continuation")]),
       ])
     }),
   )
@@ -5090,9 +5022,9 @@ describe("SessionRunnerLLM", () => {
       })
       expect(yield* session.context(sessionID)).toMatchObject([
         { type: "user" },
-        Expected.assistant("error", [Expected.reasoning("Partial thought")]),
+        Expected.assistant({ finish: "error" }, [Expected.reasoning("Partial thought")]),
         { type: "synthetic" },
-        Expected.assistant("stop", [Expected.text("Recovered")]),
+        Expected.assistant({ finish: "stop" }, [Expected.text("Recovered")]),
       ])
     }),
   )
@@ -5128,7 +5060,7 @@ describe("SessionRunnerLLM", () => {
       ])
       expect(yield* session.context(sessionID)).toMatchObject([
         { type: "user" },
-        Expected.assistant("error", [
+        Expected.assistant({ finish: "error" }, [
           {
             type: "reasoning",
             text: "",
@@ -5136,7 +5068,7 @@ describe("SessionRunnerLLM", () => {
           },
         ]),
         { type: "synthetic", text: INCOMPLETE_STREAM_CONTINUATION },
-        Expected.assistant("stop", [Expected.text("Recovered")]),
+        Expected.assistant({ finish: "stop" }, [Expected.text("Recovered")]),
       ])
     }),
   )
@@ -5202,17 +5134,14 @@ describe("SessionRunnerLLM", () => {
       expect(messageRoles(requests[1])).toEqual(["user", "assistant", "tool", "user"])
       expect(yield* session.context(sessionID)).toMatchObject([
         { type: "user" },
-        {
-          type: "assistant",
-          content: [
-            Expected.failedTool(
-              { id: "call-defect-before-close" },
-              { error: { type: "unknown", message: "unexpected tool defect" } },
-            ),
-          ],
-        },
+        Expected.assistant({}, [
+          Expected.failedTool(
+            { id: "call-defect-before-close" },
+            { error: { type: "unknown", message: "unexpected tool defect" } },
+          ),
+        ]),
         { type: "synthetic", text: INCOMPLETE_STREAM_CONTINUATION },
-        Expected.assistant("stop", [Expected.text("Recovered")]),
+        Expected.assistant({ finish: "stop" }, [Expected.text("Recovered")]),
       ])
     }),
   )
@@ -5584,14 +5513,10 @@ describe("SessionRunnerLLM", () => {
       expect(requests).toHaveLength(1)
       expect(yield* session.context(sessionID)).toMatchObject([
         Expected.user("Interrupt malformed recovery"),
-        {
-          type: "assistant",
-          error: { type: "aborted", message: "Step interrupted" },
-          content: [
-            Expected.failedTool({ id: "call-valid" }, { error: { type: "aborted" } }),
-            Expected.failedTool({ id: "call-malformed" }, {}),
-          ],
-        },
+        Expected.assistant({ error: { type: "aborted", message: "Step interrupted" } }, [
+          Expected.failedTool({ id: "call-valid" }, { error: { type: "aborted" } }),
+          Expected.failedTool({ id: "call-malformed" }, {}),
+        ]),
       ])
     }),
   )
@@ -5754,10 +5679,7 @@ describe("SessionRunnerLLM", () => {
       const context = yield* session.context(sessionID)
       expect(context).toMatchObject([
         Expected.user("Fail hosted tool durably"),
-        {
-          type: "assistant",
-          content: [Expected.failedTool({ id: "call-hosted-provider-error" }, {})],
-        },
+        Expected.assistant({}, [Expected.failedTool({ id: "call-hosted-provider-error" }, {})]),
       ])
       const assistant = requireAssistant(context)
       expect(yield* recordedStepSettlementTypes(sessionID, assistant.id)).toEqual([
@@ -5838,12 +5760,9 @@ describe("SessionRunnerLLM", () => {
 
       expect(yield* session.context(sessionID)).toMatchObject([
         Expected.user("Fail hosted tool at EOF"),
-        {
-          type: "assistant",
-          finish: "error",
-          error: { type: "tool.result-missing" },
-          content: [Expected.failedTool({ id: "call-hosted-eof" }, {})],
-        },
+        Expected.assistant({ finish: "error", error: { type: "tool.result-missing" } }, [
+          Expected.failedTool({ id: "call-hosted-eof" }, {}),
+        ]),
       ])
     }),
   )
@@ -5937,12 +5856,10 @@ describe("SessionRunnerLLM", () => {
       yield* replaySessionProjection(sessionID)
       expect(yield* session.context(sessionID)).toMatchObject([
         Expected.user("Fail hosted tool on raw failure"),
-        {
-          type: "assistant",
-          finish: "error",
-          error: { type: "provider.transport", message: "Provider unavailable" },
-          content: [Expected.failedTool({ id: "call-hosted-raw-failure" }, {})],
-        },
+        Expected.assistant(
+          { finish: "error", error: { type: "provider.transport", message: "Provider unavailable" } },
+          [Expected.failedTool({ id: "call-hosted-raw-failure" }, {})],
+        ),
       ])
     }),
   )
@@ -5981,10 +5898,7 @@ describe("SessionRunnerLLM", () => {
 
       expect(yield* session.context(sessionID)).toMatchObject([
         Expected.user("Two blocks"),
-        {
-          type: "assistant",
-          content: [Expected.text("First"), Expected.text("Second")],
-        },
+        Expected.assistant({}, [Expected.text("First"), Expected.text("Second")]),
       ])
     }),
   )
@@ -6032,10 +5946,7 @@ describe("SessionRunnerLLM", () => {
 
       expect(yield* session.context(sessionID)).toMatchObject([
         Expected.user("Call provider tool"),
-        {
-          type: "assistant",
-          content: [Expected.failedTool({ id: "call-parsed" }, { input: { query: "hello" } })],
-        },
+        Expected.assistant({}, [Expected.failedTool({ id: "call-parsed" }, { input: { query: "hello" } })]),
       ])
     }),
   )

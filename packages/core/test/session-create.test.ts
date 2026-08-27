@@ -32,7 +32,7 @@ import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { SessionTransfer } from "@opencode-ai/core/session/transfer"
 import { Workspace } from "@opencode-ai/core/workspace"
-import { Expected } from "@opencode-ai/test/session-message"
+import { Expected } from "./lib/session-message"
 import { testEffect } from "./lib/effect"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import { promptLocationLayer } from "./fixture/prompt-location"
@@ -636,10 +636,7 @@ describe("Session.create", () => {
 
       expect(yield* session.context(parent.id)).toMatchObject([
         Expected.user("Run both tools"),
-        {
-          type: "assistant",
-          content: [{ type: "tool", id: "call_running", state: { status: "running" } }],
-        },
+        Expected.assistant({}, [{ type: "tool", id: "call_running", state: { status: "running" } }]),
       ])
       expect(yield* session.context(forked.id)).toMatchObject([Expected.user("Run both tools")])
     }),

@@ -45,9 +45,6 @@
     "@opencode-ai/function#test": {
       "outputs": []
     },
-    "@opencode-ai/test#test": {
-      "outputs": []
-    },
     "@opencode-ai/cli#test": {
       "dependsOn": ["^build"],
       "outputs": []

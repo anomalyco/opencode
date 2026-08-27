@@ -1,15 +1,16 @@
 import { expect, test } from "bun:test"
-import { Expected } from "../src/session-message"
+import { Expected } from "./lib/session-message"
 
 test("builds only the requested message and content fields", () => {
   expect(Expected.user("Hello")).toStrictEqual({ type: "user", text: "Hello" })
   expect(Expected.text("Hi")).toStrictEqual({ type: "text", text: "Hi" })
   expect(Expected.reasoning("Think")).toStrictEqual({ type: "reasoning", text: "Think" })
-  expect(Expected.assistant("stop", [Expected.text("Hi")])).toStrictEqual({
+  expect(Expected.assistant({ finish: "stop" }, [Expected.text("Hi")])).toStrictEqual({
     type: "assistant",
     finish: "stop",
     content: [{ type: "text", text: "Hi" }],
   })
+  expect(Expected.assistant({}, [])).toStrictEqual({ type: "assistant", content: [] })
 })
 
 test("keeps tool identity, status, input, content, and metadata explicit", () => {
@@ -57,7 +58,7 @@ test("distinguishes omitted fields from explicit undefined without mutating inpu
 
 test("composes with ordinary asymmetric matchers and extra fields", () => {
   const content = expect.arrayContaining([Expected.text(expect.stringContaining("Hello"))])
-  const expected = { ...Expected.assistant("stop", content), snapshot: { files: ["hello.txt"] } }
+  const expected = Expected.assistant({ finish: "stop", snapshot: { files: ["hello.txt"] } }, content)
   const actual = {
     type: "assistant",
     finish: "stop",
