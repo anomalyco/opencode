@@ -319,16 +319,15 @@ export const layer = (options?: Options) =>
         }
       })
 
-      const reload = Effect.fn("Config.reload")(() =>
-        reloadLock.withPermit(
-          Effect.gen(function* () {
-            const next = yield* discover()
-            yield* reconcile(next)
-            if (isDeepStrictEqual(configs, next)) return
-            configs = next
-            yield* bus.publish(Event.Updated, {})
-          }),
-        ),
+      const reload = Effect.fn("Config.reload")(
+        function* () {
+          const next = yield* discover()
+          yield* reconcile(next)
+          if (isDeepStrictEqual(configs, next)) return
+          configs = next
+          yield* bus.publish(Event.Updated, {})
+        },
+        (effect) => reloadLock.withPermit(effect),
       )
 
       yield* Stream.fromPubSub(updates).pipe(
@@ -379,47 +378,43 @@ export const layer = (options?: Options) =>
       )
       yield* reconcile(initial)
 
-      const update = Effect.fn("Config.update")((mutate: (draft: Draft<Info>) => void) =>
-        reloadLock.withPermit(
-          Effect.gen(function* () {
-            // TODO: Replace entry-order selection with an explicit config scope/target model.
-            const document = configs.find((entry) => entry.type === "document" && entry.path !== undefined)
-            if (!document || document.type !== "document" || !document.path)
-              return yield* Effect.fail(new UpdateError({ message: "No editable config document found" }))
-            const next = yield* Effect.try({
-              try: () => produce(document.info, mutate),
-              catch: (cause) => new UpdateError({ message: "Config update failed", cause }),
-            })
-            const edits = changes(document.info, next)
-            if (!edits.length) return document.info
-            const text = yield* fs
-              .readFileString(document.path)
-              .pipe(
-                Effect.mapError(
-                  (cause) => new UpdateError({ message: `Failed to read config: ${document.path}`, cause }),
-                ),
-              )
-            const updated = edits.reduce(
-              (text, edit) =>
-                applyEdits(
-                  text,
-                  modify(text, edit.path, edit.value, { formattingOptions: { tabSize: 2, insertSpaces: true } }),
-                ),
-              text,
-            )
-            const info = yield* parseInfo(updated, document.path)
-            if (!info)
-              return yield* Effect.fail(new UpdateError({ message: `Invalid config update: ${document.path}` }))
-            const temporary = document.path + ".tmp"
-            yield* fs.writeFileString(temporary, updated.endsWith("\n") ? updated : updated + "\n").pipe(
-              Effect.andThen(fs.rename(temporary, document.path)),
+      const update = Effect.fn("Config.update")(
+        function* (mutate: (draft: Draft<Info>) => void) {
+          // TODO: Replace entry-order selection with an explicit config scope/target model.
+          const document = configs.find((entry) => entry.type === "document" && entry.path !== undefined)
+          if (!document || document.type !== "document" || !document.path)
+            return yield* Effect.fail(new UpdateError({ message: "No editable config document found" }))
+          const next = yield* Effect.try({
+            try: () => produce(document.info, mutate),
+            catch: (cause) => new UpdateError({ message: "Config update failed", cause }),
+          })
+          const edits = changes(document.info, next)
+          if (!edits.length) return document.info
+          const text = yield* fs
+            .readFileString(document.path)
+            .pipe(
               Effect.mapError(
-                (cause) => new UpdateError({ message: `Failed to write config: ${document.path}`, cause }),
+                (cause) => new UpdateError({ message: `Failed to read config: ${document.path}`, cause }),
               ),
             )
-            return info
-          }),
-        ),
+          const updated = edits.reduce(
+            (text, edit) =>
+              applyEdits(
+                text,
+                modify(text, edit.path, edit.value, { formattingOptions: { tabSize: 2, insertSpaces: true } }),
+              ),
+            text,
+          )
+          const info = yield* parseInfo(updated, document.path)
+          if (!info) return yield* Effect.fail(new UpdateError({ message: `Invalid config update: ${document.path}` }))
+          const temporary = document.path + ".tmp"
+          yield* fs.writeFileString(temporary, updated.endsWith("\n") ? updated : updated + "\n").pipe(
+            Effect.andThen(fs.rename(temporary, document.path)),
+            Effect.mapError((cause) => new UpdateError({ message: `Failed to write config: ${document.path}`, cause })),
+          )
+          return info
+        },
+        (effect, _mutate) => reloadLock.withPermit(effect),
       )
 
       return Service.of({
