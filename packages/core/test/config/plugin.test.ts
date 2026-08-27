@@ -2,7 +2,7 @@ import fs from "fs/promises"
 import path from "path"
 import { pathToFileURL } from "url"
 import { describe, expect } from "bun:test"
-import { Plugin as EffectPlugin } from "@opencode-ai/plugin/effect"
+import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Agent } from "@opencode-ai/core/agent"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { ConfigPluginSource } from "@opencode-ai/core/config/plugin/source"
@@ -270,7 +270,7 @@ describe("PluginSupervisor config", () => {
   staticIt.live("uses only internal and SDK plugins when the static source is wired", () =>
     Effect.gen(function* () {
       const sdk = yield* SdkPlugins.Service
-      yield* sdk.register(EffectPlugin.define({ id: "static-sdk", effect: () => Effect.void }))
+      yield* sdk.register(define({ id: "static-sdk", effect: () => Effect.void }))
       yield* withLocation(
         { plugins: ["-*", path.join(import.meta.dir, "../plugin/fixtures/config-promise-plugin.ts")] },
         Effect.gen(function* () {
@@ -380,7 +380,7 @@ describe("PluginSupervisor config", () => {
   it.live("loads user plugins before internal post plugins", () =>
     Effect.gen(function* () {
       const sdk = yield* SdkPlugins.Service
-      yield* sdk.register(EffectPlugin.define({ id: "sdk-order", effect: () => Effect.void }))
+      yield* sdk.register(define({ id: "sdk-order", effect: () => Effect.void }))
       yield* withLocation(
         {
           plugins: [
@@ -440,10 +440,7 @@ function withLocation<A, E, R>(
   fixtures = false,
   prepare?: (directory: string) => Promise<void>,
 ) {
-  return Effect.acquireRelease(
-    Effect.promise(() => tmpdir()),
-    (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-  ).pipe(
+  return Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
     Effect.tap((tmp) =>
       Effect.promise(async () => {
         await prepare?.(tmp.path)
