@@ -592,7 +592,7 @@ body {
           white-space: nowrap;
         }
 
-        [data-regions] {
+        :is([data-regions], [data-limited]) {
           color: var(--color-text-weak);
           white-space: nowrap;
 
@@ -696,6 +696,11 @@ body {
 
       [data-bar][data-kind="promo"] {
         fill: color-mix(in srgb, var(--bar-go) 50%, transparent);
+      }
+
+      [data-item][data-infinite] [data-value] {
+        font-size: 18px;
+        line-height: 1;
       }
 
       [data-val] {
