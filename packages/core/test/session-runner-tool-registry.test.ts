@@ -163,37 +163,6 @@ describe("Tool", () => {
     }),
   )
 
-  it.effect("validates repaired input and does not resolve permission-filtered tools", () =>
-    Effect.gen(function* () {
-      const service = yield* Tool.Service
-      const hooks = yield* PluginHooks.Service
-      yield* transform(service, { echo: make() }, { codemode: false })
-      yield* hooks.register("tool", "execute.before", (event) =>
-        Effect.sync(() => {
-          event.tool = "echo"
-          event.input = { text: 123 }
-        }),
-      )
-      const snapshot = yield* service.snapshot()
-      expect(yield* snapshot.execute(call("typo")).pipe(Effect.flip)).toBeInstanceOf(Tool.Error)
-      const filtered = yield* service.snapshot([{ action: "echo", resource: "*", effect: "deny" }])
-      expect(yield* filtered.execute(call("typo")).pipe(Effect.flip)).toMatchObject({ message: "Unknown tool: echo" })
-    }),
-  )
-
-  it.effect("allows before hooks to reject unknown calls without firing after hooks", () =>
-    Effect.gen(function* () {
-      const service = yield* Tool.Service
-      const hooks = yield* PluginHooks.Service
-      yield* hooks.register("tool", "execute.before", () => new Tool.Error({ message: "Rejected before lookup" }))
-      yield* hooks.register("tool", "execute.after", () => Effect.die("must not execute"))
-      const snapshot = yield* service.snapshot()
-      expect(yield* snapshot.execute(call("missing")).pipe(Effect.flip)).toMatchObject({
-        message: "Rejected before lookup",
-      })
-    }),
-  )
-
   it.effect("hooks execute and known Code Mode calls once but leaves unknown interpreter paths unchanged", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service

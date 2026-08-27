@@ -1183,30 +1183,23 @@ interface ShellHookDomain {
 
 ### Tools
 
-Before hooks may replace `tool` and `input`, or fail with `Tool.Error`. For top-level calls, the hook runs before
-request alias resolution, availability checks, and tool lookup, including for unknown names. `inputSchema` is no
-longer part of the event because no tool has been resolved yet.
+Before hooks may replace `tool` and `input`, or fail with `Tool.Error`. Top-level calls run the hook before lookup,
+including for unknown names; `inputSchema` is no longer provided. Corrected names still use the request's existing
+aliases and availability checks. Code Mode's internal name resolution is unchanged.
 
 ```ts
 effect: (ctx) =>
   Effect.gen(function* () {
     const tool = ctx.tool
     yield* tool.hook("execute.before", (event) =>
-      Effect.sync(() => {
-        if (event.tool === "reead") event.tool = "read"
-      }),
+      event.tool === "write"
+        ? Effect.fail(new Tool.Error({ message: "Writes are disabled" }))
+        : Effect.logDebug("tool input", { tool: event.tool, input: event.input }),
     )
   }),
 ```
 
 After hooks may inspect or replace successful results and failures.
-
-The corrected name uses the existing request alias and availability checks, then the captured tool's input validation
-and execution. After hooks report the resolved tool's name. The registered tool and the model's original call in
-session history are not renamed. A before-hook rejection or unresolved name does not fire after hooks.
-
-Code Mode's internal lookup remains interpreter-owned. Known internal calls retain their hooks and input mutation
-behavior; unknown paths do not reach this hook and internal names cannot be repaired.
 
 ```ts
 effect: (ctx) =>

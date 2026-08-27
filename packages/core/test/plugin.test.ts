@@ -709,7 +709,7 @@ describe("Plugin", () => {
           sessionID: Session.ID.make("ses_hook_reject"),
           agent: Agent.ID.make("build"),
           messageID: SessionMessage.ID.make("msg_hook_reject"),
-          call: { type: "tool-call", id: "call-hook-reject", name: "echo", input: { text: "original" } },
+          call: { type: "tool-call", id: "call-hook-reject", name: "missing", input: { text: "original" } },
         })
         .pipe(Effect.flip)
 

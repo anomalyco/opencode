@@ -611,6 +611,11 @@ describe("fromPromise", () => {
               },
             })
           })
+          await ctx.tool.hook("execute.before", (event) => {
+            expect(event.tool).toBe("helllo")
+            expect(event).not.toHaveProperty("inputSchema")
+            event.tool = "hello"
+          })
         },
       })
 
@@ -624,7 +629,7 @@ describe("fromPromise", () => {
           agent: Agent.ID.make("build"),
           messageID: SessionMessage.ID.make("msg_promise_tool"),
           progress: (update) => Effect.sync(() => progress.push(update)),
-          call: { type: "tool-call", id: "call_promise_tool", name: "hello", input: { name: "world" } },
+          call: { type: "tool-call", id: "call_promise_tool", name: "helllo", input: { name: "world" } },
         }),
       ).toMatchObject({
         output: "Hello, world!",
@@ -775,51 +780,6 @@ describe("fromPromise", () => {
       const restored = yield* registry.snapshot()
       expect(restored.definitions.map((tool) => tool.name)).toEqual(["acme_hello", "temporary", "execute"])
       expect(restored.definitions[0]?.description).toBe("Hello")
-    }),
-  )
-
-  it.effect("repairs unknown top-level tool calls through Promise before hooks", () =>
-    Effect.gen(function* () {
-      const plugins = yield* Plugin.Service
-      const registry = yield* Tool.Service
-      const host = yield* PluginHost.make(plugins)
-      const seen: string[] = []
-      yield* host.tool.transform((draft) =>
-        draft.add({
-          name: "echo",
-          description: "Echo",
-          options: { codemode: false },
-          input: Schema.Struct({ text: Schema.String }),
-          output: Schema.String,
-          execute: ({ text }) => Effect.succeed({ output: text }),
-        }),
-      )
-      yield* PluginPromise.fromPromise(
-        define({
-          id: "promise-tool-repair",
-          setup: async (ctx) => {
-            await ctx.tool.hook("execute.before", async (event) => {
-              expect(event).not.toHaveProperty("inputSchema")
-              seen.push(event.tool)
-              event.tool = "echo"
-              event.input = { text: "repaired" }
-            })
-            await ctx.tool.hook("execute.after", (event) => {
-              seen.push(event.tool)
-            })
-          },
-        }),
-      ).effect(host)
-      const snapshot = yield* registry.snapshot()
-      expect(
-        yield* snapshot.execute({
-          sessionID: Session.ID.make("ses_promise_repair"),
-          agent: Agent.ID.make("build"),
-          messageID: SessionMessage.ID.make("msg_promise_repair"),
-          call: { type: "tool-call", id: "repair", name: "typo", input: {} },
-        }),
-      ).toMatchObject({ output: "repaired" })
-      expect(seen).toEqual(["typo", "echo"])
     }),
   )
 

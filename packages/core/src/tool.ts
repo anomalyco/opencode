@@ -229,7 +229,7 @@ const layer = Layer.effect(
                 .map(([, tool]) => definition(tool)),
               ...(codemodeTool ? [definition(codemodeTool)] : []),
             ],
-            execute: Effect.fn("Tool.snapshot.execute")(function* (input: Parameters<Snapshot["execute"]>[0]) {
+            execute: Effect.fnUntraced(function* (input: Parameters<Snapshot["execute"]>[0]) {
               const context: Tool.Context = {
                 sessionID: input.sessionID,
                 agent: input.agent,
