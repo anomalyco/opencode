@@ -42,18 +42,9 @@ describe("Session.revert files", () => {
     "undoes and restores a file rename without losing either path",
     () =>
       Effect.gen(function* () {
-        const started = performance.now()
-        const mark = (phase: string) => console.info("[DEBUG-revert]", phase, Math.round(performance.now() - started))
-        mark("body started")
-        yield* Effect.addFinalizer(() => Effect.sync(() => mark("body scope closed")))
         const tmp = yield* Effect.acquireRelease(
           Effect.promise(() => tmpdir()),
-          (tmp) =>
-            Effect.promise(async () => {
-              mark("directory cleanup started")
-              await tmp[Symbol.asyncDispose]()
-              mark("directory cleanup completed")
-            }),
+          (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
         )
         const directory = path.join(tmp.path, "project")
         const original = path.join(directory, "old name.txt")
@@ -65,26 +56,19 @@ describe("Session.revert files", () => {
           await $`git init -q`.cwd(directory).quiet()
           await $`git -c core.fsmonitor=false add .`.cwd(directory).quiet()
         })
-        mark("git fixture prepared")
 
         const session = yield* Session.Service
         const database = yield* Database.Service
         const bus = yield* Bus.Service
         const created = yield* session.create({ location: { directory: AbsolutePath.make(directory) } })
-        mark("session created")
         const prompt = yield* session.prompt({ sessionID: created.id, text: "Rename the file", resume: false })
-        mark("prompt admitted")
         yield* SessionInbox.promote(database.db, bus, created.id, "steer")
-        mark("inbox promoted")
 
         yield* Effect.gen(function* () {
-          mark("location ready")
           const plugins = yield* PluginSupervisor.Service
           yield* plugins.flush
-          mark("plugins ready")
           const snapshot = yield* Snapshot.Service
           const before = yield* snapshot.capture()
-          mark("initial snapshot captured")
           if (!before) throw new Error("Initial snapshot missing")
           const assistantMessageID = SessionMessage.ID.create()
           yield* bus.publish(SessionEvent.Step.Started, {
@@ -96,7 +80,6 @@ describe("Session.revert files", () => {
           })
           yield* Effect.promise(() => fs.rename(original, renamed))
           const after = yield* snapshot.capture()
-          mark("renamed snapshot captured")
           if (!after) throw new Error("Renamed snapshot missing")
           yield* bus.publish(SessionEvent.Step.Ended, {
             sessionID: created.id,
@@ -109,9 +92,7 @@ describe("Session.revert files", () => {
           })
 
           yield* Effect.promise(() => Bun.write(path.join(directory, "unrelated.txt"), "Keep this later edit.\n"))
-          mark("revert started")
           const reverted = yield* session.revert.stage({ sessionID: created.id, messageID: prompt.id })
-          mark("revert completed")
           expect({
             original: yield* Effect.promise(() => Bun.file(original).exists()),
             renamed: yield* Effect.promise(() => Bun.file(renamed).exists()),
@@ -125,19 +106,16 @@ describe("Session.revert files", () => {
             "Keep this later edit.\n",
           )
 
-          mark("clear started")
           yield* session.revert.clear(created.id)
-          mark("clear completed")
           expect(yield* Effect.promise(() => Bun.file(original).exists())).toBe(false)
           expect(yield* Effect.promise(() => Bun.file(renamed).text())).toBe("Preserve this content.\n")
           expect(yield* Effect.promise(() => Bun.file(path.join(directory, "unrelated.txt")).text())).toBe(
             "Keep this later edit.\n",
           )
           expect((yield* session.get(created.id)).revert).toBeUndefined()
-          mark("assertions completed")
         }).pipe(Effect.provide(LocationServiceMap.Service.get(created.location)))
-        mark("location reference released")
       }),
-    Number(process.env.OPENCODE_REVERT_DIAGNOSTIC_TIMEOUT ?? 15_000),
+    // Real Location/plugin startup and Git snapshots can exceed five seconds under CI load.
+    { timeout: 15_000 },
   )
 })
