@@ -85,6 +85,7 @@ describe("SessionExecution lifecycle", () => {
       const completedRunning = yield* Deferred.make<void>()
       const release = yield* Deferred.make<void>()
       const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
       const context = yield* buildExecution(scope, ({ sessionID }) =>
         sessionID === completed
           ? Deferred.succeed(completedRunning, undefined).pipe(Effect.andThen(Deferred.await(release)))
@@ -245,6 +246,7 @@ describe("SessionExecution lifecycle", () => {
       const bothDraining = yield* Deferred.make<void>()
       const continued: SessionEvent.Synthetic[] = []
       const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
       const context = yield* buildExecution(scope, ({ sessionID }) =>
         Effect.sync(() => {
           drained.push(sessionID)
