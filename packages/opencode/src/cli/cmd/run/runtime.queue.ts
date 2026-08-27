@@ -10,7 +10,7 @@
 // Resolves when the footer closes and all in-flight work finishes.
 import * as Locale from "@/util/locale"
 import { MessageID, PartID } from "@/session/schema"
-import { isExitCommand, isNewCommand } from "./prompt.shared"
+import { isExitCommand, isNewCommand, isTelegramCommand } from "./prompt.shared"
 import type { FooterApi, FooterEvent, FooterQueuedPrompt, RunPrompt } from "./types"
 
 type Trace = {
@@ -27,6 +27,8 @@ export type QueueInput = {
   footer: FooterApi
   initialInput?: string
   trace?: Trace
+  getSessionID?: () => string | undefined
+  getTelegramServer?: () => { baseUrl: string; fetch?: typeof fetch; headers?: RequestInit["headers"] } | undefined
   onSend?: (prompt: RunPrompt) => void
   onNewSession?: () => void | Promise<void>
   run: (prompt: RunPrompt, signal: AbortSignal) => Promise<void>
@@ -159,6 +161,23 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
               },
             )
             await input.onNewSession()
+            continue
+          }
+
+          if (prompt.mode !== "shell" && isTelegramCommand(prompt.text)) {
+            syncQueue()
+            const parts = prompt.text.trim().split(/\s+/)
+            const sub = parts[1] ?? "link"
+            const sessionID = input.getSessionID?.()
+            const server = input.getTelegramServer?.()
+            const { dispatchTelegramCommand } = await import("@/telegram/bridge")
+            const result = await dispatchTelegramCommand(sub, sessionID, server)
+            input.footer.append({
+              kind: result.kind,
+              text: result.text,
+              phase: "final",
+              source: "system",
+            })
             continue
           }
 
