@@ -1,9 +1,10 @@
 import { HoverCard } from "@kobalte/core/hover-card"
 import { createSignal, Show, type JSXElement } from "solid-js"
+import { useLanguage } from "@/runtime/i18n/language"
 import "./tab-popover.css"
 
 // Initial hover delay before the preview appears, per design.
-const OPEN_DELAY = 2_000
+const OPEN_DELAY = 750
 // Mouse-out delay: begin closing immediately (a brief exit animation plays).
 const CLOSE_DELAY = 0
 // After a preview closes, hovering a neighbouring tab within this window skips
@@ -24,7 +25,9 @@ export function TabPreviewPopover(props: {
   open: boolean
   onOpenChange: (open: boolean) => void
   data: TabPreviewData
+  orientation?: "horizontal" | "vertical"
 }) {
+  const language = useLanguage()
   let triggerEl: HTMLDivElement | undefined
   // When opened during a rapid tab-hopping streak, this preview appears and
   // disappears instantly (no repeated enter/exit animation) — only the first,
@@ -50,7 +53,13 @@ export function TabPreviewPopover(props: {
       // The preview is non-interactive (pointer-events: none), so there is no
       // safe area to traverse — leaving the tab hides it immediately.
       ignoreSafeArea
-      placement="bottom-start"
+      placement={
+        props.orientation === "vertical"
+          ? language.direction() === "rtl"
+            ? "left-start"
+            : "right-start"
+          : "bottom-start"
+      }
       gutter={6}
     >
       <HoverCard.Trigger ref={triggerEl} as="div" data-component="session-tab-popover-trigger" tabIndex={-1}>

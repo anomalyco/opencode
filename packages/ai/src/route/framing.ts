@@ -19,6 +19,8 @@ import type { AIError } from "../schema/index.js"
 export interface Definition<Frame> {
   readonly id: string
   readonly frame: (bytes: Stream.Stream<Uint8Array, AIError>) => Stream.Stream<Frame, AIError>
+  /** Original wire representation when framing transforms the provider payload. */
+  readonly body?: (frame: Frame) => string | undefined
 }
 
 /** Server-Sent Events framing. Used by every JSON-streaming HTTP provider. */

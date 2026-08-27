@@ -169,16 +169,21 @@ export interface Keymap {
   }
   /** Registers a low-level keymap interceptor. */
   intercept: OpenTuiKeymap["intercept"]
+  /** Returns whether an event matches the configured leader key. */
+  isLeader(event: KeyEvent): boolean
 }
 
 function use(): Keymap {
   const value = useValue()
+  const leader = value.config.keybinds.get("leader")?.[0]?.key
+  const isLeader = leader ? value.keymap.createKeyMatcher(leader) : () => false
   return {
     dispatch(id, input) {
       value.dispatch(id, input)
     },
     mode: value.mode,
     intercept: value.keymap.intercept.bind(value.keymap),
+    isLeader,
   }
 }
 

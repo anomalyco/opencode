@@ -30,17 +30,20 @@ Leaves own resolution, permission, and side-effect ordering. Translate only expe
 
 ## Registration
 
-Built-ins, plugins, and MCP install tools through `ToolRegistry.Service.transform`, adding complete tool objects to the draft. A tool may provide a namespace, which flattens direct model names to `<namespace>_<tool>`, and defaults into CodeMode (`codemode` defaults true; `codemode: false` keeps the tool on the provider's native tool list).
+Built-ins, plugins, and MCP install tools through `Tool.Service.transform`, adding complete tool objects to the draft. A tool may provide a namespace, which flattens direct model names to `<namespace>_<tool>`, and defaults into CodeMode (`codemode` defaults true; `codemode: false` keeps the tool on the provider's native tool list).
 
-Registrations are scoped:
+The service uses shared `State` to replay synchronous transforms in registration order against a fresh draft. `Tool.Service.reload()` rebuilds from captured source data without changing registration precedence. Registrations are scoped and return a real, idempotent `dispose` Effect:
 
-- The latest active same-placement registration wins.
-- Closing any registration removes only that registration and reveals the next active one.
-- Each model request captures the effective tools it advertises; later registration changes affect later requests.
+- The latest valid active registration for the same effective name wins.
+- `update` and `remove` target effective names and do nothing for missing tools. Updates preserve the name and namespace; invalid updates leave the previous definition intact. Creating a tool requires `add`.
+- Disposing a registration or closing its scope removes only its transform and rebuilds from the remaining transforms, revealing any earlier definition it overrode.
+- Each model request captures the effective definitions and executors it advertises; later reloads and disposal affect later snapshots. Captured executors may still reference mutable producer-owned state.
+
+MCP owns one stable tool transform that reads its latest discovered tools. Tool-list changes update that source and reload the tool state instead of re-registering at the end of the transform order. MCP refresh therefore preserves the precedence of later plugin overrides.
 
 Type safety ends at registration. The registry validates model input and declared output at runtime and should not carry producer schema generics through storage or execution.
 
-`ToolRegistry.Service` is Location-scoped. Do not make the registry process-global or construct a separate application-tool service for each Location.
+`Tool.Service` is Location-scoped. Do not make the registry process-global or construct a separate application-tool service for each Location.
 
 ## Permissions
 
@@ -56,4 +59,4 @@ Producer capture limits remain local to producers. For example, Bash keeps `AppP
 
 ## Current Gaps
 
-- MCP and future Session-scoped registrations still need an explicit canonical registration design.
+- Future Session-scoped registrations still need an explicit canonical registration design.

@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
 import { LLM, LLMRequest, Message, ToolCallPart, ToolChoice, ToolDefinition } from "../../src/index.js"
@@ -91,40 +91,38 @@ describe("OpenAI-compatible Chat route", () => {
     }),
   )
 
-  it.effect("provides model helpers for compatible provider families", () =>
-    Effect.gen(function* () {
-      expect(
-        providerFamilies.map(([provider, family]) => {
-          const model = family.configure({ apiKey: "test-key" }).model(`${provider}-model`)
-          return {
-            id: String(model.id),
-            provider: String(model.provider),
-            route: model.route.id,
-            baseURL: model.route.endpoint.baseURL,
-          }
-        }),
-      ).toEqual(
-        providerFamilies.map(([provider, _, baseURL]) => ({
-          id: `${provider}-model`,
-          provider,
-          route: "openai-compatible-chat",
-          baseURL,
-        })),
-      )
+  test("provides model helpers for compatible provider families", () => {
+    expect(
+      providerFamilies.map(([provider, family]) => {
+        const model = family.configure({ apiKey: "test-key" }).model(`${provider}-model`)
+        return {
+          id: String(model.id),
+          provider: String(model.provider),
+          route: model.route.id,
+          baseURL: model.route.endpoint.baseURL,
+        }
+      }),
+    ).toEqual(
+      providerFamilies.map(([provider, _, baseURL]) => ({
+        id: `${provider}-model`,
+        provider,
+        route: "openai-compatible-chat",
+        baseURL,
+      })),
+    )
 
-      const custom = OpenAICompatible.deepseek
-        .configure({
-          apiKey: "test-key",
-          baseURL: "https://custom.deepseek.test/v1",
-        })
-        .model("deepseek-chat")
-      expect(custom).toMatchObject({
-        provider: "deepseek",
-        route: { id: "openai-compatible-chat" },
+    const custom = OpenAICompatible.deepseek
+      .configure({
+        apiKey: "test-key",
+        baseURL: "https://custom.deepseek.test/v1",
       })
-      expect(custom.route.endpoint.baseURL).toBe("https://custom.deepseek.test/v1")
-    }),
-  )
+      .model("deepseek-chat")
+    expect(custom).toMatchObject({
+      provider: "deepseek",
+      route: { id: "openai-compatible-chat" },
+    })
+    expect(custom.route.endpoint.baseURL).toBe("https://custom.deepseek.test/v1")
+  })
 
   it.effect("matches AI SDK compatible basic request body fixture", () =>
     Effect.gen(function* () {
@@ -317,6 +315,56 @@ describe("OpenAI-compatible Chat route", () => {
     }),
   )
 
+  it.effect("requires reasoning for DeepSeek models, providers, and endpoints unless explicitly overridden", () =>
+    Effect.gen(function* () {
+      const cases = [
+        { id: "DeepSeek-V3", provider: "custom", baseURL: "https://api.custom.test/v1", required: true },
+        { id: "custom-model", provider: "deepseek", baseURL: "https://api.custom.test/v1", required: true },
+        { id: "custom-model", provider: "custom", baseURL: "https://API.DeepSeek.COM/v1", required: true },
+        { id: "ordinary-model", provider: "custom", baseURL: "https://api.custom.test/v1", required: false },
+        {
+          id: "ordinary-model",
+          provider: "custom",
+          baseURL: "https://api.custom.test/v1",
+          compatibility: { requireReasoning: true, reasoningField: "reasoning" },
+          required: true,
+          field: "reasoning",
+        },
+        {
+          id: "deepseek-chat",
+          provider: "deepseek",
+          baseURL: "https://api.deepseek.com/v1",
+          compatibility: { requireReasoning: false },
+          required: false,
+        },
+      ] as const
+
+      yield* Effect.forEach(cases, (item) =>
+        Effect.gen(function* () {
+          const selected = OpenAICompatibleChat.route
+            .with({ provider: item.provider, endpoint: { baseURL: item.baseURL } })
+            .model({ id: item.id, compatibility: "compatibility" in item ? item.compatibility : undefined })
+          const prepared = yield* compileRequest(
+            LLM.request({
+              model: selected,
+              messages: [
+                Message.assistant("Hello"),
+                Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: {} })]),
+                Message.tool({ id: "call_1", name: "lookup", result: "Sunny" }),
+              ],
+            }),
+          )
+          const field = "field" in item ? item.field : "reasoning_content"
+
+          for (const message of prepared.body.messages.filter((message) => message.role === "assistant")) {
+            if (item.required) expect(message).toHaveProperty(field, "")
+            else expect(message).not.toHaveProperty(field)
+          }
+        }),
+      )
+    }),
+  )
+
   it.effect("posts to the configured compatible endpoint and parses text usage", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(request).pipe(
@@ -387,7 +435,7 @@ describe("OpenAI-compatible Chat route", () => {
         outputTokens: undefined,
         totalTokens: undefined,
         providerMetadata: {
-          openai: {
+          deepseek: {
             prompt_tokens: null,
             completion_tokens: null,
             total_tokens: null,
@@ -439,9 +487,8 @@ describe("OpenAI-compatible Chat route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({
-        _tag: "InvalidProviderOutput",
-        classification: "incomplete-stream",
+      expect(error).toMatchObject({
+        reason: { _tag: "InvalidProviderOutput", classification: "incomplete-stream" },
         message: "OpenAI Chat stream ended without finish_reason",
       })
     }),
@@ -477,11 +524,11 @@ describe("OpenAI-compatible Chat route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({
-        _tag: "ProviderInternal",
+      expect(error).toMatchObject({
+        reason: { _tag: "ProviderInternal" },
         message: "Provider reported a network error (finish_reason: network_error)",
       })
-      expect(decodeJson(error.body ?? "")).toMatchObject({
+      expect(decodeJson(error.reason.body ?? "")).toMatchObject({
         id: "chatcmpl_fixture",
         choices: [{ finish_reason: "network_error" }],
       })
@@ -490,8 +537,8 @@ describe("OpenAI-compatible Chat route", () => {
         Effect.provide(fixedResponse(sseEvents(deltaChunk({}, "error")))),
         Effect.flip,
       )
-      expect(generic.reason).toMatchObject({
-        _tag: "UnknownProvider",
+      expect(generic).toMatchObject({
+        reason: { _tag: "UnknownProvider" },
         message: "Provider reported an error (finish_reason: error)",
       })
     }),
@@ -512,8 +559,8 @@ describe("OpenAI-compatible Chat route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({ _tag: "ProviderInternal", message: "Provider disconnected", status: 502 })
-      expect(decodeJson(error.body ?? "")).toMatchObject({
+      expect(error).toMatchObject({ reason: { _tag: "ProviderInternal" }, message: "Provider disconnected" })
+      expect(decodeJson(error.reason.body ?? "")).toMatchObject({
         id: "chatcmpl_error",
         error: { code: 502, message: "Provider disconnected", details: { upstream: "vendor" } },
         trace_id: "trace_1",
@@ -553,7 +600,7 @@ describe("OpenAI-compatible Chat route", () => {
       expect(error.message).toContain("OpenAI Chat received content after the finish reason")
       expect(error.reason._tag).toBe("InvalidProviderOutput")
       if (error.reason._tag !== "InvalidProviderOutput") return
-      expect(decodeJson(error.reason.raw ?? "")).toMatchObject({
+      expect(decodeJson(error.reason.body ?? "")).toMatchObject({
         choices: [{ delta: { tool_calls: [{ id: "call_1" }] } }],
       })
     }),

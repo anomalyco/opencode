@@ -228,6 +228,57 @@ describe("Worktree", () => {
     }),
   )
 
+  projectIt.live("creates worktrees and runs setup from the selected clone", () =>
+    Effect.gen(function* () {
+      const root = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+      )
+      const main = abs(path.join(root.path, "repo"))
+      const clone = abs(path.join(root.path, "other-clone"))
+      yield* Effect.promise(async () => {
+        await fs.mkdir(main)
+        await initRepo(main)
+        await $`git remote add origin git@github.com:owner/repo.git`.cwd(main).quiet()
+        await $`git clone --no-hardlinks ${main} ${clone}`.quiet()
+        await $`git remote set-url origin https://github.com/owner/repo.git`.cwd(clone).quiet()
+        await $`git -c user.name=Test -c user.email=test@opencode.test -c commit.gpgsign=false commit --allow-empty -m clone`
+          .cwd(clone)
+          .quiet()
+      })
+      const projects = yield* Project.Service
+      const worktrees = yield* Worktree.Service
+      const initial = yield* projects.resolve(main)
+      const selected = yield* projects.resolve(clone)
+      yield* projects.update({
+        projectID: initial.id,
+        commands: {
+          start:
+            "bun -e \"await Bun.write('setup.json', JSON.stringify([process.env.OPENCODE_WORKTREE_BASE, process.env.OPENCODE_WORKTREE_PATH, process.cwd()]))\"",
+        },
+      })
+
+      const created = yield* worktrees.create({
+        projectID: selected.id,
+        strategy: gitWorktree,
+        from: selected.canonical,
+        directory: abs(path.join(root.path, "worktrees")),
+        name: "selected-clone",
+      })
+
+      expect(selected.id).toBe(initial.id)
+      expect((yield* projects.list()).find((project) => project.id === initial.id)?.canonical).toBe(main)
+      expect(yield* Effect.promise(() => $`git rev-parse HEAD`.cwd(created.directory).text())).toBe(
+        yield* Effect.promise(() => $`git rev-parse HEAD`.cwd(clone).text()),
+      )
+      expect(yield* Effect.promise(() => Bun.file(path.join(created.directory, "setup.json")).json())).toEqual([
+        clone,
+        created.directory,
+        created.directory,
+      ])
+    }),
+  )
+
   it.live("creates a git worktree from a selected branch", () =>
     Effect.gen(function* () {
       const input = yield* setup()

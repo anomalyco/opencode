@@ -19,6 +19,14 @@ Per-type constructors live on the type, not as top-level re-exports. Use `Messag
 - Use `testEffect(...)` from `test/lib/effect.ts` for tests requiring Effect layers.
 - Keep provider tests fixture-first. Live provider calls must stay behind `RECORD=true` and required API-key checks.
 
+## Errors
+
+- `AIError` wraps a union of tagged reason errors. It stores only `reason`, derives `message` from the reason, and exposes the reason as its `cause`.
+- Each reason owns its readable `message`, category-specific fields, and optional `body`, `http`, and underlying exception in `cause`.
+- `reason.body` is the sole original-response or triggering-event payload field. Preserve original text before schema decoding removes fields; do not replace the complete event with only its nested error.
+- `reason.http` describes an observed HTTP response with required `url`, `status`, and response `headers`. Do not invent status codes or derive a separate request ID from headers.
+- Reclassification and transport recovery must preserve the reason's body, HTTP context, and underlying cause. Error `message` and `cause` are non-enumerable: copy them explicitly when constructing an enriched reason with its constructor or `AIErrorReason.make`.
+
 ## Architecture
 
 This package is an Effect Schema-first LLM core. The Schema classes in `src/schema/` are the canonical runtime data model. Convenience functions in `src/llm.ts` are thin constructors that return those same Schema class instances; they should improve callsites without creating a second model.

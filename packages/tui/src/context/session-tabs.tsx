@@ -61,22 +61,28 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     const location = useLocation()
     const paths = useTuiPaths()
     const renderer = useRenderer()
+    const storage = useStorage()
     const enabled = () => config.tabs.enabled
+    const previews = () => config.experimental?.["session-preview-tabs"] === true
     const [focused, setFocused] = createSignal<boolean>()
     // Keyed reconcile keeps tab object identity across reorders, so strip rows move instead of
     // mutating in place, which per-row animations and drag state depend on.
-    const [store, updateStore] = useStorage().store<PersistedState>("tabs", {
+    const [store, updateStore] = storage.store<PersistedState>("tabs", {
       initial: {
         global: empty(),
         cwd: {},
       },
       key: "sessionID",
     })
+    const [preview, updatePreview] = storage.memory<{ global?: string; cwd?: string }>("session-tab-preview", {
+      initial: {},
+    })
     const fallback = empty()
     const [promptPulses, setPromptPulses] = createSignal<Record<string, number>>({})
     let history: SessionTabHistory = { entries: [], index: -1 }
     // User-closed tabs eligible for reopening; in-memory like history, deleted sessions pruned.
     let closedTabs: ClosedSessionTab[] = []
+    let promotedSession: string | undefined
     // Storage mutations apply against the on-disk draft under a file lock, so
     // a registration queued by the route effect can land AFTER a removal that
     // ran while the write was still in flight — resurrecting a tab that was
@@ -99,6 +105,18 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     function state() {
       if (config.tabs.scope === "cwd") return store.cwd[paths.cwd] ?? fallback
       return store.global
+    }
+
+    const previewID = () => preview[config.tabs.scope]
+    const setPreview = (sessionID: string | undefined) => {
+      const scope = config.tabs.scope
+      updatePreview((draft) => {
+        if (sessionID === undefined) {
+          delete draft[scope]
+          return
+        }
+        draft[scope] = sessionID
+      })
     }
 
     function update(mutation: (draft: TabsState) => void) {
@@ -149,12 +167,24 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
             ? ("error" as const)
             : ("activity" as const),
         promptPulse: promptPulses()[session] ?? 0,
-        attention: members.some(
-          (id) => (data.session.permission.list(id)?.length ?? 0) > 0 || (data.session.form.list(id)?.length ?? 0) > 0,
-        ),
+        attention: members.some((id) => (data.session.permission.list(id)?.length ?? 0) > 0)
+          ? ("permission" as const)
+          : members.some((id) => (data.session.form.list(id)?.length ?? 0) > 0)
+            ? ("question" as const)
+            : (false as const),
         busy: members.some((id) => data.session.status(id) === "running" || data.session.pending.list(id).length > 0),
       }
     }
+
+    createEffect(() => {
+      if (enabled() && previews()) return
+      promotedSession = undefined
+      if (!preview.global && !preview.cwd) return
+      updatePreview((draft) => {
+        delete draft.global
+        delete draft.cwd
+      })
+    })
 
     // Shared storage updates must not re-admit a tab unless this client changes route or scope.
     createEffect(
@@ -166,16 +196,30 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
         ([routed]) => {
           if (!routed || routed === "dummy") return
           const sessionID = root(routed)
+          const permanent = promotedSession === sessionID
+          promotedSession = undefined
           cancelledTabs.delete(sessionID)
           history = recordSessionTabHistory(history, sessionID)
           if (state().tabs.some((tab) => tab.sessionID === sessionID)) return
           const fallback = newTab() ? NEW_SESSION_TAB_TITLE : undefined
+          const temporary = previews() && !permanent
+          const replaced = temporary ? previewID() : undefined
+          if (replaced) scrollAnchors.delete(replaced)
+          if (temporary) setPreview(sessionID)
           update((draft) => {
             if (cancelledTabs.has(sessionID)) return
-            draft.tabs = openSessionTab(draft.tabs, {
+            const tab = {
               sessionID,
               title: title(sessionID, draft.tabs.find((tab) => tab.sessionID === sessionID)?.title, fallback),
-            })
+            }
+            if (replaced && !draft.tabs.some((item) => item.sessionID === sessionID)) {
+              const index = draft.tabs.findIndex((item) => item.sessionID === replaced)
+              if (index !== -1) {
+                draft.tabs[index] = tab
+                return
+              }
+            }
+            draft.tabs = openSessionTab(draft.tabs, tab)
           })
         },
       ),
@@ -305,6 +349,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       const target = root(sessionID)
       cancelledTabs.add(target)
       scrollAnchors.delete(target)
+      if (previewID() === target) setPreview(undefined)
       const closed = closeSessionTab(state().tabs, target)
       const selected = navigate && current() === target
       if (closed.tabs === state().tabs && !selected) return
@@ -330,6 +375,9 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       tabs() {
         return state().tabs
       },
+      isPreview(sessionID: string) {
+        return enabled() && previews() && previewID() === root(sessionID)
+      },
       newTab() {
         return newTab()
       },
@@ -354,6 +402,15 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
         if (!enabled()) return
         route.navigate({ type: "session", sessionID: root(sessionID) })
       },
+      promote(sessionID: string) {
+        if (!enabled() || !previews()) return
+        const session = root(sessionID)
+        if (previewID() === session) {
+          setPreview(undefined)
+          return
+        }
+        if (!state().tabs.some((tab) => tab.sessionID === session)) promotedSession = session
+      },
       add() {
         if (!enabled()) return
         const sessionID = current()
@@ -362,7 +419,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
           type: "home",
           location: newSessionLocation(
             config.session.new_location,
-            paths.cwd,
+            data.location.default().directory,
             currentLocation,
             location.error?.location,
           ),
@@ -390,6 +447,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
         const tabs = result.tabs
         if (!tabs || !result.sessionID) return
         cancelledTabs.delete(result.sessionID)
+        if (previews()) promotedSession = result.sessionID
         update((draft) => {
           draft.tabs = tabs
         })
@@ -399,6 +457,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
         if (!enabled()) return
         const session = root(sessionID)
         if (moveSessionTab(state().tabs, session, index) === state().tabs) return
+        if (previewID() === session) setPreview(undefined)
         update((draft) => {
           draft.tabs = moveSessionTab(draft.tabs, session, index)
         })

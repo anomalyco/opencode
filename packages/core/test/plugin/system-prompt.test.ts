@@ -32,6 +32,8 @@ const context = (id: string, system = fallback): SessionHooks["context"] => ({
   system: [SystemPart.make(system)],
   messages: [],
   tools: {},
+  generation: {},
+  providerOptions: {},
 })
 
 describe("SystemPromptPlugin", () => {

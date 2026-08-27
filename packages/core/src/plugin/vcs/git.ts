@@ -8,11 +8,18 @@ import { BranchList, FileStatus, Info, Mode } from "@opencode-ai/schema/vcs"
 import { AppProcess } from "@opencode-ai/util/process"
 import { Location } from "../../location.js"
 import type { Adapter, BranchOptions, DiffOptions } from "../../vcs.js"
-import { chunksByFile, emptyPatch, MAX_PATCH_BYTES, MAX_TOTAL_PATCH_BYTES, PATCH_CONTEXT_LINES } from "../../vcs/patch.js"
+import {
+  chunksByFile,
+  emptyPatch,
+  MAX_PATCH_BYTES,
+  MAX_TOTAL_PATCH_BYTES,
+  PATCH_CONTEXT_LINES,
+} from "../../vcs/patch.js"
 import type { Patch } from "../../vcs/patch.js"
 
 export const Plugin = define({
   id: "opencode.vcs.git",
+  vcs: { id: "git", markers: [".git"] },
   effect: Effect.fn("VcsGitPlugin")(function* (ctx) {
     const location = yield* Location.Service
     if (location.vcs?.type !== "git") return

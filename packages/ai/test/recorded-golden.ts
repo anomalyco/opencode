@@ -20,6 +20,7 @@ type ScenarioInput =
       readonly name?: string
       readonly cassette?: string
       readonly tags?: ReadonlyArray<string>
+      readonly prompt?: string
       readonly maxTokens?: number
       readonly temperature?: number | false
       readonly timeout?: number
@@ -87,6 +88,7 @@ const runTarget = (target: TargetInput) => {
             yield* runGoldenScenario(input.id, {
               id: `recorded_${kebab(target.name).replaceAll("-", "_")}_${input.id.replaceAll("-", "_")}`,
               model: target.model,
+              prompt: input.prompt,
               maxTokens: input.maxTokens,
               temperature: input.temperature,
             })

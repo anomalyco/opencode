@@ -18,13 +18,19 @@ describe("provider error classification", () => {
     expect(messages.every(isContextOverflow)).toBe(true)
   })
 
-  test("classifies request size failures separately from context overflow", () => {
-    const failures = [
-      classifyProviderFailure({ message: "request too large", status: 413 }),
+  test("classifies Anthropic request_too_large as recoverable overflow", () => {
+    expect(
       classifyProviderFailure({
         message: '{"error":{"type":"request_too_large","message":"Request exceeds the maximum size"}}',
         status: 400,
       }),
+    ).toMatchObject({ _tag: "InvalidRequest", classification: "context-overflow" })
+    expect(isContextOverflow("413 status code (no body)")).toBe(true)
+  })
+
+  test("classifies generic request size failures separately from context overflow", () => {
+    const failures = [
+      classifyProviderFailure({ message: "request too large", status: 413 }),
       classifyProviderFailure({ message: "upstream request entity too large", status: 502 }),
     ]
 
@@ -33,7 +39,6 @@ describe("provider error classification", () => {
         expect.objectContaining({ _tag: "InvalidRequest", classification: "payload-too-large" }),
       ),
     )
-    expect(isContextOverflow("413 status code (no body)")).toBe(false)
   })
 
   test("does not classify rate limits as context overflow", () => {
@@ -84,9 +89,7 @@ describe("provider error classification", () => {
 
   test("classifies network error text as provider internal", () => {
     expect(
-      ["network error", "network-error", "network_error"].map(
-        (message) => classifyProviderFailure({ message })._tag,
-      ),
+      ["network error", "network-error", "network_error"].map((message) => classifyProviderFailure({ message })._tag),
     ).toEqual(["ProviderInternal", "ProviderInternal", "ProviderInternal"])
   })
 
@@ -108,6 +111,39 @@ describe("provider error classification", () => {
 })
 
 describe("provider error rawBody classification", () => {
+  test("classifies provider envelopes without separate code inputs", () => {
+    const cases = [
+      ['{"type":"error","error":{"type":"overloaded_error","message":"Try again"}}', "ProviderInternal"],
+      ['{"error":{"code":"insufficient_quota","message":"Request failed"}}', "QuotaExceeded"],
+      [
+        '{"type":"response.failed","response":{"error":{"code":"authentication_error","message":"Denied"}}}',
+        "Authentication",
+      ],
+      ['{"error":{"code":429,"status":"RESOURCE_EXHAUSTED","message":"Try again"}}', "ProviderInternal"],
+      ['{"exception":{"type":"throttlingException","details":{"message":"Try again"}}}', "RateLimit"],
+    ] as const
+    for (const [rawBody, expected] of cases) {
+      const reason = classifyProviderFailure({ message: "Request failed", rawBody })
+      expect(reason._tag).toBe(expected)
+      expect(reason.body).toBe(rawBody)
+      expect(reason).not.toHaveProperty("code")
+    }
+  })
+
+  test("classifies separately supplied SDK data without replacing the response body", () => {
+    const data = { error: { code: "authentication_error" } }
+    for (const value of [data, JSON.stringify(data)]) {
+      const reason = classifyProviderFailure({
+        message: "Request failed",
+        status: 400,
+        rawBody: '{"message":"Request failed"}',
+        data: value,
+      })
+      expect(reason._tag).toBe("Authentication")
+      expect(reason.body).toBe('{"message":"Request failed"}')
+    }
+  })
+
   test("classifies overflow signals buried in the raw payload when the summary is vague", () => {
     const reason = classifyProviderFailure({
       message: "Request failed",

@@ -4,6 +4,7 @@ import { Headers, HttpClientRequest } from "effect/unstable/http"
 import {
   LLM,
   AIError,
+  HttpContext,
   HttpOptions,
   LLMEvent,
   LLMRequest,
@@ -12,7 +13,7 @@ import {
   ToolCallPart,
   ToolDefinition,
   ToolResultPart,
-  TransportReason,
+  TransportError,
   Usage,
 } from "../../src/index.js"
 import {
@@ -52,10 +53,11 @@ const baseChannelDriver = (message: string): WebSocketChannelDriver => ({
       return Effect.succeed({
         type: "provider-failure",
         error: new AIError({
-          module: "test",
-          method: "stream",
-          reason: new TransportReason({
+          reason: new TransportError({
             message: "provider rejected request",
+            body: frame,
+            cause: new Error("provider cause"),
+            http: new HttpContext({ url: "https://provider.test", status: 200, headers: { "x-trace": "trace-1" } }),
             transport: "websocket",
             operation: "read",
             phase: "receive",
@@ -112,10 +114,8 @@ describe("OpenAI Responses route", () => {
 
       expect(prepared.body).toEqual({
         model: "gpt-4.1-mini",
-        input: [
-          { role: "system", content: "You are concise." },
-          { role: "user", content: [{ type: "input_text", text: "Say hello." }] },
-        ],
+        input: [{ role: "user", content: [{ type: "input_text", text: "Say hello." }] }],
+        instructions: "You are concise.",
         store: false,
         include: ["reasoning.encrypted_content"],
         stream: true,
@@ -469,7 +469,7 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("continues a tool call with only the new tool output", () =>
+  it.effect("continues an item-id-less tool call with only the new tool output", () =>
     Effect.gen(function* () {
       const firstRequest = {
         type: "response.create",
@@ -485,7 +485,6 @@ describe("OpenAI Responses route", () => {
           type: "response.output_item.done",
           item: {
             type: "function_call",
-            id: "fc_1",
             status: "completed",
             call_id: "call_1",
             name: "weather",
@@ -747,6 +746,18 @@ describe("OpenAI Responses route", () => {
           reason: { _tag: "Transport", delivery: "rejected", recovery: "rotate-and-retry-full" },
         },
       })
+      for (const observation of [missing, limit]) {
+        expect(observation.type).toBe("rejected")
+        if (observation.type !== "rejected") continue
+        expect(observation.error.message).toBe("provider rejected request")
+        expect(observation.error.reason.cause).toBeInstanceOf(Error)
+        expect(observation.error.reason.cause).toMatchObject({ message: "provider cause" })
+        expect(observation.error.reason.http).toMatchObject({ status: 200, headers: { "x-trace": "trace-1" } })
+        expect(ProviderShared.decodeJson(observation.error.reason.body ?? "")).toMatchObject({
+          type: "error",
+          error: { code: expect.any(String) },
+        })
+      }
     }),
   )
 
@@ -1113,9 +1124,7 @@ describe("OpenAI Responses route", () => {
   it.effect("marks post-send WebSocket failures with delivery state", () =>
     Effect.gen(function* () {
       const failure = new AIError({
-        module: "test",
-        method: "receive",
-        reason: new TransportReason({
+        reason: new TransportError({
           message: "socket closed",
           transport: "websocket",
           operation: "read",
@@ -1597,8 +1606,8 @@ describe("OpenAI Responses route", () => {
       )
 
       expect(prepared.body).toMatchObject({
+        instructions: "You are concise. Continue from the provided history.",
         input: [
-          { role: "system", content: "You are concise. Continue from the provided history." },
           {
             role: "user",
             content: [
@@ -2120,6 +2129,47 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("routes item-id-less function arguments by output index and prefers item completion", () =>
+    Effect.gen(function* () {
+      const item = { type: "function_call", call_id: "call_1", name: "lookup", arguments: "" }
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "response.output_item.added", output_index: 2, item },
+              {
+                type: "response.function_call_arguments.delta",
+                output_index: 2,
+                item_id: "opaque_delta",
+                delta: '{"query":"streamed"}',
+              },
+              {
+                type: "response.function_call_arguments.done",
+                output_index: 2,
+                item_id: "opaque_done",
+                arguments: '{"query":"arguments-done"}',
+              },
+              {
+                type: "response.output_item.done",
+                output_index: 2,
+                item: { ...item, arguments: '{"query":"output-item-done"}' },
+              },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.events.filter((event) => event.type === "tool-input-delta")).toMatchObject([
+        { id: "call_1", text: '{"query":"streamed"}' },
+      ])
+      expect(response.events.filter(LLMEvent.is.toolCall)).toEqual([
+        expect.objectContaining({ id: "call_1", name: "lookup", input: { query: "output-item-done" } }),
+      ])
+      expect(response.events.find(LLMEvent.is.toolCall)?.providerMetadata).toBeUndefined()
+    }),
+  )
+
   it.effect("routes reasoning summary events by output index", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(request).pipe(
@@ -2188,6 +2238,35 @@ describe("OpenAI Responses route", () => {
       )
 
       expect(response.reasoning).toBe("Raw")
+    }),
+  )
+
+  it.effect("accepts empty IDs for native reasoning text deltas", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "response.output_item.added", output_index: 1, item: { type: "reasoning", id: "" } },
+              { type: "response.reasoning_text.delta", output_index: 1, item_id: "", delta: "Raw" },
+              {
+                type: "response.output_item.done",
+                output_index: 1,
+                item: { type: "reasoning", id: "", encrypted_content: "state" },
+              },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.message.content).toEqual([
+        {
+          type: "reasoning",
+          text: "Raw",
+          providerMetadata: { openai: { itemId: "", reasoningEncryptedContent: "state" } },
+        },
+      ])
     }),
   )
 
@@ -2298,13 +2377,25 @@ describe("OpenAI Responses route", () => {
   it.effect("rejects function argument events without the spec-required item id", () =>
     Effect.gen(function* () {
       const events = [
-        { type: "response.function_call_arguments.delta", delta: "{}" },
-        { type: "response.function_call_arguments.done", arguments: "{}" },
+        { type: "response.function_call_arguments.delta", output_index: 0, delta: "{}" },
+        { type: "response.function_call_arguments.done", output_index: 0, arguments: "{}" },
       ]
 
       for (const event of events) {
         const error = yield* LLMClient.generate(request).pipe(
-          Effect.provide(fixedResponse(sseEvents(event, { type: "response.completed", response: { id: "resp_1" } }))),
+          Effect.provide(
+            fixedResponse(
+              sseEvents(
+                {
+                  type: "response.output_item.added",
+                  output_index: 0,
+                  item: { type: "function_call", call_id: "call_1", name: "lookup", arguments: "" },
+                },
+                event,
+                { type: "response.completed", response: { id: "resp_1" } },
+              ),
+            ),
+          ),
           Effect.flip,
         )
 
@@ -3100,37 +3191,49 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("drops replayed item ids outside the server's grammar", () =>
+  it.effect("preserves provider-issued item ids and removes malformed ids without dropping items", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         LLM.request({
           model,
           messages: [
             Message.assistant([
-              // Fails the message id prefix.
               {
                 type: "text",
                 text: "Hello",
                 providerMetadata: { openai: { itemId: "history_1" } },
               },
-              // Oversized for the Responses item id limit.
               {
                 type: "text",
                 text: "World",
-                providerMetadata: { openai: { itemId: `m${"a".repeat(64)}` } },
+                providerMetadata: { openai: { itemId: `message_${"a".repeat(64)}` } },
               },
-              // Fails the reasoning id prefix, so the whole item is unreplayable
-              // statelessly and is skipped rather than sent malformed.
               {
                 type: "reasoning",
                 text: "Checked the diff.",
                 providerMetadata: { openai: { itemId: "thinking_1", reasoningEncryptedContent: "encrypted-state" } },
+              },
+              {
+                type: "reasoning",
+                text: "Missing suffix.",
+                providerMetadata: { openai: { itemId: "rs_", reasoningEncryptedContent: "another-state" } },
+              },
+              {
+                type: "reasoning",
+                text: "No prefix separator.",
+                providerMetadata: { openai: { itemId: "550e8400-e29b-41d4-a716-446655440000" } },
               },
               ToolCallPart.make({
                 id: "call_1",
                 name: "lookup",
                 input: { query: "weather" },
                 providerMetadata: { openai: { itemId: "toolu_01A" } },
+              }),
+              ToolCallPart.make({
+                id: "call_2",
+                name: "lookup",
+                input: { query: "news" },
+                providerMetadata: { openai: { itemId: "fc_" } },
               }),
             ]),
           ],
@@ -3140,17 +3243,43 @@ describe("OpenAI Responses route", () => {
       expect(prepared.body.input).toEqual([
         {
           type: "message",
+          id: "history_1",
           role: "assistant",
-          content: [
-            { type: "output_text", text: "Hello" },
-            { type: "output_text", text: "World" },
-          ],
+          content: [{ type: "output_text", text: "Hello" }],
+        },
+        {
+          type: "message",
+          id: `message_${"a".repeat(64)}`,
+          role: "assistant",
+          content: [{ type: "output_text", text: "World" }],
+        },
+        {
+          type: "reasoning",
+          id: "thinking_1",
+          summary: [{ type: "summary_text", text: "Checked the diff." }],
+          encrypted_content: "encrypted-state",
+        },
+        {
+          type: "reasoning",
+          summary: [{ type: "summary_text", text: "Missing suffix." }],
+          encrypted_content: "another-state",
+        },
+        {
+          type: "reasoning",
+          summary: [{ type: "summary_text", text: "No prefix separator." }],
         },
         {
           type: "function_call",
+          id: "toolu_01A",
           call_id: "call_1",
           name: "lookup",
           arguments: '{"query":"weather"}',
+        },
+        {
+          type: "function_call",
+          call_id: "call_2",
+          name: "lookup",
+          arguments: '{"query":"news"}',
         },
       ])
     }),
@@ -3457,6 +3586,43 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("finalizes and replays a completed function call without an optional item id", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              {
+                type: "response.output_item.done",
+                item: { type: "function_call", call_id: "call_1", name: "lookup", arguments: '{"query":"weather"}' },
+              },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.events.filter(LLMEvent.is.toolCall)).toEqual([
+        expect.objectContaining({ id: "call_1", name: "lookup", input: { query: "weather" } }),
+      ])
+      expect(response.events.find(LLMEvent.is.toolCall)?.providerMetadata).toBeUndefined()
+
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            response.message,
+            Message.tool({ id: "call_1", name: "lookup", resultType: "json", result: { forecast: "sunny" } }),
+          ],
+        }),
+      )
+      expect(prepared.body.input).toEqual([
+        { type: "function_call", call_id: "call_1", name: "lookup", arguments: '{"query":"weather"}' },
+        { type: "function_call_output", call_id: "call_1", output: '{"forecast":"sunny"}' },
+      ])
+    }),
+  )
+
   it.effect("emits only missing function arguments from the arguments done event", () =>
     Effect.gen(function* () {
       const body = sseEvents(
@@ -3678,6 +3844,37 @@ describe("OpenAI Responses route", () => {
       expect(response.events.filter(LLMEvent.is.toolInputEnd)).toHaveLength(1)
       expect(response.events.filter(LLMEvent.is.toolCall)).toHaveLength(1)
       expect(response.finishReason.normalized).toBe("tool-calls")
+    }),
+  )
+
+  it.effect("reconciles an item-id-less pending function call from completed response output", () =>
+    Effect.gen(function* () {
+      const item = { type: "function_call", call_id: "call_1", name: "lookup", arguments: "" }
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "response.output_item.added", output_index: 0, item },
+              {
+                type: "response.function_call_arguments.delta",
+                output_index: 0,
+                item_id: "opaque_delta",
+                delta: '{"query":"partial',
+              },
+              {
+                type: "response.completed",
+                response: { id: "resp_1", output: [{ ...item, arguments: '{"query":"complete"}' }] },
+              },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.events.filter(LLMEvent.is.toolCall)).toEqual([
+        expect.objectContaining({ id: "call_1", name: "lookup", input: { query: "complete" } }),
+      ])
+      expect(response.events.find(LLMEvent.is.toolCall)?.providerMetadata).toBeUndefined()
+      expect(response.events.filter(LLMEvent.is.toolInputEnd)).toHaveLength(1)
     }),
   )
 
@@ -4250,7 +4447,7 @@ describe("OpenAI Responses route", () => {
       )
 
       expect(error).toBeInstanceOf(AIError)
-      expect(error.reason).toMatchObject({ _tag: "RateLimit", message: "rate_limit_exceeded: Slow down" })
+      expect(error).toMatchObject({ reason: { _tag: "RateLimit" }, message: "rate_limit_exceeded: Slow down" })
     }),
   )
 
@@ -4261,7 +4458,7 @@ describe("OpenAI Responses route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({ _tag: "ProviderInternal", message: "internal_error" })
+      expect(error).toMatchObject({ reason: { _tag: "ProviderInternal" }, message: "internal_error" })
     }),
   )
 
@@ -4272,7 +4469,7 @@ describe("OpenAI Responses route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({ _tag: "ProviderInternal", message: "internal_error" })
+      expect(error).toMatchObject({ reason: { _tag: "ProviderInternal" }, message: "internal_error" })
     }),
   )
 
@@ -4297,8 +4494,8 @@ describe("OpenAI Responses route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({
-        _tag: "ProviderInternal",
+      expect(error).toMatchObject({
+        reason: { _tag: "ProviderInternal" },
         message: "server_error: Upstream model unavailable",
       })
     }),
@@ -4318,7 +4515,7 @@ describe("OpenAI Responses route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({ _tag: "InvalidRequest", message: "invalid_prompt" })
+      expect(error).toMatchObject({ reason: { _tag: "InvalidRequest" }, message: "invalid_prompt" })
     }),
   )
 
@@ -4341,10 +4538,9 @@ describe("OpenAI Responses route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({
-        _tag: "InvalidRequest",
+      expect(error).toMatchObject({
+        reason: { _tag: "InvalidRequest", classification: "context-overflow" },
         message: "context_length_exceeded: prompt too long",
-        classification: "context-overflow",
       })
     }),
   )
@@ -4369,10 +4565,9 @@ describe("OpenAI Responses route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({
-        _tag: "InvalidRequest",
+      expect(error).toMatchObject({
+        reason: { _tag: "InvalidRequest", classification: "context-overflow" },
         message: "context_length_exceeded: prompt too long",
-        classification: "context-overflow",
       })
     }),
   )
@@ -4394,7 +4589,7 @@ describe("OpenAI Responses route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({ _tag: "UnknownProvider", message: "Something went wrong" })
+      expect(error).toMatchObject({ reason: { _tag: "UnknownProvider" }, message: "Something went wrong" })
     }),
   )
 
@@ -4406,8 +4601,8 @@ describe("OpenAI Responses route", () => {
       )
 
       expect(error.reason).toMatchObject({ _tag: "UnknownProvider" })
-      expect(error.reason.message).toContain('"error":null')
-      expect(error.body).toBe(error.reason.message)
+      expect(error.message).toContain('"error":null')
+      expect(error.reason.body).toBe(error.message)
     }),
   )
 
@@ -4419,8 +4614,8 @@ describe("OpenAI Responses route", () => {
       )
 
       expect(error.reason).toMatchObject({ _tag: "ProviderInternal" })
-      expect(error.reason.message).toContain('"type":"error"')
-      expect(error.body).toBe(error.reason.message)
+      expect(error.message).toContain('"type":"error"')
+      expect(error.reason.body).toBe(error.message)
     }),
   )
 
@@ -4432,8 +4627,8 @@ describe("OpenAI Responses route", () => {
       )
 
       expect(error.reason).toMatchObject({ _tag: "UnknownProvider" })
-      expect(error.reason.message).toContain('"resp_failed_3"')
-      expect(error.body).toBe(error.reason.message)
+      expect(error.message).toContain('"resp_failed_3"')
+      expect(error.reason.body).toBe(error.message)
     }),
   )
 
@@ -4450,7 +4645,7 @@ describe("OpenAI Responses route", () => {
       )
 
       expect(error).toBeInstanceOf(AIError)
-      expect(error.reason).toMatchObject({ _tag: "InvalidRequest", message: "Bad request" })
+      expect(error).toMatchObject({ reason: { _tag: "InvalidRequest" }, message: "Bad request" })
     }),
   )
 })

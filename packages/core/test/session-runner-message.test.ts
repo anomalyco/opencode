@@ -205,6 +205,44 @@ Recent work
     })
   })
 
+  test("lowers each prepared skill once before the prompt", () => {
+    const effect = SkillAttachment.make({
+      id: Skill.ID.make("effect"),
+      name: Skill.Name.make("Effect"),
+      text: "<skill_content>Use Effect</skill_content>",
+    })
+    const api = SkillAttachment.make({
+      id: Skill.ID.make("api-design"),
+      name: Skill.Name.make("API design"),
+      text: "<skill_content>Design APIs</skill_content>",
+    })
+    const messages = toLLMMessages(
+      [
+        SessionMessage.User.make({
+          id: id("user-skill-content"),
+          type: "user",
+          text: "Use @effect and @api-design",
+          skills: [effect, api, SkillAttachment.make({ id: effect.id, name: effect.name })],
+          time: { created },
+        }),
+      ],
+      model,
+    )
+
+    expect(messages).toEqual([
+      Message.make({
+        id: id("user-skill-content"),
+        role: "user",
+        content: [
+          { type: "text", text: "<skill_content>Use Effect</skill_content>" },
+          { type: "text", text: "<skill_content>Design APIs</skill_content>" },
+          { type: "text", text: "Use @effect and @api-design" },
+        ],
+        metadata: {},
+      }),
+    ])
+  })
+
   test("does not inject skill content for reference-only attachments", () => {
     const messages = toLLMMessages(
       [
@@ -946,7 +984,7 @@ Recent work
     )
 
     expect(messages[0]?.content).toEqual([
-      { type: "text", text: "Visible thought" },
+      { type: "reasoning", text: "Visible thought" },
       {
         type: "tool-call",
         id: "hosted-old-model",

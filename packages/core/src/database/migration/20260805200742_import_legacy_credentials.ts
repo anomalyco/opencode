@@ -80,10 +80,11 @@ export function importLegacyCredentials(tx: Parameters<DatabaseMigration.Migrati
                       }
                     : undefined,
               })
+      const label = credential.type === "oauth" ? "OAuth" : "API key"
       const now = Date.now()
       yield* tx.run(sql`
         INSERT INTO credential (id, integration_id, label, value, time_created, time_updated)
-        VALUES (${Credential.ID.create()}, ${integrationID}, 'default', ${JSON.stringify(credential)}, ${now}, ${now})
+        VALUES (${Credential.ID.create()}, ${integrationID}, ${label}, ${JSON.stringify(credential)}, ${now}, ${now})
       `)
     }
 

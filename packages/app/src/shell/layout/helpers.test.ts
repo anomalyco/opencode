@@ -12,6 +12,7 @@ import {
   homeProjectDirectories,
   homeSessionServerStatus,
   latestRootSession,
+  projectForSession,
   sortedRootSessions,
   toggleHomeProjectSelection,
 } from "./helpers"
@@ -165,6 +166,27 @@ describe("layout workspace helpers", () => {
     expect(childSessionOnPath(list, "child", "leaf")?.id).toBe("leaf")
     expect(childSessionOnPath(list, "root", "root")).toBeUndefined()
     expect(childSessionOnPath(list, "root", "other")).toBeUndefined()
+  })
+
+  test("keeps the enriched workspace inventory when matching a session by project id", () => {
+    const project = {
+      id: "project",
+      worktree: "/repo",
+      sandboxes: ["/workspaces/feature"],
+      worktrees: [{ directory: "/repo" }, { directory: "/workspaces/feature", strategy: "git" }],
+    }
+
+    expect(projectForSession(session({ id: "feature", directory: "/workspaces/feature/packages/app" }), [project])).toBe(
+      project,
+    )
+  })
+
+  test("finds the enriched project for a nested workspace when its session project id is stale", () => {
+    const project = { id: "updated", worktree: "/repo", sandboxes: ["/workspaces/feature"] }
+
+    expect(projectForSession(session({ id: "feature", directory: "/workspaces/feature/packages/app" }), [project])).toBe(
+      project,
+    )
   })
 
   test("formats fallback project display name", () => {

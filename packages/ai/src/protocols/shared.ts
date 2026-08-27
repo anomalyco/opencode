@@ -2,11 +2,12 @@ import { Buffer } from "node:buffer"
 import { Tool } from "@opencode-ai/schema/tool"
 import { Effect, Schema, Stream } from "effect"
 import * as Sse from "effect/unstable/encoding/Sse"
-import { Headers, HttpClientRequest } from "effect/unstable/http"
+import { Headers, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import {
-  InvalidProviderOutputReason,
-  InvalidRequestReason,
+  InvalidProviderOutputError,
+  InvalidRequestError,
   AIError,
+  HttpContext,
   type ContentPart,
   type LLMRequest,
   type MediaPart,
@@ -96,17 +97,15 @@ export const sumTokens = (...values: ReadonlyArray<number | undefined>): number 
   return values.reduce((acc: number, value) => acc + (value ?? 0), 0)
 }
 
-export const eventError = (route: string, message: string, raw?: string) =>
+export const eventError = (route: string, message: string, body?: string, cause?: unknown) =>
   new AIError({
-    module: "ProviderShared",
-    method: "stream",
-    reason: new InvalidProviderOutputReason({ route, message, raw }),
+    reason: new InvalidProviderOutputError({ route, message, body, cause }),
   })
 
 export const parseJson = (route: string, input: string, message: string) =>
   Effect.try({
     try: () => decodeJson(input),
-    catch: () => eventError(route, message, input),
+    catch: (cause) => eventError(route, message, input, cause),
   })
 
 /**
@@ -210,10 +209,9 @@ export const errorText = (error: unknown) => {
  * `framing` step for Server-Sent Events. Decodes UTF-8, runs the SSE channel
  * decoder, optionally filters named events, and drops empty / `[DONE]`
  * keep-alive events so the protocol event schema sees one JSON string per
- * element. The SSE channel emits a
- * `Retry` control event on its error channel; we drop it here (we don't
- * implement client-driven retries). Decoder failures become provider output
- * errors so the public error channel stays `AIError`.
+ * element. Retry control events are ignored without interrupting the stream.
+ * Decoder failures become provider output errors so the public error channel
+ * stays `AIError`.
  */
 export const sseFraming = (
   bytes: Stream.Stream<Uint8Array, AIError>,
@@ -221,9 +219,23 @@ export const sseFraming = (
 ): Stream.Stream<string, AIError> =>
   bytes.pipe(
     Stream.decodeText(),
-    Stream.pipeThroughChannel(Sse.decode()),
-    Stream.catchTag("Retry", () => Stream.empty),
-    Stream.catchTag("SseError", (error) => Stream.fail(eventError("sse", error.message))),
+    Stream.mapAccumEffect(
+      () => {
+        const output: Sse.Event[] = []
+        return {
+          output,
+          parser: Sse.makeParser((event) => {
+            if (event._tag === "Event") output.push(event)
+          }),
+        }
+      },
+      (state, chunk) =>
+        Effect.gen(function* () {
+          const error = state.parser.feed(chunk)
+          if (error) return yield* eventError("sse", error.message, chunk, error)
+          return [state, state.output.splice(0)] as const
+        }),
+    ),
     Stream.filter(
       (event) =>
         (events === undefined || events.has(event.event)) &&
@@ -236,12 +248,38 @@ export const sseFraming = (
 /**
  * Canonical invalid-request constructor shared by protocol lowering.
  */
-export const invalidRequest = (message: string) =>
+export const invalidRequest = (message: string, cause?: unknown) =>
   new AIError({
-    module: "ProviderShared",
-    method: "request",
-    reason: new InvalidRequestReason({ message }),
+    reason: new InvalidRequestError({ message, cause }),
   })
+
+export const imageResponse = Effect.fn("ProviderShared.imageResponse")(function* (
+  route: string,
+  name: string,
+  response: HttpClientResponse.HttpClientResponse,
+) {
+  const http = new HttpContext({ url: response.request.url, status: response.status, headers: response.headers })
+  const body = yield* response.text.pipe(
+    Effect.mapError(
+      (cause) =>
+        new AIError({
+          reason: new InvalidProviderOutputError({
+            route,
+            message: `Failed to read the ${name} response`,
+            http,
+            cause,
+          }),
+        }),
+    ),
+  )
+  return {
+    body,
+    invalid: (message: string, cause?: unknown) =>
+      new AIError({
+        reason: new InvalidProviderOutputError({ route, message, body, http, cause }),
+      }),
+  }
+})
 
 export const matchToolChoice = <Auto, None, Required, Tool>(
   route: string,
@@ -289,7 +327,7 @@ export const unsupportedContent = (
 export const validateWith =
   <A, I, E extends { readonly message: string }>(decode: (input: I) => Effect.Effect<A, E>) =>
   (payload: I) =>
-    decode(payload).pipe(Effect.mapError((error) => invalidRequest(error.message)))
+    decode(payload).pipe(Effect.mapError((error) => invalidRequest(error.message, error)))
 
 /**
  * Build an HTTP POST with a JSON body. Sets `content-type: application/json`

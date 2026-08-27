@@ -2,9 +2,10 @@ import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
 import { CacheHint, LLM, AIError, LLMRequest, Message, ToolCallPart, ToolDefinition, Usage } from "../../src/index.js"
-import { Auth, LLMClient } from "../../src/route.js"
+import { Auth, Endpoint, LLMClient, Route } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import * as AnthropicMessages from "../../src/protocols/anthropic-messages.js"
+import { GoogleVertexMessages } from "../../src/providers.js"
 import { continuationRequest, nativeAnthropicMessagesContinuation } from "../continuation-scenarios.js"
 import { it } from "../lib/effect.js"
 import { dynamicResponse, fixedResponse } from "../lib/http.js"
@@ -26,6 +27,12 @@ const compileUnsignedReasoning = (model: LLMRequest["model"]) =>
       cache: "none",
     }),
   )
+
+const vertexOpus48 = GoogleVertexMessages.configure({
+  accessToken: "test",
+  location: "global",
+  project: "test",
+}).model("claude-opus-4-8")
 
 const request = LLM.request({
   id: "req_1",
@@ -281,6 +288,149 @@ describe("Anthropic Messages route", () => {
             { type: "text", text: "<system-update>\nOne.\n</system-update>" },
             { type: "text", text: "<system-update>\nTwo.\n</system-update>" },
           ],
+        },
+      ])
+    }),
+  )
+
+  it.effect("keeps a terminal Vertex system update in the tool-result turn", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: vertexOpus48,
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: {} })]),
+            Message.tool({ id: "call_1", name: "lookup", result: "Done." }),
+            Message.system("Operator update."),
+          ],
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "assistant",
+          content: [{ type: "tool_use", id: "call_1", name: "lookup", input: {} }],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "call_1",
+              content: '"Done."',
+              is_error: undefined,
+              cache_control: undefined,
+            },
+            {
+              type: "text",
+              text: "<system-update>\nOperator update.\n</system-update>",
+              cache_control: undefined,
+            },
+          ],
+        },
+      ])
+    }),
+  )
+
+  it.effect("preserves folded tool-result system updates across multi-turn Vertex history", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: vertexOpus48,
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: {} })]),
+            Message.tool({ id: "call_1", name: "lookup", result: "Done." }),
+            Message.system("Operator update."),
+            Message.assistant("Acknowledged."),
+            Message.user("Next step."),
+          ],
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "assistant",
+          content: [{ type: "tool_use", id: "call_1", name: "lookup", input: {} }],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "call_1",
+              content: '"Done."',
+              is_error: undefined,
+              cache_control: undefined,
+            },
+            {
+              type: "text",
+              text: "<system-update>\nOperator update.\n</system-update>",
+              cache_control: undefined,
+            },
+          ],
+        },
+        { role: "assistant", content: [{ type: "text", text: "Acknowledged." }] },
+        { role: "user", content: [{ type: "text", text: "Next step." }] },
+      ])
+    }),
+  )
+
+  it.effect("keeps a terminal direct Anthropic system update native", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: opus48,
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: {} })]),
+            Message.tool({ id: "call_1", name: "lookup", result: "Done." }),
+            Message.system("Operator update."),
+          ],
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "assistant",
+          content: [{ type: "tool_use", id: "call_1", name: "lookup", input: {} }],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "call_1",
+              content: '"Done."',
+              is_error: undefined,
+              cache_control: undefined,
+            },
+          ],
+        },
+        {
+          role: "system",
+          content: [{ type: "text", text: "Operator update.", cache_control: undefined }],
+        },
+      ])
+    }),
+  )
+
+  it.effect("keeps an ordinary terminal Vertex system update native", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: vertexOpus48,
+          messages: [Message.user("Before."), Message.system("Operator update.")],
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        { role: "user", content: [{ type: "text", text: "Before." }] },
+        {
+          role: "system",
+          content: [{ type: "text", text: "Operator update.", cache_control: undefined }],
         },
       ])
     }),
@@ -660,6 +810,99 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
+  it.effect("round-trips compatible provider metadata in its own namespace", () =>
+    Effect.gen(function* () {
+      const compatible = Route.make({
+        id: "custom-anthropic-messages",
+        provider: "custom-anthropic",
+        protocol: AnthropicMessages.protocol,
+        endpoint: Endpoint.path("/messages", { baseURL: "https://compatible.test/v1" }),
+        auth: Auth.header("x-api-key", "test"),
+        framing: AnthropicMessages.framing,
+      }).model({ id: "custom-model" })
+      const result = [
+        {
+          type: "web_search_result",
+          url: "https://example.com",
+          citations: [{ type: "web_search_result_location", cited_text: "Example" }],
+        },
+      ]
+      const response = yield* LLMClient.generate(LLM.request({ model: compatible, prompt: "Search." })).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "message_start", message: { usage: { input_tokens: 5, custom_start: true } } },
+              { type: "content_block_start", index: 0, content_block: { type: "thinking", thinking: "Thinking." } },
+              { type: "content_block_delta", index: 0, delta: { type: "signature_delta", signature: "custom_sig" } },
+              { type: "content_block_stop", index: 0 },
+              {
+                type: "content_block_start",
+                index: 1,
+                content_block: { type: "redacted_thinking", data: "custom_redacted" },
+              },
+              { type: "content_block_stop", index: 1 },
+              {
+                type: "content_block_start",
+                index: 2,
+                content_block: {
+                  type: "server_tool_use",
+                  id: "custom_tool",
+                  name: "web_search",
+                  input: { query: "example" },
+                },
+              },
+              { type: "content_block_stop", index: 2 },
+              {
+                type: "content_block_start",
+                index: 3,
+                content_block: { type: "web_search_tool_result", tool_use_id: "custom_tool", content: result },
+              },
+              { type: "content_block_stop", index: 3 },
+              {
+                type: "message_delta",
+                delta: { stop_reason: "end_turn", stop_sequence: "custom_stop" },
+                usage: { output_tokens: 2, custom_terminal: true },
+              },
+              { type: "message_stop" },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.message.content).toMatchObject([
+        { type: "reasoning", text: "Thinking.", providerMetadata: { "custom-anthropic": { signature: "custom_sig" } } },
+        { type: "reasoning", text: "", providerMetadata: { "custom-anthropic": { redactedData: "custom_redacted" } } },
+        { type: "tool-call", id: "custom_tool", providerExecuted: true },
+        {
+          type: "tool-result",
+          providerExecuted: true,
+          providerMetadata: { "custom-anthropic": { blockType: "web_search_tool_result", result } },
+        },
+      ])
+      expect(response.usage?.providerMetadata).toEqual({
+        "custom-anthropic": { input_tokens: 5, custom_start: true, output_tokens: 2, custom_terminal: true },
+      })
+      expect(response.events.at(-1)).toMatchObject({
+        providerMetadata: { "custom-anthropic": { stopSequence: "custom_stop" } },
+      })
+
+      const prepared = yield* compileRequest(
+        LLM.request({ model: compatible, messages: [response.message], cache: "none" }),
+      )
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "assistant",
+          content: [
+            { type: "thinking", thinking: "Thinking.", signature: "custom_sig" },
+            { type: "redacted_thinking", data: "custom_redacted" },
+            { type: "server_tool_use", id: "custom_tool", name: "web_search", input: { query: "example" } },
+            { type: "web_search_tool_result", tool_use_id: "custom_tool", content: result },
+          ],
+        },
+      ])
+    }),
+  )
+
   it.effect("parses text, reasoning, and usage stream fixtures", () =>
     Effect.gen(function* () {
       const body = sseEvents(
@@ -723,9 +966,8 @@ describe("Anthropic Messages route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({
-        _tag: "InvalidProviderOutput",
-        classification: "incomplete-stream",
+      expect(error).toMatchObject({
+        reason: { _tag: "InvalidProviderOutput", classification: "incomplete-stream" },
         message: "The provider response ended unexpectedly.",
       })
     }),
@@ -814,8 +1056,8 @@ describe("Anthropic Messages route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({
-        _tag: "InvalidProviderOutput",
+      expect(error).toMatchObject({
+        reason: { _tag: "InvalidProviderOutput" },
         message: "Invalid anthropic/anthropic-messages stream event",
       })
     }),
@@ -836,8 +1078,8 @@ describe("Anthropic Messages route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({
-        _tag: "InvalidProviderOutput",
+      expect(error).toMatchObject({
+        reason: { _tag: "InvalidProviderOutput" },
         message: "Invalid anthropic/anthropic-messages stream event",
       })
     }),
@@ -863,8 +1105,8 @@ describe("Anthropic Messages route", () => {
             Effect.flip,
           )
 
-          expect(error.reason).toMatchObject({
-            _tag: "InvalidProviderOutput",
+          expect(error).toMatchObject({
+            reason: { _tag: "InvalidProviderOutput" },
             message: "Invalid anthropic/anthropic-messages stream event",
           })
         }),
@@ -879,8 +1121,8 @@ describe("Anthropic Messages route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({
-        _tag: "InvalidProviderOutput",
+      expect(error).toMatchObject({
+        reason: { _tag: "InvalidProviderOutput" },
         message: "Invalid anthropic/anthropic-messages stream event",
       })
     }),
@@ -1402,7 +1644,7 @@ describe("Anthropic Messages route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({ _tag: "ProviderInternal", message: "overloaded_error: Overloaded" })
+      expect(error).toMatchObject({ reason: { _tag: "ProviderInternal" }, message: "overloaded_error: Overloaded" })
     }),
   )
 
@@ -1420,10 +1662,9 @@ describe("Anthropic Messages route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({
-        _tag: "InvalidRequest",
+      expect(error).toMatchObject({
+        reason: { _tag: "InvalidRequest", classification: "context-overflow" },
         message: "invalid_request_error: prompt is too long: 210000 tokens",
-        classification: "context-overflow",
       })
     }),
   )
@@ -1435,7 +1676,7 @@ describe("Anthropic Messages route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({ _tag: "ProviderInternal", message: "overloaded_error" })
+      expect(error).toMatchObject({ reason: { _tag: "ProviderInternal" }, message: "overloaded_error" })
     }),
   )
 
@@ -1446,7 +1687,7 @@ describe("Anthropic Messages route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({ _tag: "UnknownProvider", message: "Anthropic Messages stream error" })
+      expect(error).toMatchObject({ reason: { _tag: "UnknownProvider" }, message: "Anthropic Messages stream error" })
     }),
   )
 
@@ -1463,7 +1704,7 @@ describe("Anthropic Messages route", () => {
       )
 
       expect(error).toBeInstanceOf(AIError)
-      expect(error.reason).toMatchObject({ _tag: "InvalidRequest", message: "Bad request" })
+      expect(error).toMatchObject({ reason: { _tag: "InvalidRequest" }, message: "Bad request" })
     }),
   )
 

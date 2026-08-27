@@ -1,4 +1,10 @@
-import type { FileDiffInfo, SessionInfo, SessionStatus } from "@opencode-ai/client/promise"
+import type {
+  FileDiffInfo,
+  SessionInfo,
+  SessionStatus,
+  ShellOutputInput,
+  ShellOutputOutput,
+} from "@opencode-ai/client/promise"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
 
@@ -40,6 +46,8 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
     data: Data
     directory: string
     sessionID?: string
+    shellRunning?: (id: string) => boolean
+    shellOutput?: (input: ShellOutputInput) => Promise<ShellOutputOutput>
     onNavigateToSession?: NavigateToSessionFn
     onSessionHref?: SessionHrefFn
   }) => {
@@ -55,6 +63,8 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       },
       navigateToSession: props.onNavigateToSession,
       sessionHref: props.onSessionHref,
+      shellRunning: props.shellRunning,
+      shellOutput: props.shellOutput,
     }
   },
 })

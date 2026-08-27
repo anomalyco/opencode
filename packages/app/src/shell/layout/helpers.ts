@@ -1,6 +1,7 @@
 import { getFilename } from "@opencode-ai/util/path"
 import type { SessionInfo } from "@opencode-ai/client/promise"
 import { pathKey } from "@/workspaces/path-key"
+import { isProjectDirectory } from "@/workspaces/paths"
 import type { ServerConnection } from "@/runtime/server/registry"
 import type { HomeProjectSelection } from "@/shell/state/layout"
 
@@ -100,11 +101,7 @@ export function projectForSession<T extends { id?: string; worktree: string; san
 ) {
   const direct = byID.get(session.projectID)
   if (direct) return direct
-  const directory = pathKey(session.location.directory)
-  return projects.find(
-    (project) =>
-      pathKey(project.worktree) === directory || project.sandboxes?.some((sandbox) => pathKey(sandbox) === directory),
-  )
+  return projects.find((project) => isProjectDirectory(project, session.location.directory))
 }
 
 export const errorMessage = (err: unknown, fallback: string) => {

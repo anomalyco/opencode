@@ -261,7 +261,7 @@ export const resolveModel = (
   dependencies?: Dependencies,
 ) => withVariant(model, variant).pipe(Effect.flatMap((model) => fromCatalogModel(model, credential, dependencies)))
 
-export const supported = (model: Info) => Boolean(model.package)
+export const hasPackage = (model: Info) => Boolean(model.package)
 
 /** Resolves catalog selections into runtime models for the current Location. */
 export const layer = Layer.effect(
@@ -309,9 +309,9 @@ export const layer = Layer.effect(
               .default()
               .pipe(
                 Effect.flatMap((model) =>
-                  model && supported(model)
+                  model && hasPackage(model)
                     ? Effect.succeed(model)
-                    : Effect.map(catalog.model.available(), (models) => models.find(supported)),
+                    : Effect.map(catalog.model.available(), (models) => models.find(hasPackage)),
                 ),
               )
         if (!selected) return undefined
@@ -333,8 +333,12 @@ function usesAPIKeyAuth(packageName: string | undefined) {
   return (
     name === "@ai-sdk/openai" ||
     name === "@ai-sdk/anthropic" ||
+    name === "@ai-sdk/cerebras" ||
+    name === "@ai-sdk/deepinfra" ||
     name === "@ai-sdk/openai-compatible" ||
     name === "@ai-sdk/google" ||
+    name === "@ai-sdk/groq" ||
+    name === "@ai-sdk/togetherai" ||
     name === "@ai-sdk/xai" ||
     name === "@openrouter/ai-sdk-provider" ||
     name === "@ai-sdk/azure" ||
@@ -342,8 +346,12 @@ function usesAPIKeyAuth(packageName: string | undefined) {
     name?.startsWith("@opencode-ai/ai/providers/openai/") === true ||
     name === "@opencode-ai/ai/providers/anthropic" ||
     name === "@opencode-ai/ai/providers/anthropic-compatible" ||
+    name === "@opencode-ai/ai/providers/cerebras" ||
+    name === "@opencode-ai/ai/providers/deepinfra" ||
     name === "@opencode-ai/ai/providers/openai-compatible" ||
     name === "@opencode-ai/ai/providers/google" ||
+    name === "@opencode-ai/ai/providers/groq" ||
+    name === "@opencode-ai/ai/providers/togetherai" ||
     name === "@opencode-ai/ai/providers/xai" ||
     name === "@opencode-ai/ai/providers/openrouter" ||
     name === "@opencode-ai/ai/providers/azure" ||

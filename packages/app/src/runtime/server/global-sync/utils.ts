@@ -1,9 +1,15 @@
 import type { AgentListOutput, ModelListOutput, ProviderListOutput } from "@opencode-ai/client/promise"
 import type { Agent, Project, Provider, ProviderListResponse } from "@/runtime/server/types"
 import type { Project as CurrentProject } from "@opencode-ai/client/promise"
+import { unwrap } from "solid-js/store"
 export { pathKey as directoryKey, type PathKey as DirectoryKey } from "@/workspaces/path-key"
 
 export const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
+
+const providerCatalogs = new WeakMap<
+  ProviderListOutput["data"],
+  WeakMap<ModelListOutput["data"], ProviderListResponse>
+>()
 
 export function normalizeAgentList(input: AgentListOutput["data"] | Agent[]): Agent[] {
   if (input.every((agent) => !("request" in agent))) return input as Agent[]
@@ -30,12 +36,16 @@ export function normalizeAgentList(input: AgentListOutput["data"] | Agent[]): Ag
 }
 
 export function normalizeProviderList(
-  providers: ProviderListOutput["data"] | ProviderListResponse,
-  models?: ModelListOutput["data"],
+  input: ProviderListOutput["data"] | ProviderListResponse,
+  catalog?: ModelListOutput["data"],
 ): ProviderListResponse {
-  if (!Array.isArray(providers)) {
-    return providers
-  }
+  if (!Array.isArray(input)) return input
+  // Client sync replaces whole catalog lists. Track those reads at the caller,
+  // not every model field, and share conversions without retaining old lists.
+  const providers = unwrap(input)
+  const models = unwrap(catalog)
+  const cached = models && providerCatalogs.get(providers)?.get(models)
+  if (cached) return cached
   const all = new Map<string, Provider>()
 
   for (const provider of providers) {
@@ -101,7 +111,7 @@ export function normalizeProviderList(
     }
   }
 
-  return {
+  const result = {
     all,
     connected: providers.map((provider) => provider.id),
     default: Object.fromEntries(
@@ -111,6 +121,12 @@ export function normalizeProviderList(
       }),
     ),
   }
+  if (models) {
+    const cache = providerCatalogs.get(providers) ?? new WeakMap<ModelListOutput["data"], ProviderListResponse>()
+    cache.set(models, result)
+    providerCatalogs.set(providers, cache)
+  }
+  return result
 }
 
 export function normalizeProjectInfo(project: Project | CurrentProject): Project {

@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { ConfigProvider, Effect, Schema } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
 import { LLM, LLMEvent } from "../../src/index.js"
@@ -126,7 +126,7 @@ describe("Cloudflare", () => {
       expect(response.reasoning).toBe("Thinking")
       expect(response.events.filter(LLMEvent.is.reasoningDelta)).toHaveLength(2)
       expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
-        openai: { reasoningField: "reasoning", reasoningDetails: merged },
+        "cloudflare-ai-gateway": { reasoningField: "reasoning", reasoningDetails: merged },
       })
 
       const replay = yield* compileRequest(LLM.request({ model, messages: [response.message] }))
@@ -136,17 +136,15 @@ describe("Cloudflare", () => {
     }),
   )
 
-  it.effect("defaults AI Gateway id to default when omitted or blank", () =>
-    Effect.gen(function* () {
-      expect(
-        CloudflareAIGateway.configure({
-          accountId: "test-account",
-          gatewayId: "",
-          gatewayApiKey: "test-token",
-        }).model("workers-ai/@cf/meta/llama-3.3-70b-instruct").route.endpoint.baseURL,
-      ).toBe("https://gateway.ai.cloudflare.com/v1/test-account/default/compat")
-    }),
-  )
+  test("defaults AI Gateway id to default when omitted or blank", () => {
+    expect(
+      CloudflareAIGateway.configure({
+        accountId: "test-account",
+        gatewayId: "",
+        gatewayApiKey: "test-token",
+      }).model("workers-ai/@cf/meta/llama-3.3-70b-instruct").route.endpoint.baseURL,
+    ).toBe("https://gateway.ai.cloudflare.com/v1/test-account/default/compat")
+  })
 
   it.effect("supports authenticated AI Gateway plus upstream provider auth", () =>
     Effect.gen(function* () {

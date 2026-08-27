@@ -47,10 +47,8 @@ describe("Open Responses-compatible route", () => {
       })
       expect(prepared.body).toEqual({
         model: "example-model",
-        input: [
-          { role: "system", content: "You are concise." },
-          { role: "user", content: [{ type: "input_text", text: "Say hello." }] },
-        ],
+        input: [{ role: "user", content: [{ type: "input_text", text: "Say hello." }] }],
+        instructions: "You are concise.",
         stream: true,
         store: false,
         include: ["reasoning.encrypted_content"],
@@ -84,10 +82,12 @@ describe("Open Responses-compatible route", () => {
       const prepared = yield* compileRequest(
         LLM.request({
           model,
+          system: "Initial instructions.",
           messages: [Message.user("Before."), Message.system("Operator update."), Message.assistant("After.")],
         }),
       )
 
+      expect(prepared.body.instructions).toBe("Initial instructions.")
       expect(prepared.body.input).toEqual([
         { role: "user", content: [{ type: "input_text", text: "Before." }] },
         { role: "developer", content: "Operator update." },
@@ -195,15 +195,19 @@ describe("Open Responses-compatible route", () => {
           model,
           messages: [
             Message.assistant([
-              // The baseline does not enforce a provider id grammar, so a
-              // non-OpenAI but well-formed token is resent as-is.
-              { type: "text", text: "Kept.", providerMetadata: { openresponses: { itemId: "history_1" } } },
-              // Shape violations are dropped even without a grammar policy.
+              { type: "text", text: "Kept.", providerMetadata: { "openai-compatible": { itemId: "history_1" } } },
               {
                 type: "text",
-                text: "Dropped.",
-                providerMetadata: { openresponses: { itemId: `m${"a".repeat(64)}` } },
+                text: "Long.",
+                providerMetadata: { "openai-compatible": { itemId: `history_${"a".repeat(64)}` } },
               },
+              {
+                type: "text",
+                text: "Opaque.",
+                providerMetadata: { "openai-compatible": { itemId: "provider_value/with+symbols" } },
+              },
+              { type: "text", text: "No suffix.", providerMetadata: { "openai-compatible": { itemId: "msg_" } } },
+              { type: "text", text: "No prefix.", providerMetadata: { "openai-compatible": { itemId: "_item" } } },
             ]),
           ],
         }),
@@ -218,8 +222,23 @@ describe("Open Responses-compatible route", () => {
         },
         {
           type: "message",
+          id: `history_${"a".repeat(64)}`,
           role: "assistant",
-          content: [{ type: "output_text", text: "Dropped." }],
+          content: [{ type: "output_text", text: "Long." }],
+        },
+        {
+          type: "message",
+          id: "provider_value/with+symbols",
+          role: "assistant",
+          content: [{ type: "output_text", text: "Opaque." }],
+        },
+        {
+          type: "message",
+          role: "assistant",
+          content: [
+            { type: "output_text", text: "No suffix." },
+            { type: "output_text", text: "No prefix." },
+          ],
         },
       ])
     }),
@@ -248,7 +267,7 @@ describe("Open Responses-compatible route", () => {
               name: item.type,
               result: { type: "json", value: item },
               providerExecuted: true,
-              providerMetadata: { openresponses: { itemId: item.id } },
+              providerMetadata: { example: { itemId: item.id } },
             }),
           ),
         }),
@@ -283,8 +302,330 @@ describe("Open Responses-compatible route", () => {
       )
 
       expect(response.message.content).toEqual([
-        { type: "text", text: "Indexed", providerMetadata: { openresponses: { itemId: "msg_1" } } },
+        { type: "text", text: "Indexed", providerMetadata: { "openai-compatible": { itemId: "msg_1" } } },
       ])
+    }),
+  )
+
+  describe("stream validation", () => {
+    const request = LLM.request({
+      model: configure({ apiKey: "test-key", baseURL: "https://responses.example.test/v1" }).model("example-model"),
+      prompt: "Respond.",
+    })
+
+    const fixtures = [
+      {
+        item: { type: "message" },
+        events: [
+          { type: "response.output_text.delta", delta: "Preserved" },
+          { type: "response.output_text.done", text: "Preserved" },
+          { type: "response.refusal.delta", delta: "Preserved" },
+          { type: "response.refusal.done", refusal: "Preserved" },
+        ],
+      },
+      {
+        item: { type: "reasoning", encrypted_content: "encrypted-state" },
+        events: [
+          { type: "response.reasoning.delta", delta: "Preserved" },
+          { type: "response.reasoning.done", text: "Preserved" },
+          { type: "response.reasoning_summary_text.delta", delta: "Preserved" },
+          { type: "response.reasoning_summary_text.done", text: "Preserved" },
+          { type: "response.reasoning_text.done", text: "Preserved" },
+        ],
+      },
+      {
+        item: { type: "function_call", call_id: "call_1", name: "lookup" },
+        events: [
+          { type: "response.function_call_arguments.delta", delta: '{"query":"Preserved"}' },
+          { type: "response.function_call_arguments.done", arguments: '{"query":"Preserved"}' },
+        ],
+      },
+    ]
+
+    const routings = [
+      { name: "empty item and event IDs", id: "", item_id: "" },
+      { name: "empty event ID with registered index", id: "item_1", item_id: "", output_index: 2 },
+      { name: "empty stored ID with registered index", id: "", item_id: "wrong_item", output_index: 2 },
+      { name: "empty item and event IDs with registered index", id: "", item_id: "", output_index: 2 },
+    ]
+
+    fixtures.forEach((fixture) => {
+      fixture.events.forEach((event) => {
+        routings.forEach((routing) => {
+          it.effect(`${event.type} preserves content with ${routing.name}`, () =>
+            Effect.gen(function* () {
+              const item = { ...fixture.item, id: routing.id }
+              const response = yield* LLMClient.generate(request).pipe(
+                Effect.provide(
+                  fixedResponse(
+                    sseEvents(
+                      { type: "response.output_item.added", output_index: routing.output_index, item },
+                      { ...event, item_id: routing.item_id, output_index: routing.output_index },
+                      { type: "response.output_item.done", output_index: routing.output_index, item },
+                      { type: "response.completed", response: { id: "resp_1" } },
+                    ),
+                  ),
+                ),
+              )
+
+              const metadata = { "openai-compatible": { itemId: routing.id } }
+              if (fixture.item.type === "function_call") {
+                expect(response.toolCalls).toEqual([
+                  expect.objectContaining({
+                    id: "call_1",
+                    name: "lookup",
+                    input: { query: "Preserved" },
+                    providerMetadata: metadata,
+                  }),
+                ])
+                return
+              }
+              if (fixture.item.type === "reasoning") {
+                expect(response.message.content).toEqual([
+                  {
+                    type: "reasoning",
+                    text: "Preserved",
+                    providerMetadata: {
+                      "openai-compatible": { itemId: routing.id, reasoningEncryptedContent: "encrypted-state" },
+                    },
+                  },
+                ])
+                expect(response.events.filter(LLMEvent.is.reasoningEnd)).toHaveLength(1)
+                return
+              }
+              expect(response.message.content).toEqual([
+                { type: "text", text: "Preserved", providerMetadata: metadata },
+              ])
+              expect(response.events.filter(LLMEvent.is.textEnd)).toEqual([
+                expect.objectContaining({ id: routing.id, providerMetadata: metadata }),
+              ])
+            }),
+          )
+        })
+      })
+    })
+
+    routings.forEach((routing) => {
+      it.effect(`preserves reasoning summary boundaries and terminal metadata with ${routing.name}`, () =>
+        Effect.gen(function* () {
+          const address = { item_id: routing.item_id, output_index: routing.output_index }
+          const response = yield* LLMClient.generate(request).pipe(
+            Effect.provide(
+              fixedResponse(
+                sseEvents(
+                  {
+                    type: "response.output_item.added",
+                    output_index: routing.output_index,
+                    item: { type: "reasoning", id: routing.id },
+                  },
+                  { type: "response.reasoning_summary_part.added", ...address, summary_index: 0 },
+                  { type: "response.reasoning_summary_text.delta", ...address, summary_index: 0, delta: "First." },
+                  { type: "response.reasoning_summary_text.done", ...address, summary_index: 0, text: "First." },
+                  { type: "response.reasoning_summary_part.done", ...address, summary_index: 0 },
+                  { type: "response.reasoning_summary_part.added", ...address, summary_index: 1 },
+                  { type: "response.reasoning_summary_text.done", ...address, summary_index: 1, text: "Second." },
+                  { type: "response.reasoning_summary_part.done", ...address, summary_index: 1 },
+                  {
+                    type: "response.completed",
+                    response: { output: [{ type: "reasoning", id: routing.id, encrypted_content: "final-state" }] },
+                  },
+                ),
+              ),
+            ),
+          )
+
+          expect(response.message.content).toEqual([
+            {
+              type: "reasoning",
+              text: "First.",
+              providerMetadata: { "openai-compatible": { itemId: routing.id } },
+            },
+            {
+              type: "reasoning",
+              text: "Second.",
+              providerMetadata: {
+                "openai-compatible": { itemId: routing.id, reasoningEncryptedContent: "final-state" },
+              },
+            },
+          ])
+          expect(response.events.filter(LLMEvent.is.reasoningEnd)).toEqual([
+            expect.objectContaining({
+              id: `${routing.id}:0`,
+              providerMetadata: { "openai-compatible": { itemId: routing.id } },
+            }),
+            expect.objectContaining({
+              id: `${routing.id}:1`,
+              providerMetadata: {
+                "openai-compatible": { itemId: routing.id, reasoningEncryptedContent: "final-state" },
+              },
+            }),
+          ])
+        }),
+      )
+    })
+
+    it.effect("reconciles pending empty-ID function arguments from completed output", () =>
+      Effect.gen(function* () {
+        const item = { type: "function_call", id: "", call_id: "call_1", name: "lookup" }
+        const response = yield* LLMClient.generate(request).pipe(
+          Effect.provide(
+            fixedResponse(
+              sseEvents(
+                { type: "response.output_item.added", item },
+                { type: "response.function_call_arguments.delta", item_id: "", delta: '{"query":"partial' },
+                {
+                  type: "response.completed",
+                  response: { output: [{ ...item, arguments: '{"query":"complete"}' }] },
+                },
+              ),
+            ),
+          ),
+        )
+
+        expect(response.toolCalls).toEqual([
+          expect.objectContaining({
+            id: "call_1",
+            name: "lookup",
+            input: { query: "complete" },
+            providerMetadata: { "openai-compatible": { itemId: "" } },
+          }),
+        ])
+      }),
+    )
+
+    it.effect("treats null output items as no-ops without disturbing registered items", () =>
+      Effect.gen(function* () {
+        const response = yield* LLMClient.generate(request).pipe(
+          Effect.provide(
+            fixedResponse(
+              sseEvents(
+                { type: "response.output_item.added", output_index: 0, item: null },
+                { type: "response.output_item.done", output_index: 0, item: null },
+                { type: "response.output_item.added", output_index: 0, item: { type: "message", id: "msg_1" } },
+                { type: "response.output_text.delta", output_index: 0, item_id: "wrong_item", delta: "Before " },
+                { type: "response.output_item.added", output_index: 0, item: null },
+                { type: "response.output_item.done", output_index: 0, item: null },
+                { type: "response.output_text.delta", output_index: 0, item_id: "wrong_item", delta: "after" },
+                { type: "response.output_item.done", output_index: 0, item: { type: "message", id: "msg_1" } },
+                { type: "response.completed", response: { id: "resp_1" } },
+              ),
+            ),
+          ),
+        )
+
+        expect(response.message.content).toEqual([
+          { type: "text", text: "Before after", providerMetadata: { "openai-compatible": { itemId: "msg_1" } } },
+        ])
+        expect(response.events.map((event) => event.type)).toEqual([
+          "step-start",
+          "text-start",
+          "text-delta",
+          "text-delta",
+          "text-end",
+          "step-finish",
+          "finish",
+        ])
+      }),
+    )
+
+    it.effect("rejects missing, null, and non-string event IDs even with a registered output index", () =>
+      Effect.gen(function* () {
+        yield* Effect.forEach(
+          [
+            ...fixtures.flatMap((fixture) => fixture.events.map((event) => ({ item: fixture.item, event }))),
+            ...["response.reasoning_summary_part.added", "response.reasoning_summary_part.done"].map((type) => ({
+              item: { type: "reasoning" },
+              event: { type, summary_index: 0 },
+            })),
+          ],
+          (fixture) =>
+            Effect.forEach([undefined, null, 0, false, {}, []], (item_id) =>
+              Effect.gen(function* () {
+                const error = yield* LLMClient.generate(request).pipe(
+                  Effect.provide(
+                    fixedResponse(
+                      sseEvents(
+                        {
+                          type: "response.output_item.added",
+                          output_index: 0,
+                          item: { ...fixture.item, id: "item_1" },
+                        },
+                        { ...fixture.event, output_index: 0, item_id },
+                        { type: "response.completed", response: { id: "resp_1" } },
+                      ),
+                    ),
+                  ),
+                  Effect.flip,
+                )
+                expect(error.reason._tag).toBe("InvalidProviderOutput")
+              }),
+            ),
+        )
+      }),
+    )
+
+    it.effect("keeps malformed output item IDs invalid", () =>
+      Effect.gen(function* () {
+        yield* Effect.forEach(["response.output_item.added", "response.output_item.done"], (type) =>
+          Effect.forEach(fixtures, (fixture) =>
+            Effect.forEach(
+              fixture.item.type === "message" ? [undefined, null, 0, false, {}, []] : [null, 0, false, {}, []],
+              (id) =>
+                Effect.gen(function* () {
+                  const error = yield* LLMClient.generate(request).pipe(
+                    Effect.provide(
+                      fixedResponse(
+                        sseEvents(
+                          { type, item: { ...fixture.item, id } },
+                          { type: "response.completed", response: { id: "resp_1" } },
+                        ),
+                      ),
+                    ),
+                    Effect.flip,
+                  )
+                  expect(error.reason._tag).toBe("InvalidProviderOutput")
+                }),
+            ),
+          ),
+        )
+      }),
+    )
+  })
+
+  it.effect("streams function calls without optional item ids through the shared baseline", () =>
+    Effect.gen(function* () {
+      const model = configure({
+        apiKey: "test-key",
+        baseURL: "https://responses.example.test/v1",
+        provider: "example",
+      }).model("example-model")
+      const item = { type: "function_call", call_id: "call_1", name: "lookup", arguments: "" }
+      const response = yield* LLMClient.generate(LLM.request({ model, prompt: "Look it up." })).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "response.output_item.added", output_index: 1, item },
+              {
+                type: "response.function_call_arguments.delta",
+                output_index: 1,
+                item_id: "opaque_item",
+                delta: '{"query":"shared"}',
+              },
+              {
+                type: "response.output_item.done",
+                output_index: 1,
+                item: { ...item, arguments: '{"query":"complete"}' },
+              },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.events.filter(LLMEvent.is.toolCall)).toEqual([
+        expect.objectContaining({ id: "call_1", name: "lookup", input: { query: "complete" } }),
+      ])
+      expect(response.events.find(LLMEvent.is.toolCall)?.providerMetadata).toBeUndefined()
     }),
   )
 
@@ -325,7 +666,7 @@ describe("Open Responses-compatible route", () => {
 
       expect(response.events.find(LLMEvent.is.toolCall)).toMatchObject({
         input: { query: "complete" },
-        providerMetadata: { openresponses: { itemId: "item_1" } },
+        providerMetadata: { example: { itemId: "item_1" } },
       })
     }),
   )
@@ -357,7 +698,7 @@ describe("Open Responses-compatible route", () => {
       )
 
       expect(response.events.find((event) => event.type === "reasoning-end")).toMatchObject({
-        providerMetadata: { openresponses: { itemId: "rs_raw", reasoningEncryptedContent: "raw-state" } },
+        providerMetadata: { "openai-compatible": { itemId: "rs_raw", reasoningEncryptedContent: "raw-state" } },
       })
     }),
   )
@@ -406,7 +747,7 @@ describe("Open Responses-compatible route", () => {
             Message.assistant({
               type: "text",
               text: "Unclassified.",
-              providerMetadata: { openresponses: { phase: null } },
+              providerMetadata: { "openai-compatible": { phase: null } },
             }),
           ],
         }),
@@ -465,7 +806,7 @@ describe("Open Responses-compatible route", () => {
         {
           type: "text",
           text: "I can't help with that.",
-          providerMetadata: { openresponses: { itemId: "msg_refusal" } },
+          providerMetadata: { example: { itemId: "msg_refusal" } },
         },
       ])
 
@@ -554,7 +895,7 @@ describe("Open Responses-compatible route", () => {
 
       expect(response.toolCalls).toEqual([])
       expect(response.events.find(LLMEvent.is.finish)).toMatchObject({
-        providerMetadata: { openresponses: { responseId: "resp_1" } },
+        providerMetadata: { example: { responseId: "resp_1" } },
       })
     }),
   )

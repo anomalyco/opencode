@@ -86,28 +86,10 @@ const OpenAIResponsesBody = Schema.Struct({
 })
 export type OpenAIResponsesBody = Schema.Schema.Type<typeof OpenAIResponsesBody>
 
-// Replayed items are paired with stored server state by id, so a foreign or
-// synthetic token can fail request validation even when `call_id` pairing is
-// intact. Only resend ids in each item kind's own grammar; hosted tool
-// items keep generic validation because every hosted tool mints its own
-// prefix. The same allowlist approach codex uses before resending history
-// (codex-rs core/src/client.rs, `prepare_response_items_for_request`).
-const ITEM_ID_PREFIXES: Record<OpenResponses.ItemKind, ReadonlyArray<string>> = {
-  message: ["msg_"],
-  reasoning: ["rs_"],
-  "function-call": ["fc_"],
-  // Every hosted tool mints its own id prefix, so items keep generic validation.
-  "hosted-tool": [],
-}
-
 const extension = {
   id: ADAPTER,
   name: NAME,
   lowerHostedToolItem: (item: unknown) => (Schema.is(OpenAIResponsesHostedToolItem)(item) ? item : undefined),
-  acceptsItemID: (kind: OpenResponses.ItemKind, id: string) => {
-    const prefixes = ITEM_ID_PREFIXES[kind]
-    return prefixes.length === 0 || prefixes.some((prefix) => id.startsWith(prefix))
-  },
 } satisfies OpenResponses.Extension
 
 const nativeImageToolInput = (tool: ToolDefinition) => {
@@ -167,7 +149,9 @@ const hostedToolResult = Effect.fn("OpenAIResponses.hostedToolResult")(function*
   const isError = item.error !== undefined && item.error !== null
   if (item.type === "image_generation_call" && item.result) {
     yield* Effect.fromResult(Encoding.decodeBase64(item.result)).pipe(
-      Effect.mapError(() => ProviderShared.eventError(ADAPTER, "OpenAI Responses returned invalid image base64")),
+      Effect.mapError((cause) =>
+        ProviderShared.eventError(ADAPTER, "OpenAI Responses returned invalid image base64", undefined, cause),
+      ),
     )
     const format = item.output_format ?? "png"
     return {
@@ -202,7 +186,7 @@ const HOSTED_TOOLS = {
 
 const step = (state: OpenResponses.ParserState, event: OpenResponses.Event) => {
   if (event.type === "response.reasoning_text.delta")
-    return event.item_id
+    return event.item_id !== undefined
       ? Effect.succeed(
           OpenResponses.onReasoningDelta(state, event, OpenResponses.outputItemID(state, event) ?? event.item_id),
         )

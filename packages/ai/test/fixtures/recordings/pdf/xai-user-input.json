@@ -1,13 +1,7 @@
 {
   "version": 1,
   "metadata": {
-    "tags": [
-      "prefix:pdf",
-      "pdf",
-      "provider:xai",
-      "protocol:xai-responses",
-      "user-input"
-    ],
+    "tags": ["prefix:pdf", "pdf", "provider:xai", "protocol:xai-responses", "user-input"],
     "name": "pdf/xai-user-input",
     "recordedAt": "2026-08-25T03:29:10.612Z"
   },

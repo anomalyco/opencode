@@ -11,115 +11,73 @@ import {
 } from "./timeline-test-helpers"
 import { measureSessionSwitch, waitForStableTimeline } from "./session-tab-switch-probe"
 
-type Result = Awaited<ReturnType<typeof measureSessionSwitch>>
+const scenarios = [
+  { cached: false, review: false, resized: false },
+  { cached: false, review: true, resized: false },
+  { cached: true, review: false, resized: false },
+  { cached: true, review: true, resized: false },
+  { cached: true, review: true, resized: true },
+]
 
-benchmark(
-  "benchmarks session tab switching with and without the review pane",
-  async ({ browser, report }, testInfo) => {
-    benchmark.setTimeout(360_000)
-    const runs = Number(process.env.SESSION_TAB_SWITCH_RUNS ?? 5)
-    const results = {
-      closed: { cold: [] as Result[], hot: [] as Result[] },
-      open: { cold: [] as Result[], hot: [] as Result[] },
-    }
-    for (const reviewPane of ["closed", "open"] as const) {
-      for (const mode of ["cold", "hot"] as const) {
-        for (let run = 0; run < runs; run++) {
-          results[reviewPane][mode].push(
-            await withBenchmarkPage(
-              browser,
-              `session-tab-switch-${reviewPane}-${mode}-${run}`,
-              (page) => trial(page, mode, reviewPane),
-              testInfo,
-            ),
-          )
+scenarios.forEach((scenario) => {
+  const name = `tab switch: ${scenario.cached ? "cached" : "unmounted"}, review ${scenario.review ? "open" : "closed"}${scenario.resized ? ", resized" : ""}`
+  benchmark(name, async ({ browser, report }, testInfo) => {
+    const result = await withBenchmarkPage(
+      browser,
+      name,
+      async (page) => {
+        await mockStressTimeline(page, { vcsDiff: createReviewDiffs() })
+        await installTimelineSettings(page)
+        await installStressSessionTabs(page)
+        await page.goto(stressSessionHref(fixture.sourceID))
+        await expectSessionTitle(page, fixture.expected.sourceTitle)
+        await waitForStableTimeline(page, fixture.expected.sourceMessageIDs.at(-1)!)
+        if (scenario.review && !scenario.resized) await openReviewPane(page)
+        if (scenario.cached) {
+          await switchSession(page, fixture.targetID, fixture.expected.targetTitle)
+          const answer = page.locator(`[data-timeline-part-id="${fixture.expected.targetPartIDs.at(-1)}"]`)
+          await expect(answer.locator('[data-component="markdown"]')).toHaveAttribute("data-markdown-ready", "")
+          await expect
+            .poll(() =>
+              answer.evaluate((element) => element.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })),
+            )
+            .toBe(true)
+          await waitForStableTimeline(page, fixture.expected.targetMessageIDs.at(-1)!)
+          await switchSession(page, fixture.sourceID, fixture.expected.sourceTitle)
         }
-      }
-    }
-    report({ results, summary: summarizeReviewPane(results) }, { runs, reviewDiffs: createReviewDiffs().length })
-  },
-)
+        if (scenario.resized) await openReviewPane(page)
+        await waitForStableTimeline(page, fixture.expected.sourceMessageIDs.at(-1)!)
 
-async function trial(page: Page, mode: "cold" | "hot", reviewPane: "closed" | "open") {
-  const reviewDiffs = createReviewDiffs()
-  await mockStressTimeline(page, { vcsDiff: reviewDiffs })
-  await installTimelineSettings(page)
-  await installStressSessionTabs(page)
-  if (mode === "hot") {
-    await page.goto(stressSessionHref(fixture.targetID))
-    await expectSessionTitle(page, fixture.expected.targetTitle)
-    await waitForStableTimeline(page, fixture.expected.targetMessageIDs.at(-1)!)
-    await switchSession(page, fixture.sourceID, fixture.expected.sourceTitle)
-  } else {
-    await page.goto(stressSessionHref(fixture.sourceID))
-    await expectSessionTitle(page, fixture.expected.sourceTitle)
-  }
-  await waitForStableTimeline(page, fixture.expected.sourceMessageIDs.at(-1)!)
-  if (reviewPane === "open") {
-    await openReviewPane(page)
-    await waitForStableTimeline(page, fixture.expected.sourceMessageIDs.at(-1)!)
-  }
-
-  const destinationIDs = fixture.messages[fixture.targetID].map((message) => message.id)
-  const sourceIDs = fixture.messages[fixture.sourceID].map((message) => message.id)
-  const lastID = fixture.expected.targetMessageIDs.at(-1)!
-  const href = stressSessionHref(fixture.targetID)
-  const result = await measureSessionSwitch(page, {
-    destinationIDs,
-    sourceIDs,
-    lastID,
-    href,
-    switch: () => switchSession(page, fixture.targetID, fixture.expected.targetTitle),
-  })
-  return result
-}
-
-function summarize(results: Record<"cold" | "hot", Result[]>) {
-  const stats = (values: (number | null)[]) => {
-    const sorted = values.filter((value): value is number => value !== null).sort((a, b) => a - b)
-    return {
-      min: sorted[0] ?? null,
-      median: sorted[Math.floor(sorted.length / 2)] ?? null,
-      max: sorted.at(-1) ?? null,
-      missing: values.length - sorted.length,
-    }
-  }
-  return Object.fromEntries(
-    Object.entries(results).map(([mode, values]) => [
-      mode,
-      {
-        firstDestinationObservedMs: stats(values.map((value) => value.firstDestinationObservedMs)),
-        firstCorrectObservedMs: stats(values.map((value) => value.firstCorrectObservedMs)),
-        stableObservedMs: stats(values.map((value) => value.stableObservedMs)),
+        return measureSessionSwitch(page, {
+          destinationIDs: fixture.messages[fixture.targetID].map((message) => message.id),
+          sourceIDs: fixture.messages[fixture.sourceID].map((message) => message.id),
+          lastID: fixture.expected.targetMessageIDs.at(-1)!,
+          requiredPartID: fixture.expected.targetPartIDs.at(-1),
+          href: stressSessionHref(fixture.targetID),
+          switch: () => switchSession(page, fixture.targetID, fixture.expected.targetTitle),
+        })
       },
-    ]),
-  )
-}
-
-function summarizeReviewPane(results: Record<"closed" | "open", Record<"cold" | "hot", Result[]>>) {
-  return Object.fromEntries(
-    Object.entries(results).map(([reviewPane, values]) => [
-      reviewPane,
-      summarize(values as Record<"cold" | "hot", Result[]>),
-    ]),
-  )
-}
+      testInfo,
+    )
+    expect(result.unknownSamples).toBe(0)
+    expect(result.wrongDestinationSamples).toBe(0)
+    if (scenario.cached) expect(result.blankSamples).toBe(0)
+    report(result, { ...scenario, inputEvent: "mousedown", requireReadyAnswer: true })
+  })
+})
 
 async function switchSession(page: Page, sessionID: string, title: string) {
-  const href = stressSessionHref(sessionID)
-  const tab = page.locator(`[data-slot="titlebar-tabs"] a[href="${href}"]`).first()
-  await expect(tab).toBeVisible()
+  const tab = page.locator(`[data-slot="titlebar-tabs"] a[href="${stressSessionHref(sessionID)}"]`)
+  await expect(tab).toHaveCount(1)
   await tab.click()
   await expectSessionTitle(page, title)
 }
 
 async function openReviewPane(page: Page) {
   await page.getByRole("button", { name: "Toggle review" }).click()
-  const panel = page.locator("#review-panel")
-  await expect(panel).toBeVisible()
+  await expect(page.locator("#review-panel")).toBeVisible()
   await page.waitForFunction(() => {
-    const panel = document.querySelector<HTMLElement>("#review-panel")
-    const text = panel?.textContent ?? ""
+    const text = document.querySelector("#review-panel")?.textContent ?? ""
     return text.includes("generated-000.ts") && text.includes("+3")
   })
 }

@@ -3,7 +3,7 @@ import { LLMClient, Service } from "./route/client.js"
 import {
   GenerationOptions,
   HttpOptions,
-  InvalidProviderOutputReason,
+  InvalidProviderOutputError,
   AIError,
   LLMEvent,
   LLMRequest,
@@ -116,9 +116,7 @@ const runGenerateObject = Effect.fn("LLM.generateObject")(function* (
   )
   if (!call || !LLMEvent.is.toolCall(call))
     return yield* new AIError({
-      module: "LLM",
-      method: "generateObject",
-      reason: new InvalidProviderOutputReason({
+      reason: new InvalidProviderOutputError({
         message: `generateObject: model did not call the forced \`${GENERATE_OBJECT_TOOL_NAME}\` tool`,
       }),
     })
@@ -126,10 +124,9 @@ const runGenerateObject = Effect.fn("LLM.generateObject")(function* (
     Effect.mapError(
       (error) =>
         new AIError({
-          module: "LLM",
-          method: "generateObject",
-          reason: new InvalidProviderOutputReason({
+          reason: new InvalidProviderOutputError({
             message: `generateObject: tool input failed schema decode: ${error.message}`,
+            cause: error,
           }),
         }),
     ),

@@ -34,7 +34,10 @@ export interface Interface {
     sessionID: Session.ID
     sanitize?: boolean
   }) => Effect.Effect<Data, Session.NotFoundError | Session.MessageDecodeError>
-  readonly import: (input: { data: Data; location: Location.Ref }) => Effect.Effect<Session.Info, ImportConflictError>
+  readonly import: (input: {
+    data: Data
+    location: Location.Ref
+  }) => Effect.Effect<Session.Info, ImportConflictError | Session.NotFoundError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionTransfer") {}
@@ -66,6 +69,7 @@ const layer = Layer.effect(
           .get()
           .pipe(Effect.orDie)
         if (recorded) return yield* new ImportConflictError({ sessionID })
+        if (input.data.info.parentID) yield* sessions.get(input.data.info.parentID)
         const project = yield* projects.resolve(input.location.directory)
         yield* upsertProject(db, project).pipe(Effect.orDie)
         const messages = input.data.messages.filter(isSettled).map((message, index) => {
@@ -85,6 +89,7 @@ const layer = Layer.effect(
             SessionEvent.Created,
             {
               sessionID,
+              parentID: input.data.info.parentID,
               slug: Slug.create(),
               version: app.version,
               projectID: project.id,
@@ -220,6 +225,7 @@ function sanitizeMessage(message: SessionMessage.Info): SessionMessage.Info {
       skills: message.skills?.map((skill, index) => ({
         ...skill,
         name: Skill.Name.make(redact("skill-name", String(index), skill.name)),
+        text: skill.text === undefined ? undefined : redact("skill", String(index), skill.text),
         mention: skill.mention
           ? { ...skill.mention, text: redact("skill-mention", String(index), skill.mention.text) }
           : undefined,

@@ -6,7 +6,12 @@ import type {
 import { Match, Switch } from "solid-js"
 import type { SessionUserActions, SessionUserComment } from "../actions"
 import { AssistantReasoningContent, AssistantTextContent, CurrentUserMessageDisplay } from "./message-content"
-import { CurrentContextToolGroup, CurrentFileToolGroup, ToolDisplay } from "../tools/tool-renderer"
+import {
+  CurrentContextToolGroup,
+  CurrentFileToolGroup,
+  ToolDisplay,
+  type ContextGroupPart,
+} from "../tools/tool-renderer"
 import { currentToolError, currentToolInput, currentToolMetadata, currentToolOutput } from "./current-tool-state"
 
 export type { SessionUserActions, SessionUserComment } from "../actions"
@@ -42,6 +47,7 @@ export function SessionAssistantContent(props: {
   showAssistantCopyPartID?: string | null
   turnDurationMs?: number | null
   defaultOpen?: boolean
+  reasoningDefaultOpen?: boolean
   toolOpen?: boolean
   onToolOpenChange?: (open: boolean) => void
   onContentRendered?: () => void
@@ -63,8 +69,12 @@ export function SessionAssistantContent(props: {
         {(content) => (
           <AssistantReasoningContent
             id={props.contentID}
-            text={content().text}
-            streaming={typeof props.message.time.completed !== "number"}
+            content={content()}
+            streaming={false}
+            defaultOpen={props.reasoningDefaultOpen}
+            open={props.toolOpen}
+            onOpenChange={props.onToolOpenChange}
+            onContentRendered={props.onContentRendered}
           />
         )}
       </Match>
@@ -92,7 +102,10 @@ export function SessionAssistantContent(props: {
 }
 
 export function SessionContextToolGroup(props: {
-  tools: SessionMessageAssistantTool[]
+  parts: ContextGroupPart[]
+  reasoningDefaultOpen?: boolean
+  reasoningOpen?: (id: string) => boolean | undefined
+  onReasoningOpenChange?: (id: string, open: boolean) => void
   open: boolean
   busy: boolean
   onOpenChange: (open: boolean) => void
@@ -100,7 +113,10 @@ export function SessionContextToolGroup(props: {
 }) {
   return (
     <CurrentContextToolGroup
-      tools={props.tools}
+      parts={props.parts}
+      reasoningDefaultOpen={props.reasoningDefaultOpen}
+      reasoningOpen={props.reasoningOpen}
+      onReasoningOpenChange={props.onReasoningOpenChange}
       open={props.open}
       busy={props.busy}
       onOpenChange={props.onOpenChange}

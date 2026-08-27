@@ -11,6 +11,9 @@ import { KeyedMutex } from "./effect/keyed-mutex.js"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { isDeepStrictEqual } from "node:util"
 import { Durable } from "@opencode-ai/schema/durable-event-manifest"
+import { SessionEvent } from "@opencode-ai/schema/session-event"
+import type { SessionID } from "@opencode-ai/schema/session-id"
+import { AbsolutePath } from "@opencode-ai/schema/schema"
 
 export type Subscriber<D extends Event.Definition = Event.Definition> = (event: Event.Payload<D>) => Effect.Effect<void>
 export type Unsubscribe = Effect.Effect<void>
@@ -119,6 +122,9 @@ export interface Subscribe {
   /**
    * Volatile live channel: every event published from now on, nothing before or
    * across a disconnect. Consumers that need reliability combine it with `log`.
+   * With an ambient Location, delivery is restricted to that Location and global
+   * events. Unlocated Session events use the Session's owner at publication time.
+   * Session moves reach both the old and new Location, without changing the event.
    */
   (): Stream.Stream<Event.Payload>
   <D extends Event.Definition>(definition: D): Stream.Stream<Event.Payload<D>>
@@ -183,6 +189,7 @@ export function configured(options?: Options) {
         // Deferred import: a static one would close the module cycle
         // bus → location → project → bus and hit the node bindings in TDZ.
         const { Location } = yield* Effect.promise(() => import("./location.js"))
+        const { SessionTable } = yield* Effect.promise(() => import("./session/sql.js"))
         const pubsub = {
           live: yield* PubSub.unbounded<Event.Payload>(),
           durable: new Map<string, Set<PubSub.PubSub<void>>>(),
@@ -194,6 +201,64 @@ export function configured(options?: Options) {
         const { db } = yield* Database.Service
         const logReadPageSize = options?.logReadPageSize ?? 512
         const persist = options?.persist ?? false
+        const sessions = new Map<SessionID, Location.Ref>()
+        // Keep routing separate from the public event, and retain its snapshot
+        // while a slow subscriber drains events queued before a move or deletion.
+        const routes = new WeakMap<Event.Payload, readonly Location.Ref[]>()
+
+        const isSessionEvent = (event: Event.Payload): event is SessionEvent.Event =>
+          Object.hasOwn(SessionEvent.All.cases, event.type)
+
+        const prepareRoutes = Effect.fnUntraced(function* (events: readonly Event.Payload[]) {
+          const updates = new Map<SessionID, Location.Ref | undefined>()
+          const resolved = new Map<Event.Payload, readonly Location.Ref[]>()
+          for (const event of events) {
+            if (!isSessionEvent(event)) continue
+            const id = event.data.sessionID
+            if (event.type === "session.created") {
+              updates.set(id, event.data.location)
+              resolved.set(event, [event.location ?? event.data.location])
+              continue
+            }
+            if (event.location && event.type !== "session.forked" && event.type !== "session.moved") {
+              if (event.type === "session.deleted") updates.set(id, undefined)
+              continue
+            }
+            const owner = event.type === "session.forked" ? event.data.parentID : id
+            let ref = updates.has(owner) ? updates.get(owner) : sessions.get(owner)
+            if (!ref && !updates.has(owner)) {
+              const row = yield* db
+                .select({ directory: SessionTable.directory, workspaceID: SessionTable.workspace_id })
+                .from(SessionTable)
+                .where(eq(SessionTable.id, owner))
+                .get()
+                .pipe(Effect.orDie)
+              ref = row
+                ? { directory: AbsolutePath.make(row.directory), workspaceID: row.workspaceID ?? undefined }
+                : undefined
+              updates.set(owner, ref)
+            }
+            if (event.type === "session.moved") {
+              // Both owners need the transition, even if the producer supplied
+              // an envelope location. Later events use only the destination.
+              updates.set(id, event.data.location)
+              resolved.set(event, ref ? [ref, event.data.location] : [event.data.location])
+              continue
+            }
+            if (event.type === "session.forked") updates.set(id, ref)
+            resolved.set(event, event.location ? [event.location] : ref ? [ref] : [])
+            if (event.type === "session.deleted") updates.set(id, undefined)
+          }
+          // Apply only after the projection transaction commits. A failed move
+          // must not redirect events away from the Session's actual location.
+          return () => {
+            for (const [id, ref] of updates) {
+              if (ref) sessions.set(id, ref)
+              else sessions.delete(id)
+            }
+            for (const [event, ref] of resolved) routes.set(event, ref)
+          }
+        })
 
         const getOrCreate = (definition: Event.Definition) =>
           Effect.gen(function* () {
@@ -335,6 +400,7 @@ export function configured(options?: Options) {
                               ...event,
                               durable: { aggregateID, seq, version: durable.version },
                             } as Event.Payload
+                            const route = yield* prepareRoutes([committed])
                             for (const projector of list) {
                               yield* projector(committed)
                             }
@@ -366,12 +432,13 @@ export function configured(options?: Options) {
                                 ])
                                 .run()
                                 .pipe(Effect.orDie)
-                            return { aggregateID, seq }
+                            return { aggregateID, seq, event: committed, route }
                           }),
                         { behavior: "immediate" },
                       )
                       .pipe(Effect.orDie)
                     if (committed) {
+                      committed.route()
                       yield* Effect.forEach(
                         pubsub.durable.get(committed.aggregateID) ?? [],
                         (wake) => PubSub.publish(wake, undefined),
@@ -409,15 +476,14 @@ export function configured(options?: Options) {
                 Effect.gen(function* () {
                   const committed = yield* commitDurableEvent(definition, event as Event.Payload, undefined, commit)
                   if (!committed) return event
-                  event = {
-                    ...event,
-                    durable: envelope(committed.aggregateID, committed.seq, definition.durable.version),
-                  }
+                  event = committed.event as Event.Payload<D>
                   yield* notify(event as Event.Payload, true)
                   return event
                 }),
               )
             }
+            const route = yield* prepareRoutes([event as Event.Payload])
+            route()
             yield* notify(event as Event.Payload, false)
             return event
           })
@@ -527,7 +593,11 @@ export function configured(options?: Options) {
                             .pipe(Effect.orDie)
                           const firstSeq = (row?.seq ?? -1) + 1
                           const finalSeq = firstSeq + payloads.length - 1
-                          const result = new Array<Event.Payload>()
+                          const queued = payloads.map((item, index) => ({
+                            ...item.event,
+                            durable: envelope(aggregateID, firstSeq + index, item.definition.durable.version),
+                          }))
+                          const route = yield* prepareRoutes(queued)
                           const rows = new Array<typeof EventTable.$inferInsert>()
                           const ids = new Set<Event.ID>()
                           for (const [index, item] of payloads.entries()) {
@@ -559,10 +629,7 @@ export function configured(options?: Options) {
                                   }),
                                 )
                             }
-                            const event = {
-                              ...item.event,
-                              durable: envelope(aggregateID, seq, item.definition.durable.version),
-                            } as Event.Payload
+                            const event = queued[index]
                             for (const projector of projectors.get(
                               versionedType(item.definition.type, item.definition.durable.version),
                             ) ?? []) {
@@ -578,7 +645,6 @@ export function configured(options?: Options) {
                                 type: versionedType(item.definition.type, item.definition.durable.version),
                                 data: encoded,
                               })
-                            result.push(event)
                           }
                           yield* db
                             .insert(EventSequenceTable)
@@ -587,11 +653,12 @@ export function configured(options?: Options) {
                             .run()
                             .pipe(Effect.orDie)
                           if (persist) yield* db.insert(EventTable).values(rows).run().pipe(Effect.orDie)
-                          return result
+                          return { events: queued, route }
                         }),
                       { behavior: "immediate" },
                     )
                     .pipe(Effect.orDie)
+                  committed.route()
                   yield* Effect.forEach(
                     pubsub.durable.get(aggregateID) ?? [],
                     (wake) => PubSub.publish(wake, undefined),
@@ -599,8 +666,8 @@ export function configured(options?: Options) {
                       discard: true,
                     },
                   )
-                  yield* Effect.forEach(committed, (event) => notify(event, true), { discard: true })
-                  return committed as PublishResult<I>
+                  yield* Effect.forEach(committed.events, (event) => notify(event, true), { discard: true })
+                  return committed.events as PublishResult<I>
                 }),
               ),
             )
@@ -632,13 +699,7 @@ export function configured(options?: Options) {
                   strictOwner: options?.strictOwner,
                 })
                 if (committed && options?.publish) {
-                  yield* notify(
-                    {
-                      ...payload,
-                      durable: envelope(committed.aggregateID, committed.seq, definition.durable.version),
-                    },
-                    true,
-                  )
+                  yield* notify(committed.event, true)
                 }
               }),
             )
@@ -653,7 +714,10 @@ export function configured(options?: Options) {
                 yield* db.delete(EventTable).where(eq(EventTable.aggregate_id, aggregateID)).run()
               }),
             )
-            .pipe(Effect.orDie)
+            .pipe(
+              Effect.tap(() => Effect.sync(() => sessions.delete(aggregateID as SessionID))),
+              Effect.orDie,
+            )
         }
 
         function claim(aggregateID: string, ownerID: string) {
@@ -671,15 +735,17 @@ export function configured(options?: Options) {
               Effect.map((location) =>
                 Option.match(location, {
                   onNone: () => stream,
-                  onSome: (location) =>
-                    stream.pipe(
-                      Stream.filter(
-                        (event) =>
-                          !event.location ||
-                          (event.location.directory === location.directory &&
-                            event.location.workspaceID === location.workspaceID),
-                      ),
-                    ),
+                  onSome: (location) => {
+                    const matches = (ref: Location.Ref) =>
+                      ref.directory === location.directory && ref.workspaceID === location.workspaceID
+                    return stream.pipe(
+                      Stream.filter((event) => {
+                        const refs = routes.get(event)
+                        if (refs) return refs.some(matches)
+                        return !event.location || matches(event.location)
+                      }),
+                    )
+                  },
                 }),
               ),
             ),

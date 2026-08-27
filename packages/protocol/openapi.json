@@ -3950,6 +3950,143 @@
         },
         "description": "Retrieve one projected message owned by the Session.",
         "summary": "Get session message"
+      },
+      "patch": {
+        "tags": ["session"],
+        "operationId": "v2.session.messageUpdate",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses"
+            },
+            "required": true
+          },
+          {
+            "name": "messageID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^msg_"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Session.Message.Assistant"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError | MessageNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/MessageNotFoundErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "SessionBusyError | ConflictError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/SessionBusyErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ConflictErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Replace the content of a completed assistant message in an idle session.",
+        "summary": "Update assistant message content",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "content": {
+                    "type": "array",
+                    "items": {
+                      "anyOf": [
+                        {
+                          "$ref": "#/components/schemas/Session.Message.Assistant.Text"
+                        },
+                        {
+                          "$ref": "#/components/schemas/Session.Message.Assistant.Reasoning"
+                        },
+                        {
+                          "$ref": "#/components/schemas/Session.Message.Assistant.Tool"
+                        }
+                      ]
+                    }
+                  }
+                },
+                "required": ["content"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
       }
     },
     "/api/session/{sessionID}/environment": {
@@ -16198,6 +16335,9 @@
             "type": "string"
           },
           "name": {
+            "type": "string"
+          },
+          "text": {
             "type": "string"
           },
           "mention": {

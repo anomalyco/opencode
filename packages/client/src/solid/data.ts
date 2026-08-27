@@ -167,6 +167,10 @@ function createSync() {
     has(key: string) {
       return state.has(key)
     },
+    pending(key: string) {
+      const active = state.get(key)
+      return active !== undefined && active !== true
+    },
     invalidate(key?: string) {
       if (key) {
         const active = state.get(key)
@@ -617,7 +621,22 @@ export function createData(config: CreateDataInput) {
       }
       case "worktree.resolved": {
         for (const [sessionID, info] of Object.entries(store.session.info)) {
-          const adopted = Worktree.adopt({ projectID: info.projectID, directory: info.location.directory }, event.data)
+          const explicit = event.data.adopted?.includes(info.projectID)
+          const directory = explicit ? store.project.info[info.projectID]?.canonical : info.location.directory
+          if (!directory) {
+            if (info.location.workspaceID) continue
+            result.session.invalidate(sessionID)
+            void result.session.sync(sessionID)
+            continue
+          }
+          const adopted = Worktree.adopt(
+            {
+              projectID: info.projectID,
+              directory,
+              workspaceID: info.location.workspaceID,
+            },
+            event.data,
+          )
           if (!adopted) continue
           setStore("session", "info", sessionID, "projectID", adopted.projectID)
           setStore("session", "info", sessionID, "subpath", adopted.subpath)
@@ -708,6 +727,17 @@ export function createData(config: CreateDataInput) {
           match.time.completed = event.created
         })
         return
+      case "session.message.content.updated": {
+        if (store.session.message[event.data.sessionID])
+          message.update(event.data.sessionID, (draft, index) => {
+            const assistant = message.assistant(draft, index, event.data.messageID)
+            if (assistant) assistant.content = [...event.data.content]
+          })
+        if (!sync.pending(`session.message:${event.data.sessionID}`)) return
+        result.session.message.invalidate(event.data.sessionID)
+        void result.session.message.sync(event.data.sessionID)
+        return
+      }
       case "session.step.started":
         message.update(event.data.sessionID, (draft, index) => {
           const position = index.get(event.data.assistantMessageID)
@@ -720,6 +750,7 @@ export function createData(config: CreateDataInput) {
             existing.finish = undefined
             existing.rawFinish = undefined
             existing.providerState = undefined
+            existing.time.streamed = undefined
             existing.time.completed = undefined
             if (event.data.snapshot) existing.snapshot = { ...existing.snapshot, start: event.data.snapshot }
             return
@@ -739,6 +770,12 @@ export function createData(config: CreateDataInput) {
             snapshot: event.data.snapshot ? { start: event.data.snapshot } : undefined,
             time: { created: event.created },
           })
+        })
+        return
+      case "session.step.streamed":
+        message.update(event.data.sessionID, (draft, index) => {
+          const currentAssistant = message.assistant(draft, index, event.data.assistantMessageID)
+          if (currentAssistant) currentAssistant.time.streamed = event.created
         })
         return
       case "session.step.ended": {

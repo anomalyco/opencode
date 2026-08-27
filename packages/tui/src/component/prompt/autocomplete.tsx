@@ -760,6 +760,14 @@ export function Autocomplete(props: {
         },
       },
       {
+        id: "prompt.clear",
+        title: "Dismiss autocomplete",
+        group: "Autocomplete",
+        run() {
+          hide(true)
+        },
+      },
+      {
         id: "prompt.autocomplete.select",
         title: "Select autocomplete item",
         group: "Autocomplete",

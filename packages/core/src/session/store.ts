@@ -1,6 +1,6 @@
 export * as SessionStore from "./store.js"
 
-import { and, eq, isNotNull, isNull, sql } from "drizzle-orm"
+import { and, eq, isNotNull, isNull, notInArray, sql } from "drizzle-orm"
 import { Context, Effect, Layer } from "effect"
 import { Database } from "../database/database.js"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
@@ -18,9 +18,8 @@ export interface Interface {
     messageID: SessionMessage.ID,
   ) => Effect.Effect<{ readonly sessionID: Session.ID; readonly message: SessionMessage.Info } | undefined>
   /**
-   * Top-level Sessions holding an execution claim. Child (subagent) Sessions
-   * are excluded: a resumed parent re-runs its tool call and spawns fresh
-   * children, so resuming orphaned children would duplicate their work.
+   * Top-level Sessions holding an execution claim. Recoverable background
+   * children are resumed separately through their durable Job records.
    */
   readonly listSuspended: () => Effect.Effect<ReadonlyArray<Session.ID>>
   /**
@@ -33,11 +32,10 @@ export interface Interface {
   /** Releases the claim and resets resume accounting. Terminal events call this on commit. */
   readonly release: (sessionID: Session.ID) => Effect.Effect<void>
   /**
-   * Clears orphaned child (subagent) claims. Children are never resumed
-   * independently, so a dead child's claim is noise no terminal will ever
-   * release.
+   * Clears orphaned child claims except children owned by recoverable
+   * background subagent jobs.
    */
-  readonly releaseChildClaims: Effect.Effect<void>
+  readonly releaseChildClaims: (recoverable: ReadonlyArray<Session.ID>) => Effect.Effect<void>
   /**
    * Durably counts one more resume of an orphaned claim, returning the new
    * total — or undefined when the Session no longer exists.
@@ -103,12 +101,20 @@ const layer = Layer.effect(
           .run()
           .pipe(Effect.orDie)
       }),
-      releaseChildClaims: db
-        .update(SessionTable)
-        .set({ time_suspended: null, resume_attempts: 0, time_updated: sql`${SessionTable.time_updated}` })
-        .where(and(isNotNull(SessionTable.time_suspended), isNotNull(SessionTable.parent_id)))
-        .run()
-        .pipe(Effect.orDie, Effect.asVoid, Effect.withSpan("SessionStore.releaseChildClaims")),
+      releaseChildClaims: Effect.fn("SessionStore.releaseChildClaims")((recoverable) =>
+        db
+          .update(SessionTable)
+          .set({ time_suspended: null, resume_attempts: 0, time_updated: sql`${SessionTable.time_updated}` })
+          .where(
+            and(
+              isNotNull(SessionTable.time_suspended),
+              isNotNull(SessionTable.parent_id),
+              recoverable.length > 0 ? notInArray(SessionTable.id, Array.from(recoverable)) : undefined,
+            ),
+          )
+          .run()
+          .pipe(Effect.orDie, Effect.asVoid),
+      ),
       countResume: Effect.fn("SessionStore.countResume")(function* (sessionID) {
         const row = yield* db
           .update(SessionTable)

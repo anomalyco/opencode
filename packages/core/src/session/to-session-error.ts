@@ -59,7 +59,6 @@ export function toSessionError(cause: unknown): SessionError.Error {
 }
 
 function providerError(type: string, reason: AIError["reason"]): SessionError.Error {
-  const status =
-    ("http" in reason ? reason.http?.response?.status : undefined) ?? ("status" in reason ? reason.status : undefined)
+  const status = reason.http?.status
   return { type, message: reason.message, ...(status === undefined ? {} : { status }) }
 }
