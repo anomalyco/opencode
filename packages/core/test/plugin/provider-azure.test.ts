@@ -15,6 +15,7 @@ import { Provider } from "@opencode-ai/core/provider"
 import { Integration } from "@opencode-ai/core/integration"
 import { Location } from "@opencode-ai/core/location"
 import { Session } from "@opencode-ai/core/session"
+import { State } from "@opencode-ai/core/state"
 import { AppProcess } from "@opencode-ai/util/process"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
@@ -302,55 +303,62 @@ describe("AzurePlugin", () => {
     ),
   )
 
-  it.effect("discovers deployments and preserves multiple deployments of the same model", () =>
-    withEnv({ AZURE_RESOURCE_GROUP: undefined }, () =>
-      withAzureCommands(
-        (args) => {
-          if (args.includes("deployment")) {
-            return [
-              {
-                name: "gpt-production",
-                properties: { model: { name: "gpt-5-mini" }, provisioningState: "Succeeded" },
-              },
-              {
-                name: "gpt-staging",
-                properties: { model: { name: "gpt-5-mini" }, provisioningState: "Succeeded" },
-              },
-              {
-                name: "gpt-pending",
-                properties: { model: { name: "gpt-5-mini" }, provisioningState: "Creating" },
-              },
-            ]
-          }
-          return [{ name: "test-resource", resourceGroup: "test-group" }]
-        },
-        () =>
-          Effect.gen(function* () {
-            const catalog = yield* Catalog.Service
-            yield* catalog.transform((draft) => {
-              draft.provider.update(Provider.ID.azure, (provider) => {
-                provider.package = Provider.aisdk("@ai-sdk/azure")
-              })
-              draft.model.update(Provider.ID.azure, Model.ID.make("gpt-5-mini"), (model) => {
-                model.name = "GPT-5 Mini"
-              })
-              draft.model.update(Provider.ID.azure, Model.ID.make("gpt-5-nano"), () => {})
-            })
-            yield* azureCredential
-            yield* addPlugin()
+  for (const batched of [false, true]) {
+    it.effect(
+      `discovers deployments with an existing connection (${batched ? "batched startup" : "ready catalog"})`,
+      () =>
+        withEnv({ AZURE_RESOURCE_GROUP: undefined }, () =>
+          withAzureCommands(
+            (args) => {
+              if (args.includes("deployment")) {
+                return [
+                  {
+                    name: "gpt-production",
+                    properties: { model: { name: "gpt-5-mini" }, provisioningState: "Succeeded" },
+                  },
+                  {
+                    name: "gpt-staging",
+                    properties: { model: { name: "gpt-5-mini" }, provisioningState: "Succeeded" },
+                  },
+                  {
+                    name: "gpt-pending",
+                    properties: { model: { name: "gpt-5-mini" }, provisioningState: "Creating" },
+                  },
+                ]
+              }
+              return [{ name: "test-resource", resourceGroup: "test-group" }]
+            },
+            () =>
+              Effect.gen(function* () {
+                const catalog = yield* Catalog.Service
+                yield* azureCredential
+                const startup = Effect.gen(function* () {
+                  yield* catalog.transform((draft) => {
+                    draft.provider.update(Provider.ID.azure, (provider) => {
+                      provider.package = Provider.aisdk("@ai-sdk/azure")
+                    })
+                    draft.model.update(Provider.ID.azure, Model.ID.make("gpt-5-mini"), (model) => {
+                      model.name = "GPT-5 Mini"
+                    })
+                    draft.model.update(Provider.ID.azure, Model.ID.make("gpt-5-nano"), () => {})
+                  })
+                  yield* addPlugin()
+                })
+                yield* batched ? State.batch(startup) : startup
 
-            expect((yield* catalog.provider.get(Provider.ID.azure))?.settings?.resourceName).toBe("test-resource")
-            expect((yield* catalog.model.get(Provider.ID.azure, Model.ID.make("gpt-5-mini")))?.modelID).toBe(
-              Model.ID.make("gpt-production"),
-            )
-            expect((yield* catalog.model.get(Provider.ID.azure, Model.ID.make("gpt-staging")))?.modelID).toBe(
-              Model.ID.make("gpt-staging"),
-            )
-            expect(yield* catalog.model.get(Provider.ID.azure, Model.ID.make("gpt-5-nano"))).toBeUndefined()
-          }),
-      ),
-    ),
-  )
+                expect((yield* catalog.provider.get(Provider.ID.azure))?.settings?.resourceName).toBe("test-resource")
+                expect((yield* catalog.model.get(Provider.ID.azure, Model.ID.make("gpt-5-mini")))?.modelID).toBe(
+                  Model.ID.make("gpt-production"),
+                )
+                expect((yield* catalog.model.get(Provider.ID.azure, Model.ID.make("gpt-staging")))?.modelID).toBe(
+                  Model.ID.make("gpt-staging"),
+                )
+                expect(yield* catalog.model.get(Provider.ID.azure, Model.ID.make("gpt-5-nano"))).toBeUndefined()
+              }),
+          ),
+        ),
+    )
+  }
 
   it.effect("keeps existing models when Azure deployment discovery is unavailable", () =>
     withAzureCommands(

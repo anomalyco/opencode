@@ -5,7 +5,6 @@ import { Form } from "@opencode-ai/schema/form"
 import { AppProcess } from "@opencode-ai/util/process"
 import { App } from "../../app.js"
 import { Bus } from "../../bus.js"
-import { Catalog } from "../../catalog.js"
 import { Credential } from "../../credential.js"
 import { Integration } from "../../integration.js"
 import { Model } from "../../model.js"
@@ -27,17 +26,16 @@ const decodeToken = Schema.decodeUnknownEffect(
 const decodeAccounts = Schema.decodeUnknownEffect(
   Schema.Array(Schema.Struct({ name: Schema.NonEmptyString, resourceGroup: Schema.NonEmptyString })),
 )
-const decodeDeployments = Schema.decodeUnknownEffect(
-  Schema.Array(
-    Schema.Struct({
-      name: Schema.NonEmptyString,
-      properties: Schema.Struct({
-        model: Schema.Struct({ name: Schema.NonEmptyString }),
-        provisioningState: Schema.NonEmptyString,
-      }),
+const Deployments = Schema.Array(
+  Schema.Struct({
+    name: Schema.NonEmptyString,
+    properties: Schema.Struct({
+      model: Schema.Struct({ name: Schema.NonEmptyString }),
+      provisioningState: Schema.NonEmptyString,
     }),
-  ),
+  }),
 )
+const decodeDeployments = Schema.decodeUnknownEffect(Deployments)
 
 function selectLanguage(sdk: any, modelID: string, useChat: boolean) {
   if (useChat && sdk.chat) return sdk.chat(modelID)
@@ -52,11 +50,10 @@ export const AzurePlugin = define({
   effect: Effect.fn(function* (ctx) {
     const configured = yield* configuredSettings(Provider.ID.azure)
     const processes = yield* AppProcess.Service
-    const catalog = yield* Catalog.Service
     const bus = yield* Bus.Service
     const tokens = new Map<string, { access: string; expires: number }>()
     const loading = Semaphore.makeUnsafe(1)
-    const loaded: { resource?: string; models?: Map<Model.ID, Model.Info> } = {}
+    const loaded: { resource?: string; deployments?: typeof Deployments.Type } = {}
 
     const command = (args: string[]) =>
       processes.run(ChildProcess.make("az", args, { extendEnv: true, stdin: "ignore" })).pipe(
@@ -140,7 +137,7 @@ export const AzurePlugin = define({
               if (!resourceName) return yield* Effect.fail(new Error("Azure resource name is required"))
               const current = yield* token(cognitiveScope)
               loaded.resource = resourceName
-              loaded.models = yield* discover(resourceName)
+              loaded.deployments = yield* discover(resourceName)
               yield* ctx.catalog.reload()
               return Credential.OAuth.make({
                 type: "oauth",
@@ -162,7 +159,6 @@ export const AzurePlugin = define({
     })
 
     const discover = Effect.fn("AzurePlugin.discover")(function* (resource: string) {
-      const existing = (yield* catalog.model.all()).filter((model) => model.providerID === Provider.ID.azure)
       return yield* Effect.gen(function* () {
         const group = process.env.AZURE_RESOURCE_GROUP
         const account = group
@@ -175,7 +171,7 @@ export const AzurePlugin = define({
             ).find((item) => item.name.toLowerCase() === resource.toLowerCase())
         if (!account)
           return yield* Effect.fail(new Error(`Azure resource "${resource}" was not found in the active subscription`))
-        const deployments = yield* command([
+        return yield* command([
           "cognitiveservices",
           "account",
           "deployment",
@@ -188,22 +184,6 @@ export const AzurePlugin = define({
           "json",
           "--only-show-errors",
         ]).pipe(Effect.flatMap(decodeDeployments))
-        const found = new Map<Model.ID, Model.Info>()
-        deployments.forEach((deployment) => {
-          if (deployment.properties.provisioningState !== "Succeeded") return
-          const model = existing.find(
-            (item) => item.id.toLowerCase() === deployment.properties.model.name.toLowerCase(),
-          )
-          if (!model) return
-          const id = found.has(model.id) ? Model.ID.make(deployment.name) : model.id
-          found.set(id, {
-            ...model,
-            id,
-            name: id === model.id ? model.name : `${model.name} (${deployment.name})`,
-            modelID: Model.ID.make(deployment.name),
-          })
-        })
-        return found
       }).pipe(
         Effect.catch((error) =>
           Effect.logWarning("Azure model discovery failed", {
@@ -221,13 +201,13 @@ export const AzurePlugin = define({
         : undefined
       if (credential?.type !== "oauth" || credential.methodID !== methodID) {
         loaded.resource = undefined
-        loaded.models = undefined
+        loaded.deployments = undefined
         return
       }
       const resource =
         typeof credential.metadata?.resourceName === "string" ? credential.metadata.resourceName : undefined
       loaded.resource = resource
-      loaded.models = resource ? yield* discover(resource) : undefined
+      loaded.deployments = resource ? yield* discover(resource) : undefined
     })
 
     yield* load()
@@ -246,11 +226,28 @@ export const AzurePlugin = define({
                 : {}),
             }
           })
-        if (item.provider.id === Provider.ID.azure && loaded.models) {
+        if (item.provider.id === Provider.ID.azure && loaded.deployments) {
+          // Startup batches catalog transforms, so match against the current draft rather than a pre-startup snapshot.
+          const existing = Array.from(item.models.values())
+          const found = new Map<Model.ID, Model.Info>()
+          loaded.deployments.forEach((deployment) => {
+            if (deployment.properties.provisioningState !== "Succeeded") return
+            const model = existing.find(
+              (model) => model.id.toLowerCase() === deployment.properties.model.name.toLowerCase(),
+            )
+            if (!model) return
+            const id = found.has(model.id) ? Model.ID.make(deployment.name) : model.id
+            found.set(id, {
+              ...model,
+              id,
+              name: id === model.id ? model.name : `${model.name} (${deployment.name})`,
+              modelID: Model.ID.make(deployment.name),
+            })
+          })
           for (const id of Array.from(item.models.keys())) {
-            if (!loaded.models.has(Model.ID.make(id))) evt.model.remove(item.provider.id, id)
+            if (!found.has(Model.ID.make(id))) evt.model.remove(item.provider.id, id)
           }
-          for (const [id, model] of loaded.models) {
+          for (const [id, model] of found) {
             evt.model.update(item.provider.id, id, (draft) => Object.assign(draft, structuredClone(model)))
           }
         }
