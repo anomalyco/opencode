@@ -151,7 +151,24 @@ describe("tool.edit", () => {
         const result = yield* run({ filePath: filepath, oldString: "old content", newString: "new content" })
 
         expect(result.output).toContain("Edit applied successfully")
+        expect(result.output).not.toContain("fuzzy matching")
+        expect(result.metadata.matchStrategy).toBe("exact")
         expect(yield* load(filepath)).toBe("new content here")
+      }),
+    )
+
+    it.instance("reports fuzzy match strategy when oldString does not match exactly", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "fuzzy.txt")
+        yield* put(filepath, "alpha\n   beta_line\ngamma\n")
+
+        // oldString has 4-space indent, file has 3 — matched via LineTrimmedReplacer
+        const result = yield* run({ filePath: filepath, oldString: "    beta_line", newString: "    beta_edited" })
+
+        expect(result.metadata.matchStrategy).toBe("line-trimmed")
+        expect(result.output).toContain("fuzzy matching (line-trimmed)")
+        expect(result.output).toContain("+    beta_edited")
       }),
     )
 
