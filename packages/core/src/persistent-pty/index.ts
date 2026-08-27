@@ -11,8 +11,6 @@ import { Bus } from "../bus.js"
 import { Database } from "../database/database.js"
 import { Pty } from "@opencode-ai/schema/pty"
 import { Global } from "@opencode-ai/util/global"
-import { Location } from "../location.js"
-import { ShellSelect } from "../shell/select.js"
 import {
   makeDaemonTransport,
   type DaemonTransport,
@@ -68,15 +66,15 @@ export interface Interface {
   readonly create: (
     sessionID: Session.ID,
     input: {
-      readonly command?: string
+      readonly command: string
       readonly args: readonly string[]
-      readonly cwd?: string
+      readonly cwd: string
       readonly title: string
       readonly env: Readonly<Record<string, string>>
       readonly cols?: number
       readonly rows?: number
     },
-  ) => Effect.Effect<Info, UnavailableError, Location.Service | ShellSelect.Service>
+  ) => Effect.Effect<Info, UnavailableError>
   readonly write: (
     id: Pty.ID,
     data: string,
@@ -156,25 +154,22 @@ export const layer = Layer.effect(
     const create = Effect.fn("PersistentPty.create")(function* (
       sessionID: Session.ID,
       input: {
-        readonly command?: string
+        readonly command: string
         readonly args: readonly string[]
-        readonly cwd?: string
+        readonly cwd: string
         readonly title: string
         readonly env: Readonly<Record<string, string>>
         readonly cols?: number
         readonly rows?: number
       },
     ) {
-      const location = yield* Location.Service
-      const shell = yield* ShellSelect.Service
-      const command = input.command ?? (yield* shell.resolve({ priority: "config" }))
       const response = yield* request(
         daemon,
         {
           op: "create",
-          program: command,
+          program: input.command,
           args: input.args,
-          cwd: input.cwd ?? location.directory,
+          cwd: input.cwd,
           title: input.title,
           group_id: sessionID,
           env: input.env,

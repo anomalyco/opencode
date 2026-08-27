@@ -4,14 +4,9 @@ import { PtyTicket } from "@opencode-ai/schema/pty-ticket"
 import { Session } from "@opencode-ai/schema/session"
 import { Context, Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
-import {
-  ForbiddenError,
-  InvalidRequestError,
-  PtyNotFoundError,
-  ServiceUnavailableError,
-  SessionNotFoundError,
-} from "../errors.js"
+import { ForbiddenError, InvalidRequestError, PtyNotFoundError, ServiceUnavailableError } from "../errors.js"
 import { PTY_CONNECT_TICKET_QUERY, PTY_CONNECT_TOKEN_HEADER, PTY_CONNECT_TOKEN_HEADER_VALUE } from "./pty.js"
+import { LocationQuery, locationQueryOpenApi } from "./location.js"
 
 export { PTY_CONNECT_TICKET_QUERY, PTY_CONNECT_TOKEN_HEADER, PTY_CONNECT_TOKEN_HEADER_VALUE }
 
@@ -24,9 +19,7 @@ export function hasPersistentPtyConnectTicketURL(url: URL) {
 const errors = [InvalidRequestError, ServiceUnavailableError] as const
 const terminalErrors = [PtyNotFoundError, ServiceUnavailableError] as const
 
-export const makePersistentPtyGroup = <I extends HttpApiMiddleware.AnyId, S>(
-  sessionLocationMiddleware: Context.Key<I, S>,
-) =>
+export const makePersistentPtyGroup = <I extends HttpApiMiddleware.AnyId, S>(locationMiddleware: Context.Key<I, S>) =>
   HttpApiGroup.make("server.experimental")
     .add(
       HttpApiEndpoint.get("persistentPty.list", "/api/experimental/session/:sessionID/terminal", {
@@ -38,10 +31,13 @@ export const makePersistentPtyGroup = <I extends HttpApiMiddleware.AnyId, S>(
     .add(
       HttpApiEndpoint.post("persistentPty.create", "/api/experimental/session/:sessionID/terminal", {
         params: { sessionID: Session.ID },
+        query: LocationQuery,
         payload: PersistentPty.CreateInput,
         success: Schema.Struct({ data: PersistentPty.Info }),
-        error: [...errors, SessionNotFoundError],
-      }).middleware(sessionLocationMiddleware),
+        error: errors,
+      })
+        .middleware(locationMiddleware)
+        .annotateMerge(locationQueryOpenApi),
     )
     .add(
       HttpApiEndpoint.post("persistentPty.shutdown", "/api/experimental/persistent-pty/shutdown", {

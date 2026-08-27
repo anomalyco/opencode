@@ -89,7 +89,7 @@ type ApiGroups<
   | typeof WorktreeGroup
   | typeof WorkspaceGroup
   | typeof GenerateGroup
-  | ReturnType<typeof makePersistentPtyGroup<SessionLocationId, SessionLocationService>>
+  | ReturnType<typeof makePersistentPtyGroup<LocationId, LocationService>>
   | LocationGroups<LocationId>
   | FormGroups<LocationId, LocationService, FormLocationId, FormLocationService>
   | SessionGroups<SessionLocationId, SessionLocationService>
@@ -170,7 +170,7 @@ const makeApiFromGroup = <
     .add(SkillGroup.middleware(locationMiddleware))
     .add(eventGroup)
     .add(PtyGroup.middleware(locationMiddleware))
-    .add(makePersistentPtyGroup(sessionLocationMiddleware))
+    .add(makePersistentPtyGroup(locationMiddleware))
     .add(ShellGroup.middleware(locationMiddleware))
     .add(ReferenceGroup.middleware(locationMiddleware))
     .add(WorktreeGroup)

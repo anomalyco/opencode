@@ -5753,6 +5753,9 @@ export type ExperimentalPersistentPtyListOutput = { data: Array<PersistentPtyInf
 
 export type ExperimentalPersistentPtyCreateInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
   readonly command?: {
     readonly command?: string
     readonly args: ReadonlyArray<string>

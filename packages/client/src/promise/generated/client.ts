@@ -1698,6 +1698,7 @@ export function make(options: ClientOptions) {
             {
               method: "POST",
               path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/terminal`,
+              query: { location: input["location"] },
               body: {
                 command: input["command"],
                 args: input["args"],
@@ -1707,7 +1708,7 @@ export function make(options: ClientOptions) {
                 size: input["size"],
               },
               successStatus: 200,
-              declaredStatuses: [400, 503, 404, 401],
+              declaredStatuses: [400, 503, 401],
               empty: false,
             },
             requestOptions,

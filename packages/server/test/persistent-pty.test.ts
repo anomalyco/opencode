@@ -61,16 +61,9 @@ smoke(
           expect((yield* request(base, "GET", `/api/experimental/session/${sessionID}/terminal`)).data).toEqual([])
           expect(existsSync(path.join(fixture.directory, "service.json"))).toBeFalse()
           const defaults = { args: [], title: "default shell", env: { SHELL: "/missing/client/zsh" } }
-          const missing = yield* request(
-            base,
-            "POST",
-            `/api/experimental/session/${sessionID}/terminal`,
-            defaults,
-          ).pipe(Effect.flip)
-          expect(missing.message).toContain("(404)")
-          yield* request(base, "POST", "/api/session", { id: sessionID, location: { directory: fixture.root } })
+          const createPath = `/api/experimental/session/${sessionID}/terminal?location[directory]=${encodeURIComponent(fixture.root)}`
           const terminal = Schema.decodeUnknownSync(PersistentPty.Info)(
-            (yield* request(base, "POST", `/api/experimental/session/${sessionID}/terminal`, defaults)).data,
+            (yield* request(base, "POST", createPath, defaults)).data,
           )
           expect(terminal.command).toBe("/bin/sh")
           expect(terminal.cwd).toBe(fixture.root)
@@ -78,7 +71,7 @@ smoke(
           yield* request(base, "DELETE", `/api/experimental/persistent-pty/${terminal.id}`)
           const events = yield* Effect.promise(() => openEventStream(base))
           const first = Schema.decodeUnknownSync(PersistentPty.Info)(
-            (yield* request(base, "POST", `/api/experimental/session/${sessionID}/terminal`, {
+            (yield* request(base, "POST", createPath, {
               command: "/usr/bin/env",
               args: ["/bin/sh", "-c", "stty -echo; printf terminal-one; cat"],
               cwd: process.cwd(),
