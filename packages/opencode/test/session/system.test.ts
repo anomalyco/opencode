@@ -149,6 +149,23 @@ describe("session.system", () => {
     }),
   )
 
+  it.instance("environment includes the agent name", () =>
+    Effect.gen(function* () {
+      const prompt = yield* SystemPrompt.Service
+      const env = yield* prompt.environment({ api: { id: "test-model" }, providerID: "test" } as Provider.Model, build)
+      expect(env[0]).toContain("Agent: build")
+    }),
+  )
+
+  it.instance("environment reflects a custom agent name", () =>
+    Effect.gen(function* () {
+      const prompt = yield* SystemPrompt.Service
+      const custom: Agent.Info = { name: "reviewer", mode: "subagent", permission: Permission.fromConfig({ "*": "allow" }), options: {} }
+      const env = yield* prompt.environment({ api: { id: "test-model" }, providerID: "test" } as Provider.Model, custom)
+      expect(env[0]).toContain("Agent: reviewer")
+    }),
+  )
+
   it.effect("MCP output omits servers when all advertised tools are denied", () =>
     Effect.gen(function* () {
       const prompt = yield* SystemPrompt.Service
