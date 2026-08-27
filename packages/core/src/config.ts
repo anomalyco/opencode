@@ -224,17 +224,27 @@ export const layer = (options?: Options) =>
                 .pipe(Effect.orDie)
 
         const globalEnabled = options?.global !== false
+        // The upward walk can reach the user's home directory. Home-level
+        // .claude/.agents are global config however they are found, so a
+        // global: false caller excludes them from the walk's results too.
+        const excludedGlobals = new Set(
+          globalEnabled ? [] : [globalClaudeDirectory, globalAgentsDirectory].map((item) => path.resolve(item)),
+        )
         // We load certain files from a few other folders in the ecosystem
         const claude = [
           ...new Set([
             ...(globalEnabled && (yield* fs.isDir(globalClaudeDirectory)) ? [globalClaudeDirectory] : []),
-            ...discovered.filter((item) => path.basename(item) === ".claude").toReversed(),
+            ...discovered
+              .filter((item) => path.basename(item) === ".claude" && !excludedGlobals.has(path.resolve(item)))
+              .toReversed(),
           ]),
         ].map((directory) => new ClaudeDirectory({ type: "claude", path: AbsolutePath.make(directory) }))
         const agents = [
           ...new Set([
             ...(globalEnabled && (yield* fs.isDir(globalAgentsDirectory)) ? [globalAgentsDirectory] : []),
-            ...discovered.filter((item) => path.basename(item) === ".agents").toReversed(),
+            ...discovered
+              .filter((item) => path.basename(item) === ".agents" && !excludedGlobals.has(path.resolve(item)))
+              .toReversed(),
           ]),
         ].map((directory) => new AgentsDirectory({ type: "agents", path: AbsolutePath.make(directory) }))
 
