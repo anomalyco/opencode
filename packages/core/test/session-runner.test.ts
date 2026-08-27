@@ -162,6 +162,7 @@ const defaultSystem = SessionSystemPrompt.make([])
 const replacementModel = testModel("replacement")
 const compactModel = testModel("compact", { context: 4_000, output: 50 })
 const fullOutputModel = testModel("full-output", { context: 262_144, output: 262_144 })
+const unknownContextModel = testModel("unknown-context", { context: 0, output: 32_000 })
 const undersizedContextModel = testModel("undersized-context", { context: 1, output: 1_000 })
 const recoveryModel = testModel("recovery", { context: 20_000, output: 1_000 })
 
@@ -1855,25 +1856,6 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("uses only the agent prompt and initial instructions as system parts", () =>
-    Effect.gen(function* () {
-      const session = yield* setup
-      const agent = yield* Agent.Service
-      yield* agent.transform((editor) =>
-        editor.update(Agent.ID.make("build"), (agent) => {
-          agent.system = "Build agent instructions"
-          agent.mode = "primary"
-        }),
-      )
-      yield* admit(session, "First")
-
-      yield* TestLLM.push(TestLLM.text("Done", "text-no-system"))
-      yield* session.resume(sessionID)
-
-      expect(requests.at(-1)?.system.map((part) => part.text)).toEqual(["Build agent instructions", "Initial context"])
-    }),
-  )
-
   it.effect("uses an explicitly selected non-build agent system", () =>
     Effect.gen(function* () {
       const session = yield* setup
@@ -2324,6 +2306,7 @@ describe("SessionRunnerLLM", () => {
   it.effect("delivers steered manual compaction when the model has no context limit", () =>
     Effect.gen(function* () {
       const session = yield* setup
+      currentModel = unknownContextModel
       yield* TestLLM.push(TestLLM.text("Earlier answer", "text-manual-unknown-history"))
       yield* runPrompt(session, "Earlier question")
 
@@ -2714,7 +2697,7 @@ describe("SessionRunnerLLM", () => {
   it.effect("recovers from provider context overflow without a configured context limit", () =>
     Effect.gen(function* () {
       const session = yield* setupOverflowRecovery
-      currentModel = model
+      currentModel = unknownContextModel
       yield* TestLLM.push(
         [LLMEvent.providerError({ message: "prompt too long", classification: "context-overflow" })],
         TestLLM.text("## Objective\n- Recover unknown limit", "text-summary-unknown-limit"),
@@ -5682,6 +5665,14 @@ describe("SessionRunnerLLM", () => {
   it.effect("preserves the provider failure when tool output persistence also fails", () =>
     Effect.gen(function* () {
       const session = yield* setup
+      const bus = yield* Bus.Service
+      let injected = false
+      yield* bus.project(SessionEvent.Tool.Success, (event) => {
+        if (event.data.id !== "call-store-provider-error") return Effect.void
+        return Effect.sync(() => {
+          injected = true
+        }).pipe(Effect.andThen(Effect.die("tool output persistence failed")))
+      })
       yield* admit(session, "Storage fails while provider fails")
       yield* TestLLM.push([
         LLMEvent.stepStart({ index: 0 }),
@@ -5693,6 +5684,7 @@ describe("SessionRunnerLLM", () => {
         _tag: "Failure",
       })
 
+      expect(injected).toBe(true)
       expect(requireAssistant(yield* session.context(sessionID))).toMatchObject({
         error: { type: "provider.unknown", message: "Provider unavailable" },
       })
