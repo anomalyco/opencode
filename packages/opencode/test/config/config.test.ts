@@ -528,6 +528,57 @@ it.instance("preserves env variables when adding $schema to config", () =>
   ),
 )
 
+it.instance("reports syntax errors against the config as written", () =>
+  withProcessEnv(
+    "PRESERVE_VAR",
+    "secret_value",
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      yield* FSUtil.use.writeWithDirs(
+        path.join(test.directory, "opencode.json"),
+        [
+          "{",
+          '  "$schema": "https://opencode.ai/config.json",',
+          '  "username": "{env:PRESERVE_VAR}",',
+          '  "model":',
+          "}",
+        ].join("\n"),
+      )
+
+      const exit = yield* Config.use.get().pipe(Effect.exit)
+      expect(Exit.isFailure(exit)).toBe(true)
+      const error = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined
+      expect(NamedError.hasName(error, "ConfigJsonError")).toBe(true)
+      const message = (error as { data?: { message?: string } }).data?.message ?? ""
+      expect(message).toContain("{env:PRESERVE_VAR}")
+      expect(message).not.toContain("secret_value")
+      expect(message).toContain("ValueExpected at line 5")
+    }),
+  ),
+)
+
+it.instance("does not print a substituted value that breaks the config JSON", () =>
+  withProcessEnv(
+    "PRESERVE_VAR",
+    'quote"secret_value',
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      yield* FSUtil.use.writeWithDirs(
+        path.join(test.directory, "opencode.json"),
+        ["{", '  "$schema": "https://opencode.ai/config.json",', '  "username": "{env:PRESERVE_VAR}"', "}"].join("\n"),
+      )
+
+      const exit = yield* Config.use.get().pipe(Effect.exit)
+      expect(Exit.isFailure(exit)).toBe(true)
+      const error = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined
+      expect(NamedError.hasName(error, "ConfigJsonError")).toBe(true)
+      const message = (error as { data?: { message?: string } }).data?.message ?? ""
+      expect(message).toContain("{env:PRESERVE_VAR}")
+      expect(message).not.toContain("secret_value")
+    }),
+  ),
+)
+
 it.instance("handles file inclusion substitution", () =>
   Effect.gen(function* () {
     const test = yield* TestInstance
