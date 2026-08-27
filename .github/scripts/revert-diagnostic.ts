@@ -11,7 +11,12 @@ const results = await Promise.all(
         "--timeout",
         process.argv[2],
       ],
-      { cwd: "packages/core", stdout: "pipe", stderr: "pipe" },
+      {
+        cwd: "packages/core",
+        stdout: "pipe",
+        stderr: "pipe",
+        env: { ...process.env, OPENCODE_REVERT_DIAGNOSTIC_TIMEOUT: process.argv[2] },
+      },
     )
     const [stdout, stderr, exit] = await Promise.all([
       new Response(child.stdout).text(),

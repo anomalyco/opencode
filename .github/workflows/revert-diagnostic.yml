@@ -16,9 +16,11 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
-      - uses: ./.github/actions/setup-bun
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
-          install-flags: --frozen-lockfile
+          bun-download-url: https://github.com/oven-sh/bun/releases/download/bun-v1.3.14/bun-windows-x64-baseline.zip
+      - name: Install diagnostic dependencies without unrelated native parser builds
+        run: bun install --frozen-lockfile --linker hoisted --ignore-scripts
       - name: Configure fixture Git identity
         run: |
           git config --global user.email "bot@opencode.ai"
@@ -34,5 +36,10 @@ jobs:
       - name: Measure loaded executions through completion
         timeout-minutes: 4
         run: bun .github/scripts/revert-diagnostic.ts 30000
+        env:
+          OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: "true"
+      - name: Verify the integration-test budget under load
+        timeout-minutes: 4
+        run: bun .github/scripts/revert-diagnostic.ts 15000
         env:
           OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: "true"
