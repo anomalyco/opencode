@@ -15,7 +15,7 @@ import { PluginHooks } from "./plugin/hooks.js"
 import { SessionMessage } from "./session/message.js"
 import { SessionSchema } from "./session/schema.js"
 import { State } from "./state.js"
-import { definition, execute, normalizeContent } from "./tool/runtime.js"
+import { definition, effectiveName, execute, normalizedName, normalizeContent } from "./tool/runtime.js"
 import { Wildcard } from "./util/wildcard.js"
 
 export class RegistrationError extends Schema.TaggedError<RegistrationError>()("Tool.RegistrationError", {
@@ -284,13 +284,6 @@ function registrationError(tool: Tool.Info) {
   })
   return Result.isFailure(result) ? result.failure : undefined
 }
-
-const normalizedName = (tool: Tool.Info) => tool.name.replace(/[^a-zA-Z0-9_-]/g, "_")
-
-const effectiveName = (tool: Tool.Info) =>
-  tool.options?.namespace === undefined
-    ? normalizedName(tool)
-    : `${tool.options.namespace.replaceAll(".", "_")}_${normalizedName(tool)}`
 
 export const node = makeLocationNode({
   service: Service,
