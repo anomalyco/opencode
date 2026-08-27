@@ -98,7 +98,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
       list: (input) => {
         const ref = locationRef(input)
         if (ref && !isCurrentLocation(ref)) return runtime.location.agent.list(ref)
-        return agents.list().pipe(Effect.map((data) => ({ location: locationInfo(), data })))
+        return response(agents.list())
       },
       reload: agents.reload,
       transform: (callback) =>
