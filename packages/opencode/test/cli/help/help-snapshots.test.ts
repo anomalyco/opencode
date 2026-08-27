@@ -106,6 +106,10 @@ describe("opencode CLI help-text snapshots", () => {
         expect(topLevel.stderr).not.toContain("--variant")
         expect(topLevel.stderr).not.toContain("--demo")
 
+        const webNoOpen = yield* opencode.spawn(["web", "--no-open", "--help"], { env: SNAPSHOT_ENV })
+        expect(webNoOpen.exitCode).toBe(0)
+        expect(webNoOpen.stderr).toContain("--open")
+
         const argvs: Array<readonly string[]> = [...TOP_LEVEL.map((c) => [c] as const), ...SUBCOMMANDS]
 
         // Spawn in parallel, then assert in argv order so snapshot output is
