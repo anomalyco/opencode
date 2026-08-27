@@ -334,10 +334,10 @@ const layer = Layer.effect(
         Effect.map((sets) => new Map(sets.flat(2).map((item) => [item.directory, item] as const)).values().toArray()),
       )
       const removed = checked.filter((item) => !item.exists).map((item) => item.directory)
-      const result = yield* db
+      const changes = yield* db
         .transaction((tx) =>
           Effect.all({
-            updated: Effect.forEach(discovered, (item) =>
+            updated: Effect.filter(discovered, (item) =>
               ops.create(
                 {
                   projectID: input.projectID,
@@ -346,15 +346,11 @@ const layer = Layer.effect(
                 },
                 tx,
               ),
-            ),
-            removed: Effect.forEach(removed, (directory) => ops.remove(input.projectID, directory, tx)),
+            ).pipe(Effect.map((items) => items.map((item) => item.directory))),
+            removed: Effect.filter(removed, (directory) => ops.remove(input.projectID, directory, tx)),
           }),
         )
         .pipe(Effect.orDie)
-      const changes = {
-        updated: discovered.filter((_, index) => result.updated[index]).map((item) => item.directory),
-        removed: removed.filter((_, index) => result.removed[index]),
-      }
       yield* changed(input.projectID, changes.updated.length > 0 || changes.removed.length > 0)
       return changes
     })
