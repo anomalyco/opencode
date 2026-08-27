@@ -66,7 +66,9 @@ for (const item of targets) {
     entrypoints: ["./src/index.ts"],
     tsconfig: "./tsconfig.json",
     plugins: [plugin],
-    external: ["node-gyp"],
+    // lightningcss (via ui -> tailwind) has a conditional native-binding require the bundler
+    // cannot resolve; the TUI never runs that path, so it stays external.
+    external: ["node-gyp", "lightningcss"],
     format: "esm",
     minify: true,
     sourcemap: sourcemapsFlag ? "linked" : "none",
