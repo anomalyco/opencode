@@ -1,5 +1,4 @@
-import { AIError, AIErrorReason, ToolFailure } from "@opencode-ai/ai"
-import { Schema } from "effect"
+import { AIError, ToolFailure } from "@opencode-ai/ai"
 import { Tool } from "@opencode-ai/schema/tool"
 import { SessionError } from "@opencode-ai/schema/session-error"
 import { Permission } from "../permission.js"
@@ -11,25 +10,25 @@ export function toSessionError(cause: unknown): SessionError.Error {
   if (cause instanceof AIError) {
     switch (cause.reason._tag) {
       case "RateLimit":
-        return providerError("provider.rate-limit", cause)
+        return providerError("provider.rate-limit", cause.reason)
       case "Authentication":
-        return providerError("provider.auth", cause)
+        return providerError("provider.auth", cause.reason)
       case "QuotaExceeded":
-        return providerError("provider.quota", cause)
+        return providerError("provider.quota", cause.reason)
       case "ContentPolicy":
-        return providerError("provider.content-filter", cause)
+        return providerError("provider.content-filter", cause.reason)
       case "Transport":
-        return providerError("provider.transport", cause)
+        return providerError("provider.transport", cause.reason)
       case "ProviderInternal":
-        return providerError("provider.internal", cause)
+        return providerError("provider.internal", cause.reason)
       case "InvalidProviderOutput":
-        return providerError("provider.invalid-output", cause)
+        return providerError("provider.invalid-output", cause.reason)
       case "InvalidRequest":
-        return providerError("provider.invalid-request", cause)
+        return providerError("provider.invalid-request", cause.reason)
       case "NoRoute":
-        return providerError("provider.no-route", cause)
+        return providerError("provider.no-route", cause.reason)
       case "UnknownProvider":
-        return providerError("provider.unknown", cause)
+        return providerError("provider.unknown", cause.reason)
       default: {
         const exhaustive: never = cause.reason
         return exhaustive
@@ -59,41 +58,7 @@ export function toSessionError(cause: unknown): SessionError.Error {
   return { type: "unknown", message: cause instanceof Error ? cause.message : String(cause) }
 }
 
-function providerError(type: string, error: AIError): SessionError.Error {
-  // The durable projection owns diagnostics; encode classification without the native cause.
-  const reason = Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Json))(
-    Schema.encodeSync(Schema.toCodecJson(AIErrorReason))(
-      AIErrorReason.make({ ...error.reason, message: error.message, cause: undefined }),
-    ),
-  )
-  return {
-    type,
-    message: error.message,
-    ...(error.reason.http === undefined ? {} : { status: error.reason.http.status, http: { ...error.reason.http } }),
-    ...(error.reason.body === undefined ? {} : { body: error.reason.body }),
-    reason: Object.fromEntries(
-      Object.entries(reason).filter(([key]) => !["message", "body", "http", "cause"].includes(key)),
-    ),
-    ...(error.reason.cause === undefined ? {} : { cause: serializeCause(error.reason.cause) }),
-  }
-}
-
-function serializeCause(cause: unknown): Schema.Json {
-  try {
-    // Inspect the original value before toJSON() can expose SDK request payloads.
-    const json = JSON.stringify(cause, function (this: Record<string, unknown>, key, value: unknown) {
-      const original = this[key]
-      if (!(original instanceof Error)) return value
-      return {
-        name: original.name,
-        message: original.message,
-        stack: original.stack,
-        code: "code" in original ? original.code : undefined,
-        cause: original.cause,
-      }
-    })
-    return json === undefined ? String(cause) : Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(json)
-  } catch {
-    return String(cause)
-  }
+function providerError(type: string, reason: AIError["reason"]): SessionError.Error {
+  const status = reason.http?.status
+  return { type, message: reason.message, ...(status === undefined ? {} : { status }) }
 }

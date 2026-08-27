@@ -418,12 +418,7 @@ test("content-filter finish retains failure evidence until step closeout", async
   )
   expect(published.map((event) => event.type)).toEqual(["session.step.started.1", "session.step.failed.1"])
   expect(published.at(-1)?.data).toMatchObject({
-    error: {
-      type: "provider.content-filter",
-      message: "Provider blocked the response",
-      reason: { _tag: "ContentPolicy" },
-      body: expect.stringContaining('"stopDetails":{"type":"refusal","category":"safety","explanation":"Blocked"}'),
-    },
+    error: { type: "provider.content-filter", message: "Provider blocked the response" },
     finish: "content-filter",
     rawFinish: "refusal",
     providerState: {
@@ -456,24 +451,5 @@ test("content-filter finish preserves partial streamed text and never ends the s
   expect(published.find((event) => event.type === "session.text.ended.1")?.data).toMatchObject({ text: "Partial" })
   expect(published.find((event) => event.type === "session.step.failed.1")?.data).toMatchObject({
     error: { type: "provider.content-filter" },
-  })
-})
-
-test("provider errors retain canonical evidence and overflow classification", async () => {
-  const fixture = capture()
-  const event = LLMEvent.providerError({
-    message: "prompt too long",
-    classification: "context-overflow",
-    providerMetadata: { anthropic: { requestId: "failed-request" } },
-  })
-  await Effect.runPromise(fixture.publisher.publish(event))
-  await Effect.runPromise(fixture.publisher.publishStepFailure())
-  expect(fixture.published.at(-1)?.data).toMatchObject({
-    error: {
-      type: "provider.unknown",
-      message: "prompt too long",
-      body: JSON.stringify(event),
-      reason: { _tag: "InvalidRequest", classification: "context-overflow" },
-    },
   })
 })

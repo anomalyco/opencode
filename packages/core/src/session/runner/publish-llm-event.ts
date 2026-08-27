@@ -522,12 +522,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
         }
         if (event.reason.normalized === "content-filter") {
           providerFailed = true
-          yield* failAssistant({
-            type: "provider.content-filter",
-            message: "Provider blocked the response",
-            body: JSON.stringify(event),
-            reason: { _tag: "ContentPolicy" },
-          })
+          yield* failAssistant({ type: "provider.content-filter", message: "Provider blocked the response" })
           return
         }
         return
@@ -535,15 +530,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
         return
       case "provider-error":
         providerFailed = true
-        yield* failAssistant({
-          type: "provider.unknown",
-          message: event.message,
-          body: JSON.stringify(event),
-          reason:
-            event.classification === undefined
-              ? { _tag: "UnknownProvider" }
-              : { _tag: "InvalidRequest", classification: event.classification },
-        })
+        yield* failAssistant({ type: "provider.unknown", message: event.message })
         return
     }
   })

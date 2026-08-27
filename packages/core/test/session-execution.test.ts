@@ -40,14 +40,7 @@ describe("SessionExecution lifecycle", () => {
           }),
         ),
       ),
-    ).toEqual({
-      type: "failed",
-      error: {
-        type: "provider.transport",
-        message: "Disconnected",
-        reason: { _tag: "Transport", transport: "http", operation: "request" },
-      },
-    })
+    ).toEqual({ type: "failed", error: { type: "provider.transport", message: "Disconnected" } })
   })
 
   test("defaults owner-scope interruption to shutdown and preserves explicit reasons", () => {

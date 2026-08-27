@@ -1,5 +1,4 @@
 import { describe, expect } from "bun:test"
-import { AIError, HttpContext, InvalidRequestError, RateLimitError } from "@opencode-ai/ai"
 import { DateTime, Effect, Fiber, Option, Schema, Stream } from "effect"
 import { asc, eq, sql } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
@@ -17,7 +16,6 @@ import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionMessage } from "@opencode-ai/core/session/message"
-import { toSessionError } from "@opencode-ai/core/session/to-session-error"
 import { Money } from "@opencode-ai/schema/money"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
@@ -599,27 +597,13 @@ describe("SessionProjector", () => {
       const bus = yield* Bus.Service
       const first = SessionMessage.ID.make("msg_retry_first")
       const second = SessionMessage.ID.make("msg_retry_second")
-      const error = toSessionError(
-        new AIError({
-          reason: new RateLimitError({
-            message: "Rate limited",
-            retryAfterMs: 2000,
-            http: new HttpContext({
-              url: "https://provider.test/responses",
-              status: 429,
-              headers: { "retry-after": "2" },
-            }),
-            body: '{"error":"rate limited"}',
-          }),
-        }),
-      )
       yield* bus.publish(SessionEvent.Step.Started, { sessionID, assistantMessageID: first, agent: build, model })
       yield* bus.publish(SessionEvent.RetryScheduled, {
         sessionID,
         assistantMessageID: first,
         attempt: 2,
         at: 2_000,
-        error,
+        error: { type: "provider.transport", message: "Disconnected" },
       })
 
       const decode = (row: typeof SessionMessageTable.$inferSelect) =>
@@ -632,7 +616,7 @@ describe("SessionProjector", () => {
         .pipe(Effect.orDie)
       const projected = firstRow ?? (yield* Effect.die(new Error("Missing retry projection")))
       expect(decode(projected)).toMatchObject({
-        retry: { attempt: 2, at: DateTime.makeUnsafe(2_000), error },
+        retry: { attempt: 2, at: DateTime.makeUnsafe(2_000), error: { type: "provider.transport" } },
       })
 
       yield* bus.publish(SessionEvent.Step.Started, { sessionID, assistantMessageID: second, agent: build, model })
@@ -793,22 +777,6 @@ describe("SessionProjector", () => {
         .pipe(Effect.orDie)
       const endedID = SessionMessage.ID.make("msg_ended")
       const failedID = SessionMessage.ID.make("msg_failed")
-      const error = toSessionError(
-        new AIError({
-          reason: new InvalidRequestError({
-            message: "Failed",
-            parameter: "messages",
-            classification: "context-overflow",
-            body: '{"error":"context limit"}',
-            http: new HttpContext({
-              url: "https://provider.test/responses",
-              status: 400,
-              headers: { "x-request-id": "failed-request" },
-            }),
-            cause: new Error("upstream failure", { cause: new Error("socket disconnected") }),
-          }),
-        }),
-      )
       yield* db
         .insert(SessionMessageTable)
         .values([assistantRow(endedID, 0), assistantRow(failedID, 1)])
@@ -837,7 +805,7 @@ describe("SessionProjector", () => {
         finish: "content-filter",
         rawFinish: "blocked",
         providerState: { response: "failed" },
-        error,
+        error: { type: "provider.invalid-request", message: "Failed" },
         snapshot: Snapshot.ID.make("snap_failed"),
         files: [RelativePath.make("src/failed.ts")],
       })
@@ -867,13 +835,10 @@ describe("SessionProjector", () => {
         finish: "content-filter",
         rawFinish: "blocked",
         providerState: { response: "failed" },
-        error,
+        error: { type: "provider.invalid-request", message: "Failed" },
         snapshot: { end: "snap_failed", files: ["src/failed.ts"] },
         time: { completed: created },
       })
-      const events = yield* db.select().from(EventTable).where(eq(EventTable.type, "session.step.failed.1")).all()
-      expect(events).toHaveLength(1)
-      expect(events[0]?.data).toMatchObject({ error })
     }),
   )
 

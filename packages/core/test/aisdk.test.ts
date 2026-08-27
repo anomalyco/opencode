@@ -615,12 +615,11 @@ Object.values({
   object: { error: { message: "Provider busy", metadata: { requestId: "stream-request", retryable: true } } },
   string: '{"error":"Provider busy","requestId":"stream-request"}',
 }).forEach((payload) => {
-  it.effect(`preserves ${typeof payload} AI SDK stream error payloads in the durable body`, () =>
+  it.effect(`preserves ${typeof payload} AI SDK stream error payloads in the runtime body`, () =>
     Effect.gen(function* () {
       const error = yield* streamFailure(payload, true)
       const body = typeof payload === "string" ? payload : JSON.stringify(payload)
       expect(error.reason.body).toBe(body)
-      expect(toSessionError(error).body).toBe(body)
       expect(error.reason.cause).toBe(payload)
     }),
   )
@@ -706,15 +705,6 @@ it.effect("preserves complete HTTP context on AI SDK call errors", () =>
     )
     expect(error.reason.body).toBe('{"error":{"message":"","code":"not_found"}}')
     expect(error.reason.cause).toBe(cause)
-    expect(toSessionError(error)).toMatchObject({
-      body: error.reason.body,
-      http: {
-        url: "https://api.example.com/chat",
-        status: 404,
-        headers: { authorization: "Bearer secret-token" },
-      },
-    })
-    expect(JSON.stringify(toSessionError(error).cause)).not.toContain("private prompt")
   }),
 )
 
@@ -742,7 +732,6 @@ it.effect("classifies data-only AI SDK provider codes", () =>
     expect(error.reason.http?.status).toBe(400)
     expect(SessionRunnerRetry.isRetryable(error)).toBeTrue()
     expect(error.reason.body).toBe(JSON.stringify(data))
-    expect(toSessionError(error).body).toBe(JSON.stringify(data))
     expect(error.reason.cause).toBe(cause)
     expect(error.reason.body).not.toContain("private prompt")
   }),

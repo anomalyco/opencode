@@ -289,11 +289,6 @@ const make = (dependencies: Dependencies) => {
           failure = {
             type: event.classification === "context-overflow" ? "provider.invalid-request" : "provider.error",
             message: event.message,
-            body: JSON.stringify(event),
-            reason:
-              event.classification === undefined
-                ? { _tag: "UnknownProvider" }
-                : { _tag: "InvalidRequest", classification: event.classification },
           }
         if (LLMEvent.is.textDelta(event)) {
           chunks.push(event.text)

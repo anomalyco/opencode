@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import {
   AIError,
-  HttpContext,
   LLMEvent,
   LLMRequest,
   Message,
@@ -586,8 +585,8 @@ const continuationRejected = (recovery: "retry-full" | "rotate-and-retry-full") 
 const incompleteStream = () =>
   new AIError({
     reason: new InvalidProviderOutputError({
-      message: "The provider response ended unexpectedly.",
       classification: "incomplete-stream",
+      message: "The provider response ended unexpectedly.",
     }),
   })
 
@@ -2439,18 +2438,14 @@ describe("SessionRunnerLLM", () => {
       yield* TestLLM.push(TestLLM.text("Earlier answer", "text-manual-provider-history"))
       yield* runPrompt(session, "Earlier question")
 
-      const event = LLMEvent.providerError({
-        message: "summary unavailable",
-        providerMetadata: { openai: { requestId: "summary-request" } },
-      })
-      yield* TestLLM.push([event])
+      yield* TestLLM.push([LLMEvent.providerError({ message: "summary unavailable" })])
       const compaction = yield* session.compact({ sessionID })
       yield* session.resume(sessionID)
 
       expect((yield* session.messages({ sessionID })).find((message) => message.id === compaction.id)).toMatchObject({
         type: "compaction",
         status: "failed",
-        error: { type: "provider.error", message: "summary unavailable", body: JSON.stringify(event) },
+        error: { type: "provider.error", message: "summary unavailable" },
       })
     }),
   )
@@ -2845,12 +2840,7 @@ describe("SessionRunnerLLM", () => {
           type: "compaction",
           status: "failed",
           reason: "auto",
-          error: {
-            type: "provider.error",
-            message: "summary unavailable",
-            body: JSON.stringify({ type: "provider-error", message: "summary unavailable" }),
-            reason: { _tag: "UnknownProvider" },
-          },
+          error: { type: "provider.error", message: "summary unavailable" },
         }),
       )
       expect(context.slice(-3)).toMatchObject([
@@ -4695,22 +4685,17 @@ describe("SessionRunnerLLM", () => {
   it.effect("projects provider errors as terminal assistant step failures", () =>
     Effect.gen(function* () {
       const session = yield* setup
-      const event = LLMEvent.providerError({
-        message: "Provider unavailable",
-        providerMetadata: { openai: { requestId: "failed-request" } },
-      })
-      yield* TestLLM.push([LLMEvent.stepStart({ index: 0 }), event])
+      yield* TestLLM.push([
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.providerError({ message: "Provider unavailable" }),
+      ])
 
       expect((yield* runPrompt(session, "Fail durably").pipe(Effect.flip)).message).toBe("Provider unavailable")
 
       expect(requests).toHaveLength(1)
       expect(yield* session.context(sessionID)).toMatchObject([
         { type: "user", text: "Fail durably" },
-        {
-          type: "assistant",
-          finish: "error",
-          error: { type: "provider.unknown", message: "Provider unavailable", body: JSON.stringify(event) },
-        },
+        { type: "assistant", finish: "error", error: { type: "provider.unknown", message: "Provider unavailable" } },
       ])
     }),
   )
@@ -4793,11 +4778,7 @@ describe("SessionRunnerLLM", () => {
             responseId: "response-blocked",
             refusal: { category: "safety", explanation: "Prompt blocked" },
           },
-          error: {
-            type: "provider.content-filter",
-            reason: { _tag: "ContentPolicy" },
-            body: expect.stringContaining('"refusal":{"category":"safety","explanation":"Prompt blocked"}'),
-          },
+          error: { type: "provider.content-filter" },
           cost: 0,
           tokens: { input: 8, output: 2, reasoning: 1, cache: { read: 0, write: 0 } },
           content: [{ type: "text", text: "Partial" }],
@@ -4860,11 +4841,7 @@ describe("SessionRunnerLLM", () => {
         {
           type: "assistant",
           finish: "error",
-          error: {
-            message: "prompt too long",
-            reason: { _tag: "InvalidRequest", classification: "context-overflow" },
-            body: expect.stringContaining('"classification":"context-overflow"'),
-          },
+          error: { message: "prompt too long" },
           content: [{ type: "text", text: "Partial" }],
         },
       ])
@@ -5445,42 +5422,12 @@ describe("SessionRunnerLLM", () => {
   it.effect("does not retry non-eligible provider failures", () =>
     Effect.gen(function* () {
       const session = yield* setup
-      const failure = new AIError({
-        reason: new InvalidRequestError({
-          message: "Invalid request",
-          parameter: "tools",
-          body: '{"error":{"message":"Unsupported tool schema","parameter":"tools"}}',
-          http: new HttpContext({
-            url: "https://provider.test/responses",
-            status: 400,
-            headers: { "x-request-id": "failed-request" },
-          }),
-          cause: new Error("upstream request rejected"),
-        }),
-      })
+      const failure = invalidRequest()
       yield* TestLLM.push(Stream.fail(failure))
 
       expect(yield* runPrompt(session, "Do not retry").pipe(Effect.flip)).toBe(failure)
       expect(requests).toHaveLength(1)
       expect(yield* recordedEventTypes(sessionID)).not.toContain("session.retry.scheduled.1")
-      const assistant = requireAssistant(yield* session.context(sessionID))
-      expect(assistant.error).toMatchObject({
-        type: "provider.invalid-request",
-        message: failure.message,
-        status: 400,
-        body: failure.reason.body,
-        http: {
-          url: "https://provider.test/responses",
-          status: 400,
-          headers: { "x-request-id": "failed-request" },
-        },
-        reason: { _tag: "InvalidRequest", parameter: "tools" },
-        cause: { name: "Error", message: "upstream request rejected", stack: expect.any(String) },
-      })
-      expect(yield* recordedStepSettlementEvents(sessionID, assistant.id)).toMatchObject([
-        { type: "session.step.started.1" },
-        { type: "session.step.failed.1", data: { error: assistant.error } },
-      ])
     }),
   )
 
