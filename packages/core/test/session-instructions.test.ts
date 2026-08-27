@@ -69,7 +69,6 @@ const testLayer = AppNodeBuilder.build(
     ReadToolFileSystem.node,
     readToolNode,
     Tool.node,
-    Tool.node,
     PluginHooks.node,
     SessionInstructions.node,
     Global.node,

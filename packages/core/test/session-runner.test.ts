@@ -446,8 +446,6 @@ const it = testEffect(
       Agent.node,
       Catalog.node,
       Tool.node,
-      Tool.node,
-      PluginHooks.node,
       PluginHooks.node,
       echoNode,
       SessionRunnerModel.node,
