@@ -528,6 +528,26 @@ export function make(input: {
         return yield* promptResponse(response.info, params.messageId)
       }
 
+      if (command.name === "compact") {
+        yield* request(
+          () =>
+            runUntilIdle(current.id, () =>
+              input.sdk.session.summarize(
+                {
+                  sessionID: current.id,
+                  directory: current.cwd,
+                  providerID: selected.providerID,
+                  modelID: selected.modelID,
+                },
+                { throwOnError: true },
+              ),
+            ),
+          "session",
+        )
+        yield* sendUsageUpdate(input.usage, input.sdk, input.connection, current.id, current.cwd)
+        return yield* promptResponse(undefined, params.messageId)
+      }
+
       const known = snapshot.availableCommands.find((item) => item.name === command.name)
       if (known) {
         const response = yield* request(
@@ -550,24 +570,6 @@ export function make(input: {
         )
         yield* sendUsageUpdate(input.usage, input.sdk, input.connection, current.id, current.cwd)
         return yield* promptResponse(response.info, params.messageId)
-      }
-
-      if (command.name === "compact") {
-        yield* request(
-          () =>
-            runUntilIdle(current.id, () =>
-              input.sdk.session.summarize(
-                {
-                  sessionID: current.id,
-                  directory: current.cwd,
-                  providerID: selected.providerID,
-                  modelID: selected.modelID,
-                },
-                { throwOnError: true },
-              ),
-            ),
-          "session",
-        )
       }
 
       yield* sendUsageUpdate(input.usage, input.sdk, input.connection, current.id, current.cwd)
@@ -770,6 +772,15 @@ async function loadDirectorySnapshot(sdk: OpencodeClient, directory: string) {
           hints: [],
         })),
     ] as Command.Info[]
+    if (!commands.some((command) => command.name === "compact")) {
+      commands.push({
+        name: "compact",
+        description: "compact the session",
+        source: "command",
+        template: "",
+        hints: [],
+      })
+    }
 
     return Directory.build({
       directory,
