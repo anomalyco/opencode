@@ -113,21 +113,26 @@ export async function ensureRunning(redirectUri?: string): Promise<void> {
 
   if (server) return
 
-  const running = await isPortInUse(port)
-  if (running) {
-    return
-  }
-
   currentPort = port
   currentPath = path
 
   server = createServer(handleRequest)
-  await new Promise<void>((resolve, reject) => {
-    server!.listen(currentPort, OAUTH_CALLBACK_HOST, () => {
-      resolve()
+  try {
+    await new Promise<void>((resolve, reject) => {
+      server!.listen(port, OAUTH_CALLBACK_HOST, () => {
+        resolve()
+      })
+      server!.on("error", reject)
     })
-    server!.on("error", reject)
-  })
+  } catch (error) {
+    server = undefined
+    // Another opencode instance already owns the callback port; its server will
+    // receive the browser redirect. Anything else on the port is foreign and the
+    // flow will surface through the waitForCallback timeout.
+    const code = error && typeof error === "object" && "code" in error ? error.code : undefined
+    if (code === "EADDRINUSE") return
+    throw error
+  }
 }
 
 export function waitForCallback(oauthState: string, mcpName?: string): Promise<string> {
@@ -137,7 +142,11 @@ export function waitForCallback(oauthState: string, mcpName?: string): Promise<s
       if (pendingAuths.has(oauthState)) {
         pendingAuths.delete(oauthState)
         if (mcpName) mcpNameToState.delete(mcpName)
-        reject(new Error("OAuth callback timeout - authorization took too long"))
+        reject(
+          new Error(
+            `OAuth callback timeout - authorization took too long. If port ${currentPort} is used by another application, configure a different "callbackPort" in the server's oauth options.`,
+          ),
+        )
         stopIfIdle()
       }
     }, CALLBACK_TIMEOUT_MS)

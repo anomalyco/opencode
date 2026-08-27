@@ -29,6 +29,7 @@ import {
 import { InstanceRuntime } from "@/project/instance-runtime"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { testEffect } from "../lib/effect"
+import { createHash } from "crypto"
 import path from "path"
 import fs from "fs/promises"
 import os from "os"
@@ -1474,6 +1475,214 @@ it.instance("local .opencode config can override MCP from project config", () =>
 
     const config = yield* Config.use.get()
     expect(config.mcp?.docs?.enabled).toBe(true)
+  }),
+)
+
+it.instance("loads MCP servers from .agents/mcp.json", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* FSUtil.use.ensureDir(path.join(test.directory, ".agents"))
+    yield* writeConfigEffect(
+      path.join(test.directory, ".agents"),
+      {
+        jira: { type: "remote", url: "https://jira.example.com/mcp", enabled: true },
+      },
+      "mcp.json",
+    )
+
+    const config = yield* Config.use.get()
+    const jira = config.mcp?.jira
+    expect(jira && "url" in jira ? jira.url : undefined).toBe("https://jira.example.com/mcp")
+    expect(jira && "type" in jira ? jira.type : undefined).toBe("remote")
+    expect(jira?.enabled).toBe(true)
+  }),
+)
+
+it.instance(".agents config overrides root project config", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* writeConfigEffect(test.directory, {
+      $schema: "https://opencode.ai/config.json",
+      mcp: {
+        docs: {
+          type: "remote",
+          url: "https://docs.example.com/mcp",
+          enabled: false,
+        },
+      },
+    })
+    yield* FSUtil.use.ensureDir(path.join(test.directory, ".agents"))
+    yield* writeConfigEffect(
+      path.join(test.directory, ".agents"),
+      {
+        $schema: "https://opencode.ai/config.json",
+        mcp: {
+          docs: {
+            type: "remote",
+            url: "https://docs.example.com/mcp",
+            enabled: true,
+          },
+        },
+      },
+      "opencode.json",
+    )
+    yield* writeConfigEffect(path.join(test.directory, ".agents"), { slack: { type: "remote", url: "https://slack.example.com/mcp" } }, "mcp.json")
+
+    const config = yield* Config.use.get()
+    const slack = config.mcp?.slack
+    expect(slack && "url" in slack ? slack.url : undefined).toBe("https://slack.example.com/mcp")
+    expect(config.mcp?.docs?.enabled).toBe(true)
+  }),
+)
+
+it.instance(".agents/mcp.json overrides mcp key from .agents/opencode.json", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* FSUtil.use.ensureDir(path.join(test.directory, ".agents"))
+    yield* writeConfigEffect(
+      path.join(test.directory, ".agents"),
+      {
+        $schema: "https://opencode.ai/config.json",
+        mcp: {
+          docs: {
+            type: "remote",
+            url: "https://docs.example.com/mcp",
+            enabled: false,
+          },
+        },
+      },
+      "opencode.json",
+    )
+    yield* writeConfigEffect(
+      path.join(test.directory, ".agents"),
+      {
+        docs: {
+          type: "remote",
+          url: "https://docs.example.com/mcp",
+          enabled: true,
+        },
+      },
+      "mcp.json",
+    )
+
+    const config = yield* Config.use.get()
+    expect(config.mcp?.docs?.enabled).toBe(true)
+  }),
+)
+
+it.instance(".agents/mcp.json accepts vendor shorthand server formats", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* FSUtil.use.ensureDir(path.join(test.directory, ".agents"))
+    yield* writeConfigEffect(
+      path.join(test.directory, ".agents"),
+      {
+        stripe: { httpUrl: "https://mcp.stripe.com" },
+        jira: {
+          command: "npx",
+          args: ["-y", "@nexus2520/jira-mcp-server"],
+          env: { JIRA_EMAIL: "test@example.com", JIRA_API_TOKEN: "{env:PATH}" },
+        },
+        supabase: { url: "https://mcp.supabase.com/mcp", enabled: false },
+      },
+      "mcp.json",
+    )
+
+    const config = yield* Config.use.get()
+    const stripe = config.mcp?.stripe
+    expect(stripe && "type" in stripe ? stripe.type : undefined).toBe("remote")
+    expect(stripe && "url" in stripe ? stripe.url : undefined).toBe("https://mcp.stripe.com")
+    const jira = config.mcp?.jira
+    expect(jira && "type" in jira ? jira.type : undefined).toBe("local")
+    expect(jira && "command" in jira ? jira.command : undefined).toEqual(["npx", "-y", "@nexus2520/jira-mcp-server"])
+    expect(jira && "environment" in jira ? jira.environment : undefined).toEqual({
+      JIRA_EMAIL: "test@example.com",
+      JIRA_API_TOKEN: process.env.PATH ?? "",
+    })
+    expect(config.mcp?.supabase?.enabled).toBe(false)
+  }),
+)
+
+it.instance(".agents/mcp.json accepts mcpServers and servers wrappers", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* FSUtil.use.ensureDir(path.join(test.directory, ".agents"))
+    yield* writeConfigEffect(
+      path.join(test.directory, ".agents"),
+      { servers: { stripe: { httpUrl: "https://mcp.stripe.com" } } },
+      "mcp.json",
+    )
+
+    const config = yield* Config.use.get()
+    expect(config.mcp?.stripe && "url" in config.mcp.stripe ? config.mcp.stripe.url : undefined).toBe(
+      "https://mcp.stripe.com",
+    )
+  }),
+)
+
+it.instance("project mcp servers are marked for approval", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* FSUtil.use.ensureDir(path.join(test.directory, ".agents"))
+    yield* writeConfigEffect(
+      path.join(test.directory, ".agents"),
+      { stripe: { httpUrl: "https://mcp.stripe.com" } },
+      "mcp.json",
+    )
+
+    const config = yield* Config.use.get()
+    const hash = config.mcp_project_scope?.stripe
+    expect(hash).toBeDefined()
+    expect(hash).toBe(createHash("sha256").update(JSON.stringify(config.mcp?.stripe)).digest("hex"))
+  }),
+)
+
+it.instance("local scope MCP overrides project config and ignores other projects", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    const dataDir = yield* Effect.promise(() => fs.mkdtemp(path.join(os.tmpdir(), "opencode-data-")))
+    const previousData = Global.Path.data
+    ;(Global.Path as { data: string }).data = dataDir
+
+    yield* Effect.gen(function* () {
+      yield* FSUtil.use.ensureDir(path.join(test.directory, ".agents"))
+      yield* writeConfigEffect(
+        path.join(test.directory, ".agents"),
+        {
+          jira: { type: "remote", url: "https://jira.example.com/mcp", enabled: false },
+          shared: { type: "remote", url: "https://shared.example.com/mcp" },
+        },
+        "mcp.json",
+      )
+      // Local store keyed by project root; an entry under a different project must be ignored
+      yield* FSUtil.use.writeJson(
+        path.join(dataDir, "mcp-local.json"),
+        {
+          [test.directory]: {
+            jira: { type: "remote", url: "https://private.example.com/mcp", enabled: true },
+          },
+          ["/some/other/project"]: {
+            jira: { type: "remote", url: "https://wrong.example.com/mcp" },
+          },
+        },
+        0o600,
+      )
+
+      const config = yield* Config.use.get()
+      const jira = config.mcp?.jira
+      expect(jira && "url" in jira ? jira.url : undefined).toBe("https://private.example.com/mcp")
+      expect(jira?.enabled).toBe(true)
+      // Local scope replaced the project definition, so no approval should be required
+      expect(config.mcp_project_scope?.jira).toBeUndefined()
+      const shared = config.mcp?.shared
+      expect(shared && "url" in shared ? shared.url : undefined).toBe("https://shared.example.com/mcp")
+    }).pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          ;(Global.Path as { data: string }).data = previousData
+        }),
+      ),
+    )
   }),
 )
 

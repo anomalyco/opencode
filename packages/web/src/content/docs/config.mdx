@@ -47,7 +47,7 @@ Config sources are loaded in this order (later sources override earlier ones):
 2. **Global config** (`~/.config/opencode/opencode.json`) - user preferences
 3. **Custom config** (`OPENCODE_CONFIG` env var) - custom overrides
 4. **Project config** (`opencode.json` in project) - project-specific settings
-5. **`.opencode` directories** - agents, commands, plugins
+5. **`.opencode` and `.agents` directories** - agents, commands, plugins, plus `.agents/mcp.json`
 6. **Inline config** (`OPENCODE_CONFIG_CONTENT` env var) - runtime overrides
 7. **Managed config files** (`/Library/Application Support/opencode/` on macOS) - admin-controlled
 8. **macOS managed preferences** (`.mobileconfig` via MDM) - highest priority, not user-overridable
@@ -55,7 +55,7 @@ Config sources are loaded in this order (later sources override earlier ones):
 This means project configs can override global defaults, and global configs can override remote organizational defaults. Managed settings override everything.
 
 :::note
-The `.opencode` and `~/.config/opencode` directories use **plural names** for subdirectories: `agents/`, `commands/`, `modes/`, `plugins/`, `skills/`, `tools/`, and `themes/`. Singular names (e.g., `agent/`) are also supported for backwards compatibility.
+The `.opencode`, `.agents`, and `~/.config/opencode` directories use **plural names** for subdirectories: `agents/`, `commands/`, `modes/`, `plugins/`, `skills/`, `tools/`, and `themes/`. Singular names (e.g., `agent/`) are also supported for backwards compatibility.
 :::
 
 ---
@@ -119,6 +119,38 @@ Place project specific config in the root of your project.
 When OpenCode starts up, it first looks for a config file in the current directory, then traverses up to the nearest Git directory.
 
 This is also safe to be checked into Git and uses the same schema as the global one.
+
+---
+
+### The `.agents` directory
+
+The recommended home for project-level configuration is a `.agents/` directory. Like `.opencode`, it is discovered from the current directory up to the nearest Git directory (plus `~/.agents` for user-wide agent config), and it can hold `agents/`, `commands/`, `plugins/`, `skills/`, and other subdirectories just like `.opencode`.
+
+It supports two config files, both merged after root-level `opencode.json` (so they override it):
+
+- `.agents/opencode.json` (or `.jsonc`) - any config keys, same schema as global config
+- `.agents/mcp.json` - MCP server definitions only; equivalent to declaring them under the `"mcp"` key, but kept in a dedicated file so teams can manage servers independently from the rest of the config
+
+```json title=".agents/mcp.json"
+{
+  "jira": {
+    "type": "remote",
+    "url": "https://jira.example.com/mcp",
+    "enabled": true
+  }
+}
+```
+
+Note that `mcp.json` contains the server map directly - there is no outer `"mcp"` wrapper. A `"mcpServers"` or `"servers"` wrapper is also accepted.
+
+Shorthand server formats are expanded automatically, so snippets copied from vendor docs usually work as-is:
+
+- `{"httpUrl": "..."} ` or a bare `{"url": "..."}` is treated as a remote server
+- `{"command": "npx", "args": ["-y", "pkg"], "env": {...}}` is treated as a local server (`args` appended to `command`, `env` mapped to `environment`)
+
+Root-level `opencode.json` files continue to work and are loaded first, with `.agents` config taking precedence over them.
+
+MCP servers additionally support a per-project **local scope**: `opencode mcp add --scope local` stores the server in `~/.local/share/opencode/mcp-local.json`, keyed by project path. Local entries are private to you, never committed, and replace same-named servers from project and user config.
 
 ---
 

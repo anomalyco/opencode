@@ -109,8 +109,19 @@ export namespace FSUtil {
 
       const writeJson = Effect.fn("FileSystem.writeJson")(function* (path: string, data: unknown, mode?: number) {
         const content = JSON.stringify(data, null, 2)
-        yield* fs.writeFileString(path, content)
-        if (mode) yield* fs.chmod(path, mode)
+        if (!mode) {
+          yield* fs.writeFileString(path, content)
+          return
+        }
+        // Route restricted writes through a pre-chmoded temp file so the target never briefly
+        // exists with umask-default permissions (which are typically group/world readable).
+        const tmp = `${path}.tmp`
+        yield* fs.writeFileString(tmp, content)
+        yield* fs.chmod(tmp, mode)
+        yield* fs.rename(tmp, path).pipe(
+          Effect.catch((error) => fs.remove(tmp).pipe(Effect.ignore, Effect.andThen(Effect.fail(error)))),
+          Effect.orDie,
+        )
       })
 
       const ensureDir = Effect.fn("FileSystem.ensureDir")(function* (path: string) {

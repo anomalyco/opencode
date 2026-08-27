@@ -1,4 +1,5 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { createHash } from "crypto"
 import { httpClient } from "@opencode-ai/core/effect/app-node-platform"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import path from "path"
@@ -23,6 +24,7 @@ import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/
 import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 import { containsPath, type InstanceContext } from "../project/instance-context"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
+import { ConfigMCPV1 } from "@opencode-ai/core/v1/config/mcp"
 import { RemoteAuthError } from "@opencode-ai/core/v1/config/error"
 import { ConfigPermissionV1 } from "@opencode-ai/core/v1/config/permission"
 import { ConfigPluginV1 } from "@opencode-ai/core/v1/config/plugin"
@@ -31,6 +33,7 @@ import { ConfigCommand } from "./command"
 import { ConfigManaged } from "./managed"
 import { ConfigParse } from "./parse"
 import { ConfigPaths } from "./paths"
+import { ProjectKey } from "@/project/project-key"
 import { ConfigPlugin } from "./plugin"
 import { ConfigVariable } from "./variable"
 import { Npm } from "@opencode-ai/core/npm"
@@ -112,6 +115,10 @@ type Info = ConfigV1.Info & {
   // plugin_origins is derived state, not a persisted config field. It keeps each winning plugin spec together
   // with the file and scope it came from so later runtime code can make location-sensitive decisions.
   plugin_origins?: ConfigPlugin.Origin[]
+  // mcp_project_scope maps server names defined in project-owned config files (checked-into-git territory)
+  // to a hash of their definition. Derived state like plugin_origins; the MCP service uses it to require
+  // approval before connecting project-supplied servers, so a cloned repo can't auto-connect its own servers.
+  mcp_project_scope?: Record<string, string>
 }
 
 type State = {
@@ -161,7 +168,7 @@ function patchJsonc(input: string, patch: unknown, path: string[] = []): string 
 }
 
 function writable(info: Info) {
-  const { plugin_origins: _plugin_origins, ...next } = info
+  const { plugin_origins: _plugin_origins, mcp_project_scope: _mcp_project_scope, ...next } = info
   return next
 }
 
@@ -224,6 +231,7 @@ const layer = Layer.effect(
         ),
       )
       const parsed = ConfigParse.jsonc(expanded, source)
+      if (isRecord(parsed) && isRecord(parsed.mcp)) parsed.mcp = ConfigMCPV1.normalizeServers(parsed.mcp)
       const data = ConfigParse.schema(ConfigV1.Info, normalizeLoadedConfig(parsed), source)
       if (!("path" in options)) return data
 
@@ -241,6 +249,29 @@ const layer = Layer.effect(
       const text = yield* readConfigFile(filepath)
       if (!text) return {} as Info
       return yield* loadConfig(text, { path: filepath }, env)
+    })
+
+    // .agents/mcp.json holds only MCP server definitions; contents are validated against the `mcp` record schema
+    // and merged as if they were declared under the "mcp" key of a config file. A "mcpServers" or "servers"
+    // wrapper (Claude Desktop / Gemini CLI style) is accepted and unwrapped.
+    const loadMcpFile = Effect.fnUntraced(function* (filepath: string, env?: Record<string, string>) {
+      yield* Effect.logInfo("loading", { path: filepath })
+      const text = yield* readConfigFile(filepath)
+      if (!text) return {} as Info
+      const expanded = yield* Effect.promise(() =>
+        ConfigVariable.substitute({ text, type: "path", path: filepath, env }),
+      )
+      const parsed = ConfigParse.jsonc(expanded, filepath)
+      let servers = parsed
+      if (isRecord(parsed) && isRecord(parsed.mcpServers)) servers = parsed.mcpServers
+      else if (isRecord(parsed) && isRecord(parsed.servers)) servers = parsed.servers
+      servers = ConfigMCPV1.normalizeServers(servers)
+      const validated = ConfigParse.schema(
+        Schema.Record(Schema.String, Schema.Union([ConfigMCPV1.Info, Schema.Struct({ enabled: Schema.Boolean })])),
+        servers,
+        filepath,
+      )
+      return { mcp: validated } as Info
     })
 
     const loadGlobal = Effect.fnUntraced(function* (env?: Record<string, string>) {
@@ -311,6 +342,25 @@ const layer = Layer.effect(
       }
     })
 
+    // Local-scope MCP servers: per-project, private to the user, stored in the data directory so
+    // credentials never live in the project. Keyed by project root, Claude Code's ~/.claude.json pattern.
+    const loadLocalMcp = Effect.fnUntraced(function* (projectRoot: string, env?: Record<string, string>) {
+      const filepath = path.join(Global.Path.data, "mcp-local.json")
+      if (!existsSync(filepath)) return {}
+      const text = yield* readConfigFile(filepath)
+      if (!text) return {}
+      const expanded = yield* Effect.promise(() =>
+        ConfigVariable.substitute({ text, type: "path", path: filepath, env }),
+      )
+      const parsed = ConfigParse.jsonc(expanded, filepath)
+      const projects = ConfigParse.schema(
+        Schema.Record(Schema.String, Schema.Record(Schema.String, ConfigMCPV1.Info)),
+        parsed,
+        filepath,
+      )
+      return projects[projectRoot] ?? {}
+    })
+
     const loadInstanceState = Effect.fn("Config.loadInstanceState")(
       function* (ctx: InstanceContext) {
         const auth = yield* authSvc.all().pipe(Effect.orDie)
@@ -351,6 +401,20 @@ const layer = Layer.effect(
         const merge = (source: string, next: Info, kind?: ConfigPlugin.Scope) => {
           result = mergeConfigConcatArrays(result, next)
           return mergePluginOrigins(source, next.plugin, kind)
+        }
+
+        // Track MCP servers defined by project-owned config so the MCP service can require approval
+        // before connecting them. A hash of each winning definition is kept so edited entries
+        // re-trigger the approval prompt.
+        const projectMcp: Record<string, string> = {}
+        const snapshotMcp = () => JSON.stringify(result.mcp ?? {})
+        const markProjectMcp = (before: string) => {
+          const previous = JSON.parse(before) as Record<string, unknown>
+          for (const [name, entry] of Object.entries(result.mcp ?? {})) {
+            if (JSON.stringify(previous[name]) !== JSON.stringify(entry)) {
+              projectMcp[name] = createHash("sha256").update(JSON.stringify(entry)).digest("hex")
+            }
+          }
         }
 
         for (const [key, value] of Object.entries(auth)) {
@@ -405,7 +469,9 @@ const layer = Layer.effect(
 
         if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
           for (const file of yield* ConfigPaths.files("opencode", ctx.directory, ctx.worktree).pipe(Effect.orDie)) {
+            const before = snapshotMcp()
             yield* merge(file, yield* loadFile(file, authEnv), "local")
+            markProjectMcp(before)
           }
         }
 
@@ -422,14 +488,23 @@ const layer = Layer.effect(
         const deps: Fiber.Fiber<void>[] = []
 
         for (const dir of directories) {
-          if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
+          if (dir.endsWith(".opencode") || dir.endsWith(".agents") || dir === Flag.OPENCODE_CONFIG_DIR) {
             for (const file of ["opencode.json", "opencode.jsonc"]) {
               const source = path.join(dir, file)
+              const before = snapshotMcp()
               yield* Effect.logDebug(`loading config from ${source}`)
               yield* merge(source, yield* loadFile(source, authEnv))
+              if (containsPath(dir, ctx)) markProjectMcp(before)
               result.agent ??= {}
               result.mode ??= {}
               result.plugin ??= []
+            }
+            if (dir.endsWith(".agents")) {
+              const mcpSource = path.join(dir, "mcp.json")
+              const before = snapshotMcp()
+              yield* Effect.logDebug(`loading config from ${mcpSource}`)
+              yield* merge(mcpSource, yield* loadMcpFile(mcpSource, authEnv))
+              if (containsPath(dir, ctx)) markProjectMcp(before)
             }
           }
 
@@ -464,6 +539,25 @@ const layer = Layer.effect(
           const list = yield* Effect.promise(() => ConfigPlugin.load(dir))
           yield* mergePluginOrigins(dir, list)
         }
+
+        // Local-scope MCP entries replace same-named servers from project/user config wholesale,
+        // matching Claude Code's scope semantics instead of field-level merging.
+        // Non-git projects set worktree to "/", so fall back to the working directory for the key.
+        // The key is the git directory's device+inode (ProjectKey) so reaching the project through
+        // a symlinked or bind-mounted path resolves to the same local-scope entry.
+        const rawRoot = ctx.worktree && ctx.worktree !== "/" ? ctx.worktree : ctx.directory
+        const projectRoot = yield* Effect.promise(() => ProjectKey.key(rawRoot))
+        const localMcp = yield* loadLocalMcp(projectRoot, authEnv).pipe(
+          Effect.catch(() => Effect.succeed({})),
+        )
+        if (Object.keys(localMcp).length) {
+          result.mcp = { ...(result.mcp ?? {}), ...localMcp }
+          // Local entries are user-private; they win over project definitions and need no approval.
+          for (const name of Object.keys(localMcp)) {
+            delete projectMcp[name]
+          }
+        }
+        result.mcp_project_scope = projectMcp
 
         if (process.env.OPENCODE_CONFIG_CONTENT) {
           const source = "OPENCODE_CONFIG_CONTENT"

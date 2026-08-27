@@ -517,6 +517,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           await sdk.client.mcp.connect({ name })
         }
       },
+      async authenticate(name: string) {
+        await sdk.client.mcp.auth.authenticate({ name })
+      },
     }
 
     createEffect(() => {

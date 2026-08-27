@@ -5,6 +5,7 @@ import { Global } from "@opencode-ai/core/global"
 import { Effect, Layer, Context, Option, Schema } from "effect"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
+import { Keychain } from "./keychain"
 
 export const Tokens = Schema.Struct({
   accessToken: Schema.mutableKey(Schema.String),
@@ -62,6 +63,10 @@ const layer = Layer.effect(
     const fs = yield* FSUtil.Service
     const flock = yield* EffectFlock.Service
 
+    // Secrets (tokens, client secrets) live in the OS keychain when available; the file keeps only
+    // non-secret metadata as an enumeration index. Legacy file entries with embedded secrets remain
+    // readable and migrate into the keychain on their next save. Locking note: the locked wrappers
+    // below must only call unlocked cores — the file lock is not reentrant.
     const read = Effect.fn("McpAuth.read")(function* () {
       return yield* fs.readJson(filepath).pipe(
         Effect.map((data): AuthData => Option.getOrElse(decodeAuthData(data), () => ({}) as AuthData) as AuthData),
@@ -69,15 +74,80 @@ const layer = Layer.effect(
       )
     })
 
+    const keychainName = (mcpName: string) => mcpName.replace(/\s+/g, "_")
+
+    const keychainGet = Effect.fn("McpAuth.keychainGet")(function* (mcpName: string) {
+      if (!(yield* Keychain.available())) return undefined
+      const value = yield* Keychain.get(keychainName(mcpName))
+      if (value === undefined) return undefined
+      return Option.getOrElse(decodeAuthData({ [mcpName]: value }), () => ({}) as AuthData)[mcpName]
+    })
+
+    const readFileData = Effect.fn("McpAuth.readFileData")(function* () {
+      return yield* read()
+    })
+
+    const writeFileData = Effect.fn("McpAuth.writeFileData")(function* (update: (data: AuthData) => AuthData) {
+      const next = update(yield* read())
+      yield* fs.writeJson(filepath, next, 0o600).pipe(Effect.orDie)
+    })
+
+    const persistUnlocked = Effect.fn("McpAuth.persistUnlocked")(function* (
+      mcpName: string,
+      entry: Entry | undefined,
+    ) {
+      if (!entry) {
+        if (yield* Keychain.available()) yield* Keychain.remove(keychainName(mcpName))
+        yield* writeFileData((data) => {
+          const next = { ...data }
+          delete next[mcpName]
+          return next
+        })
+        return
+      }
+      const { tokens, clientInfo, ...metadata } = entry
+      if (yield* Keychain.available()) {
+        const stored = yield* Keychain.set(keychainName(mcpName), { tokens, clientInfo })
+        // Only strip secrets from the file once the keychain round-trips; otherwise keep the
+        // legacy plaintext entry rather than risking the credentials.
+        if (stored) {
+          yield* writeFileData((data) => ({ ...data, [mcpName]: metadata }))
+          return
+        }
+      }
+      yield* writeFileData((data) => ({ ...data, [mcpName]: entry }))
+    })
+
+    const readMerged = Effect.fn("McpAuth.readMerged")(function* () {
+      const fileData = yield* readFileData()
+      const merged: AuthData = {}
+      for (const [name, entry] of Object.entries(fileData)) {
+        const fromKeychain = yield* keychainGet(name).pipe(Effect.orElseSucceed(() => undefined))
+        // The keychain holds only the secret fields; file metadata (serverUrl, codeVerifier,
+        // oauthState) layers underneath so a keychain hit doesn't erase it.
+        merged[name] = fromKeychain ? { ...entry, ...fromKeychain } : entry
+      }
+      return merged
+    })
+
     const all = Effect.fn("McpAuth.all")(function* () {
-      return yield* read().pipe(flock.withLock(lockKey), Effect.orDie)
+      return yield* readMerged().pipe(flock.withLock(lockKey), Effect.orDie)
     })
 
     const mutate = Effect.fn("McpAuth.mutate")(function* (update: (data: AuthData) => AuthData | undefined) {
       yield* Effect.gen(function* () {
-        const next = update(yield* read())
+        const current = yield* readMerged()
+        // Snapshot before running update: update functions may mutate entries in place, which
+        // would make a naive before/after diff compare the mutated object against itself.
+        const before = new Map(Object.entries(current).map(([name, entry]) => [name, JSON.stringify(entry)]))
+        const next = update(current)
         if (!next) return
-        yield* fs.writeJson(filepath, next, 0o600).pipe(Effect.orDie)
+        const names = new Set([...Object.keys(current), ...Object.keys(next)])
+        for (const name of names) {
+          const after = JSON.stringify(next[name] ?? {})
+          if ((before.get(name) ?? "{}") === after) continue
+          yield* persistUnlocked(name, next[name])
+        }
       }).pipe(flock.withLock(lockKey), Effect.orDie)
     })
 

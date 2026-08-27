@@ -17,6 +17,7 @@ import { InstanceRef } from "@/effect/instance-ref"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import path from "path"
 import { Global } from "@opencode-ai/core/global"
+import { ProjectKey } from "@/project/project-key"
 import { modify, applyEdits } from "jsonc-parser"
 import { Filesystem } from "@/util/filesystem"
 import { Effect } from "effect"
@@ -100,6 +101,7 @@ export const McpCommand = cmd({
       .command(McpAddCommand)
       .command(McpListCommand)
       .command(McpAuthCommand)
+      .command(McpApproveCommand)
       .command(McpLogoutCommand)
       .command(McpDebugCommand)
       .demandCommand(),
@@ -113,6 +115,11 @@ export const McpListCommand = effectCmd({
   handler: Effect.fn("Cli.mcp.list")(function* () {
     UI.empty()
     prompts.intro("MCP Servers")
+
+    const maybeCtx = yield* InstanceRef
+    if (!maybeCtx) return yield* Effect.die("InstanceRef not provided")
+    const ctx = maybeCtx
+    const projectRoot = (ctx.worktree && ctx.worktree !== "/" ? ctx.worktree : ctx.directory)
 
     const { config, statuses, stored } = yield* listState()
     const servers = configuredServers(config)
@@ -147,6 +154,10 @@ export const McpListCommand = effectCmd({
       } else if (status.status === "needs_auth") {
         statusIcon = "⚠"
         statusText = "needs authentication"
+      } else if (status.status === "needs_approval") {
+        statusIcon = "⚠"
+        statusText = "needs approval"
+        hint = "\n    " + UI.Style.TEXT_DIM + "review the definition, then run: opencode mcp approve " + name
       } else if (status.status === "needs_client_registration") {
         statusIcon = "✗"
         statusText = "needs client registration"
@@ -158,8 +169,9 @@ export const McpListCommand = effectCmd({
       }
 
       const typeHint = serverConfig.type === "remote" ? serverConfig.url : serverConfig.command.join(" ")
+      const scope = yield* Effect.promise(() => detectScope(name, projectRoot))
       prompts.log.info(
-        `${statusIcon} ${name} ${UI.Style.TEXT_DIM}${statusText}${hint}\n    ${UI.Style.TEXT_DIM}${typeHint}`,
+        `${statusIcon} ${name} ${UI.Style.TEXT_DIM}${statusText}${hint}\n    ${UI.Style.TEXT_DIM}${typeHint} (${scope})`,
       )
     }
 
@@ -333,6 +345,38 @@ export const McpAuthListCommand = effectCmd({
   }),
 })
 
+export const McpApproveCommand = effectCmd({
+  command: "approve <name>",
+  describe: "approve a project-scoped MCP server for connection",
+  builder: (yargs) =>
+    yargs
+      .positional("name", {
+        describe: "name of the MCP server",
+        type: "string",
+        demandOption: true,
+      })
+      .option("revoke", {
+        describe: "revoke a previously granted approval",
+        type: "boolean",
+        default: false,
+      }),
+  handler: Effect.fn("Cli.mcp.approve")(function* (args) {
+    UI.empty()
+    if (args.revoke) {
+      yield* MCP.Service.use((mcp) => mcp.revokeApproval(args.name!))
+      prompts.log.success(`Approval revoked for "${args.name}"`)
+      return
+    }
+    yield* MCP.Service.use((mcp) => mcp.approve(args.name!)).pipe(
+      Effect.orElseSucceed(() => {
+        prompts.log.error(`"${args.name}" is not a project-scoped MCP server`)
+        throw new UI.CancelledError()
+      }),
+    )
+    prompts.log.success(`"${args.name}" approved for connection in this project`)
+  }),
+})
+
 export const McpLogoutCommand = effectCmd({
   command: "logout [name]",
   describe: "remove OAuth credentials for an MCP server",
@@ -391,22 +435,13 @@ export const McpLogoutCommand = effectCmd({
   }),
 })
 
-async function resolveConfigPath(baseDir: string, global = false) {
-  // Check for existing config files (prefer .jsonc over .json, check .opencode/ subdirectory too)
-  const candidates = [path.join(baseDir, "opencode.json"), path.join(baseDir, "opencode.jsonc")]
+// .agents/mcp.json holds the bare server map (no "mcp" wrapper)
+function resolveMcpJsonPath(baseDir: string) {
+  return path.join(baseDir, ".agents", "mcp.json")
+}
 
-  if (!global) {
-    candidates.push(path.join(baseDir, ".opencode", "opencode.json"), path.join(baseDir, ".opencode", "opencode.jsonc"))
-  }
-
-  for (const candidate of candidates) {
-    if (await Filesystem.exists(candidate)) {
-      return candidate
-    }
-  }
-
-  // Default to opencode.json if none exist
-  return candidates[0]
+function localMcpStorePath() {
+  return path.join(Global.Path.data, "mcp-local.json")
 }
 
 async function addMcpToConfig(name: string, mcpConfig: ConfigMCPV1.Info, configPath: string) {
@@ -424,6 +459,59 @@ async function addMcpToConfig(name: string, mcpConfig: ConfigMCPV1.Info, configP
   await Filesystem.write(configPath, result)
 
   return configPath
+}
+
+// Project and user scope write .agents/mcp.json with the server map at the top level
+async function addMcpToJson(name: string, mcpConfig: ConfigMCPV1.Info, configPath: string) {
+  let text = "{}"
+  if (await Filesystem.exists(configPath)) {
+    text = await Filesystem.readText(configPath)
+  }
+
+  const edits = modify(text, [name], mcpConfig, {
+    formattingOptions: { tabSize: 2, insertSpaces: true },
+  })
+  const result = applyEdits(text, edits)
+
+  await Filesystem.write(configPath, result)
+
+  return configPath
+}
+
+// Local scope stores per-project servers in the data directory, keyed by project root,
+// so credentials never live inside the repository. File holds secrets, so 0o600.
+async function addMcpToLocal(name: string, mcpConfig: ConfigMCPV1.Info, projectRoot: string) {
+  const storePath = localMcpStorePath()
+  let store: Record<string, Record<string, ConfigMCPV1.Info>> = {}
+  if (await Filesystem.exists(storePath)) {
+    store = (await Filesystem.readJson(storePath)) as Record<string, Record<string, ConfigMCPV1.Info>>
+  }
+  store[projectRoot] = { ...(store[projectRoot] ?? {}), [name]: mcpConfig }
+  await Filesystem.writeJson(storePath, store, 0o600)
+  return storePath
+}
+
+type McpScope = "local" | "project" | "user" | "config"
+
+async function detectScope(name: string, projectRoot: string): Promise<McpScope> {
+  const key = await ProjectKey.key(projectRoot)
+  const storePath = localMcpStorePath()
+  if (await Filesystem.exists(storePath)) {
+    const store = (await Filesystem.readJson(storePath)) as Record<string, Record<string, unknown>>
+    if (store[key]?.[name]) return "local"
+  }
+  for (const [scope, base] of [
+    ["project", projectRoot],
+    ["user", Global.Path.home],
+  ] as const) {
+    const mcpJson = path.join(base, ".agents", "mcp.json")
+    if (await Filesystem.exists(mcpJson)) {
+      const parsed = (await Filesystem.readJson(mcpJson)) as Record<string, unknown>
+      const servers = (parsed.mcpServers ?? parsed.servers ?? parsed) as Record<string, unknown>
+      if (servers[name]) return scope
+    }
+  }
+  return "config"
 }
 
 export const McpAddCommand = effectCmd({
@@ -448,6 +536,11 @@ export const McpAddCommand = effectCmd({
         describe: "HTTP header for a remote MCP server (KEY=VALUE)",
         type: "string",
         array: true,
+      })
+      .option("scope", {
+        describe: "where to store the server: local (private, this project), project (.agents/mcp.json, shared), user (all projects)",
+        type: "string",
+        choices: ["local", "project", "user"],
       }),
   handler: Effect.fn("Cli.mcp.add")(function* (args) {
     const maybeCtx = yield* InstanceRef
@@ -494,9 +587,16 @@ export const McpAddCommand = effectCmd({
               ...(Object.keys(environment).length ? { environment } : {}),
             }
 
-        const configPath = await resolveConfigPath(Global.Path.config, true)
-        await addMcpToConfig(args.name, mcpConfig, configPath)
-        prompts.log.success(`MCP server "${args.name}" added to ${configPath}`)
+        const scope = args.scope ?? "local"
+        let configPath: string
+        if (scope === "local") {
+          configPath = await addMcpToLocal(args.name, mcpConfig, (ctx.worktree && ctx.worktree !== "/" ? ctx.worktree : ctx.directory))
+        } else if (scope === "project") {
+          configPath = await addMcpToJson(args.name, mcpConfig, resolveMcpJsonPath((ctx.worktree && ctx.worktree !== "/" ? ctx.worktree : ctx.directory)))
+        } else {
+          configPath = await addMcpToJson(args.name, mcpConfig, resolveMcpJsonPath(Global.Path.home))
+        }
+        prompts.log.success(`MCP server "${args.name}" added to ${configPath} (${scope} scope)`)
         return
       }
 
@@ -505,32 +605,37 @@ export const McpAddCommand = effectCmd({
 
       const project = ctx.project
 
-      // Resolve config paths eagerly for hints
-      const [projectConfigPath, globalConfigPath] = await Promise.all([
-        resolveConfigPath(ctx.worktree),
-        resolveConfigPath(Global.Path.config, true),
-      ])
-
       // Determine scope
-      let configPath = globalConfigPath
+      let scope: "local" | "project" | "user" = "local"
       if (project.vcs === "git") {
         const scopeResult = await prompts.select({
-          message: "Location",
+          message: "Scope",
           options: [
             {
-              label: "Current project",
-              value: projectConfigPath,
-              hint: projectConfigPath,
+              label: "Local",
+              value: "local" as const,
+              hint: "private to you, this project only (stored in home)",
             },
             {
-              label: "Global",
-              value: globalConfigPath,
-              hint: globalConfigPath,
+              label: "Project",
+              value: "project" as const,
+              hint: `${resolveMcpJsonPath((ctx.worktree && ctx.worktree !== "/" ? ctx.worktree : ctx.directory))} (shared via git)`,
+            },
+            {
+              label: "User",
+              value: "user" as const,
+              hint: "available in all your projects (stored in home)",
             },
           ],
         })
         if (prompts.isCancel(scopeResult)) throw new UI.CancelledError()
-        configPath = scopeResult
+        scope = scopeResult
+      }
+
+      const writeScope = (name: string, mcpConfig: ConfigMCPV1.Info) => {
+        if (scope === "local") return addMcpToLocal(name, mcpConfig, (ctx.worktree && ctx.worktree !== "/" ? ctx.worktree : ctx.directory))
+        if (scope === "project") return addMcpToJson(name, mcpConfig, resolveMcpJsonPath((ctx.worktree && ctx.worktree !== "/" ? ctx.worktree : ctx.directory)))
+        return addMcpToJson(name, mcpConfig, resolveMcpJsonPath(Global.Path.home))
       }
 
       const name = await prompts.text({
@@ -569,8 +674,8 @@ export const McpAddCommand = effectCmd({
           command: command.split(" "),
         }
 
-        await addMcpToConfig(name, mcpConfig, configPath)
-        prompts.log.success(`MCP server "${name}" added to ${configPath}`)
+        const configPath = await writeScope(name, mcpConfig)
+        prompts.log.success(`MCP server "${name}" added to ${configPath} (${scope} scope)`)
         prompts.outro("MCP server added successfully")
         return
       }
@@ -647,8 +752,8 @@ export const McpAddCommand = effectCmd({
           }
         }
 
-        await addMcpToConfig(name, mcpConfig, configPath)
-        prompts.log.success(`MCP server "${name}" added to ${configPath}`)
+        const configPath = await writeScope(name, mcpConfig)
+        prompts.log.success(`MCP server "${name}" added to ${configPath} (${scope} scope)`)
       }
 
       prompts.outro("MCP server added successfully")
