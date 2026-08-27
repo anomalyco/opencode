@@ -205,6 +205,13 @@ export async function POST(input: APIEvent) {
       } else if (productID === BlackData.productID()) {
         await Billing.unsubscribeBlack({ subscriptionID })
       }
+
+      const latestInvoice = body.data.object.latest_invoice
+      const invoiceID = typeof latestInvoice === "string" ? latestInvoice : latestInvoice?.id
+      if (invoiceID) {
+        const invoice = await Billing.stripe().invoices.retrieve(invoiceID)
+        if (invoice.status === "open") await Billing.stripe().invoices.voidInvoice(invoiceID)
+      }
     }
     if (body.type === "invoice.payment_succeeded") {
       if (
