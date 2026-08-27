@@ -97,6 +97,20 @@ describe("Config", () => {
           Effect.andThen(
             Effect.gen(function* () {
               const config = yield* Config.Service
+              const content = yield* Effect.promise(() => fs.readFile(globalFile, "utf8"))
+              const cause = new Error("Rejected config update")
+              const error = yield* config
+                .update((draft) => {
+                  draft.shell = "discarded"
+                  throw cause
+                })
+                .pipe(Effect.flip)
+
+              expect(error).toBeInstanceOf(Config.UpdateError)
+              expect(error.message).toBe("Config update failed")
+              expect(error.cause).toBe(cause)
+              expect(yield* Effect.promise(() => fs.readFile(globalFile, "utf8"))).toBe(content)
+
               const updated = yield* config.update((draft) => {
                 draft.shell = "updated"
               })
@@ -335,6 +349,38 @@ describe("Config", () => {
       yield* Effect.yieldNow
       yield* test.emitChange({ type: "create", path: "/root/commands/review.md" })
       expect(Array.from(yield* Fiber.join(received))).toEqual([{ type: "create", path: "/root/commands/review.md" }])
+    }).pipe(Effect.provide(Config.testLayer())),
+  )
+
+  it.effect("keeps test config unchanged after an update callback fails", () =>
+    Effect.gen(function* () {
+      const config = yield* Config.Service
+      const test = yield* Config.Test
+      const entry = new Document({
+        type: "document",
+        path: AbsolutePath.make(path.join(import.meta.dir, "opencode.json")),
+        info: new Info({ shell: "initial" }),
+      })
+      yield* test.setEntries([entry])
+      const cause = new Error("Rejected config update")
+      const error = yield* config
+        .update((draft) => {
+          draft.shell = "discarded"
+          throw cause
+        })
+        .pipe(Effect.flip)
+
+      expect(error).toBeInstanceOf(Config.UpdateError)
+      expect(error.message).toBe("Config update failed")
+      expect(error.cause).toBe(cause)
+      expect(yield* config.entries()).toEqual([entry])
+      expect(entry.info.shell).toBe("initial")
+
+      const updated = yield* config.update((draft) => {
+        draft.shell = "recovered"
+      })
+      expect(updated.shell).toBe("recovered")
+      expect(Config.latest(yield* test.entries(), "shell")).toBe("recovered")
     }).pipe(Effect.provide(Config.testLayer())),
   )
 
