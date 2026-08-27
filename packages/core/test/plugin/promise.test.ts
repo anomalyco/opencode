@@ -25,7 +25,7 @@ import { Money } from "@opencode-ai/schema/money"
 import type { SessionHooks } from "@opencode-ai/plugin/effect/session"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
-import { host as testHost } from "./host"
+import { host } from "./host"
 
 const it = testEffect(PluginTestLayer)
 
@@ -94,7 +94,7 @@ describe("fromPromise", () => {
   it.effect("adapts session creation through the protocol schema", () =>
     Effect.gen(function* () {
       let seen: unknown
-      const host = testHost({
+      const context = host({
         session: {
           create: (input) => {
             seen = input
@@ -132,7 +132,7 @@ describe("fromPromise", () => {
             })
           },
         }),
-      ).effect(host)
+      ).effect(context)
 
       expect(seen).toEqual({ title: "Promise title" })
     }),
@@ -140,7 +140,7 @@ describe("fromPromise", () => {
 
   it.effect("forwards transient session generation", () =>
     Effect.gen(function* () {
-      const host = testHost({
+      const context = host({
         session: {
           generate: (input) => Effect.succeed({ text: `${input.sessionID}: ${input.prompt}` }),
         },
@@ -155,14 +155,14 @@ describe("fromPromise", () => {
             })
           },
         }),
-      ).effect(host)
+      ).effect(context)
     }),
   )
 
   it.effect("preserves interrupt results and rejected Promise behavior", () =>
     Effect.gen(function* () {
       const seen: unknown[] = []
-      const host = testHost({
+      const context = host({
         session: {
           interrupt: (input) => {
             if (input.sessionID === Session.ID.make("ses_failure")) {
@@ -201,7 +201,7 @@ describe("fromPromise", () => {
             expect(await ctx.session.wait({ sessionID: "ses_success" })).toBeUndefined()
           },
         }),
-      ).effect(host)
+      ).effect(context)
 
       expect(seen).toEqual([
         { sessionID: Session.ID.make("ses_success"), agent: Agent.ID.make("build") },
@@ -232,7 +232,7 @@ describe("fromPromise", () => {
         resume: null,
       }
       let seen: unknown
-      const host = testHost({
+      const context = host({
         session: {
           synthetic: (value) => {
             seen = value
@@ -260,7 +260,7 @@ describe("fromPromise", () => {
             await ctx.session.synthetic(input)
           },
         }),
-      ).effect(host)
+      ).effect(context)
 
       expect(seen).toEqual({
         ...input,
