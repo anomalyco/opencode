@@ -14,6 +14,7 @@ import { PluginModule } from "../plugin/module.js"
 import { PluginSourceDirectory } from "../plugin/source-directory.js"
 import { SdkPlugins } from "../plugin/sdk.js"
 import { AbsolutePath } from "../schema.js"
+import { ProjectJj } from "./jj.js"
 
 export interface Match {
   readonly type: string
@@ -35,7 +36,7 @@ const layer = Layer.effect(
     const global = yield* Global.Service
     const npm = yield* Npm.Service
     const sdk = yield* SdkPlugins.Service
-    const known = new Set([".git", ".hg"])
+    const known = new Set([".git", ".hg", ...ProjectJj.vcs.markers])
     const loaded = new Map<string, Versioned | undefined>()
 
     const discover = Effect.fn("ProjectMarkers.discover")(function* (directory: AbsolutePath) {
@@ -70,7 +71,9 @@ const layer = Layer.effect(
           )
         },
       )
-      const declarations = new Map<string, { readonly id: string; readonly markers: readonly string[] }>()
+      const declarations = new Map<string, { readonly id: string; readonly markers: readonly string[] }>([
+        [ProjectJj.id, ProjectJj.vcs],
+      ])
 
       for (const plugin of sdk.all()) {
         if (!plugin.vcs) continue

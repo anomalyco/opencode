@@ -84,6 +84,7 @@ import { WebSearchPlugins } from "./websearch/index.js"
 import { PluginRuntime } from "./runtime.js"
 import { SkillPlugin } from "./skill.js"
 import { VcsHgPlugin } from "./vcs/hg.js"
+import { VcsJjPlugin } from "./vcs/jj.js"
 import { SystemPromptPlugin } from "./system-prompt.js"
 import { VariantPlugin } from "./variant.js"
 import { VcsGitPlugin } from "./vcs/git.js"
@@ -238,6 +239,7 @@ const pre = [
   MCPCodeModeExclusionPlugin.Plugin,
   WellKnownPlugin.Plugin,
   VcsGitPlugin.Plugin,
+  VcsJjPlugin.Plugin,
   AgentPlugin.Plugin,
   PlanPlugin.Plugin,
   CommandPlugin.Plugin,

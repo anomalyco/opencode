@@ -22,6 +22,8 @@ test("parcel patterns ignore built-in folders at any depth", async () => {
     "nested/node_modules/package/index.js",
     "nested/.git",
     "nested/.git/HEAD",
+    "nested/.jj",
+    "nested/.jj/repo/op_store/operations/current",
     "nested/dist",
     "nested/dist/index.js",
   ]) {

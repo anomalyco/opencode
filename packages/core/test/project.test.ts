@@ -10,6 +10,7 @@ import { Database } from "@opencode-ai/core/database/database"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectSchema } from "@opencode-ai/core/project/schema"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
+import { WorktreeTable } from "@opencode-ai/core/worktree/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Hash } from "@opencode-ai/util/hash"
 import { tmpdir } from "./fixture/tmpdir"
@@ -522,6 +523,163 @@ describe("Project.resolve", () => {
       expect(result.directory).toBe(abs(tmp.path))
       expect(result.id).not.toBe(Project.ID.make("global"))
       expect(result.previous).toBeUndefined()
+    }),
+  )
+
+  const itJj = Bun.which("jj") ? it : { live: it.live.skip }
+
+  itJj.live("detects standalone Jujutsu repositories from nested directories", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      yield* Effect.promise(async () => {
+        await $`jj git init --no-colocate`.cwd(tmp.path).quiet()
+        await fs.mkdir(path.join(tmp.path, "a", "b"), { recursive: true })
+      })
+      const project = yield* Project.Service
+      const result = yield* project.resolve(abs(path.join(tmp.path, "a", "b")))
+
+      expect(result.vcs?.type).toBe("jj")
+      expect(result.directory).toBe(yield* real(tmp.path))
+      expect(result.canonical).toBe(result.directory)
+      expect(result.id).not.toBe(Project.ID.global)
+      expect((yield* project.resolve(abs(tmp.path))).id).toBe(result.id)
+    }),
+  )
+
+  it.live("ignores incomplete Jujutsu metadata", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      yield* Effect.promise(() => fs.mkdir(path.join(tmp.path, ".jj")))
+      const project = yield* Project.Service
+
+      expect((yield* project.resolve(abs(tmp.path))).vcs).toBeUndefined()
+
+      yield* Effect.promise(() => fs.writeFile(path.join(tmp.path, ".jj", "repo"), "   \n"))
+      expect((yield* project.resolve(abs(tmp.path))).vcs).toBeUndefined()
+
+      yield* Effect.promise(() => fs.writeFile(path.join(tmp.path, ".jj", "repo"), "../missing"))
+      expect((yield* project.resolve(abs(tmp.path))).vcs).toBeUndefined()
+
+      yield* Effect.promise(() => initRepo(tmp.path, { commit: true }))
+      expect((yield* project.resolve(abs(tmp.path))).vcs?.type).toBe("git")
+    }),
+  )
+
+  itJj.live("preserves Git project identity in colocated Jujutsu repositories", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      yield* Effect.promise(async () => {
+        await initRepo(tmp.path, { commit: true, remote: "git@github.com:owner/repo.git" })
+        await $`jj git init --colocate`.cwd(tmp.path).quiet()
+      })
+      const project = yield* Project.Service
+      const result = yield* project.resolve(abs(tmp.path))
+
+      expect(result.id).toBe(remoteID("github.com/owner/repo"))
+      expect(result.vcs?.type).toBe("git")
+      expect(result.directory).toBe(yield* real(tmp.path))
+    }),
+  )
+
+  itJj.live("shares standalone Jujutsu identity and canonical root across workspaces", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      const main = path.join(tmp.path, "main")
+      const secondary = path.join(tmp.path, "secondary")
+      yield* Effect.promise(async () => {
+        await fs.mkdir(main)
+        await $`jj git init --no-colocate`.cwd(main).quiet()
+        await $`jj workspace add ${secondary}`.cwd(main).quiet()
+      })
+      const project = yield* Project.Service
+      const first = yield* project.resolve(abs(main))
+      const second = yield* project.resolve(abs(secondary))
+
+      expect(second.id).toBe(first.id)
+      expect(second.vcs?.type).toBe("jj")
+      expect(second.directory).toBe(yield* real(secondary))
+      expect(second.canonical).toBe(yield* real(main))
+    }),
+  )
+
+  itJj.live("shares colocated Git identity with secondary Jujutsu workspaces", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      const main = path.join(tmp.path, "main")
+      const secondary = path.join(tmp.path, "secondary")
+      yield* Effect.promise(async () => {
+        await fs.mkdir(main)
+        await initRepo(main, { commit: true, remote: "git@github.com:owner/jj-workspaces.git" })
+        await $`jj git init --colocate`.cwd(main).quiet()
+        await $`jj workspace add ${secondary}`.cwd(main).quiet()
+      })
+      const project = yield* Project.Service
+      const first = yield* project.resolve(abs(main))
+      const second = yield* project.resolve(abs(secondary))
+
+      expect(second.id).toBe(first.id)
+      expect(second.vcs).toMatchObject({ type: "git" })
+      expect(second.vcsBackend).toBe("jj")
+      expect(second.directory).toBe(yield* real(secondary))
+      expect(second.canonical).toBe(yield* real(main))
+      const database = yield* Database.Service
+      const rows = yield* database.db.select().from(WorktreeTable).all()
+      expect(rows.find((item) => item.directory === second.directory)?.strategy).toBeNull()
+    }),
+  )
+
+  itJj.live("prefers a nested Jujutsu repository over its parent Git repository", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      const nested = path.join(tmp.path, "nested")
+      yield* Effect.promise(async () => {
+        await initRepo(tmp.path, { commit: true })
+        await fs.mkdir(nested)
+        await $`jj git init --no-colocate`.cwd(nested).quiet()
+      })
+      const project = yield* Project.Service
+      const result = yield* project.resolve(abs(nested))
+
+      expect(result.vcs?.type).toBe("jj")
+      expect(result.directory).toBe(yield* real(nested))
+    }),
+  )
+
+  itJj.live("prefers a nested Git repository over its parent Jujutsu repository", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      const nested = path.join(tmp.path, "nested")
+      yield* Effect.promise(async () => {
+        await $`jj git init --no-colocate`.cwd(tmp.path).quiet()
+        await fs.mkdir(nested)
+        await initRepo(nested, { commit: true })
+      })
+      const project = yield* Project.Service
+      const result = yield* project.resolve(abs(nested))
+
+      expect(result.vcs?.type).toBe("git")
+      expect(result.directory).toBe(yield* real(nested))
     }),
   )
 

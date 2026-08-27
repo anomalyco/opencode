@@ -15,6 +15,7 @@ import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { Hash } from "@opencode-ai/util/hash"
 import { ProjectMarkers } from "./project/markers.js"
 import { ProjectSchema } from "./project/schema.js"
+import { ProjectJj } from "./project/jj.js"
 import { ProjectTable, upsertProject } from "./project/sql.js"
 import { WorktreeTable } from "./worktree/sql.js"
 
@@ -127,7 +128,7 @@ const layer = Layer.effect(
         directories.push({
           projectID: project.id,
           directory: project.directory,
-          strategy: project.vcs.type === "git" ? "git" : undefined,
+          strategy: project.vcs.type === "git" && project.vcsBackend !== "jj" ? "git" : undefined,
         })
       // A missing directory row means this directory's resolution is a new durable
       // fact (copy.ts registers copy directories directly; those never strand
@@ -313,19 +314,34 @@ const layer = Layer.effect(
     const resolve = Effect.fn("Project.resolve")(function* (input: AbsolutePath) {
       const directory = AbsolutePath.make(yield* fs.resolve(input))
       const marker = yield* markers.discover(directory)
+      const discovered = marker?.type === "jj" ? yield* ProjectJj.discover(fs, marker.marker) : undefined
       const native = yield* fs.up({ targets: [".git", ".hg"], start: directory, mode: "first" }).pipe(
         Effect.map((matches) => matches[0]),
         Effect.orElseSucceed(() => undefined),
       )
-      const repo =
+      const repository =
         native && path.basename(native) === ".git"
           ? yield* git.repo.discover(AbsolutePath.make(path.dirname(native)))
           : undefined
-      if (repo && (!marker || FSUtil.contains(marker.directory, repo.worktree))) {
+      const jj =
+        discovered &&
+        repository &&
+        repository.worktree !== discovered.directory &&
+        FSUtil.contains(discovered.directory, repository.worktree)
+          ? undefined
+          : discovered
+      const backing =
+        jj && (!repository || repository.worktree !== jj.directory)
+          ? yield* git.repo.discover(jj.canonical)
+          : repository
+      const repo = jj && backing?.worktree !== jj.canonical && backing?.worktree !== jj.directory ? undefined : backing
+      if (repo && (!marker || FSUtil.contains(marker.directory, repo.worktree) || jj?.canonical === repo.worktree)) {
         const previous = yield* cached(repo.commonDirectory)
         const id = (yield* remote(repo)) ?? previous ?? (yield* rootCommit(repo))
-        const canonical =
-          repo.gitDirectory === repo.commonDirectory
+        const workspace = jj && jj.directory !== repo.worktree
+        const canonical = workspace
+          ? repo.worktree
+          : repo.gitDirectory === repo.commonDirectory
             ? repo.worktree
             : yield* git.worktree.list(repo).pipe(
                 Effect.map((items) => items.find((item) => item.kind === "main")?.directory ?? repo.worktree),
@@ -334,10 +350,11 @@ const layer = Layer.effect(
         return yield* persist({
           previous,
           id: id ?? ID.global,
-          directory: repo.worktree,
+          directory: workspace ? jj.directory : repo.worktree,
           canonical,
           vcs: { type: "git" as const, store: repo.commonDirectory },
-          ...(marker?.directory === repo.worktree && marker.type !== "git" ? { vcsBackend: marker.type } : {}),
+          ...(marker && marker.directory === repo.worktree && marker.type !== "git" ? { vcsBackend: marker.type } : {}),
+          ...(jj ? { vcsBackend: "jj" } : {}),
         })
       }
 
@@ -350,7 +367,18 @@ const layer = Layer.effect(
         })
       }
 
-      if (marker) {
+      if (jj) {
+        const previous = yield* cached(jj.store)
+        return yield* persist({
+          previous,
+          id: previous ?? ID.make(Hash.fast(`jj-repository:${jj.store}`)),
+          directory: jj.directory,
+          canonical: jj.canonical,
+          vcs: { type: "jj", store: jj.store },
+        })
+      }
+
+      if (marker && marker.type !== "jj") {
         const previous = yield* cached(marker.marker)
         return yield* persist({
           previous,

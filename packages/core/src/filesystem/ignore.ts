@@ -14,6 +14,7 @@ const FOLDERS = new Set([
   ".git",
   ".svn",
   ".hg",
+  ".jj",
   ".vscode",
   ".idea",
   ".turbo",

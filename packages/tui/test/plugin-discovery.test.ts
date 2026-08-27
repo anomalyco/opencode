@@ -68,6 +68,18 @@ test("uses an Hg root for a missing project plugin directory", async () => {
   )
 })
 
+test("uses a Jujutsu root for a missing project plugin directory", async () => {
+  await using tmp = await tmpdir()
+  const project = path.join(tmp.path, "repo")
+  const cwd = path.join(project, "package")
+  await mkdir(path.join(project, ".jj"), { recursive: true })
+  await mkdir(cwd, { recursive: true })
+
+  expect(await tuiPluginDirectories(cwd, path.join(tmp.path, "config"))).toContain(
+    path.join(project, ".opencode", "plugins", "tui"),
+  )
+})
+
 test("truncates fractional mtimes in fresh specifiers", () => {
   // A dot in the query makes Bun's compiled binaries skip runtime plugin
   // hooks for the import, breaking JSX/solid rewriting for external plugins.

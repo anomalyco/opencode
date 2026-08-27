@@ -17,7 +17,7 @@ export async function localProjectDirectory(cwd: string) {
   const repositories = await Promise.all(
     directories.map((directory) =>
       Promise.all(
-        [".git", ".hg"].map((name) =>
+        [".git", ".hg", ".jj"].map((name) =>
           stat(path.join(directory, name)).then(
             () => true,
             (error) => (isMissingPath(error) ? false : Promise.reject(error)),
