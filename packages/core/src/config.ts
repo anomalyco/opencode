@@ -5,7 +5,7 @@ import path from "path"
 import { isDeepStrictEqual } from "node:util"
 import { type ParseError, parse } from "jsonc-parser"
 import { applyEdits, modify } from "jsonc-parser"
-import { Context, Effect, Layer, Option, PubSub, Ref, Schema, Semaphore, Stream } from "effect"
+import { Config, Context, Effect, Layer, Option, PubSub, Ref, Schema, Semaphore, Stream } from "effect"
 import { produce, type Draft } from "immer"
 import {
   AgentsDirectory,
@@ -55,6 +55,7 @@ export const Options = Schema.Struct({
   project: Schema.optional(Schema.Boolean),
   file: Schema.optional(Schema.String),
   content: Schema.optional(Schema.String),
+  disableClaudeCode: Schema.optional(Schema.Boolean),
 })
 export type Options = typeof Options.Type
 
@@ -220,12 +221,16 @@ export const layer = (options?: Options) =>
                 .pipe(Effect.orDie)
 
         // We load certain files from a few other folders in the ecosystem
-        const claude = [
-          ...new Set([
-            ...((yield* fs.isDir(globalClaudeDirectory)) ? [globalClaudeDirectory] : []),
-            ...discovered.filter((item) => path.basename(item) === ".claude").toReversed(),
-          ]),
-        ].map((directory) => new ClaudeDirectory({ type: "claude", path: AbsolutePath.make(directory) }))
+        const disableClaudeCode =
+          options?.disableClaudeCode ?? (yield* Config.boolean("OPENCODE_DISABLE_CLAUDE_CODE").pipe(Config.withDefault(false)))
+        const claude = disableClaudeCode
+          ? []
+          : [
+              ...new Set([
+                ...((yield* fs.isDir(globalClaudeDirectory)) ? [globalClaudeDirectory] : []),
+                ...discovered.filter((item) => path.basename(item) === ".claude").toReversed(),
+              ]),
+            ].map((directory) => new ClaudeDirectory({ type: "claude", path: AbsolutePath.make(directory) }))
         const agents = [
           ...new Set([
             ...((yield* fs.isDir(globalAgentsDirectory)) ? [globalAgentsDirectory] : []),
