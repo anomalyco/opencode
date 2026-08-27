@@ -114,6 +114,11 @@ type Info = ConfigV1.Info & {
   plugin_origins?: ConfigPlugin.Origin[]
 }
 
+// A PATCH body: `Info`, but map members may be `null` to remove them (RFC 7396).
+type Patch = ConfigV1.Patch & {
+  plugin_origins?: ConfigPlugin.Origin[]
+}
+
 type State = {
   config: Info
   directories: string[]
@@ -126,7 +131,7 @@ export interface Interface {
   readonly getGlobal: () => Effect.Effect<Info>
   readonly getConsoleState: () => Effect.Effect<ConsoleState>
   readonly update: (config: Info) => Effect.Effect<void>
-  readonly updateGlobal: (config: Info) => Effect.Effect<{ info: Info; changed: boolean }>
+  readonly updateGlobal: (config: Patch) => Effect.Effect<{ info: Info; changed: boolean }>
   readonly invalidate: () => Effect.Effect<void>
   readonly directories: () => Effect.Effect<string[]>
   readonly waitForDependencies: () => Effect.Effect<void>
@@ -165,8 +170,25 @@ function writable(info: Info) {
   return next
 }
 
-function writableGlobal(info: Info) {
-  const next = writable(info)
+/**
+ * A patch body removes a config entry by setting it to `null`, as in JSON
+ * Merge Patch (RFC 7396) — there is no other way for a merge to express a
+ * deletion, since an omitted key means "leave this alone".
+ *
+ * JSON has no `undefined`, but both write paths below already drop a member
+ * whose value is `undefined` — jsonc-parser's `modify` deletes the key, and
+ * `JSON.stringify` omits it — so translating `null` to `undefined` here is all
+ * a removal needs. Recursive, so nested entries (`provider.<id>`,
+ * `agent.<name>`) can be removed and not just top-level keys.
+ */
+function withRemovals(patch: unknown): unknown {
+  if (patch === null) return undefined
+  if (!isRecord(patch)) return patch
+  return Object.fromEntries(Object.entries(patch).map(([key, value]) => [key, withRemovals(value)]))
+}
+
+function writableGlobal(info: Patch) {
+  const next = writable(withRemovals(info) as Info)
   // When a user changes config from a value back to default in the Desktop app, we don't want to leave a blank `"shell": "",` key
   if ("shell" in next && next.shell === "") return { ...next, shell: undefined }
   return next
@@ -634,7 +656,7 @@ const layer = Layer.effect(
       yield* invalidateGlobal
     })
 
-    const updateGlobal = Effect.fn("Config.updateGlobal")(function* (config: Info) {
+    const updateGlobal = Effect.fn("Config.updateGlobal")(function* (config: Patch) {
       const file = globalConfigFile()
       const before = (yield* readConfigFile(file)) ?? "{}"
       const patch = writableGlobal(config)
@@ -647,7 +669,10 @@ const layer = Layer.effect(
         const serialized = JSON.stringify(merged, null, 2)
         changed = serialized !== before
         if (changed) yield* fs.writeFileString(file, serialized).pipe(Effect.orDie)
-        next = merged
+        // Re-read from the serialized form rather than returning `merged`: a
+        // removed member is still present-but-undefined in the merge result,
+        // which `Info` does not accept. Mirrors the jsonc branch below.
+        next = ConfigParse.schema(ConfigV1.Info, ConfigParse.jsonc(serialized, file), file)
       } else {
         const updated = patchJsonc(before, patch)
         next = ConfigParse.schema(ConfigV1.Info, ConfigParse.jsonc(updated, file), file)
