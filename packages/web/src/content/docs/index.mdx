@@ -81,6 +81,39 @@ You can also install it with the following commands:
 
   > We recommend using the OpenCode tap for the most up to date releases. The official `brew install opencode` formula is maintained by the Homebrew team and is updated less frequently.
 
+- **System packages on Debian/Ubuntu**
+
+  Download `.deb` packages for amd64 or arm64 from the [releases page](https://github.com/anomalyco/opencode/releases).
+
+  ```bash
+  # amd64
+  sudo apt install ./opencode_*_amd64.deb
+  # arm64
+  sudo apt install ./opencode_*_arm64.deb
+  ```
+
+- **System packages on Fedora/RHEL/openSUSE**
+
+  Download `.rpm` packages for x86_64 or aarch64 from the [releases page](https://github.com/anomalyco/opencode/releases).
+
+  ```bash
+  # x86_64
+  sudo dnf install ./opencode-*-1.x86_64.rpm
+  # aarch64
+  sudo dnf install ./opencode-*-1.aarch64.rpm
+  ```
+
+- **macOS installer package**
+
+  Download signed `.pkg` installers for Apple Silicon or Intel from the [releases page](https://github.com/anomalyco/opencode/releases). The package installs to `/usr/local/bin`.
+
+  ```bash
+  # Apple Silicon
+  sudo installer -pkg opencode-*-arm64.pkg -target /
+  # Intel
+  sudo installer -pkg opencode-*-x64.pkg -target /
+  ```
+
 - **Installing on Arch Linux**
 
   ```bash
