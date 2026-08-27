@@ -60,6 +60,7 @@ OpenCode Go работает так же, как и любой другой пр
 Текущий список моделей включает:
 
 - **Grok 4.6**
+- **GLM-5.3-Flash**
 - **GLM-5.3**
 - **GLM-5.2**
 - **GLM-5.1**
@@ -81,7 +82,6 @@ OpenCode Go работает так же, как и любой другой пр
 - **DeepSeek V4 Flash**
 - **DeepSeek V4 Flash Vision Exp**
 - **Hy3**
-- **Ox Alpha Free** (ограниченное время)
 
 Список моделей может меняться по мере того, как мы тестируем и добавляем новые.
 
@@ -103,6 +103,7 @@ OpenCode Go включает следующие лимиты:
 | ---------------------------- | ------------------- | ----------------- | ---------------- |
 | Grok 4.6                     | 169                 | 423               | 845              |
 | GPT 5.6 Luna                 | 2,050               | 5,100             | 10,250           |
+| GLM-5.3-Flash                | 1,580               | 3,950             | 7,900            |
 | GLM-5.3                      | 220                 | 540               | 1,080            |
 | GLM-5.2                      | 880                 | 2,150             | 4,300            |
 | GLM-5.1                      | 880                 | 2,150             | 4,300            |
@@ -123,11 +124,11 @@ OpenCode Go включает следующие лимиты:
 | DeepSeek V4 Flash            | 7,600               | 18,900            | 37,800           |
 | DeepSeek V4 Flash Vision Exp | 3,800               | 9,450             | 18,900           |
 | Hy3                          | 4,300               | 10,750            | 21,500           |
-| Ox Alpha Free                | -                   | -                 | -                |
 
 Эти оценки основаны на наблюдаемых показателях запросов:
 
 - Grok 4.6 — 390 входных, 32,500 кешированных, 120 выходных токенов на запрос
+- GLM-5.3-Flash — 1,000 входных, 55,000 кешированных, 200 выходных токенов на запрос
 - GLM-5.3/5.2/5.1 — 700 входных, 52,000 кешированных, 150 выходных токенов на запрос
 - GPT 5.6 Luna — 1,000 входных, 50,000 кешированных, 220 выходных токенов на запрос
 - Kimi K3 — 1,050 входных, 76,500 кешированных, 300 выходных токенов на запрос
@@ -155,6 +156,7 @@ OpenCode Go включает следующие лимиты:
 | Grok 4.6 (> 200K tokens)                | $4.00  | $12.00 | $1.00       | -            | $15           |
 | GPT 5.6 Luna (≤ 272K tokens)            | $0.20  | $1.20  | $0.02       | $0.25        | $15           |
 | GPT 5.6 Luna (> 272K tokens)            | $0.40  | $1.80  | $0.04       | $0.50        | $15           |
+| GLM-5.3-Flash                           | $0.15  | $0.50  | $0.03       | -            | $15           |
 | GLM-5.3                                 | $1.40  | $4.40  | $0.26       | -            | $15           |
 | GLM-5.2                                 | $1.40  | $4.40  | $0.26       | -            | $60           |
 | GLM-5.1                                 | $1.40  | $4.40  | $0.26       | -            | $60           |
@@ -181,13 +183,10 @@ OpenCode Go включает следующие лимиты:
 | DeepSeek V4 Flash Vision Exp (Off-Peak) | $0.22  | $0.66  | $0.007      | -            | $15           |
 | DeepSeek V4 Flash Vision Exp (Peak)     | $0.44  | $1.32  | $0.014      | -            | $15           |
 | Hy3                                     | $0.14  | $0.58  | $0.035      | -            | $60           |
-| Ox Alpha Free                           | -      | -      | -           | -            | -             |
 
 **DeepSeek V4 Flash / V4 Flash Vision Exp / V4 Pro:** Часы Peak с понедельника по пятницу: 01:00-04:00 и 06:00-10:00 UTC; все остальные часы, включая выходные, относятся к Off-Peak. [Подробнее](https://api-docs.deepseek.com/quick_start/pricing/).
 
 **DeepSeek V4 Flash Vision Exp:** Изображения преобразуются в токены с учётом их размеров и оплачиваются как входные токены вместе с текстовыми токенами. [Подробнее](https://api-docs.deepseek.com/quick_start/pricing/).
-
-**Ox Alpha Free:** Бесплатно в течение ограниченного времени.
 
 Вы можете отслеживать текущее использование в **<a href={console}>консоли</a>**.
 
@@ -227,6 +226,7 @@ OpenCode Go включает следующие лимиты:
 | ---------------------------- | ---------------------------- | ------------------------------------------------ | --------------------------- |
 | Grok 4.6                     | grok-4.6                     | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | GPT 5.6 Luna                 | gpt-5.6-luna                 | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
+| GLM-5.3-Flash                | glm-5.3-flash                | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5.3                      | glm-5.3                      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5.2                      | glm-5.2                      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5.1                      | glm-5.1                      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
@@ -248,7 +248,6 @@ OpenCode Go включает следующие лимиты:
 | Qwen3.7 Plus                 | qwen3.7-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus                 | qwen3.6-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Hy3                          | hy3                          | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| Ox Alpha Free                | ox-alpha-free                | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 
 [ID модели](/docs/config/#models) в вашем конфиге OpenCode
 использует формат `opencode-go/<model-id>`. Например, для Kimi K3 вам нужно
@@ -272,6 +271,7 @@ https://opencode.ai/zen/go/v1/models
 | ---------------------------- | ---------------- | --------------- |
 | Grok 4.6                     | Не используется  | 30 дней         |
 | GPT 5.6 Luna                 | Не используется  | 30 дней         |
+| GLM-5.3-Flash                | Не используется  | 0 дней          |
 | GLM-5.3                      | Не используется  | 0 дней          |
 | GLM-5.2                      | Не используется  | 0 дней          |
 | GLM-5.1                      | Не используется  | 0 дней          |
@@ -292,7 +292,6 @@ https://opencode.ai/zen/go/v1/models
 | DeepSeek V4 Flash            | Не используется  | 0 дней          |
 | DeepSeek V4 Flash Vision Exp | Не используется  | 0 дней          |
 | Hy3                          | Не используется  | 0 дней          |
-| Ox Alpha Free                | Не используется  | 0 дней          |
 
 - **Grok 4.6:** ZDR отключает важные функции API, зависящие от сохраненных данных, включая Responses API с сохранением состояния, Files and Collections и Batch API. [Подробнее](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
 - **GPT 5.6 Luna:** Журналы мониторинга злоупотреблений создаются при любом использовании функций API и хранятся до 30 дней. [Подробнее](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).

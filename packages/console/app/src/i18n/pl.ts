@@ -255,7 +255,7 @@ export const dict = {
   "zen.privacy.exceptionsLink": "następującymi wyjątkami",
 
   "go.title": "OpenCode Go | Niskokosztowe modele do kodowania dla każdego",
-  "go.banner.text": "Ox Alpha Free jest dostępny w Go przez ograniczony czas",
+  "go.banner.text": "GLM-5.3-Flash oferuje 2x wyższe limity użycia przez ograniczony czas",
   "go.meta.description":
     "Go kosztuje $10/miesiąc, oferując hojne limity użycia i niezawodny dostęp do wiodących modeli do kodowania.",
   "go.hero.title": "Niskokosztowe modele do kodowania dla każdego",
