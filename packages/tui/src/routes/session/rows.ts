@@ -393,6 +393,11 @@ export function messageBoundaryIDs(rows: SessionRow[], messages: SessionMessageI
   })
 }
 
+export function sessionRowID(row: SessionRow, boundaryID?: string) {
+  if (boundaryID) return boundaryID
+  if (row.type === "part") return `session-part:${row.ref.messageID}:${row.ref.partID}`
+}
+
 function rowBoundaryMessageID(row: SessionRow, messages: Map<string, SessionMessageInfo>) {
   if (row.type === "message") {
     const message = messages.get(row.messageID)

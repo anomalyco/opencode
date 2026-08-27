@@ -90,6 +90,7 @@ import {
   createSessionRows,
   messageBoundaryIDs,
   resolvePart,
+  sessionRowID,
   turnDuration,
   turnTokensPerSecond,
   type CacheUsage,
@@ -140,6 +141,7 @@ const context = createContext<{
   config: ReturnType<typeof useConfig>["data"]
   mutatePending: (action: PendingAction, inboxID: string) => Promise<boolean>
   pendingDelivery: (inboxID: string) => SessionInbox.Delivery | undefined
+  jumpToShell: (jobID: string) => void
 }>()
 
 function use() {
@@ -653,6 +655,24 @@ export function Session(props: {
       const message = data.session.message.get(route.sessionID, messageID)
       alignMessage(messageID, Math.max(0, y - (message?.type === "assistant" ? 1 : 0)))
     })
+
+  const jumpToShell = (jobID: string) => {
+    const jump = () => {
+      const index = rows.findIndex((row) => row.type === "part" && row.ref.partID === jobID)
+      if (index === -1) {
+        if (data.session.message.more(route.sessionID)) prependHistory(0, jump)
+        return
+      }
+      const id = sessionRowID(rows[index]!, boundaries()[index])
+      if (!id) return
+      ensureAllRows(() => {
+        const child = scroll.getRenderable(id)
+        if (!child) return
+        alignMessage(id, Math.max(0, scroll.scrollTop + child.y - scroll.viewport.y))
+      })
+    }
+    jump()
+  }
 
   function toBottom() {
     clearMessageNavigation()
@@ -1267,6 +1287,7 @@ export function Session(props: {
         config,
         mutatePending,
         pendingDelivery: (inboxID) => pendingDeliveries().get(inboxID),
+        jumpToShell,
       }}
     >
       <box flexDirection="row" flexGrow={1} minHeight={0}>
@@ -1429,7 +1450,7 @@ type SessionRowViewProps = {
 
 function SessionRowView(props: SessionRowViewProps) {
   return (
-    <box id={props.boundaryID} marginTop={1} flexShrink={0}>
+    <box id={sessionRowID(props.row, props.boundaryID)} marginTop={1} flexShrink={0}>
       <Switch>
         <Match when={props.row.type === "message" ? props.row : undefined}>
           {(row) => (
@@ -2008,8 +2029,11 @@ function SessionSwitchMessageV2(props: { message: SessionMessageInfo }) {
 function SessionNoticeMessageV2(props: { message: SessionMessageInfo }) {
   const ctx = use()
   const theme = useTheme()
+  const renderer = useRenderer()
+  const [hover, setHover] = createSignal(false)
   const metadata = () => (props.message.type === "synthetic" ? props.message.metadata : undefined)
   const source = () => stringValue(metadata()?.source)
+  const jobID = () => (source() === "shell" ? stringValue(metadata()?.jobID) : undefined)
   const completion = () => source() === "subagent" || source() === "shell"
   const state = () => stringValue(metadata()?.state)
   const actor = () => (source() === "shell" ? "Shell" : Locale.titlecase(stringValue(metadata()?.agent) ?? "Subagent"))
@@ -2027,6 +2051,7 @@ function SessionNoticeMessageV2(props: { message: SessionMessageInfo }) {
   const heading = () => `${state() === "completed" ? "↳" : "!"} ${actor()} ${status()}`
   const suffix = () => Locale.truncateWidth(` · ${description()}`, Math.max(0, ctx.width - 3 - stringWidth(heading())))
   const color = () => {
+    if (hover()) return theme.text.action.secondary.hovered
     if (state() === "error") return theme.text.feedback.error.default
     if (state() === "cancelled") return theme.text.feedback.warning.default
     return theme.text.feedback.info.default
@@ -2040,7 +2065,19 @@ function SessionNoticeMessageV2(props: { message: SessionMessageInfo }) {
         </InlineToolRow>
       }
     >
-      <box marginLeft={3}>
+      <box
+        id={jobID() ? `shell-completion:${jobID()}` : undefined}
+        marginLeft={3}
+        onMouseOver={() => {
+          if (jobID()) setHover(true)
+        }}
+        onMouseOut={() => setHover(false)}
+        onMouseUp={() => {
+          const id = jobID()
+          if (!id || renderer.getSelection()?.getSelectedText()) return
+          ctx.jumpToShell(id)
+        }}
+      >
         <text wrapMode="none">
           <span style={{ fg: color() }}>{heading()}</span>
           <span style={{ fg: theme.text.subdued }}>{suffix()}</span>

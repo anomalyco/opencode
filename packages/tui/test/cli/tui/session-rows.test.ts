@@ -4,6 +4,7 @@ import {
   cacheReuseDrop,
   messageBoundaryIDs,
   reduceSessionRows,
+  sessionRowID,
   turnDuration,
   turnTokensPerSecond,
 } from "../../../src/routes/session/rows"
@@ -142,6 +143,26 @@ test("assigns assistant boundaries to the first rendered row instead of the firs
   const rows = reduceSessionRows(messages)
 
   expect(messageBoundaryIDs(rows, messages)).toEqual(["user-1", "assistant-1", undefined, undefined])
+})
+
+test("assigns stable IDs to tool rows for direct navigation", () => {
+  const messages: SessionMessageInfo[] = [
+    assistant("assistant-1", [
+      { type: "text", text: "Starting a shell" },
+      { type: "tool", id: "shell-1", name: "shell", state: pending(), time: { created: 2 } },
+    ]),
+    assistant("assistant-2", [
+      { type: "tool", id: "shell-2", name: "shell", state: pending(), time: { created: 3 } },
+    ]),
+  ]
+  const rows = reduceSessionRows(messages)
+  const boundaries = messageBoundaryIDs(rows, messages)
+
+  expect(rows.map((row, index) => sessionRowID(row, boundaries[index]))).toEqual([
+    "assistant-1",
+    "session-part:assistant-1:shell-1",
+    "assistant-2",
+  ])
 })
 
 test("groups exploration parts across assistant messages until a delimiter", () => {
