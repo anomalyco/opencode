@@ -85,14 +85,9 @@ const layer = Layer.effect(
       const promotable = input.promotable ?? "input"
       if (!force && !continuing) {
         const pending = yield* SessionInbox.nextPromotable(db, sessionID, "input")
-        if (
-          !pending ||
-          (pending.delivery === "queue" &&
-            promotable === "steer" &&
-            pending.type !== "compaction" &&
-            pending.type !== "move")
-        )
-          return DrainResult.Complete()
+        if (!pending) return DrainResult.Complete()
+        const control = pending.type === "compaction" || pending.type === "move"
+        if (promotable === "steer" && pending.delivery === "queue" && !control) return DrainResult.Complete()
       }
       yield* plugins.flush
       yield* settleStaleToolCalls(sessionID)
@@ -263,29 +258,33 @@ const layer = Layer.effect(
               : Effect.succeed(false),
           ),
         })
-        if (outcome._tag === "Completed") return outcome.needsContinuation
-        if (outcome._tag === "Retry" || outcome._tag === "Continue") {
-          yield* retry({ cause: outcome.cause, error: outcome.error, assistantMessageID }).pipe(
-            Pull.catchDone(() =>
-              Effect.gen(function* () {
-                if (outcome._tag === "Retry")
-                  yield* bus.publish(SessionEvent.Step.Failed, { sessionID, assistantMessageID, error: outcome.error })
-                return yield* outcome.cause
-              }),
+        const completed = yield* SessionStep.Outcome.$match(outcome, {
+          Completed: (outcome) => Effect.succeed(outcome.needsContinuation),
+          Retry: (outcome) =>
+            retry({ cause: outcome.cause, error: outcome.error, assistantMessageID }).pipe(
+              Pull.catchDone(() =>
+                bus
+                  .publish(SessionEvent.Step.Failed, { sessionID, assistantMessageID, error: outcome.error })
+                  .pipe(Effect.andThen(outcome.cause)),
+              ),
+              Effect.asVoid,
             ),
-          )
-          if (outcome._tag === "Continue") {
+          Continue: Effect.fnUntraced(function* (outcome) {
+            yield* retry({ cause: outcome.cause, error: outcome.error, assistantMessageID }).pipe(
+              Pull.catchDone(() => outcome.cause),
+            )
             yield* bus.publish(SessionEvent.Synthetic, { sessionID, text: CONTINUE_AFTER_INCOMPLETE_STREAM })
             assistantMessageID = SessionMessage.ID.create()
-          }
-          continue
-        }
-        if (outcome._tag === "Compacted") {
-          recoverOverflow = false
-          assistantMessageID = SessionMessage.ID.create()
-          continue
-        }
-        recoverContinuation = false
+          }),
+          Compacted: Effect.fnUntraced(function* () {
+            recoverOverflow = false
+            assistantMessageID = SessionMessage.ID.create()
+          }),
+          RecoverFull: Effect.fnUntraced(function* () {
+            recoverContinuation = false
+          }),
+        })
+        if (completed !== undefined) return completed
       }
     })
 

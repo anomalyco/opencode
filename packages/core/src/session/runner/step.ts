@@ -36,7 +36,7 @@ export type Outcome = Data.TaggedEnum<{
   RecoverFull: {}
   Compacted: {}
 }>
-const Outcome = Data.taggedEnum<Outcome>()
+export const Outcome = Data.taggedEnum<Outcome>()
 
 interface Input {
   readonly sessionID: SessionSchema.ID
@@ -127,11 +127,11 @@ export const make = Effect.gen(function* () {
       Effect.gen(function* () {
         const stream = yield* restore(providerStream).pipe(Effect.exit)
         const streamFailure = Option.getOrUndefined(Exit.findErrorOption(stream))
-        const streamInterrupted = stream._tag === "Failure" && Cause.hasInterrupts(stream.cause)
+        const streamInterrupted = Exit.hasInterrupts(stream)
         if (!overflowFailure && publisher.hasStarted()) yield* publisher.streamed()
         if (streamInterrupted) yield* interruptTools
         const joined = yield* restore(Fiber.awaitAll(toolRuns.map((run) => run.fiber))).pipe(Effect.exit)
-        if (joined._tag === "Failure") yield* interruptTools
+        if (Exit.isFailure(joined)) yield* interruptTools
         const tools = classifyToolExits(
           joined,
           toolRuns.map((run) => run.call),
@@ -147,7 +147,7 @@ export const make = Effect.gen(function* () {
         if (overflowFailure) yield* publisher.publish(overflowFailure)
         const recorded = publisher.record()
         const unknownFinish =
-          stream._tag === "Success" && recorded.finish?.finish === "unknown"
+          Exit.isSuccess(stream) && recorded.finish?.finish === "unknown"
             ? new AIError({
                 reason: new InvalidProviderOutputError({
                   message: "The provider response ended with an unknown finish reason.",
@@ -191,7 +191,7 @@ export const make = Effect.gen(function* () {
         if (interrupted) yield* publisher.failAssistant(STEP_INTERRUPTED)
 
         // All local fibers have joined; only provider-hosted results can still be missing.
-        if (llmError || (stream._tag === "Success" && !recorded.providerFailed)) {
+        if (llmError || (Exit.isSuccess(stream) && !recorded.providerFailed)) {
           const missing = yield* publisher.failUnsettledTools(RESULT_MISSING, "hosted")
           if (missing && !llmError && !recorded.finish) yield* publisher.failAssistant(RESULT_MISSING)
         }
@@ -234,10 +234,10 @@ export const make = Effect.gen(function* () {
         )
           return Outcome.Continue({ cause: llmFailure, error: llmError })
 
-        if (stream._tag === "Failure") return yield* Effect.failCause(stream.cause)
+        if (Exit.isFailure(stream)) return yield* Effect.failCause(stream.cause)
         if (tools.declines.length > 0) return yield* Effect.interrupt
         if (tools.interrupted && tools.failure) return yield* Effect.failCause(tools.failure)
-        if (tools.interrupted && joined._tag === "Failure") return yield* Effect.failCause(joined.cause)
+        if (tools.interrupted && Exit.isFailure(joined)) return yield* Effect.failCause(joined.cause)
         if (record.failure) return yield* new StepFailedError({ error: record.failure })
         return Outcome.Completed({
           needsContinuation: !input.toolsDisabled && record.needsContinuation,
@@ -265,18 +265,17 @@ const classifyToolExits = (
   settled: Exit.Exit<Array<Exit.Exit<void, SessionModelRequest.ExecuteError>>>,
   calls: ReadonlyArray<ToolCall>,
 ) => {
-  const exits = settled._tag === "Success" ? settled.value : []
+  const exits = Exit.isSuccess(settled) ? settled.value : []
   const declines = exits.flatMap((exit, index) =>
-    exit._tag === "Failure"
+    Exit.isFailure(exit)
       ? exit.cause.reasons.flatMap((reason) =>
           Cause.isFailReason(reason) && isDecline(reason.error) ? [{ call: calls[index], reason: reason.error }] : [],
         )
       : [],
   )
-  const causes =
-    settled._tag === "Failure"
-      ? [settled.cause]
-      : exits.flatMap((exit) => (exit._tag === "Failure" ? [exit.cause] : []))
+  const causes = Exit.isFailure(settled)
+    ? [settled.cause]
+    : exits.flatMap((exit) => (Exit.isFailure(exit) ? [exit.cause] : []))
   const failure = causes
     .flatMap((cause) => {
       if (Cause.hasInterrupts(cause)) return []
