@@ -745,6 +745,8 @@ export const dict = {
   "session.messages.loadEarlier": "پہلے کے پیغامات لوڈ کریں۔",
   "session.messages.loading": "پیغامات لوڈ ہو رہے ہیں...",
   "session.messages.jumpToLatest": "تازہ ترین پر جائیں",
+  "session.messages.timelineNavigation": "پیغام نیویگیشن",
+  "session.messages.jumpToMessage": "پیغام {{index}} پر جائیں",
   "session.context.addToContext": "{{selection}} کو سیاق و سباق میں شامل کریں۔",
   "session.todo.title": "زیر التوا کام",
   "session.todo.collapse": "سمیٹیں",
@@ -973,6 +975,9 @@ export const dict = {
     "کمپوزر میں ایجنٹس تبدیل کریں۔ چھپانے پر Build ایجنٹ بطور طے شدہ استعمال ہوگا۔",
   "settings.general.row.reasoningSummaries.title": "استدلال کے خلاصے دکھائیں۔",
   "settings.general.row.reasoningSummaries.description": "ٹائم لائن میں ماڈل استدلال کے خلاصے ڈسپلے کریں۔",
+  "settings.general.row.preloadTimelineHistory.title": "پیغامات کی مکمل سرگزشت پہلے سے لوڈ کریں",
+  "settings.general.row.preloadTimelineHistory.description":
+    "پرانے پیغامات پس منظر میں لوڈ کریں تاکہ پیغام نیویگیشن پورے سیشن کا احاطہ کرے۔",
   "settings.general.row.shellToolPartsExpanded.title": "شیل ٹول کے حصے پھیلائیں",
   "settings.general.row.shellToolPartsExpanded.description":
     "ٹائم لائن میں شیل ٹول کے حصے بطور طے شدہ پھیلے ہوئے دکھائیں۔",

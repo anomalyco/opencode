@@ -722,6 +722,8 @@ export const dict = {
   "session.messages.loadEarlier": "Załaduj wcześniejsze wiadomości",
   "session.messages.loading": "Ładowanie wiadomości...",
   "session.messages.jumpToLatest": "Przejdź do najnowszych",
+  "session.messages.timelineNavigation": "Nawigacja po wiadomościach",
+  "session.messages.jumpToMessage": "Przejdź do wiadomości {{index}}",
   "session.context.addToContext": "Dodaj {{selection}} do kontekstu",
   "session.todo.title": "Zadania",
   "session.todo.collapse": "Zwiń",
@@ -889,6 +891,9 @@ export const dict = {
     "Umożliwiaj przełączanie agentów w edytorze wiadomości. Po ukryciu domyślnie używany jest agent Build.",
   "settings.general.row.reasoningSummaries.title": "Pokaż podsumowania wnioskowania",
   "settings.general.row.reasoningSummaries.description": "Wyświetlaj podsumowania wnioskowania modelu na osi czasu",
+  "settings.general.row.preloadTimelineHistory.title": "Wstępnie ładuj pełną historię wiadomości",
+  "settings.general.row.preloadTimelineHistory.description":
+    "Ładuj starsze wiadomości w tle, aby nawigacja po wiadomościach obejmowała całą sesję.",
   "settings.general.row.shellToolPartsExpanded.title": "Rozwijaj elementy narzędzia shell",
   "settings.general.row.shellToolPartsExpanded.description":
     "Domyślnie pokazuj rozwinięte elementy narzędzia shell na osi czasu",

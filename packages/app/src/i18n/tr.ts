@@ -782,6 +782,8 @@ export const dict = {
   "session.messages.loadEarlier": "Önceki mesajları yükle",
   "session.messages.loading": "Mesajlar yükleniyor...",
   "session.messages.jumpToLatest": "En sona atla",
+  "session.messages.timelineNavigation": "Mesaj gezinmesi",
+  "session.messages.jumpToMessage": "{{index}}. mesaja git",
 
   "session.context.addToContext": "{{selection}} bağlama ekle",
   "session.todo.title": "Görevler",
@@ -958,6 +960,9 @@ export const dict = {
     "Düzenleyicide ajanlar arasında geçiş yapın. Gizlendiğinde varsayılan olarak Build ajanı kullanılır.",
   "settings.general.row.reasoningSummaries.title": "Akıl yürütme özetlerini göster",
   "settings.general.row.reasoningSummaries.description": "Zaman çizelgesinde model akıl yürütme özetlerini görüntüle",
+  "settings.general.row.preloadTimelineHistory.title": "Tüm mesaj geçmişini önceden yükle",
+  "settings.general.row.preloadTimelineHistory.description":
+    "Mesaj gezinmesinin tüm oturumu kapsaması için eski mesajları arka planda yükle.",
   "settings.general.row.shellToolPartsExpanded.title": "Kabuk araç bileşenlerini genişlet",
   "settings.general.row.shellToolPartsExpanded.description":
     "Zaman çizelgesinde kabuk araç bileşenlerini varsayılan olarak genişletilmiş göster",

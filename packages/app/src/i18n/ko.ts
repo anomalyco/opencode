@@ -494,6 +494,8 @@ export const dict = {
   "session.messages.loadEarlier": "이전 메시지 로드",
   "session.messages.loading": "메시지 로드 중...",
   "session.messages.jumpToLatest": "최신으로 이동",
+  "session.messages.timelineNavigation": "메시지 탐색",
+  "session.messages.jumpToMessage": "{{index}}번째 메시지로 이동",
   "session.context.addToContext": "컨텍스트에 {{selection}} 추가",
   "session.todo.title": "할 일",
   "session.todo.collapse": "접기",
@@ -610,6 +612,9 @@ export const dict = {
   "settings.general.row.followup.option.steer": "즉시 반영",
   "settings.general.row.reasoningSummaries.title": "추론 요약 표시",
   "settings.general.row.reasoningSummaries.description": "타임라인에 모델 추론 요약 표시",
+  "settings.general.row.preloadTimelineHistory.title": "전체 메시지 기록 미리 로드",
+  "settings.general.row.preloadTimelineHistory.description":
+    "이전 메시지를 백그라운드에서 로드하여 메시지 탐색이 전체 세션을 포괄하도록 합니다.",
   "settings.general.row.shellToolPartsExpanded.title": "shell 도구 항목 펼치기",
   "settings.general.row.shellToolPartsExpanded.description":
     "타임라인에서 기본적으로 shell 도구 항목을 펼친 상태로 표시합니다",

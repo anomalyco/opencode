@@ -718,6 +718,8 @@ export const dict = {
   "session.messages.loadEarlier": "以前のメッセージを読み込む",
   "session.messages.loading": "メッセージを読み込み中...",
   "session.messages.jumpToLatest": "最新へジャンプ",
+  "session.messages.timelineNavigation": "メッセージナビゲーション",
+  "session.messages.jumpToMessage": "メッセージ {{index}} に移動",
   "session.context.addToContext": "{{selection}}をコンテキストに追加",
   "session.todo.title": "ToDo",
   "session.todo.collapse": "折りたたむ",
@@ -872,6 +874,9 @@ export const dict = {
     "コンポーザーでエージェントを切り替えます。非表示の場合は、デフォルトでBuildエージェントが使用されます。",
   "settings.general.row.reasoningSummaries.title": "推論の要約を表示",
   "settings.general.row.reasoningSummaries.description": "タイムラインにモデルの推論の要約を表示します",
+  "settings.general.row.preloadTimelineHistory.title": "メッセージ履歴全体を事前読み込み",
+  "settings.general.row.preloadTimelineHistory.description":
+    "古いメッセージをバックグラウンドで読み込み、メッセージナビゲーションがセッション全体をカバーできるようにします。",
   "settings.general.row.shellToolPartsExpanded.title": "shell ツールパーツを展開",
   "settings.general.row.shellToolPartsExpanded.description":
     "タイムラインで shell ツールパーツをデフォルトで展開して表示します",

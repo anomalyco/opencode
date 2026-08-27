@@ -827,6 +827,11 @@ export default function Page() {
     scrollToMessage(msgs[targetIndex], "auto")
   }
 
+  const jumpToTimelineMessage = (message: UserMessage) => {
+    autoScroll.pause()
+    scrollToMessage(message, "auto")
+  }
+
   function upsert(next: Project) {
     const list = serverSync().data.project
     sync().set("project", next.id)
@@ -1668,6 +1673,35 @@ export default function Page() {
     ),
   )
 
+  let preloadedHistorySession: string | undefined
+  let preloadingHistorySession: string | undefined
+  createEffect(() => {
+    if (!settings.general.preloadTimelineHistory()) return
+    const id = params.id
+    if (!id || !messagesReady() || preloadedHistorySession === id || preloadingHistorySession === id) return
+    let alive = true
+    onCleanup(() => {
+      alive = false
+    })
+    preloadingHistorySession = id
+    void untrack(async () => {
+      // oxlint-disable-next-line no-unmodified-loop-condition -- `alive` is cleared by cleanup on session switch
+      while (alive && params.id === id && timeline.history.more()) {
+        if (timeline.history.loading()) {
+          await new Promise((resolve) => setTimeout(resolve, 0))
+          continue
+        }
+        const failed = await timeline.history
+          .loadOlder()
+          .then(() => false)
+          .catch(() => true)
+        if (failed) break
+      }
+      if (preloadingHistorySession === id) preloadingHistorySession = undefined
+      if (alive && params.id === id && !timeline.history.more()) preloadedHistorySession = id
+    })
+  })
+
   const draft = (id: string) =>
     extractPromptFromParts(sync().data.part[id] ?? [], {
       directory: sdk().directory,
@@ -2107,6 +2141,7 @@ export default function Page() {
                     if (root) scheduleScrollState(root)
                   }}
                   userMessages={visibleUserMessages()}
+                  onJumpToMessage={jumpToTimelineMessage}
                   setHistoryAnchor={(handlers) => {
                     captureHistoryAnchor = handlers.capture
                     restoreHistoryAnchor = handlers.restore

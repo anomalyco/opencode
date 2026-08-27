@@ -30,6 +30,7 @@ export interface Settings {
     showStatus: boolean
     showTerminal: boolean
     showReasoningSummaries: boolean
+    preloadTimelineHistory: boolean
     shellToolPartsExpanded: boolean
     editToolPartsExpanded: boolean
     showCustomAgents: boolean
@@ -191,6 +192,7 @@ const defaultSettings: Settings = {
     showStatus: false,
     showTerminal: false,
     showReasoningSummaries: false,
+    preloadTimelineHistory: true,
     shellToolPartsExpanded: false,
     editToolPartsExpanded: false,
     showCustomAgents: false,
@@ -402,6 +404,13 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         ),
         setShowReasoningSummaries(value: boolean) {
           setStore("general", "showReasoningSummaries", value)
+        },
+        preloadTimelineHistory: withFallback(
+          () => store.general?.preloadTimelineHistory,
+          defaultSettings.general.preloadTimelineHistory,
+        ),
+        setPreloadTimelineHistory(value: boolean) {
+          setStore("general", "preloadTimelineHistory", value)
         },
         shellToolPartsExpanded: withFallback(
           () => store.general?.shellToolPartsExpanded,

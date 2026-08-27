@@ -715,6 +715,8 @@ export const dict = {
   "session.messages.loadEarlier": "تحميل الرسائل السابقة",
   "session.messages.loading": "جارٍ تحميل الرسائل...",
   "session.messages.jumpToLatest": "الانتقال إلى الأحدث",
+  "session.messages.timelineNavigation": "التنقل بين الرسائل",
+  "session.messages.jumpToMessage": "الانتقال إلى الرسالة {{index}}",
   "session.context.addToContext": "إضافة {{selection}} إلى السياق",
   "session.todo.title": "المهام",
   "session.todo.collapse": "طي",
@@ -883,6 +885,9 @@ export const dict = {
     "التبديل بين الوكلاء في محرر الرسائل. عند إخفائه، يُستخدم وكيل Build افتراضيًا.",
   "settings.general.row.reasoningSummaries.title": "إظهار ملخصات الاستدلال",
   "settings.general.row.reasoningSummaries.description": "عرض ملخصات استدلال النموذج في الشريط الزمني",
+  "settings.general.row.preloadTimelineHistory.title": "التحميل المسبق لسجل الرسائل الكامل",
+  "settings.general.row.preloadTimelineHistory.description":
+    "حمّل الرسائل الأقدم في الخلفية ليغطي التنقل بين الرسائل الجلسة بالكامل.",
   "settings.general.row.shellToolPartsExpanded.title": "توسيع أجزاء أداة shell",
   "settings.general.row.shellToolPartsExpanded.description":
     "إظهار أجزاء أداة shell موسعة بشكل افتراضي في الشريط الزمني",
