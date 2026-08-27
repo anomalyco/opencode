@@ -6,13 +6,13 @@ import path from "path"
 import { Database } from "../database/database.js"
 import { Bus } from "../bus.js"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
-import { Agent } from "../agent.js"
-import { Model } from "../model.js"
+import { Agent } from "@opencode-ai/schema/agent"
+import { Model } from "@opencode-ai/schema/model"
 import { SessionEvent } from "./event.js"
 import { SessionMessage } from "./message.js"
 import { SessionMessageUpdater } from "./message-updater.js"
 import { SessionInbox } from "./inbox.js"
-import { Workspace } from "../workspace.js"
+import { Workspace } from "@opencode-ai/schema/workspace"
 import { InstructionState } from "./instruction-state.js"
 import { SessionInboxTable, SessionMessageTable, SessionTable } from "./sql.js"
 import { InstructionEntry } from "./instruction-entry.js"
@@ -26,8 +26,10 @@ import type { SessionSchema } from "./schema.js"
 import { ProjectTable } from "../project/sql.js"
 
 type DatabaseService = Database.Interface["db"]
-type CurrentDurableEvent = Extract<SessionEvent.Event, { readonly durable: object }>
-type MessageEvent = Exclude<CurrentDurableEvent, typeof SessionEvent.Forked.Type | typeof SessionEvent.Deleted.Type>
+type MessageEvent = Exclude<
+  SessionEvent.DurableEvent,
+  typeof SessionEvent.Forked.Type | typeof SessionEvent.Deleted.Type
+>
 
 const decodeMessage = Schema.decodeUnknownSync(SessionMessage.Info)
 const encodeMessage = Schema.encodeSync(SessionMessage.Info)
@@ -53,16 +55,16 @@ const forkTitle = (value?: string) => {
   return `${value} (fork #1)`
 }
 
-function applyUsage(db: DatabaseService, sessionID: SessionSchema.ID, value: Usage, sign = 1) {
+function applyUsage(db: DatabaseService, sessionID: SessionSchema.ID, value: Usage) {
   return db
     .update(SessionTable)
     .set({
-      cost: sql`${SessionTable.cost} + ${value.cost * sign}`,
-      tokens_input: sql`${SessionTable.tokens_input} + ${value.tokens.input * sign}`,
-      tokens_output: sql`${SessionTable.tokens_output} + ${value.tokens.output * sign}`,
-      tokens_reasoning: sql`${SessionTable.tokens_reasoning} + ${value.tokens.reasoning * sign}`,
-      tokens_cache_read: sql`${SessionTable.tokens_cache_read} + ${value.tokens.cache.read * sign}`,
-      tokens_cache_write: sql`${SessionTable.tokens_cache_write} + ${value.tokens.cache.write * sign}`,
+      cost: sql`${SessionTable.cost} + ${value.cost}`,
+      tokens_input: sql`${SessionTable.tokens_input} + ${value.tokens.input}`,
+      tokens_output: sql`${SessionTable.tokens_output} + ${value.tokens.output}`,
+      tokens_reasoning: sql`${SessionTable.tokens_reasoning} + ${value.tokens.reasoning}`,
+      tokens_cache_read: sql`${SessionTable.tokens_cache_read} + ${value.tokens.cache.read}`,
+      tokens_cache_write: sql`${SessionTable.tokens_cache_write} + ${value.tokens.cache.write}`,
       time_updated: sql`${SessionTable.time_updated}`,
     })
     .where(eq(SessionTable.id, sessionID))
@@ -73,7 +75,7 @@ function applyUsage(db: DatabaseService, sessionID: SessionSchema.ID, value: Usa
 const publishSessionUsage = Effect.fn("SessionProjector.publishUsage")(function* (
   db: DatabaseService,
   bus: Bus.Interface,
-  sessionID: (typeof SessionEvent.Step.Ended.Type)["data"]["sessionID"],
+  sessionID: SessionSchema.ID,
 ) {
   const row = yield* db
     .select({
