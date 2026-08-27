@@ -1225,10 +1225,6 @@ const layer = Layer.effect(
       throw new Error("Impossible")
     })
 
-    /**
-     * A wake enters an existing turn rather than creating one, so there is no new user message to
-     * own. Claim the latest one instead, which is what the scope's turn evidence is keyed against.
-     */
     const ownLatestUser = Effect.fn("SessionPrompt.ownLatestUser")(function* (
       attachment: AttachmentCoordinator.Scope | undefined,
       sessionID: SessionID,
@@ -1325,6 +1321,7 @@ const layer = Layer.effect(
               auto: task.auto,
               overflow: task.overflow,
             })
+            yield* ownLatestUser(turnAttachment, sessionID)
             if (result === "stop") break
             continue
           }
@@ -1335,6 +1332,7 @@ const layer = Layer.effect(
             (yield* compaction.isOverflow({ tokens: lastFinished.tokens, model }))
           ) {
             yield* compaction.create({ sessionID, agent: lastUser.agent, model: lastUser.model, auto: true })
+            yield* ownLatestUser(turnAttachment, sessionID)
             continue
           }
 
@@ -1536,6 +1534,7 @@ const layer = Layer.effect(
                 auto: true,
                 overflow: !handle.message.finish,
               })
+              yield* ownLatestUser(turnAttachment, sessionID)
             }
             return "continue" as const
           }).pipe(
@@ -1550,6 +1549,10 @@ const layer = Layer.effect(
         return yield* lastAssistant(sessionID)
       })
 
+    // Attachment carriage is an invocation-private Task seam, not part of the generic SessionPrompt
+    // service. Validate the handed capability before Runner arbitration so even a joined Runner cannot
+    // let a wrong-Session scope reach Task execution or observer state. This observes no registry and
+    // confers no authority over unrelated ingress.
     const loopWithAttachment: (
       input: LoopInput,
       attachment?: AttachmentCoordinator.Scope,
@@ -1557,7 +1560,10 @@ const layer = Layer.effect(
       input: LoopInput,
       attachment?: AttachmentCoordinator.Scope,
     ) {
-      yield* ownLatestUser(attachment, input.sessionID)
+      if (attachment && attachment.sessionID !== input.sessionID) {
+        yield* attachment.degrade()
+        return yield* Effect.die(new Error(`Attachment scope does not belong to session ${input.sessionID}`))
+      }
       return yield* state.ensureRunning(
         input.sessionID,
         lastAssistant(input.sessionID),
