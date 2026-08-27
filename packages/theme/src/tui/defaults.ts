@@ -123,7 +123,7 @@ export const DEFAULT_THEME = {
       },
       status: {
         running: "$hue.interactive.800",
-        question: "$text.feedback.info.default",
+        question: "$hue.interactive.800",
         permission: "$text.feedback.warning.default",
         unread: "$hue.accent.800",
       },
@@ -344,7 +344,7 @@ export const DEFAULT_THEME = {
       },
       status: {
         running: "$hue.interactive.200",
-        question: "$text.feedback.info.default",
+        question: "$hue.interactive.200",
         permission: "$text.feedback.warning.default",
         unread: "$hue.accent.200",
       },
