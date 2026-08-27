@@ -32,6 +32,7 @@ Examples: `fix(tui): simplify thinking toggle styling`, `docs: update contributi
 - Prefer functional array methods (flatMap, filter, map) over for loops; use type guards on filter to maintain type inference downstream
 - In `src/config`, follow the existing self-export pattern at the top of the file (for example `export * as ConfigAgent from "./agent"`) when adding a new config module.
 - In Effect generators, bind services to named variables before calling methods. Do not use nested service yields such as `yield* (yield* Foo.Service).bar()`.
+- Never write manual scratch algorithms for vector mathematics, distance metrics, similarity scoring, tokenization, or parsing or any such complex already proven libraries and algos. Always use battle-tested libraries (e.g. `compute-cosine-similarity`, `ml-distance`, or `@ai-sdk/provider-utils`) and existing project utilities.
 
 Reduce total variable count by inlining when a value is only used once.
 
