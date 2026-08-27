@@ -182,10 +182,7 @@ describe("Session.view", () => {
         type: event.type,
         data: event.data,
       }))
-      const tmp = yield* Effect.acquireRelease(
-        Effect.promise(() => tmpdir()),
-        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-      )
+      const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir()))
       const targetLayer = AppNodeBuilder.build(
         LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionStore.node]),
         [

@@ -40,10 +40,7 @@ const it = testEffect(
 describe("Session.revert files", () => {
   it.live("undoes and restores a file rename without losing either path", () =>
     Effect.gen(function* () {
-      const tmp = yield* Effect.acquireRelease(
-        Effect.promise(() => tmpdir()),
-        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-      )
+      const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir()))
       const directory = path.join(tmp.path, "project")
       const original = path.join(directory, "old name.txt")
       const renamed = path.join(directory, "new name.txt")
