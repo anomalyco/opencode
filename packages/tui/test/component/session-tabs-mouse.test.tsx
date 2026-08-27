@@ -34,9 +34,7 @@ test("releasing a transcript selection over tab controls does not activate them"
         <ConfigProvider config={createTuiResolvedConfig({ tabs: { enabled: true } })}>
           <ThemeProvider mode="dark" source={emptyThemeSource}>
             <box flexDirection="column">
-              <Keymap.Provider>
-                <SessionTabs controller={controller} animations={false} />
-              </Keymap.Provider>
+              <SessionTabs controller={controller} animations={false} />
               <text>selectable transcript text</text>
             </box>
           </ThemeProvider>
@@ -147,9 +145,7 @@ test("double-clicking a preview tab keeps it open without promoting permanent ta
       <TestTuiContexts>
         <ConfigProvider config={createTuiResolvedConfig({ tabs: { enabled: true } })}>
           <ThemeProvider mode="dark" source={emptyThemeSource}>
-            <Keymap.Provider>
-              <SessionTabs controller={controller} animations={false} />
-            </Keymap.Provider>
+            <SessionTabs controller={controller} animations={false} />
           </ThemeProvider>
         </ConfigProvider>
       </TestTuiContexts>
@@ -194,9 +190,7 @@ test("middle-click closes a session tab without selecting it", async () => {
       <TestTuiContexts>
         <ConfigProvider config={createTuiResolvedConfig({ tabs: { enabled: true } })}>
           <ThemeProvider mode="dark" source={emptyThemeSource}>
-            <Keymap.Provider>
-              <SessionTabs controller={controller} animations={false} />
-            </Keymap.Provider>
+            <SessionTabs controller={controller} animations={false} />
           </ThemeProvider>
         </ConfigProvider>
       </TestTuiContexts>
@@ -244,9 +238,7 @@ test("keeps consecutive close controls fixed across overflow window changes", as
       <TestTuiContexts>
         <ConfigProvider config={createTuiResolvedConfig({ tabs: { enabled: true } })}>
           <ThemeProvider mode="dark" source={emptyThemeSource}>
-            <Keymap.Provider>
-              <SessionTabs controller={controller} animations={false} />
-            </Keymap.Provider>
+            <SessionTabs controller={controller} animations={false} />
           </ThemeProvider>
         </ConfigProvider>
       </TestTuiContexts>
@@ -298,9 +290,7 @@ test("reflows held tabs when the pointer leaves the strip", async () => {
         <ConfigProvider config={createTuiResolvedConfig({ tabs: { enabled: true } })}>
           <ThemeProvider mode="dark" source={emptyThemeSource}>
             <box flexDirection="column">
-              <Keymap.Provider>
-                <SessionTabs controller={controller} animations={false} />
-              </Keymap.Provider>
+              <SessionTabs controller={controller} animations={false} />
               <text>outside</text>
             </box>
           </ThemeProvider>

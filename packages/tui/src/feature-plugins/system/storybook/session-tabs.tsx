@@ -454,7 +454,6 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
           { shortcut: "f/x", label: "complete/fail" },
           { shortcut: "c", label: "spinner" },
           { shortcut: "u", label: "unread marker" },
-          { shortcut: "hold ctrl", label: "numbers" },
           { shortcut: "m", label: "motion" },
           { shortcut: "↑/↓", label: "select" },
           { shortcut: "o", label: "layout" },

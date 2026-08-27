@@ -13,7 +13,6 @@ import { SPINNER_FRAMES } from "../../src/component/spinner-frames"
 import { ClientProvider } from "../../src/context/client"
 import { DataProvider } from "../../src/context/data"
 import { LocationProvider } from "../../src/context/location"
-import { Keymap } from "../../src/context/keymap"
 import { RouteProvider } from "../../src/context/route"
 import { TuiAppProvider } from "../../src/context/runtime"
 import { SessionTabsProvider } from "../../src/context/session-tabs"
@@ -79,13 +78,7 @@ for (const orientation of ["horizontal", "vertical"] as const) {
                         <SessionTabsProvider>
                           <ThemeProvider mode="dark" source={emptyThemeSource}>
                             <Colors />
-                            <Keymap.Provider>
-                              <SessionTabs
-                                controller={controller}
-                                orientation={orientation}
-                                animations={animations()}
-                              />
-                            </Keymap.Provider>
+                            <SessionTabs controller={controller} orientation={orientation} animations={animations()} />
                           </ThemeProvider>
                         </SessionTabsProvider>
                       </LocationProvider>
@@ -97,25 +90,12 @@ for (const orientation of ["horizontal", "vertical"] as const) {
           </TuiAppProvider>
         </TestTuiContexts>
       ),
-      { width: 60, height: 10, kittyKeyboard: true },
+      { width: 60, height: 10 },
     )
 
     try {
       app.renderer.start()
       await app.waitForFrame((frame) => frame.includes("   First") && frame.includes("   Second"))
-      const pressed = performance.now()
-      await app.mockInput.pressKeys(["\x1b[57442;5u"])
-      await app.waitForFrame((frame) => frame.includes("1 First") && frame.includes("2 Second"))
-      expect(performance.now() - pressed).toBeGreaterThanOrEqual(300)
-      await app.mockInput.pressKeys(["\x1b[57442;1:3u"])
-      await app.waitForFrame((frame) => frame.includes("   First"))
-
-      await app.mockInput.pressKeys(["\x1b[57442;5u"])
-      await app.renderOnce()
-      await app.mockInput.pressKeys(["\x1b[57442;1:3u"])
-      await Bun.sleep(325)
-      await app.renderOnce()
-      expect(app.captureCharFrame()).toContain("   First")
 
       const titleColumn = app
         .captureCharFrame()
@@ -225,18 +205,13 @@ for (const orientation of ["horizontal", "vertical"] as const) {
       await app.mockMouse.click(1, orientation === "vertical" ? 1 : 0)
       setStatus({ ...EMPTY_SESSION_TAB_STATUS, busy: true })
       await app.waitForFrame((frame) => SPINNER_FRAMES.slice(1).some((glyph) => frame.includes(`${glyph} First`)))
-      await app.mockInput.pressKeys(["\x1b[57442;5u"])
       setStatus({ ...EMPTY_SESSION_TAB_STATUS, busy: true, attention: "question" })
-      await app.waitForFrame((frame) => frame.includes("1 First"))
-      app.renderer.emit("blur")
       await app.waitForFrame((frame) => frame.includes("? First"))
 
       await config.update((draft) => {
         draft.tabs.indicators = "numbers"
       })
       await app.waitForFrame((frame) => frame.includes("1 First") && frame.includes("2 Second"))
-      await app.mockInput.pressKeys(["\x1b[57442;5u", "\x1b[57442;1:3u"])
-      app.renderer.emit("blur")
       setStatus({ ...EMPTY_SESSION_TAB_STATUS, busy: true })
       await app.renderOnce()
       expect(app.captureCharFrame()).toContain("1 First")

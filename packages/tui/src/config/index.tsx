@@ -160,7 +160,7 @@ export const Info = Schema.Struct({
         description: "Show tabs in a horizontal strip or vertical sidebar",
       }),
       indicators: Schema.optional(Schema.Literals(["status", "numbers"])).annotate({
-        description: "Show status icons with numbers on held Control, or always show tab numbers",
+        description: "Show status icons or always show tab numbers",
       }),
     }),
   ).annotate({ description: "Tab strip settings" }),

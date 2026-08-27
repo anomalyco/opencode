@@ -13,7 +13,7 @@ import { formatCommandBindings, formatKeySequence } from "@opentui/keymap/extras
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui"
 import { KeymapProvider, useBindings, useKeymapSelector } from "@opentui/keymap/solid"
 import { useRenderer } from "@opentui/solid"
-import { createContext, createSignal, onCleanup, useContext, type Accessor, type ParentProps } from "solid-js"
+import { createContext, onCleanup, useContext, type Accessor, type ParentProps } from "solid-js"
 import { useConfig } from "../config"
 import { TuiKeybind } from "../config/keybind"
 
@@ -46,7 +46,6 @@ const Context = createContext<{
   readonly keymap: OpenTuiKeymap
   readonly config: KeymapConfig
   readonly mode: Mode
-  readonly control: Accessor<boolean>
   readonly dispatch: (id: string, input?: string) => void
   readonly input: (id: string) => string | undefined
 }>()
@@ -56,23 +55,6 @@ function Provider(props: ParentProps<{ config?: KeymapConfig }>) {
   const config: KeymapConfig = props.config ?? useConfig().data
   const keymap = createDefaultOpenTuiKeymap(renderer)
   const mode = createMode(keymap)
-  const [control, setControl] = createSignal(false)
-  const modifier = (event: KeyEvent) => {
-    if (!/^(?:(left|right)(ctrl|shift|alt|super|hyper|meta)|iso_level[35]_shift)$/.test(event.name)) return
-    if (event.name === "leftctrl" || event.name === "rightctrl") setControl(event.eventType !== "release")
-    // Modifier-only reports are state changes, not input that cancels a selection or pending chord.
-    event.preventDefault()
-    event.stopPropagation()
-  }
-  const blur = () => setControl(false)
-  renderer.keyInput.prependListener("keypress", modifier)
-  renderer.keyInput.prependListener("keyrelease", modifier)
-  renderer.on("blur", blur)
-  onCleanup(() => {
-    renderer.keyInput.off("keypress", modifier)
-    renderer.keyInput.off("keyrelease", modifier)
-    renderer.off("blur", blur)
-  })
   let invocation: { readonly id: string; readonly input?: string } | undefined
   const dispatch = (id: string, input?: string) => {
     const previous = invocation
@@ -163,7 +145,6 @@ function Provider(props: ParentProps<{ config?: KeymapConfig }>) {
           keymap,
           config,
           mode,
-          control,
           dispatch,
           input: (id) => (invocation?.id === id ? invocation.input : undefined),
         }}
@@ -177,8 +158,6 @@ function Provider(props: ParentProps<{ config?: KeymapConfig }>) {
 export type { KeymapCommand, KeymapLayer } from "@opencode-ai/plugin/tui/context"
 
 export interface Keymap {
-  /** Whether Control is held, when the terminal reports modifier events. */
-  readonly control: Accessor<boolean>
   /** Dispatches a reachable command by ID. */
   dispatch(id: string, input?: string): void
   /** Controls mutually exclusive OpenCode input modes. */
@@ -203,7 +182,6 @@ function use(): Keymap {
       value.dispatch(id, input)
     },
     mode: value.mode,
-    control: value.control,
     intercept: value.keymap.intercept.bind(value.keymap),
     isLeader,
   }

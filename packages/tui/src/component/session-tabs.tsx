@@ -464,18 +464,7 @@ export function SessionTabs(
     width?: number
   } = {},
 ) {
-  const keymap = Keymap.use()
   const config = useConfig().data
-  const [numbers, setNumbers] = createSignal(config.tabs.indicators === "numbers")
-  createEffect(() => {
-    if (config.tabs.indicators === "numbers" || !keymap.control()) {
-      setNumbers(config.tabs.indicators === "numbers")
-      return
-    }
-    // Brief Control chords should not flash the tab numbers.
-    const timeout = setTimeout(() => setNumbers(true), 300)
-    onCleanup(() => clearTimeout(timeout))
-  })
 
   return (
     <Switch>
@@ -485,7 +474,7 @@ export function SessionTabs(
           animations={props.animations}
           spinner={props.spinner}
           unreadMarker={props.unreadMarker}
-          numbers={numbers()}
+          numbers={config.tabs.indicators === "numbers"}
           width={props.width}
         />
       </Match>
@@ -495,7 +484,7 @@ export function SessionTabs(
           animations={props.animations}
           spinner={props.spinner}
           unreadMarker={props.unreadMarker}
-          numbers={numbers()}
+          numbers={config.tabs.indicators === "numbers"}
         />
       </Match>
     </Switch>
