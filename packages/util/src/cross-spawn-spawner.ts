@@ -1,6 +1,4 @@
 import type { NonEmptyReadonlyArray } from "effect/Array"
-import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem"
-import * as NodePath from "@effect/platform-node/NodePath"
 import * as NodeSink from "@effect/platform-node/NodeSink"
 import * as NodeStream from "@effect/platform-node/NodeStream"
 import { Deferred, Effect, Exit, FileSystem, Layer, Path, PlatformError, Predicate, Sink, Stream } from "effect"
