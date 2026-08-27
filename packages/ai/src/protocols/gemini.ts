@@ -6,6 +6,7 @@ import { Endpoint } from "../route/endpoint.js"
 import { Framing } from "../route/framing.js"
 import { Protocol } from "../route/protocol.js"
 import {
+  AIError,
   LLMEvent,
   Usage,
   type FinishReason,
@@ -17,6 +18,7 @@ import {
   type ToolCallPart,
   type ToolDefinition,
 } from "../schema/index.js"
+import { classifyProviderFailure } from "../provider-error.js"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
 import { GeminiToolSchema } from "./utils/gemini-tool-schema.js"
 import { Lifecycle } from "./utils/lifecycle.js"
@@ -221,6 +223,7 @@ const GeminiPromptFeedback = Schema.StructWithRest(
 type GeminiPromptFeedback = Schema.Schema.Type<typeof GeminiPromptFeedback>
 
 const GeminiEvent = Schema.Struct({
+  error: Schema.optional(Schema.Unknown),
   candidates: optionalNull(Schema.Array(GeminiCandidate)),
   promptFeedback: optionalNull(GeminiPromptFeedback),
   usageMetadata: optionalNull(GeminiUsage),
@@ -598,6 +601,18 @@ const finish = (state: ParserState): ReadonlyArray<LLMEvent> => {
 }
 
 const step = (state: ParserState, event: GeminiEvent) => {
+  if (ProviderShared.isRecord(event.error) && typeof event.error.message === "string") {
+    const body = ProviderShared.encodeJson(event)
+    return Effect.fail(
+      new AIError({
+        reason: classifyProviderFailure({
+          message: event.error.message,
+          status: typeof event.error.code === "number" ? event.error.code : undefined,
+          rawBody: body,
+        }),
+      }),
+    )
+  }
   const nextState = {
     ...state,
     promptFeedback: event.promptFeedback ?? state.promptFeedback,

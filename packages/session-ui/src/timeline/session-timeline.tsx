@@ -2,7 +2,7 @@ import { For, createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { SessionDocument } from "../document"
 import type { SessionUserActions } from "../actions"
-import { createReactiveTimelineProjection, TimelineRow } from "./projection"
+import { createReactiveTimelineProjection, TimelineRow, type ReasoningMode } from "./projection"
 import { createSessionTimelineRowRenderer, type SessionUserPresentation } from "./session-timeline-row"
 
 export type { SessionUserPresentation } from "./session-timeline-row"
@@ -11,7 +11,7 @@ export type SessionTimelineProps = {
   document: SessionDocument
   presentation?: Record<string, SessionUserPresentation | undefined>
   actions?: SessionUserActions
-  showReasoningSummaries?: boolean
+  reasoningMode?: ReasoningMode
   shellToolDefaultOpen?: boolean
   editToolDefaultOpen?: boolean
   class?: string
@@ -21,7 +21,7 @@ export function SessionTimeline(props: SessionTimelineProps) {
   const projection = createReactiveTimelineProjection({
     sessionMessages: () => props.document.messages,
     status: () => props.document.status,
-    showReasoningSummaries: () => props.showReasoningSummaries ?? true,
+    reasoningMode: () => props.reasoningMode ?? "compact",
     shellToolDefaultOpen: () => props.shellToolDefaultOpen ?? false,
     editToolDefaultOpen: () => props.editToolDefaultOpen ?? false,
   })
@@ -32,7 +32,7 @@ export function SessionTimeline(props: SessionTimelineProps) {
     projection,
     presentation: (message) => props.presentation?.[message.id],
     actions: props.actions,
-    showReasoningSummaries: () => props.showReasoningSummaries ?? true,
+    reasoningMode: () => props.reasoningMode ?? "compact",
     shellToolDefaultOpen: () => props.shellToolDefaultOpen ?? false,
     editToolDefaultOpen: () => props.editToolDefaultOpen ?? false,
     disclosure: {

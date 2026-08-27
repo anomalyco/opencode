@@ -1,6 +1,7 @@
 import { createStore, reconcile } from "solid-js/store"
 import { createEffect, createMemo } from "solid-js"
 import { createSimpleContext } from "@opencode-ai/ui/context"
+import type { ReasoningMode } from "@opencode-ai/session-ui/timeline/projection"
 import { persisted } from "@/runtime/persistence/storage"
 import { ScopedKey, type ServerScope } from "@/runtime/server/scope"
 
@@ -35,7 +36,7 @@ export interface Settings {
     showStatus: boolean
     showProjectIcon: boolean
     showTerminal: boolean
-    showReasoningSummaries: boolean
+    reasoningMode: ReasoningMode
     shellToolPartsExpanded: boolean
     editToolPartsExpanded: boolean
     showCustomAgents: boolean
@@ -124,7 +125,7 @@ const defaultSettings: Settings = {
     showStatus: false,
     showProjectIcon: false,
     showTerminal: false,
-    showReasoningSummaries: false,
+    reasoningMode: "compact",
     shellToolPartsExpanded: false,
     editToolPartsExpanded: false,
     showCustomAgents: false,
@@ -166,11 +167,26 @@ function withFallback<T>(read: () => T | undefined, fallback: T) {
   return createMemo(() => read() ?? fallback)
 }
 
+export function migrateSettings(value: unknown) {
+  if (!value || typeof value !== "object" || !("general" in value)) return value
+  const general = value.general
+  if (!general || typeof general !== "object") return value
+  if ("reasoningMode" in general && general.reasoningMode !== undefined) return value
+  if (!("showReasoningSummaries" in general) || typeof general.showReasoningSummaries !== "boolean") return value
+  return {
+    ...value,
+    general: { ...general, reasoningMode: general.showReasoningSummaries ? "full" : "compact" },
+  }
+}
+
 export const { use: useSettings, provider: SettingsProvider } = createSimpleContext({
   name: "Settings",
   gate: false,
   init: () => {
-    const [store, setStore, , ready] = persisted("settings.v3", createStore<Settings>(defaultSettings))
+    const [store, setStore, , ready] = persisted(
+      { key: "settings.v3", migrate: migrateSettings },
+      createStore<Settings>(defaultSettings),
+    )
     const showFileTree = withFallback(() => store.general?.showFileTree, defaultSettings.general.showFileTree)
     const showSearch = withFallback(() => store.general?.showSearch, defaultSettings.general.showSearch)
     const showStatus = withFallback(() => store.general?.showStatus, defaultSettings.general.showStatus)
@@ -223,12 +239,9 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setShowTerminal(value: boolean) {
           setStore("general", "showTerminal", value)
         },
-        showReasoningSummaries: withFallback(
-          () => store.general?.showReasoningSummaries,
-          defaultSettings.general.showReasoningSummaries,
-        ),
-        setShowReasoningSummaries(value: boolean) {
-          setStore("general", "showReasoningSummaries", value)
+        reasoningMode: withFallback(() => store.general?.reasoningMode, defaultSettings.general.reasoningMode),
+        setReasoningMode(value: ReasoningMode) {
+          setStore("general", "reasoningMode", value)
         },
         shellToolPartsExpanded: withFallback(
           () => store.general?.shellToolPartsExpanded,

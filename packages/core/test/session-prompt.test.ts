@@ -28,6 +28,7 @@ import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import type { LocationServices } from "@opencode-ai/core/location-services"
 import { Image } from "@opencode-ai/core/image"
 import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
+import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { Snapshot } from "@opencode-ai/core/snapshot"
 import { testEffect } from "./lib/effect"
 
@@ -67,6 +68,7 @@ const locations = Layer.effect(
         Effect.sync(() => {
           let ready = false
           return Layer.mergeAll(
+            LayerNode.compile(PluginHooks.node),
             Layer.mock(Image.Service, {
               normalize: (_resource, content) =>
                 ready

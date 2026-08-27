@@ -11,7 +11,6 @@ import { ToolFailure } from "@opencode-ai/ai"
 import { FileDiff } from "@opencode-ai/schema/file-diff"
 import { Bom } from "@opencode-ai/util/bom"
 import { Effect, Schema } from "effect"
-import path from "path"
 import { Environment } from "../../environment/index.js"
 import { FileMutation } from "../../file-mutation.js"
 import { Formatter } from "../../formatter.js"
@@ -219,7 +218,7 @@ export const Plugin = {
                 replacements,
               } satisfies Output
             }).pipe(
-              fileMutation.withLock([path.resolve(location.directory, input.path)]),
+              fileMutation.withLock([LocationMutation.resolvePath(location.directory, input.path)]),
               Effect.map((output) => ({
                 output,
                 content: `Edited ${output.files[0]?.file} (${output.replacements} replacement${output.replacements === 1 ? "" : "s"})`,

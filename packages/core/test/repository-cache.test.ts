@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, setDefaultTimeout } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { pathToFileURL } from "url"
@@ -13,6 +13,9 @@ import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(Layer.empty)
+
+// Cold Git setup and cloning can exceed Bun's five-second default on Windows.
+setDefaultTimeout(15_000)
 
 describe("RepositoryCache", () => {
   it.live("replaces a stale cache directory before cloning", () =>

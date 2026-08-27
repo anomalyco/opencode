@@ -1658,9 +1658,9 @@ export type ExperimentalPersistentPtyListOperation<E = never> = (
 
 export type ExperimentalPersistentPtyCreateInput = {
   readonly sessionID: Session.ID
-  readonly command: string
+  readonly command?: string | undefined
   readonly args: ReadonlyArray<string>
-  readonly cwd: string
+  readonly cwd?: string | undefined
   readonly title: string
   readonly env: { readonly [x: string]: string }
   readonly size?: { readonly cols: number; readonly rows: number } | undefined
@@ -1686,6 +1686,19 @@ export type ExperimentalPersistentPtyCreateOperation<E = never> = (
 export type ExperimentalPersistentPtyShutdownOutput = void
 export type ExperimentalPersistentPtyShutdownOperation<E = never> = () => Effect.Effect<
   ExperimentalPersistentPtyShutdownOutput,
+  E
+>
+
+export type ExperimentalPersistentPtyHandoffOutput = {
+  readonly handoff: {
+    readonly directory: string
+    readonly instanceID: string
+    readonly ticket: string
+    readonly expiresAt: number
+  } | null
+}
+export type ExperimentalPersistentPtyHandoffOperation<E = never> = () => Effect.Effect<
+  ExperimentalPersistentPtyHandoffOutput,
   E
 >
 
@@ -1775,6 +1788,7 @@ export interface ExperimentalApi<E = never> {
     readonly list: ExperimentalPersistentPtyListOperation<E>
     readonly create: ExperimentalPersistentPtyCreateOperation<E>
     readonly shutdown: ExperimentalPersistentPtyShutdownOperation<E>
+    readonly handoff: ExperimentalPersistentPtyHandoffOperation<E>
     readonly get: ExperimentalPersistentPtyGetOperation<E>
     readonly update: ExperimentalPersistentPtyUpdateOperation<E>
     readonly snapshot: ExperimentalPersistentPtySnapshotOperation<E>

@@ -580,7 +580,7 @@ describe("Plugin", () => {
       const registry = yield* Tool.Service
       const executed: unknown[] = []
       const seen: {
-        before?: { input: unknown; inputSchema: unknown }
+        before?: { input: unknown; tool: string }
         after?: { input: unknown; status: string; content: unknown; metadata: unknown }
       } = {}
 
@@ -605,7 +605,9 @@ describe("Plugin", () => {
             yield* ctx.tool
               .hook("execute.before", (event) =>
                 Effect.sync(() => {
-                  seen.before = { input: event.input, inputSchema: event.inputSchema }
+                  expect(event).not.toHaveProperty("inputSchema")
+                  seen.before = { input: event.input, tool: event.tool }
+                  event.tool = "echo"
                   event.input = { text: "before-mutated" }
                 }),
               )
@@ -648,17 +650,12 @@ describe("Plugin", () => {
         sessionID: Session.ID.make("ses_hooks"),
         agent: Agent.ID.make("build"),
         messageID: SessionMessage.ID.make("msg_hooks"),
-        call: { type: "tool-call", id: "call-hooks", name: "echo", input: { text: "original" } },
+        call: { type: "tool-call", id: "call-hooks", name: "misspelled", input: { text: "original" } },
       })
 
       expect(seen.before).toEqual({
         input: { text: "original" },
-        inputSchema: {
-          type: "object",
-          properties: { text: { type: "string" } },
-          required: ["text"],
-          additionalProperties: false,
-        },
+        tool: "misspelled",
       })
       expect(executed).toEqual([{ text: "before-mutated" }])
       expect(seen.after).toEqual({
@@ -712,7 +709,7 @@ describe("Plugin", () => {
           sessionID: Session.ID.make("ses_hook_reject"),
           agent: Agent.ID.make("build"),
           messageID: SessionMessage.ID.make("msg_hook_reject"),
-          call: { type: "tool-call", id: "call-hook-reject", name: "echo", input: { text: "original" } },
+          call: { type: "tool-call", id: "call-hook-reject", name: "missing", input: { text: "original" } },
         })
         .pipe(Effect.flip)
 

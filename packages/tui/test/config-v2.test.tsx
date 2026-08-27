@@ -75,6 +75,15 @@ test("shows the TPS default in session settings", () => {
   expect(setting?.default).toBe(true)
 })
 
+test("names tool grouping explicitly in settings", () => {
+  expect(settings.find((setting) => setting.path.join(".") === "session.grouping")).toMatchObject({
+    title: "Tool grouping",
+    category: "Session",
+    default: "auto",
+    values: ["none", "auto"],
+  })
+})
+
 test("validates terminal copy behavior", () => {
   expect(decodeInfo({ terminal: { copy: "manual" } })).toEqual({ terminal: { copy: "manual" } })
   expect(decodeInfo({ terminal: { copy: "select" } })).toEqual({ terminal: { copy: "select" } })

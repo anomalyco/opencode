@@ -125,34 +125,63 @@ export const TestFailed = {
   ),
 }
 
-function InteractiveCommandStory(props: { expanded?: boolean; streaming?: boolean }) {
+function InteractiveCommandStory(props: {
+  expanded?: boolean
+  streaming?: boolean
+  existingGroup?: boolean
+  tool?: "shell" | "execute" | "subagent"
+}) {
   const [state, setState] = createStore({
     phase: props.streaming ? "streaming" : "completed",
+    started: !props.existingGroup,
     lines: 3,
     sibling: false,
     busy: false,
   })
   const document = createMemo(() => {
     const phase = state.phase as "streaming" | "input" | "running" | "completed"
-    const command = phase === "streaming" ? "" : "printf ready"
     const content: SessionMessageAssistant["content"] = [
-      storyTool("tool_shell_lifecycle", "shell", phase === "input" ? "streaming" : phase, command ? { command } : {}, {
-        output:
-          phase === "running"
-            ? "still running"
-            : Array.from({ length: state.lines }, (_, index) => `line ${index + 1}`).join("\n"),
-        ...(phase === "streaming" ? { raw: "" } : {}),
-      }),
+      ...(props.existingGroup
+        ? [storyTool("tool_context_lifecycle", "read", "completed", { filePath: "/workspace/README.md" })]
+        : []),
+      ...(state.started
+        ? [
+            storyTool(
+              "tool_shell_lifecycle",
+              props.tool ?? "shell",
+              phase === "input" ? "streaming" : phase,
+              phase === "streaming"
+                ? {}
+                : props.tool === "execute"
+                  ? { code: 'console.log("ready")' }
+                  : props.tool === "subagent"
+                    ? { description: "Inspect lifecycle", agent: "explore", prompt: "Inspect lifecycle" }
+                    : { command: "printf ready" },
+              {
+                output:
+                  phase === "running"
+                    ? "still running"
+                    : Array.from({ length: state.lines }, (_, index) => `line ${index + 1}`).join("\n"),
+                ...(phase === "streaming" ? { raw: "" } : {}),
+              },
+            ),
+          ]
+        : []),
       ...(state.sibling ? [{ type: "text" as const, text: "Sibling content" }] : []),
     ]
     return {
-      ...storyDocument(content, phase !== "completed"),
-      status: { type: phase !== "completed" || state.busy ? ("busy" as const) : ("idle" as const) },
+      ...storyDocument(content, state.started && phase !== "completed"),
+      status: { type: (state.started && phase !== "completed") || state.busy ? ("busy" as const) : ("idle" as const) },
     }
   })
   return (
     <section class="mx-auto flex w-full max-w-[720px] flex-col gap-4 p-6">
-      <div class="flex gap-3">
+      <div class="flex flex-wrap gap-3">
+        {props.existingGroup && (
+          <button type="button" onClick={() => setState({ started: true, phase: "streaming" })}>
+            Start tool
+          </button>
+        )}
         <button type="button" onClick={() => setState("phase", "input")}>
           Complete input
         </button>
@@ -182,16 +211,19 @@ function InteractiveCommandStory(props: { expanded?: boolean; streaming?: boolea
   )
 }
 
-const RunACommand = {
-  args: { expanded: false, streaming: false },
-  render: (args: { expanded: boolean; streaming: boolean }) => <InteractiveCommandStory {...args} />,
-}
-
 export const TerminalCommands = {
-  args: { scenario: "command", expanded: false, streaming: false },
-  argTypes: { scenario: { control: "select", options: ["command", "collapsed"] } },
-  render: (args: { scenario: string; expanded: boolean; streaming: boolean }) =>
-    args.scenario === "collapsed" ? CollapsedShell.render() : RunACommand.render(args),
+  args: { scenario: "command", expanded: false, streaming: false, existingGroup: false, tool: "shell" },
+  argTypes: {
+    scenario: { control: "select", options: ["command", "collapsed"] },
+    tool: { control: "select", options: ["shell", "execute", "subagent"] },
+  },
+  render: (args: {
+    scenario: string
+    expanded: boolean
+    streaming: boolean
+    existingGroup: boolean
+    tool: "shell" | "execute" | "subagent"
+  }) => (args.scenario === "collapsed" ? CollapsedShell.render() : <InteractiveCommandStory {...args} />),
 }
 
 export const FixedAndPassed = {

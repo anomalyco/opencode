@@ -1306,9 +1306,9 @@ describe("ModelResolver", () => {
 
   it.effect("reports whether a catalog model declares a provider package", () =>
     Effect.sync(() => {
-      expect(ModelResolver.supported(model(Provider.aisdk("@ai-sdk/openai")))).toBe(true)
-      expect(ModelResolver.supported(model("@opencode-ai/ai/providers/custom"))).toBe(true)
-      expect(ModelResolver.supported(model(undefined))).toBe(false)
+      expect(ModelResolver.hasPackage(model(Provider.aisdk("@ai-sdk/openai")))).toBe(true)
+      expect(ModelResolver.hasPackage(model("@opencode-ai/ai/providers/custom"))).toBe(true)
+      expect(ModelResolver.hasPackage(model(undefined))).toBe(false)
     }),
   )
 })

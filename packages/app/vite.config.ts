@@ -1,7 +1,9 @@
 import { sentryVitePlugin } from "@sentry/vite-plugin"
+import { fileURLToPath } from "node:url"
 import { defineConfig } from "vite"
-import { VitePWA } from "vite-plugin-pwa"
-import desktopPlugin from "./vite.js"
+import desktopPlugin, { channel } from "./vite.js"
+import { icons } from "./vite.icons"
+import { serviceWorker } from "./vite.pwa"
 
 const sentry =
   process.env.SENTRY_AUTH_TOKEN && process.env.SENTRY_ORG && process.env.SENTRY_PROJECT
@@ -23,58 +25,8 @@ const sentry =
 export default defineConfig({
   plugins: [
     desktopPlugin,
-    VitePWA({
-      strategies: "generateSW",
-      registerType: "prompt",
-      injectRegister: false,
-      manifest: false,
-      workbox: {
-        clientsClaim: false,
-        skipWaiting: true,
-        inlineWorkboxRuntime: true,
-        // Always fetch the current HTML. Precaching a partial build can strand it without its chunks after an upgrade.
-        navigateFallback: null,
-        globPatterns: [],
-        runtimeCaching: [
-          {
-            urlPattern: ({ url }) =>
-              url.origin === self.location.origin &&
-              (url.pathname.startsWith("/_assets/") || url.pathname.startsWith("/assets/")),
-            handler: "CacheFirst",
-            options: {
-              cacheName: "opencode-assets",
-              plugins: [
-                {
-                  cachedResponseWillBeUsed: async ({ request, cachedResponse }) => {
-                    if (
-                      cachedResponse?.status === 200 &&
-                      !/^(text\/html|application\/xhtml\+xml)\b/i.test(cachedResponse.headers.get("content-type") ?? "")
-                    )
-                      return cachedResponse
-                    // Keep old tabs' precached chunks usable without retaining their stale HTML navigation handler.
-                    const response = await caches.match(request, {
-                      cacheName: `workbox-precache-v2-${self.location.origin}/`,
-                    })
-                    return response?.status === 200 &&
-                      !/^(text\/html|application\/xhtml\+xml)\b/i.test(response.headers.get("content-type") ?? "")
-                      ? response
-                      : null
-                  },
-                  cacheWillUpdate: async ({ response }) =>
-                    response.status === 200 &&
-                    !/^(text\/html|application\/xhtml\+xml)\b/i.test(response.headers.get("content-type") ?? "")
-                      ? response
-                      : null,
-                },
-              ],
-              expiration: {
-                maxEntries: 1000,
-              },
-            },
-          },
-        ],
-      },
-    }),
+    icons(channel),
+    serviceWorker(fileURLToPath(new URL("./dist", import.meta.url))),
     sentry,
   ] as any,
   server: {

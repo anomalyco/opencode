@@ -84,6 +84,39 @@ const assistantMessage = {
 } satisfies SessionMessageInfo
 
 test.describe("regression: session timeline local row state", () => {
+  test("preserves a patch file choice as new calls join its Used group", async ({ page }) => {
+    const events: EventPayload[] = []
+    const part = { ...editPart, tool: "patch" }
+    await mockServer(page, events, [userMessage, { ...assistantMessage, content: [toolContent(part)] }])
+    await configurePage(page, false)
+    await page.goto(sessionHref())
+    await expectSessionTitle(page, title)
+
+    const group = page.locator('[data-component="collapsed-tool-group"]')
+    const summary = group.getByRole("button", { name: "Used Patch", exact: true })
+    await summary.click()
+    await group.locator(`[data-timeline-part-id="${editPartID}"]`).evaluate((element) => {
+      element.setAttribute("data-disclosure-probe", "existing")
+    })
+    const wrapper = group.locator('[data-disclosure-probe="existing"]')
+    const trigger = wrapper.locator('[data-scope="apply-patch"] button')
+    await expect(trigger).toHaveAttribute("aria-expanded", "false")
+    await trigger.click()
+    await expect(trigger).toHaveAttribute("aria-expanded", "true")
+    const original = await wrapper.elementHandle()
+
+    for (const count of [2, 3]) {
+      if (count === 3) await trigger.click()
+      const id = `prt_patch_${count}`
+      events.push(...toolEvents({ ...part, id, callID: id }))
+      await expect(group.locator('[data-component="tag"]')).toHaveText(String(count))
+      await expect(group).toHaveAttribute("data-timeline-part-ids", new RegExp(`${id}$`))
+      await expect(trigger).toHaveAttribute("aria-expanded", String(count === 2))
+      await expect(summary).toHaveAttribute("aria-expanded", "true")
+      expect(await original!.evaluate((node) => node.isConnected)).toBe(true)
+    }
+  })
+
   test("keeps a manually collapsed tool collapsed when later assistant content streams", async ({ page }) => {
     const events: EventPayload[] = []
     await mockServer(page, events)
@@ -208,19 +241,19 @@ test.describe("regression: session timeline local row state", () => {
   })
 })
 
-async function configurePage(page: Page) {
-  await page.addInitScript(() => {
+async function configurePage(page: Page, expanded = true) {
+  await page.addInitScript((expanded) => {
     localStorage.setItem(
       "settings.v3",
       JSON.stringify({
         general: {
-          editToolPartsExpanded: true,
-          shellToolPartsExpanded: true,
+          editToolPartsExpanded: expanded,
+          shellToolPartsExpanded: expanded,
           showReasoningSummaries: true,
         },
       }),
     )
-  })
+  }, expanded)
 }
 
 async function expectExpanded(locator: Locator, expected: boolean) {

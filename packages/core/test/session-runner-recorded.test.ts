@@ -44,6 +44,8 @@ import { Effect, Layer, Stream } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/unstable/http"
 import path from "node:path"
 import { testEffect } from "./lib/effect"
+import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
+import { promptLocationLayer } from "./fixture/prompt-location"
 import { permissionLayer } from "./lib/permission"
 import { agentHost, catalogHost, host } from "./plugin/host"
 
@@ -155,6 +157,7 @@ const testLayer = (llmClient: Layer.Layer<typeof LLMClient.Service>) =>
     ]),
     [
       [Bus.node, Bus.configured({ persist: true })],
+      [LocationServiceMap.node, promptLocationLayer],
       [LayerNodePlatform.llmClient, llmClient],
       [Permission.node, permission],
       [Catalog.node, promptCatalog],

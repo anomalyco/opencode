@@ -92,10 +92,12 @@ function SessionTabEntry(props: {
   const tabs = useTabs()
   const language = useLanguage()
   const sdk = createMemo(() => props.serverCtx?.sdk ?? null)
+  const pending = createMemo(() => tabs.pendingSession(props.tab.server, props.tab.sessionId))
   const cachedSession = createMemo(() => props.serverCtx?.data.session.get(props.tab.sessionId))
   const persisted = createMemo(() => tabs.info[props.id])
   const [loadedSession] = createResource(
     () => {
+      if (pending()) return null
       const ctx = props.serverCtx
       return ctx ? { id: props.tab.sessionId, ctx } : null
     },
@@ -105,9 +107,9 @@ function SessionTabEntry(props: {
         .then(() => ctx.data.session.get(id))
         .catch(() => undefined),
   )
-  const session = createMemo(() => cachedSession() ?? loadedSession())
-  const missingSession = createMemo(() => !!props.serverCtx && !loadedSession.loading && !session())
-  const visible = createMemo(() => !!session() || missingSession() || !!persisted()?.title)
+  const session = createMemo(() => (pending() ? undefined : (cachedSession() ?? loadedSession())))
+  const missingSession = createMemo(() => !pending() && !!props.serverCtx && !loadedSession.loading && !session())
+  const visible = createMemo(() => !!pending() || !!session() || missingSession() || !!persisted()?.title)
 
   const rename = async (title: string) => {
     const value = session()
@@ -170,7 +172,11 @@ function SessionTabEntry(props: {
         forceTruncate={props.forceTruncate}
         orientation={props.orientation}
         session={session()}
-        fallbackTitle={persisted()?.title ?? (missingSession() ? language.t("session.tab.unknown") : undefined)}
+        fallbackTitle={
+          pending()
+            ? language.t("command.session.new")
+            : (persisted()?.title ?? (missingSession() ? language.t("session.tab.unknown") : undefined))
+        }
         onRename={rename}
         onNavigate={props.onNavigate}
         onClose={props.onClose}

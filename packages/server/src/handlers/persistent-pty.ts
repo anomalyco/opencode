@@ -52,6 +52,12 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
         }),
       )
       .handle(
+        "persistentPty.handoff",
+        Effect.fn(function* () {
+          return { handoff: yield* pty.handoff().pipe(mapUnavailable) }
+        }),
+      )
+      .handle(
         "persistentPty.get",
         Effect.fn(function* (ctx) {
           return { data: yield* pty.get(ctx.params.ptyID).pipe(mapTerminalError) }

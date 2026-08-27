@@ -261,7 +261,7 @@ export const resolveModel = (
   dependencies?: Dependencies,
 ) => withVariant(model, variant).pipe(Effect.flatMap((model) => fromCatalogModel(model, credential, dependencies)))
 
-export const supported = (model: Info) => Boolean(model.package)
+export const hasPackage = (model: Info) => Boolean(model.package)
 
 /** Resolves catalog selections into runtime models for the current Location. */
 export const layer = Layer.effect(
@@ -309,9 +309,9 @@ export const layer = Layer.effect(
               .default()
               .pipe(
                 Effect.flatMap((model) =>
-                  model && supported(model)
+                  model && hasPackage(model)
                     ? Effect.succeed(model)
-                    : Effect.map(catalog.model.available(), (models) => models.find(supported)),
+                    : Effect.map(catalog.model.available(), (models) => models.find(hasPackage)),
                 ),
               )
         if (!selected) return undefined

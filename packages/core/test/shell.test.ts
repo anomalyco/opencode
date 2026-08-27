@@ -3,6 +3,8 @@ import path from "path"
 import { ShellSelect } from "@opencode-ai/core/shell/select"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { which } from "@opencode-ai/core/util/which"
+import fs from "node:fs/promises"
+import { tmpdir } from "./fixture/tmpdir"
 
 const withShell = async (shell: string | undefined, fn: () => void | Promise<void>) => {
   const prev = process.env.SHELL
@@ -59,6 +61,22 @@ describe("shell", () => {
       "Write-Output hi",
     ])
   })
+
+  if (process.platform !== "win32") {
+    test("resolves the environment shell without retaining a removed executable", async () => {
+      await withShell(undefined, async () => {
+        await using directory = await tmpdir()
+        const fallback = ShellSelect.environment()
+        const shell = path.join(directory.path, "preferred-shell")
+        await fs.symlink("/bin/sh", shell)
+        process.env.SHELL = shell
+        expect(ShellSelect.environment()).toBe(shell)
+        expect(ShellSelect.resolve({ priority: "config" })).toBe(shell)
+        await fs.unlink(shell)
+        expect(ShellSelect.environment()).toBe(fallback)
+      })
+    })
+  }
 
   if (process.platform === "win32") {
     test("rejects blacklisted shells case-insensitively", async () => {

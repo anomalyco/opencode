@@ -55,6 +55,7 @@ export function SessionUIProvider(
       data={sessionUIData()}
       directory={directory()}
       sessionID={params.id}
+      shellRunning={(id) => !!data.shell.get(id)}
       shellOutput={(input) => serverSDK.api.shell.output(input)}
       onNavigateToSession={navigateToSession}
       onSessionHref={href}

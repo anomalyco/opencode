@@ -199,6 +199,51 @@ const fileScenarios = {
   write: WrittenSource,
 }
 
+export const AppendingToolCalls = {
+  render: () => {
+    const [state, setState] = createStore({ calls: 0 })
+    const files = ["src/a.ts", "src/b.ts"].map((file) => ({
+      ...storyPatchFile(file),
+      patch: createTwoFilesPatch(file, file, "export const before = true\n", "export const after = true\n"),
+    }))
+    const document = createMemo(() =>
+      storyDocument([
+        storyTool("tool_shell_existing", "shell", "completed", { command: "printf checked" }, { output: "checked" }),
+        storyTool(
+          "tool_patch_existing",
+          "patch",
+          "completed",
+          { patchText: "Update two files" },
+          {
+            metadata: { files },
+          },
+        ),
+        ...Array.from({ length: state.calls }, (_, index) =>
+          storyTool(
+            `tool_patch_next_${index}`,
+            "patch",
+            "completed",
+            { patchText: "Update src/a.ts again" },
+            {
+              metadata: { files: [files[0]] },
+            },
+          ),
+        ),
+      ]),
+    )
+    return (
+      <section class="mx-auto flex w-full max-w-[860px] flex-col gap-4 p-6">
+        <button type="button" onClick={() => setState("calls", (count) => count + 1)}>
+          Append tool call
+        </button>
+        <CurrentSessionProviders document={document()}>
+          <SessionTimeline document={document()} />
+        </CurrentSessionProviders>
+      </section>
+    )
+  },
+}
+
 export const ChangingFiles = {
   args: { scenario: "streaming" },
   argTypes: { scenario: { control: "select", options: Object.keys(fileScenarios) } },

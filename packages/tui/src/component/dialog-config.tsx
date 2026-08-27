@@ -86,12 +86,12 @@ export const settings: Setting[] = [
     keywords: ["syntax", "concealment", "rendering"],
   },
   {
-    title: "Grouping",
+    title: "Tool grouping",
     category: "Session",
     path: ["session", "grouping"],
     default: "auto",
     values: ["none", "auto"],
-    keywords: ["transcript", "messages"],
+    keywords: ["transcript", "messages", "reads", "searches"],
   },
   {
     title: "Transcript images",

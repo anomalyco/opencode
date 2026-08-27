@@ -36,14 +36,18 @@ import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
 import { changedFileDiff, patchFileGroups } from "../components/apply-patch-file"
 import { animate } from "motion"
 import { SessionProgressIndicatorV2 } from "../v2/components/session-progress-indicator-v2"
-import type { SessionMessageAssistantTool, SessionMessageShell } from "@opencode-ai/client/promise"
+import type {
+  SessionMessageAssistantReasoning,
+  SessionMessageAssistantTool,
+  SessionMessageShell,
+} from "@opencode-ai/client/promise"
 import {
   currentToolError,
   currentToolInput,
   currentToolMetadata,
   currentToolOutput,
 } from "../message/current-tool-state"
-import { writeClipboard } from "../message/message-content"
+import { AssistantReasoningContent, writeClipboard } from "../message/message-content"
 
 function ShellSubmessage(props: { text: string; animate?: boolean }) {
   let widthRef: HTMLSpanElement | undefined
@@ -469,26 +473,30 @@ function ExaOutput(props: { output?: string }) {
   )
 }
 
+export type ContextGroupPart = SessionMessageAssistantTool | (SessionMessageAssistantReasoning & { id: string })
+
 export function CurrentContextToolGroup(props: {
-  tools: SessionMessageAssistantTool[]
+  parts: ContextGroupPart[]
   busy: boolean
   open: boolean
   onOpenChange: (open: boolean) => void
   onSizeChange?: () => void
+  reasoningDefaultOpen?: boolean
+  reasoningOpen?: (id: string) => boolean | undefined
+  onReasoningOpenChange?: (id: string, open: boolean) => void
 }) {
   const i18n = useI18n()
+  const tools = createMemo(() => props.parts.filter((part) => part.type === "tool"))
   const pending = createMemo(
-    () =>
-      props.busy || props.tools.some((tool) => tool.state.status === "streaming" || tool.state.status === "running"),
+    () => props.busy || tools().some((tool) => tool.state.status === "streaming" || tool.state.status === "running"),
   )
   const names = createMemo(() =>
     [
       ...new Set(
-        props.tools.map((tool) => {
+        tools().map((tool) => {
           const input = currentToolInput(tool)
           if (tool.name === "skill") return i18n.t("ui.tool.skill")
-          if (tool.name === "subagent" && typeof input.agent === "string" && input.agent)
-            return input.agent[0]!.toUpperCase() + input.agent.slice(1)
+          if (tool.name === "subagent") return i18n.t("ui.tool.agent.default")
           return getToolInfo(tool.name, input, currentToolMetadata(tool)).title
         }),
       ),
@@ -501,22 +509,40 @@ export function CurrentContextToolGroup(props: {
     return { text, before: text.slice(0, index).trim(), after: text.slice(index + tools.length).trim() }
   })
   const items = createMemo(() =>
-    props.tools.reduce<SessionMessageAssistantTool[][]>((groups, tool) => {
-      const previous = groups.at(-1)
-      if (
-        tool.name === "skill" &&
-        tool.state.status !== "error" &&
-        skillToolName(currentToolInput(tool), currentToolMetadata(tool)) &&
-        previous?.[0]?.name === "skill" &&
-        previous[0].state.status !== "error" &&
-        skillToolName(currentToolInput(previous[0]), currentToolMetadata(previous[0]))
-      ) {
-        previous.push(tool)
+    props.parts.reduce<(SessionMessageAssistantTool[] | (SessionMessageAssistantReasoning & { id: string }))[]>(
+      (groups, tool) => {
+        if (tool.type === "reasoning") {
+          groups.push(tool)
+          return groups
+        }
+        const previous = groups.at(-1)
+        if (
+          tool.name === "patch" &&
+          tool.state.status !== "error" &&
+          Array.isArray(previous) &&
+          previous?.[0]?.name === "patch" &&
+          previous[0].state.status !== "error"
+        ) {
+          previous.push(tool)
+          return groups
+        }
+        if (
+          tool.name === "skill" &&
+          tool.state.status !== "error" &&
+          skillToolName(currentToolInput(tool), currentToolMetadata(tool)) &&
+          Array.isArray(previous) &&
+          previous?.[0]?.name === "skill" &&
+          previous[0].state.status !== "error" &&
+          skillToolName(currentToolInput(previous[0]), currentToolMetadata(previous[0]))
+        ) {
+          previous.push(tool)
+          return groups
+        }
+        groups.push([tool])
         return groups
-      }
-      groups.push([tool])
-      return groups
-    }, []),
+      },
+      [],
+    ),
   )
   const change = (open: boolean) => {
     props.onOpenChange(open)
@@ -524,7 +550,7 @@ export function CurrentContextToolGroup(props: {
   }
 
   return (
-    <div data-component="collapsed-tool-group" data-timeline-part-ids={props.tools.map((tool) => tool.id).join(",")}>
+    <div data-component="collapsed-tool-group" data-timeline-part-ids={props.parts.map((part) => part.id).join(",")}>
       <BasicTool
         icon="glasses"
         status={pending() ? "running" : "completed"}
@@ -542,116 +568,162 @@ export function CurrentContextToolGroup(props: {
               <Show when={label().after}>
                 {(after) => <span data-slot="context-tool-group-prefix">{after()}</span>}
               </Show>
-              <Badge>{props.tools.length}</Badge>
+              <Badge>{tools().length}</Badge>
             </span>
           </div>
         }
       >
         <div data-component="context-tool-group-list">
           <Index each={items()}>
-            {(group) => {
-              const tool = createMemo(() => group()[0]!)
-              const trigger = createMemo(() => currentContextToolTrigger(tool(), i18n))
-              const skills = createMemo(() =>
-                group().flatMap((item) => {
-                  const name = skillToolName(currentToolInput(item), currentToolMetadata(item))
-                  return name ? [name] : []
-                }),
-              )
-              const marker = "__OPENCODE_LOADED_SKILL__"
-              const loaded = createMemo(() => i18n.plural("ui.tool.loadedSkills", skills().length, { name: marker }))
+            {(item) => {
+              const group = createMemo(() => {
+                const value = item()
+                return Array.isArray(value) ? value : undefined
+              })
+              const reasoning = createMemo(() => {
+                const value = item()
+                return Array.isArray(value) ? undefined : value
+              })
               return (
-                <div data-slot="context-tool-group-item">
-                  <Show
-                    when={tool().state.status !== "error" && ["read", "glob", "grep", "list"].includes(tool().name)}
-                    fallback={
-                      <Show
-                        when={tool().name === "skill" && group().length > 1 && skills().length === group().length}
-                        fallback={
-                          <ToolDisplay
-                            id={tool().id}
-                            tool={tool().name}
-                            input={currentToolInput(tool())}
-                            metadata={currentToolMetadata(tool())}
-                            output={currentToolOutput(tool())}
-                            error={currentToolError(tool())}
-                            status={tool().state.status}
-                            defaultOpen={false}
-                            deferContent
-                            virtualizeDiff={false}
+                <Show
+                  when={group()}
+                  fallback={
+                    <Show when={reasoning()}>
+                      {(part) => (
+                        <div data-slot="context-tool-group-item">
+                          <AssistantReasoningContent
+                            id={part().id}
+                            content={part()}
+                            streaming={false}
+                            defaultOpen={props.reasoningDefaultOpen}
+                            open={props.reasoningOpen?.(part().id)}
+                            onOpenChange={(open) => props.onReasoningOpenChange?.(part().id, open)}
                             onContentRendered={props.onSizeChange}
                           />
-                        }
-                      >
-                        <div
-                          data-component="tool-loaded-item"
-                          data-timeline-part-ids={group()
-                            .map((item) => item.id)
-                            .join(",")}
-                          aria-label={i18n.plural("ui.tool.loadedSkills", skills().length, {
-                            name: skills().join(", "),
-                          })}
-                        >
-                          <span data-slot="tool-loaded-label" aria-hidden="true">
-                            {loaded().split(marker)[0]?.trim()}
-                          </span>
-                          <span data-slot="tool-loaded-value" aria-hidden="true">
-                            <For each={skills()}>
-                              {(name, index) => (
-                                <>
-                                  <Show when={index() > 0}>, </Show>
-                                  <TextShimmer
-                                    as="span"
-                                    text={name}
-                                    active={["streaming", "running"].includes(group()[index()]!.state.status)}
-                                  />
-                                </>
-                              )}
-                            </For>
-                          </span>
-                          <Show when={loaded().split(marker)[1]?.trim()}>
-                            {(suffix) => (
-                              <span data-slot="tool-loaded-kind" aria-hidden="true">
-                                {suffix()}
-                              </span>
-                            )}
-                          </Show>
                         </div>
-                      </Show>
-                    }
-                  >
-                    <div data-component="tool-trigger">
-                      <div data-slot="basic-tool-tool-trigger-content">
-                        <div data-slot="basic-tool-tool-info">
-                          <div data-slot="basic-tool-tool-info-structured">
-                            <div data-slot="basic-tool-tool-info-main">
-                              <span data-slot="basic-tool-tool-title">
-                                <TextShimmer
-                                  text={trigger().title}
-                                  active={tool().state.status === "streaming" || tool().state.status === "running"}
-                                />
-                              </span>
-                              <Show when={trigger().subtitle}>
-                                {(subtitle) => <span data-slot="basic-tool-tool-subtitle">{subtitle()}</span>}
-                              </Show>
-                              <For each={trigger().args}>
-                                {(arg) => <span data-slot="basic-tool-tool-arg">{arg}</span>}
-                              </For>
-                            </div>
-                            <Show when={trigger().matches}>
-                              {(matches) => (
-                                <>
-                                  <span data-slot="context-tool-group-dot" />
-                                  <span data-slot="context-tool-group-matches">{matches()}</span>
-                                </>
-                              )}
+                      )}
+                    </Show>
+                  }
+                >
+                  {(group) => {
+                    const tool = createMemo(() => group()[0]!)
+                    const trigger = createMemo(() => currentContextToolTrigger(tool(), i18n))
+                    const skills = createMemo(() =>
+                      group().flatMap((item) => {
+                        const name = skillToolName(currentToolInput(item), currentToolMetadata(item))
+                        return name ? [name] : []
+                      }),
+                    )
+                    const marker = "__OPENCODE_LOADED_SKILL__"
+                    const loaded = createMemo(() =>
+                      i18n.plural("ui.tool.loadedSkills", skills().length, { name: marker }),
+                    )
+                    return (
+                      <div data-slot="context-tool-group-item">
+                        <Show
+                          when={
+                            tool().state.status !== "error" && ["read", "glob", "grep", "list"].includes(tool().name)
+                          }
+                          fallback={
+                            <Show
+                              when={tool().name === "skill" && group().length > 1 && skills().length === group().length}
+                              fallback={
+                                <Show
+                                  when={tool().name === "patch" && tool().state.status !== "error"}
+                                  fallback={
+                                    <ToolDisplay
+                                      id={tool().id}
+                                      tool={tool().name}
+                                      input={currentToolInput(tool())}
+                                      metadata={currentToolMetadata(tool())}
+                                      output={currentToolOutput(tool())}
+                                      error={currentToolError(tool())}
+                                      status={tool().state.status}
+                                      defaultOpen={false}
+                                      deferContent
+                                      virtualizeDiff={false}
+                                      onContentRendered={props.onSizeChange}
+                                    />
+                                  }
+                                >
+                                  <CurrentFileToolGroup tools={group()} onSizeChange={props.onSizeChange} />
+                                </Show>
+                              }
+                            >
+                              <div
+                                data-component="tool-loaded-item"
+                                data-timeline-part-ids={group()
+                                  .map((item) => item.id)
+                                  .join(",")}
+                                aria-label={i18n.plural("ui.tool.loadedSkills", skills().length, {
+                                  name: skills().join(", "),
+                                })}
+                              >
+                                <span data-slot="tool-loaded-label" aria-hidden="true">
+                                  {loaded().split(marker)[0]?.trim()}
+                                </span>
+                                <span data-slot="tool-loaded-value" aria-hidden="true">
+                                  <For each={skills()}>
+                                    {(name, index) => (
+                                      <>
+                                        <Show when={index() > 0}>, </Show>
+                                        <TextShimmer
+                                          as="span"
+                                          text={name}
+                                          active={["streaming", "running"].includes(group()[index()]!.state.status)}
+                                        />
+                                      </>
+                                    )}
+                                  </For>
+                                </span>
+                                <Show when={loaded().split(marker)[1]?.trim()}>
+                                  {(suffix) => (
+                                    <span data-slot="tool-loaded-kind" aria-hidden="true">
+                                      {suffix()}
+                                    </span>
+                                  )}
+                                </Show>
+                              </div>
                             </Show>
+                          }
+                        >
+                          <div data-component="tool-trigger">
+                            <div data-slot="basic-tool-tool-trigger-content">
+                              <div data-slot="basic-tool-tool-info">
+                                <div data-slot="basic-tool-tool-info-structured">
+                                  <div data-slot="basic-tool-tool-info-main">
+                                    <span data-slot="basic-tool-tool-title">
+                                      <TextShimmer
+                                        text={trigger().title}
+                                        active={
+                                          tool().state.status === "streaming" || tool().state.status === "running"
+                                        }
+                                      />
+                                    </span>
+                                    <Show when={trigger().subtitle}>
+                                      {(subtitle) => <span data-slot="basic-tool-tool-subtitle">{subtitle()}</span>}
+                                    </Show>
+                                    <For each={trigger().args}>
+                                      {(arg) => <span data-slot="basic-tool-tool-arg">{arg}</span>}
+                                    </For>
+                                  </div>
+                                  <Show when={trigger().matches}>
+                                    {(matches) => (
+                                      <>
+                                        <span data-slot="context-tool-group-dot" />
+                                        <span data-slot="context-tool-group-matches">{matches()}</span>
+                                      </>
+                                    )}
+                                  </Show>
+                                </div>
+                              </div>
+                            </div>
                           </div>
-                        </div>
+                        </Show>
                       </div>
-                    </div>
-                  </Show>
-                </div>
+                    )
+                  }}
+                </Show>
               )
             }}
           </Index>
@@ -663,24 +735,27 @@ export function CurrentContextToolGroup(props: {
 
 export function CurrentFileToolGroup(props: {
   tools: SessionMessageAssistantTool[]
-  fileOpen: (path: string) => boolean | undefined
-  onFileOpenChange: (path: string, open: boolean) => void
+  fileOpen?: (path: string) => boolean | undefined
+  onFileOpenChange?: (path: string, open: boolean) => void
   onSizeChange?: () => void
 }) {
-  const files = createMemo((previous: { key: string; value: unknown }[]) => {
+  const files = createMemo((previous: { key: string; toolID: string; value: unknown }[]) => {
     const next = props.tools.flatMap((tool) => {
       const files = currentToolMetadata(tool).files
       if (!Array.isArray(files)) return []
-      return files.map((value, index) => ({ key: `${tool.id}:${index}`, value }))
+      return files.map((value, index) => ({ key: `${tool.id}:${index}`, toolID: tool.id, value }))
     })
     const updates = new Map(next.map((entry) => [entry.key, entry.value]))
     const existing = new Set(previous.map((entry) => entry.key))
+    const owners = new Set(props.tools.map((tool) => tool.id))
     const result = [
-      ...previous.map((entry) => {
-        if (!updates.has(entry.key)) return entry
-        const value = updates.get(entry.key)
-        return samePatchFile(value, entry.value) ? entry : { key: entry.key, value }
-      }),
+      ...previous
+        .filter((entry) => owners.has(entry.toolID))
+        .map((entry) => {
+          if (!updates.has(entry.key)) return entry
+          const value = updates.get(entry.key)
+          return samePatchFile(value, entry.value) ? entry : { ...entry, value }
+        }),
       ...next.filter((entry) => !existing.has(entry.key)),
     ]
     return result.length === previous.length && result.every((entry, index) => entry === previous[index])
@@ -1396,28 +1471,37 @@ ToolRegistry.register({
     const i18n = useI18n()
     const data = useData()
     const streaming = () => props.status === "streaming"
-    const pending = () => streaming() || props.status === "running" || props.metadata.status === "running"
+    const pending = () =>
+      streaming() ||
+      props.status === "running" ||
+      (typeof props.metadata.shellID === "string" && data.shellRunning?.(props.metadata.shellID) === true)
     const sawStreaming = streaming()
     const [streamed, setStreamed] = createSignal("")
     createEffect(() => {
       const id = props.metadata.shellID
       const shellOutput = data.shellOutput
-      if (typeof id !== "string" || !pending() || !shellOutput) return
+      if (typeof id !== "string" || !shellOutput) return
       const directory = data.directory
+      const running = pending()
       let cursor = 0
       let loading = false
       let disposed = false
       const load = async () => {
         if (loading) return
         loading = true
-        const response = await shellOutput({ id, location: { directory }, cursor }).catch(() => undefined)
-        if (disposed) return
-        if (response?.data.output) setStreamed((output) => output + response.data.output)
-        if (response) cursor = response.data.cursor
+        do {
+          const response = await shellOutput({ id, location: { directory }, cursor }).catch(() => undefined)
+          if (disposed || !response) break
+          setStreamed((output) => (cursor === 0 ? response.data.output : output + response.data.output))
+          if (response.data.cursor <= cursor) break
+          cursor = response.data.cursor
+          if (running || cursor >= response.data.size) break
+        } while (!disposed)
         loading = false
       }
       void load()
-      const interval = setInterval(() => void load(), 1_000)
+      // Refresh the final snapshot on exit, but poll only while the shell is live.
+      const interval = running ? setInterval(() => void load(), 1_000) : undefined
       onCleanup(() => {
         disposed = true
         clearInterval(interval)
@@ -1428,7 +1512,12 @@ ToolRegistry.register({
       if (typeof props.metadata.command === "string") return props.metadata.command
       return ""
     }
-    const output = createMemo(() => stripAnsi((pending() && streamed()) || props.output || "").replace(/\r\n?/g, "\n"))
+    const output = createMemo(() =>
+      stripAnsi((typeof props.metadata.shellID === "string" && streamed()) || props.output || "").replace(
+        /\r\n?/g,
+        "\n",
+      ),
+    )
     return (
       <BasicTool
         {...props}

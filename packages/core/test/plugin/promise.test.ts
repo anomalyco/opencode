@@ -20,6 +20,7 @@ import { Project } from "@opencode-ai/core/project"
 import { Workspace } from "@opencode-ai/core/workspace"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { define } from "@opencode-ai/plugin/promise/plugin"
+import type { Info } from "@opencode-ai/plugin/promise/tool"
 import { Money } from "@opencode-ai/schema/money"
 import type { SessionHooks } from "@opencode-ai/plugin/effect/session"
 import { testEffect } from "../lib/effect"
@@ -381,6 +382,8 @@ describe("fromPromise", () => {
             await ctx.session.hook("context", (event) => {
               event.system.push(SystemPart.make("Promise hook"))
               delete event.tools.echo
+              event.generation.temperature = 0.4
+              event.providerOptions.reasoningEffort = "medium"
             })
           },
         }),
@@ -392,12 +395,16 @@ describe("fromPromise", () => {
         system: [SystemPart.make("Initial")],
         messages: [Message.user("Hello")],
         tools: { echo: { description: "Echo", input: { type: "object" } } },
+        generation: {},
+        providerOptions: {},
       }
 
       yield* hooks.trigger("session", "context", event)
 
       expect(event.system.map((part) => part.text)).toEqual(["Initial", "Promise hook"])
       expect(event.tools).toEqual({})
+      expect(event.generation).toEqual({ temperature: 0.4 })
+      expect(event.providerOptions).toEqual({ reasoningEffort: "medium" })
     }),
   )
 
@@ -611,6 +618,11 @@ describe("fromPromise", () => {
               },
             })
           })
+          await ctx.tool.hook("execute.before", (event) => {
+            expect(event.tool).toBe("helllo")
+            expect(event).not.toHaveProperty("inputSchema")
+            event.tool = "hello"
+          })
         },
       })
 
@@ -624,13 +636,83 @@ describe("fromPromise", () => {
           agent: Agent.ID.make("build"),
           messageID: SessionMessage.ID.make("msg_promise_tool"),
           progress: (update) => Effect.sync(() => progress.push(update)),
-          call: { type: "tool-call", id: "call_promise_tool", name: "hello", input: { name: "world" } },
+          call: { type: "tool-call", id: "call_promise_tool", name: "helllo", input: { name: "world" } },
         }),
       ).toMatchObject({
         output: "Hello, world!",
         content: [{ type: "text", text: "Hello, world!" }],
       })
       expect(progress).toEqual([{ phase: "greeting" }])
+    }),
+  )
+
+  it.live("adapts listed and retrieved tool executors without invoking them eagerly", () =>
+    Effect.gen(function* () {
+      const plugins = yield* Plugin.Service
+      const host = yield* PluginHost.make(plugins)
+      const calls: string[] = []
+      const failure = new Tool.Error({ message: "executor failed" })
+      yield* host.tool.transform((draft) => {
+        draft.add({
+          name: "hello",
+          description: "Hello",
+          options: { namespace: "acme", codemode: false },
+          input: Schema.Struct({ name: Schema.String }),
+          output: Schema.String,
+          execute: ({ name }, context) => {
+            calls.push(name)
+            if (name === "failure") return Effect.fail(failure)
+            return context.progress({ name }).pipe(Effect.as({ output: name }))
+          },
+        })
+      })
+      yield* PluginPromise.fromPromise(
+        define({
+          id: "promise-tool-reads",
+          setup: async (ctx) => {
+            const tools: Info[] = []
+            await ctx.tool.transform((draft) => {
+              expect(draft.list().map((tool) => tool.id)).toEqual(["acme_hello"])
+              tools.push(...draft.list())
+              const tool = draft.get("acme_hello")
+              if (!tool) throw new Error("Tool was not found")
+              expect(tool.id).toBe("acme_hello")
+              tools.push(tool)
+            })
+            expect(tools).toHaveLength(2)
+            expect(calls).toEqual([])
+            await Promise.all(
+              tools.map(async (tool) => {
+                const progress: Tool.Metadata[] = []
+                const context = {
+                  sessionID: Session.ID.make("ses_promise_tool_reads"),
+                  agent: Agent.ID.make("build"),
+                  messageID: SessionMessage.ID.make("msg_promise_tool_reads"),
+                  id: Tool.CallID.make("call_reads"),
+                  progress: async (update: Tool.Metadata) => {
+                    progress.push(update)
+                  },
+                }
+                expect(await tool.execute({ name: "world" }, context)).toEqual({ output: "world" })
+                expect(progress).toEqual([{ name: "world" }])
+                await expect(tool.execute({ name: "failure" }, context)).rejects.toBe(failure)
+                const error = new Error("progress failed")
+                await expect(
+                  tool.execute(
+                    { name: "world" },
+                    {
+                      ...context,
+                      progress: async () => {
+                        throw error
+                      },
+                    },
+                  ),
+                ).rejects.toBe(error)
+              }),
+            )
+          },
+        }),
+      ).effect(host)
     }),
   )
 
@@ -775,6 +857,61 @@ describe("fromPromise", () => {
       const restored = yield* registry.snapshot()
       expect(restored.definitions.map((tool) => tool.name)).toEqual(["acme_hello", "temporary", "execute"])
       expect(restored.definitions[0]?.description).toBe("Hello")
+    }),
+  )
+
+  it.live("clears deleted tool options while retaining the namespace", () =>
+    Effect.gen(function* () {
+      const plugins = yield* Plugin.Service
+      const registry = yield* Tool.Service
+      const host = yield* PluginHost.make(plugins)
+      yield* host.tool.transform((draft) => {
+        draft.add({
+          name: "hello",
+          description: "Hello",
+          options: { namespace: "acme", codemode: false },
+          input: Schema.Struct({}),
+          output: Schema.String,
+          execute: () => Effect.succeed({ output: "Hello" }),
+        })
+      })
+      const original = yield* registry.snapshot()
+      expect(original.definitions.map((tool) => tool.name)).toEqual(["acme_hello", "execute"])
+      expect(original.codeModeCatalog).toEqual([])
+
+      yield* PluginPromise.fromPromise(
+        define({
+          id: "promise-tool-options",
+          setup: async (ctx) => {
+            await ctx.tool.transform((draft) => {
+              draft.update("acme_hello", (tool) => {
+                delete tool.options
+              })
+              expect(draft.get("acme_hello")?.options).toEqual({ namespace: "acme" })
+            })
+          },
+        }),
+      ).effect(host)
+
+      const snapshot = yield* registry.snapshot()
+      expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["execute"])
+      expect(snapshot.codeModeCatalog?.map((tool) => tool.path)).toEqual(["acme.hello"])
+      expect(original.definitions.map((tool) => tool.name)).toEqual(["acme_hello", "execute"])
+      expect(
+        yield* snapshot.execute({
+          sessionID: Session.ID.make("ses_promise_tool_options"),
+          agent: Agent.ID.make("build"),
+          messageID: SessionMessage.ID.make("msg_promise_tool_options"),
+          call: {
+            type: "tool-call",
+            id: "call_options",
+            name: "execute",
+            input: { code: "return await tools.acme.hello({})" },
+          },
+        }),
+      ).toMatchObject({
+        output: { output: "Hello", toolCalls: [{ tool: "acme.hello", status: "completed" }] },
+      })
     }),
   )
 

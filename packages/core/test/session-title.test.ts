@@ -5,7 +5,7 @@ import {
   LLMEvent,
   LanguageModel,
   SystemPart,
-  TransportReason,
+  TransportError,
   type LLMRequest,
 } from "@opencode-ai/ai"
 import { OpenAIChat } from "@opencode-ai/ai/protocols"
@@ -574,9 +574,7 @@ it.effect("does not rename after a failed title stream", () =>
     titleStream = () =>
       Stream.fail(
         new AIError({
-          module: "test",
-          method: "stream",
-          reason: new TransportReason({ message: "Disconnected", transport: "http", operation: "request" }),
+          reason: new TransportError({ message: "Disconnected", transport: "http", operation: "request" }),
         }),
       )
 

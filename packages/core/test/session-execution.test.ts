@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { AIError, TransportReason } from "@opencode-ai/ai"
+import { AIError, TransportError } from "@opencode-ai/ai"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
@@ -36,9 +36,7 @@ describe("SessionExecution lifecycle", () => {
       SessionExecution.terminal(
         Exit.fail(
           new AIError({
-            module: "test",
-            method: "stream",
-            reason: new TransportReason({ message: "Disconnected", transport: "http", operation: "request" }),
+            reason: new TransportError({ message: "Disconnected", transport: "http", operation: "request" }),
           }),
         ),
       ),
