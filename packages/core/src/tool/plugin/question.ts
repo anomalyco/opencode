@@ -35,7 +35,7 @@ export class CancelledError extends Schema.TaggedError<CancelledError>()("Questi
   }
 }
 
-export const toModelOutput = (questions: ReadonlyArray<Question.Prompt>, answers: ReadonlyArray<Question.Answer>) => {
+export const toModelContent = (questions: ReadonlyArray<Question.Prompt>, answers: ReadonlyArray<Question.Answer>) => {
   const formatted = questions
     .map(
       (question, index) =>
@@ -101,7 +101,7 @@ export const Plugin = {
                   }
                   return Effect.succeed({
                     output,
-                    content: toModelOutput(input.questions, output.answers),
+                    content: toModelContent(input.questions, output.answers),
                     metadata: { answers: output.answers },
                   })
                 }),

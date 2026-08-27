@@ -36,7 +36,7 @@ export const Output = Schema.Struct({
 })
 export type Output = typeof Output.Type
 
-export const toModelOutput = (output: Output) =>
+export const toModelContent = (output: Output) =>
   [
     "Success. Updated the following files:",
     ...output.applied.map(
@@ -296,7 +296,7 @@ export const Plugin = {
               fileMutation.withLock(lockTargets),
               Effect.map((output) => ({
                 output,
-                content: toModelOutput(output),
+                content: toModelContent(output),
                 metadata: { files: output.files },
               })),
               Effect.mapError((error) =>
