@@ -1,17 +1,26 @@
 import { afterEach, describe, expect, test } from "bun:test"
+import { chmod } from "node:fs/promises"
+import path from "node:path"
+import { tmpdir } from "../fixture/fixture"
 import type { Hooks } from "@opencode-ai/plugin"
 import type { Auth, Provider } from "@opencode-ai/sdk/v2"
 import { OAUTH_DUMMY_KEY } from "../../src/auth"
-import { createAzureAuthHooks } from "../../src/plugin/azure"
+import { AzureAuthPlugin, createAzureAuthHooks } from "../../src/plugin/azure"
 
 const resourceName = process.env.AZURE_RESOURCE_NAME
 const resourceGroup = process.env.AZURE_RESOURCE_GROUP
+const azureConfig = process.env.AZURE_CONFIG_DIR
+const originalPath = process.env.PATH
 
 afterEach(() => {
   if (resourceName === undefined) delete process.env.AZURE_RESOURCE_NAME
   else process.env.AZURE_RESOURCE_NAME = resourceName
   if (resourceGroup === undefined) delete process.env.AZURE_RESOURCE_GROUP
   else process.env.AZURE_RESOURCE_GROUP = resourceGroup
+  if (azureConfig === undefined) delete process.env.AZURE_CONFIG_DIR
+  else process.env.AZURE_CONFIG_DIR = azureConfig
+  if (originalPath === undefined) delete process.env.PATH
+  else process.env.PATH = originalPath
 })
 
 const oauth: Auth = {
@@ -113,6 +122,34 @@ function discoveryShell(accounts: unknown, deployments: unknown, commands: strin
 }
 
 describe("plugin.azure", () => {
+  for (const profile of [
+    { name: "missing", content: undefined, signedIn: false },
+    { name: "logged out", content: '{"subscriptions":[]}', signedIn: false },
+    { name: "signed in with BOM", content: '\uFEFF{"subscriptions":[{}]}', signedIn: true },
+  ]) {
+    test(`only lists resources for a cached Azure login (${profile.name})`, async () => {
+      await using tmp = await tmpdir()
+      const executable = path.join(tmp.path, process.platform === "win32" ? "az.cmd" : "az")
+      await Bun.write(executable, process.platform === "win32" ? "@exit /b 0\r\n" : "#!/bin/sh\nexit 0\n")
+      await chmod(executable, 0o755)
+      process.env.PATH = `${tmp.path}${path.delimiter}${originalPath}`
+      process.env.AZURE_CONFIG_DIR = path.join(tmp.path, "azure-cli")
+      if (profile.content)
+        await Bun.write(path.join(process.env.AZURE_CONFIG_DIR, "azureProfile.json"), profile.content)
+      delete process.env.AZURE_RESOURCE_NAME
+      delete process.env.AZURE_RESOURCE_GROUP
+      const commands: string[] = []
+
+      const hooks = await AzureAuthPlugin({
+        $: discoveryShell([{ name: "test-resource", resourceGroup: "test-group" }], [], commands),
+      })
+
+      expect(commands).toHaveLength(profile.signedIn ? 1 : 0)
+      expect(hooks.auth?.methods.some((method) => method.type === "oauth")).toBe(true)
+      if (profile.signedIn) expect(oauthMethod(hooks).prompts?.[0].type).toBe("select")
+    })
+  }
+
   test("keeps the existing API-key method and adds Entra ID", () => {
     delete process.env.AZURE_RESOURCE_NAME
     const hooks = createAzureAuthHooks(azureShell([]))

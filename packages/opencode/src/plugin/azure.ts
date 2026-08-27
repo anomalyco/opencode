@@ -1,5 +1,8 @@
+import { readFile } from "node:fs/promises"
+import { homedir } from "node:os"
+import { join } from "node:path"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
-import type { Hooks, PluginInput } from "@opencode-ai/plugin"
+import type { Hooks } from "@opencode-ai/plugin"
 import type { Provider } from "@opencode-ai/sdk/v2"
 import { Effect, Schema } from "effect"
 import { OAUTH_DUMMY_KEY } from "../auth"
@@ -14,6 +17,9 @@ const AzureCliToken = Schema.Struct({
   expiresOn: Schema.optional(Schema.NonEmptyString),
 })
 const decodeAzureCliToken = Schema.decodeUnknownPromise(AzureCliToken)
+const decodeAzureProfile = Schema.decodeUnknownPromise(
+  Schema.fromJsonString(Schema.Struct({ subscriptions: Schema.Array(Schema.Unknown) })),
+)
 
 const decodeAzureAccounts = Schema.decodeUnknownPromise(
   Schema.Array(
@@ -46,10 +52,17 @@ type AzureCommand = {
 type AzureShell = (strings: TemplateStringsArray, ...values: string[]) => AzureCommand
 type AzureAccount = { readonly name: string; readonly resourceGroup: string }
 
-export async function AzureAuthPlugin(input: PluginInput): Promise<Hooks> {
+export async function AzureAuthPlugin(input: { $: AzureShell }): Promise<Hooks> {
   const available = Boolean(Bun.which("az", { PATH: process.env.PATH }))
+  // Avoid launching Azure CLI on unrelated commands just because the executable is installed.
+  const signedIn = available
+    ? await readFile(join(process.env.AZURE_CONFIG_DIR ?? join(homedir(), ".azure"), "azureProfile.json"), "utf8")
+        .then((text) => decodeAzureProfile(text.replace(/^\uFEFF/, "")))
+        .then((profile) => profile.subscriptions.length > 0)
+        .catch(() => false)
+    : false
   const accounts =
-    !process.env.AZURE_RESOURCE_NAME && !process.env.AZURE_RESOURCE_GROUP && available
+    !process.env.AZURE_RESOURCE_NAME && !process.env.AZURE_RESOURCE_GROUP && signedIn
       ? await input.$`az cognitiveservices account list --output json --only-show-errors`
           .quiet()
           .json()
