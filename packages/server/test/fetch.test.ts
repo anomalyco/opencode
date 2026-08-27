@@ -61,7 +61,7 @@ it.live("serves the HttpApi and enforces Basic auth like the Node server", () =>
     const body: unknown = yield* Effect.promise(() => response.json())
     if (typeof body !== "object" || body === null) throw new Error("Expected a health response object")
     expect((body as Record<string, unknown>)["healthy"]).toBe(true)
-  }).pipe(Effect.scoped),
+  }),
 )
 
 it.live("activates credentials through the HttpApi", () =>
@@ -71,7 +71,7 @@ it.live("activates credentials through the HttpApi", () =>
       handler(new Request("http://opencode.local/api/credential/cred_missing/activate", { method: "POST" })),
     )
     expect(response.status).toBe(204)
-  }).pipe(Effect.scoped),
+  }),
 )
 
 it.live("serves unauthenticated and answers CORS preflight when no password is configured", () =>
@@ -93,7 +93,7 @@ it.live("serves unauthenticated and answers CORS preflight when no password is c
       ),
     )
     expect(preflight.headers.get("access-control-allow-origin")).toBe("http://localhost:3000")
-  }).pipe(Effect.scoped),
+  }),
 )
 
 it.live("cancels a stale OpenAI OAuth callback server before falling back", () =>
@@ -113,7 +113,7 @@ it.live("cancels a stale OpenAI OAuth callback server before falling back", () =
     expect(requests).toContain("/cancel")
     const body = (yield* Effect.promise(() => response.json())) as { data: { url: string } }
     expect(new URL(body.data.url).searchParams.get("redirect_uri")).toBe("http://localhost:1455/auth/callback")
-  }).pipe(Effect.scoped),
+  }),
 )
 
 it.live("falls back to port 1457 when OpenAI OAuth port 1455 remains busy", () =>
@@ -133,7 +133,7 @@ it.live("falls back to port 1457 when OpenAI OAuth port 1455 remains busy", () =
     expect(requests).toContain("/cancel")
     const body = (yield* Effect.promise(() => response.json())) as { data: { url: string } }
     expect(new URL(body.data.url).searchParams.get("redirect_uri")).toBe("http://localhost:1457/auth/callback")
-  }).pipe(Effect.scoped),
+  }),
 )
 
 it.live("explains how to recover when both OpenAI OAuth callback ports are busy", () =>
@@ -155,7 +155,7 @@ it.live("explains how to recover when both OpenAI OAuth callback ports are busy"
         "OpenAI browser login needs local port 1455 or 1457, but both are already in use. Stop the processes using those ports or choose ChatGPT Pro/Plus (headless), then try again.",
       kind: "integration_authorization",
     })
-  }).pipe(Effect.scoped),
+  }),
 )
 
 it.live("treats destroying a missing workspace as success", () =>
@@ -171,7 +171,7 @@ it.live("treats destroying a missing workspace as success", () =>
 
     expect(response.status).toBe(200)
     expect(yield* Effect.promise(() => response.json())).toEqual({ destroyed: false })
-  }).pipe(Effect.scoped),
+  }),
 )
 
 it.live("creates idempotent caller-identified workspaces through the HttpApi", () =>
@@ -213,7 +213,7 @@ it.live("creates idempotent caller-identified workspaces through the HttpApi", (
     const minted = yield* create({ provider: "fake" })
     expect(minted.status).toBe(200)
     expect(yield* Effect.promise(() => minted.json())).toMatchObject({ data: expect.stringMatching(/^wrk_/) })
-  }).pipe(Effect.scoped),
+  }),
 )
 
 it.live("serves the session view operation and missing-session error", () =>
@@ -260,7 +260,7 @@ it.live("serves the session view operation and missing-session error", () =>
       ),
     )
     expect(missing.status).toBe(404)
-  }).pipe(Effect.scoped),
+  }),
 )
 
 // Pins the eager-boot guarantee: the application layer is built before the handler returns, so
@@ -283,5 +283,5 @@ it.live("stays serviceable when the first request aborts", () =>
 
     const second = yield* Effect.promise(() => handler(new Request("http://opencode.local/api/health")))
     expect(second.status).toBe(200)
-  }).pipe(Effect.scoped),
+  }),
 )
