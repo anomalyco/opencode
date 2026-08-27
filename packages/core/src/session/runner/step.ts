@@ -30,7 +30,10 @@ import { createLLMEventPublisher } from "./publish-llm-event.js"
 import { SessionRunnerRetry } from "./retry.js"
 
 export type Outcome = Data.TaggedEnum<{
-  Completed: { readonly needsContinuation: boolean }
+  Completed: {
+    readonly needsContinuation: boolean
+    readonly responseMissing: boolean
+  }
   Retry: { readonly cause: AIError; readonly error: SessionError.Error }
   Continue: { readonly cause: AIError; readonly error: SessionError.Error }
   RecoverFull: {}
@@ -53,6 +56,16 @@ interface Input {
 const TOOLS_INTERRUPTED = { type: "aborted", message: "Tool execution interrupted" } as const
 const STEP_INTERRUPTED = { type: "aborted", message: "Step interrupted" } as const
 const RESULT_MISSING = { type: "tool.result-missing", message: "Provider did not return a tool result" } as const
+
+const incompleteResponse = (message: string) =>
+  new AIError({
+    module: "session",
+    method: "stream",
+    reason: new InvalidProviderOutputReason({
+      classification: "incomplete-stream",
+      message,
+    }),
+  })
 
 /** Captures Location-scoped dependencies without introducing another service or execution loop. */
 export const make = Effect.gen(function* () {
@@ -90,17 +103,29 @@ export const make = Effect.gen(function* () {
     // Provider and tool fibers retain per-source order without a shared writer queue.
     // A local execution starts only after its Tool.Called publication completes.
     let overflowFailure: ProviderErrorEvent | undefined
+    let semanticEmptyProviderFailure: ProviderErrorEvent | undefined
     // Read to the end, not just the finish event, so the next request can reuse this response.
     const providerStream = llm.stream(input.prepared.request, input.prepared.options).pipe(
       Stream.runForEach((event) =>
         Effect.gen(function* () {
-          if (overflowFailure || publisher.hasProviderError()) return
+          if (overflowFailure || semanticEmptyProviderFailure || publisher.hasProviderError()) return
           if (
             LLMEvent.is.providerError(event) &&
             isContextOverflowFailure(event) &&
             !publisher.record().outputStarted
           ) {
             overflowFailure = event
+            return
+          }
+          const record = publisher.record()
+          if (
+            LLMEvent.is.providerError(event) &&
+            record.outputStarted &&
+            !record.responseProduced &&
+            !record.hasToolActivity &&
+            !record.needsContinuation
+          ) {
+            semanticEmptyProviderFailure = event
             return
           }
           yield* publisher.publish(event)
@@ -157,7 +182,21 @@ export const make = Effect.gen(function* () {
                 }),
               })
             : undefined
-        const llmFailure = streamFailure instanceof AIError ? streamFailure : unknownFinish
+        const rawFailure = streamFailure instanceof AIError ? streamFailure : undefined
+        const semanticEmptyFailure =
+          recorded.outputStarted &&
+          !recorded.responseProduced &&
+          !recorded.hasToolActivity &&
+          !recorded.needsContinuation
+            ? (semanticEmptyProviderFailure ?? rawFailure)
+            : undefined
+        const llmFailure = semanticEmptyFailure
+          ? incompleteResponse(
+              semanticEmptyFailure instanceof AIError
+                ? semanticEmptyFailure.reason.message
+                : semanticEmptyFailure.message,
+            )
+          : (rawFailure ?? unknownFinish)
         const llmError = llmFailure && !recorded.providerFailed ? toSessionError(llmFailure) : undefined
         if (
           input.recoverContinuation &&
@@ -243,6 +282,13 @@ export const make = Effect.gen(function* () {
         if (record.failure) return yield* new StepFailedError({ error: record.failure })
         return Outcome.Completed({
           needsContinuation: !input.toolsDisabled && record.needsContinuation,
+          responseMissing:
+            !input.toolsDisabled &&
+            record.finish?.finish === "stop" &&
+            record.finish.tokens.output + record.finish.tokens.reasoning > 0 &&
+            !record.responseProduced &&
+            !record.hasToolActivity &&
+            !record.needsContinuation,
         })
       }),
     )
