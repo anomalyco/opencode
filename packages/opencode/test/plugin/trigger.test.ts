@@ -8,6 +8,9 @@ import { Account } from "../../src/account/account"
 import { Auth } from "../../src/auth"
 import { RuntimeFlags } from "../../src/effect/runtime-flags"
 import { Plugin } from "../../src/plugin/index"
+import { PluginShellEnvironment } from "../../src/plugin/shell-environment"
+import { Project } from "../../src/project/project"
+import { ShellEnvironment } from "@opencode-ai/core/shell-environment"
 
 import { TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
@@ -20,7 +23,7 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 
 const it = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Plugin.node, CrossSpawnSpawner.node]), [
+  AppNodeBuilder.build(LayerNode.group([Plugin.node, Project.node, CrossSpawnSpawner.node]), [
     [Auth.node, AuthTest.empty],
     [Account.node, AccountTest.empty],
     [Npm.node, NpmTest.noop],
@@ -73,6 +76,34 @@ const triggerSystemTransform = Effect.fn("PluginTriggerTest.triggerSystemTransfo
 })
 
 describe("plugin.trigger", () => {
+  it.instance("projects shell.env hooks through the V2 shell environment adapter", () =>
+    withProject(
+      [
+        "export default async () => ({",
+        '  "shell.env": (input, output) => {',
+        '    output.env.SHELL_ENV_PROBE = [input.cwd, input.sessionID, input.callID].join("|")',
+        "  },",
+        "})",
+        "",
+      ].join("\n"),
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const environment = yield* ShellEnvironment.Service.use((service) =>
+          service.get({
+            directory: test.directory,
+            cwd: path.join(test.directory, "child"),
+            sessionID: "ses_adapter_test",
+            callID: "call_adapter_test",
+          }),
+        ).pipe(Effect.provide(PluginShellEnvironment.layer))
+
+        expect(environment).toEqual({
+          SHELL_ENV_PROBE: `${path.join(test.directory, "child")}|ses_adapter_test|call_adapter_test`,
+        })
+      }),
+    ),
+  )
+
   it.instance("runs synchronous hooks without crashing", () =>
     withProject(
       [
