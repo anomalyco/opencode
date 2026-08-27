@@ -82,7 +82,7 @@ const withTool = <A, E, R>(
       AppNodeBuilder.build(LayerNode.group([Tool.node, LocationMutation.node, FileMutation.node, writeToolNode]), [
         [
           Environment.node,
-          transformEnvironmentFiles(activeLocation, (files) => ({
+          transformEnvironmentFiles((files) => ({
             write: (target, content) =>
               Effect.sync(() => fixture.writes.push(target)).pipe(Effect.andThen(files.write(target, content))),
           })),

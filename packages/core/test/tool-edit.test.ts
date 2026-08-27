@@ -94,7 +94,7 @@ const withTool = <A, E, R>(
       AppNodeBuilder.build(LayerNode.group([Tool.node, LocationMutation.node, FileMutation.node, editToolNode]), [
         [
           Environment.node,
-          transformEnvironmentFiles(activeLocation, (files) => ({
+          transformEnvironmentFiles((files) => ({
             read: (target, range) =>
               files
                 .read(target, range)
