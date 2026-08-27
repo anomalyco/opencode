@@ -78,25 +78,33 @@ describe("ConfigCompactionPlugin.Plugin", () => {
       const started = yield* bus
         .subscribe(SessionEvent.Compaction.Started)
         .pipe(Stream.runHead, Effect.forkScoped({ startImmediately: true }))
+      const messages: SessionMessage.Info[] = [
+        {
+          id: SessionMessage.ID.create(),
+          type: "user",
+          text: "Older context",
+          time: { created: DateTime.makeUnsafe(0) },
+        },
+        {
+          id: SessionMessage.ID.create(),
+          type: "user",
+          text: "Recent context",
+          time: { created: DateTime.makeUnsafe(1) },
+        },
+      ]
       expect(
         yield* compaction.compactManual({
           session,
-          resolveModel: () => Effect.succeed(resolved),
           prepare: modelRequests.prepare,
-          messages: [
-            {
-              id: SessionMessage.ID.create(),
-              type: "user",
-              text: "Older context",
-              time: { created: DateTime.makeUnsafe(0) },
-            },
-            {
-              id: SessionMessage.ID.create(),
-              type: "user",
-              text: "Recent context",
-              time: { created: DateTime.makeUnsafe(1) },
-            },
-          ],
+          context: Effect.succeed({
+            session,
+            agent: { id: Agent.defaultID, info: Agent.Info.default(Agent.defaultID) },
+            model: resolved,
+            initial: "",
+            messages,
+            tools: { definitions: [], execute: () => Effect.die("Compaction must not execute tools") },
+          }),
+          messages,
           inputID: SessionMessage.ID.make("msg_compaction_manual"),
         }),
       ).toEqual({ status: "completed" })

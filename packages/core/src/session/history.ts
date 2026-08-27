@@ -63,6 +63,24 @@ export const load = Effect.fn("SessionHistory.load")(function* (db: DatabaseServ
   return (yield* messageEntries(db, sessionID)).map((entry) => entry.message)
 })
 
+/** Finds the last assistant even when a checkpoint has replaced it in model-visible history. */
+export const latestAssistant = Effect.fn("SessionHistory.latestAssistant")(function* (
+  db: DatabaseService,
+  sessionID: SessionSchema.ID,
+) {
+  const row = yield* db
+    .select()
+    .from(SessionMessageTable)
+    .where(and(eq(SessionMessageTable.session_id, sessionID), eq(SessionMessageTable.type, "assistant")))
+    .orderBy(desc(SessionMessageTable.seq))
+    .limit(1)
+    .get()
+    .pipe(Effect.orDie)
+  if (!row) return
+  const message = yield* decodeMessageRow(row).pipe(Effect.orDie)
+  return message.type === "assistant" ? message : undefined
+})
+
 export const entriesForRunner = Effect.fn("SessionHistory.entriesForRunner")(function* (
   db: DatabaseService,
   sessionID: SessionSchema.ID,

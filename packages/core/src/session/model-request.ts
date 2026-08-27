@@ -60,7 +60,7 @@ interface PrepareInput {
     readonly session: SessionSchema.Info
     readonly agentID: Agent.ID
     readonly model: SessionRunnerModel.Resolved
-    /** Omitted for requests that carry no tools (title, compaction). */
+    /** Omitted for requests that carry no tools, such as titles. */
     readonly tools?: Tool.Snapshot
   }
   readonly transcript: {
@@ -70,7 +70,7 @@ interface PrepareInput {
   readonly toolChoice?: LLM.RequestInput["toolChoice"]
   /**
    * Session context hooks shape the agent conversation. Requests that are not
-   * part of the conversation (title, compaction) opt out: their transcripts
+   * part of the conversation (such as titles) opt out: their transcripts
    * pass through unchanged.
    */
   readonly contextHooks?: false

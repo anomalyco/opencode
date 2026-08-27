@@ -50,7 +50,7 @@ export interface Loaded {
  */
 export interface Interface {
   /** Selects the Session, agent, instructions, and tools used by subsequent work. */
-  readonly select: (sessionID: SessionSchema.ID) => Effect.Effect<Selection, AgentNotFoundError>
+  readonly select: (sessionID: SessionSchema.ID, agentID?: Agent.ID) => Effect.Effect<Selection, AgentNotFoundError>
   /** Resolves the model and active history for that selection. */
   readonly load: (selection: Selection) => Effect.Effect<Loaded, SessionRunnerModel.Error>
   readonly resolveModel: (
@@ -119,7 +119,7 @@ const layer = Layer.effect(
       return { agent, primary, selected }
     })
 
-    const select = Effect.fn("SessionContext.select")(function* (sessionID: SessionSchema.ID) {
+    const select = Effect.fn("SessionContext.select")(function* (sessionID: SessionSchema.ID, agentID?: Agent.ID) {
       const session = yield* store.get(sessionID)
       if (!session) return yield* Effect.die(new Error(`Session not found: ${sessionID}`))
       if (session.location.directory !== location.directory || session.location.workspaceID !== location.workspaceID)
@@ -127,8 +127,8 @@ const layer = Layer.effect(
 
       yield* plugins.flush
       yield* mcpTools.flush
-      const agent = yield* agents.select(session.agent)
-      if (!agent.info) return yield* new AgentNotFoundError({ sessionID: session.id, agent: session.agent ?? agent.id })
+      const agent = yield* agents.select(agentID ?? session.agent)
+      if (!agent.info) return yield* new AgentNotFoundError({ sessionID: session.id, agent: agent.id })
       const loaded = yield* Effect.all(
         {
           tools: registry.snapshot(agent.info.permissions),

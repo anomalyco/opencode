@@ -1615,7 +1615,7 @@ describe("SessionRunnerLLM", () => {
       yield* runner.drain({ sessionID, force: false, continuation: moved.continuation })
 
       expect(requests).toHaveLength(3)
-      expect(userTexts(requests[1])[0]).toContain("Create a new anchored summary")
+      expect(requests[1]?.messages.at(-1)).toEqual(Message.user(SessionCompaction.buildPrompt()))
       expect(userTexts(requests[2])[0]).toContain("<summary>\nEntry summary\n</summary>")
       expect(yield* session.inbox(sessionID)).toEqual([])
     }),
@@ -2259,7 +2259,7 @@ describe("SessionRunnerLLM", () => {
       expect(requests).toHaveLength(4)
       expect(userTexts(requests[1])).toContain("Steer after compaction")
       expect(userTexts(requests[1])).toContain("Completion after compaction")
-      expect(userTexts(requests[2])[0]).toContain("Create a new anchored summary")
+      expect(requests[2]?.messages.at(-1)).toEqual(Message.user(SessionCompaction.buildPrompt()))
       expect(userTexts(requests[3])).toContain("Queue after compaction")
       expect(yield* SessionInbox.find((yield* Database.Service).db, first.id)).toBeUndefined()
       expect((yield* session.messages({ sessionID })).find((message) => message.id === first.id)).toMatchObject({
@@ -2340,12 +2340,17 @@ describe("SessionRunnerLLM", () => {
       yield* runPrompt(session, "Earlier question")
 
       requests.length = 0
+      systemBaseline = "Changed before manual compaction"
       yield* TestLLM.push(TestLLM.text("Manual summary", "text-manual-unknown-summary"))
       const compaction = yield* session.compact({ sessionID, delivery: "steer" })
       yield* session.resume(sessionID)
 
       expect(requests).toHaveLength(1)
       expect(userTexts(requests[0])[0]).toContain("Earlier question")
+      expect(requests[0]?.system.map((part) => part.text)).toEqual([defaultSystem, "Initial context"])
+      expect(messageRoles(requests[0])).toEqual(["user", "assistant", "system", "user"])
+      expect(systemTexts(requests[0])).toEqual(["Changed before manual compaction"])
+      expect(requests[0]?.messages.at(-1)).toEqual(Message.user(SessionCompaction.buildPrompt()))
       expect((yield* session.messages({ sessionID })).find((message) => message.id === compaction.id)).toMatchObject({
         type: "compaction",
         status: "completed",
@@ -2376,7 +2381,7 @@ describe("SessionRunnerLLM", () => {
       // Steer-delivered compaction runs at the boundary after the active step, ahead of
       // the queued prompt, and consuming it does not trigger an input-free model call.
       expect(requests).toHaveLength(3)
-      expect(userTexts(requests[1])[0]).toContain("Create a new anchored summary")
+      expect(requests[1]?.messages.at(-1)).toEqual(Message.user(SessionCompaction.buildPrompt()))
       expect(userTexts(requests[2])).toContain("Queued prompt")
       expect(yield* SessionInbox.find((yield* Database.Service).db, compaction.id)).toBeUndefined()
       expect((yield* session.messages({ sessionID })).find((message) => message.id === compaction.id)).toMatchObject({
@@ -2393,7 +2398,13 @@ describe("SessionRunnerLLM", () => {
       currentModel = recoveryModel
       const stream = yield* TestLLM.gate
       yield* TestLLM.push(
-        TestLLM.tool("call-active", "echo", { text: "active" }),
+        TestLLM.complete(
+          { reason: { normalized: "tool-calls" } },
+          LLMEvent.reasoningStart({ id: "reasoning-active" }),
+          LLMEvent.reasoningDelta({ id: "reasoning-active", text: "Check the active work" }),
+          LLMEvent.reasoningEnd({ id: "reasoning-active", providerMetadata: { openai: { signature: "signed" } } }),
+          LLMEvent.toolCall({ id: "call-active", name: "echo", input: { text: "active" } }),
+        ),
         [LLMEvent.textDelta({ id: "summary", text: "durable summary" })],
         TestLLM.text("Continued", "text-continued-after-compact"),
       )
@@ -2407,12 +2418,140 @@ describe("SessionRunnerLLM", () => {
 
       // The compaction summary is requested before the tool turn's continuation step.
       expect(requests).toHaveLength(3)
-      expect(userTexts(requests[1])[0]).toContain("Create a new anchored summary")
+      expect(requests[1]?.messages.at(-1)).toEqual(Message.user(SessionCompaction.buildPrompt()))
+      expect(requests[1]?.system).toEqual(requests[0]?.system)
+      expect(requests[1]?.tools).toEqual(requests[0]?.tools)
+      expect(requests[1]?.tools.map((tool) => tool.name)).toContain("echo")
+      expect(messageRoles(requests[1])).toEqual(["user", "assistant", "tool", "user"])
+      expect(requests[1]?.messages[0]).toEqual(requests[0]?.messages[0])
+      expect(requests[1]?.messages[1]?.content).toMatchObject([
+        { type: "reasoning", text: "Check the active work", providerMetadata: { openai: { signature: "signed" } } },
+        { type: "tool-call", id: "call-active", name: "echo", input: { text: "active" } },
+      ])
+      expect(requests[1]?.messages[2]?.content).toMatchObject([
+        { type: "tool-result", id: "call-active", name: "echo", result: { type: "text", value: "active" } },
+      ])
+      expect(executions).toEqual(["active"])
       expect((yield* session.messages({ sessionID })).find((message) => message.id === compaction.id)).toMatchObject({
         type: "compaction",
         status: "completed",
         summary: "durable summary",
       })
+    }),
+  )
+
+  for (const mode of ["manual", "auto"] as const) {
+    it.effect(`uses the last assistant's custom agent after a switch for ${mode} compaction`, () =>
+      Effect.gen(function* () {
+        const session = yield* setup
+        const agents = yield* Agent.Service
+        const bus = yield* Bus.Service
+        const hooks = yield* PluginHooks.Service
+        const seen: Agent.ID[] = []
+        yield* agents.transform((draft) =>
+          draft.update(Agent.ID.make("reviewer"), (agent) => {
+            agent.mode = "primary"
+            agent.system = "Reviewer instructions"
+          }),
+        )
+        yield* hooks.register("session", "context", (event) =>
+          Effect.sync(() => {
+            seen.push(event.agent)
+            event.system.push(SystemPart.make(`Context hook for ${event.agent}`))
+            if (event.agent === "build") delete event.tools.echo
+          }),
+        )
+        yield* bus.publish(SessionEvent.AgentSelected, { sessionID, agent: Agent.ID.make("reviewer") })
+        yield* TestLLM.push(TestLLM.textWithUsage("Earlier answer", "text-custom-agent", 3_950))
+        yield* runPrompt(session, "Earlier question ".repeat(180))
+        const original = requests[0]
+
+        yield* bus.publish(SessionEvent.AgentSelected, { sessionID, agent: Agent.ID.make("build") })
+        currentModel = compactModel
+        requests.length = 0
+        seen.length = 0
+        yield* TestLLM.push(TestLLM.text("Reviewer summary", "text-custom-summary"))
+        if (mode === "manual") yield* session.compact({ sessionID })
+        if (mode === "auto") {
+          yield* admit(session, "Recent exact request ".repeat(180))
+          yield* TestLLM.push(TestLLM.text("Continued by build", "text-custom-continuation"))
+        }
+        yield* session.resume(sessionID)
+
+        expect(seen).toEqual(
+          mode === "manual" ? [Agent.ID.make("reviewer")] : [Agent.ID.make("reviewer"), Agent.ID.make("build")],
+        )
+        expect(requests[0]?.model).toBe(compactModel)
+        expect(requests[0]?.system).toEqual(original?.system)
+        expect(requests[0]?.system.map((part) => part.text)).toEqual([
+          "Reviewer instructions",
+          "Initial context",
+          "Context hook for reviewer",
+        ])
+        expect(requests[0]?.tools).toEqual(original?.tools)
+        expect(requests[0]?.tools.map((tool) => tool.name)).toContain("echo")
+        expect(requests[0]?.messages[0]).toEqual(original?.messages[0])
+        expect(requests[0]?.messages.at(-1)).toEqual(Message.user(SessionCompaction.buildPrompt()))
+        expect(yield* session.context(sessionID)).toContainEqual(
+          expect.objectContaining({ type: "compaction", status: "completed", summary: "Reviewer summary" }),
+        )
+        expect((yield* session.get(sessionID))?.agent).toBe(Agent.ID.make("build"))
+        if (mode === "auto") {
+          expect(requests[1]?.system.map((part) => part.text)).toContain("Context hook for build")
+          expect(requests[1]?.tools.map((tool) => tool.name)).not.toContain("echo")
+        }
+        if (mode === "manual") {
+          expect((yield* session.context(sessionID)).some((message) => message.type === "assistant")).toBe(false)
+          yield* bus.publish(SessionEvent.AgentSelected, { sessionID, agent: Agent.ID.make("build") })
+          const input = yield* admit(session, "New input without an assistant response")
+          yield* bus.publish(SessionEvent.InboxDelivered, { sessionID, inboxID: input.id })
+          yield* TestLLM.push(TestLLM.text("Updated reviewer summary", "text-checkpoint-summary"))
+          yield* session.compact({ sessionID })
+          yield* session.resume(sessionID)
+
+          expect(requests).toHaveLength(2)
+          expect(seen).toEqual([Agent.ID.make("reviewer"), Agent.ID.make("reviewer")])
+          expect(requests[1]?.system).toEqual(original?.system)
+          expect(requests[1]?.tools).toEqual(original?.tools)
+          expect(userTexts(requests[1])[0]).toContain("<summary>\nReviewer summary\n</summary>")
+          expect(userTexts(requests[1])).toContain("New input without an assistant response")
+          expect(requests[1]?.messages.at(-1)).toEqual(Message.user(SessionCompaction.buildPrompt()))
+          expect(yield* session.context(sessionID)).toContainEqual(
+            expect.objectContaining({ type: "compaction", status: "completed", summary: "Updated reviewer summary" }),
+          )
+        }
+      }),
+    )
+  }
+
+  it.effect("fails manual compaction without executing a summarizer tool call even when it returns text", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      yield* TestLLM.push(TestLLM.text("Earlier answer", "text-tool-summary-history"))
+      yield* runPrompt(session, "Earlier question")
+
+      yield* TestLLM.push(
+        TestLLM.complete(
+          { reason: { normalized: "tool-calls" } },
+          LLMEvent.textDelta({ id: "summary", text: "Must not become a checkpoint" }),
+          LLMEvent.toolCall({ id: "call-summary", name: "echo", input: { text: "Must not execute" } }),
+        ),
+      )
+      const compaction = yield* session.compact({ sessionID })
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(2)
+      expect(requests[1]?.tools.map((tool) => tool.name)).toContain("echo")
+      expect(executions).toEqual([])
+      expect(authorizations).toEqual([])
+      expect((yield* session.messages({ sessionID })).find((message) => message.id === compaction.id)).toMatchObject({
+        type: "compaction",
+        status: "failed",
+        error: { type: "compaction.failed", message: "Compaction attempted to call a tool" },
+      })
+      expect(yield* session.context(sessionID)).toContainEqual(
+        expect.objectContaining({ type: "user", text: "Earlier question" }),
+      )
     }),
   )
 
@@ -2522,7 +2661,12 @@ describe("SessionRunnerLLM", () => {
       yield* runPrompt(session, "Recent exact request ".repeat(180))
 
       expect(requests).toHaveLength(2)
-      expect(userTexts(requests[0])[0]).toContain("## Objective")
+      expect(messageRoles(requests[0])).toEqual(["user", "assistant", "user"])
+      expect(userTexts(requests[0])).toEqual(["Earlier question ".repeat(180), SessionCompaction.buildPrompt()])
+      expect(requests[0]?.messages[1]?.content).toMatchObject([{ type: "text", text: "Earlier answer" }])
+      expect(requests[0]?.model).toBe(compactModel)
+      expect(requests[0]?.system).toEqual(requests[1]?.system)
+      expect(requests[0]?.tools).toEqual(requests[1]?.tools)
       expect(userTexts(requests[1])).toHaveLength(1)
       expect(userTexts(requests[1])[0]).toContain("<summary>\n## Objective\n- Preserve the task\n</summary>")
       expect(userTexts(requests[1])[0]).toContain(`[User]: ${"Recent exact request ".repeat(180)}`)
@@ -2532,8 +2676,10 @@ describe("SessionRunnerLLM", () => {
       expect(context[0]).toMatchObject({
         type: "compaction",
         summary: "## Objective\n- Preserve the task",
+        recent: `[User]: ${"Recent exact request ".repeat(180)}`,
       })
 
+      const checkpoint = requests[1]?.messages[0]
       requests.length = 0
       executions.length = 0
       yield* TestLLM.push(
@@ -2543,10 +2689,13 @@ describe("SessionRunnerLLM", () => {
       yield* runPrompt(session, "Newest exact request ".repeat(180))
 
       expect(requests).toHaveLength(2)
-      expect(userTexts(requests[0])[0]).toContain(
-        "<previous-summary>\n## Objective\n- Preserve the task\n</previous-summary>",
-      )
+      expect(requests[0]?.messages[0]).toEqual(checkpoint)
+      expect(requests[0]?.messages.at(-1)).toEqual(Message.user(SessionCompaction.buildPrompt()))
+      expect(userTexts(requests[0])[0]).toContain("<summary>\n## Objective\n- Preserve the task\n</summary>")
       expect(userTexts(requests[0])[0]).toContain("Recent exact request")
+      expect(userTexts(requests[0]).join("\n")).not.toContain("<previous-summary>")
+      expect(userTexts(requests[0]).at(-1)).not.toContain("Preserve the task")
+      expect(userTexts(requests[0]).join("\n")).not.toContain("Newest exact request")
       expect((yield* (yield* SessionStore.Service).context(sessionID))[0]).toMatchObject({
         type: "compaction",
         summary: "## Objective\n- Preserve the updated task",
@@ -2613,7 +2762,12 @@ describe("SessionRunnerLLM", () => {
       yield* runPrompt(session, "Continue")
 
       expect(requests).toHaveLength(3)
-      expect(userTexts(requests[1])[0]).toContain("## Objective")
+      expect(requests[1]?.messages.at(-1)).toEqual(Message.user(SessionCompaction.buildPrompt()))
+      expect(requests[1]?.messages.slice(0, -1)).toEqual(requests[0]?.messages.slice(0, -1))
+      expect(requests[1]?.system).toEqual(requests[0]?.system)
+      expect(requests[1]?.tools).toEqual(requests[0]?.tools)
+      expect(requests[1]?.model).toBe(recoveryModel)
+      expect(userTexts(requests[1])).not.toContain("Continue")
       expect(userTexts(requests[2])[0]).toContain("<summary>\n## Objective\n- Recover overflow\n</summary>")
       expect(yield* session.context(sessionID)).toMatchObject([
         { type: "compaction", summary: "## Objective\n- Recover overflow" },

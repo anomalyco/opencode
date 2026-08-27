@@ -8,6 +8,7 @@ import { InstructionState } from "../instruction-state.js"
 import { SessionCompaction } from "../compaction.js"
 import { SessionContext } from "../context.js"
 import { SessionEvent } from "../event.js"
+import { SessionHistory } from "../history.js"
 import { SessionInbox } from "../inbox.js"
 import { SessionModelRequest } from "../model-request.js"
 import { SessionModelTransport } from "../model-transport.js"
@@ -139,11 +140,12 @@ const layer = Layer.effect(
                 if (!session) return yield* Effect.die(new Error(`Session not found: ${sessionID}`))
                 const compacted = yield* restore(
                   Effect.gen(function* () {
+                    const messages = yield* store.context(sessionID)
                     return yield* compaction.compactManual({
                       session,
-                      resolveModel: context.resolveModel,
                       prepare: context.prepare,
-                      messages: yield* store.context(sessionID),
+                      messages,
+                      context: loadCompactionContext(sessionID, messages),
                       inputID: pending.id,
                       started: true,
                     })
@@ -204,6 +206,20 @@ const layer = Layer.effect(
       return selected
     })
 
+    const loadCompactionContext = Effect.fn("SessionRunner.loadCompactionContext")(function* (
+      sessionID: SessionSchema.ID,
+      messages: readonly SessionMessage.Info[],
+      loaded?: SessionContext.Loaded,
+    ) {
+      const last =
+        messages.findLast((message) => message.type === "assistant") ??
+        (yield* SessionHistory.latestAssistant(db, sessionID))
+      if (loaded && (!last || last.agent === loaded.agent.id)) return loaded
+      const selected = yield* context.select(sessionID, last?.agent)
+      yield* InstructionState.prepare(db, bus, selected.instructions, sessionID)
+      return yield* context.load(selected)
+    })
+
     /** Owns logical Step policy; each attempt owns its streaming, tools, and durable settlement. */
     const runStep = Effect.fn("SessionRunner.runStep")(function* (first: SessionContext.Loaded, step: number) {
       const sessionID = first.session.id
@@ -221,6 +237,7 @@ const layer = Layer.effect(
           messages: loaded.messages,
           resolved: loaded.model,
           prepare: context.prepare,
+          context: loadCompactionContext(sessionID, loaded.messages, loaded),
         }
         if (compaction.required(compactionInput)) {
           const compacted = yield* compaction.compact(compactionInput)

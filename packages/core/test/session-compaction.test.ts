@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { LLMClient, LLMEvent, LanguageModel, SystemPart, type LLMRequest } from "@opencode-ai/ai"
+import { LLMClient, LLMEvent, LanguageModel, Message, SystemPart, type LLMRequest } from "@opencode-ai/ai"
 import { OpenAIChat } from "@opencode-ai/ai/protocols"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -8,6 +8,7 @@ import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Bus } from "@opencode-ai/core/bus"
 import { EventTable } from "@opencode-ai/core/event/sql"
 import { SessionCompaction } from "@opencode-ai/core/session/compaction"
+import type { SessionContext } from "@opencode-ai/core/session/context"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionModelRequest } from "@opencode-ai/core/session/model-request"
@@ -74,6 +75,18 @@ const resolved = SessionRunnerModel.resolved(model, {
   cost,
   limit: { context: 200_000, output: 32_000 },
 })
+const context = (
+  session: Session.Info,
+  messages: readonly SessionMessage.Info[],
+): Effect.Effect<SessionContext.Loaded> =>
+  Effect.succeed({
+    session,
+    agent: { id: Agent.defaultID, info: { ...Agent.Info.default(Agent.defaultID), system: "Working agent system" } },
+    model: resolved,
+    initial: "Session instructions",
+    messages,
+    tools: { definitions: [], execute: () => Effect.die("Compaction must not execute tools") },
+  })
 const it = testEffect(
   AppNodeBuilder.build(
     LayerNode.group([
@@ -93,7 +106,7 @@ const it = testEffect(
 )
 
 test("compaction prompt preserves detailed work state and relevant files", () => {
-  const prompt = SessionCompaction.buildPrompt({ context: ["conversation history"] })
+  const prompt = SessionCompaction.buildPrompt()
 
   expect(prompt).toContain("## Work State\n### Completed")
   expect(prompt).toContain("### Active")
@@ -125,7 +138,7 @@ test("compaction truncation does not split surrogate pairs", () => {
 })
 
 test("compaction prompt requires the checkpoint headings in order", () => {
-  const prompt = SessionCompaction.buildPrompt({ context: ["Conversation history"] })
+  const prompt = SessionCompaction.buildPrompt()
   expect(prompt.match(/^#{2,3} .+$/gm)).toEqual([
     "## Objective",
     "## Important Details",
@@ -249,8 +262,8 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
     expect(
       yield* compaction.compactManual({
         session,
-        resolveModel: () => Effect.succeed(resolved),
         prepare: modelRequests.prepare,
+        context: context(session, [userMessage]),
         messages: [userMessage],
         inputID: SessionMessage.ID.make("msg_manual_compaction"),
       }),
@@ -269,6 +282,9 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
       "x-opencode-client": "opencode",
     })
     expect(requests[0]?.generation).toBeUndefined()
+    expect(requests[0]?.system.map((part) => part.text)).toEqual(["Working agent system", "Session instructions"])
+    expect(requests[0]?.messages.map((message) => message.role)).toEqual(["user", "user"])
+    expect(requests[0]?.messages.at(-1)?.content).toEqual([Message.text(SessionCompaction.buildPrompt())])
     expect(JSON.stringify(requests[0]?.messages)).toContain("Manual compaction should include this short conversation.")
     expect(JSON.stringify(requests[0]?.messages)).toContain("Use Effect services and generators.")
     expect(yield* store.context(sessionID)).toMatchObject([
@@ -305,19 +321,20 @@ it.effect("forked session compaction reuses the fork root prompt cache key", () 
       fork_boundary: { type: "before", messageID: SessionMessage.ID.create() },
     })
     const modelRequests = yield* SessionModelRequest.Service
+    const messages: SessionMessage.Info[] = [
+      {
+        id: SessionMessage.ID.create(),
+        type: "user",
+        text: "Summarize the forked conversation.",
+        time: { created: DateTime.makeUnsafe(0) },
+      },
+    ]
     expect(
       yield* compaction.compactManual({
         session,
-        resolveModel: () => Effect.succeed(resolved),
+        context: context(session, messages),
+        messages,
         prepare: modelRequests.prepare,
-        messages: [
-          {
-            id: SessionMessage.ID.create(),
-            type: "user",
-            text: "Summarize the forked conversation.",
-            time: { created: DateTime.makeUnsafe(0) },
-          },
-        ],
         inputID: SessionMessage.ID.make("msg_fork_compaction"),
       }),
     ).toEqual({ status: "completed" })
@@ -327,38 +344,45 @@ it.effect("forked session compaction reuses the fork root prompt cache key", () 
   }),
 )
 
-it.effect("keeps session context hooks away from compaction requests", () =>
+it.effect("applies the working agent's context hooks to compaction requests", () =>
   Effect.gen(function* () {
     requests = []
     const compaction = yield* SessionCompaction.Service
-    // Context hooks shape the agent conversation; compaction is not part of it,
-    // so it opts out and the transcript passes through unchanged.
     const hooks = yield* PluginHooks.Service
     yield* hooks.register("session", "context", (event) =>
       Effect.sync(() => {
+        expect(event.agent).toBe(Agent.defaultID)
         event.system.push(SystemPart.make("Injected conversation context"))
+        event.messages.push(Message.user("Additional conversation context"))
       }),
     )
     const session = yield* insertSession(Session.ID.make("ses_hook_compaction"))
     const modelRequests = yield* SessionModelRequest.Service
+    const messages: SessionMessage.Info[] = [
+      {
+        id: SessionMessage.ID.create(),
+        type: "user",
+        text: "Summarize this conversation.",
+        time: { created: DateTime.makeUnsafe(0) },
+      },
+    ]
     expect(
       yield* compaction.compactManual({
         session,
-        resolveModel: () => Effect.succeed(resolved),
+        context: context(session, messages),
+        messages,
         prepare: modelRequests.prepare,
-        messages: [
-          {
-            id: SessionMessage.ID.create(),
-            type: "user",
-            text: "Summarize this conversation.",
-            time: { created: DateTime.makeUnsafe(0) },
-          },
-        ],
         inputID: SessionMessage.ID.make("msg_hook_compaction"),
       }),
     ).toEqual({ status: "completed" })
 
     expect(requests).toHaveLength(1)
-    expect(requests[0]?.system).toEqual([])
+    expect(requests[0]?.system.map((part) => part.text)).toEqual([
+      "Working agent system",
+      "Session instructions",
+      "Injected conversation context",
+    ])
+    expect(requests[0]?.messages.at(-2)?.content).toEqual([Message.text("Additional conversation context")])
+    expect(requests[0]?.messages.at(-1)?.content).toEqual([Message.text(SessionCompaction.buildPrompt())])
   }),
 )
