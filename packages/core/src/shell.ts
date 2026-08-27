@@ -275,10 +275,11 @@ const layer = () =>
                 .pipe(
                   Effect.mapError((cause) => new AppProcess.AppProcessError({ command: invocation.command, cause })),
                 )
+              const createdInfo = produce(info, (draft) => {
+                draft.pid = handle.pid
+              })
               const session: Active = {
-                info: produce(info, (draft) => {
-                  draft.pid = handle.pid
-                }),
+                info: createdInfo,
                 file,
                 size: 0,
                 done: Deferred.makeUnsafe<Info, NotFoundError>(),
@@ -370,7 +371,7 @@ const layer = () =>
                 ),
               )
 
-              yield* bus.publish(Shell.Event.Created, { info })
+              yield* bus.publish(Shell.Event.Created, { info: createdInfo })
               yield* Deferred.succeed(ready, session)
               // Hold the handle's scope open until the command terminates; closing it earlier would
               // release (kill) the process before its exit is observed.
