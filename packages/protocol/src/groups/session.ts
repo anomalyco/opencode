@@ -191,12 +191,13 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
           location: Location.Ref.pipe(Schema.optional),
         }),
         success: Schema.Struct({ data: Session.Info }),
-        error: ConflictError,
+        error: [ConflictError, SessionNotFoundError],
       }).annotateMerge(
         OpenApi.annotations({
           identifier: "v2.session.import",
           summary: "Import session",
-          description: "Import a projected session transcript at the requested location.",
+          description:
+            "Import a projected session transcript at the requested location. If parentID is supplied, the parent session must already exist; import parents before children.",
         }),
       ),
     )

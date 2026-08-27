@@ -526,7 +526,7 @@ export function make(options: ClientOptions) {
             path: `/api/session/import`,
             body: { info: input["info"], messages: input["messages"], location: input["location"] },
             successStatus: 200,
-            declaredStatuses: [409, 401, 400],
+            declaredStatuses: [409, 404, 401, 400],
             empty: false,
           },
           requestOptions,
