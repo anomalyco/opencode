@@ -87,9 +87,8 @@ describe("CloudflareAIGatewayPlugin", () => {
     withEnv({ CLOUDFLARE_ACCOUNT_ID: undefined, CLOUDFLARE_GATEWAY_ID: undefined }, () =>
       Effect.gen(function* () {
         yield* addPlugin()
-        expect(
-          (yield* (yield* Integration.Service).get(Integration.ID.make("cloudflare-ai-gateway")))?.methods,
-        ).toContainEqual({
+        const integrations = yield* Integration.Service
+        expect((yield* integrations.get(Integration.ID.make("cloudflare-ai-gateway")))?.methods).toContainEqual({
           type: "key",
           label: "Gateway API token",
           form: [
@@ -354,9 +353,11 @@ describe("CloudflareAIGatewayPlugin", () => {
             }),
           )
           yield* addPlugin()
-          expect(
-            (yield* (yield* Integration.Service).get(Integration.ID.make("cloudflare-ai-gateway")))?.methods,
-          ).toContainEqual({ type: "key", label: "Gateway API token" })
+          const integrations = yield* Integration.Service
+          expect((yield* integrations.get(Integration.ID.make("cloudflare-ai-gateway")))?.methods).toContainEqual({
+            type: "key",
+            label: "Gateway API token",
+          })
 
           const result = yield* aisdk.runSDK({
             model: Model.Info.make({
