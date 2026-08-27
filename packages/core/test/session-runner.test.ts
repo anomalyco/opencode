@@ -12,7 +12,7 @@ import {
   InvalidRequestError,
   RateLimitError,
 } from "@opencode-ai/ai"
-import * as OpenAIChat from "@opencode-ai/ai/protocols/openai-chat"
+import { OpenAIChat } from "@opencode-ai/ai/protocols/openai-chat"
 import { TestLLM } from "@opencode-ai/ai/testing"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Database } from "@opencode-ai/core/database/database"
@@ -43,7 +43,7 @@ import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionRunCoordinator } from "@opencode-ai/core/session/run-coordinator"
 import { SessionRunner } from "@opencode-ai/core/session/runner/index"
-import * as SessionRunnerLLM from "@opencode-ai/core/session/runner/llm"
+import { SessionRunnerLLM } from "@opencode-ai/core/session/runner/llm"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { PromptCacheDiagnostics } from "@opencode-ai/core/session/prompt-cache-diagnostics"
 import { SessionUsage } from "@opencode-ai/core/session/usage"
@@ -2213,6 +2213,7 @@ describe("SessionRunnerLLM", () => {
   it.effect("runs steers before queued compaction and later queued input", () =>
     Effect.gen(function* () {
       const session = yield* setup
+      const database = yield* Database.Service
       currentModel = recoveryModel
       const stream = yield* TestLLM.gate
       yield* TestLLM.push(
@@ -2226,7 +2227,7 @@ describe("SessionRunnerLLM", () => {
       yield* stream.started
 
       const first = yield* session.compact({ sessionID, delivery: "queue" })
-      expect(yield* SessionInbox.find((yield* Database.Service).db, first.id)).toMatchObject({
+      expect(yield* SessionInbox.find(database.db, first.id)).toMatchObject({
         id: first.id,
       })
       expect((yield* session.messages({ sessionID })).find((message) => message.id === first.id)).toBeUndefined()
@@ -2239,7 +2240,7 @@ describe("SessionRunnerLLM", () => {
         delivery: "queue",
         resume: false,
       })
-      expect(yield* SessionInbox.has((yield* Database.Service).db, sessionID, "steer")).toBe(true)
+      expect(yield* SessionInbox.has(database.db, sessionID, "steer")).toBe(true)
 
       yield* stream.release
       yield* Fiber.join(active)
@@ -2249,7 +2250,7 @@ describe("SessionRunnerLLM", () => {
       expect(userTexts(requests[1])).toContain("Completion after compaction")
       expect(userTexts(requests[2])[0]).toContain("Create a new anchored summary")
       expect(userTexts(requests[3])).toContain("Queue after compaction")
-      expect(yield* SessionInbox.find((yield* Database.Service).db, first.id)).toBeUndefined()
+      expect(yield* SessionInbox.find(database.db, first.id)).toBeUndefined()
       expect((yield* session.messages({ sessionID })).find((message) => message.id === first.id)).toMatchObject({
         type: "compaction",
         status: "completed",
@@ -2261,6 +2262,7 @@ describe("SessionRunnerLLM", () => {
   it.effect("releases queued prompts when durable compaction fails", () =>
     Effect.gen(function* () {
       const session = yield* setup
+      const database = yield* Database.Service
       currentModel = recoveryModel
       const stream = yield* TestLLM.gate
       yield* TestLLM.push(
@@ -2284,7 +2286,7 @@ describe("SessionRunnerLLM", () => {
 
       expect(requests).toHaveLength(3)
       expect(userTexts(requests[2])).toContain("Continue after failure")
-      expect(yield* SessionInbox.find((yield* Database.Service).db, compaction.id)).toBeUndefined()
+      expect(yield* SessionInbox.find(database.db, compaction.id)).toBeUndefined()
       expect((yield* session.messages({ sessionID })).find((message) => message.id === compaction.id)).toMatchObject({
         type: "compaction",
         status: "failed",
@@ -2301,12 +2303,13 @@ describe("SessionRunnerLLM", () => {
     Effect.gen(function* () {
       yield* setup
       const session = yield* Session.Service
+      const database = yield* Database.Service
       const compaction = yield* session.compact({ sessionID })
       modelResolveHook = Effect.die("model resolution should not run")
 
       yield* session.resume(sessionID)
 
-      expect(yield* SessionInbox.find((yield* Database.Service).db, compaction.id)).toBeUndefined()
+      expect(yield* SessionInbox.find(database.db, compaction.id)).toBeUndefined()
       expect((yield* session.messages({ sessionID })).find((message) => message.id === compaction.id)).toMatchObject({
         type: "compaction",
         status: "failed",
@@ -2345,6 +2348,7 @@ describe("SessionRunnerLLM", () => {
   it.effect("runs manual compaction at the next step boundary before queued prompts", () =>
     Effect.gen(function* () {
       const session = yield* setup
+      const database = yield* Database.Service
       currentModel = recoveryModel
       const stream = yield* TestLLM.gate
       yield* TestLLM.push(
@@ -2366,7 +2370,7 @@ describe("SessionRunnerLLM", () => {
       expect(requests).toHaveLength(3)
       expect(userTexts(requests[1])[0]).toContain("Create a new anchored summary")
       expect(userTexts(requests[2])).toContain("Queued prompt")
-      expect(yield* SessionInbox.find((yield* Database.Service).db, compaction.id)).toBeUndefined()
+      expect(yield* SessionInbox.find(database.db, compaction.id)).toBeUndefined()
       expect((yield* session.messages({ sessionID })).find((message) => message.id === compaction.id)).toMatchObject({
         type: "compaction",
         status: "completed",
@@ -2443,6 +2447,7 @@ describe("SessionRunnerLLM", () => {
   it.effect("records cancelled manual compaction without surfacing an internal failure", () =>
     Effect.gen(function* () {
       const session = yield* setup
+      const database = yield* Database.Service
       yield* TestLLM.push(TestLLM.text("Earlier answer", "text-manual-interrupt-history"))
       yield* runPrompt(session, "Earlier question")
 
@@ -2460,7 +2465,7 @@ describe("SessionRunnerLLM", () => {
       yield* session.interrupt(sessionID)
 
       yield* Fiber.await(run)
-      expect(yield* SessionInbox.find((yield* Database.Service).db, compaction.id)).toBeUndefined()
+      expect(yield* SessionInbox.find(database.db, compaction.id)).toBeUndefined()
       expect((yield* session.messages({ sessionID })).find((message) => message.id === compaction.id)).toMatchObject({
         type: "compaction",
         status: "failed",
@@ -2473,6 +2478,7 @@ describe("SessionRunnerLLM", () => {
   it.effect("settles an admitted manual compaction when pre-start resolution throws", () =>
     Effect.gen(function* () {
       const session = yield* setup
+      const database = yield* Database.Service
       yield* TestLLM.push(TestLLM.text("Earlier answer", "text-manual-resolution-history"))
       yield* runPrompt(session, "Earlier question")
 
@@ -2481,7 +2487,7 @@ describe("SessionRunnerLLM", () => {
 
       expect(yield* Effect.exit(session.resume(sessionID))).toMatchObject({ _tag: "Failure" })
 
-      expect(yield* SessionInbox.find((yield* Database.Service).db, compaction.id)).toBeUndefined()
+      expect(yield* SessionInbox.find(database.db, compaction.id)).toBeUndefined()
       expect((yield* session.messages({ sessionID })).find((message) => message.id === compaction.id)).toMatchObject({
         type: "compaction",
         status: "failed",
@@ -3733,8 +3739,9 @@ describe("SessionRunnerLLM", () => {
     Effect.gen(function* () {
       const session = yield* setup
       const bus = yield* Bus.Service
+      const database = yield* Database.Service
       yield* admit(session, "Recover interrupted tool")
-      yield* SessionInbox.promote((yield* Database.Service).db, bus, sessionID, "steer")
+      yield* SessionInbox.promote(database.db, bus, sessionID, "steer")
       const assistantMessageID = SessionMessage.ID.create()
       yield* bus.publish(SessionEvent.Step.Started, {
         sessionID,
@@ -3853,8 +3860,9 @@ describe("SessionRunnerLLM", () => {
     Effect.gen(function* () {
       const session = yield* setup
       const bus = yield* Bus.Service
+      const database = yield* Database.Service
       yield* admit(session, "Recover interrupted hosted tool")
-      yield* SessionInbox.promote((yield* Database.Service).db, bus, sessionID, "steer")
+      yield* SessionInbox.promote(database.db, bus, sessionID, "steer")
       const assistantMessageID = SessionMessage.ID.create()
       yield* bus.publish(SessionEvent.Step.Started, {
         sessionID,
@@ -3904,8 +3912,9 @@ describe("SessionRunnerLLM", () => {
     Effect.gen(function* () {
       const session = yield* setup
       const bus = yield* Bus.Service
+      const database = yield* Database.Service
       yield* admit(session, "Recover interrupted tool input")
-      yield* SessionInbox.promote((yield* Database.Service).db, bus, sessionID, "steer")
+      yield* SessionInbox.promote(database.db, bus, sessionID, "steer")
       const assistantMessageID = SessionMessage.ID.create()
       yield* bus.publish(SessionEvent.Step.Started, {
         sessionID,
