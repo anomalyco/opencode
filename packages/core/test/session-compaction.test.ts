@@ -10,6 +10,7 @@ import { EventTable } from "@opencode-ai/core/event/sql"
 import { SessionCompaction } from "@opencode-ai/core/session/compaction"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionMessage } from "@opencode-ai/core/session/message"
+import { SessionModelRequest } from "@opencode-ai/core/session/model-request"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { SessionTable } from "@opencode-ai/core/session/sql"
@@ -73,9 +74,6 @@ const resolved = SessionRunnerModel.resolved(model, {
   cost,
   limit: { context: 200_000, output: 32_000 },
 })
-const models = Layer.mock(SessionRunnerModel.Service)({
-  resolve: () => Effect.succeed(resolved),
-})
 const it = testEffect(
   AppNodeBuilder.build(
     LayerNode.group([
@@ -85,11 +83,11 @@ const it = testEffect(
       SessionStore.node,
       PluginHooks.node,
       SessionCompaction.node,
+      SessionModelRequest.node,
     ]),
     [
       [Bus.node, Bus.configured({ persist: true })],
       [llmClient, client],
-      [SessionRunnerModel.node, models],
     ],
   ),
 )
@@ -242,6 +240,7 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
       time: { created: DateTime.makeUnsafe(0) },
     }
     const session = yield* insertSession(sessionID, { parent_id: parentID })
+    const modelRequests = yield* SessionModelRequest.Service
 
     const delta = yield* bus
       .subscribe(SessionEvent.Compaction.Delta)
@@ -250,6 +249,8 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
     expect(
       yield* compaction.compactManual({
         session,
+        resolveModel: () => Effect.succeed(resolved),
+        prepare: modelRequests.prepare,
         messages: [userMessage],
         inputID: SessionMessage.ID.make("msg_manual_compaction"),
       }),
@@ -303,9 +304,12 @@ it.effect("forked session compaction reuses the fork root prompt cache key", () 
       fork_session_id: rootID,
       fork_boundary: { type: "before", messageID: SessionMessage.ID.create() },
     })
+    const modelRequests = yield* SessionModelRequest.Service
     expect(
       yield* compaction.compactManual({
         session,
+        resolveModel: () => Effect.succeed(resolved),
+        prepare: modelRequests.prepare,
         messages: [
           {
             id: SessionMessage.ID.create(),
@@ -336,9 +340,12 @@ it.effect("keeps session context hooks away from compaction requests", () =>
       }),
     )
     const session = yield* insertSession(Session.ID.make("ses_hook_compaction"))
+    const modelRequests = yield* SessionModelRequest.Service
     expect(
       yield* compaction.compactManual({
         session,
+        resolveModel: () => Effect.succeed(resolved),
+        prepare: modelRequests.prepare,
         messages: [
           {
             id: SessionMessage.ID.create(),

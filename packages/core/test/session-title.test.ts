@@ -24,6 +24,8 @@ import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { SessionTitle } from "@opencode-ai/core/session/title"
 import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
+import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
+import { Location } from "@opencode-ai/core/location"
 import { Session } from "@opencode-ai/core/session"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
@@ -127,6 +129,8 @@ const it = testEffect(
       [llmClient, client],
       [Catalog.node, catalog],
       [SessionRunnerModel.node, models],
+      [Location.node, Location.boundNode({ directory: AbsolutePath.make("/project") })],
+      [PluginSupervisor.node, Layer.mock(PluginSupervisor.Service, { flush: Effect.void })],
     ],
   ),
 )

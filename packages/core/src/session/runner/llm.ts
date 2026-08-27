@@ -36,7 +36,6 @@ const layer = Layer.effect(
     const bus = yield* Bus.Service
     const store = yield* SessionStore.Service
     const context = yield* SessionContext.Service
-    const modelRequests = yield* SessionModelRequest.Service
     const modelTransport = yield* SessionModelTransport.Service
     const db = (yield* Database.Service).db
     const compaction = yield* SessionCompaction.Service
@@ -142,6 +141,8 @@ const layer = Layer.effect(
                   Effect.gen(function* () {
                     return yield* compaction.compactManual({
                       session,
+                      resolveModel: context.resolveModel,
+                      prepare: context.prepare,
                       messages: yield* store.context(sessionID),
                       inputID: pending.id,
                       started: true,
@@ -215,7 +216,12 @@ const layer = Layer.effect(
         // Reuse boundary preparation once; retries refresh context without delivering more input.
         const loaded = initial ?? (yield* prepareContext(sessionID).pipe(Effect.flatMap(context.load)))
         initial = undefined
-        const compactionInput = { session: loaded.session, messages: loaded.messages, resolved: loaded.model }
+        const compactionInput = {
+          session: loaded.session,
+          messages: loaded.messages,
+          resolved: loaded.model,
+          prepare: context.prepare,
+        }
         if (compaction.required(compactionInput)) {
           const compacted = yield* compaction.compact(compactionInput)
           if (compacted.status !== "completed") return yield* new StepFailedError({ error: compacted.error })
@@ -230,7 +236,7 @@ const layer = Layer.effect(
           initial: loaded.initial,
           messages: loaded.messages,
         })
-        const prepared = yield* modelRequests.prepare({
+        const prepared = yield* context.prepare({
           scope: { session: loaded.session, agentID: loaded.agent.id, model: loaded.model, tools: loaded.tools },
           transcript: {
             system: transcript.system,
@@ -319,7 +325,6 @@ export const node = makeLocationNode({
     Bus.node,
     llmClient,
     SessionContext.node,
-    SessionModelRequest.node,
     SessionModelTransport.node,
     SessionStore.node,
     SessionCompaction.node,

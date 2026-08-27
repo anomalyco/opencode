@@ -797,8 +797,10 @@ describe("LocationServiceMap", () => {
               }),
             ),
           )
-          const failure = yield* SessionRunnerModel.Service.use((models) =>
-            models.resolve(
+          const failure = yield* Effect.gen(function* () {
+            const catalog = yield* Catalog.Service
+            const models = yield* SessionRunnerModel.Service
+            return yield* models.resolve(
               Session.Info.make({
                 id: Session.ID.make("ses_unavailable_model"),
                 projectID: Project.ID.global,
@@ -812,8 +814,9 @@ describe("LocationServiceMap", () => {
                 time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
                 location,
               }),
-            ),
-          ).pipe(Effect.provide(LocationServiceMap.Service.get(location)), Effect.flip)
+              catalog.model.available,
+            )
+          }).pipe(Effect.provide(LocationServiceMap.Service.get(location)), Effect.flip)
 
           expect(failure).toMatchObject({
             _tag: "SessionRunnerModel.ModelUnavailableError",
@@ -837,8 +840,10 @@ describe("LocationServiceMap", () => {
             ["azure-cognitive-services", "azure"],
             ["google-vertex-anthropic", "google-vertex"],
           ] as const) {
-            const failure = yield* SessionRunnerModel.Service.use((models) =>
-              models.resolve(
+            const failure = yield* Effect.gen(function* () {
+              const catalog = yield* Catalog.Service
+              const models = yield* SessionRunnerModel.Service
+              return yield* models.resolve(
                 Session.Info.make({
                   id: Session.ID.make(`ses_removed_${providerID}`),
                   projectID: Project.ID.global,
@@ -852,8 +857,9 @@ describe("LocationServiceMap", () => {
                   time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
                   location,
                 }),
-              ),
-            ).pipe(Effect.provide(LocationServiceMap.Service.get(location)), Effect.flip)
+                catalog.model.available,
+              )
+            }).pipe(Effect.provide(LocationServiceMap.Service.get(location)), Effect.flip)
 
             expect(failure).toMatchObject({
               _tag: "SessionRunnerModel.ModelUnavailableError",
@@ -905,6 +911,7 @@ describe("LocationServiceMap", () => {
                 time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
                 location,
               }),
+              catalog.model.available,
             )
           }).pipe(Effect.provide(LocationServiceMap.Service.get(location)))
 
