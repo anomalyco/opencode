@@ -23,6 +23,9 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/McpTool") {}
 
+/** For environments without MCP: registration settles immediately. */
+export const noop = Layer.succeed(Service, Service.of({ flush: Effect.void }))
+
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {

@@ -1,6 +1,6 @@
 export * as PluginSupervisor from "./supervisor-service.js"
 
-import { Context, Effect } from "effect"
+import { Context, Effect, Layer } from "effect"
 
 /**
  * Dependency-only supervisor seam. Keep this module free of implementation
@@ -12,3 +12,6 @@ export interface Interface {
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/PluginSupervisor") {}
+
+/** For values-constructed environments: no plugin generations exist, so flush settles immediately. */
+export const noop = Layer.succeed(Service, Service.of({ flush: Effect.void }))

@@ -22,10 +22,12 @@ export class RegistrationError extends Schema.TaggedError<RegistrationError>()("
   message: Schema.String,
 }) {}
 
+export interface Draft {
+  readonly add: (tool: Tool.Info) => void
+}
+
 export interface Interface {
-  readonly transform: (
-    callback: (draft: { readonly add: (tool: Tool.Info) => void }) => void,
-  ) => Effect.Effect<void, never, Scope.Scope>
+  readonly transform: (callback: (draft: Draft) => void) => Effect.Effect<void, never, Scope.Scope>
   readonly snapshot: (permissions?: Permission.Ruleset) => Effect.Effect<Snapshot>
 }
 

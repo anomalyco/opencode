@@ -60,6 +60,9 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/McpInstructions") {}
 
+/** For environments without MCP: no server guidance to load. */
+export const noop = Layer.succeed(Service, Service.of({ load: () => Effect.succeed(Instructions.empty) }))
+
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {

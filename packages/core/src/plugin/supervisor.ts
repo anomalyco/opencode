@@ -1,5 +1,5 @@
 export * as PluginSupervisor from "./supervisor.js"
-export { Service, type Interface } from "./supervisor-service.js"
+export { noop, Service, type Interface } from "./supervisor-service.js"
 
 import { Event } from "@opencode-ai/schema/config"
 import { Cause, Effect, Latch, Layer, Stream } from "effect"

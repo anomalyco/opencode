@@ -67,6 +67,10 @@ export const resolved = (
   limit: options.limit,
 })
 
+/** Layer resolving every session to one fixed model, bypassing the catalog. Test or embedding seam. */
+export const fixed = (resolved: Resolved) =>
+  Layer.succeed(Service, Service.of({ resolve: () => Effect.succeed(resolved) }))
+
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {

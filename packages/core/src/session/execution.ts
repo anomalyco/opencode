@@ -6,6 +6,7 @@ import { Database } from "../database/database.js"
 import { Job } from "../job.js"
 import { LocationServiceMap } from "../location-service-map.js"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
+import { SessionEngineBindings } from "./engine-bindings.js"
 import { SessionEvent } from "./event.js"
 import { SessionRunCoordinator } from "./run-coordinator.js"
 import { SessionRunner } from "./runner/index.js"
@@ -52,6 +53,7 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const store = yield* SessionStore.Service
     const locations = yield* LocationServiceMap.Service
+    const bindings = yield* SessionEngineBindings.Service
     const bus = yield* Bus.Service
     const jobs = yield* Job.Service
     const db = (yield* Database.Service).db
@@ -83,22 +85,30 @@ export const layer = Layer.effect(
       continuation?: SessionRunner.Continuation,
       promotable: SessionInbox.Promotable = "input",
     ): Effect.Effect<void, SessionRunner.RunError> {
+      const loop = (
+        force: boolean,
+        continuation?: SessionRunner.Continuation,
+      ): Effect.Effect<void, SessionRunner.RunError, SessionRunner.Service> =>
+        SessionRunner.Service.use((runner) => runner.drain({ sessionID, force, continuation, promotable })).pipe(
+          Effect.flatMap((result) => (result._tag === "Complete" ? Effect.void : loop(false, result.continuation))),
+        )
       return Effect.gen(function* () {
+        // The environment is resolved once and pinned for the whole busy period, so a
+        // binding change never switches environments between continuations. A bound
+        // values-constructed environment outranks the Session's Location graph and
+        // implies the Session exists, since binding follows durable creation.
+        const bound = bindings.get(sessionID)
+        if (bound) return yield* loop(force, continuation).pipe(Effect.provide(bound))
         const session = yield* store.get(sessionID)
         if (!session) return yield* Effect.die(new Error(`Session not found: ${sessionID}`))
-        const result = yield* SessionRunner.Service.use((runner) =>
-          runner.drain({ sessionID, force, continuation, promotable }),
-        ).pipe(
-          Effect.provide(locations.get(session.location)),
-          Effect.tapCause((cause) =>
-            Cause.hasInterruptsOnly(cause)
-              ? Effect.void
-              : Effect.logError("Failed to drain Session", cause).pipe(Effect.annotateLogs({ sessionID })),
-          ),
-        )
-        if (result._tag === "Complete") return
-        return yield* drain(sessionID, false, result.continuation, promotable)
-      })
+        return yield* loop(force, continuation).pipe(Effect.provide(locations.get(session.location)))
+      }).pipe(
+        Effect.tapCause((cause) =>
+          Cause.hasInterruptsOnly(cause)
+            ? Effect.void
+            : Effect.logError("Failed to drain Session", cause).pipe(Effect.annotateLogs({ sessionID })),
+        ),
+      )
     }
     const coordinator = yield* SessionRunCoordinator.make<SessionSchema.ID, SessionRunner.RunError, InterruptReason>({
       started: (sessionID) =>
@@ -170,7 +180,7 @@ export const layer = Layer.effect(
 export const node = makeGlobalNode({
   service: Service,
   layer,
-  deps: [SessionStore.node, LocationServiceMap.node, Bus.node, Database.node, Job.node],
+  deps: [SessionStore.node, LocationServiceMap.node, SessionEngineBindings.node, Bus.node, Database.node, Job.node],
 })
 
 /** Low-level compatibility layer for callers that only need durable Session recording. */
