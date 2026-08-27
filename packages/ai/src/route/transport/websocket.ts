@@ -2,6 +2,7 @@ import { Cause, Effect, Queue, Stream } from "effect"
 import { Headers } from "effect/unstable/http"
 import { Socket } from "effect/unstable/socket"
 import { AIError, TransportReason, type TransportOperation } from "../../schema/index.js"
+import { classifyHttpFailure } from "../executor.js"
 import * as HttpTransport from "./http.js"
 import type { Transport } from "./index.js"
 import type {
@@ -30,6 +31,18 @@ type WebSocketConstructorWithHeaders = (
   url: string,
   options?: { readonly headers?: Headers.Headers },
 ) => globalThis.WebSocket
+
+interface UpgradeResponse extends AsyncIterable<unknown> {
+  readonly statusCode?: number
+  readonly headers: Readonly<Record<string, string | ReadonlyArray<string> | undefined>>
+}
+
+type UpgradeListener = (request: unknown, response: UpgradeResponse) => void
+
+interface UpgradeAwareWebSocket extends globalThis.WebSocket {
+  readonly once?: (event: "unexpected-response", listener: UpgradeListener) => void
+  readonly off?: (event: "unexpected-response", listener: UpgradeListener) => void
+}
 
 const MAX_FRAME_BYTES = 16 * 1024 * 1024
 const transportError = (
@@ -91,6 +104,59 @@ const binaryMessage = (data: unknown) => {
   return undefined
 }
 
+const upgradeHeaders = (headers: UpgradeResponse["headers"]) =>
+  Object.fromEntries(
+    Object.entries(headers).flatMap(([name, value]) => {
+      if (value === undefined) return []
+      return [[name, Array.isArray(value) ? value.join(", ") : String(value)]]
+    }),
+  )
+
+const upgradeBody = (input: WebSocketRequest, response: UpgradeResponse) =>
+  Stream.fromAsyncIterable(response, (error) =>
+    transportError("open", error instanceof Error ? error.message : "Failed to read WebSocket upgrade response", {
+      url: input.url,
+      operation: "read",
+      phase: "connect",
+      delivery: "not-sent",
+    }),
+  ).pipe(
+    Stream.mapEffect((chunk) => {
+      if (typeof chunk === "string") return Effect.succeed(new TextEncoder().encode(chunk))
+      const binary = binaryMessage(chunk)
+      if (binary) return Effect.succeed(binary)
+      return Effect.fail(
+        transportError("open", "Unsupported WebSocket upgrade response body", {
+          url: input.url,
+          operation: "read",
+          phase: "connect",
+          delivery: "not-sent",
+        }),
+      )
+    }),
+    Stream.decodeText(),
+    Stream.runFold(
+      () => "",
+      (body, chunk) => body + chunk,
+    ),
+  )
+
+const rejectedUpgrade = (input: WebSocketRequest, response: UpgradeResponse, body: string | undefined) =>
+  new AIError({
+    module: "WebSocketConnector",
+    method: "open",
+    reason: classifyHttpFailure({
+      message: `WebSocket upgrade rejected with HTTP ${response.statusCode ?? "unknown"}`,
+      method: "GET",
+      url: input.url,
+      requestHeaders: { ...input.headers },
+      status: response.statusCode,
+      code: "UnexpectedServerResponse",
+      responseHeaders: upgradeHeaders(response.headers),
+      responseBody: body,
+    }),
+  })
+
 const waitOpen = (ws: globalThis.WebSocket, input: WebSocketRequest) => {
   if (ws.readyState === globalThis.WebSocket.OPEN) return Effect.void
   if (ws.readyState === globalThis.WebSocket.CLOSING || ws.readyState === globalThis.WebSocket.CLOSED) {
@@ -105,10 +171,13 @@ const waitOpen = (ws: globalThis.WebSocket, input: WebSocketRequest) => {
     )
   }
   return Effect.callback<void, AIError>((resume, signal) => {
+    const upgrade: UpgradeAwareWebSocket = ws
+    const unexpectedResponse = upgrade.once && upgrade.off ? upgrade : undefined
     const cleanup = () => {
       ws.removeEventListener("open", onOpen)
       ws.removeEventListener("error", onError)
       ws.removeEventListener("close", onClose)
+      unexpectedResponse?.off?.("unexpected-response", onUnexpectedResponse)
       signal.removeEventListener("abort", onAbort)
     }
     const onAbort = () => {
@@ -147,9 +216,25 @@ const waitOpen = (ws: globalThis.WebSocket, input: WebSocketRequest) => {
         ),
       )
     }
+    const onUnexpectedResponse: UpgradeListener = (_request, response) => {
+      cleanup()
+      resume(
+        upgradeBody(input, response).pipe(
+          Effect.catch(() => Effect.succeed(undefined)),
+          Effect.flatMap((body) => Effect.fail(rejectedUpgrade(input, response, body))),
+          Effect.ensuring(
+            Effect.sync(() => {
+              ws.addEventListener("error", () => {}, { once: true })
+              if (ws.readyState === globalThis.WebSocket.CONNECTING) ws.close()
+            }),
+          ),
+        ),
+      )
+    }
     ws.addEventListener("open", onOpen, { once: true })
     ws.addEventListener("error", onError, { once: true })
     ws.addEventListener("close", onClose, { once: true })
+    unexpectedResponse?.once?.("unexpected-response", onUnexpectedResponse)
     signal.addEventListener("abort", onAbort, { once: true })
   })
 }

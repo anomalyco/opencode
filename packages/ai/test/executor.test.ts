@@ -1,6 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Deferred, Effect, Fiber, Layer, Ref, Stream } from "effect"
 import { Headers, HttpClient, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { Socket } from "effect/unstable/socket"
 import { LLM, AIError } from "../src/index.js"
 import { LLMClient, RequestExecutor, WebSocketTransport, type WebSocketChannelExecutor } from "../src/route.js"
 import * as OpenAIChat from "../src/protocols/openai-chat.js"
@@ -66,6 +67,53 @@ const expectAIError = (error: unknown) => {
 }
 
 const errorHttp = (error: AIError) => ("http" in error.reason ? error.reason.http : undefined)
+
+interface RejectedUpgradeResponse extends AsyncIterable<Uint8Array> {
+  readonly statusCode: number
+  readonly headers: Readonly<Record<string, string | undefined>>
+}
+
+type RejectedUpgradeListener = (request: unknown, response: RejectedUpgradeResponse) => void
+
+class RejectedUpgradeSocket extends EventTarget {
+  readyState = globalThis.WebSocket.CONNECTING
+  listener?: RejectedUpgradeListener
+
+  constructor(
+    readonly response: { status: number; headers: Readonly<Record<string, string | undefined>>; body: string },
+  ) {
+    super()
+  }
+
+  once(_event: "unexpected-response", listener: RejectedUpgradeListener) {
+    this.listener = listener
+    const body = this.response.body
+    queueMicrotask(() =>
+      listener(
+        {},
+        {
+          statusCode: this.response.status,
+          headers: this.response.headers,
+          async *[Symbol.asyncIterator]() {
+            const split = Math.floor(body.length / 2)
+            yield new TextEncoder().encode(body.slice(0, split))
+            yield new TextEncoder().encode(body.slice(split))
+          },
+        },
+      ),
+    )
+  }
+
+  off(_event: "unexpected-response", listener: RejectedUpgradeListener) {
+    if (this.listener === listener) this.listener = undefined
+  }
+
+  close() {
+    this.readyState = globalThis.WebSocket.CLOSED
+  }
+
+  send() {}
+}
 const largeProviderMessage = `Upstream request failed: ${"validation failed; ".repeat(1_000)}`
 
 describe("RequestExecutor", () => {
@@ -640,6 +688,78 @@ describe("WebSocket channel execution", () => {
       expect(error.reason).toMatchObject({ _tag: "Transport", phase: "send", delivery: "not-sent" })
       expect(socket.sends).toBe(0)
       yield* connection.close
+    }),
+  )
+
+  it.effect("preserves rejected upgrade diagnostics", () =>
+    Effect.gen(function* () {
+      const cases = [
+        {
+          status: 401,
+          headers: { "x-request-id": "req_401" },
+          body: '{"error":{"message":"invalid key"}}',
+          reason: { _tag: "Authentication", kind: "invalid" },
+        },
+        {
+          status: 403,
+          headers: { "x-request-id": "req_403" },
+          body: '{"error":{"message":"forbidden"}}',
+          reason: { _tag: "Authentication", kind: "insufficient-permissions" },
+        },
+        {
+          status: 429,
+          headers: {
+            "retry-after": "2",
+            "x-request-id": "req_429",
+            "x-ratelimit-limit-requests": "500",
+          },
+          body: '{"error":{"message":"rate limited"}}',
+          reason: { _tag: "RateLimit", retryAfterMs: 2_000 },
+        },
+        {
+          status: 503,
+          headers: { "retry-after-ms": "250", "x-request-id": "req_503" },
+          body: '{"error":{"message":"overloaded"}}',
+          reason: { _tag: "ProviderInternal", status: 503, retryAfterMs: 250 },
+        },
+      ] as const
+
+      yield* Effect.forEach(
+        cases,
+        (item) =>
+          Effect.gen(function* () {
+            const socket = new RejectedUpgradeSocket(item)
+            const error = yield* WebSocketTransport.open({
+              url: "wss://api.openai.test/v1/responses",
+              headers: Headers.fromInput({ authorization: "Bearer secret", "x-client": "visible" }),
+            }).pipe(
+              Effect.provideService(Socket.WebSocketConstructor, () => {
+                // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- fixture implements the socket surface used by the connector.
+                return socket as unknown as globalThis.WebSocket
+              }),
+              Effect.flip,
+            )
+
+            expectAIError(error)
+            expect(error.reason).toMatchObject(item.reason)
+            expect(errorHttp(error)).toMatchObject({
+              request: {
+                method: "GET",
+                url: "wss://api.openai.test/v1/responses",
+                headers: { authorization: "Bearer secret", "x-client": "visible" },
+              },
+              response: { status: item.status, headers: item.headers },
+              body: item.body,
+              requestId: `req_${item.status}`,
+              ...(item.status === 429
+                ? { rateLimit: { retryAfterMs: 2_000, limit: { requests: "500" } } }
+                : item.status === 503
+                  ? { rateLimit: { retryAfterMs: 250 } }
+                  : {}),
+            })
+          }),
+        { discard: true },
+      )
     }),
   )
 

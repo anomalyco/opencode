@@ -34,13 +34,16 @@ const exchange = (server: WebSocketServerFixture, id: string): WebSocketChannelE
 
 const withServer = <A>(
   options: WebSocketServerOptions,
-  effect: (server: WebSocketServerFixture) => Effect.Effect<A, unknown, SessionModelTransport.Service>,
+  effect: (
+    server: WebSocketServerFixture,
+    constructor: Socket.WebSocketConstructor["Service"],
+  ) => Effect.Effect<A, unknown, SessionModelTransport.Service>,
 ) =>
   Effect.runPromise(
     Effect.gen(function* () {
       const constructor = yield* Socket.WebSocketConstructor
       const server = yield* makeWebSocketServer(options)
-      return yield* effect(server).pipe(
+      return yield* effect(server, constructor).pipe(
         Effect.provide(
           SessionModelTransport.makeLayer({
             open: (input) =>
@@ -293,8 +296,27 @@ describe("SessionModelTransport local WebSocket server", () => {
     )
   })
 
-  // Effect's browser-compatible constructor does not expose upgrade response bodies or headers.
-  // The real 426 fixture therefore pins the observable contract: a not-sent connect failure and one HTTP fallback.
+  test("preserves a real rejected upgrade response", async () => {
+    await withServer({ upgrade: () => false }, (server, constructor) =>
+      Effect.gen(function* () {
+        const error = yield* WebSocketTransport.open({ url: server.url, headers: Headers.empty }).pipe(
+          Effect.provideService(Socket.WebSocketConstructor, constructor),
+          Effect.flip,
+        )
+
+        expect(error.reason).toMatchObject({
+          _tag: "UnknownProvider",
+          status: 426,
+          http: {
+            request: { method: "GET", url: server.url },
+            response: { status: 426, headers: { "x-upgrade-rejected": "true" } },
+            body: "WebSocket upgrade required",
+          },
+        })
+      }),
+    )
+  })
+
   test("falls back once after a real rejected upgrade", async () => {
     let fallbacks = 0
     await withServer({ upgrade: () => false }, (server) =>

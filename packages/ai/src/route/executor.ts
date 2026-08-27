@@ -174,12 +174,14 @@ const statusError =
 
 // Classifies an HTTP failure captured outside the executor (for example by the
 // AI SDK's own fetch) onto the same reason types and HttpContext that
-// executor-driven requests produce. The originating request is not available on
-// that path, so the method is assumed (language model calls are always POST),
-// request headers are empty.
+// executor-driven requests produce. Callers may supply originating request
+// details when their transport exposes them; language model calls otherwise
+// default to POST with no request headers.
 export const classifyHttpFailure = (input: {
   readonly message: string
   readonly url: string
+  readonly method?: string | undefined
+  readonly requestHeaders?: Record<string, string> | undefined
   readonly status?: number | undefined
   readonly code?: string | undefined
   readonly responseHeaders?: Record<string, string> | undefined
@@ -196,7 +198,11 @@ export const classifyHttpFailure = (input: {
     retryAfterMs: retryAfter,
     rateLimit,
     http: new HttpContext({
-      request: new HttpRequestDetails({ method: "POST", url: input.url, headers: {} }),
+      request: new HttpRequestDetails({
+        method: input.method ?? "POST",
+        url: input.url,
+        headers: input.requestHeaders ?? {},
+      }),
       response:
         input.status === undefined
           ? undefined
