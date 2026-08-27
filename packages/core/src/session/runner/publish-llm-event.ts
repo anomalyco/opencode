@@ -378,7 +378,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     (error: SessionError.Error, scope: "hosted" | "all" = "all") => failTools(error, scope),
   )
 
-  const publish = Effect.fn("SessionRunner.publishLLMEvent")(function* (event: LLMEvent) {
+  const dispatch = Effect.fnUntraced(function* (event: LLMEvent) {
     switch (event.type) {
       case "step-start":
         yield* startAssistant()
@@ -534,6 +534,13 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
         return
     }
   })
+  const publishTraced = Effect.fn("SessionRunner.publishLLMEvent")(function* (event: LLMEvent) {
+    return yield* dispatch(event)
+  })
+  const publish = (event: LLMEvent) =>
+    event.type === "text-delta" || event.type === "reasoning-delta" || event.type === "tool-input-delta"
+      ? dispatch(event)
+      : publishTraced(event)
 
   const progress = Effect.fnUntraced(function* (id: string, update: Tool.Metadata) {
     const tool = tools.get(id)

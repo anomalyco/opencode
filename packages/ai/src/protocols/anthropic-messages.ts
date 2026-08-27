@@ -1256,7 +1256,7 @@ const onContentBlockStart = (
   return [{ ...state, lifecycle: Lifecycle.stepStart(state.lifecycle, events) }, [...events, result]]
 }
 
-const onContentBlockDelta = Effect.fn("AnthropicMessages.onContentBlockDelta")(function* (
+const onContentBlockDelta = Effect.fnUntraced(function* (
   state: ParserState,
   event: AnthropicEvent & { readonly delta: AnthropicStreamDelta },
 ) {
