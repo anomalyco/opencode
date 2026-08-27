@@ -815,7 +815,9 @@ changing their order; it does not rerun plugin setup.
 await ctx.tool.reload()
 ```
 
-Use `update` and `remove` with the effective tool name, including its namespace (`acme_greeting` above). Dots in
+Use `list()` and `get()` to inspect tools currently in the draft. `list()` returns `[id, tool]` pairs and `get()`
+returns `undefined` when the effective name is not present. Use `update` and `remove` with the effective tool name,
+including its namespace (`acme_greeting` above). Dots in
 namespaces and unsupported characters in tool names become `_`. Missing names are ignored; creating a tool requires
 `add` with a complete definition. Updates preserve the name and namespace. Assign new schemas or options to replace
 them rather than mutating nested values. Invalid updates are logged and leave the previous definition intact.
@@ -855,6 +857,8 @@ interface ToolContext {
 }
 
 interface ToolDraft {
+  list(): readonly (readonly [string, ToolInfo])[]
+  get(id: string): ToolInfo | undefined
   add(tool: ToolInfo): void
   update(id: string, update: (tool: Types.Mutable<ToolInfo>) => void): void
   remove(id: string): void

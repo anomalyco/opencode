@@ -73,6 +73,18 @@ const transform = (service: Tool.Interface, tools: Readonly<Record<string, Info>
   )
 
 describe("Tool", () => {
+  it.effect("reads the current draft tools by effective name", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      yield* transform(service, { echo: make() }, { namespace: "acme", codemode: false })
+      yield* service.transform((draft) => {
+        expect(draft.list().map(([id]) => id)).toEqual(["acme_echo"])
+        expect(draft.get("acme_echo")?.name).toBe("echo")
+        expect(draft.get("missing")).toBeUndefined()
+      })
+    }),
+  )
+
   it.effect("replays mutations on refreshed sources and restores tools on disposal and scope cleanup", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service

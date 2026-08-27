@@ -657,6 +657,9 @@ describe("fromPromise", () => {
                 options: { codemode: false },
                 execute: async () => ({ output: description }),
               })
+              expect(draft.list().map(([id]) => id)).toEqual(["reloadable"])
+              expect(draft.get("reloadable")?.name).toBe("reloadable")
+              expect(draft.get("missing")).toBeUndefined()
             })
             registrations.push({ reload: ctx.tool.reload, dispose: registration.dispose })
           },

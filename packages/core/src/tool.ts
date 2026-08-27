@@ -24,6 +24,8 @@ export class RegistrationError extends Schema.TaggedError<RegistrationError>()("
 }) {}
 
 export interface Draft {
+  readonly list: () => readonly (readonly [string, Tool.Info])[]
+  readonly get: (id: string) => Tool.Info | undefined
   readonly add: (tool: Tool.Info) => void
   readonly update: (id: string, update: (tool: Types.Mutable<Tool.Info>) => void) => void
   readonly remove: (id: string) => void
@@ -150,6 +152,8 @@ const layer = Layer.effect(
         errors: [],
       }),
       draft: (draft) => ({
+        list: () => Array.from(draft.tools),
+        get: (id) => draft.tools.get(id),
         add: (tool) => {
           const error = registrationError(tool)
           if (error) {
