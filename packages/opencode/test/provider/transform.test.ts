@@ -5680,3 +5680,113 @@ describe("ProviderTransform.options - kimi family adaptive thinking", () => {
     expect(result.thinking).toBeUndefined()
   })
 })
+
+describe("ProviderTransform.message - Bedrock unsigned reasoning-only messages", () => {
+  const createBedrockModel = () =>
+    ({
+      id: "amazon-bedrock/global.anthropic.claude-sonnet-4-5",
+      providerID: "amazon-bedrock",
+      api: {
+        id: "global.anthropic.claude-sonnet-4-5",
+        url: "https://bedrock-runtime.eu-west-1.amazonaws.com",
+        npm: "@ai-sdk/amazon-bedrock",
+      },
+      name: "Claude Sonnet 4.5",
+      capabilities: {
+        temperature: true,
+        reasoning: true,
+        attachment: true,
+        toolcall: true,
+        input: { text: true, audio: false, image: true, video: false, pdf: true },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: { input: 0.003, output: 0.015, cache: { read: 0.0003, write: 0.00375 } },
+      limit: { context: 200000, output: 8192 },
+      status: "active",
+      options: {},
+      headers: {},
+    }) as any
+
+  const unsignedReasoningOnly = {
+    role: "assistant",
+    // aborted mid-thinking: no signature ever arrived, so no providerOptions
+    content: [{ type: "reasoning", text: "Let me consider the options" }],
+  }
+
+  test("drops an assistant message whose only content is unsigned reasoning", () => {
+    const result = ProviderTransform.message(
+      [
+        { role: "user", content: "think hard then answer" },
+        unsignedReasoningOnly,
+        { role: "user", content: "hello?" },
+      ] as any[],
+      createBedrockModel(),
+      {},
+    )
+    expect(result.map((msg: any) => msg.role)).toEqual(["user", "user"])
+  })
+
+  test("cache points land on surviving messages, not the dropped one", () => {
+    const result = ProviderTransform.message(
+      [
+        { role: "user", content: "think hard then answer" },
+        { role: "assistant", content: [{ type: "text", text: "thinking done, answering" }] },
+        unsignedReasoningOnly,
+      ] as any[],
+      createBedrockModel(),
+      {},
+    )
+    expect(result).toHaveLength(2)
+    for (const msg of result as any[]) {
+      expect(msg.providerOptions?.bedrock?.cachePoint).toEqual({ type: "default" })
+    }
+  })
+
+  test("keeps a signed reasoning-only assistant message", () => {
+    const result = ProviderTransform.message(
+      [
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "reasoning",
+              text: "Let me consider the options",
+              providerOptions: { bedrock: { signature: "sig-123" } },
+            },
+          ],
+        },
+      ] as any[],
+      createBedrockModel(),
+      {},
+    )
+    expect(result).toHaveLength(1)
+  })
+
+  test("keeps an assistant message where unsigned reasoning sits next to real content", () => {
+    const result = ProviderTransform.message(
+      [
+        {
+          role: "assistant",
+          content: [
+            { type: "reasoning", text: "Let me consider the options" },
+            { type: "text", text: "The answer is 42." },
+          ],
+        },
+      ] as any[],
+      createBedrockModel(),
+      {},
+    )
+    expect(result).toHaveLength(1)
+  })
+
+  test("does not touch other providers", () => {
+    const result = ProviderTransform.message([unsignedReasoningOnly] as any[], {
+      ...createBedrockModel(),
+      id: "anthropic/claude-sonnet-4-5",
+      providerID: "anthropic",
+      api: { id: "claude-sonnet-4-5", url: "https://api.anthropic.com", npm: "@ai-sdk/anthropic" },
+    } as any, {})
+    expect(result).toHaveLength(1)
+  })
+})

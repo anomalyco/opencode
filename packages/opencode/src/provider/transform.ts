@@ -356,6 +356,29 @@ function normalizeMessages(
   return msgs
 }
 
+// The @ai-sdk/amazon-bedrock converter intentionally drops reasoning parts that
+// carry no signature (an aborted thinking stream never receives one, since the
+// signature arrives at the end of the block). An assistant message whose only
+// content is unsigned reasoning therefore reaches Bedrock as an empty content
+// array — rejected with "The content field in the Message object is empty" —
+// or, when applyCaching attached a cachePoint to it, as a lone cachePoint
+// block — rejected with "There is nothing available to cache". Both 400s are
+// non-retryable and repeat on every request while the message sits in the
+// last-2 cache window, wedging the session. Drop such messages before caching
+// and conversion: the converter discards their content anyway, so the model
+// sees no difference. Must run before applyCaching so cache points land on
+// messages that survive.
+function dropUnsignedReasoningOnlyMessages(msgs: ModelMessage[]): ModelMessage[] {
+  return msgs.filter((msg) => {
+    if (msg.role !== "assistant" || !Array.isArray(msg.content)) return true
+    return msg.content.some((part) => {
+      if (part.type !== "reasoning") return true
+      const metadata = part.providerOptions?.["bedrock"] ?? part.providerOptions?.["amazonBedrock"]
+      return metadata?.["signature"] != null || metadata?.["redactedData"] != null
+    })
+  })
+}
+
 function applyCaching(msgs: ModelMessage[], model: Provider.Model): ModelMessage[] {
   const system = msgs.filter((msg) => msg.role === "system").slice(0, 2)
   const final = msgs.filter((msg) => msg.role !== "system").slice(-2)
@@ -465,6 +488,9 @@ function mapProviderOptions(
 
 export function message(msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>) {
   msgs = unsupportedParts(msgs, model)
+  if (model.api.npm === "@ai-sdk/amazon-bedrock") {
+    msgs = dropUnsignedReasoningOnlyMessages(msgs)
+  }
   msgs = normalizeMessages(msgs, model, options)
   const usesAnthropicAutomaticCaching =
     options.cacheControl !== undefined &&
