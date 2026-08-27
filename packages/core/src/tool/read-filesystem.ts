@@ -18,7 +18,7 @@ const FIRST_CHUNK = 256 * 1024
 const MAX_LINE_LENGTH = 2_000
 const TREE_BASE = 6
 const MAX_LINE_SUFFIX = `... (line truncated to ${MAX_LINE_LENGTH} chars)`
-const MEDIA_MIMES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf"])
+export const MEDIA_MIMES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf"])
 
 export class BinaryFileError extends Schema.TaggedError<BinaryFileError>()("ReadTool.BinaryFileError", {
   resource: Schema.String,
