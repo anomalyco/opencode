@@ -634,6 +634,66 @@ describe("fromPromise", () => {
     }),
   )
 
+  it.live("reloads and disposes Promise tools while preserving older snapshots", () =>
+    Effect.gen(function* () {
+      const plugins = yield* Plugin.Service
+      const registry = yield* Tool.Service
+      const host = yield* PluginHost.make(plugins)
+      const source = { description: "Original", replays: 0 }
+      const registrations: Array<{ reload: () => Promise<void>; dispose: () => Promise<void> }> = []
+      yield* PluginPromise.fromPromise(
+        define({
+          id: "promise-tool-lifecycle",
+          setup: async (ctx) => {
+            expect(Object.keys(ctx.tool).sort()).toEqual(["hook", "reload", "transform"])
+            const registration = await ctx.tool.transform((draft) => {
+              source.replays++
+              const description = source.description
+              draft.add({
+                name: "reloadable",
+                description,
+                input: Schema.Struct({}),
+                output: Schema.String,
+                options: { codemode: false },
+                execute: async () => ({ output: description }),
+              })
+            })
+            registrations.push({ reload: ctx.tool.reload, dispose: registration.dispose })
+          },
+        }),
+      ).effect(host)
+      const registration = registrations[0]
+      if (!registration) return yield* Effect.die("Promise tool registration was not captured")
+      const original = yield* registry.snapshot()
+      const execute = (snapshot: Tool.Snapshot) =>
+        snapshot.execute({
+          sessionID: Session.ID.make("ses_promise_tool_reload"),
+          agent: Agent.ID.make("build"),
+          messageID: SessionMessage.ID.make("msg_promise_tool_reload"),
+          call: { type: "tool-call", id: "call_promise_tool_reload", name: "reloadable", input: {} },
+        })
+
+      source.description = "Reloaded"
+      yield* Effect.promise(() => registration.reload())
+      const reloaded = yield* registry.snapshot()
+      expect(source.replays).toBe(2)
+      expect(reloaded.definitions).toContainEqual(
+        expect.objectContaining({ name: "reloadable", description: "Reloaded" }),
+      )
+      expect(yield* execute(reloaded)).toMatchObject({ output: "Reloaded" })
+      expect(yield* execute(original)).toMatchObject({ output: "Original" })
+
+      yield* Effect.promise(() => registration.dispose())
+      yield* Effect.promise(() => registration.dispose())
+      expect((yield* registry.snapshot()).definitions.some((tool) => tool.name === "reloadable")).toBe(false)
+      expect(yield* execute(original)).toMatchObject({ output: "Original" })
+      expect(yield* execute(reloaded)).toMatchObject({ output: "Reloaded" })
+      yield* Effect.promise(() => registration.reload())
+      expect(source.replays).toBe(2)
+      expect((yield* registry.snapshot()).definitions.some((tool) => tool.name === "reloadable")).toBe(false)
+    }),
+  )
+
   it.effect("returns content-only plugin results through Code Mode", () =>
     Effect.gen(function* () {
       const plugins = yield* Plugin.Service

@@ -358,14 +358,8 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
       hook: (name, callback) => hooks.register("shell", name, callback),
     },
     tool: {
-      transform: (callback) =>
-        tools
-          .transform((draft) =>
-            callback({
-              add: (tool) => draft.add(tool),
-            }),
-          )
-          .pipe(Effect.as({ dispose: Effect.void })),
+      transform: tools.transform,
+      reload: tools.reload,
       hook: (name, callback) => hooks.register("tool", name, callback),
     },
     vcs: {

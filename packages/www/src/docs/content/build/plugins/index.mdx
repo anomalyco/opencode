@@ -784,10 +784,12 @@ interface StorageScanResult {
 
 ### Tools
 
-Register tools with a transform.
+Register tools with an add-only transform. The callback is synchronous, including in Promise plugins; load external
+data before registering or reloading. OpenCode replays active transforms in registration order on a fresh draft.
+For the same effective tool name, a later valid registration overrides an earlier one.
 
 ```ts
-await ctx.tool.transform((draft) => {
+const registration = await ctx.tool.transform((draft) => {
   draft.add({
     name: "greeting",
     description: "Create a greeting",
@@ -806,6 +808,24 @@ await ctx.tool.transform((draft) => {
 })
 ```
 
+Call `reload()` after changing source data captured by the callback. Reload replays the active transforms without
+changing their order; it does not rerun plugin setup.
+
+```ts
+await ctx.tool.reload()
+```
+
+Dispose a registration to remove its transform and rebuild from the remaining transforms, revealing any earlier
+definition it overrode. Disposal is idempotent, and unloading the plugin also disposes its registrations.
+
+```ts
+await registration.dispose()
+```
+
+Each model request captures a tool snapshot. Reload and disposal affect future snapshots, not the definitions or
+executors already captured by an existing request. Executors that close over mutable plugin data still observe
+that data; capture a value inside the transform when it must remain tied to that definition.
+
 #### Reference
 
 Schemas: [`Tool.Content`](/api#schema-Tool.Content), [`Tool.TextContent`](/api#schema-Tool.TextContent),
@@ -814,6 +834,7 @@ Schemas: [`Tool.Content`](/api#schema-Tool.Content), [`Tool.TextContent`](/api#s
 ```ts
 interface ToolContext {
   transform(callback: (draft: ToolDraft) => void): Promise<Registration>
+  reload(): Promise<void>
 }
 
 interface ToolDraft {

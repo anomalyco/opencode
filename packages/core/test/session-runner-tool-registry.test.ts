@@ -6,11 +6,13 @@ import { Image } from "@opencode-ai/core/image"
 import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { Session } from "@opencode-ai/core/session"
 import { SessionMessage } from "@opencode-ai/core/session/message"
+import { State } from "@opencode-ai/core/state"
 import { Tool } from "@opencode-ai/core/tool"
 import type { Info } from "@opencode-ai/schema/tool"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { executeTool, toolDefinitions } from "./lib/tool"
 import { Cause, Deferred, Effect, Exit, Fiber, Layer, Logger, Schema, SchemaGetter, SchemaIssue, Scope } from "effect"
+import { TestClock } from "effect/testing"
 import { z } from "zod"
 import { testEffect } from "./lib/effect"
 
@@ -71,6 +73,114 @@ const transform = (service: Tool.Interface, tools: Readonly<Record<string, Info>
   )
 
 describe("Tool", () => {
+  it.effect("replays empty sources on reload and keeps advertised snapshots", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      let source: Info[] = []
+      yield* service.transform((draft) => source.forEach((tool) => draft.add(tool)))
+      expect((yield* service.snapshot()).definitions.map((tool) => tool.name)).toEqual(["execute"])
+
+      const tool = { ...constant("first"), name: "echo", options: { codemode: false } }
+      source = [tool]
+      const first = yield* service.reload().pipe(Effect.forkChild({ startImmediately: true }))
+      yield* TestClock.adjust("500 millis")
+      yield* Fiber.join(first)
+      const advertised = yield* service.snapshot()
+      expect((yield* advertised.execute(call("echo"))).output).toEqual({ text: "first" })
+
+      tool.execute = constant("second").execute
+      expect((yield* advertised.execute(call("echo"))).output).toEqual({ text: "first" })
+      const second = yield* service.reload().pipe(Effect.forkChild({ startImmediately: true }))
+      yield* TestClock.adjust("500 millis")
+      yield* Fiber.join(second)
+      expect((yield* executeTool(service, call("echo"))).output).toEqual({ text: "second" })
+      expect((yield* advertised.execute(call("echo"))).output).toEqual({ text: "first" })
+
+      source = []
+      const removed = yield* service.reload().pipe(Effect.forkChild({ startImmediately: true }))
+      yield* TestClock.adjust("500 millis")
+      yield* Fiber.join(removed)
+      expect((yield* service.snapshot()).definitions.map((tool) => tool.name)).toEqual(["execute"])
+      expect((yield* advertised.execute(call("echo"))).output).toEqual({ text: "first" })
+    }),
+  )
+
+  it.effect("disposes overlays once and replays remaining transforms in order", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      const runs: string[] = []
+      yield* service.transform((draft) => {
+        runs.push("base")
+        draft.add({ ...constant("base"), name: "echo", options: { codemode: false } })
+      })
+      const scope = yield* Scope.make()
+      const overlay = yield* service
+        .transform((draft) => {
+          runs.push("overlay")
+          draft.add({ ...constant("overlay"), name: "echo", options: { codemode: false } })
+        })
+        .pipe(Scope.provide(scope))
+      expect(runs).toEqual(["base", "base", "overlay"])
+      expect((yield* executeTool(service, call("echo"))).output).toEqual({ text: "overlay" })
+
+      yield* overlay.dispose
+      expect(runs).toEqual(["base", "base", "overlay", "base"])
+      expect((yield* executeTool(service, call("echo"))).output).toEqual({ text: "base" })
+      yield* overlay.dispose
+      yield* Scope.close(scope, Exit.void)
+      expect(runs).toEqual(["base", "base", "overlay", "base"])
+    }),
+  )
+
+  it.effect("batches tool publication and suppresses terminal teardown replay", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      const runs: string[] = []
+      const scope = yield* Scope.make()
+      yield* State.batch(
+        Effect.gen(function* () {
+          yield* service.transform((draft) => {
+            runs.push("base")
+            draft.add({ ...constant("base"), name: "echo", options: { codemode: false } })
+          })
+          yield* service.transform((draft) => {
+            runs.push("overlay")
+            draft.add({ ...constant("overlay"), name: "echo", options: { codemode: false } })
+          })
+          expect(runs).toEqual([])
+          expect((yield* service.snapshot()).definitions.map((tool) => tool.name)).toEqual(["execute"])
+        }).pipe(Scope.provide(scope)),
+      )
+
+      expect(runs).toEqual(["base", "overlay"])
+      expect((yield* executeTool(service, call("echo"))).output).toEqual({ text: "overlay" })
+      yield* State.batch(Scope.close(scope, Exit.void), { flush: false })
+      expect(runs).toEqual(["base", "overlay"])
+    }),
+  )
+
+  it.effect("revalidates sources and rejects collisions without hiding earlier tools", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      yield* transform(service, { echo_tool: constant("base") }, { codemode: false })
+      let source = [{ ...constant("overlay"), name: "echo.tool", options: { codemode: false } }]
+      yield* service.transform((draft) => source.forEach((tool) => draft.add(tool)))
+      expect((yield* executeTool(service, call("echo_tool"))).output).toEqual({ text: "overlay" })
+
+      source = [...source, { ...constant("collision"), name: "echo_tool", options: { codemode: false } }]
+      const collision = yield* service.reload().pipe(Effect.forkChild({ startImmediately: true }))
+      yield* TestClock.adjust("500 millis")
+      yield* Fiber.join(collision)
+      expect((yield* executeTool(service, call("echo_tool"))).output).toEqual({ text: "base" })
+
+      source = [{ ...constant("invalid"), name: "", options: { codemode: false } }]
+      const invalid = yield* service.reload().pipe(Effect.forkChild({ startImmediately: true }))
+      yield* TestClock.adjust("500 millis")
+      yield* Fiber.join(invalid)
+      expect((yield* executeTool(service, call("echo_tool"))).output).toEqual({ text: "base" })
+    }),
+  )
+
   it.effect("logs and skips invalid dotted namespaces", () => {
     const output: unknown[] = []
     const logger = Logger.map(Logger.formatStructured, (entry) => {

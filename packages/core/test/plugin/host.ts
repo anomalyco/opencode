@@ -120,6 +120,7 @@ export function host(overrides: Overrides = {}): Plugin.Context {
     },
     tool: overrides.tool ?? {
       transform: () => Effect.die("unused tool.transform"),
+      reload: () => Effect.die("unused tool.reload"),
       hook: () => Effect.die("unused tool.hook"),
     },
     vcs: overrides.vcs ?? {

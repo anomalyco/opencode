@@ -64,10 +64,8 @@ export const registerToolPlugin = <R>(
         hook: () => Effect.succeed({ dispose: Effect.void }),
       },
       tool: {
-        transform: (callback) =>
-          tools
-            .transform((draft) => callback({ add: (tool) => draft.add(tool) }))
-            .pipe(Effect.orDie, Effect.as({ dispose: Effect.void })),
+        transform: tools.transform,
+        reload: tools.reload,
         hook: () => Effect.die("registerToolPlugin does not support tool hooks"),
       },
     })

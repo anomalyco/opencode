@@ -2,7 +2,7 @@ import { Tool } from "@opencode-ai/schema/tool"
 import type { Agent } from "@opencode-ai/schema/agent"
 import type { Session } from "@opencode-ai/schema/session"
 import type { SessionMessage } from "@opencode-ai/schema/session-message"
-import type { JsonSchema } from "effect"
+import type { Effect, JsonSchema } from "effect"
 import type { Hooks, Transform } from "./registration.js"
 
 export interface ToolDraft {
@@ -48,5 +48,6 @@ export interface ToolFailures extends Record<keyof ToolHooks, unknown> {
 
 export interface ToolDomain {
   readonly transform: Transform<ToolDraft>
+  readonly reload: () => Effect.Effect<void>
   readonly hook: Hooks<ToolHooks, ToolFailures>
 }

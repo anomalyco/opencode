@@ -829,6 +829,10 @@ interface StorageDomain {
 Register typed tools with Effect `Schema`. The executor receives decoded input and returns an Effect containing typed
 output, display content, or metadata.
 
+The draft is add-only and the transform callback is synchronous: it must not return an Effect or Promise. Load
+external data before registering or reloading. OpenCode replays active transforms in registration order on a fresh
+draft; for the same effective tool name, a later valid registration overrides an earlier one.
+
 ```ts
 effect: (ctx) =>
   Effect.gen(function* () {
@@ -850,6 +854,17 @@ effect: (ctx) =>
   }),
 ```
 
+Call `yield* ctx.tool.reload()` after changing source data captured by the callback. Reload replays active transforms
+without changing their order; it does not rerun the plugin effect.
+
+`transform` returns a scoped registration. Run `yield* registration.dispose` to remove its transform and rebuild
+from the remaining transforms, revealing any earlier definition it overrode. Disposal is idempotent, and closing
+the plugin scope also disposes its registrations.
+
+Each model request captures a tool snapshot. Reload and disposal affect future snapshots, not the definitions or
+executors already captured by an existing request. Executors that close over mutable plugin data still observe
+that data; capture a value inside the transform when it must remain tied to that definition.
+
 Schemas: [`Tool.Content`](/api#schema-Tool.Content), [`Tool.TextContent`](/api#schema-Tool.TextContent),
 [`Tool.FileContent`](/api#schema-Tool.FileContent).
 
@@ -862,6 +877,7 @@ interface ToolDraft {
 
 interface ToolDomain {
   readonly transform: Transform<ToolDraft>
+  readonly reload: () => Effect.Effect<void>
 }
 ```
 

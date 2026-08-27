@@ -291,6 +291,7 @@ export function fromPromise(plugin: Plugin) {
             scan: (options) => run(host.storage.scan(options)),
           },
           tool: {
+            reload: () => run(host.tool.reload()),
             transform: (callback) =>
               register(
                 host.tool.transform((draft) =>
