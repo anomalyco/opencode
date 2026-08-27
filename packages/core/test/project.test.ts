@@ -220,6 +220,48 @@ describe("Project.resolve", () => {
     }),
   )
 
+  it.live("applies plugin removal and reenabling selectors to repository markers", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      yield* Effect.promise(async () => {
+        await fs.mkdir(path.join(tmp.path, ".opencode", "plugins"), { recursive: true })
+        await fs.mkdir(path.join(tmp.path, ".svn"))
+        await Bun.write(
+          path.join(tmp.path, ".opencode", "plugins", "svn.ts"),
+          'export default { id: "svn", vcs: { markers: [".svn"] }, setup() {} }',
+        )
+        await Bun.write(path.join(tmp.path, "opencode.json"), JSON.stringify({ plugins: ["-svn", "svn"] }))
+      })
+      const project = yield* Project.Service
+
+      expect((yield* project.resolve(abs(tmp.path))).vcs?.type).toBe("svn")
+    }),
+  )
+
+  it.live("does not detect repository markers from disabled plugins", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      yield* Effect.promise(async () => {
+        await fs.mkdir(path.join(tmp.path, ".opencode", "plugins"), { recursive: true })
+        await fs.mkdir(path.join(tmp.path, ".svn"))
+        await Bun.write(
+          path.join(tmp.path, ".opencode", "plugins", "svn.ts"),
+          'export default { id: "svn", vcs: { markers: [".svn"] }, setup() {} }',
+        )
+        await Bun.write(path.join(tmp.path, "opencode.json"), JSON.stringify({ plugins: ["-svn"] }))
+      })
+      const project = yield* Project.Service
+
+      expect((yield* project.resolve(abs(tmp.path))).vcs).toBeUndefined()
+    }),
+  )
+
   it.live("prefers a nested plugin repository over its parent git repository", () =>
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireRelease(
