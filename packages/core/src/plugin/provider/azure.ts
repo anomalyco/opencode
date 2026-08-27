@@ -84,7 +84,7 @@ export const AzurePlugin = define({
       available
         ? yield* command(["cognitiveservices", "account", "list", "--output", "json", "--only-show-errors"]).pipe(
             Effect.flatMap(decodeAccounts),
-            Effect.catch(() => Effect.succeed([])),
+            Effect.orElseSucceed(() => []),
           )
         : []
 
