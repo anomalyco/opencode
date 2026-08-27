@@ -86,6 +86,7 @@ import { useLocation } from "../../context/location"
 import { Slot } from "../../plugin/render"
 import { usePlugin } from "../../plugin/context"
 import {
+  backgroundToolRowIndex,
   cacheReuseDrop,
   createSessionRows,
   messageBoundaryIDs,
@@ -93,6 +94,7 @@ import {
   sessionRowID,
   turnDuration,
   turnTokensPerSecond,
+  type BackgroundToolTarget,
   type CacheUsage,
   type PartRef,
   type SessionRow,
@@ -141,7 +143,7 @@ const context = createContext<{
   config: ReturnType<typeof useConfig>["data"]
   mutatePending: (action: PendingAction, inboxID: string) => Promise<boolean>
   pendingDelivery: (inboxID: string) => SessionInbox.Delivery | undefined
-  jumpToShell: (jobID: string) => void
+  jumpToBackgroundTool: (target: BackgroundToolTarget, beforeMessageID: string) => void
 }>()
 
 function use() {
@@ -656,9 +658,9 @@ export function Session(props: {
       alignMessage(messageID, Math.max(0, y - (message?.type === "assistant" ? 1 : 0)))
     })
 
-  const jumpToShell = (jobID: string) => {
+  const jumpToBackgroundTool = (target: BackgroundToolTarget, beforeMessageID: string) => {
     const jump = () => {
-      const index = rows.findIndex((row) => row.type === "part" && row.ref.partID === jobID)
+      const index = backgroundToolRowIndex(rows, messages(), target, beforeMessageID)
       if (index === -1) {
         if (data.session.message.more(route.sessionID)) prependHistory(0, jump)
         return
@@ -1287,7 +1289,7 @@ export function Session(props: {
         config,
         mutatePending,
         pendingDelivery: (inboxID) => pendingDeliveries().get(inboxID),
-        jumpToShell,
+        jumpToBackgroundTool,
       }}
     >
       <box flexDirection="row" flexGrow={1} minHeight={0}>
@@ -2033,7 +2035,16 @@ function SessionNoticeMessageV2(props: { message: SessionMessageInfo }) {
   const [hover, setHover] = createSignal(false)
   const metadata = () => (props.message.type === "synthetic" ? props.message.metadata : undefined)
   const source = () => stringValue(metadata()?.source)
-  const jobID = () => (source() === "shell" ? stringValue(metadata()?.jobID) : undefined)
+  const target = createMemo<BackgroundToolTarget | undefined>(() => {
+    if (source() === "shell") {
+      const id = stringValue(metadata()?.jobID)
+      return id ? { source: "shell", id } : undefined
+    }
+    if (source() === "subagent") {
+      const id = stringValue(metadata()?.childID)
+      return id ? { source: "subagent", id } : undefined
+    }
+  })
   const completion = () => source() === "subagent" || source() === "shell"
   const state = () => stringValue(metadata()?.state)
   const actor = () => (source() === "shell" ? "Shell" : Locale.titlecase(stringValue(metadata()?.agent) ?? "Subagent"))
@@ -2066,16 +2077,16 @@ function SessionNoticeMessageV2(props: { message: SessionMessageInfo }) {
       }
     >
       <box
-        id={jobID() ? `shell-completion:${jobID()}` : undefined}
+        id={target() ? `${target()!.source}-completion:${target()!.id}` : undefined}
         marginLeft={3}
         onMouseOver={() => {
-          if (jobID()) setHover(true)
+          if (target()) setHover(true)
         }}
         onMouseOut={() => setHover(false)}
         onMouseUp={() => {
-          const id = jobID()
-          if (!id || renderer.getSelection()?.getSelectedText()) return
-          ctx.jumpToShell(id)
+          const item = target()
+          if (!item || renderer.getSelection()?.getSelectedText()) return
+          ctx.jumpToBackgroundTool(item, props.message.id)
         }}
       >
         <text wrapMode="none">
