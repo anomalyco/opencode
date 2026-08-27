@@ -698,16 +698,22 @@ describe("SessionModelTransport", () => {
 
   test("poisons instead of dropping data when the inbound queue overflows", async () => {
     const messages = queue<string | Uint8Array, AIError>()
+    const poisoned = Deferred.makeUnsafe<void>()
     let closed = 0
     const connector: WebSocketConnector = {
       open: () =>
         Effect.succeed({
           sendText: () =>
+            // Hold consumption at the send boundary until the reader fills and poisons the inbound queue.
             Effect.sync(() => {
               for (let index = 0; index <= 129; index++) Queue.offerUnsafe(messages, `frame:${index}`)
-            }),
-          messages: Stream.fromQueue(messages),
-          close: Effect.sync(() => closed++).pipe(Effect.andThen(Queue.shutdown(messages)), Effect.asVoid),
+            }).pipe(Effect.andThen(Deferred.await(poisoned))),
+          messages: Stream.fromQueue(messages).pipe(Stream.tap(() => Effect.yieldNow)),
+          close: Effect.sync(() => closed++).pipe(
+            Effect.andThen(Deferred.succeed(poisoned, undefined)),
+            Effect.andThen(Queue.shutdown(messages)),
+            Effect.asVoid,
+          ),
         }),
     }
 
@@ -721,7 +727,7 @@ describe("SessionModelTransport", () => {
             ...item,
             driver: {
               create: item.driver.create,
-              observe: (_create, frame) => Effect.sleep("1 millis").pipe(Effect.as({ type: "frame" as const, frame })),
+              observe: (_create, frame) => Effect.succeed({ type: "frame" as const, frame }),
             },
           }),
         )
