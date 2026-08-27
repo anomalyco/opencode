@@ -1,9 +1,10 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, setDefaultTimeout } from "bun:test"
 import path from "path"
 import { Deferred, Effect, Fiber, Stream } from "effect"
 import { Bus } from "@opencode-ai/core/bus"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { Watcher } from "@opencode-ai/core/filesystem/watcher"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { PluginRuntime } from "@opencode-ai/core/plugin/runtime"
@@ -22,6 +23,9 @@ import { tempGlobalLayer } from "./fixture/global"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
+// These tests include real Location and plugin startup, not just hook callbacks.
+setDefaultTimeout(15_000)
+
 const runtime = PluginRuntime.makeCell()
 const it = testEffect(
   AppNodeBuilder.build(
@@ -36,6 +40,7 @@ const it = testEffect(
     [
       [Bus.node, Bus.configured({ persist: true })],
       [Global.node, tempGlobalLayer],
+      [Watcher.node, Watcher.configured({ enabled: false })],
       [SessionExecution.node, SessionExecution.noopLayer],
       [PluginRuntime.node, PluginRuntime.layerWithCell(runtime)],
     ],
