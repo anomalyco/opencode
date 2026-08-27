@@ -436,41 +436,41 @@ it.effect("logs global update diagnostics once without exposing values", () =>
 )
 
 const updateFixtures = path.join(import.meta.dir, "fixtures/v2-compat")
-const globalInputs = [...new Bun.Glob("update-global/*/input.{json,jsonc}").scanSync({ cwd: updateFixtures })].sort()
-const projectInputs = [...new Bun.Glob("update-project/*/input.json").scanSync({ cwd: updateFixtures })].sort()
+const globalInputs = [...new Bun.Glob("update-global/*-input.{json,jsonc}").scanSync({ cwd: updateFixtures })].sort()
+const projectInputs = [...new Bun.Glob("update-project/*-input.json").scanSync({ cwd: updateFixtures })].sort()
 if (!globalInputs.length || !projectInputs.length) throw new Error("Missing config update fixtures")
 
 for (const input of globalInputs) {
-  const directory = path.join(updateFixtures, path.dirname(input))
   const extension = path.extname(input)
-  it.live(`fixture ${path.dirname(input)}`, () =>
+  const name = input.slice(0, -`-input${extension}`.length)
+  const prefix = path.join(updateFixtures, name)
+  it.live(`fixture ${name}`, () =>
     withGlobalConfig({}, ({ dir }) =>
       Effect.gen(function* () {
         const fs = yield* FSUtil.Service
         const file = path.join(dir, `opencode${extension}`)
         yield* fs.writeFileString(file, yield* fs.readFileString(path.join(updateFixtures, input)))
-        const patch = ConfigParse.schema(ConfigV1.Info, yield* fs.readJson(path.join(directory, "patch.json")), input)
+        const patch = ConfigParse.schema(ConfigV1.Info, yield* fs.readJson(`${prefix}-patch.json`), input)
         const updated = yield* Config.use.updateGlobal(patch)
         const written = yield* fs.readFileString(file)
 
-        yield* Effect.promise(() => snapshot(path.join(directory, `output${extension}`), written))
-        yield* Effect.promise(() =>
-          snapshot(path.join(directory, "normalized.json"), JSON.stringify(updated.info, null, 2) + "\n"),
-        )
+        yield* Effect.promise(() => snapshot(`${prefix}-output${extension}`, written))
+        yield* Effect.promise(() => snapshot(`${prefix}-normalized.json`, JSON.stringify(updated.info, null, 2) + "\n"))
       }),
     ),
   )
 }
 
 for (const input of projectInputs) {
-  const directory = path.join(updateFixtures, path.dirname(input))
-  it.instance(`fixture ${path.dirname(input)}`, () =>
+  const name = input.slice(0, -"-input.json".length)
+  const prefix = path.join(updateFixtures, name)
+  it.instance(`fixture ${name}`, () =>
     Effect.gen(function* () {
       const instance = yield* TestInstance
       const fs = yield* FSUtil.Service
       const file = path.join(instance.directory, "config.json")
       yield* fs.writeFileString(file, yield* fs.readFileString(path.join(updateFixtures, input)))
-      const patch = ConfigParse.schema(ConfigV1.Info, yield* fs.readJson(path.join(directory, "patch.json")), input)
+      const patch = ConfigParse.schema(ConfigV1.Info, yield* fs.readJson(`${prefix}-patch.json`), input)
       yield* Config.use.update(patch)
       const written = yield* fs.readFileString(file)
       const normalized = ConfigParse.schema(
@@ -479,10 +479,8 @@ for (const input of projectInputs) {
         file,
       )
 
-      yield* Effect.promise(() => snapshot(path.join(directory, "output.json"), written))
-      yield* Effect.promise(() =>
-        snapshot(path.join(directory, "normalized.json"), JSON.stringify(normalized, null, 2) + "\n"),
-      )
+      yield* Effect.promise(() => snapshot(`${prefix}-output.json`, written))
+      yield* Effect.promise(() => snapshot(`${prefix}-normalized.json`, JSON.stringify(normalized, null, 2) + "\n"))
     }),
   )
 }

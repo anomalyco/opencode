@@ -41,20 +41,20 @@ const it = testEffect(
 
 describe("V2 compatibility read fixtures", () => {
   const directory = path.join(import.meta.dir, "fixtures/v2-compat/read")
-  const cases = Array.from(new Bun.Glob("*/input.jsonc").scanSync(directory))
-    .map((file) => path.dirname(file))
+  const cases = Array.from(new Bun.Glob("*-input.jsonc").scanSync(directory))
+    .map((file) => file.slice(0, -"-input.jsonc".length))
     .sort()
   if (!cases.length) throw new Error("No V2 compatibility read fixtures found")
 
   cases.forEach((name) => {
     test(name, async () => {
-      const source = path.join(directory, name, "input.jsonc")
+      const source = path.join(directory, `${name}-input.jsonc`)
       const input = ConfigParse.jsonc(await Bun.file(source).text(), source)
       const original = structuredClone(input)
       const result = ConfigV2Compat.lower(input)
       expect(input).toEqual(original)
       const config = ConfigParse.schema(ConfigV1.Info, result.value, source)
-      await snapshot(path.join(path.dirname(source), "output.json"), JSON.stringify(config, null, 2) + "\n")
+      await snapshot(path.join(directory, `${name}-output.json`), JSON.stringify(config, null, 2) + "\n")
     })
   })
 })
