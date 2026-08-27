@@ -329,6 +329,34 @@ describe("AppProcess", () => {
     )
 
     it.live(
+      "includes stderr in output while retaining capped failure diagnostics",
+      Effect.gen(function* () {
+        const svc = yield* AppProcess.Service
+        const lines: string[] = []
+        const exit = yield* Effect.exit(
+          svc
+            .runStream(
+              cmd(
+                "-e",
+                "console.log('stdout-line'); console.error('stderr-line'); console.error('diagnostic-tail'); process.exit(2)",
+              ),
+              { includeStderr: true, maxErrorBytes: 20, okExitCodes: [0] },
+            )
+            .pipe(Stream.runForEach((line) => Effect.sync(() => lines.push(line)))),
+        )
+
+        expect(lines.toSorted()).toEqual(["diagnostic-tail", "stderr-line", "stdout-line"])
+        expect(Exit.isFailure(exit)).toBe(true)
+        if (!Exit.isFailure(exit)) return
+        const reason = exit.cause.reasons[0]
+        expect(reason?._tag).toBe("Fail")
+        if (!reason || reason._tag !== "Fail") return
+        expect(reason.error).toBeInstanceOf(AppProcess.AppProcessError)
+        expect(reason.error.stderr).toBe("stderr-line\ndiagnost")
+      }),
+    )
+
+    it.live(
       "without okExitCodes, never fails on exit code",
       Effect.gen(function* () {
         const svc = yield* AppProcess.Service
