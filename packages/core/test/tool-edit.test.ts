@@ -37,44 +37,74 @@ const editToolNode = makeLocationNode({
 })
 
 const sessionID = Session.ID.make("ses_edit_tool_test")
-const assertions: Permission.AssertInput[] = []
-const writes: string[] = []
-let reads = 0
-let denyAction: string | undefined
-let afterRead = (_target: string, _content: Uint8Array): Effect.Effect<void> => Effect.void
-let formatFile = (_target: string): Effect.Effect<boolean> => Effect.succeed(false)
+const makeEditFixture = () => {
+  const assertions: Permission.AssertInput[] = []
+  const writes: string[] = []
+  let reads = 0
+  let denyAction: string | undefined
+  let afterRead = (_target: string, _content: Uint8Array): Effect.Effect<void> => Effect.void
+  let formatFile = (_target: string): Effect.Effect<boolean> => Effect.succeed(false)
 
-const permission = permissionLayer({
-  assert: (input) =>
-    Effect.sync(() => assertions.push(input)).pipe(
-      Effect.andThen(
-        input.action === denyAction
-          ? Effect.fail(
-              new Permission.BlockedError({
-                rules: [],
-                permission: input.action,
-                resources: input.resources,
-              }),
-            )
-          : Effect.void,
+  const permission = permissionLayer({
+    assert: (input) =>
+      Effect.sync(() => assertions.push(input)).pipe(
+        Effect.andThen(
+          input.action === denyAction
+            ? Effect.fail(
+                new Permission.BlockedError({
+                  rules: [],
+                  permission: input.action,
+                  resources: input.resources,
+                }),
+              )
+            : Effect.void,
+        ),
       ),
-    ),
-})
+  })
 
-const formatter = Layer.mock(Formatter.Service, {
-  file: (target) => formatFile(target),
-})
+  const formatter = Layer.mock(Formatter.Service, {
+    file: (target) => formatFile(target),
+  })
 
-const reset = () => {
-  assertions.length = 0
-  writes.length = 0
-  reads = 0
-  denyAction = undefined
-  afterRead = () => Effect.void
-  formatFile = () => Effect.succeed(false)
+  return {
+    assertions,
+    writes,
+    get reads() {
+      return reads
+    },
+    reset() {
+      assertions.length = 0
+      writes.length = 0
+      reads = 0
+      denyAction = undefined
+      afterRead = () => Effect.void
+      formatFile = () => Effect.succeed(false)
+    },
+    set denyAction(action: string | undefined) {
+      denyAction = action
+    },
+    set afterRead(next: (target: string, content: Uint8Array) => Effect.Effect<void>) {
+      afterRead = next
+    },
+    set formatFile(next: (target: string) => Effect.Effect<boolean>) {
+      formatFile = next
+    },
+    recordRead(target: string, content: Uint8Array) {
+      return Effect.sync(() => reads++).pipe(Effect.andThen(Effect.suspend(() => afterRead(target, content))))
+    },
+    recordWrite(target: string) {
+      writes.push(target)
+    },
+    permission,
+    formatter,
+  }
 }
 
-const withTool = <A, E, R>(directory: string, body: (registry: Tool.Interface) => Effect.Effect<A, E, R>) => {
+const withTool = <A, E, R>(
+  directory: string,
+  fixture: ReturnType<typeof makeEditFixture>,
+  body: (registry: Tool.Interface) => Effect.Effect<A, E, R>,
+) => {
   const activeLocation = Layer.succeed(
     Location.Service,
     Location.Service.of(location({ directory: AbsolutePath.make(directory) })),
@@ -88,22 +118,14 @@ const withTool = <A, E, R>(directory: string, body: (registry: Tool.Interface) =
           Environment.node,
           transformEnvironmentFiles(activeLocation, (files) => ({
             read: (target, range) =>
-              files
-                .read(target, range)
-                .pipe(
-                  Effect.tap((result) =>
-                    Effect.sync(() => reads++).pipe(
-                      Effect.andThen(Effect.suspend(() => afterRead(target, result.bytes))),
-                    ),
-                  ),
-                ),
+              files.read(target, range).pipe(Effect.tap((result) => fixture.recordRead(target, result.bytes))),
             write: (target, content) =>
-              Effect.sync(() => writes.push(target)).pipe(Effect.andThen(files.write(target, content))),
+              Effect.sync(() => fixture.recordWrite(target)).pipe(Effect.andThen(files.write(target, content))),
           })),
         ],
         [Location.node, activeLocation],
-        [Formatter.node, formatter],
-        [Permission.node, permission],
+        [Formatter.node, fixture.formatter],
+        [Permission.node, fixture.permission],
       ]),
     ),
   )
@@ -126,11 +148,11 @@ const withTempDir = <A, E, R>(body: (tmp: Awaited<ReturnType<typeof tmpdir>>) =>
 describe("EditTool", () => {
   it.live("registers and replaces relative exact text through FileMutation once", () =>
     withTempDir((tmp) => {
-      reset()
+      const edit = makeEditFixture()
       const target = path.join(tmp.path, "hello.txt")
       return Effect.promise(() => fs.writeFile(target, "before\nrest\n")).pipe(
         Effect.andThen(
-          withTool(tmp.path, (registry) =>
+          withTool(tmp.path, edit, (registry) =>
             Effect.gen(function* () {
               expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["edit", "execute"])
               expect(
@@ -167,8 +189,10 @@ describe("EditTool", () => {
                 ],
               })
               expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("after\nrest\n")
-              expect(assertions).toMatchObject([{ sessionID, action: "edit", resources: ["hello.txt"], save: ["*"] }])
-              expect(assertions[0]?.metadata).toMatchObject({
+              expect(edit.assertions).toMatchObject([
+                { sessionID, action: "edit", resources: ["hello.txt"], save: ["*"] },
+              ])
+              expect(edit.assertions[0]?.metadata).toMatchObject({
                 files: [
                   {
                     file: "hello.txt",
@@ -179,7 +203,7 @@ describe("EditTool", () => {
                   },
                 ],
               })
-              expect(writes).toEqual([yield* Effect.promise(() => fs.realpath(target))])
+              expect(edit.writes).toEqual([yield* Effect.promise(() => fs.realpath(target))])
             }),
           ),
         ),
@@ -189,16 +213,16 @@ describe("EditTool", () => {
 
   it.live("returns the diff for final formatted content", () =>
     withTempDir((tmp) => {
-      reset()
+      const edit = makeEditFixture()
       const target = path.join(tmp.path, "formatted.txt")
-      formatFile = (file) =>
+      edit.formatFile = (file) =>
         Effect.promise(async () => {
           await fs.writeFile(file, (await fs.readFile(file, "utf8")).replace("after", "AFTER"))
           return true
         })
       return Effect.promise(() => fs.writeFile(target, "before\n")).pipe(
         Effect.andThen(
-          withTool(tmp.path, (registry) =>
+          withTool(tmp.path, edit, (registry) =>
             Effect.gen(function* () {
               const settled = yield* executeTool(
                 registry,
@@ -218,18 +242,18 @@ describe("EditTool", () => {
 
   it.live("accepts an absolute file path inside the active Location", () =>
     withTempDir((tmp) => {
-      reset()
+      const edit = makeEditFixture()
       const target = path.join(tmp.path, "absolute.txt")
       return Effect.promise(() => fs.writeFile(target, "before")).pipe(
         Effect.andThen(
-          withTool(tmp.path, (registry) =>
+          withTool(tmp.path, edit, (registry) =>
             executeTool(registry, call({ path: target, oldString: "before", newString: "after" })),
           ),
         ),
         Effect.andThen((result) =>
           Effect.gen(function* () {
             expect(result.status).toBe("completed")
-            expect(assertions.map((input) => input.action)).toEqual(["edit"])
+            expect(edit.assertions.map((input) => input.action)).toEqual(["edit"])
             expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("after")
           }),
         ),
@@ -241,7 +265,7 @@ describe("EditTool", () => {
     Effect.acquireUseRelease(
       Effect.promise(() => Promise.all([tmpdir(), tmpdir()])),
       ([active, outside]) => {
-        reset()
+        const edit = makeEditFixture()
         if (process.platform === "win32") return Effect.void
         const target = path.join(outside.path, "external.txt")
         const link = path.join(active.path, "link.txt")
@@ -250,15 +274,15 @@ describe("EditTool", () => {
           await fs.symlink(target, link)
         }).pipe(
           Effect.andThen(
-            withTool(active.path, (registry) =>
+            withTool(active.path, edit, (registry) =>
               executeTool(registry, call({ path: "link.txt", oldString: "before", newString: "after" })),
             ),
           ),
           Effect.andThen((result) =>
             Effect.sync(() => {
               expect(result.status).toBe("completed")
-              expect(assertions.map((input) => input.action)).toEqual(["edit"])
-              expect(assertions[0]?.resources).toEqual(["link.txt"])
+              expect(edit.assertions.map((input) => input.action)).toEqual(["edit"])
+              expect(edit.assertions[0]?.resources).toEqual(["link.txt"])
             }),
           ),
           Effect.andThen(Effect.promise(() => fs.readFile(target, "utf8"))),
@@ -276,20 +300,20 @@ describe("EditTool", () => {
     Effect.acquireUseRelease(
       Effect.promise(() => Promise.all([tmpdir(), tmpdir()])),
       ([active, outside]) => {
-        reset()
+        const edit = makeEditFixture()
         const target = path.join(outside.path, "external.txt")
         return Effect.promise(() => fs.writeFile(target, "before")).pipe(
           Effect.andThen(
-            withTool(active.path, (registry) =>
+            withTool(active.path, edit, (registry) =>
               executeTool(registry, call({ path: target, oldString: "before", newString: "after" })),
             ),
           ),
           Effect.andThen((result) =>
             Effect.gen(function* () {
               expect(result.status).toBe("completed")
-              expect(assertions.map((input) => input.action)).toEqual(["external_directory", "edit"])
+              expect(edit.assertions.map((input) => input.action)).toEqual(["external_directory", "edit"])
               expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("after")
-              expect(writes).toHaveLength(1)
+              expect(edit.writes).toHaveLength(1)
             }),
           ),
         )
@@ -308,33 +332,33 @@ describe("EditTool", () => {
         Effect.gen(function* () {
           const external = path.join(outside.path, "denied.txt")
           yield* Effect.promise(() => fs.writeFile(external, "before"))
-          reset()
-          denyAction = "external_directory"
+          const edit = makeEditFixture()
+          edit.denyAction = "external_directory"
           expect(
-            yield* withTool(active.path, (registry) =>
+            yield* withTool(active.path, edit, (registry) =>
               executeTool(registry, call({ path: external, oldString: "before", newString: "after" })),
             ),
           ).toEqual({
             status: "error",
             error: { type: "permission.rejected", message: "Permission denied: external_directory" },
           })
-          expect(assertions.map((input) => input.action)).toEqual(["external_directory"])
-          expect(reads).toBe(0)
-          expect(writes).toEqual([])
+          expect(edit.assertions.map((input) => input.action)).toEqual(["external_directory"])
+          expect(edit.reads).toBe(0)
+          expect(edit.writes).toEqual([])
 
-          reset()
-          denyAction = "edit"
+          edit.reset()
+          edit.denyAction = "edit"
           expect(
-            yield* withTool(active.path, (registry) =>
+            yield* withTool(active.path, edit, (registry) =>
               executeTool(registry, call({ path: external, oldString: "before", newString: "after" })),
             ),
           ).toEqual({
             status: "error",
             error: { type: "permission.rejected", message: "Permission denied: edit" },
           })
-          expect(assertions.map((input) => input.action)).toEqual(["external_directory", "edit"])
-          expect(reads).toBe(1)
-          expect(writes).toEqual([])
+          expect(edit.assertions.map((input) => input.action)).toEqual(["external_directory", "edit"])
+          expect(edit.reads).toBe(1)
+          expect(edit.writes).toEqual([])
           expect(yield* Effect.promise(() => fs.readFile(external, "utf8"))).toBe("before")
         }),
       ([active, outside]) =>
@@ -346,12 +370,12 @@ describe("EditTool", () => {
 
   it.live("denied edit does not disclose whether oldString matches", () =>
     withTempDir((tmp) => {
-      reset()
-      denyAction = "edit"
+      const edit = makeEditFixture()
+      edit.denyAction = "edit"
       const target = path.join(tmp.path, "secret.txt")
       return Effect.promise(() => fs.writeFile(target, "secret content")).pipe(
         Effect.andThen(
-          withTool(tmp.path, (registry) =>
+          withTool(tmp.path, edit, (registry) =>
             Effect.gen(function* () {
               const matching = yield* executeTool(
                 registry,
@@ -367,9 +391,9 @@ describe("EditTool", () => {
                 error: { type: "permission.rejected", message: "Permission denied: edit" },
               })
               expect(missing).toEqual(matching)
-              expect(assertions.map((input) => input.action)).toEqual(["edit", "edit"])
-              expect(reads).toBe(2)
-              expect(writes).toEqual([])
+              expect(edit.assertions.map((input) => input.action)).toEqual(["edit", "edit"])
+              expect(edit.reads).toBe(2)
+              expect(edit.writes).toEqual([])
             }),
           ),
         ),
@@ -379,11 +403,11 @@ describe("EditTool", () => {
 
   it.live("rejects no-op, empty, missing, and ambiguous exact replacements", () =>
     withTempDir((tmp) => {
-      reset()
+      const edit = makeEditFixture()
       const target = path.join(tmp.path, "matches.txt")
       return Effect.promise(() => fs.writeFile(target, "same same")).pipe(
         Effect.andThen(
-          withTool(tmp.path, (registry) =>
+          withTool(tmp.path, edit, (registry) =>
             Effect.gen(function* () {
               expect(
                 yield* executeTool(registry, call({ path: "matches.txt", oldString: "same", newString: "same" })),
@@ -423,7 +447,7 @@ describe("EditTool", () => {
                     "Found 2 matches for oldString, but expected exactly one. Add more surrounding context to make oldString unique, or set replaceAll to true to replace every occurrence.",
                 },
               })
-              expect(writes).toEqual([])
+              expect(edit.writes).toEqual([])
             }),
           ),
         ),
@@ -433,11 +457,11 @@ describe("EditTool", () => {
 
   it.live("returns specific missing file and directory errors", () =>
     withTempDir((tmp) => {
-      reset()
+      const edit = makeEditFixture()
       const directory = path.join(tmp.path, "src")
       return Effect.promise(() => fs.mkdir(directory)).pipe(
         Effect.andThen(
-          withTool(tmp.path, (registry) =>
+          withTool(tmp.path, edit, (registry) =>
             Effect.gen(function* () {
               expect(
                 yield* executeTool(registry, call({ path: "missing.ts", oldString: "before", newString: "after" })),
@@ -451,7 +475,7 @@ describe("EditTool", () => {
                 status: "error",
                 error: { type: "tool.execution", message: "Path is a directory, not a file: src" },
               })
-              expect(writes).toEqual([])
+              expect(edit.writes).toEqual([])
             }),
           ),
         ),
@@ -461,11 +485,11 @@ describe("EditTool", () => {
 
   it.live("replaces every exact occurrence when replaceAll is true", () =>
     withTempDir((tmp) => {
-      reset()
+      const edit = makeEditFixture()
       const target = path.join(tmp.path, "all.txt")
       return Effect.promise(() => fs.writeFile(target, "same same same")).pipe(
         Effect.andThen(
-          withTool(tmp.path, (registry) =>
+          withTool(tmp.path, edit, (registry) =>
             executeTool(registry, call({ path: "all.txt", oldString: "same", newString: "after", replaceAll: true })),
           ),
         ),
@@ -476,7 +500,7 @@ describe("EditTool", () => {
             expect(settled.output).toMatchObject({ replacements: 3 })
             expect(settled.content).toEqual([{ type: "text", text: "Edited all.txt (3 replacements)" }])
             expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("after after after")
-            expect(writes).toHaveLength(1)
+            expect(edit.writes).toHaveLength(1)
           }),
         ),
       )
@@ -485,13 +509,13 @@ describe("EditTool", () => {
 
   it.live("normalizes Unicode typography only after exact matching fails", () =>
     withTempDir((tmp) => {
-      reset()
+      const edit = makeEditFixture()
       const target = path.join(tmp.path, "unicode.txt")
       return Effect.promise(() =>
         fs.writeFile(target, "exact - match\ncurly “quotes”\nminus − one\nspace\u00A0here\nexact − match\n"),
       ).pipe(
         Effect.andThen(
-          withTool(tmp.path, (registry) =>
+          withTool(tmp.path, edit, (registry) =>
             Effect.gen(function* () {
               const normalized = yield* executeTool(
                 registry,
@@ -520,11 +544,11 @@ describe("EditTool", () => {
 
   it.live("ignores trailing whitespace while preserving untouched lines", () =>
     withTempDir((tmp) => {
-      reset()
+      const edit = makeEditFixture()
       const target = path.join(tmp.path, "whitespace.txt")
       return Effect.promise(() => fs.writeFile(target, "before  \nmatch  \nnext\t\nafter  \n")).pipe(
         Effect.andThen(
-          withTool(tmp.path, (registry) =>
+          withTool(tmp.path, edit, (registry) =>
             executeTool(registry, call({ path: "whitespace.txt", oldString: "match\nnext", newString: "changed" })),
           ),
         ),
@@ -537,14 +561,14 @@ describe("EditTool", () => {
 
   it.live("uses non-overlapping trailing-whitespace matches and preserves CRLF", () =>
     withTempDir((tmp) => {
-      reset()
+      const edit = makeEditFixture()
       const overlap = path.join(tmp.path, "overlap.txt")
       const windows = path.join(tmp.path, "windows.txt")
       return Effect.promise(() =>
         Promise.all([fs.writeFile(overlap, "a  \na  \na  \n"), fs.writeFile(windows, "a  \r\nb\t\r\n")]),
       ).pipe(
         Effect.andThen(
-          withTool(tmp.path, (registry) =>
+          withTool(tmp.path, edit, (registry) =>
             Effect.gen(function* () {
               const replaced = yield* executeTool(
                 registry,
@@ -568,16 +592,16 @@ describe("EditTool", () => {
 
   it.live("preserves BOM and CRLF line endings", () =>
     withTempDir((tmp) => {
-      reset()
+      const edit = makeEditFixture()
       const target = path.join(tmp.path, "windows.txt")
-      formatFile = (file) =>
+      edit.formatFile = (file) =>
         Effect.promise(async () => {
           await fs.writeFile(file, (await fs.readFile(file, "utf8")).replace(/^\uFEFF/, ""))
           return true
         })
       return Effect.promise(() => fs.writeFile(target, "\uFEFFbefore\r\nrest\r\n")).pipe(
         Effect.andThen(
-          withTool(tmp.path, (registry) =>
+          withTool(tmp.path, edit, (registry) =>
             executeTool(registry, call({ path: "windows.txt", oldString: "before\nrest", newString: "after\nrest" })),
           ),
         ),
@@ -589,12 +613,12 @@ describe("EditTool", () => {
 
   it.live("serializes concurrent edit transactions", () =>
     withTempDir((tmp) => {
-      reset()
+      const edit = makeEditFixture()
       const target = path.join(tmp.path, "concurrent.txt")
-      afterRead = () => (reads === 1 ? Effect.sleep("50 millis") : Effect.void)
+      edit.afterRead = () => (edit.reads === 1 ? Effect.sleep("50 millis") : Effect.void)
       return Effect.promise(() => fs.writeFile(target, "one\ntwo\n")).pipe(
         Effect.andThen(
-          withTool(tmp.path, (registry) =>
+          withTool(tmp.path, edit, (registry) =>
             Effect.all(
               [
                 executeTool(
@@ -622,12 +646,12 @@ describe("EditTool", () => {
 
   it.live("applies the edit when content changes after matching", () =>
     withTempDir((tmp) => {
-      reset()
+      const edit = makeEditFixture()
       const target = path.join(tmp.path, "concurrent.txt")
-      afterRead = () => (reads === 1 ? Effect.promise(() => fs.writeFile(target, "newer\n")) : Effect.void)
+      edit.afterRead = () => (edit.reads === 1 ? Effect.promise(() => fs.writeFile(target, "newer\n")) : Effect.void)
       return Effect.promise(() => fs.writeFile(target, "before\n")).pipe(
         Effect.andThen(
-          withTool(tmp.path, (registry) =>
+          withTool(tmp.path, edit, (registry) =>
             executeTool(registry, call({ path: "concurrent.txt", oldString: "before", newString: "after" })),
           ),
         ),
@@ -635,7 +659,7 @@ describe("EditTool", () => {
           Effect.gen(function* () {
             expect(result).toMatchObject({ status: "completed", output: { replacements: 1 } })
             expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("after\n")
-            expect(writes).toEqual([target])
+            expect(edit.writes).toEqual([target])
           }),
         ),
       )
