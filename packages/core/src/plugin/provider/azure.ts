@@ -1,3 +1,6 @@
+import { readFile } from "node:fs/promises"
+import { homedir } from "node:os"
+import { join } from "node:path"
 import { Clock, Effect, Schema, Semaphore, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { define } from "@opencode-ai/plugin/effect/plugin"
@@ -10,12 +13,16 @@ import { Integration } from "../../integration.js"
 import { Model } from "../../model.js"
 import { Provider } from "../../provider.js"
 import { iife } from "../../util/iife.js"
+import { which } from "../../util/which.js"
 import { configuredSettings } from "./configured.js"
 
 const cognitiveScope = "https://cognitiveservices.azure.com/.default"
 const foundryScope = "https://ai.azure.com/.default"
 const methodID = Integration.MethodID.make("azure-cli")
 const decodeJSON = Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))
+const decodeProfile = Schema.decodeUnknownEffect(
+  Schema.fromJsonString(Schema.Struct({ subscriptions: Schema.Array(Schema.Unknown) })),
+)
 const decodeToken = Schema.decodeUnknownEffect(
   Schema.Struct({
     accessToken: Schema.NonEmptyString,
@@ -56,10 +63,12 @@ export const AzurePlugin = define({
     const loaded: { resource?: string; deployments?: typeof Deployments.Type } = {}
 
     const command = (args: string[]) =>
-      processes.run(ChildProcess.make("az", args, { extendEnv: true, stdin: "ignore" })).pipe(
-        Effect.flatMap(AppProcess.requireSuccess),
-        Effect.flatMap((result) => decodeJSON(result.stdout.toString("utf8"))),
-      )
+      processes
+        .run(ChildProcess.make("az", args, { extendEnv: true, stdin: "ignore" }), { timeout: "10 seconds" })
+        .pipe(
+          Effect.flatMap(AppProcess.requireSuccess),
+          Effect.flatMap((result) => decodeJSON(result.stdout.toString("utf8"))),
+        )
 
     const token = Effect.fn("AzurePlugin.token")(function* (scope: string) {
       const now = yield* Clock.currentTimeMillis
@@ -76,12 +85,22 @@ export const AzurePlugin = define({
       return refreshed
     })
 
-    const available = Boolean(Bun.which("az", { PATH: process.env.PATH }))
+    const available = Boolean(which("az"))
+    // Installing Azure CLI does not mean the user has signed in. Avoid spawning it for unrelated CLI commands.
+    const signedIn = available
+      ? yield* Effect.tryPromise(() =>
+          readFile(join(process.env.AZURE_CONFIG_DIR ?? join(homedir(), ".azure"), "azureProfile.json"), "utf8"),
+        ).pipe(
+          Effect.flatMap((text) => decodeProfile(text.replace(/^\uFEFF/, ""))),
+          Effect.map((profile) => profile.subscriptions.length > 0),
+          Effect.orElseSucceed(() => false),
+        )
+      : false
     const accounts =
       !resolveResourceName(configured) &&
       typeof configured?.baseURL !== "string" &&
       !process.env.AZURE_RESOURCE_GROUP &&
-      available
+      signedIn
         ? yield* command(["cognitiveservices", "account", "list", "--output", "json", "--only-show-errors"]).pipe(
             Effect.flatMap(decodeAccounts),
             Effect.orElseSucceed(() => []),

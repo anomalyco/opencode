@@ -59,13 +59,19 @@ function withAzureCommands<A, E, R>(
   run: (args: readonly string[]) => unknown,
   fx: () => Effect.Effect<A, E, R>,
   deploymentDelay = 0,
+  signedIn = true,
 ) {
   return Effect.gen(function* () {
     const processes = yield* AppProcess.Service
     const directory = (yield* Location.Service).directory
-    const executable = `${directory}/az`
-    yield* Effect.promise(() => Bun.write(executable, "#!/bin/sh\nexit 0\n"))
+    const executable = `${directory}/${process.platform === "win32" ? "az.cmd" : "az"}`
+    yield* Effect.promise(() =>
+      Bun.write(executable, process.platform === "win32" ? "@exit /b 0\r\n" : "#!/bin/sh\nexit 0\n"),
+    )
     yield* Effect.promise(() => chmod(executable, 0o755))
+    if (signedIn) {
+      yield* Effect.promise(() => Bun.write(`${directory}/azure-cli/azureProfile.json`, '{"subscriptions":[{}]}'))
+    }
     const fake = AppProcess.Service.of({
       ...processes,
       run: (command) => {
@@ -88,8 +94,12 @@ function withAzureCommands<A, E, R>(
         return result
       },
     })
-    return yield* withEnv({ PATH: `${directory}:${process.env.PATH}` }, () =>
-      fx().pipe(Effect.provideService(AppProcess.Service, fake)),
+    return yield* withEnv(
+      {
+        PATH: `${directory}${process.platform === "win32" ? ";" : ":"}${process.env.PATH}`,
+        AZURE_CONFIG_DIR: `${directory}/azure-cli`,
+      },
+      () => fx().pipe(Effect.provideService(AppProcess.Service, fake)),
     )
   })
 }
@@ -180,6 +190,33 @@ describe("AzurePlugin", () => {
       ),
     ),
   )
+
+  it.live("does not invoke Azure CLI at startup without a cached Azure login", () => {
+    const commands: string[] = []
+    return withEnv(
+      {
+        AZURE_RESOURCE_NAME: undefined,
+        AZURE_COGNITIVE_SERVICES_RESOURCE_NAME: undefined,
+        AZURE_RESOURCE_GROUP: undefined,
+      },
+      () =>
+        withAzureCommands(
+          (args) => {
+            commands.push(args.join(" "))
+            return []
+          },
+          () =>
+            Effect.gen(function* () {
+              yield* addPlugin()
+              expect(commands).toEqual([])
+              const integration = yield* (yield* Integration.Service).get(Integration.ID.make("azure"))
+              expect(integration?.methods.some((method) => method.type === "oauth")).toBe(true)
+            }),
+          0,
+          false,
+        ),
+    )
+  })
 
   it.live("lists Azure CLI resources and keeps manual resource entry available", () =>
     withEnv({ AZURE_RESOURCE_NAME: undefined, AZURE_COGNITIVE_SERVICES_RESOURCE_NAME: undefined }, () =>
