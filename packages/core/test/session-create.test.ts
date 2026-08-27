@@ -85,10 +85,7 @@ const assertCreateInputTypes = (session: Session.Interface) => {
 void assertCreateInputTypes
 
 function withTmp<A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>) {
-  return Effect.acquireRelease(
-    Effect.promise(() => tmpdir()),
-    (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-  ).pipe(Effect.flatMap((tmp) => f(tmp.path)))
+  return Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(Effect.flatMap((tmp) => f(tmp.path)))
 }
 
 describe("Session.create", () => {
@@ -895,10 +892,7 @@ describe("Session.create", () => {
         data: event.data,
       }))
 
-      const tmp = yield* Effect.acquireRelease(
-        Effect.promise(() => tmpdir()),
-        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-      )
+      const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir()))
       const targetLayer = AppNodeBuilder.build(
         LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionStore.node]),
         [

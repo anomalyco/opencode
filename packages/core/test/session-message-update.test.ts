@@ -149,10 +149,7 @@ describe("Session.updateMessage", () => {
         type: event.type,
         data: event.data,
       }))
-      const tmp = yield* Effect.acquireRelease(
-        Effect.promise(() => tmpdir()),
-        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-      )
+      const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir()))
       const target = AppNodeBuilder.build(
         LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionStore.node]),
         [
