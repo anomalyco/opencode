@@ -1,7 +1,10 @@
 import fs from "fs/promises"
 import path from "path"
+import { createServer } from "node:http"
 import { describe, expect } from "bun:test"
+import { NodeHttpServer } from "@effect/platform-node"
 import { Effect } from "effect"
+import { HttpServer, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Global } from "@opencode-ai/util/global"
 import { SkillDiscovery } from "@opencode-ai/core/skill/discovery"
@@ -15,22 +18,18 @@ const fixture = Effect.gen(function* () {
     files: Record<string, string>
     requests: string[]
   } = { skills: [], files: {}, requests: [] }
-  const server = yield* Effect.acquireRelease(
-    Effect.sync(() =>
-      Bun.serve({
-        port: 0,
-        fetch(request) {
-          state.requests.push(request.url)
-          const pathname = new URL(request.url).pathname
-          const body =
-            pathname === "/catalog/index.json" ? JSON.stringify({ skills: state.skills }) : state.files[pathname]
-          return new Response(body ?? "Not Found", { status: body === undefined ? 404 : 200 })
-        },
-      }),
-    ),
-    (server) => Effect.promise(() => server.stop(true)),
+  const server = yield* NodeHttpServer.make(createServer, { host: "127.0.0.1", port: 0 })
+  const base = new URL("/catalog/", HttpServer.formatAddress(server.address)).href
+  yield* server.serve(
+    Effect.gen(function* () {
+      const request = yield* HttpServerRequest.HttpServerRequest
+      const url = new URL(request.url, base)
+      state.requests.push(url.href)
+      const body =
+        url.pathname === "/catalog/index.json" ? JSON.stringify({ skills: state.skills }) : state.files[url.pathname]
+      return HttpServerResponse.text(body ?? "Not Found", { status: body === undefined ? 404 : 200 })
+    }),
   )
-  const base = new URL("/catalog/", server.url).href
   return {
     cache: tmp.path,
     base,
