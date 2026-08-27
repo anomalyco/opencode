@@ -559,8 +559,12 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         result.location.command.refresh(),
         result.location.skill.refresh(),
       ]).then((settled) => {
-        for (const failure of settled.filter((item) => item.status === "rejected"))
+        for (const failure of settled.filter((item) => item.status === "rejected")) {
+          // Ctrl+C aborts in-flight refreshes on the way out; that is a normal
+          // shutdown, not a failure worth a stack trace.
+          if (failure.reason instanceof Error && failure.reason.name === "AbortError") continue
           console.error("Failed to refresh default location data", failure.reason)
+        }
       })
     })
 

@@ -484,3 +484,85 @@ test("projects live context updates with their message ID", async () => {
     app.renderer.destroy()
   }
 })
+
+const locationDataPaths = [
+  "/api/location",
+  "/api/agent",
+  "/api/model",
+  "/api/provider",
+  "/api/integration",
+  "/api/command",
+  "/api/skill",
+  "/api/reference",
+]
+
+async function mountDataApp(fetch: typeof globalThis.fetch) {
+  const events = createEventSource()
+  let ready!: () => void
+  const mounted = new Promise<void>((resolve) => {
+    ready = resolve
+  })
+
+  function Probe() {
+    onMount(ready)
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <SDKProvider url="http://test" directory={directory} events={events.source} fetch={fetch}>
+        <ProjectProvider>
+          <DataProvider>
+            <Probe />
+          </DataProvider>
+        </ProjectProvider>
+      </SDKProvider>
+    </TestTuiContexts>
+  ))
+
+  return { app, mounted }
+}
+
+test("startup refresh treats aborted location requests as a normal shutdown", async () => {
+  const base = createFetch((url) => {
+    if (locationDataPaths.includes(url.pathname)) throw new DOMException("The operation was aborted.", "AbortError")
+    return undefined
+  })
+  const errors: string[] = []
+  const original = console.error
+  console.error = (...args: unknown[]) => {
+    errors.push(args.map(String).join(" "))
+  }
+
+  const { app, mounted } = await mountDataApp(base.fetch)
+  try {
+    await mounted
+    await Bun.sleep(100)
+    expect(errors.filter((line) => line.includes("Failed to refresh default location data"))).toEqual([])
+  } finally {
+    console.error = original
+    app.renderer.destroy()
+  }
+})
+
+test("startup refresh still reports non-abort failures", async () => {
+  const base = createFetch((url) => {
+    if (locationDataPaths.includes(url.pathname)) throw new Error("refresh exploded")
+    return undefined
+  })
+  const errors: string[] = []
+  const original = console.error
+  console.error = (...args: unknown[]) => {
+    errors.push(args.map(String).join(" "))
+  }
+
+  const { app, mounted } = await mountDataApp(base.fetch)
+  try {
+    await mounted
+    await wait(() => errors.some((line) => line.includes("Failed to refresh default location data")))
+    expect(errors.some((line) => line.includes("refresh exploded"))).toBe(true)
+  } finally {
+    console.error = original
+    app.renderer.destroy()
+  }
+})
