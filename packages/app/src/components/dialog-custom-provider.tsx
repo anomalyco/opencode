@@ -16,6 +16,8 @@ import { type FormState, headerRow, modelRow, validateCustomProvider } from "./d
 
 type Props = {
   onBack: () => void
+  initialConfig?: Partial<FormState>
+  originalProviderID?: string
 }
 
 export function DialogCustomProvider(props: Props) {
@@ -35,24 +37,26 @@ export function DialogCustomProvider(props: Props) {
       }
       transition
     >
-      <CustomProviderForm />
+      <CustomProviderForm initialConfig={props.initialConfig} originalProviderID={props.originalProviderID} />
     </Dialog>
   )
 }
 
-export function CustomProviderForm(props: { autofocus?: boolean } = {}) {
+export function CustomProviderForm(
+  props: { autofocus?: boolean; initialConfig?: Partial<FormState>; originalProviderID?: string } = {},
+) {
   const dialog = useDialog()
   const serverSync = useServerSync()
   const serverSDK = useServerSDK()
   const language = useLanguage()
 
   const [form, setForm] = createStore<FormState>({
-    providerID: "",
-    name: "",
-    baseURL: "",
-    apiKey: "",
-    models: [modelRow()],
-    headers: [headerRow()],
+    providerID: props.initialConfig?.providerID ?? "",
+    name: props.initialConfig?.name ?? "",
+    baseURL: props.initialConfig?.baseURL ?? "",
+    apiKey: props.initialConfig?.apiKey ?? "",
+    models: props.initialConfig?.models ?? [modelRow()],
+    headers: props.initialConfig?.headers ?? [headerRow()],
     err: {},
   })
 
@@ -120,6 +124,7 @@ export function CustomProviderForm(props: { autofocus?: boolean } = {}) {
       t: language.t,
       disabledProviders: serverSync().data.config.disabled_providers ?? [],
       existingProviderIDs: new Set(serverSync().data.provider.all.keys()),
+      editingProviderID: props.originalProviderID,
     })
     batch(() => {
       setForm("err", output.err)
@@ -201,6 +206,7 @@ export function CustomProviderForm(props: { autofocus?: boolean } = {}) {
             onChange={(v) => setField("providerID", v)}
             validationState={form.err.providerID ? "invalid" : undefined}
             error={form.err.providerID}
+            disabled={!!props.originalProviderID}
           />
           <TextField
             label={language.t("provider.custom.field.name.label")}
