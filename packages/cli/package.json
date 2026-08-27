@@ -27,7 +27,7 @@
     "@effect/platform-node": "catalog:",
     "@opencode-ai/client": "workspace:*",
     "@opencode-ai/plugin": "workspace:*",
-    "@opencode-ai/pty": "0.1.11",
+    "@opencode-ai/pty": "0.1.12",
     "@opencode-ai/schema": "workspace:*",
     "@opencode-ai/server": "workspace:*",
     "@opencode-ai/tui": "workspace:*",
