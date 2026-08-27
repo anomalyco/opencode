@@ -6,6 +6,7 @@ import { OpenAIChat } from "@opencode-ai/ai/protocols"
 import { TestLLM } from "@opencode-ai/ai/testing"
 import { llmClient } from "@opencode-ai/core/effect/app-node-platform"
 import { makeMemoryDriver } from "@opencode-ai/core/environment/index"
+import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { WorkspaceDriver } from "@opencode-ai/core/workspace/driver"
 import { Deferred, Effect, Fiber, Latch, Layer, Option, Ref, Schema, Stream } from "effect"
@@ -33,6 +34,70 @@ const sessionID = (fixture: Fixture) => fixture.sdk.Session.ID.create()
 
 const location = (fixture: Fixture) =>
   fixture.sdk.Location.Ref.make({ directory: fixture.sdk.AbsolutePath.make(fixture.directory) })
+
+for (const selection of ["explicit", "default"] as const) {
+  it.live(`first generate.text waits for inline providers with ${selection} model selection`, () =>
+    withEmbedded("opencode-embedded-generate-", (fixture) =>
+      Effect.gen(function* () {
+        const release = yield* Latch.make()
+        const llm = yield* TestLLM.Service.pipe(
+          Effect.provide(TestLLM.layer({ fallback: TestLLM.text("ready", "answer") })),
+        )
+        const supervisor = Layer.effect(
+          PluginSupervisor.Service,
+          Effect.gen(function* () {
+            const plugins = yield* PluginSupervisor.Service
+            return { flush: release.open.pipe(Effect.andThen(plugins.flush)) }
+          }),
+        ).pipe(Layer.provide(PluginSupervisor.layer))
+        const opencode = yield* fixture.sdk.OpenCode.create(
+          {
+            config: {
+              directory: fixture.directory,
+              project: false,
+              content: JSON.stringify({
+                model: "custom/fictional-chat",
+                providers: {
+                  custom: {
+                    package: "aisdk:@ai-sdk/openai-compatible",
+                    settings: { baseURL: "https://provider.example/v1" },
+                    models: { "fictional-chat": {} },
+                  },
+                },
+              }),
+            },
+            models: { fetch: false },
+            fs: { filewatcher: false },
+          },
+          {
+            overrides: [
+              [llmClient, Layer.succeed(LLMClient.Service, llm.client)],
+              [PluginSupervisor.node, { ...PluginSupervisor.node, implementation: supervisor }],
+            ],
+          },
+        )
+        // Hold provider activation until the request reaches readiness, regardless of startup speed.
+        yield* opencode.plugin({ id: "gate-catalog", effect: () => release.await })
+
+        const result = yield* opencode.generate.text({
+          prompt: "Say ready",
+          ...(selection === "explicit"
+            ? {
+                model: fixture.sdk.Model.Ref.make({
+                  providerID: fixture.sdk.Provider.ID.make("custom"),
+                  id: fixture.sdk.Model.ID.make("fictional-chat"),
+                }),
+              }
+            : {}),
+        })
+
+        expect(result.text).toBe("ready")
+        expect(llm.requests).toHaveLength(1)
+        expect(llm.requests[0]?.model).toMatchObject({ provider: "custom", id: "fictional-chat" })
+      }),
+    ),
+  )
+}
 
 it.live("exposes app metadata to plugins", () =>
   withEmbedded("opencode-embedded-app-", (fixture) =>
