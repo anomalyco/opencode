@@ -53,10 +53,10 @@ interface EffectCmdOpts<Args, A> {
  * Effect-native CLI command builder. Wraps yargs `cmd()` so the handler body is
  * an `Effect` with `InstanceRef` provided and any `AppServices` yieldable.
  *
- * The handler is wrapped in `Effect.ensuring(store.dispose(ctx))` so the loaded
- * InstanceContext is disposed (runDisposers + IPC `server.instance.disposed`)
- * on every Exit — success, typed failure, defect, or interruption. Matches the
- * legacy `bootstrap()` finally-disposal semantics without per-handler boilerplate.
+ * The handler is wrapped in a `finally` block that calls `store.disposeAll()` so
+ * all loaded InstanceContexts are disposed (runDisposers + IPC `server.instance.disposed`)
+ * on every Exit — success, typed failure, defect, or interruption. This covers
+ * instances loaded by server middleware for session resume with a different `--dir`.
  *
  * Errors propagate to the existing top-level handler in `src/index.ts`; use
  * `fail("...")` for user-visible domain failures (clean exit, formatted message).
@@ -90,7 +90,7 @@ export const effectCmd = <Args, A>(opts: EffectCmdOpts<Args, A>) =>
       try {
         await AppRuntime.runPromise(opts.handler(args).pipe(Effect.provideService(InstanceRef, ctx)))
       } finally {
-        await AppRuntime.runPromise(store.dispose(ctx))
+        await AppRuntime.runPromise(store.disposeAll().pipe(Effect.catchCause((cause) => Effect.logWarning("cli disposal failed", { cause }))))
       }
     },
   })
