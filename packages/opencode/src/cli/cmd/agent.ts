@@ -234,7 +234,12 @@ const AgentCreateCommand = effectCmd({
 const AgentListCommand = effectCmd({
   command: "list",
   describe: "list all available agents",
-  handler: Effect.fn("Cli.agent.list")(function* () {
+  builder: (yargs) =>
+    yargs.option("verbose", {
+      type: "boolean",
+      describe: "print each agent's full resolved permission rules",
+    }),
+  handler: Effect.fn("Cli.agent.list")(function* (args) {
     const { Agent } = yield* Effect.promise(() => import("../../agent/agent"))
     const agents = yield* Agent.Service.use((svc) => svc.list())
     const sortedAgents = agents.sort((a, b) => {
@@ -245,8 +250,10 @@ const AgentListCommand = effectCmd({
     })
 
     for (const agent of sortedAgents) {
-      process.stdout.write(`${agent.name} (${agent.mode})` + EOL)
-      process.stdout.write(`  ${JSON.stringify(agent.permission, null, 2)}` + EOL)
+      const model = agent.model ? ` ${agent.model.providerID}/${agent.model.modelID}` : ""
+      const description = agent.description ? ` — ${agent.description}` : ""
+      process.stdout.write(`${agent.name} (${agent.mode})${model}${description}` + EOL)
+      if (args.verbose) process.stdout.write(`  ${JSON.stringify(agent.permission, null, 2)}` + EOL)
     }
   }),
 })
