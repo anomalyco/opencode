@@ -15,7 +15,7 @@ export interface Input {
 }
 
 export function isRetryable(error: AIError) {
-  const override = "http" in error.reason ? error.reason.http?.response?.headers["x-should-retry"] : undefined
+  const override = error.reason.http?.headers["x-should-retry"]
   if (override === "true") return true
   if (override === "false") return false
   switch (error.reason._tag) {

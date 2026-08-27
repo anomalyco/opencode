@@ -79,9 +79,8 @@ export const { use: useSessionTerminals, provider: SessionTerminalsProvider } = 
         const session = data.session.get(sessionID)
         const terminal = await client.api.experimental.persistentPty.create({
           sessionID,
-          command: process.env.SHELL || "/bin/sh",
           args: [],
-          cwd: session?.location.directory ?? process.cwd(),
+          cwd: session?.location.directory,
           title: "Terminal",
           env: {},
         })

@@ -5,6 +5,7 @@ import {
   compactionEnded,
   compactionFailed,
   compactionStarted,
+  directory,
   event,
   session,
   sessionID,
@@ -208,6 +209,56 @@ test("navigates from a running subagent card and hides background controls in th
   await expect(page.getByText(/move running work to the background/i)).toHaveCount(0)
 })
 
+for (const name of ["shell", "subagent"] as const) {
+  test(`keeps the background shortcut available for a grouped running ${name}`, async ({ page }) => {
+    const message = assistant(false, true)
+    await setupTimeline(page, {
+      sessionMessages: [
+        user,
+        {
+          ...message,
+          content: [
+            {
+              type: "tool",
+              id: "call_read",
+              name: "read",
+              state: {
+                status: "completed",
+                input: { path: "src/example.ts" },
+                content: [{ type: "text", text: "export const example = true" }],
+                metadata: {},
+              },
+              time: { created: 1, completed: 2 },
+            },
+            {
+              type: "tool",
+              id: "call_running",
+              name,
+              state: {
+                status: "running",
+                input:
+                  name === "shell" ? { command: "echo checking" } : { agent: "general", description: "Inspect code" },
+                metadata: {},
+              },
+              time: { created: 3 },
+            },
+          ],
+        },
+      ],
+    })
+    const group = page.locator('[data-timeline-part-ids="call_read,call_running"]')
+    await expect(group).toBeVisible()
+    await expect(group.locator('[data-slot="collapsible-trigger"]')).toHaveAttribute("aria-expanded", "false")
+    await expect(page.locator('[data-component="session-background-hint"]')).toBeVisible()
+    const request = page.waitForRequest(
+      (request) =>
+        request.method() === "POST" && new URL(request.url()).pathname === `/api/session/${sessionID}/background`,
+    )
+    await page.keyboard.press("Control+b")
+    await request
+  })
+}
+
 test("shows a badge for active background work", async ({ page }) => {
   const childID = "ses_background_child"
   await setupTimeline(page, {
@@ -298,6 +349,24 @@ test("separates blocking and already-backgrounded work into two rows", async ({ 
     },
   })
 
+  await timeline.transport.send({
+    id: "evt_background_shell_created",
+    created: 3,
+    type: "shell.created",
+    location: { directory },
+    data: {
+      info: {
+        id: "shell_backgrounded",
+        status: "running",
+        command: "sleep 120",
+        cwd: directory,
+        shell: "bash",
+        file: "/tmp/background.out",
+        metadata: { sessionID },
+        time: { started: 2 },
+      },
+    },
+  })
   const backgroundCard = page.locator('[data-timeline-part-id="call_backgrounded"]')
   await expect(page.getByText(/move running work to the background/i)).toBeVisible()
   await page.getByRole("button", { name: "Session details" }).click()

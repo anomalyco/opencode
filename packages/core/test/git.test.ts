@@ -131,6 +131,66 @@ describe("Git worktrees", () => {
 })
 
 describe("Git trees", () => {
+  ;[0, 1, 128].forEach((exitCode) => {
+    it.live(`refresh handles check-ignore exit ${exitCode}`, () =>
+      Effect.gen(function* () {
+        const root = yield* Effect.acquireRelease(
+          Effect.promise(() => tmpdir()),
+          (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+        )
+        const project = path.join(root.path, "project")
+        const paths = ["scope/allowed.txt", "scope/ignored name.txt"].map((file) => RelativePath.make(file))
+        yield* Effect.promise(async () => {
+          await fs.mkdir(path.join(project, "scope"), { recursive: true })
+          await initRepo(project)
+          await Promise.all(paths.map((file) => Bun.write(path.join(project, file), "one\n")))
+          await $`git add .`.cwd(project).quiet()
+          await $`git commit -m initial`.cwd(project).quiet()
+        })
+        const git = yield* Git.Service
+        const source = yield* git.repo.discover(AbsolutePath.make(project))
+        if (!source) throw new Error("Repository not found")
+        const repository = yield* git.repo.create({
+          worktree: source.worktree,
+          gitDirectory: AbsolutePath.make(path.join(root.path, "storage")),
+          seed: source,
+        })
+        const before = yield* git.tree.write(repository)
+        yield* Effect.promise(async () => {
+          await Promise.all(paths.map((file) => Bun.write(path.join(project, file), "two\n")))
+          await Bun.write(path.join(source.gitDirectory, "info", "exclude"), exitCode === 0 ? `${paths[1]}\n` : "")
+          if (exitCode === 128) await Bun.write(path.join(source.gitDirectory, "config"), "[broken\n")
+          const result =
+            await $`git --git-dir ${source.gitDirectory} --work-tree ${source.worktree} check-ignore --no-index --stdin -z < ${Buffer.from(paths.join("\0") + "\0")}`
+              .cwd(project)
+              .quiet()
+              .nothrow()
+          expect(result.exitCode).toBe(exitCode)
+        })
+        const refresh = git.index.refresh({ repository, scope: RelativePath.make("scope"), ignores: source })
+        if (exitCode === 128) {
+          const error = yield* refresh.pipe(Effect.flip)
+          expect(error).toBeInstanceOf(Git.OperationError)
+          expect(error.message).toContain("bad config line")
+          expect(yield* git.tree.write(repository)).toBe(before)
+          expect(
+            yield* git.index.refresh({ repository, scope: RelativePath.make("missing"), ignores: source }),
+          ).toEqual({ skipped: [] })
+          return
+        }
+        expect(yield* git.index.ignored({ repository: source, paths })).toEqual(
+          new Set(exitCode === 0 ? [paths[1]] : []),
+        )
+        expect(yield* refresh).toEqual({ skipped: [] })
+        const after = yield* git.tree.write(repository)
+        expect((yield* git.tree.diff({ repository, from: before, to: after })).map((file) => file.status)).toEqual([
+          "modified",
+          exitCode === 0 ? "deleted" : "modified",
+        ])
+      }),
+    )
+  })
+
   it.live("lists both sides of a rename as separate file changes", () =>
     Effect.gen(function* () {
       const root = yield* Effect.acquireRelease(

@@ -3,6 +3,7 @@ import { createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { SessionDocument } from "../document"
 import { SessionTimeline } from "./session-timeline"
+import type { ReasoningMode } from "./projection"
 import { CurrentSessionProviders, CurrentSessionTimelineStory } from "../storybook/current-session-story"
 import {
   CURRENT_SESSION_ID,
@@ -39,14 +40,7 @@ export default {
 }
 
 export const AgentThinking = {
-  render: () => (
-    <CurrentSessionTimelineStory
-      title="Agent thinking"
-      description="The prompt is admitted and the active turn is waiting for its first visible content."
-      document={thinkingDocument}
-      width="560px"
-    />
-  ),
+  render: () => <AgentReasoningStory mode="compact" reasoning="heading" tool={false} text="" />,
 }
 
 export const StreamingReasoningAndText = {
@@ -60,15 +54,18 @@ export const StreamingReasoningAndText = {
   ),
 }
 
-function AgentReasoningStory(props: { summaries: boolean; reasoning: string; tool: boolean; text: string }) {
+function AgentReasoningStory(props: { mode: ReasoningMode; reasoning: string; tool: boolean; text: string }) {
   const content = [
     ...(props.reasoning === "none"
       ? []
       : [
           {
             type: "reasoning" as const,
-            text: props.reasoning === "blank" ? "   " : "## Inspecting stability",
-            time: { created: STORY_TIME + 100 },
+            text:
+              props.reasoning === "blank"
+                ? "   "
+                : "## Inspecting stability\n\nI will inspect the timeline before changing its state.",
+            time: { created: STORY_TIME + 100, ...(props.tool || props.text ? { completed: STORY_TIME + 7100 } : {}) },
           },
         ]),
     ...(props.tool
@@ -78,7 +75,7 @@ function AgentReasoningStory(props: { summaries: boolean; reasoning: string; too
             id: "tool_reasoning_projection_skill",
             name: "skill",
             state: { status: "running" as const, input: { name: "inspect" }, metadata: {} },
-            time: { created: STORY_TIME + 200, ran: STORY_TIME + 250 },
+            time: { created: STORY_TIME + 7200, ran: STORY_TIME + 7250 },
           },
         ]
       : []),
@@ -103,16 +100,16 @@ function AgentReasoningStory(props: { summaries: boolean; reasoning: string; too
   return (
     <section class="mx-auto w-full max-w-[720px] p-6">
       <CurrentSessionProviders document={document}>
-        <SessionTimeline document={document} showReasoningSummaries={props.summaries} />
+        <SessionTimeline document={document} reasoningMode={props.mode} />
       </CurrentSessionProviders>
     </section>
   )
 }
 
 const AgentReasoning = {
-  args: { summaries: true, reasoning: "heading", tool: false, text: "" },
+  args: { mode: "compact", reasoning: "heading", tool: false, text: "" },
   argTypes: { reasoning: { control: "select", options: ["none", "blank", "heading"] } },
-  render: (args: { summaries: boolean; reasoning: string; tool: boolean; text: string }) => (
+  render: (args: { mode: ReasoningMode; reasoning: string; tool: boolean; text: string }) => (
     <AgentReasoningStory {...args} />
   ),
 }
@@ -174,7 +171,7 @@ function HiddenReasoningStory() {
         </button>
       </div>
       <CurrentSessionProviders document={document()}>
-        <SessionTimeline document={document()} showReasoningSummaries={false} />
+        <SessionTimeline document={document()} reasoningMode="compact" />
       </CurrentSessionProviders>
     </section>
   )
@@ -592,12 +589,13 @@ const conversationScenarios = {
 }
 
 export const Conversation = {
-  args: { scenario: "notices", summaries: true, reasoning: "heading", tool: false, text: "" },
+  args: { scenario: "notices", mode: "compact", reasoning: "heading", tool: false, text: "" },
   argTypes: {
     scenario: { control: "select", options: Object.keys(conversationScenarios) },
     reasoning: { control: "select", options: ["none", "blank", "heading"] },
+    mode: { control: "select", options: ["hidden", "compact", "full"] },
   },
-  render: (args: { scenario: string; summaries: boolean; reasoning: string; tool: boolean; text: string }) => {
+  render: (args: { scenario: string; mode: ReasoningMode; reasoning: string; tool: boolean; text: string }) => {
     if (args.scenario === "reasoning") return <AgentReasoningStory {...args} />
     return conversationScenarios[args.scenario as Exclude<keyof typeof conversationScenarios, "reasoning">].render()
   },

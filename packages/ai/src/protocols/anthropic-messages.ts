@@ -1387,14 +1387,15 @@ const providerErrorMessage = (event: AnthropicEvent): string => {
   return message || type || "Anthropic Messages stream error"
 }
 
-const onError = (event: AnthropicEvent) =>
-  Effect.fail(
+const onError = (event: AnthropicEvent) => {
+  const message = providerErrorMessage(event)
+  const body = ProviderShared.encodeJson(event)
+  return Effect.fail(
     new AIError({
-      module: ADAPTER,
-      method: "stream",
-      reason: classifyProviderFailure({ message: providerErrorMessage(event), code: event.error?.type }),
+      reason: classifyProviderFailure({ message, rawBody: body }),
     }),
   )
+}
 
 const isKnownStreamBlockType = (type: string) =>
   type === "text" ||

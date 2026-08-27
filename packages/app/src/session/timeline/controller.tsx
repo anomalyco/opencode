@@ -104,7 +104,7 @@ export function createTimelineController(input: { session: TimelineSessionSource
   const projection = createTimelineProjection({
     sessionMessages: projectedMessages,
     status: input.session.data.status,
-    showReasoningSummaries: settings.general.showReasoningSummaries,
+    reasoningMode: settings.general.reasoningMode,
     shellToolDefaultOpen: settings.general.shellToolPartsExpanded,
     editToolDefaultOpen: settings.general.editToolPartsExpanded,
     pendingUserMessageIDs,
@@ -235,7 +235,7 @@ export function createTimelineController(input: { session: TimelineSessionSource
       childTitle,
       showHeader,
       projection,
-      showReasoningSummaries: settings.general.showReasoningSummaries,
+      reasoningMode: settings.general.reasoningMode,
       shellToolPartsExpanded: settings.general.shellToolPartsExpanded,
       editToolPartsExpanded: settings.general.editToolPartsExpanded,
     },

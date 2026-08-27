@@ -5,6 +5,7 @@ import type { OpenCodeEvent } from "@opencode-ai/client"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { Bus } from "@opencode-ai/core/bus"
 import { Event } from "@opencode-ai/schema/event"
+import { Expected } from "../../../../core/test/lib/session-message"
 import { createEffect, onMount, type ParentProps } from "solid-js"
 import { ConfigProvider } from "../../../src/config"
 import { ClientProvider, useClient } from "../../../src/context/client"
@@ -2825,7 +2826,7 @@ test("renders admitted prompts immediately and tracks them until promoted", asyn
     })
     await wait(() => sync.session.message.list(sessionID)?.length === 1)
     const admitted = sync.session.message.list(sessionID)?.[0]
-    expect(admitted).toMatchObject({ id: messageID, type: "user", text: "hello" })
+    expect(admitted).toMatchObject({ id: messageID, ...Expected.user("hello") })
     expect(admitted?.metadata).toBeUndefined()
     expect(sync.session.pending.list(sessionID)).toEqual([
       {
@@ -3250,7 +3251,7 @@ test("hydrates durable pending prompts into the visible transcript", async () =>
     await mounted
     await sync.session.pending.sync(sessionID)
     expect(sync.session.message.list(sessionID)).toEqual([
-      { id: item.id, type: "user", text: "waiting", time: { created: 5 } },
+      { id: item.id, ...Expected.user("waiting"), time: { created: 5 } },
     ])
 
     await sync.session.message.sync(sessionID)

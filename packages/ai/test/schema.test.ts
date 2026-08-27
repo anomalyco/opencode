@@ -4,14 +4,25 @@ import * as OpenAIChat from "../src/protocols/openai-chat.js"
 import * as OpenAIResponses from "../src/protocols/openai-responses.js"
 import {
   AIError,
+  AIErrorReason,
+  AuthenticationError,
   ContentPart,
-  InvalidRequestReason,
+  ContentPolicyError,
+  HttpContext,
+  InvalidProviderOutputError,
+  InvalidRequestError,
   LLMEvent,
   LLMRequest,
   LanguageModel,
   ModelID,
+  NoRouteError,
   ProviderID,
-  TransportReason,
+  ProviderInternalError,
+  QuotaExceededError,
+  RateLimitError,
+  RouteID,
+  TransportError,
+  UnknownProviderError,
   Usage,
 } from "../src/schema/index.js"
 import { ProviderShared } from "../src/protocols/shared.js"
@@ -144,19 +155,20 @@ describe("AI.Usage", () => {
 
 test("AI errors expose the shared runtime tag", async () => {
   const error = new AIError({
-    module: "test",
-    method: "call",
-    reason: new InvalidRequestReason({ message: "invalid" }),
+    reason: new InvalidRequestError({ message: "invalid" }),
   })
   expect(error._tag).toBe("AI.Error")
+  expect(error.message).toBe("invalid")
+  expect(error.cause).toBe(error.reason)
+  expect(error.reason.cause).toBeUndefined()
   expect(
     await Effect.runPromise(Effect.fail(error).pipe(Effect.catchTag("AI.Error", () => Effect.succeed("caught")))),
   ).toBe("caught")
 })
 
 test("transport errors serialize execution facts", () => {
-  const reason = new TransportReason({
-    message: "connection closed",
+  const reason = new TransportError({
+    message: "Connection closed",
     transport: "websocket",
     operation: "read",
     phase: "receive",
@@ -164,14 +176,176 @@ test("transport errors serialize execution facts", () => {
     recovery: "fail",
   })
 
-  expect(Schema.encodeSync(TransportReason)(reason)).toEqual({
+  expect(Schema.encodeSync(TransportError)(reason)).toEqual({
     _tag: "Transport",
-    message: "connection closed",
+    message: "Connection closed",
     transport: "websocket",
     operation: "read",
     phase: "receive",
     delivery: "ambiguous",
     recovery: "fail",
   })
-  expect(Schema.decodeUnknownSync(TransportReason)(Schema.encodeSync(TransportReason)(reason))).toEqual(reason)
+  expect(Schema.decodeUnknownSync(TransportError)(Schema.encodeSync(TransportError)(reason))).toEqual(reason)
+})
+
+test("AI errors serialize diagnostics only on their typed reason", () => {
+  const cause = new SyntaxError("Unexpected end of JSON input")
+  const error = new AIError({
+    reason: new InvalidRequestError({
+      message: "Invalid provider response",
+      body: '{"error":',
+      http: new HttpContext({
+        url: "https://provider.test/v1/messages",
+        status: 400,
+        headers: { "request-id": "req_123" },
+      }),
+      cause,
+      parameter: "messages",
+      classification: "context-overflow",
+    }),
+  })
+  const encoded = Schema.encodeSync(AIError)(error)
+  expect(encoded).toEqual({
+    _tag: "AI.Error",
+    reason: {
+      _tag: "InvalidRequest",
+      message: "Invalid provider response",
+      body: '{"error":',
+      http: {
+        url: "https://provider.test/v1/messages",
+        status: 400,
+        headers: { "request-id": "req_123" },
+      },
+      cause: { name: "SyntaxError", message: cause.message, stack: cause.stack },
+      parameter: "messages",
+      classification: "context-overflow",
+    },
+  })
+  const decoded = Schema.decodeUnknownSync(Schema.fromJsonString(AIError))(
+    Schema.encodeSync(Schema.fromJsonString(AIError))(error),
+  )
+
+  expect(error).not.toHaveProperty("body")
+  expect(error).not.toHaveProperty("http")
+  expect(error.cause).toBe(error.reason)
+  expect(error.reason.cause).toBe(cause)
+  expect(decoded).toBeInstanceOf(AIError)
+  expect(decoded.reason).toBeInstanceOf(InvalidRequestError)
+  expect(decoded.message).toBe("Invalid provider response")
+  expect(decoded.reason.message).toBe(decoded.message)
+  expect(decoded.reason.body).toBe('{"error":')
+  expect(decoded.reason.http).toEqual(error.reason.http)
+  expect(decoded.cause).toBe(decoded.reason)
+  expect(decoded.reason.cause).toBeInstanceOf(Error)
+  expect(decoded.reason.cause).toMatchObject({ name: "SyntaxError", message: cause.message, stack: cause.stack })
+  expect(decoded.reason).toMatchObject({ parameter: "messages", classification: "context-overflow" })
+})
+
+test("AI error reasons are tagged Errors with required messages", () => {
+  const reasons = [
+    new InvalidRequestError({ message: "Invalid request" }),
+    new NoRouteError({
+      message: "No route",
+      route: RouteID.make("missing"),
+      provider: model.provider,
+      model: model.id,
+    }),
+    new AuthenticationError({ message: "Missing credentials", kind: "missing" }),
+    new RateLimitError({ message: "Rate limited" }),
+    new QuotaExceededError({ message: "Quota exceeded" }),
+    new ContentPolicyError({ message: "Content blocked" }),
+    new ProviderInternalError({ message: "Provider failed" }),
+    new TransportError({ message: "Connection failed", transport: "http", operation: "request" }),
+    new InvalidProviderOutputError({ message: "Invalid output" }),
+    new UnknownProviderError({ message: "Unknown failure" }),
+  ]
+  expect(reasons.map((reason) => reason._tag)).toEqual([
+    "InvalidRequest",
+    "NoRoute",
+    "Authentication",
+    "RateLimit",
+    "QuotaExceeded",
+    "ContentPolicy",
+    "ProviderInternal",
+    "Transport",
+    "InvalidProviderOutput",
+    "UnknownProvider",
+  ])
+  reasons.forEach((reason) => {
+    expect(reason).toBeInstanceOf(Error)
+    const encoded = Schema.encodeSync(AIErrorReason)(reason)
+    const decoded = Schema.decodeUnknownSync(AIErrorReason)(encoded)
+    expect(decoded).toBeInstanceOf(reason.constructor)
+    expect(decoded.message).toBe(reason.message)
+    expect(Schema.decodeUnknownOption(AIErrorReason)({ ...encoded, message: undefined })._tag).toBe("None")
+  })
+})
+
+test("AI error reason enrichment preserves non-enumerable diagnostics", () => {
+  const cause = new Error("socket disconnected")
+  const reason = new TransportError({
+    message: "Connection closed",
+    body: "close frame detail",
+    http: new HttpContext({ url: "https://provider.test/responses", status: 101, headers: { upgrade: "websocket" } }),
+    cause,
+    transport: "websocket",
+    operation: "read",
+    phase: "close",
+  })
+  expect(Object.prototype.propertyIsEnumerable.call(reason, "message")).toBe(false)
+  expect(Object.prototype.propertyIsEnumerable.call(reason, "cause")).toBe(false)
+  const enriched = AIErrorReason.make({
+    // oxlint-disable-next-line typescript-eslint/no-misused-spread -- Copy fields rather than iterating the yieldable error.
+    ...reason,
+    message: reason.message,
+    cause: reason.cause,
+    delivery: "ambiguous",
+    recovery: "retry-full",
+  })
+  const error = new AIError({ reason: enriched })
+
+  expect(enriched).toBeInstanceOf(TransportError)
+  expect(error.message).toBe(reason.message)
+  expect(error.cause).toBe(enriched)
+  expect(enriched.cause).toBe(cause)
+  expect(enriched.body).toBe(reason.body)
+  expect(enriched.http).toBe(reason.http)
+  expect(enriched).toMatchObject({ phase: "close", delivery: "ambiguous", recovery: "retry-full" })
+})
+
+test("AI errors support reason-specific handlers", async () => {
+  const limited = new AIError({ reason: new RateLimitError({ message: "Slow down", retryAfterMs: 2000 }) })
+  const invalid = new AIError({ reason: new InvalidRequestError({ message: "Invalid request", parameter: "model" }) })
+  expect(
+    await Effect.runPromise(
+      Effect.fail(limited).pipe(
+        Effect.catchReason("AI.Error", "RateLimit", (reason) => {
+          expect(reason).toBe(limited.reason)
+          expect(reason).toBeInstanceOf(RateLimitError)
+          return Effect.succeed(reason.retryAfterMs)
+        }),
+      ),
+    ),
+  ).toBe(2000)
+  expect(
+    await Effect.runPromise(
+      Effect.forEach([limited, invalid], (error) =>
+        Effect.fail(error).pipe(
+          Effect.catchReasons("AI.Error", {
+            RateLimit: (reason) => Effect.succeed(reason.message),
+            InvalidRequest: (reason) => Effect.succeed(reason.parameter),
+          }),
+        ),
+      ),
+    ),
+  ).toEqual(["Slow down", "model"])
+})
+
+test("HTTP error context requires an observed response", () => {
+  const decode = Schema.decodeUnknownOption(HttpContext)
+  expect(decode({ status: 400, headers: {} })._tag).toBe("None")
+  expect(decode({ url: "https://provider.test", headers: {} })._tag).toBe("None")
+  expect(decode({ url: "https://provider.test", status: 400 })._tag).toBe("None")
+  expect(decode({ url: "https://provider.test", status: 0, headers: {} })._tag).toBe("None")
+  expect(decode({ url: "https://provider.test", status: Number.NaN, headers: {} })._tag).toBe("None")
 })

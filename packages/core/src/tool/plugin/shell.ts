@@ -19,9 +19,8 @@ import { ToolOutput } from "../../tool-output.js"
 export const name = "shell"
 export const DEFAULT_TIMEOUT_MS = 2 * 60 * 1_000
 
-const BACKGROUND_STARTED = "The command was moved to the background."
 const BACKGROUND_INSTRUCTION =
-  "You will be notified automatically when the command finishes. DO NOT sleep, poll, or proactively check on its progress."
+  "You will be notified automatically when the command finishes. Avoid sleep commands or polling for completion; if you need the output before then, read the file directly."
 const OS =
   process.platform === "darwin"
     ? "macOS"
@@ -95,8 +94,8 @@ const toolResult = (output: Output) => {
   }
 }
 
-const backgroundResult = (shellID: string) => ({
-  output: BACKGROUND_STARTED,
+const backgroundResult = (shellID: string, file: string) => ({
+  output: `Command moved to the background (shell ID: ${shellID}).\nOutput is streaming to: ${file}`,
   shellID,
   truncated: false,
   status: "running" as const,
@@ -295,7 +294,7 @@ export const Plugin = {
               if (input.background === true) {
                 yield* runtime.job.background(job.id)
                 yield* notifyWhenDone(context.sessionID, context.id, info.id, info.command, settled)
-                return backgroundResult(info.id)
+                return backgroundResult(info.id, info.file)
               }
 
               const result = yield* runtime.job
@@ -304,7 +303,7 @@ export const Plugin = {
               if (result?.type === "backgrounded") {
                 yield* shell.timeout(info.id, 0)
                 yield* notifyWhenDone(context.sessionID, context.id, info.id, info.command, settled)
-                return backgroundResult(info.id)
+                return backgroundResult(info.id, info.file)
               }
               if (result?.info.status === "error")
                 return yield* Effect.fail(new Error(result.info.error ?? "Command failed"))

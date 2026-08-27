@@ -3,6 +3,7 @@ import { expect, story } from "../../storybook/playwright/story"
 story("renders streamed reasoning without starting the app", async ({ mount }) => {
   const timeline = await mount("current-session-timeline-rows--streaming-reasoning-and-text")
   await expect(timeline.locator('[data-component="session-timeline"]')).toBeVisible()
+  await timeline.locator('[data-component="reasoning-part"] [data-slot="collapsible-trigger"]').click()
   await expect(timeline.getByText("Checking the current contract", { exact: true })).toBeVisible()
 })
 

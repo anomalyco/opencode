@@ -4,6 +4,7 @@ import { Button } from "@opencode-ai/ui/button"
 import { Select } from "@opencode-ai/ui/select"
 import { Switch } from "@opencode-ai/ui/switch"
 import { TextInput } from "@opencode-ai/ui/text-input"
+import type { ReasoningMode } from "@opencode-ai/session-ui/timeline/projection"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useUpdaterAction } from "@/shell/updates/action"
@@ -183,6 +184,34 @@ const FollowUpBehaviorSetting: Component = () => {
   )
 }
 
+const ReasoningModeSetting: Component = () => {
+  const language = useLanguage()
+  const settings = useSettings()
+  const options = createMemo((): { value: ReasoningMode; label: string }[] => [
+    { value: "hidden", label: language.t("settings.general.row.reasoningMode.hidden") },
+    { value: "compact", label: language.t("settings.general.row.reasoningMode.compact") },
+    { value: "full", label: language.t("settings.general.row.reasoningMode.full") },
+  ])
+
+  return (
+    <SettingsRow
+      title={language.t("settings.general.row.reasoningMode.title")}
+      description={language.t("settings.general.row.reasoningMode.description")}
+    >
+      <Select
+        data-action="settings-reasoning-mode"
+        options={options()}
+        current={options().find((option) => option.value === settings.general.reasoningMode())}
+        value={(option) => option.value}
+        label={(option) => option.label}
+        placement="bottom-end"
+        gutter={6}
+        onSelect={(option) => option && settings.general.setReasoningMode(option.value)}
+      />
+    </SettingsRow>
+  )
+}
+
 const AppearanceSection: Component<{ controller: AppearanceSettingsController }> = (props) => {
   const language = useLanguage()
   return (
@@ -331,17 +360,7 @@ export const SettingsGeneral: Component<{
         <TerminalPlacementSetting />
         <FollowUpBehaviorSetting />
 
-        <SettingsRow
-          title={language.t("settings.general.row.reasoningSummaries.title")}
-          description={language.t("settings.general.row.reasoningSummaries.description")}
-        >
-          <div data-action="settings-feed-reasoning-summaries">
-            <Switch
-              checked={settings.general.showReasoningSummaries()}
-              onChange={(checked) => settings.general.setShowReasoningSummaries(checked)}
-            />
-          </div>
-        </SettingsRow>
+        <ReasoningModeSetting />
 
         <SettingsRow
           title={language.t("settings.general.row.shellToolPartsExpanded.title")}

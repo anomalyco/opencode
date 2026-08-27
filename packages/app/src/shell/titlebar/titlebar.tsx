@@ -161,6 +161,7 @@ export function Titlebar(props: {
               () => {
                 const route = layout.route()
                 if (route.type !== "session") return undefined
+                if (tabs.pendingSession(route.server, route.sessionId)) return undefined
                 const conn = global.servers.list().find((item) => ServerConnection.key(item) === route.server)
                 return conn ? { route, ctx: global.ensureServerCtx(conn) } : undefined
               },
@@ -169,6 +170,7 @@ export function Titlebar(props: {
             const session = createMemo(() => {
               const route = layout.route()
               if (route.type !== "session") return
+              if (tabs.pendingSession(route.server, route.sessionId)) return
               const conn = global.servers.list().find((item) => ServerConnection.key(item) === route.server)
               const cached = conn ? global.ensureServerCtx(conn).data.session.get(route.sessionId) : undefined
               if (cached) return cached
@@ -220,6 +222,10 @@ export function Titlebar(props: {
               }
 
               if (route.type === "session") {
+                if (tabs.pendingSession(route.server, route.sessionId)) {
+                  tabsStoreActions.addSessionTab({ server: route.server, sessionId: route.sessionId })
+                  return
+                }
                 const s = session()
                 if (!s) return
                 const sessionId = s.parentID ?? s.id
@@ -238,6 +244,12 @@ export function Titlebar(props: {
               const route = layout.route()
               switch (route.type) {
                 case "session": {
+                  const pending = tabs.pendingSession(route.server, route.sessionId)
+                  if (pending) {
+                    const model = tabs.stateValue<ComposerState>(pending.draft, "prompt")?.model.current()
+                    void tabs.newDraft({ server: route.server, directory: pending.draft.directory }, "", model)
+                    return
+                  }
                   const activeSession = session()
                   if (!activeSession) return
 

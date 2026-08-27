@@ -130,7 +130,11 @@ describe("reuseTimelineRows", () => {
       name: "does not create accidental key collisions",
       previous: [context("context:a", ["a", "b", "c"])],
       rows: [context("context:b", ["b"]), context("context:a", ["a"]), context("context:c", ["c"])],
-      expected: ["assistant-part:context:context:b", "assistant-part:context:context:a", "assistant-part:context:context:c"],
+      expected: [
+        "assistant-part:context:context:b",
+        "assistant-part:context:context:a",
+        "assistant-part:context:context:c",
+      ],
       reused: [],
     },
   ])("$name", ({ previous, rows, expected, reused }) => {
@@ -173,7 +177,7 @@ describe("createTimelineProjection", () => {
     const result = createTimelineProjection({
       sessionMessages: messages,
       status: { type: "busy" },
-      showReasoningSummaries: true,
+      reasoningMode: "full",
     })
 
     expect(result.activeMessageID).toBe("user-2")
@@ -207,12 +211,12 @@ describe("createTimelineProjection", () => {
     const first = createTimelineProjection({
       sessionMessages: messages,
       status: { type: "idle" },
-      showReasoningSummaries: true,
+      reasoningMode: "full",
     })
     const second = createTimelineProjection({
       sessionMessages: messages,
       status: { type: "idle" },
-      showReasoningSummaries: true,
+      reasoningMode: "full",
       previousRows: first.rows,
     })
 
@@ -244,7 +248,7 @@ describe("createTimelineProjection", () => {
     const result = createTimelineProjection({
       sessionMessages: messages,
       status: { type: "idle" },
-      showReasoningSummaries: true,
+      reasoningMode: "full",
     })
 
     expect(result.assistantMessagesByParent.get("assistant-1")?.map((message) => message.id)).toEqual([

@@ -1,6 +1,7 @@
 import { expect, test, type Page, type Route } from "@playwright/test"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { currentSession } from "../utils/mock-server"
+import pkg from "../../package.json" with { type: "json" }
 
 const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
 const sessionA = session("ses_tab_a", "Tab A session")
@@ -175,6 +176,9 @@ test("appearance experimental setting switches tab orientation", async ({ page }
 
   const settings = page.getByTestId("settings-screen")
   await expect(settings).toBeVisible()
+  const version = settings.getByRole("tablist").getByText(`v${pkg.version}`, { exact: true })
+  await expect(settings.getByRole("tablist").getByText("OpenCode Desktop", { exact: true })).toBeInViewport()
+  await expect(version).toBeInViewport()
   await settings.getByRole("tab", { name: "Appearance" }).click()
   await expect(settings.getByRole("heading", { name: "Experimental" })).toBeVisible()
 
@@ -194,6 +198,17 @@ test("appearance experimental setting switches tab orientation", async ({ page }
 
   await page.setViewportSize({ width: 800, height: 720 })
   await expect(settings.getByRole("tablist")).toHaveCSS("width", "160px")
+  await expect(version).toBeInViewport()
+
+  await page.setViewportSize({ width: 390, height: 720 })
+  await expect(version).toBeInViewport()
+  await settings.evaluate((element) => element.setAttribute("dir", "rtl"))
+  await expect(version).toBeInViewport()
+  await expect(version).toHaveCSS("direction", "ltr")
+
+  await page.setViewportSize({ width: 390, height: 360 })
+  await version.scrollIntoViewIfNeeded()
+  await expect(version).toBeInViewport()
 })
 
 test("vertical tab preference falls back to horizontal on mobile", async ({ page }) => {

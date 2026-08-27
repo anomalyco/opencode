@@ -2,7 +2,7 @@ import { Tool } from "@opencode-ai/schema/tool"
 import type { Agent } from "@opencode-ai/schema/agent"
 import type { Session } from "@opencode-ai/schema/session"
 import type { SessionMessage } from "@opencode-ai/schema/session-message"
-import type { Effect, JsonSchema, Types } from "effect"
+import type { Effect, Types } from "effect"
 import type { Hooks, Transform } from "./registration.js"
 
 export interface ToolDraft {
@@ -18,8 +18,7 @@ export interface ToolDraft {
 
 export interface ToolHooks {
   readonly "execute.before": {
-    readonly tool: string
-    readonly inputSchema: JsonSchema.JsonSchema
+    tool: string
     readonly sessionID: Session.ID
     readonly agent: Agent.ID
     readonly messageID: SessionMessage.ID

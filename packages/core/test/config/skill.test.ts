@@ -162,6 +162,10 @@ metadata:
         _tag: "Parsed",
         skill: { id: Skill.ID.make("foo") },
       })
+      expect(SkillFile.parse("/repo/skills/manual", "/repo/skills/manual/SKILL.md", "# manual")).toMatchObject({
+        _tag: "Parsed",
+        skill: { id: Skill.ID.make("manual"), name: Skill.Name.make("manual") },
+      })
       expect(
         SkillFile.parse(directory, "/repo/skills/broken.md", "---\ndescription: foo: bar\nmetadata: [\n---\n# broken"),
       ).toEqual({ _tag: "Skipped", reason: "markdown" })
@@ -214,7 +218,7 @@ describe("ConfigSkillPlugin.Plugin", () => {
     ),
   )
 
-  it.live("loads directory and URL sources with later-source precedence", () =>
+  it.live("loads directory and individual downloaded skill roots with later-source precedence", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
@@ -225,14 +229,24 @@ describe("ConfigSkillPlugin.Plugin", () => {
           const second = path.join(tmp.path, "second")
           yield* Effect.promise(async () => {
             await fs.mkdir(path.join(first, "review"), { recursive: true })
+            await fs.mkdir(path.join(second, "deploy"), { recursive: true })
             await fs.mkdir(path.join(second, "review"), { recursive: true })
             await write(first, "review", "First")
+            await write(second, "deploy", "Deploy")
             await write(second, "review", "Second")
           })
           pulls = 0
-          urls.set("https://example.test/skills/", [AbsolutePath.make(second)])
+          urls.set("https://example.test/skills/", [
+            AbsolutePath.make(path.join(second, "deploy")),
+            AbsolutePath.make(path.join(second, "review")),
+          ])
 
           const skill = yield* start([first, "https://example.test/skills/"], tmp.path)
+          expect((yield* skill.list()).map((item) => item.id).toSorted()).toEqual([
+            Skill.ID.make("deploy"),
+            Skill.ID.make("review"),
+          ])
+          expect((yield* skill.list()).find((item) => item.id === "deploy")?.description).toBe("Deploy")
           expect((yield* skill.list()).find((item) => item.id === "review")?.description).toBe("Second")
           expect(pulls).toBe(1)
         }),

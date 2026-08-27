@@ -789,19 +789,32 @@ describe("Bedrock Converse route", () => {
       ])
       const error = yield* LLMClient.generate(baseRequest).pipe(Effect.provide(fixedBytes(body)), Effect.flip)
 
-      expect(error.reason).toMatchObject({ _tag: "UnknownProvider", message: "A future provider failure" })
+      expect(error).toMatchObject({ reason: { _tag: "UnknownProvider" }, message: "A future provider failure" })
     }),
   )
 
   it.effect("classifies throttlingException as a rate limit", () =>
     Effect.gen(function* () {
+      const payload = { message: "Slow down", details: { opaque: [1, 2] }, trace: "outer", p: "padding" }
       const body = concat([
         eventFrame("messageStart", { role: "assistant" }),
-        exceptionFrame("throttlingException", { message: "Slow down" }),
+        exceptionFrame("throttlingException", payload),
       ])
       const error = yield* LLMClient.generate(baseRequest).pipe(Effect.provide(fixedBytes(body)), Effect.flip)
 
-      expect(error.reason).toMatchObject({ _tag: "RateLimit", message: "Slow down" })
+      expect(error).toMatchObject({ reason: { _tag: "RateLimit" }, message: "Slow down" })
+      expect(JSON.parse(error.reason.body ?? "")).toEqual({
+        headers: {
+          ":message-type": { type: "string", value: "exception" },
+          ":exception-type": { type: "string", value: "throttlingException" },
+          ":content-type": { type: "string", value: "application/json" },
+        },
+        body: JSON.stringify(payload),
+      })
+      expect(error.reason.http).toMatchObject({
+        status: 200,
+        headers: { "content-type": "application/vnd.amazon.eventstream" },
+      })
     }),
   )
 
@@ -814,10 +827,9 @@ describe("Bedrock Converse route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({
-        _tag: "InvalidRequest",
+      expect(error).toMatchObject({
+        reason: { _tag: "InvalidRequest", classification: "context-overflow" },
         message: "Input is too long for requested model",
-        classification: "context-overflow",
       })
     }),
   )
@@ -836,7 +848,7 @@ describe("Bedrock Converse route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({ _tag: "ProviderInternal", message: "Upstream model failed" })
+      expect(error).toMatchObject({ reason: { _tag: "ProviderInternal" }, message: "Upstream model failed" })
     }),
   )
 
@@ -847,10 +859,32 @@ describe("Bedrock Converse route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({
-        _tag: "InvalidProviderOutput",
+      expect(error).toMatchObject({
+        reason: { _tag: "InvalidProviderOutput" },
         message: "BadStream: Stream failed",
       })
+      expect(JSON.parse(error.reason.body ?? "")).toMatchObject({
+        headers: { ":error-code": { value: "BadStream" } },
+        body: "",
+      })
+    }),
+  )
+
+  it.effect("retains malformed AWS payloads with headers and decode cause", () =>
+    Effect.gen(function* () {
+      const headers = {
+        ":message-type": { type: "string" as const, value: "event" },
+        ":event-type": { type: "string" as const, value: "messageStart" },
+      }
+      const body = '{"malformed":'
+      const error = yield* LLMClient.generate(baseRequest).pipe(
+        Effect.provide(fixedBytes(codec.encode({ headers, body: utf8Encoder.encode(body) }))),
+        Effect.flip,
+      )
+      expect(error.reason._tag).toBe("InvalidProviderOutput")
+      expect(JSON.parse(error.reason.body ?? "")).toEqual({ headers, body })
+      expect(error.reason.cause).toBeInstanceOf(Error)
+      expect(error.reason.http?.status).toBe(200)
     }),
   )
 

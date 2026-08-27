@@ -79,7 +79,8 @@ export default function Layout(props: ParentProps) {
               />
             </aside>
           </Show>
-          <main class="flex-1 min-h-0 min-w-0 overflow-x-hidden flex flex-col items-start contain-strict">
+          {/* Size containment collapses percentage-height descendants in WebKit. */}
+          <main class="flex-1 min-h-0 min-w-0 overflow-x-hidden flex flex-col items-start contain-content">
             <div
               class="flex size-full min-h-0 min-w-0 flex-col"
               hidden={settings.store.open}

@@ -4,6 +4,7 @@ import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import path from "path"
 import { Context, Effect, Layer, Schema } from "effect"
 import { FSUtil } from "@opencode-ai/util/fs-util"
+import { Global } from "@opencode-ai/util/global"
 import { Location } from "./location.js"
 import { Project } from "./project.js"
 import { ProjectMarkers } from "./project/markers.js"
@@ -13,9 +14,9 @@ export const Kind = Schema.Literals(["file", "directory"])
 export type Kind = typeof Kind.Type
 
 /**
- * Mutation paths do not accept project references. Relative paths resolve
- * from the active Location. Paths outside it require separate
- * `external_directory` approval.
+ * Mutation paths do not accept project references. A leading `~` expands to
+ * the home directory; other relative paths resolve from the active Location.
+ * Paths outside it require separate `external_directory` approval.
  */
 export const ResolveInput = Schema.Struct({
   path: Schema.String,
@@ -49,12 +50,24 @@ export interface Target {
 
 export interface Interface {
   /**
-   * Resolve a path and derive its permission resources. Relative paths resolve
-   * from the Location. Paths outside it require separate `external_directory`
-   * approval. This does not approve the mutation.
+   * Resolve a path and derive its permission resources. A leading `~` expands
+   * to the home directory; other relative paths resolve from the Location.
+   * Paths outside it require separate `external_directory` approval. This does
+   * not approve the mutation.
    */
   readonly resolve: (input: ResolveInput) => Effect.Effect<Target, FSUtil.Error>
 }
+
+/** Lexical absolute path, expanding a leading `~` before resolving against `directory`. */
+export const resolvePath = (directory: string, input: string, home = Global.Path.home) =>
+  path.resolve(
+    directory,
+    input === "~"
+      ? home
+      : input.startsWith("~/") || (process.platform === "win32" && input.startsWith("~\\"))
+        ? path.join(home, input.slice(2))
+        : input,
+  )
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/LocationMutation") {}
 
@@ -68,7 +81,7 @@ const layer = Layer.effect(
     const markers = yield* ProjectMarkers.Service
 
     const resolve = Effect.fnUntraced(function* (input: ResolveInput) {
-      const absolute = path.resolve(location.directory, input.path)
+      const absolute = resolvePath(location.directory, input.path)
       if (FSUtil.contains(location.directory, absolute)) {
         return {
           absolute,

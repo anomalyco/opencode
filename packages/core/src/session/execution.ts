@@ -77,29 +77,29 @@ export const layer = Layer.effect(
     const releaseOnCommit = (sessionID: SessionSchema.ID) => ({
       commit: () => store.release(sessionID),
     })
-    function drain(
+    const drain = Effect.fnUntraced(function* (
       sessionID: SessionSchema.ID,
       force: boolean,
       continuation?: SessionRunner.Continuation,
       promotable: SessionInbox.Promotable = "input",
-    ): Effect.Effect<void, SessionRunner.RunError> {
-      return Effect.gen(function* () {
-        const session = yield* store.get(sessionID)
-        if (!session) return yield* Effect.die(new Error(`Session not found: ${sessionID}`))
-        const result = yield* SessionRunner.Service.use((runner) =>
-          runner.drain({ sessionID, force, continuation, promotable }),
-        ).pipe(
-          Effect.provide(locations.get(session.location)),
-          Effect.tapCause((cause) =>
-            Cause.hasInterruptsOnly(cause)
-              ? Effect.void
-              : Effect.logError("Failed to drain Session", cause).pipe(Effect.annotateLogs({ sessionID })),
-          ),
-        )
-        if (result._tag === "Complete") return
-        return yield* drain(sessionID, false, result.continuation, promotable)
+    ): Effect.fn.Return<void, SessionRunner.RunError> {
+      const session = yield* store.get(sessionID)
+      if (!session) return yield* Effect.die(new Error(`Session not found: ${sessionID}`))
+      const result = yield* SessionRunner.Service.use((runner) =>
+        runner.drain({ sessionID, force, continuation, promotable }),
+      ).pipe(
+        Effect.provide(locations.get(session.location)),
+        Effect.tapCause((cause) =>
+          Cause.hasInterruptsOnly(cause)
+            ? Effect.void
+            : Effect.logError("Failed to drain Session", cause).pipe(Effect.annotateLogs({ sessionID })),
+        ),
+      )
+      return yield* SessionRunner.DrainResult.$match(result, {
+        Complete: () => Effect.void,
+        Moved: (result) => drain(sessionID, false, result.continuation, promotable),
       })
-    }
+    })
     const coordinator = yield* SessionRunCoordinator.make<SessionSchema.ID, SessionRunner.RunError, InterruptReason>({
       started: (sessionID) =>
         reportLifecycle(

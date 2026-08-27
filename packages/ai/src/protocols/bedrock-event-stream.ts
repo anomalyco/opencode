@@ -1,6 +1,7 @@
 import { EventStreamCodec } from "@smithy/eventstream-codec"
 import { fromUtf8, toUtf8 } from "@smithy/util-utf8"
-import { Effect, Stream } from "effect"
+import { Effect, Encoding, Stream } from "effect"
+import { AIError, AIErrorReason } from "../schema/index.js"
 import { Framing } from "../route/framing.js"
 import { ProviderShared } from "./shared.js"
 
@@ -49,10 +50,14 @@ const consumeFrames = (route: string) => (state: FrameBufferState, chunk: Uint8A
             `Failed to decode Bedrock Converse event-stream frame: ${
               error instanceof Error ? error.message : String(error)
             }`,
+            Encoding.encodeBase64(view.subarray(0, totalLength)),
+            error,
           ),
       })
       cursor = { buffer: cursor.buffer, offset: cursor.offset + totalLength }
 
+      const payload = utf8.decode(decoded.body)
+      const body = ProviderShared.encodeJson({ headers: decoded.headers, body: payload })
       const messageType = decoded.headers[":message-type"]?.value
       if (messageType === "error") {
         const code = decoded.headers[":error-code"]?.value
@@ -61,6 +66,7 @@ const consumeFrames = (route: string) => (state: FrameBufferState, chunk: Uint8A
           route,
           [code, message].filter((value): value is string => typeof value === "string").join(": ") ||
             "Bedrock Converse event-stream error",
+          body,
         )
       }
       const eventType =
@@ -70,7 +76,6 @@ const consumeFrames = (route: string) => (state: FrameBufferState, chunk: Uint8A
             ? decoded.headers[":exception-type"]?.value
             : undefined
       if (typeof eventType !== "string") continue
-      const payload = utf8.decode(decoded.body)
       if (!payload) continue
       // The AWS event stream pads short payloads with a `p` field. Drop it
       // before handing the object to the chunk schema. JSON decode goes
@@ -80,11 +85,21 @@ const consumeFrames = (route: string) => (state: FrameBufferState, chunk: Uint8A
         route,
         payload,
         "Failed to parse Bedrock Converse event-stream payload",
+      ).pipe(
+        Effect.mapError(
+          (error) =>
+            new AIError({
+              reason: AIErrorReason.make({ ...error.reason, message: error.message, cause: error.reason.cause, body }),
+            }),
+        ),
       )) as Record<string, unknown>
       delete parsed.p
-      out.push(
-        messageType === "exception" ? { exception: { type: eventType, details: parsed } } : { [eventType]: parsed },
-      )
+      out.push({
+        ...(messageType === "exception"
+          ? { exception: { type: eventType, details: parsed } }
+          : { [eventType]: parsed }),
+        rawBody: body,
+      })
     }
     return [cursor, out] as const
   })
@@ -97,6 +112,7 @@ const consumeFrames = (route: string) => (state: FrameBufferState, chunk: Uint8A
  */
 export const framing = (route: string): Framing.Definition<object> => ({
   id: "aws-event-stream",
+  body: (frame) => ("rawBody" in frame && typeof frame.rawBody === "string" ? frame.rawBody : undefined),
   frame: (bytes) => bytes.pipe(Stream.mapAccumEffect(() => initialFrameBuffer, consumeFrames(route))),
 })
 

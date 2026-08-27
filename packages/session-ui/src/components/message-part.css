@@ -273,10 +273,22 @@
   line-height: var(--line-height-normal);
 
   [data-component="markdown"] {
-    margin-top: 16px;
+    margin-top: 0;
     font-style: normal;
     font-size: 13px;
+    line-height: var(--line-height-base);
     color: var(--v2-text-text-muted);
+
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6 {
+      font-size: inherit;
+      font-weight: inherit;
+      color: inherit;
+    }
 
     strong,
     b {
@@ -724,7 +736,9 @@
       width: 100%;
     }
 
-    > [data-component="tool-part-wrapper"] > [data-component="collapsible"] > [data-slot="collapsible-trigger"] {
+    > [data-component="tool-part-wrapper"]
+      > [data-component="collapsible"]
+      > [data-slot="collapsible-trigger"]:not([data-hide-details="true"]) {
       height: 28px;
     }
 
@@ -1513,4 +1527,9 @@
 
 :root[data-color-scheme="light"] body [data-component="user-message"] [data-slot="user-message-text"] {
   background: var(--v2-background-bg-layer-02);
+}
+
+:root body [data-workspace-session] [data-component="user-message"] [data-slot="user-message-text"] {
+  background: var(--v2-background-bg-accent);
+  color: var(--v2-text-text-contrast);
 }

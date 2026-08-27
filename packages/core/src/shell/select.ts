@@ -167,6 +167,11 @@ export function args(file: string, command: string) {
   return ["-c", command]
 }
 
+// Resolve afresh so removing a shell does not leave terminals using a stale cached path.
+export function environment(bin?: string, filter?: { compatible?: boolean }) {
+  return select(process.env.SHELL, undefined, filter, bin) ?? fallback(bin)
+}
+
 let defaultConfigured: { bin?: string; value: string } | undefined
 let defaultCompatible: { bin?: string; value: string } | undefined
 
@@ -176,7 +181,7 @@ export function resolve(input: ResolveInput, configShell?: string, options?: Opt
   if (options?.gitbash) return select(process.env.SHELL, options, filter, bin)
   const cached = input.priority === "compat" ? defaultCompatible : defaultConfigured
   if (cached && cached.bin === bin) return cached.value
-  const value = select(process.env.SHELL, undefined, filter, bin) ?? fallback(bin)
+  const value = environment(bin, filter)
   if (input.priority === "compat") defaultCompatible = { bin, value }
   if (input.priority === "config") defaultConfigured = { bin, value }
   return value

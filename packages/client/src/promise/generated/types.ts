@@ -376,6 +376,8 @@ export type SessionStatus =
 
 export type PtyTicketConnectToken = { ticket: string; expires_in: number }
 
+export type PersistentPtyHandoff = { directory: string; instanceID: string; ticket: string; expiresAt: number }
+
 export type ShellInfo1 = {
   id: string
   status: "running" | "exited" | "timeout" | "killed"
@@ -5753,50 +5755,50 @@ export type ExperimentalPersistentPtyListOutput = { data: Array<PersistentPtyInf
 
 export type ExperimentalPersistentPtyCreateInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]
-  readonly command: {
-    readonly command: string
+  readonly command?: {
+    readonly command?: string
     readonly args: ReadonlyArray<string>
-    readonly cwd: string
+    readonly cwd?: string
     readonly title: string
     readonly env: { readonly [x: string]: string }
     readonly size?: { readonly cols: number; readonly rows: number }
   }["command"]
   readonly args: {
-    readonly command: string
+    readonly command?: string
     readonly args: ReadonlyArray<string>
-    readonly cwd: string
+    readonly cwd?: string
     readonly title: string
     readonly env: { readonly [x: string]: string }
     readonly size?: { readonly cols: number; readonly rows: number }
   }["args"]
-  readonly cwd: {
-    readonly command: string
+  readonly cwd?: {
+    readonly command?: string
     readonly args: ReadonlyArray<string>
-    readonly cwd: string
+    readonly cwd?: string
     readonly title: string
     readonly env: { readonly [x: string]: string }
     readonly size?: { readonly cols: number; readonly rows: number }
   }["cwd"]
   readonly title: {
-    readonly command: string
+    readonly command?: string
     readonly args: ReadonlyArray<string>
-    readonly cwd: string
+    readonly cwd?: string
     readonly title: string
     readonly env: { readonly [x: string]: string }
     readonly size?: { readonly cols: number; readonly rows: number }
   }["title"]
   readonly env: {
-    readonly command: string
+    readonly command?: string
     readonly args: ReadonlyArray<string>
-    readonly cwd: string
+    readonly cwd?: string
     readonly title: string
     readonly env: { readonly [x: string]: string }
     readonly size?: { readonly cols: number; readonly rows: number }
   }["env"]
   readonly size?: {
-    readonly command: string
+    readonly command?: string
     readonly args: ReadonlyArray<string>
-    readonly cwd: string
+    readonly cwd?: string
     readonly title: string
     readonly env: { readonly [x: string]: string }
     readonly size?: { readonly cols: number; readonly rows: number }
@@ -5806,6 +5808,8 @@ export type ExperimentalPersistentPtyCreateInput = {
 export type ExperimentalPersistentPtyCreateOutput = { data: PersistentPtyInfo }["data"]
 
 export type ExperimentalPersistentPtyShutdownOutput = void
+
+export type ExperimentalPersistentPtyHandoffOutput = { handoff: PersistentPtyHandoff | null }
 
 export type ExperimentalPersistentPtyGetInput = { readonly ptyID: { readonly ptyID: string }["ptyID"] }
 

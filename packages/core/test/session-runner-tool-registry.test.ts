@@ -6,6 +6,10 @@ import { Image } from "@opencode-ai/core/image"
 import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { Session } from "@opencode-ai/core/session"
 import { SessionMessage } from "@opencode-ai/core/session/message"
+import { SessionModelRequest } from "@opencode-ai/core/session/model-request"
+import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
+import { LanguageModel } from "@opencode-ai/ai"
+import { route } from "@opencode-ai/ai/protocols/openai-chat"
 import { State } from "@opencode-ai/core/state"
 import { Tool } from "@opencode-ai/core/tool"
 import type { Info } from "@opencode-ai/schema/tool"
@@ -38,7 +42,9 @@ const imageStore = Layer.mock(Image.Service, {
     })
   },
 })
-const registryLayer = AppNodeBuilder.build(LayerNode.group([Tool.node, PluginHooks.node]), [[Image.node, imageStore]])
+const registryLayer = AppNodeBuilder.build(LayerNode.group([Tool.node, PluginHooks.node, SessionModelRequest.node]), [
+  [Image.node, imageStore],
+])
 const it = testEffect(registryLayer)
 const identity = {
   agent: Agent.ID.make("build"),
@@ -83,6 +89,116 @@ describe("Tool", () => {
         expect(draft.get("acme_echo")?.name).toBe("echo")
         expect(draft.get("missing")).toBeUndefined()
       })
+    }),
+  )
+
+  it.effect("repairs names and inputs before lookup using the captured request tool set", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      const hooks = yield* PluginHooks.Service
+      yield* transform(service, { echo: constant("captured"), hidden: make() }, { codemode: false })
+      const snapshot = yield* service.snapshot()
+      const modelRequests = yield* SessionModelRequest.Service
+      yield* hooks.register("session", "context", (event) =>
+        Effect.sync(() => {
+          const echo = event.tools.echo
+          if (!echo) throw new Error("Expected echo definition")
+          event.tools.alias = echo
+          delete event.tools.echo
+          delete event.tools.hidden
+        }),
+      )
+      const prepared = yield* modelRequests.prepare({
+        scope: {
+          session: Schema.decodeUnknownSync(Session.Info)({
+            id: sessionID,
+            projectID: "project",
+            location: { directory: "/test" },
+            cost: 0,
+            tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+            time: { created: 0, updated: 0 },
+          }),
+          agentID: identity.agent,
+          model: SessionRunnerModel.resolved(LanguageModel.make({ id: "test", provider: "test", route }), {
+            capabilities: { tools: true, input: ["text"], output: ["text"] },
+            cost: [],
+            limit: { context: 200_000, output: 32_000 },
+          }),
+          tools: snapshot,
+        },
+        transcript: { system: [], messages: [] },
+      })
+      expect(prepared.request.tools.map((tool) => tool.name)).toEqual(["execute", "alias"])
+      yield* transform(service, { echo: constant("new") }, { codemode: false })
+      const before: string[] = []
+      const after: string[] = []
+      yield* hooks.register("tool", "execute.before", (event) =>
+        Effect.sync(() => {
+          expect(event).not.toHaveProperty("inputSchema")
+          before.push(event.tool)
+          event.tool = event.tool === "typo" ? "alias" : event.tool
+          event.input = { text: "corrected" }
+        }),
+      )
+      yield* hooks.register("tool", "execute.after", (event) =>
+        Effect.sync(() => {
+          after.push(event.tool)
+          expect(event.input).toEqual({ text: "corrected" })
+        }),
+      )
+      expect((yield* prepared.executeTool(call("typo"))).output).toEqual({ text: "captured" })
+      expect(before).toEqual(["typo"])
+      expect(after).toEqual(["echo"])
+      expect(yield* prepared.executeTool(call("hidden")).pipe(Effect.flip)).toMatchObject({
+        message: "Tool is not available for this request: hidden",
+      })
+      expect(yield* prepared.executeTool(call("echo")).pipe(Effect.flip)).toMatchObject({
+        message: "Tool is not available for this request: echo",
+      })
+      expect(yield* prepared.executeTool(call("missing")).pipe(Effect.flip)).toMatchObject({
+        message: "Unknown tool: missing",
+      })
+      expect(before).toEqual(["typo", "hidden", "echo", "missing"])
+      expect(after).toEqual(["echo"])
+    }),
+  )
+
+  it.effect("hooks execute and known Code Mode calls once but leaves unknown interpreter paths unchanged", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      const hooks = yield* PluginHooks.Service
+      yield* transform(service, { echo: make() })
+      const seen: string[] = []
+      yield* hooks.register("tool", "execute.before", (event) =>
+        Effect.sync(() => {
+          seen.push(event.tool)
+          expect(event).not.toHaveProperty("inputSchema")
+          if (event.tool === "run_code") event.tool = "execute"
+        }),
+      )
+      const snapshot = yield* service.snapshot()
+      const known = yield* snapshot.execute({
+        ...call("run_code"),
+        call: {
+          type: "tool-call",
+          id: "known",
+          name: "run_code",
+          input: { code: 'return await tools.echo({ text: "hello" })' },
+        },
+      })
+      expect(known.output).toMatchObject({ output: '{\n  "text": "hello"\n}' })
+      expect(seen).toEqual(["run_code", "echo"])
+      const unknown = yield* snapshot.execute({
+        ...call("execute"),
+        call: {
+          type: "tool-call",
+          id: "unknown",
+          name: "execute",
+          input: { code: "return await tools.missing({})" },
+        },
+      })
+      expect(unknown.output).toMatchObject({ error: true })
+      expect(seen).toEqual(["run_code", "echo", "execute"])
     }),
   )
 

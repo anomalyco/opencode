@@ -4,6 +4,7 @@ import { Headers, HttpClientRequest } from "effect/unstable/http"
 import {
   LLM,
   AIError,
+  HttpContext,
   HttpOptions,
   LLMEvent,
   LLMRequest,
@@ -12,7 +13,7 @@ import {
   ToolCallPart,
   ToolDefinition,
   ToolResultPart,
-  TransportReason,
+  TransportError,
   Usage,
 } from "../../src/index.js"
 import {
@@ -52,10 +53,11 @@ const baseChannelDriver = (message: string): WebSocketChannelDriver => ({
       return Effect.succeed({
         type: "provider-failure",
         error: new AIError({
-          module: "test",
-          method: "stream",
-          reason: new TransportReason({
+          reason: new TransportError({
             message: "provider rejected request",
+            body: frame,
+            cause: new Error("provider cause"),
+            http: new HttpContext({ url: "https://provider.test", status: 200, headers: { "x-trace": "trace-1" } }),
             transport: "websocket",
             operation: "read",
             phase: "receive",
@@ -744,6 +746,18 @@ describe("OpenAI Responses route", () => {
           reason: { _tag: "Transport", delivery: "rejected", recovery: "rotate-and-retry-full" },
         },
       })
+      for (const observation of [missing, limit]) {
+        expect(observation.type).toBe("rejected")
+        if (observation.type !== "rejected") continue
+        expect(observation.error.message).toBe("provider rejected request")
+        expect(observation.error.reason.cause).toBeInstanceOf(Error)
+        expect(observation.error.reason.cause).toMatchObject({ message: "provider cause" })
+        expect(observation.error.reason.http).toMatchObject({ status: 200, headers: { "x-trace": "trace-1" } })
+        expect(ProviderShared.decodeJson(observation.error.reason.body ?? "")).toMatchObject({
+          type: "error",
+          error: { code: expect.any(String) },
+        })
+      }
     }),
   )
 
@@ -1110,9 +1124,7 @@ describe("OpenAI Responses route", () => {
   it.effect("marks post-send WebSocket failures with delivery state", () =>
     Effect.gen(function* () {
       const failure = new AIError({
-        module: "test",
-        method: "receive",
-        reason: new TransportReason({
+        reason: new TransportError({
           message: "socket closed",
           transport: "websocket",
           operation: "read",
@@ -4435,7 +4447,7 @@ describe("OpenAI Responses route", () => {
       )
 
       expect(error).toBeInstanceOf(AIError)
-      expect(error.reason).toMatchObject({ _tag: "RateLimit", message: "rate_limit_exceeded: Slow down" })
+      expect(error).toMatchObject({ reason: { _tag: "RateLimit" }, message: "rate_limit_exceeded: Slow down" })
     }),
   )
 
@@ -4446,7 +4458,7 @@ describe("OpenAI Responses route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({ _tag: "ProviderInternal", message: "internal_error" })
+      expect(error).toMatchObject({ reason: { _tag: "ProviderInternal" }, message: "internal_error" })
     }),
   )
 
@@ -4457,7 +4469,7 @@ describe("OpenAI Responses route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({ _tag: "ProviderInternal", message: "internal_error" })
+      expect(error).toMatchObject({ reason: { _tag: "ProviderInternal" }, message: "internal_error" })
     }),
   )
 
@@ -4482,8 +4494,8 @@ describe("OpenAI Responses route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({
-        _tag: "ProviderInternal",
+      expect(error).toMatchObject({
+        reason: { _tag: "ProviderInternal" },
         message: "server_error: Upstream model unavailable",
       })
     }),
@@ -4503,7 +4515,7 @@ describe("OpenAI Responses route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({ _tag: "InvalidRequest", message: "invalid_prompt" })
+      expect(error).toMatchObject({ reason: { _tag: "InvalidRequest" }, message: "invalid_prompt" })
     }),
   )
 
@@ -4526,10 +4538,9 @@ describe("OpenAI Responses route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({
-        _tag: "InvalidRequest",
+      expect(error).toMatchObject({
+        reason: { _tag: "InvalidRequest", classification: "context-overflow" },
         message: "context_length_exceeded: prompt too long",
-        classification: "context-overflow",
       })
     }),
   )
@@ -4554,10 +4565,9 @@ describe("OpenAI Responses route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({
-        _tag: "InvalidRequest",
+      expect(error).toMatchObject({
+        reason: { _tag: "InvalidRequest", classification: "context-overflow" },
         message: "context_length_exceeded: prompt too long",
-        classification: "context-overflow",
       })
     }),
   )
@@ -4579,7 +4589,7 @@ describe("OpenAI Responses route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({ _tag: "UnknownProvider", message: "Something went wrong" })
+      expect(error).toMatchObject({ reason: { _tag: "UnknownProvider" }, message: "Something went wrong" })
     }),
   )
 
@@ -4591,8 +4601,8 @@ describe("OpenAI Responses route", () => {
       )
 
       expect(error.reason).toMatchObject({ _tag: "UnknownProvider" })
-      expect(error.reason.message).toContain('"error":null')
-      expect(error.body).toBe(error.reason.message)
+      expect(error.message).toContain('"error":null')
+      expect(error.reason.body).toBe(error.message)
     }),
   )
 
@@ -4604,8 +4614,8 @@ describe("OpenAI Responses route", () => {
       )
 
       expect(error.reason).toMatchObject({ _tag: "ProviderInternal" })
-      expect(error.reason.message).toContain('"type":"error"')
-      expect(error.body).toBe(error.reason.message)
+      expect(error.message).toContain('"type":"error"')
+      expect(error.reason.body).toBe(error.message)
     }),
   )
 
@@ -4617,8 +4627,8 @@ describe("OpenAI Responses route", () => {
       )
 
       expect(error.reason).toMatchObject({ _tag: "UnknownProvider" })
-      expect(error.reason.message).toContain('"resp_failed_3"')
-      expect(error.body).toBe(error.reason.message)
+      expect(error.message).toContain('"resp_failed_3"')
+      expect(error.reason.body).toBe(error.message)
     }),
   )
 
@@ -4635,7 +4645,7 @@ describe("OpenAI Responses route", () => {
       )
 
       expect(error).toBeInstanceOf(AIError)
-      expect(error.reason).toMatchObject({ _tag: "InvalidRequest", message: "Bad request" })
+      expect(error).toMatchObject({ reason: { _tag: "InvalidRequest" }, message: "Bad request" })
     }),
   )
 })

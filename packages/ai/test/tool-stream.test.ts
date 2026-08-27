@@ -109,7 +109,7 @@ describe("ToolStream", () => {
       const error = ToolStream.appendExisting(ADAPTER, ToolStream.empty<number>(), 0, "{}", "missing tool")
 
       expect(error).toBeInstanceOf(AIError)
-      if (ToolStream.isError(error)) expect(error.reason.message).toBe("missing tool")
+      if (ToolStream.isError(error)) expect(error.message).toBe("missing tool")
     }),
   )
 

@@ -99,19 +99,15 @@ export function fromPromise(plugin: Plugin) {
 
         const run = <A, E>(effect: Effect.Effect<A, E>) => Effect.runPromiseWith(context)(effect)
 
-        const promiseTool = (tool: Tool.Info & { readonly id: string }): Info & { readonly id: string } => {
-          const execute = tool.execute
-          return {
-            ...tool,
-            execute: (input, context) =>
-              run(
-                execute(input, {
-                  ...context,
-                  progress: (update) => Effect.promise(() => context.progress(update)),
-                }),
-              ),
-          }
-        }
+        const promiseExecutor =
+          (execute: Tool.Info["execute"]): Info["execute"] =>
+          (input, context) =>
+            run(
+              execute(input, {
+                ...context,
+                progress: (update) => Effect.promise(() => context.progress(update)),
+              }),
+            )
 
         const adaptApiMethod = <PromiseMethod>(
           endpoint: HttpApiEndpoint.Top,
@@ -310,10 +306,10 @@ export function fromPromise(plugin: Plugin) {
               register(
                 host.tool.transform((draft) =>
                   callback({
-                    list: () => draft.list().map((tool) => promiseTool(tool)),
+                    list: () => draft.list().map((tool) => ({ ...tool, execute: promiseExecutor(tool.execute) })),
                     get: (id) => {
                       const tool = draft.get(id)
-                      return tool ? promiseTool(tool) : undefined
+                      return tool ? { ...tool, execute: promiseExecutor(tool.execute) } : undefined
                     },
                     add: (tool: Info) =>
                       draft.add({
@@ -322,16 +318,9 @@ export function fromPromise(plugin: Plugin) {
                       }),
                     update: (id, update) =>
                       draft.update(id, (tool) => {
-                        const execute = tool.execute
                         const value: Info = {
                           ...tool,
-                          execute: (input, context) =>
-                            run(
-                              execute(input, {
-                                ...context,
-                                progress: (update) => Effect.promise(() => context.progress(update)),
-                              }),
-                            ),
+                          execute: promiseExecutor(tool.execute),
                         }
                         update(value)
                         Object.assign(tool, value, {

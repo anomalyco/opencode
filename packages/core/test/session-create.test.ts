@@ -32,7 +32,10 @@ import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { SessionTransfer } from "@opencode-ai/core/session/transfer"
 import { Workspace } from "@opencode-ai/core/workspace"
+import { Expected } from "./lib/session-message"
 import { testEffect } from "./lib/effect"
+import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
+import { promptLocationLayer } from "./fixture/prompt-location"
 import { globalProjectLayer } from "./lib/project"
 import { tmpdir } from "./fixture/tmpdir"
 
@@ -50,6 +53,7 @@ const it = testEffect(
     [
       [Bus.node, Bus.configured({ persist: true })],
       [Project.node, globalProjectLayer],
+      [LocationServiceMap.node, promptLocationLayer],
       [SessionExecution.node, SessionExecution.noopLayer],
     ],
   ),
@@ -183,7 +187,7 @@ describe("Session.create", () => {
           "session.inbox.enqueued",
         ])
         expect(yield* session.messages({ sessionID: created.id })).toMatchObject([
-          { id: expect.any(String), type: "user", text: "Preserved history" },
+          { id: expect.any(String), ...Expected.user("Preserved history") },
         ])
         expect(yield* SessionInbox.find(db, pending.id)).toMatchObject({ payload: { text: "Preserved inbox" } })
         expect(
@@ -446,10 +450,7 @@ describe("Session.create", () => {
 
       expect(forked).toMatchObject({ title: "Parent (fork #1)", fork: { sessionID: parent.id } })
       expect(forked.parentID).toBeUndefined()
-      expect(forkContext).toMatchObject([
-        { type: "user", text: "First" },
-        { type: "synthetic", text: "parent note" },
-      ])
+      expect(forkContext).toMatchObject([Expected.user("First"), { type: "synthetic", text: "parent note" }])
       expect(forkContext.map((message) => message.id)).not.toEqual(parentContext.map((message) => message.id))
       expect(history).toHaveLength(1)
       expect(history[0]).toMatchObject({
@@ -634,13 +635,10 @@ describe("Session.create", () => {
       const forked = yield* session.fork({ sessionID: parent.id, boundary: { type: "through" } })
 
       expect(yield* session.context(parent.id)).toMatchObject([
-        { type: "user", text: "Run both tools" },
-        {
-          type: "assistant",
-          content: [{ type: "tool", id: "call_running", state: { status: "running" } }],
-        },
+        Expected.user("Run both tools"),
+        Expected.assistant({}, [{ type: "tool", id: "call_running", state: { status: "running" } }]),
       ])
-      expect(yield* session.context(forked.id)).toMatchObject([{ type: "user", text: "Run both tools" }])
+      expect(yield* session.context(forked.id)).toMatchObject([Expected.user("Run both tools")])
     }),
   )
 
@@ -667,10 +665,10 @@ describe("Session.create", () => {
       const running = yield* session.fork({ sessionID: parent.id, boundary: { type: "through" } })
 
       expect(yield* session.context(parent.id)).toMatchObject([
-        { type: "user", text: "Run a shell" },
+        Expected.user("Run a shell"),
         { type: "shell", command: "sleep 10", status: "running" },
       ])
-      expect(yield* session.context(running.id)).toMatchObject([{ type: "user", text: "Run a shell" }])
+      expect(yield* session.context(running.id)).toMatchObject([Expected.user("Run a shell")])
 
       yield* bus.publish(SessionEvent.Shell.Ended, {
         sessionID: parent.id,
@@ -679,9 +677,9 @@ describe("Session.create", () => {
       })
       const completed = yield* session.fork({ sessionID: parent.id, boundary: { type: "through" } })
 
-      expect(yield* session.context(running.id)).toMatchObject([{ type: "user", text: "Run a shell" }])
+      expect(yield* session.context(running.id)).toMatchObject([Expected.user("Run a shell")])
       expect(yield* session.context(completed.id)).toMatchObject([
-        { type: "user", text: "Run a shell" },
+        Expected.user("Run a shell"),
         { type: "shell", command: "sleep 10", status: "exited", output: { output: "complete" } },
       ])
     }),
@@ -757,8 +755,8 @@ describe("Session.create", () => {
       expect(yield* session.context(beforeFirst.id)).toEqual([])
       expect(beforeFirst).toMatchObject({ cost: 0, tokens: { input: 0, output: 0, reasoning: 0 } })
       expect(yield* session.context(complete.id)).toMatchObject([
-        { type: "user", text: "First" },
-        { type: "user", text: "Second" },
+        Expected.user("First"),
+        Expected.user("Second"),
         { type: "assistant", finish: "stop" },
       ])
       expect(complete).toMatchObject({
@@ -933,7 +931,7 @@ describe("Session.create", () => {
         yield* Effect.forEach(serialized.slice(2), (event) => bus.replay(event), { discard: true })
         expect(yield* SessionInbox.find(db, admitted.id)).toBeUndefined()
         expect(yield* store.context(created.id)).toMatchObject([
-          { id: admitted.id, type: "user", text: "Replay lifecycle" },
+          { id: admitted.id, ...Expected.user("Replay lifecycle") },
         ])
         expect(
           (yield* db
@@ -963,7 +961,7 @@ describe("Session.create", () => {
     }),
   )
 
-  it.live("runs a shell command and projects the started/ended shell message", () =>
+  liveIt.live("runs a shell command and projects the started/ended shell message", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
         const session = yield* Session.Service
@@ -988,7 +986,7 @@ describe("Session.create", () => {
     ),
   )
 
-  it.live("still emits shell ended for a failing command", () =>
+  liveIt.live("still emits shell ended for a failing command", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
         const session = yield* Session.Service
@@ -1157,9 +1155,7 @@ describe("SessionTransfer", () => {
         recent: "pending",
       })
 
-      expect((yield* transfer.export({ sessionID: source.id })).messages).toMatchObject([
-        { type: "user", text: "Settled" },
-      ])
+      expect((yield* transfer.export({ sessionID: source.id })).messages).toMatchObject([Expected.user("Settled")])
     }),
   )
 
@@ -1304,7 +1300,7 @@ describe("SessionTransfer", () => {
       expect(imported).toMatchObject({ id: sessionID, title: "Exported", location })
       expect(imported.time).toMatchObject({ idle: DateTime.makeUnsafe(200), viewed: DateTime.makeUnsafe(150) })
       expect(messages).toMatchObject([
-        { id: sourceMessageID, type: "user", text: "Imported message" },
+        { id: sourceMessageID, ...Expected.user("Imported message") },
         { id: errorMessageID, type: "compaction", error: { type: "test_error", message: "Original error" } },
       ])
       expect(yield* Bus.latestSequence(db, sessionID)).toBe(2)

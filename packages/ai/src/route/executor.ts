@@ -7,14 +7,7 @@ import {
   HttpClientRequest,
   HttpClientResponse,
 } from "effect/unstable/http"
-import {
-  HttpContext,
-  HttpRateLimitDetails,
-  HttpRequestDetails,
-  HttpResponseDetails,
-  AIError,
-  TransportReason,
-} from "../schema/index.js"
+import { HttpContext, HttpRateLimitDetails, AIError, TransportError } from "../schema/index.js"
 import { classifyProviderFailure } from "../provider-error.js"
 
 export interface Interface {
@@ -97,23 +90,12 @@ const rateLimitDetails = (headers: Record<string, string>, retryAfter: number | 
   })
 }
 
-const requestDetails = (request: HttpClientRequest.HttpClientRequest) =>
-  new HttpRequestDetails({
-    method: request.method,
-    url: request.url,
-    headers: headerDetails(request.headers),
-  })
-
-const responseDetails = (response: HttpClientResponse.HttpClientResponse) =>
-  new HttpResponseDetails({
+export const responseHttp = (response: HttpClientResponse.HttpClientResponse) =>
+  new HttpContext({
+    url: response.request.url,
     status: response.status,
     headers: headerDetails(response.headers),
   })
-
-const responseBody = (body: string | void) => {
-  if (body === undefined) return {}
-  return { body }
-}
 
 const decodeProviderBody = Schema.decodeUnknownOption(
   Schema.fromJsonString(
@@ -132,77 +114,46 @@ const providerMessage = (status: number, body: string | void) => {
   )
 }
 
-const responseHttp = (input: {
-  readonly request: HttpClientRequest.HttpClientRequest
-  readonly response: HttpClientResponse.HttpClientResponse
-  readonly body: ReturnType<typeof responseBody>
-  readonly rateLimit?: HttpRateLimitDetails | undefined
-}) =>
-  new HttpContext({
-    request: requestDetails(input.request),
-    response: responseDetails(input.response),
-    ...input.body,
-    rateLimit: input.rateLimit,
+const statusError = (response: HttpClientResponse.HttpClientResponse) =>
+  Effect.gen(function* () {
+    if (response.status < 400) return response
+    const result = yield* response.text.pipe(Effect.result)
+    return yield* httpFailure({
+      message: providerMessage(response.status, result._tag === "Success" ? result.success : undefined),
+      url: response.request.url,
+      status: response.status,
+      responseHeaders: headerDetails(response.headers),
+      responseBody: result._tag === "Success" ? result.success : undefined,
+      cause: result._tag === "Failure" ? (result.failure.cause ?? result.failure) : undefined,
+    })
   })
 
-const statusError =
-  (request: HttpClientRequest.HttpClientRequest) => (response: HttpClientResponse.HttpClientResponse) =>
-    Effect.gen(function* () {
-      if (response.status < 400) return response
-      const body = yield* response.text.pipe(Effect.catch(() => Effect.void))
-      const headers = normalizedHeaders(response.headers)
-      const retryAfter = retryAfterMs(headers)
-      const rateLimit = rateLimitDetails(headers, retryAfter)
-      const details = responseBody(body)
-      return yield* new AIError({
-        module: "RequestExecutor",
-        method: "execute",
-        reason: classifyProviderFailure({
-          status: response.status,
-          message: providerMessage(response.status, body),
-          retryAfterMs: retryAfter,
-          rateLimit,
-          http: responseHttp({
-            request,
-            response,
-            body: details,
-            rateLimit,
-          }),
-        }),
-      })
-    })
-
-// Classifies an HTTP failure captured outside the executor (for example by the
-// AI SDK's own fetch) onto the same reason types and HttpContext that
-// executor-driven requests produce. The originating request is not available on
-// that path, so the method is assumed (language model calls are always POST),
-// request headers are empty.
-export const classifyHttpFailure = (input: {
+/** Preserve HTTP diagnostics for executor and externally captured failures alike. */
+export const httpFailure = (input: {
   readonly message: string
-  readonly url: string
+  readonly url?: string | undefined
   readonly status?: number | undefined
-  readonly code?: string | undefined
+  readonly data?: unknown
   readonly responseHeaders?: Record<string, string> | undefined
   readonly responseBody?: string | undefined
+  readonly cause?: unknown
 }) => {
   const headers = normalizedHeaders(Headers.fromInput(input.responseHeaders))
   const retryAfter = retryAfterMs(headers)
   const rateLimit = rateLimitDetails(headers, retryAfter)
-  const details = responseBody(input.responseBody)
-  return classifyProviderFailure({
-    message: input.message,
-    status: input.status,
-    code: input.code,
-    retryAfterMs: retryAfter,
-    rateLimit,
-    http: new HttpContext({
-      request: new HttpRequestDetails({ method: "POST", url: input.url, headers: {} }),
-      response:
-        input.status === undefined
-          ? undefined
-          : new HttpResponseDetails({ status: input.status, headers: headerDetails(Headers.fromInput(headers)) }),
-      ...details,
+  return new AIError({
+    reason: classifyProviderFailure({
+      message: input.message,
+      status: input.status,
+      data: input.data,
+      rawBody: input.responseBody,
+      retryAfterMs: retryAfter,
       rateLimit,
+      cause: input.cause,
+      http:
+        input.status === undefined || input.url === undefined
+          ? undefined
+          : new HttpContext({ url: input.url, status: input.status, headers }),
     }),
   })
 }
@@ -229,25 +180,25 @@ const httpError = (input: {
   readonly error: unknown
   readonly request: HttpClientRequest.HttpClientRequest
   readonly operation: HttpOperation
+  readonly http?: HttpContext
 }) => {
   const request = HttpClientError.isHttpClientError(input.error) ? input.error.request : input.request
   const transportError = (failure: { readonly message: string; readonly code?: string | undefined }) =>
     new AIError({
-      module: "RequestExecutor",
-      method: input.operation,
-      reason: new TransportReason({
+      reason: new TransportError({
         message: failure.message,
+        cause: source,
+        http: input.http,
         transport: "http",
         operation: input.operation,
         code: failure.code,
         url: request.url,
-        http: new HttpContext({ request: requestDetails(request) }),
       }),
     })
 
   const source =
     HttpClientError.isHttpClientError(input.error) && "cause" in input.error.reason
-      ? input.error.reason.cause
+      ? (input.error.reason.cause ?? input.error)
       : input.error
   const native = nativeTransportFailure(source)
   const code = native?.code
@@ -271,6 +222,13 @@ const httpError = (input: {
   })
 }
 
+export const responseStream = (response: HttpClientResponse.HttpClientResponse): Stream.Stream<Uint8Array, AIError> =>
+  response.stream.pipe(
+    Stream.mapError((error) =>
+      httpError({ error, request: response.request, operation: "read", http: responseHttp(response) }),
+    ),
+  )
+
 export const stream = (
   executor: Interface,
   request: HttpClientRequest.HttpClientRequest,
@@ -279,9 +237,7 @@ export const stream = (
   Stream.unwrap(
     Effect.gen(function* () {
       const response = yield* executor.execute(request, middleware)
-      return response.stream.pipe(
-        Stream.mapError((error) => httpError({ error, request: response.request, operation: "read" })),
-      )
+      return responseStream(response)
     }),
   )
 
@@ -294,7 +250,7 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient> = Layer.e
         if (!middleware)
           return yield* http.execute(request).pipe(
             Effect.mapError((error) => httpError({ error, request, operation: "request" })),
-            Effect.flatMap(statusError(request)),
+            Effect.flatMap(statusError),
           )
 
         const response = yield* middleware(request, (input) =>
@@ -302,7 +258,7 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient> = Layer.e
             .execute(input)
             .pipe(Effect.mapError((cause) => (cause instanceof Error ? cause : new Error(String(cause))))),
         ).pipe(Effect.mapError((error) => httpError({ error, request, operation: "request" })))
-        return yield* statusError(response.request)(response)
+        return yield* statusError(response)
       })
     return Service.of({
       execute: executeOnce,

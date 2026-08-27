@@ -35,7 +35,7 @@ export const Output = Schema.Struct({
 })
 export type Output = typeof Output.Type
 
-export const toModelOutput = (output: Output) =>
+export const toModelContent = (output: Output) =>
   `${output.existed ? "Wrote" : "Created"} file successfully: ${output.resource}`
 
 /** Deferred write UX integrations remain visible at the model-facing seam. */
@@ -98,7 +98,7 @@ export const Plugin = {
               }
               return result
             }).pipe(
-              Effect.map((output) => ({ output, content: toModelOutput(output) })),
+              Effect.map((output) => ({ output, content: toModelContent(output) })),
               Effect.mapError((error) => new ToolFailure({ message: `Unable to write ${input.path}`, error })),
             ),
         }),

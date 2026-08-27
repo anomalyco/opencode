@@ -261,7 +261,7 @@ for (const delivery of ["steer", "queue"] as const) {
     const transcript = page.locator("[data-timeline-virtual-content]")
     const thinking = transcript.locator('[data-timeline-row="Thinking"]')
     await expect(transcript.getByText("A1: I will inspect the current implementation.", { exact: true })).toBeVisible()
-    await expect(thinking).toBeVisible()
+    await expect(thinking).toHaveCount(0)
     await expect(view.input).toBeEditable()
     await view.input.fill(followUp)
     await view.input.press("Enter")
@@ -274,12 +274,14 @@ for (const delivery of ["steer", "queue"] as const) {
       const queued = view.rows.filter({ hasText: followUp })
       await expect(queued).toBeVisible()
       await expect(pending).toHaveCount(0)
+      await expect(thinking).toHaveCount(0)
       await queued.hover()
       await queued.getByRole("button", { name: "Steer", exact: true }).click()
       await expect.poll(() => mock.changes).toEqual([{ inboxID, action: "steer" }])
     }
     await expect(view.rows).toHaveCount(0)
     await expect(pending).toContainText(followUp)
+    await expect(thinking).toHaveCount(0)
 
     // The next assistant step still belongs to U1: U2 has been admitted, not delivered.
     mock.emit("session.step.started", { sessionID, assistantMessageID: assistantID, agent: "build", model })
@@ -308,7 +310,7 @@ for (const delivery of ["steer", "queue"] as const) {
     await expect(tools).toBeVisible()
     await expect(tools).toContainText(/Used\s*Read, Grep/)
     await expect(tools.locator('[data-component="tag"]')).toHaveText("2")
-    await expect(thinking).toBeVisible()
+    await expect(thinking).toHaveCount(0)
     await expect(pending).toBeVisible()
     expect(mock.rows.map((row) => ({ id: row.id, delivery: row.delivery }))).toEqual([
       { id: inboxID, delivery: "steer" },
@@ -316,27 +318,21 @@ for (const delivery of ["steer", "queue"] as const) {
     await transcript.screenshot({ path: testInfo.outputPath("pending-steer.png") })
 
     // Soft assertions let delivery run too, even when the pending ordering regresses.
-    await expect
-      .soft(tools.or(thinking).or(pending))
-      .toHaveText([/Used\s*Read, Grep/, /Thinking/, /U2: Also check the retry path\./])
+    await expect.soft(tools.or(pending)).toHaveText([/Used\s*Read, Grep/, /U2: Also check the retry path\./])
     await expect
       .soft(transcript.locator('[data-timeline-row="AssistantPart"]').filter({ has: tools }))
       .toHaveAttribute("data-message-id", userID)
     await expect
       .configure({ soft: true })
       .poll(async () => {
-        const boxes = await Promise.all([tools.boundingBox(), thinking.boundingBox(), pending.boundingBox()])
-        return (
-          boxes.every((box) => box !== null) &&
-          boxes[0]!.y + boxes[0]!.height <= boxes[1]!.y &&
-          boxes[1]!.y + boxes[1]!.height <= boxes[2]!.y
-        )
+        const boxes = await Promise.all([tools.boundingBox(), pending.boundingBox()])
+        return boxes.every((box) => box !== null) && boxes[0]!.y + boxes[0]!.height <= boxes[1]!.y
       })
       .toBe(true)
 
     mock.rows.splice(0, 1)
     mock.emit("session.inbox.delivered", { sessionID, inboxID })
-    await expect(thinking).toHaveAttribute("data-message-id", inboxID)
+    await expect(thinking).toHaveCount(0)
     await expect(pending).toHaveCount(1)
     await expect(transcript.locator('[data-timeline-row="UserMessage"]')).toHaveCount(2)
     await expect(transcript.locator('[data-timeline-row="AssistantPart"]').filter({ has: tools })).toHaveAttribute(
@@ -352,11 +348,11 @@ for (const delivery of ["steer", "queue"] as const) {
       .locator('[data-timeline-row="AssistantPart"]')
       .filter({ hasText: "A3: Now checking the retry path for U2." })
     await expect(response).toHaveAttribute("data-message-id", inboxID)
-    await expect(tools.or(pending).or(response).or(thinking)).toHaveText([
+    await expect(thinking).toHaveCount(0)
+    await expect(tools.or(pending).or(response)).toHaveText([
       /Used\s*Read, Grep/,
       /U2: Also check the retry path\./,
       /A3: Now checking the retry path for U2\./,
-      /Thinking/,
     ])
   })
 }

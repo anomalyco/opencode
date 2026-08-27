@@ -6,6 +6,7 @@ import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Location } from "@opencode-ai/core/location"
 import { LocationMutation } from "@opencode-ai/core/location-mutation"
 import { AbsolutePath } from "@opencode-ai/core/schema"
+import { Global } from "@opencode-ai/util/global"
 import { tmpdir } from "./fixture/tmpdir"
 import { location } from "./fixture/location"
 import { it } from "./lib/effect"
@@ -196,4 +197,44 @@ describe("LocationMutation", () => {
       path: "README.md",
     })
   })
+
+  test("expands a leading tilde against the home directory", () => {
+    const home = path.resolve("/Users/aiden")
+    expect(LocationMutation.resolvePath("/project", "~", home)).toBe(home)
+    expect(LocationMutation.resolvePath("/project", "~/notes.md", home)).toBe(path.resolve(home, "notes.md"))
+    expect(LocationMutation.resolvePath("/project", "~draft.md", home)).toBe(path.resolve("/project", "~draft.md"))
+    expect(LocationMutation.resolvePath("/project", "~\\notes.md", home)).toBe(
+      process.platform === "win32"
+        ? path.resolve(home, "notes.md")
+        : path.resolve("/project", "~\\notes.md"),
+    )
+  })
+
+  it.live("resolves a tilde path as an external home target", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const target = yield* (yield* LocationMutation.Service).resolve({ path: "~/notes.md" })
+        const absolute = path.resolve(Global.Path.home, "notes.md")
+        expect(target).toMatchObject({
+          absolute,
+          resource: absolute.replaceAll("\\", "/"),
+        })
+        expect(target.externalDirectory).toMatchObject({
+          directory: Global.Path.home,
+          resource: path.join(Global.Path.home, "*").replaceAll("\\", "/"),
+        })
+      }).pipe(provide(directory)),
+    ),
+  )
+
+  it.live("treats a tilde path as in-location when the location is home", () =>
+    Effect.gen(function* () {
+      const target = yield* (yield* LocationMutation.Service).resolve({ path: "~/notes.md" })
+      expect(target).toMatchObject({
+        absolute: path.resolve(Global.Path.home, "notes.md"),
+        resource: "notes.md",
+      })
+      expect(target.externalDirectory).toBeUndefined()
+    }).pipe(provide(Global.Path.home)),
+  )
 })

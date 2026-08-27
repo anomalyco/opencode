@@ -10,6 +10,7 @@ import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import type { LocationServices } from "@opencode-ai/core/location-services"
 import { Project } from "@opencode-ai/core/project"
 import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor-service"
+import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
@@ -31,7 +32,8 @@ const info = Skill.Info.make({
   location: AbsolutePath.make(path.resolve("/skills/effect.md")),
   content: "Use Effect",
 })
-const skills = Layer.merge(
+const skills = Layer.mergeAll(
+  LayerNode.compile(PluginHooks.node),
   Layer.mock(Skill.Service, {
     get: (id) => Effect.succeed(id === info.id ? info : undefined),
     list: () => Effect.succeed([info]),

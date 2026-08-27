@@ -5,7 +5,7 @@ import { Protocol } from "../route/protocol.js"
 import {
   AIError,
   LLMEvent,
-  ProviderInternalReason,
+  ProviderInternalError,
   Usage,
   type FinishReason,
   type JsonSchema,
@@ -1188,11 +1188,8 @@ const providerErrorMessage = (event: Event, nested: OpenResponsesErrorPayload | 
   return message || code
 }
 
-export const providerFailure = (id: string, event: Event, fallback: string) => {
+export const providerFailure = (event: Event, fallback: string, body = ProviderShared.encodeJson(event)) => {
   const nested = event.error ?? event.response?.error ?? undefined
-  const code = event.code || nested?.code || undefined
-  // Keep the full raw payload on the error even when the message is a summary.
-  const body = JSON.stringify(nested ?? event) ?? ""
   const summary = providerErrorMessage(event, nested)
   const message = summary ?? (body === "{}" ? fallback : body)
   const status =
@@ -1207,17 +1204,10 @@ export const providerFailure = (id: string, event: Event, fallback: string) => {
     event.response === undefined &&
     summary === undefined &&
     status === undefined
-      ? new ProviderInternalReason({ message })
-      : classifyProviderFailure({ message, code, status, rawBody: body })
-  return new AIError({
-    module: id,
-    method: "stream",
-    body,
-    reason,
-  })
+      ? new ProviderInternalError({ message, body })
+      : classifyProviderFailure({ message, status, rawBody: body })
+  return new AIError({ reason })
 }
-
-const providerError = (state: ParserState, event: Event, fallback: string) => providerFailure(state.id, event, fallback)
 
 export const step = (state: ParserState, input: Event) => {
   // The OpenAPI requires string IDs but imposes no minLength; empty is not missing.
@@ -1286,11 +1276,18 @@ export const step = (state: ParserState, input: Event) => {
     return onOutputItemDone(state, event)
   }
   if (event.type === "response.completed" || event.type === "response.incomplete") return onResponseFinish(state, event)
-  if (event.type === "response.failed") return providerError(state, event, `${state.name} response failed`)
+  if (event.type === "response.failed") return providerFailure(event, `${state.name} response failed`)
   if (event.type === "error")
     return decodeKnownErrorEvent(event).pipe(
-      Effect.mapError(() => ProviderShared.eventError(state.id, `${state.name} returned a malformed error event`)),
-      Effect.flatMap(() => providerError(state, event, `${state.name} stream error`)),
+      Effect.mapError((cause) =>
+        ProviderShared.eventError(
+          state.id,
+          `${state.name} returned a malformed error event`,
+          ProviderShared.encodeJson(event),
+          cause,
+        ),
+      ),
+      Effect.flatMap(() => providerFailure(event, `${state.name} stream error`)),
     )
   return Effect.succeed<StepResult>([state, NO_EVENTS])
 }

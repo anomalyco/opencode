@@ -109,31 +109,85 @@ test("shimmers and expands a running shell command", async ({ page }) => {
   await expect(tool.locator('[data-slot="bash-pre"]')).toContainText("still running")
 })
 
-test("transitions thinking and hidden reasoning through busy to idle", async ({ page }) => {
-  const reasoningID = "prt_reasoning_hidden"
-  const assistant = assistantMessage([reasoningPart(reasoningID, "## Inspecting stability")], { completed: false })
-  const timeline = await setupTimeline(page, {
-    messages: [userMessage(), assistant],
-    settings: { showReasoningSummaries: false },
-    cpuRate: 4,
+for (const open of [false, true]) {
+  test(`keeps ${open ? "expanded" : "collapsed"} reasoning intent from Thinking through standalone shell into Used`, async ({
+    page,
+  }) => {
+    const reasoningID = `prt_reasoning_hidden_${open}`
+    const shellID = `prt_reasoning_shell_${open}`
+    const assistant = assistantMessage([reasoningPart(reasoningID, "## Inspecting stability")], { completed: false })
+    const timeline = await setupTimeline(page, {
+      messages: [userMessage(), assistant],
+      settings: { showReasoningSummaries: false },
+      cpuRate: 4,
+    })
+    const reasoning = page.locator(`[data-timeline-part-id="${renderedPartID(reasoningID)}"]`)
+    await expect(page.locator('[data-timeline-row="Thinking"]')).toBeVisible()
+    await expect(page.getByText("Inspecting stability", { exact: true })).toBeVisible()
+    const thought = reasoning.locator('[data-slot="collapsible-trigger"]')
+    await expect(thought).toHaveAttribute("aria-expanded", "false")
+    await thought.click()
+    await expect(thought).toHaveAttribute("aria-expanded", "true")
+    if (!open) await thought.click()
+    await expect(thought).toHaveAttribute("aria-expanded", String(open))
+    await timeline.send(partUpdated(shell(shellID, "running")))
+    const group = page.locator('[data-component="collapsed-tool-group"]')
+    await expect(page.locator(`[data-timeline-part-id="${shellID}"]`)).toBeVisible()
+    await expect(group).toHaveCount(0)
+    await expect(page.locator('[data-timeline-row="Thinking"]')).toHaveCount(0)
+    await expect(thought).toContainText("Thought")
+    await expect(thought).not.toContainText("Inspecting stability")
+    await expect(thought).toHaveAttribute("aria-expanded", String(open))
+    await timeline.send(partUpdated(shell(shellID, "completed", "done")))
+    await timeline.send(messageUpdated(completedAssistantInfo(assistant)))
+    await timeline.send(status("idle"))
+    const used = group.getByRole("button", { name: "Used Shell", exact: true })
+    await expect(used).toHaveAttribute("aria-expanded", "false")
+    await used.click()
+    await expect(used).toHaveAttribute("aria-expanded", "true")
+    await expect(group.locator(`[data-timeline-part-id="${shellID}"]`)).toBeVisible()
+    await expect(group.getByRole("button", { name: "Thought", exact: true })).toHaveAttribute(
+      "aria-expanded",
+      String(open),
+    )
+    await expect(group.locator('[data-component="tag"]')).toHaveText("1")
+    await expect(page.locator('[data-timeline-row="Thinking"]')).toHaveCount(0)
+    await expect(used).toHaveAttribute("aria-expanded", "true")
+    if (!open) await thought.click()
+    await expect(reasoning.getByRole("heading", { name: "Inspecting stability", exact: true })).toBeVisible()
+    await used.click()
+    await expect(used).toHaveAttribute("aria-expanded", "false")
+    await used.click()
+    await expect(reasoning.getByRole("button", { name: "Thought", exact: true })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    )
+    await expect(reasoning.getByRole("heading", { name: "Inspecting stability", exact: true })).toBeVisible()
   })
-  await timeline.send(status("busy"), 150)
+}
 
-  await expect(page.locator('[data-timeline-row="Thinking"]')).toBeVisible()
-  await expect(page.getByText("Inspecting stability", { exact: true })).toBeVisible()
-  await expect(page.locator(`[data-timeline-part-id="${reasoningID}"]`)).toHaveCount(0)
-  await expect(page.locator(`[data-timeline-part-id="${renderedPartID(reasoningID)}"]`)).toHaveCount(0)
-  await timeline.send(partUpdated(shell("prt_reasoning_shell", "running")), 160)
-  await expect(page.locator('[data-timeline-row="Thinking"]')).toBeVisible()
-  await timeline.send(partUpdated(shell("prt_reasoning_shell", "completed", "done")), 180)
-  await timeline.send(messageUpdated(completedAssistantInfo(assistant)), 100)
-  await timeline.send(status("idle"), 300)
-  await expect(page.locator('[data-timeline-row="Thinking"]')).toHaveCount(0)
-  await expect(page.locator(`[data-timeline-part-id="${reasoningID}"]`)).toHaveCount(0)
-  await expect(page.locator(`[data-timeline-part-id="${renderedPartID(reasoningID)}"]`)).toHaveCount(0)
-})
+for (const transition of ["reasoning-end", "idle", "retry"] as const) {
+  test(`stops active Thinking on ${transition} without a following tool`, async ({ page }) => {
+    const id = `prt_reasoning_stop_${transition}`
+    const text = "## Inspecting stability\n\nThe timeline is ready for the next step."
+    const timeline = await setupTimeline(page, {
+      messages: [userMessage(), assistantMessage([reasoningPart(id, text)], { completed: false })],
+    })
+    const part = page.locator(`[data-timeline-part-id="${renderedPartID(id)}"]`)
+    const trigger = part.locator('[data-slot="collapsible-trigger"]')
+    await expect(page.locator('[data-timeline-row="Thinking"]')).toBeVisible()
+    await expect(trigger).toHaveAttribute("aria-expanded", "false")
+    await timeline.send(transition === "reasoning-end" ? partUpdated(reasoningPart(id, text)) : status(transition))
+    await expect(trigger).toContainText("Thought")
+    await expect(page.locator('[data-timeline-row="Thinking"]')).toHaveCount(0)
+    await expect(page.locator('[data-timeline-row="Retry"]')).toHaveCount(transition === "retry" ? 1 : 0)
+    await trigger.click()
+    await expect(trigger).toHaveAttribute("aria-expanded", "true")
+    await expect(part.getByText("The timeline is ready for the next step.", { exact: true })).toBeVisible()
+  })
+}
 
-test("moves busy through retry and recovery to final idle content", async ({ page }) => {
+test("does not infer Thinking from busy, retry, or recovery without reasoning", async ({ page }) => {
   const assistant = assistantMessage([], { completed: false })
   const timeline = await setupTimeline(page, {
     messages: [
@@ -153,18 +207,17 @@ test("moves busy through retry and recovery to final idle content", async ({ pag
       assistant,
     ],
   })
-  await timeline.send(status("busy"), 140)
-  await expect(page.locator('[data-timeline-row="Thinking"]')).toBeVisible()
+  await expect(page.locator('[data-timeline-row="Thinking"]')).toHaveCount(0)
   await expect(page.locator('[data-timeline-row="DiffSummary"]')).toHaveCount(0)
-  await timeline.send(status("retry"), 180)
+  await timeline.send(status("retry"))
   await expect(page.locator('[data-timeline-row="Retry"]')).toBeVisible()
   await expect(page.locator('[data-timeline-row="Thinking"]')).toHaveCount(0)
-  await timeline.send(stepStarted(assistant), 180)
+  await timeline.send(stepStarted(assistant))
   await expect(page.locator('[data-timeline-row="Retry"]')).toHaveCount(0)
-  await expect(page.locator('[data-timeline-row="Thinking"]')).toBeVisible()
-  await timeline.send(partUpdated(textPart("prt_recovered", "Recovered response")), 140)
-  await timeline.send(messageUpdated(completedAssistantInfo(assistant)), 100)
-  await timeline.send(status("idle"), 350)
+  await expect(page.locator('[data-timeline-row="Thinking"]')).toHaveCount(0)
+  await timeline.send(partUpdated(textPart("prt_recovered", "Recovered response")))
+  await timeline.send(messageUpdated(completedAssistantInfo(assistant)))
+  await timeline.send(status("idle"))
   await expect(page.locator('[data-timeline-row="Thinking"]')).toHaveCount(0)
   await expect(page.locator(`[data-timeline-part-id="${renderedPartID("prt_recovered")}"]`)).toContainText(
     "Recovered response",

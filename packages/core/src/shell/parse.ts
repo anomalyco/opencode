@@ -329,7 +329,9 @@ function expandKnownDirectory(value: string) {
   // Unknown shell expressions cannot be resolved safely during permission analysis.
   if (value.includes("$") || value.includes("`") || value.startsWith("(")) return
   if (value === "~") return os.homedir()
-  if (value.startsWith("~/") || value.startsWith("~\\")) return path.join(os.homedir(), value.slice(2))
+  if (value.startsWith("~/") || (process.platform === "win32" && value.startsWith("~\\"))) {
+    return path.join(os.homedir(), value.slice(2))
+  }
   return value
 }
 

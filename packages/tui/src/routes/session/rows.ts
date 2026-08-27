@@ -35,6 +35,8 @@ export type SessionRow =
   | { type: "assistant-footer"; messageID: string }
   | { type: "turn-usage"; messageIDs: string[]; previousCache?: CacheUsage }
 
+export type BackgroundToolTarget = { source: "shell" | "subagent"; id: string }
+
 export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessionID: string) => void) {
   const data = useData()
   const client = useClient()
@@ -390,6 +392,35 @@ export function messageBoundaryIDs(rows: SessionRow[], messages: SessionMessageI
     if (!id || seen.has(id)) return undefined
     seen.add(id)
     return id
+  })
+}
+
+export function sessionRowID(row: SessionRow, boundaryID?: string) {
+  if (boundaryID) return boundaryID
+  if (row.type === "part") return `session-part:${row.ref.messageID}:${row.ref.partID}`
+}
+
+export function backgroundToolRowIndex(
+  rows: SessionRow[],
+  messages: SessionMessageInfo[],
+  target: BackgroundToolTarget,
+  beforeMessageID: string,
+) {
+  const byID = new Map(messages.map((message) => [message.id, message]))
+  const end = rows.findIndex((row) => row.type === "message" && row.messageID === beforeMessageID)
+  return rows.slice(0, end === -1 ? rows.length : end).findLastIndex((row) => {
+    if (row.type !== "part") return false
+    if (target.source === "shell") return row.ref.partID === target.id
+    const message = byID.get(row.ref.messageID)
+    if (message?.type !== "assistant") return false
+    const part = resolvePart(message, row.ref.partID)
+    return (
+      part?.type === "tool" &&
+      part.name.toLowerCase() === "subagent" &&
+      part.state.status === "completed" &&
+      part.state.metadata?.status === "running" &&
+      part.state.metadata.sessionID === target.id
+    )
   })
 }
 

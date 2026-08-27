@@ -54,7 +54,7 @@ export namespace TimelineRow {
 
   export class Thinking extends Data.TaggedClass("Thinking")<{
     userMessageID: string
-    reasoningHeading?: string
+    ref: PartRef
   }> {}
 
   export class Error extends Data.TaggedClass("Error")<{
@@ -121,7 +121,7 @@ export type TimelineRowMap = {
     previousAssistantPart: boolean
     spacing?: "tool" | "content"
   }
-  Thinking: { userMessageID: string; reasoningHeading?: string }
+  Thinking: { userMessageID: string; ref: PartRef }
   Retry: { userMessageID: string }
   Error: { userMessageID: string; text: string }
 }
