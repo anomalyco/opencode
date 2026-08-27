@@ -1,5 +1,4 @@
 {
   "model": "anthropic/claude-sonnet",
-  "permission": "deny",
-  "permissions": [{ "action": "read", "resource": "*", "effect": "allow" }]
+  "permission": "deny"
 }

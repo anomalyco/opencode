@@ -485,6 +485,45 @@ for (const input of projectInputs) {
   )
 }
 
+for (const name of ["opencode.json", "opencode.jsonc"]) {
+  it.live(`rejects updating ${name} with native permissions without writing it`, () =>
+    withGlobalConfig(
+      { name, config: { permissions: [{ action: "read", resource: "secret-resource", effect: "deny" }] } },
+      ({ dir }) =>
+        Effect.gen(function* () {
+          const fs = yield* FSUtil.Service
+          const file = path.join(dir, name)
+          const before = yield* fs.readFileString(file)
+          const exit = yield* Effect.exit(Config.use.updateGlobal({ username: "changed" }))
+          expect(Exit.isFailure(exit)).toBe(true)
+          if (Exit.isFailure(exit)) {
+            const error = Cause.squash(exit.cause)
+            expect(error).toMatchObject({ data: { path: file, issues: [{ path: ["permissions"] }] } })
+            expect(JSON.stringify(error)).not.toContain("secret-resource")
+          }
+          expect(yield* fs.readFileString(file)).toBe(before)
+        }),
+    ),
+  )
+}
+
+it.instance("rejects a project update with native agent permissions without writing it", () =>
+  Effect.gen(function* () {
+    const instance = yield* TestInstance
+    const fs = yield* FSUtil.Service
+    const file = path.join(instance.directory, "config.json")
+    const before = JSON.stringify({ agents: { reviewer: { permissions: [] } } })
+    yield* fs.writeFileString(file, before)
+    const exit = yield* Effect.exit(Config.use.update({ username: "changed" }))
+    expect(Exit.isFailure(exit)).toBe(true)
+    if (Exit.isFailure(exit))
+      expect(Cause.squash(exit.cause)).toMatchObject({
+        data: { path: file, issues: [{ path: ["agents", "reviewer", "permissions"] }] },
+      })
+    expect(yield* fs.readFileString(file)).toBe(before)
+  }),
+)
+
 it.effect("native project MCP servers override inherited V1 disabled state", () =>
   withConfigTree(
     {
@@ -511,7 +550,7 @@ it.effect("native project MCP servers override inherited V1 disabled state", () 
   ),
 )
 
-it.effect("ignores native project permissions without changing inherited V1 rules", () =>
+it.effect("rejects native project permissions even with inherited V1 rules", () =>
   withConfigTree(
     {
       global: {
@@ -529,12 +568,18 @@ it.effect("ignores native project permissions without changing inherited V1 rule
       },
     },
     Effect.gen(function* () {
-      const config = yield* Config.use.get()
-      expect(config.permission).toEqual({ read: "deny", bash: "ask" })
-      expect(config.agent?.reviewer).toMatchObject({
-        prompt: "Review carefully",
-        permission: { edit: "deny" },
-      })
+      const exit = yield* Effect.exit(Config.use.get())
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit))
+        expect(Cause.squash(exit.cause)).toMatchObject({
+          data: {
+            path: expect.stringContaining("project/opencode.json"),
+            issues: [
+              { path: ["permissions"], message: expect.stringContaining('Use V1 "permission" rules or run opencode2') },
+              { path: ["agents", "reviewer", "permissions"], message: expect.stringContaining("not supported") },
+            ],
+          },
+        })
     }),
   ),
 )

@@ -1,5 +1,4 @@
 {
-  "permissions": [{ "action": "read", "resource": "*", "effect": "allow" }],
   "plugins": [{ "package": "@example/native-plugin" }],
   "providers": { "native": { "models": { "example": { "name": "Native model" } } } },
   "policies": [{ "action": "provider.use", "effect": "deny", "resource": "openai" }],

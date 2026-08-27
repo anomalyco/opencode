@@ -22,7 +22,7 @@ import { testEffect } from "../lib/effect"
 import { snapshot } from "./snapshot"
 
 const source = "test:v2-compat"
-const lower = (input: unknown) => ConfigParse.schema(ConfigV1.Info, ConfigV2Compat.lower(input).value, source)
+const lower = (input: unknown) => ConfigParse.schema(ConfigV1.Info, ConfigV2Compat.lower(input, source).value, source)
 
 const it = testEffect(
   LayerNode.compile(LayerNode.group([Config.node, FSUtil.node, Env.node, CrossSpawnSpawner.node]), [
@@ -51,7 +51,7 @@ describe("V2 compatibility read fixtures", () => {
       const source = path.join(directory, `${name}-input.jsonc`)
       const input = ConfigParse.jsonc(await Bun.file(source).text(), source)
       const original = structuredClone(input)
-      const result = ConfigV2Compat.lower(input)
+      const result = ConfigV2Compat.lower(input, source)
       expect(input).toEqual(original)
       const config = ConfigParse.schema(ConfigV1.Info, result.value, source)
       await snapshot(path.join(directory, `${name}-output.json`), JSON.stringify(config, null, 2) + "\n")
@@ -203,7 +203,7 @@ describe("ConfigV2Compat.lower", () => {
     expect(JSON.stringify(result.diagnostics)).not.toContain(secret)
   })
 
-  test("silently ignores native permission settings", () => {
+  test("rejects any native permission field, including empty and malformed values", () => {
     const cases = [
       [{ action: "shell", resource: "*", effect: "deny" }],
       [
@@ -212,13 +212,13 @@ describe("ConfigV2Compat.lower", () => {
         { action: "read", resource: "public", effect: "allow" },
       ],
       [],
+      null,
       "secret-permission-value",
       [{ action: "read", resource: "secret-permission-value", effect: "invalid" }],
     ]
     cases.forEach((permissions) => {
-      const result = ConfigV2Compat.lower({ username: "keep-me", permissions })
-      expect(ConfigParse.schema(ConfigV1.Info, result.value, source)).toEqual({ username: "keep-me" })
-      expect(result.diagnostics).toEqual([])
+      expect(() => lower({ username: "keep-me", permissions })).toThrow("ConfigInvalidError")
+      expect(() => lower({ permission: "deny", permissions })).toThrow("ConfigInvalidError")
     })
   })
 
@@ -226,15 +226,26 @@ describe("ConfigV2Compat.lower", () => {
     expect(() => lower({ permission: { read: "invalid" }, permissions: [] })).toThrow("ConfigInvalidError")
   })
 
-  test("ignores native agent permissions without rejecting supported agent fields", () => {
-    const result = ConfigV2Compat.lower({
-      agents: { reviewer: { system: "Review carefully", permissions: [{ action: "read" }] } },
+  test("rejects native agent permissions before decoding or applying V1 precedence", () => {
+    const cases = [
+      { agents: { reviewer: { system: "Review carefully", permissions: [{ action: "read" }] } } },
+      { agents: { reviewer: { disabled: true, permissions: [] } } },
+      { agent: { reviewer: { permission: "deny" } }, agents: { reviewer: { permissions: [] } } },
+      { agents: { reviewer: { steps: "invalid", permissions: [] } } },
+      { agent: { reviewer: { permissions: [] } } },
+      { mode: { reviewer: { permissions: [] } } },
+    ]
+    cases.forEach((input) => expect(() => lower(input)).toThrow("ConfigInvalidError"))
+  })
+
+  test("continues to support V1 permission rules", () => {
+    const config = lower({
+      permission: { bash: "deny", "*": "ask", edit: "allow" },
+      agent: { reviewer: { permission: { edit: "deny" } } },
     })
-    expect(ConfigParse.schema(ConfigV1.Info, result.value, source).agent?.reviewer).toMatchObject({
-      prompt: "Review carefully",
-      permission: {},
-    })
-    expect(result.diagnostics).toEqual([])
+    expect(config.permission).toEqual({ bash: "deny", "*": "ask", edit: "allow" })
+    expect(Object.keys(config.permission ?? {})).toEqual(["bash", "*", "edit"])
+    expect(config.agent?.reviewer?.permission).toEqual({ edit: "deny" })
   })
 
   test("does not sanitize malformed V1 fields before schema validation", () => {
@@ -318,15 +329,10 @@ describe("V2 configuration loading", () => {
               native: { type: "remote", url: "https://native.example.com/mcp", disabled: false },
             },
           },
-          permissions: [
-            { action: "shell", resource: "*", effect: "deny" },
-            { action: "shell", resource: "git status", effect: "allow" },
-          ],
           agents: {
             reviewer: {
               model: "anthropic/claude-sonnet#thinking",
               system: "Review carefully.",
-              permissions: [{ action: "subagent", resource: "explore", effect: "deny" }],
             },
           },
           commands: {

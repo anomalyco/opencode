@@ -8,11 +8,7 @@
       "hidden": true,
       "color": "#123abc",
       "steps": 4,
-      "disabled": true,
-      "permissions": [
-        { "action": "read", "resource": "*.ts", "effect": "allow" },
-        { "action": "read", "resource": "secret.ts", "effect": "deny" }
-      ]
+      "disabled": true
     },
     "quick": { "model": "openai/gpt-4.1#fast", "disabled": false }
   }

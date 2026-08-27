@@ -1,9 +1,6 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "snapshots": true,
-  "permissions": [
-    { "action": "read", "resource": "*", "effect": "allow" }
-  ],
   "agents": {
     "reviewer": { "disabled": false }
   },

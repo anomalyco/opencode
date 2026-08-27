@@ -5,6 +5,7 @@ import { Option, Schema } from "effect"
 import { NonNegativeInt, PositiveInt } from "@opencode-ai/core/schema"
 import { ConfigAttachmentV1 } from "@opencode-ai/core/v1/config/attachment"
 import { ConfigLSPV1 } from "@opencode-ai/core/v1/config/lsp"
+import { InvalidError } from "@opencode-ai/core/v1/config/error"
 
 export interface Diagnostic {
   readonly kind: "invalid" | "unsupported" | "conflict"
@@ -87,9 +88,29 @@ const decodeRecord = Schema.decodeUnknownOption(Record, decodeOptions)
 const decodeLspEntry = Schema.decodeUnknownOption(ConfigLSPV1.Entry, decodeOptions)
 const builtinServers = new Set<string>(ConfigLSPV1.builtinServerIds)
 
-export function lower(input: unknown): Result {
+export function lower(input: unknown, source = "configuration"): Result {
   const parsed = decodeRecord(input)
   if (Option.isNone(parsed)) return { value: input, diagnostics: [] }
+
+  const permissions = [
+    ...(Object.hasOwn(parsed.value, "permissions") ? [["permissions"]] : []),
+    ...["agents", "agent", "mode"].flatMap((key) => {
+      const agents = decodeRecord(parsed.value[key])
+      if (Option.isNone(agents)) return []
+      return Object.entries(agents.value).flatMap(([name, value]) => {
+        const agent = decodeRecord(value)
+        return Option.isSome(agent) && Object.hasOwn(agent.value, "permissions") ? [[key, name, "permissions"]] : []
+      })
+    }),
+  ]
+  if (permissions.length)
+    throw new InvalidError({
+      path: source,
+      issues: permissions.map((path) => ({
+        path,
+        message: 'V2 permissions are not supported by OpenCode V1. Use V1 "permission" rules or run opencode2.',
+      })),
+    })
 
   const result: Record<string, unknown> = { ...parsed.value }
   const diagnostics: Diagnostic[] = []
