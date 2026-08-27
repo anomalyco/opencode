@@ -214,6 +214,7 @@ export function createData(config: CreateDataInput) {
     Object.values(store.session.info).toSorted((a, b) => b.time.updated - a.time.updated),
   )
   const messageIndex = new Map<string, Map<string, number>>()
+  const messageRevision = new Map<string, number>()
   const sync = createSync()
 
   function setSessionActive(sessionID: string, status: DataSessionStatus) {
@@ -369,6 +370,7 @@ export function createData(config: CreateDataInput) {
 
   const message = {
     update(sessionID: string, fn: (messages: SessionMessageInfo[], index: Map<string, number>) => void) {
+      messageRevision.set(sessionID, (messageRevision.get(sessionID) ?? 0) + 1)
       setStore(
         "session",
         "message",
@@ -475,6 +477,7 @@ export function createData(config: CreateDataInput) {
   function removeSession(sessionID: string) {
     store.session.pending[sessionID]?.forEach((item) => outbox.delete(item.id))
     messageIndex.delete(sessionID)
+    messageRevision.delete(sessionID)
     sync.invalidate(`session:${sessionID}`)
     sync.invalidate(`session.family:${sessionID}`)
     sync.invalidate(`session.pending:${sessionID}`)
@@ -1427,7 +1430,13 @@ export function createData(config: CreateDataInput) {
         },
         sync(sessionID: string) {
           return sync.run(`session.message:${sessionID}`, async () => {
-            const response = await api().message.list({ sessionID, limit: messagePageLimit, order: "desc" })
+            let revision = messageRevision.get(sessionID)
+            let response = await api().message.list({ sessionID, limit: messagePageLimit, order: "desc" })
+            // Live events can overtake a reconnect snapshot. Never replace their newer state with that response.
+            while (revision !== messageRevision.get(sessionID)) {
+              revision = messageRevision.get(sessionID)
+              response = await api().message.list({ sessionID, limit: messagePageLimit, order: "desc" })
+            }
             const fetched = response.data.toReversed()
             // Same protection as the pending sync: a re-fetch racing an
             // admission must not wipe its local transcript row.

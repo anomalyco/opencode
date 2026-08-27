@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
 import { type Renderable, ScrollBoxRenderable } from "@opentui/core"
+import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode-ai/client"
 import { createTestRenderer } from "@opentui/core/testing"
 import { Effect, FileSystem } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -7,6 +8,134 @@ import { Global } from "@opencode-ai/util/global"
 import path from "node:path"
 import { createEventStream, createFetch, directory, json } from "./fixture/tui-client"
 import { tmpdir } from "./fixture/fixture"
+
+test.each([false, true])(
+  "preserves recovered subagents after reconnect (assistant in snapshot: %s)",
+  async (existing) => {
+    const setup = await createTestRenderer({ width: 100, height: 30, useThread: false })
+    setup.renderer.start()
+    const events = createEventStream()
+    const session = {
+      id: "recovery",
+      title: "Recovery session",
+      projectID: "project",
+      location: { directory },
+      agent: "build",
+      model: { providerID: "provider", id: "model" },
+      cost: 0,
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      time: { created: 0, updated: 0 },
+    }
+    const messages: SessionMessageInfo[] = [
+      {
+        id: "interrupted",
+        type: "assistant",
+        agent: "build",
+        model: session.model,
+        content: [{ type: "text", text: "Investigating before restart" }],
+        error: { type: "interrupted", message: "Step interrupted" },
+        time: { created: 10, completed: 20 },
+      },
+    ]
+    const requests = { message: 0, event: 0 }
+    const input = { sessionID: "child", agent: "general", description: "Resumed investigation" }
+    const resumed: SessionMessageAssistant = {
+      id: "resumed",
+      type: "assistant",
+      agent: "build",
+      model: session.model,
+      content: [],
+      time: { created: 40 },
+    }
+    const snapshot = Promise.withResolvers<void>()
+    const release = Promise.withResolvers<void>()
+    const calls = createFetch(async (url) => {
+      if (url.pathname === "/api/event") {
+        requests.event++
+        return events.v2()
+      }
+      if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
+      if (url.pathname === "/api/session/recovery") return json({ data: session })
+      if (url.pathname === "/api/session/recovery/message") {
+        requests.message++
+        const response = json({ data: messages.toReversed(), cursor: {} })
+        if (requests.message === 2) {
+          snapshot.resolve()
+          await release.promise
+        }
+        return response
+      }
+      if (url.pathname === "/api/session/recovery/inbox") return json({ data: [] })
+      if (url.pathname === "/api/session/recovery/permission") return json({ data: [] })
+    }, events)
+    const server = Bun.serve({ port: 0, fetch: (request) => calls.fetch(request) })
+
+    try {
+      const { run } = await import("../src/app")
+      const task = Effect.runPromise(
+        run({
+          app: { name: "test", version: "test", channel: "test" },
+          server: { endpoint: { url: server.url.toString() } },
+          config: { get: async () => ({ animations: false, tabs: { enabled: false } }), update: async () => ({}) },
+          packages: { resolve: async () => undefined },
+          terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
+          args: { sessionID: session.id },
+          log: () => {},
+        }).pipe(Effect.provide(AppNodeBuilder.build(Global.node)), Effect.provide(FileSystem.layerNoop({}))),
+      )
+
+      await setup.waitForFrame((frame) => frame.includes("interrupted"))
+      events.disconnect()
+      if (existing) messages.push(resumed)
+      await snapshot.promise
+      if (!existing) messages.push(resumed)
+      resumed.content = [
+        {
+          type: "tool",
+          id: "call-resumed",
+          name: "subagent",
+          state: { status: "running", input, metadata: {} },
+          time: { created: 41, ran: 42 },
+        },
+      ]
+      events.emit({
+        id: "evt_step",
+        created: 40,
+        type: "session.step.started",
+        durable: { aggregateID: session.id, seq: 1, version: 1 },
+        data: { sessionID: session.id, assistantMessageID: "resumed", agent: "build", model: session.model },
+      })
+      events.emit({
+        id: "evt_tool",
+        created: 41,
+        type: "session.tool.input.started",
+        durable: { aggregateID: session.id, seq: 2, version: 1 },
+        data: { sessionID: session.id, assistantMessageID: "resumed", id: "call-resumed", name: "subagent" },
+      })
+      events.emit({
+        id: "evt_called",
+        created: 42,
+        type: "session.tool.called",
+        durable: { aggregateID: session.id, seq: 3, version: 1 },
+        data: { sessionID: session.id, assistantMessageID: "resumed", id: "call-resumed", input, executed: false },
+      })
+      await setup.waitForFrame((frame) => frame.includes("Resumed investigation"))
+      // Only a fresh history read can supply this row, proving hydration finishes before rebuilding the transcript.
+      resumed.content.push({ type: "text", text: "Recovered history synchronized" })
+      release.resolve()
+      await setup.waitForFrame((frame) => frame.includes("Recovered history synchronized"))
+      expect(setup.captureCharFrame()).toContain("Resumed investigation")
+      expect(requests.event).toBe(2)
+      expect(requests.message).toBe(3)
+      setup.renderer.destroy()
+      await task
+    } finally {
+      release.resolve()
+      if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+      await server.stop(true)
+    }
+  },
+)
 
 test("SIGHUP clears title and disposes scoped resources once", async () => {
   const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
