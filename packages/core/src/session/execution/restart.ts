@@ -203,7 +203,6 @@ export const layer = (options?: Options) =>
         yield* jobs.background(background.id)
         yield* jobs.wait({ id: background.id }).pipe(
           Effect.flatMap((result) => (result.info ? notify(result.info) : Effect.void)),
-          Effect.ignore,
           Effect.forkIn(scope),
         )
       })

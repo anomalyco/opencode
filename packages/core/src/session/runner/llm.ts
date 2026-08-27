@@ -170,7 +170,7 @@ const layer = Layer.effect(
                     entering && !continuing ? promotable : "steer",
                   )
                   if (promoted > 0 && !selected.session.parentID && SessionTitle.isUntitled(selected.session))
-                    yield* FiberMap.run(titles, sessionID, title.generate(sessionID).pipe(Effect.ignore), {
+                    yield* FiberMap.run(titles, sessionID, title.generate(sessionID), {
                       onlyIfMissing: true,
                     })
                   if (promoted > 0) step = 1

@@ -109,9 +109,7 @@ describe("Git worktrees", () => {
       yield* Effect.promise(() => initRepo(root.path))
       const directory = AbsolutePath.make(yield* Effect.promise(() => fs.realpath(root.path)))
       const worktree = AbsolutePath.make(`${root.path}-git-worktree`)
-      yield* Effect.addFinalizer(() =>
-        Effect.promise(() => fs.rm(worktree, { recursive: true, force: true })).pipe(Effect.ignore),
-      )
+      yield* Effect.addFinalizer(() => Effect.promise(() => fs.rm(worktree, { recursive: true, force: true })))
       const git = yield* Git.Service
       const repo = yield* git.repo.discover(directory)
       if (!repo) throw new Error("Repository not found")
