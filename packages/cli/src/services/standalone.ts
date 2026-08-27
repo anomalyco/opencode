@@ -1,5 +1,5 @@
 import { Service, type Endpoint } from "@opencode-ai/client/effect/service"
-import { CrossSpawnSpawner } from "@opencode-ai/util/cross-spawn-spawner"
+import { LayerNodePlatform } from "@opencode-ai/util/effect/app-node-platform"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Deferred, Effect, Schema, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
@@ -55,7 +55,7 @@ const makeEndpoint = Effect.fn("cli.standalone.endpoint")(
       pid: proc.pid,
     } satisfies Endpoint & { readonly pid: number }
   },
-  Effect.provide(LayerNode.compile(CrossSpawnSpawner.node)),
+  Effect.provide(LayerNode.compile(LayerNodePlatform.processSpawner)),
 )
 
 export function start(options: Options = {}) {

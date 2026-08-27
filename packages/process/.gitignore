@@ -1,0 +1,5 @@
+native/*.node
+native/*.lib
+native/*.pdb
+native/*.exp
+native/*.exe

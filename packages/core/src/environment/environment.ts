@@ -1,4 +1,4 @@
-import { CrossSpawnSpawner } from "@opencode-ai/util/cross-spawn-spawner"
+import { LayerNodePlatform } from "@opencode-ai/util/effect/app-node-platform"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Context, Effect, Layer } from "effect"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
@@ -37,7 +37,7 @@ const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [CrossSpawnSpawner.node, Location.node, Workspace.node],
+  deps: [LayerNodePlatform.processSpawner, Location.node, Workspace.node],
 })
 
 export * as EnvironmentService from "./environment.js"

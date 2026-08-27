@@ -6,6 +6,7 @@ import { ChildProcess } from "effect/unstable/process"
 import { produce } from "immer"
 import { Shell } from "@opencode-ai/schema/shell"
 import { AppProcess } from "@opencode-ai/util/process"
+import { ProcessSpawner } from "@opencode-ai/process/spawner"
 import { makeGlobalNode, makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Bus } from "./bus.js"
@@ -262,19 +263,16 @@ const layer = () =>
         runFork(
           Effect.scoped(
             Effect.gen(function* () {
-              const handle = yield* environment.spawner
-                .spawn(
-                  ChildProcess.make(invocation.shell, args, {
-                    cwd: invocation.cwd,
-                    env: invocation.env,
-                    stdin: "ignore",
-                    detached: process.platform !== "win32",
-                    forceKillAfter: Duration.seconds(3),
-                  }),
-                )
-                .pipe(
-                  Effect.mapError((cause) => new AppProcess.AppProcessError({ command: invocation.command, cause })),
-                )
+              const handle = yield* ProcessSpawner.startForeground(
+                ChildProcess.make(invocation.shell, args, {
+                  cwd: invocation.cwd,
+                  env: invocation.env,
+                  stdin: "ignore",
+                  detached: process.platform !== "win32",
+                  forceKillAfter: Duration.seconds(3),
+                }),
+                environment.spawner,
+              ).pipe(Effect.mapError((cause) => new AppProcess.AppProcessError({ command: invocation.command, cause })))
               const session: Active = {
                 info: produce(info, (draft) => {
                   draft.pid = handle.pid

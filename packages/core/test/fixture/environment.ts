@@ -1,7 +1,7 @@
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Environment } from "@opencode-ai/core/environment/index"
 import { Location } from "@opencode-ai/core/location"
-import { CrossSpawnSpawner } from "@opencode-ai/util/cross-spawn-spawner"
+import { LayerNodePlatform } from "@opencode-ai/util/effect/app-node-platform"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Effect, Layer } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
@@ -17,7 +17,7 @@ export const hostEnvironmentLayer = Layer.effect(
     const driver = Environment.makeLocalDriver(spawner)
     return Environment.Service.of({ files: Environment.makeFiles(driver), spawner: driver.spawner })
   }),
-).pipe(Layer.provide(LayerNode.compile(CrossSpawnSpawner.node)))
+).pipe(Layer.provide(LayerNode.compile(LayerNodePlatform.processSpawner)))
 
 /**
  * The host environment with its spawner wrapped so a test can assert on every command that crosses

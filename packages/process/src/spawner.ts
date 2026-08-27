@@ -1,8 +1,6 @@
+export * as ProcessSpawner from "@opencode-ai/process/spawner"
+
 import type { NonEmptyReadonlyArray } from "effect/Array"
-import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem"
-import * as NodePath from "@effect/platform-node/NodePath"
-import * as NodeSink from "@effect/platform-node/NodeSink"
-import * as NodeStream from "@effect/platform-node/NodeStream"
 import { Deferred, Effect, Exit, FileSystem, Layer, Path, PlatformError, Predicate, Sink, Stream } from "effect"
 import type { Scope } from "effect"
 import { ChildProcess } from "effect/unstable/process"
@@ -14,12 +12,27 @@ import {
   ProcessId,
   type ChildProcessHandle,
 } from "effect/unstable/process/ChildProcessSpawner"
-// ast-grep-ignore: no-star-import
-import * as NodeChildProcess from "node:child_process"
+import NodeChildProcess from "node:child_process"
 import { PassThrough } from "node:stream"
 import launch from "cross-spawn"
-import { makeGlobalNode } from "./effect/app-node.js"
-import { filesystem, path } from "./effect/app-node-platform.js"
+import { ForegroundProcess } from "@opencode-ai/process"
+
+export type ForegroundHandle = Pick<ChildProcessHandle, "pid" | "all" | "exitCode"> & {
+  readonly kill: () => Effect.Effect<void, PlatformError.PlatformError>
+}
+
+export type Spawner = ChildProcessSpawner["Service"] & {
+  readonly spawnForeground?: (
+    command: ChildProcess.StandardCommand,
+  ) => Effect.Effect<ForegroundHandle, PlatformError.PlatformError, Scope.Scope>
+}
+
+/** Use the environment's capability, never a local substitute for a custom spawner. */
+export const startForeground = (
+  command: ChildProcess.StandardCommand,
+  spawner: Spawner,
+): Effect.Effect<ForegroundHandle, PlatformError.PlatformError, Scope.Scope> =>
+  spawner.spawnForeground ? spawner.spawnForeground(command) : spawner.spawn(command)
 
 const toError = (err: unknown): Error => (err instanceof globalThis.Error ? err : new globalThis.Error(String(err)))
 
@@ -90,7 +103,9 @@ const toPlatformError = (
 
 type ExitSignal = Deferred.Deferred<readonly [code: number | null, signal: NodeJS.Signals | null]>
 
-const makeCrossSpawnSpawner = Effect.gen(function* () {
+const makeSpawner = Effect.gen(function* () {
+  const NodeSink = yield* Effect.promise(() => import("@effect/platform-node/NodeSink"))
+  const NodeStream = yield* Effect.promise(() => import("@effect/platform-node/NodeStream"))
   const fs = yield* FileSystem.FileSystem
   const path = yield* Path.Path
 
@@ -496,14 +511,42 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
     },
   )
 
-  return make(spawnCommand)
+  const spawnForeground = Effect.fn("ProcessSpawner.spawnForeground")(function* (
+    command: ChildProcess.StandardCommand,
+  ): Effect.fn.Return<ForegroundHandle, PlatformError.PlatformError, Scope.Scope> {
+    if (
+      process.platform !== "win32" ||
+      stdin(command.options).stream !== "ignore" ||
+      stdio(command.options, "stdout").stream !== "pipe" ||
+      stdio(command.options, "stderr").stream !== "pipe" ||
+      Object.keys(command.options.additionalFds ?? {}).length !== 0 ||
+      command.options.shell ||
+      command.options.detached ||
+      !path.isAbsolute(command.command) ||
+      !/\.exe$/i.test(command.command)
+    ) {
+      return yield* spawnCommand(command)
+    }
+
+    const error = (err: ForegroundProcess.ProcessError) => toPlatformError(err.operation, toError(err.cause), command)
+    const child = yield* ForegroundProcess.start({
+      executable: command.command,
+      args: command.args,
+      cwd: yield* cwd(command.options),
+      env: env(command.options),
+    }).pipe(Effect.mapError(error))
+    return {
+      pid: ProcessId(child.pid),
+      all: Stream.mapError(child.output, error),
+      exitCode: child.exitCode.pipe(Effect.map(ExitCode), Effect.mapError(error)),
+      kill: () => child.terminate().pipe(Effect.mapError(error)),
+    }
+  })
+
+  return { ...make(spawnCommand), spawnForeground } satisfies Spawner
 })
 
-const layer: Layer.Layer<ChildProcessSpawner, never, FileSystem.FileSystem | Path.Path> = Layer.effect(
+export const layer: Layer.Layer<ChildProcessSpawner, never, FileSystem.FileSystem | Path.Path> = Layer.effect(
   ChildProcessSpawner,
-  makeCrossSpawnSpawner,
+  makeSpawner,
 )
-
-export const node = makeGlobalNode({ service: ChildProcessSpawner, layer, deps: [filesystem, path] })
-
-export * as CrossSpawnSpawner from "./cross-spawn-spawner.js"

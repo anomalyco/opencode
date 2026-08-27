@@ -2,7 +2,7 @@ import fs from "node:fs/promises"
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
-import { CrossSpawnSpawner } from "@opencode-ai/util/cross-spawn-spawner"
+import { LayerNodePlatform } from "@opencode-ai/util/effect/app-node-platform"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { EnvironmentUnavailable } from "../src/environment/unavailable"
 import {
@@ -76,7 +76,7 @@ environmentConformance("local environment", () =>
           }),
       dispose: Effect.promise(() => tmp[Symbol.asyncDispose]()),
     }
-  }).pipe(Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),
+  }).pipe(Effect.provide(LayerNode.compile(LayerNodePlatform.processSpawner))),
 )
 
 environmentConformance(
@@ -95,6 +95,6 @@ environmentConformance(
           }),
         dispose: Effect.promise(() => tmp[Symbol.asyncDispose]()),
       }
-    }).pipe(Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),
+    }).pipe(Effect.provide(LayerNode.compile(LayerNodePlatform.processSpawner))),
   process.platform !== "linux",
 )

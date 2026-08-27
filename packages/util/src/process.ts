@@ -2,7 +2,7 @@ import { Context, Duration, Effect, Fiber, Layer, Schema, Stream } from "effect"
 import type { PlatformError } from "effect/PlatformError"
 import { ChildProcess } from "effect/unstable/process"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
-import { CrossSpawnSpawner } from "./cross-spawn-spawner.js"
+import { LayerNodePlatform } from "./effect/app-node-platform.js"
 import { makeGlobalNode } from "./effect/app-node.js"
 
 export class AppProcessError extends Schema.TaggedError<AppProcessError>()("AppProcessError", {
@@ -256,6 +256,6 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeGlobalNode({ service: Service, layer: layer, deps: [CrossSpawnSpawner.node] })
+export const node = makeGlobalNode({ service: Service, layer: layer, deps: [LayerNodePlatform.processSpawner] })
 
 export * as AppProcess from "./process.js"

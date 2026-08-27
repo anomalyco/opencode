@@ -11,7 +11,7 @@ import { FileSystemSearch } from "@opencode-ai/core/filesystem/search"
 import { Pty } from "@opencode-ai/core/pty"
 import { Snapshot } from "@opencode-ai/core/snapshot"
 import { Vcs } from "@opencode-ai/core/vcs"
-import { CrossSpawnSpawner } from "@opencode-ai/util/cross-spawn-spawner"
+import { LayerNodePlatform } from "@opencode-ai/util/effect/app-node-platform"
 import type { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { ServerFetch } from "./fetch"
 import type { ServerOptions } from "./options"
@@ -76,7 +76,7 @@ export function serverOptions(options: Options): ServerOptions {
 export function replacements(options: Options): LayerNode.Replacements {
   return [
     [Database.node, Database.configuredClient(sqliteLayer({ storage: options.storage }))],
-    [CrossSpawnSpawner.node, EnvironmentUnavailable.layer],
+    [LayerNodePlatform.processSpawner, EnvironmentUnavailable.layer],
     [Snapshot.node, Snapshot.noopLayer],
     [Vcs.node, vcsLayer],
     [FileSystem.node, fileSystemLayer],

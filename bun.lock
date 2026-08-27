@@ -364,6 +364,7 @@
         "@opencode-ai/ai": "workspace:*",
         "@opencode-ai/codemode": "workspace:*",
         "@opencode-ai/plugin": "workspace:*",
+        "@opencode-ai/process": "workspace:*",
         "@opencode-ai/pty": "0.1.12",
         "@opencode-ai/schema": "workspace:*",
         "@opencode-ai/util": "workspace:*",
@@ -632,6 +633,25 @@
         "@types/bun": "catalog:",
         "typescript": "catalog:",
         "wrangler": "4.110.0",
+      },
+    },
+    "packages/process": {
+      "name": "@opencode-ai/process",
+      "version": "0.0.0",
+      "dependencies": {
+        "@effect/platform-node": "catalog:",
+        "cross-spawn": "catalog:",
+      },
+      "devDependencies": {
+        "@tsconfig/bun": "catalog:",
+        "@types/bun": "catalog:",
+        "@types/cross-spawn": "catalog:",
+        "@types/node": "catalog:",
+        "@typescript/native-preview": "catalog:",
+        "effect": "catalog:",
+      },
+      "peerDependencies": {
+        "effect": "4.0.0-rc.111",
       },
     },
     "packages/protocol": {
@@ -992,12 +1012,12 @@
         "@effect/platform-node-shared": "catalog:",
         "@npmcli/arborist": "catalog:",
         "@npmcli/config": "10.8.1",
+        "@opencode-ai/process": "workspace:*",
         "@opentelemetry/api": "1.9.0",
         "@opentelemetry/context-async-hooks": "2.6.1",
         "@opentelemetry/exporter-trace-otlp-http": "0.214.0",
         "@opentelemetry/sdk-trace-base": "2.6.1",
         "@opentelemetry/sdk-trace-node": "2.6.1",
-        "cross-spawn": "catalog:",
         "effect": "catalog:",
         "glob": "13.0.5",
         "mime-types": "3.0.2",
@@ -1008,7 +1028,6 @@
       "devDependencies": {
         "@tsconfig/bun": "catalog:",
         "@types/bun": "catalog:",
-        "@types/cross-spawn": "catalog:",
         "@types/node": "catalog:",
         "@types/npm-package-arg": "6.1.4",
         "@types/npmcli__arborist": "6.3.3",
@@ -2172,6 +2191,8 @@
     "@opencode-ai/plugin": ["@opencode-ai/plugin@workspace:packages/plugin"],
 
     "@opencode-ai/posts": ["@opencode-ai/posts@workspace:packages/posts"],
+
+    "@opencode-ai/process": ["@opencode-ai/process@workspace:packages/process"],
 
     "@opencode-ai/protocol": ["@opencode-ai/protocol@workspace:packages/protocol"],
 

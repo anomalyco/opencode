@@ -1,0 +1,38 @@
+{
+  "name": "@opencode-ai/process",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/process.ts",
+    "./spawner": "./src/spawner.ts"
+  },
+  "imports": {
+    "#capture-binding": {
+      "workerd": "./src/binding.unavailable.ts",
+      "default": "./src/binding.ts"
+    }
+  },
+  "scripts": {
+    "build:native": "bun script/build-native.ts",
+    "demo": "bun example/capture.ts",
+    "test": "bun test --timeout 20000",
+    "test:node": "node --experimental-strip-types --test test/process.test.ts",
+    "typecheck": "tsgo --noEmit"
+  },
+  "peerDependencies": {
+    "effect": "4.0.0-rc.111"
+  },
+  "dependencies": {
+    "@effect/platform-node": "catalog:",
+    "cross-spawn": "catalog:"
+  },
+  "devDependencies": {
+    "effect": "catalog:",
+    "@tsconfig/bun": "catalog:",
+    "@types/bun": "catalog:",
+    "@types/cross-spawn": "catalog:",
+    "@types/node": "catalog:",
+    "@typescript/native-preview": "catalog:"
+  }
+}

@@ -3,9 +3,8 @@ import { Context, Effect, Layer, Stream } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http"
 import { ChildProcess } from "effect/unstable/process"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
-import { CrossSpawnSpawner } from "@opencode-ai/util/cross-spawn-spawner"
+import { httpClient, LayerNodePlatform } from "@opencode-ai/util/effect/app-node-platform"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
-import { httpClient } from "@opencode-ai/util/effect/app-node-platform"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Global } from "@opencode-ai/util/global"
 import { which } from "../util/which.js"
@@ -131,6 +130,6 @@ export namespace RipgrepBinary {
   export const node = makeGlobalNode({
     service: Service,
     layer: layer,
-    deps: [FSUtil.node, Global.node, httpClient, CrossSpawnSpawner.node],
+    deps: [FSUtil.node, Global.node, httpClient, LayerNodePlatform.processSpawner],
   })
 }
