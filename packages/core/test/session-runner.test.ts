@@ -1650,6 +1650,7 @@ describe("SessionRunnerLLM", () => {
   it.effect("seeds a fork with the parent's newest instruction values", () =>
     Effect.gen(function* () {
       const session = yield* setup
+      const database = yield* Database.Service
       yield* runPrompt(session, "First")
       systemBaseline = "Changed context"
       const second = yield* runPrompt(session, "Second")
@@ -1658,7 +1659,7 @@ describe("SessionRunnerLLM", () => {
 
       const forked = yield* session.fork({ sessionID, boundary: { type: "before", messageID: second.id } })
       expect(
-        yield* (yield* Database.Service).db
+        yield* database.db
           .select()
           .from(InstructionStateTable)
           .where(eq(InstructionStateTable.session_id, forked.id))
@@ -1706,6 +1707,7 @@ describe("SessionRunnerLLM", () => {
   it.effect("keeps nested forks self-contained", () =>
     Effect.gen(function* () {
       const session = yield* setup
+      const database = yield* Database.Service
       yield* runPrompt(session, "First")
       systemBaseline = "Changed context"
       const second = yield* runPrompt(session, "Second")
@@ -1721,7 +1723,7 @@ describe("SessionRunnerLLM", () => {
       })
 
       expect(
-        yield* (yield* Database.Service).db
+        yield* database.db
           .select()
           .from(InstructionStateTable)
           .where(eq(InstructionStateTable.session_id, grandchild.id))
@@ -2538,6 +2540,7 @@ describe("SessionRunnerLLM", () => {
   it.effect("automatically compacts into a completed summary and retained recent turn", () =>
     Effect.gen(function* () {
       const session = yield* setup
+      const store = yield* SessionStore.Service
       yield* TestLLM.push(TestLLM.textWithUsage("Earlier answer", "text-first", 3_950))
       yield* runPrompt(session, "Earlier question ".repeat(180))
 
@@ -2555,7 +2558,7 @@ describe("SessionRunnerLLM", () => {
       expect(userTexts(requests[1])[0]).toContain("<summary>\n## Objective\n- Preserve the task\n</summary>")
       expect(userTexts(requests[1])[0]).toContain(`[User]: ${"Recent exact request ".repeat(180)}`)
 
-      const context = yield* (yield* SessionStore.Service).context(sessionID)
+      const context = yield* store.context(sessionID)
       expect(context.map((message) => message.type)).toEqual(["compaction", "assistant"])
       expect(context[0]).toMatchObject({
         type: "compaction",
@@ -2575,7 +2578,7 @@ describe("SessionRunnerLLM", () => {
         "<previous-summary>\n## Objective\n- Preserve the task\n</previous-summary>",
       )
       expect(userTexts(requests[0])[0]).toContain("Recent exact request")
-      expect((yield* (yield* SessionStore.Service).context(sessionID))[0]).toMatchObject({
+      expect((yield* store.context(sessionID))[0]).toMatchObject({
         type: "compaction",
         summary: "## Objective\n- Preserve the updated task",
       })
@@ -3765,6 +3768,7 @@ describe("SessionRunnerLLM", () => {
   it.effect("coalesces multiple active steering prompts into one continuation step", () =>
     Effect.gen(function* () {
       const session = yield* setup
+      const execution = yield* SessionExecution.Service
       yield* admit(session, "Start working")
 
       yield* TestLLM.push(TestLLM.stop(), TestLLM.stop())
@@ -3780,7 +3784,7 @@ describe("SessionRunnerLLM", () => {
 
       expect(requests).toHaveLength(2)
       expect(userTexts(requests[1])).toEqual(["Start working", "First steer", "Second steer"])
-      yield* (yield* SessionExecution.Service).wake(sessionID)
+      yield* execution.wake(sessionID)
       yield* Effect.yieldNow
       expect(requests).toHaveLength(2)
     }),
@@ -4027,6 +4031,7 @@ describe("SessionRunnerLLM", () => {
   it.effect("promotes the first queued input when woken while idle", () =>
     Effect.gen(function* () {
       const session = yield* setup
+      const execution = yield* SessionExecution.Service
       yield* session.prompt({
         sessionID,
         text: "Wait in queue",
@@ -4035,7 +4040,7 @@ describe("SessionRunnerLLM", () => {
       })
 
       const stream = yield* TestLLM.gate
-      yield* (yield* SessionExecution.Service).wake(sessionID)
+      yield* execution.wake(sessionID)
       yield* stream.started
       yield* stream.release
 
@@ -4047,6 +4052,7 @@ describe("SessionRunnerLLM", () => {
   it.effect("retries inbox input after prompt projection rolls back", () =>
     Effect.gen(function* () {
       const session = yield* setup
+      const execution = yield* SessionExecution.Service
       const bus = yield* Bus.Service
       const defect = new Error("fail after prompt promotion")
       let fail = true
@@ -4059,7 +4065,7 @@ describe("SessionRunnerLLM", () => {
       yield* TestLLM.push(TestLLM.stop())
 
       const stream = yield* TestLLM.gate
-      yield* (yield* SessionExecution.Service).wake(sessionID)
+      yield* execution.wake(sessionID)
       yield* stream.started
       yield* stream.release
 
