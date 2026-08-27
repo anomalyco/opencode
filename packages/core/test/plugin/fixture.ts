@@ -79,7 +79,6 @@ export const PluginTestLayer = LayerNode.compile(
     Reference.node,
     Skill.node,
     SkillDiscovery.node,
-    PluginHooks.node,
     Tool.node,
     Vcs.node,
     Watcher.node,
