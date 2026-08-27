@@ -8,6 +8,8 @@ import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/unstable
 import { Config } from "@/config/config"
 import { ConfigManaged } from "@/config/managed"
 import { ConfigParse } from "../../src/config/parse"
+import { ConfigV2Compat } from "../../src/config/v2-compat"
+import { snapshot } from "./snapshot"
 import { Npm } from "@opencode-ai/core/npm"
 
 import { InstanceRef } from "../../src/effect/instance-ref"
@@ -397,22 +399,17 @@ it.effect("updates global config and omits empty shell key in jsonc", () =>
   ),
 )
 
-it.effect("updates global JSON without removing native V2 configuration", () =>
+it.effect("logs global update diagnostics once without exposing values", () =>
   withGlobalConfig(
     {
       config: {
-        mcp: {
-          servers: {
-            modern: { type: "local", command: ["modern-mcp"], disabled: true },
-          },
-        },
         providers: { example: { settings: { apiKey: "keep-me" } } },
       },
     },
     ({ dir }) =>
       Effect.gen(function* () {
         const messages: unknown[] = []
-        const updated = yield* Config.use.updateGlobal({ username: "updated" }).pipe(
+        yield* Config.use.updateGlobal({ username: "updated" }).pipe(
           Effect.provide(
             Logger.layer([
               Logger.make<unknown, void>((options) => {
@@ -421,13 +418,6 @@ it.effect("updates global JSON without removing native V2 configuration", () =>
             ]),
           ),
         )
-        const written = yield* FSUtil.use.readJson(path.join(dir, "opencode.json"))
-        expect(written).toMatchObject({
-          username: "updated",
-          mcp: { servers: { modern: { type: "local", command: ["modern-mcp"], disabled: true } } },
-          providers: { example: { settings: { apiKey: "keep-me" } } },
-        })
-        expect(updated.info.mcp?.modern).toMatchObject({ enabled: false })
         expect(JSON.stringify(messages)).not.toContain("keep-me")
         expect(
           messages.filter((item) => Array.isArray(item) && item[0] === "configuration compatibility diagnostic"),
@@ -445,82 +435,57 @@ it.effect("updates global JSON without removing native V2 configuration", () =>
   ),
 )
 
-it.effect("updates global JSONC without removing native V2 configuration", () =>
-  withGlobalConfig(
-    {
-      name: "opencode.jsonc",
-      config: {
-        mcp: {
-          servers: {
-            modern: { type: "local", command: ["modern-mcp"], disabled: true },
-          },
-        },
-        providers: { example: { settings: { apiKey: "keep-me" } } },
-      },
-    },
-    ({ dir }) =>
+const updateFixtures = path.join(import.meta.dir, "fixtures/v2-compat")
+const globalInputs = [...new Bun.Glob("update-global/*/input.{json,jsonc}").scanSync({ cwd: updateFixtures })].sort()
+const projectInputs = [...new Bun.Glob("update-project/*/input.json").scanSync({ cwd: updateFixtures })].sort()
+if (!globalInputs.length || !projectInputs.length) throw new Error("Missing config update fixtures")
+
+for (const input of globalInputs) {
+  const directory = path.join(updateFixtures, path.dirname(input))
+  const extension = path.extname(input)
+  it.live(`fixture ${path.dirname(input)}`, () =>
+    withGlobalConfig({}, ({ dir }) =>
       Effect.gen(function* () {
-        const updated = yield* Config.use.updateGlobal({ username: "updated" })
-        const written = yield* FSUtil.use.readJson(path.join(dir, "opencode.jsonc"))
-        expect(written).toMatchObject({
-          username: "updated",
-          mcp: { servers: { modern: { type: "local", command: ["modern-mcp"], disabled: true } } },
-          providers: { example: { settings: { apiKey: "keep-me" } } },
-        })
-        expect(updated.info.mcp?.modern).toMatchObject({ enabled: false })
+        const fs = yield* FSUtil.Service
+        const file = path.join(dir, `opencode${extension}`)
+        yield* fs.writeFileString(file, yield* fs.readFileString(path.join(updateFixtures, input)))
+        const patch = ConfigParse.schema(ConfigV1.Info, yield* fs.readJson(path.join(directory, "patch.json")), input)
+        const updated = yield* Config.use.updateGlobal(patch)
+        const written = yield* fs.readFileString(file)
+
+        yield* Effect.promise(() => snapshot(path.join(directory, `output${extension}`), written))
+        yield* Effect.promise(() =>
+          snapshot(path.join(directory, "normalized.json"), JSON.stringify(updated.info, null, 2) + "\n"),
+        )
       }),
-  ),
-)
+    ),
+  )
+}
 
-it.effect("applies legacy global updates over existing native V2 settings", () =>
-  withGlobalConfig(
-    {
-      config: {
-        snapshots: true,
-        permissions: [{ action: "read", resource: "*", effect: "allow" }],
-        agents: { reviewer: { disabled: false } },
-        mcp: { servers: { modern: { type: "local", command: ["modern-mcp"], disabled: false } } },
-      },
-    },
-    () =>
-      Effect.gen(function* () {
-        const updated = yield* Config.use.updateGlobal({
-          snapshot: false,
-          permission: { read: "deny" },
-          agent: { reviewer: { disable: true } },
-          mcp: { modern: { enabled: false } },
-        })
+for (const input of projectInputs) {
+  const directory = path.join(updateFixtures, path.dirname(input))
+  it.instance(`fixture ${path.dirname(input)}`, () =>
+    Effect.gen(function* () {
+      const instance = yield* TestInstance
+      const fs = yield* FSUtil.Service
+      const file = path.join(instance.directory, "config.json")
+      yield* fs.writeFileString(file, yield* fs.readFileString(path.join(updateFixtures, input)))
+      const patch = ConfigParse.schema(ConfigV1.Info, yield* fs.readJson(path.join(directory, "patch.json")), input)
+      yield* Config.use.update(patch)
+      const written = yield* fs.readFileString(file)
+      const normalized = ConfigParse.schema(
+        ConfigV1.Info,
+        ConfigV2Compat.lower(ConfigParse.jsonc(written, file)).value,
+        file,
+      )
 
-        expect(updated.info.snapshot).toBe(false)
-        expect(updated.info.permission?.read).toBe("deny")
-        expect(updated.info.agent?.reviewer?.disable).toBe(true)
-        expect(updated.info.mcp?.modern).toEqual({ enabled: false })
-      }),
-  ),
-)
-
-it.instance("updates project config without removing native V2 configuration", () =>
-  Effect.gen(function* () {
-    const test = yield* TestInstance
-    yield* writeConfigEffect(
-      test.directory,
-      {
-        $schema: "https://opencode.ai/config.json",
-        mcp: { servers: { modern: { type: "local", command: ["modern-mcp"], disabled: true } } },
-        providers: { example: { settings: { apiKey: "keep-me" } } },
-      },
-      "config.json",
-    )
-
-    yield* Config.use.update({ username: "updated" })
-
-    expect(yield* FSUtil.use.readJson(path.join(test.directory, "config.json"))).toMatchObject({
-      username: "updated",
-      mcp: { servers: { modern: { type: "local", command: ["modern-mcp"], disabled: true } } },
-      providers: { example: { settings: { apiKey: "keep-me" } } },
-    })
-  }),
-)
+      yield* Effect.promise(() => snapshot(path.join(directory, "output.json"), written))
+      yield* Effect.promise(() =>
+        snapshot(path.join(directory, "normalized.json"), JSON.stringify(normalized, null, 2) + "\n"),
+      )
+    }),
+  )
+}
 
 it.effect("native project MCP servers override inherited V1 disabled state", () =>
   withConfigTree(

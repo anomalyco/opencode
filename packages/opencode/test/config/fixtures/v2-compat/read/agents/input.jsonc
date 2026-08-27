@@ -1,0 +1,19 @@
+{
+  "agents": {
+    "reviewer": {
+      "model": { "providerID": "anthropic", "model": "claude-sonnet", "variant": "thinking" },
+      "system": "Review carefully.",
+      "description": "Reviews changes",
+      "mode": "subagent",
+      "hidden": true,
+      "color": "#123abc",
+      "steps": 4,
+      "disabled": true,
+      "permissions": [
+        { "action": "read", "resource": "*.ts", "effect": "allow" },
+        { "action": "read", "resource": "secret.ts", "effect": "deny" }
+      ]
+    },
+    "quick": { "model": "openai/gpt-4.1#fast", "disabled": false }
+  }
+}

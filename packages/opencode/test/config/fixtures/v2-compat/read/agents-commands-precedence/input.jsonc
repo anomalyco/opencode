@@ -1,0 +1,19 @@
+{
+  "permission": { "bash": "deny", "*": "ask", "edit": "deny" },
+  "permissions": [{ "action": "shell", "resource": "*", "effect": "allow" }],
+  "agent": {
+    "reviewer": { "prompt": "Legacy prompt", "permission": { "bash": "deny", "edit": "deny" } }
+  },
+  "agents": {
+    "reviewer": {
+      "system": "Native prompt",
+      "permissions": [{ "action": "shell", "resource": "*", "effect": "allow" }]
+    },
+    "native": { "permissions": [{ "action": "shell", "resource": "*", "effect": "deny" }] }
+  },
+  "command": { "review": { "template": "Legacy review" } },
+  "commands": {
+    "review": { "template": "Native review" },
+    "modern": { "template": "Native command" }
+  }
+}
