@@ -670,7 +670,7 @@ export function Session(props: {
       ensureAllRows(() => {
         const child = scroll.getRenderable(id)
         if (!child) return
-        alignMessage(id, Math.max(0, scroll.scrollTop + child.y - scroll.viewport.y))
+        alignMessage(id, Math.max(0, scroll.scrollTop + child.y - scroll.viewport.y - 1))
       })
     }
     jump()
