@@ -1,0 +1,17 @@
+{
+  "snapshot": false,
+  "attachment": {
+    "image": {
+      "max_width": 640
+    }
+  },
+  "subagent_depth": 1,
+  "experimental": {
+    "mcp_timeout": 4000
+  },
+  "compaction": {
+    "preserve_recent_tokens": 100,
+    "reserved": 300
+  },
+  "mcp": {}
+}
