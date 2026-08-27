@@ -9923,6 +9923,11 @@ export type SessionMessageResponse = SessionMessageResponses[keyof SessionMessag
 export type SessionForkData = {
   body?: {
     messageID?: string
+    agent?: string
+    metadata?: {
+      [key: string]: unknown
+    }
+    note?: string
   }
   path: {
     sessionID: string

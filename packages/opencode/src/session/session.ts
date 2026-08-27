@@ -273,6 +273,9 @@ export type CreateInput = Types.DeepMutable<Schema.Schema.Type<typeof CreateInpu
 export const ForkInput = Schema.Struct({
   sessionID: SessionID,
   messageID: Schema.optional(MessageID),
+  agent: Schema.optional(Schema.String),
+  metadata: Schema.optional(Metadata),
+  note: Schema.optional(Schema.String),
 })
 export const GetInput = SessionID
 export const ChildrenInput = SessionID
@@ -422,7 +425,13 @@ export interface Interface {
     permission?: PermissionV1.Ruleset
     workspaceID?: WorkspaceV2.ID
   }) => Effect.Effect<Info>
-  readonly fork: (input: { sessionID: SessionID; messageID?: MessageID }) => Effect.Effect<Info, NotFound>
+  readonly fork: (input: {
+    sessionID: SessionID
+    messageID?: MessageID
+    agent?: string
+    metadata?: typeof Metadata.Type
+    note?: string
+  }) => Effect.Effect<Info, NotFound>
   readonly touch: (sessionID: SessionID) => Effect.Effect<void>
   readonly get: (id: SessionID) => Effect.Effect<Info, NotFound>
   readonly setTitle: (input: { sessionID: SessionID; title: string }) => Effect.Effect<void>
@@ -688,22 +697,32 @@ const layer: Layer.Layer<
       })
     })
 
-    const fork = Effect.fn("Session.fork")(function* (input: { sessionID: SessionID; messageID?: MessageID }) {
+    const fork = Effect.fn("Session.fork")(function* (input: {
+      sessionID: SessionID
+      messageID?: MessageID
+      agent?: string
+      metadata?: typeof Metadata.Type
+      note?: string
+    }) {
       const ctx = yield* InstanceState.context
       const original = yield* get(input.sessionID)
       const title = getForkedTitle(original.title)
+      const metadata = { ...structuredClone(original.metadata), ...input.metadata }
       const session = yield* createNext({
         directory: ctx.directory,
         path: sessionPath(ctx.worktree, ctx.directory),
         workspaceID: original.workspaceID,
         title,
-        metadata: structuredClone(original.metadata),
+        agent: input.agent,
+        ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
       })
       const msgs = yield* messages({ sessionID: input.sessionID })
       const idMap = new Map<string, MessageID>()
       const target = input.messageID ? msgs.findIndex((msg) => msg.info.id === input.messageID) : msgs.length
 
+      let lastModel: Info["model"]
       for (const msg of msgs.slice(0, target < 0 ? msgs.length : target)) {
+        if (msg.info.role === "assistant") lastModel = { id: msg.info.modelID, providerID: msg.info.providerID }
         const newID = MessageID.ascending()
         idMap.set(msg.info.id, newID)
 
@@ -728,6 +747,30 @@ const layer: Layer.Layer<
           yield* updatePart(p)
         }
       }
+
+      if (input.note) {
+        const info: SessionV1.User = {
+          id: MessageID.ascending(),
+          role: "user",
+          sessionID: session.id,
+          time: { created: Date.now() },
+          agent: input.agent ?? original.agent ?? "sidecar",
+          model: {
+            providerID: lastModel?.providerID ?? ProviderV2.ID.make("unknown"),
+            modelID: lastModel?.id ?? ModelV2.ID.make("unknown"),
+          },
+        }
+        yield* updateMessage(info)
+        yield* updatePart({
+          id: PartID.ascending(),
+          type: "text",
+          text: input.note,
+          synthetic: true,
+          messageID: info.id,
+          sessionID: session.id,
+        })
+      }
+
       return session
     })
 

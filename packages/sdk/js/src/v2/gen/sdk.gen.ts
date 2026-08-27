@@ -3877,6 +3877,11 @@ export class Session2 extends HeyApiClient {
       directory?: string
       workspace?: string
       messageID?: string
+      agent?: string
+      metadata?: {
+        [key: string]: unknown
+      }
+      note?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -3889,6 +3894,9 @@ export class Session2 extends HeyApiClient {
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
             { in: "body", key: "messageID" },
+            { in: "body", key: "agent" },
+            { in: "body", key: "metadata" },
+            { in: "body", key: "note" },
           ],
         },
       ],
