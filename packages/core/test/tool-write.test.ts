@@ -30,16 +30,22 @@ const writeToolNode = makeLocationNode({
 
 const sessionID = Session.ID.make("ses_write_tool_test")
 const makeWriteFixture = () => {
-  const assertions: Permission.AssertInput[] = []
-  const writes: string[] = []
-  let formatFile = (_target: string): Effect.Effect<boolean> => Effect.succeed(false)
-  let denyAction: string | undefined
+  const fixture: {
+    assertions: Permission.AssertInput[]
+    writes: string[]
+    denyAction?: string
+    formatFile: (target: string) => Effect.Effect<boolean>
+  } = {
+    assertions: [],
+    writes: [],
+    formatFile: () => Effect.succeed(false),
+  }
 
   const permission = permissionLayer({
     assert: (input) =>
-      Effect.sync(() => assertions.push(input)).pipe(
+      Effect.sync(() => fixture.assertions.push(input)).pipe(
         Effect.andThen(
-          input.action === denyAction
+          input.action === fixture.denyAction
             ? Effect.fail(
                 new Permission.BlockedError({
                   rules: [],
@@ -53,30 +59,10 @@ const makeWriteFixture = () => {
   })
 
   const formatter = Layer.mock(Formatter.Service, {
-    file: (target) => formatFile(target),
+    file: (target) => fixture.formatFile(target),
   })
 
-  return {
-    assertions,
-    writes,
-    reset() {
-      assertions.length = 0
-      writes.length = 0
-      formatFile = () => Effect.succeed(false)
-      denyAction = undefined
-    },
-    set formatFile(next: (target: string) => Effect.Effect<boolean>) {
-      formatFile = next
-    },
-    set denyAction(action: string | undefined) {
-      denyAction = action
-    },
-    recordWrite(target: string) {
-      writes.push(target)
-    },
-    permission,
-    formatter,
-  }
+  return Object.assign(fixture, { permission, formatter })
 }
 
 const withTool = <A, E, R>(
@@ -89,7 +75,8 @@ const withTool = <A, E, R>(
     Location.Service.of(location({ directory: AbsolutePath.make(directory) })),
   )
   return Effect.gen(function* () {
-    return yield* body(yield* Tool.Service)
+    const registry = yield* Tool.Service
+    return yield* body(registry)
   }).pipe(
     Effect.provide(
       AppNodeBuilder.build(LayerNode.group([Tool.node, LocationMutation.node, FileMutation.node, writeToolNode]), [
@@ -97,7 +84,7 @@ const withTool = <A, E, R>(
           Environment.node,
           transformEnvironmentFiles(activeLocation, (files) => ({
             write: (target, content) =>
-              Effect.sync(() => fixture.recordWrite(target)).pipe(Effect.andThen(files.write(target, content))),
+              Effect.sync(() => fixture.writes.push(target)).pipe(Effect.andThen(files.write(target, content))),
           })),
         ],
         [Location.node, activeLocation],
@@ -265,7 +252,7 @@ describe("WriteTool", () => {
     }),
   )
 
-  it.live("fixture.writes an external symlink target with only its in-location permission", () =>
+  it.live("writes an external symlink target with only its in-location permission", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => Promise.all([tmpdir(), tmpdir()])),
       ([active, outside]) => {
@@ -394,18 +381,18 @@ describe("WriteTool", () => {
           expect(fixture.assertions.map((input) => input.action)).toEqual(["external_directory"])
           expect(fixture.writes).toEqual([])
 
-          fixture.reset()
-          fixture.denyAction = "edit"
+          const deniedEdit = makeWriteFixture()
+          deniedEdit.denyAction = "edit"
           expect(
-            yield* withTool(active.path, fixture, (registry) =>
+            yield* withTool(active.path, deniedEdit, (registry) =>
               executeTool(registry, call({ path: "denied.txt", content: "blocked" })),
             ),
           ).toEqual({
             status: "error",
             error: { type: "permission.rejected", message: "Permission denied: edit" },
           })
-          expect(fixture.assertions.map((input) => input.action)).toEqual(["edit"])
-          expect(fixture.writes).toEqual([])
+          expect(deniedEdit.assertions.map((input) => input.action)).toEqual(["edit"])
+          expect(deniedEdit.writes).toEqual([])
         }),
       ([active, outside]) =>
         Effect.promise(() =>

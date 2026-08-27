@@ -38,18 +38,26 @@ const editToolNode = makeLocationNode({
 
 const sessionID = Session.ID.make("ses_edit_tool_test")
 const makeEditFixture = () => {
-  const assertions: Permission.AssertInput[] = []
-  const writes: string[] = []
-  let reads = 0
-  let denyAction: string | undefined
-  let afterRead = (_target: string, _content: Uint8Array): Effect.Effect<void> => Effect.void
-  let formatFile = (_target: string): Effect.Effect<boolean> => Effect.succeed(false)
+  const fixture: {
+    assertions: Permission.AssertInput[]
+    writes: string[]
+    reads: number
+    denyAction?: string
+    afterRead: () => Effect.Effect<void>
+    formatFile: (target: string) => Effect.Effect<boolean>
+  } = {
+    assertions: [],
+    writes: [],
+    reads: 0,
+    afterRead: () => Effect.void,
+    formatFile: () => Effect.succeed(false),
+  }
 
   const permission = permissionLayer({
     assert: (input) =>
-      Effect.sync(() => assertions.push(input)).pipe(
+      Effect.sync(() => fixture.assertions.push(input)).pipe(
         Effect.andThen(
-          input.action === denyAction
+          input.action === fixture.denyAction
             ? Effect.fail(
                 new Permission.BlockedError({
                   rules: [],
@@ -63,41 +71,10 @@ const makeEditFixture = () => {
   })
 
   const formatter = Layer.mock(Formatter.Service, {
-    file: (target) => formatFile(target),
+    file: (target) => fixture.formatFile(target),
   })
 
-  return {
-    assertions,
-    writes,
-    get reads() {
-      return reads
-    },
-    reset() {
-      assertions.length = 0
-      writes.length = 0
-      reads = 0
-      denyAction = undefined
-      afterRead = () => Effect.void
-      formatFile = () => Effect.succeed(false)
-    },
-    set denyAction(action: string | undefined) {
-      denyAction = action
-    },
-    set afterRead(next: (target: string, content: Uint8Array) => Effect.Effect<void>) {
-      afterRead = next
-    },
-    set formatFile(next: (target: string) => Effect.Effect<boolean>) {
-      formatFile = next
-    },
-    recordRead(target: string, content: Uint8Array) {
-      return Effect.sync(() => reads++).pipe(Effect.andThen(Effect.suspend(() => afterRead(target, content))))
-    },
-    recordWrite(target: string) {
-      writes.push(target)
-    },
-    permission,
-    formatter,
-  }
+  return Object.assign(fixture, { permission, formatter })
 }
 
 const withTool = <A, E, R>(
@@ -110,7 +87,8 @@ const withTool = <A, E, R>(
     Location.Service.of(location({ directory: AbsolutePath.make(directory) })),
   )
   return Effect.gen(function* () {
-    return yield* body(yield* Tool.Service)
+    const registry = yield* Tool.Service
+    return yield* body(registry)
   }).pipe(
     Effect.provide(
       AppNodeBuilder.build(LayerNode.group([Tool.node, LocationMutation.node, FileMutation.node, editToolNode]), [
@@ -118,9 +96,13 @@ const withTool = <A, E, R>(
           Environment.node,
           transformEnvironmentFiles(activeLocation, (files) => ({
             read: (target, range) =>
-              files.read(target, range).pipe(Effect.tap((result) => fixture.recordRead(target, result.bytes))),
+              files
+                .read(target, range)
+                .pipe(
+                  Effect.tap(() => Effect.sync(() => fixture.reads++).pipe(Effect.andThen(() => fixture.afterRead()))),
+                ),
             write: (target, content) =>
-              Effect.sync(() => fixture.recordWrite(target)).pipe(Effect.andThen(files.write(target, content))),
+              Effect.sync(() => fixture.writes.push(target)).pipe(Effect.andThen(files.write(target, content))),
           })),
         ],
         [Location.node, activeLocation],
@@ -340,19 +322,19 @@ describe("EditTool", () => {
           expect(edit.reads).toBe(0)
           expect(edit.writes).toEqual([])
 
-          edit.reset()
-          edit.denyAction = "edit"
+          const deniedEdit = makeEditFixture()
+          deniedEdit.denyAction = "edit"
           expect(
-            yield* withTool(active.path, edit, (registry) =>
+            yield* withTool(active.path, deniedEdit, (registry) =>
               executeTool(registry, call({ path: external, oldString: "before", newString: "after" })),
             ),
           ).toEqual({
             status: "error",
             error: { type: "permission.rejected", message: "Permission denied: edit" },
           })
-          expect(edit.assertions.map((input) => input.action)).toEqual(["external_directory", "edit"])
-          expect(edit.reads).toBe(1)
-          expect(edit.writes).toEqual([])
+          expect(deniedEdit.assertions.map((input) => input.action)).toEqual(["external_directory", "edit"])
+          expect(deniedEdit.reads).toBe(1)
+          expect(deniedEdit.writes).toEqual([])
           expect(yield* Effect.promise(() => fs.readFile(external, "utf8"))).toBe("before")
         }),
       ([active, outside]) =>
