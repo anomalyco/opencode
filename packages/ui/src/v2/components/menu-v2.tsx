@@ -144,6 +144,7 @@ function MenuV2SubContent(props: ComponentProps<typeof DropdownMenu.SubContent>)
     <DropdownMenu.SubContent
       {...r}
       data-component="menu-v2-content"
+      data-menu-v2-kind="submenu"
       classList={{ ...s.classList, [s.class ?? ""]: !!s.class }}
     />
   )
@@ -177,6 +178,7 @@ function MenuV2Content(props: ComponentProps<typeof DropdownMenu.Content>) {
     <DropdownMenu.Content
       {...r}
       data-component="menu-v2-content"
+      data-menu-v2-kind="root"
       classList={{ ...s.classList, [s.class ?? ""]: !!s.class }}
     />
   )
@@ -196,6 +198,7 @@ function MenuV2ContextContent(props: ComponentProps<typeof ContextMenu.Content>)
     <ContextMenu.Content
       {...r}
       data-component="menu-v2-content"
+      data-menu-v2-kind="context"
       classList={{ ...s.classList, [s.class ?? ""]: !!s.class }}
     />
   )

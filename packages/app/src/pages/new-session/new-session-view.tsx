@@ -1,8 +1,8 @@
 import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { Mark } from "@opencode-ai/ui/logo"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
-import { WordmarkV2 } from "@opencode-ai/ui/v2/wordmark-v2"
 import { Show, createMemo, createSignal, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Portal } from "solid-js/web"
@@ -31,15 +31,22 @@ export function NewSessionView(props: {
   project: PromptProjectController
   workspace: NewSessionWorkspaceController
 }) {
+  const language = useLanguage()
+
   return (
-    <div class="@container relative flex flex-col min-h-0 h-full flex-1">
+    <div data-component="new-session-view" class="@container relative flex flex-col min-h-0 h-full flex-1">
       <div
         data-component="session-new-design"
         class="relative flex-1 min-h-0 overflow-hidden rounded-[10px] bg-v2-background-bg-deep"
       >
-        <div class="absolute inset-x-0 top-[25.375%] flex justify-center px-6">
+        <div data-component="new-session-watermark" aria-hidden="true">
+          <Mark class="size-full" />
+        </div>
+        <div data-component="new-session-content" class="absolute inset-x-0 top-[25.375%] flex justify-center px-6">
           <div class={NEW_SESSION_CONTENT_WIDTH}>
-            <WordmarkV2 class="h-auto w-full text-v2-background-bg-inverse" />
+            <div data-component="new-session-heading">
+              <h1>{language.t("session.new.title")}</h1>
+            </div>
             <div class="mt-8 flex flex-col gap-8">
               <PromptInputV2Composer controller={props.input} />
               <Show when={props.project.empty()}>
