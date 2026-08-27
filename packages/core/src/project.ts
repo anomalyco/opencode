@@ -249,15 +249,14 @@ const layer = Layer.effect(
       const value = input.trim()
       if (!value) return undefined
 
-      try {
-        const parsed = new URL(value)
+      const parsed = URL.parse(value)
+      if (parsed) {
         if (parsed.protocol === "file:") return undefined
         return parts(parsed.hostname, parsed.pathname)
-      } catch {
-        const scp = value.match(/^([^@/:]+@)?([^/:]+):(.+)$/)
-        if (scp) return parts(scp[2], scp[3])
-        return undefined
       }
+      const scp = value.match(/^([^@/:]+@)?([^/:]+):(.+)$/)
+      if (scp) return parts(scp[2], scp[3])
+      return undefined
     }
 
     function parts(host: string, name: string) {
