@@ -5756,7 +5756,7 @@ export type ExperimentalPersistentPtyCreateInput = {
   readonly command?: {
     readonly command?: string
     readonly args: ReadonlyArray<string>
-    readonly cwd: string
+    readonly cwd?: string
     readonly title: string
     readonly env: { readonly [x: string]: string }
     readonly size?: { readonly cols: number; readonly rows: number }
@@ -5764,15 +5764,15 @@ export type ExperimentalPersistentPtyCreateInput = {
   readonly args: {
     readonly command?: string
     readonly args: ReadonlyArray<string>
-    readonly cwd: string
+    readonly cwd?: string
     readonly title: string
     readonly env: { readonly [x: string]: string }
     readonly size?: { readonly cols: number; readonly rows: number }
   }["args"]
-  readonly cwd: {
+  readonly cwd?: {
     readonly command?: string
     readonly args: ReadonlyArray<string>
-    readonly cwd: string
+    readonly cwd?: string
     readonly title: string
     readonly env: { readonly [x: string]: string }
     readonly size?: { readonly cols: number; readonly rows: number }
@@ -5780,7 +5780,7 @@ export type ExperimentalPersistentPtyCreateInput = {
   readonly title: {
     readonly command?: string
     readonly args: ReadonlyArray<string>
-    readonly cwd: string
+    readonly cwd?: string
     readonly title: string
     readonly env: { readonly [x: string]: string }
     readonly size?: { readonly cols: number; readonly rows: number }
@@ -5788,7 +5788,7 @@ export type ExperimentalPersistentPtyCreateInput = {
   readonly env: {
     readonly command?: string
     readonly args: ReadonlyArray<string>
-    readonly cwd: string
+    readonly cwd?: string
     readonly title: string
     readonly env: { readonly [x: string]: string }
     readonly size?: { readonly cols: number; readonly rows: number }
@@ -5796,7 +5796,7 @@ export type ExperimentalPersistentPtyCreateInput = {
   readonly size?: {
     readonly command?: string
     readonly args: ReadonlyArray<string>
-    readonly cwd: string
+    readonly cwd?: string
     readonly title: string
     readonly env: { readonly [x: string]: string }
     readonly size?: { readonly cols: number; readonly rows: number }

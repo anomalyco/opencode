@@ -69,7 +69,7 @@ export interface Interface {
     input: {
       readonly command?: string
       readonly args: readonly string[]
-      readonly cwd: string
+      readonly cwd?: string
       readonly title: string
       readonly env: Readonly<Record<string, string>>
       readonly cols?: number
@@ -157,7 +157,7 @@ export const layer = Layer.effect(
       input: {
         readonly command?: string
         readonly args: readonly string[]
-        readonly cwd: string
+        readonly cwd?: string
         readonly title: string
         readonly env: Readonly<Record<string, string>>
         readonly cols?: number
@@ -170,7 +170,7 @@ export const layer = Layer.effect(
           op: "create",
           program: input.command ?? ShellSelect.environment(global.bin),
           args: input.args,
-          cwd: input.cwd,
+          cwd: input.cwd ?? path.resolve("/"),
           title: input.title,
           group_id: sessionID,
           env: input.env,

@@ -72,6 +72,17 @@ smoke(
           expect(terminal.cwd).toBe(fixture.root)
           expect(terminal.cwd).not.toBe(process.cwd())
           yield* request(base, "DELETE", `/api/experimental/persistent-pty/${terminal.id}`)
+          const root = Schema.decodeUnknownSync(PersistentPty.Info)(
+            (yield* request(base, "POST", createPath, {
+              args: ["-c", "printf 'root-cwd:%s\\n' \"$PWD\"; cat"],
+              title: "root directory",
+              env: {},
+            })).data,
+          )
+          expect(root.cwd).toBe(path.parse(fixture.root).root)
+          expect(root.cwd).not.toBe(process.cwd())
+          expect(yield* waitForText(base, root.id, `root-cwd:${root.cwd}`)).toContain(`root-cwd:${root.cwd}`)
+          yield* request(base, "DELETE", `/api/experimental/persistent-pty/${root.id}`)
           const events = yield* Effect.promise(() => openEventStream(base))
           const first = Schema.decodeUnknownSync(PersistentPty.Info)(
             (yield* request(base, "POST", createPath, {
