@@ -1306,7 +1306,7 @@ describe("ShellTool", () => {
               },
               {
                 type: "text",
-                text: "You will be notified when the command finishes. Avoid checking its progress unless you need the output before completion.",
+                text: "You will be notified automatically when the command finishes. Do not sleep or wait for it; avoid checking its progress unless you need the output before completion.",
               },
             ])
             expect((yield* shell.list()).map((info) => info.id)).toContain(id)
@@ -1546,7 +1546,7 @@ describe("ShellTool", () => {
             })
             expect(settled.content?.[1]).toEqual({
               type: "text",
-              text: "You will be notified when the command finishes. Avoid checking its progress unless you need the output before completion.",
+              text: "You will be notified automatically when the command finishes. Do not sleep or wait for it; avoid checking its progress unless you need the output before completion.",
             })
             yield* Effect.sleep(Duration.millis(100))
             expect((yield* shell.get(id)).status).toBe("running")
