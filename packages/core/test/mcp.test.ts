@@ -475,6 +475,37 @@ test("retains output schemas across paginated MCP discovery", async () => {
   ])
 })
 
+test("lists paginated prompts and invokes them through the MCP client", async () => {
+  const result = await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const connection = yield* connect(
+          "prompts",
+          new ConfigMCP.Local({
+            type: "local",
+            command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-prompts.ts")],
+          }),
+          import.meta.dir,
+        )
+        return {
+          prompts: yield* connection.prompts(),
+          result: yield* connection.prompt({ name: "first", args: { topic: "Effect" } }),
+        }
+      }),
+    ),
+  )
+
+  expect(result.prompts).toEqual([
+    {
+      name: "first",
+      description: "First prompt",
+      arguments: [{ name: "topic", description: "Topic to explain", required: true }],
+    },
+    { name: "second", description: "Second prompt", arguments: undefined },
+  ])
+  expect(result.result).toEqual({ messages: [{ role: "user", content: { type: "text", text: "Effect" } }] })
+})
+
 test("spawns local MCP servers through the location environment", async () => {
   const spawns: Array<ChildProcess.Command> = []
   const cwd = path.join(import.meta.dir, "fixture")

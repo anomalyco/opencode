@@ -10,17 +10,14 @@ import {
   CallToolResultSchema,
   ElicitationCompleteNotificationSchema,
   ElicitRequestSchema,
-  GetPromptResultSchema,
   type Implementation,
   type ElicitRequestFormParams,
   type ElicitRequestParams,
   type ElicitRequestURLParams,
   type ElicitResult,
-  ListPromptsResultSchema,
   ListRootsRequestSchema,
   ListToolsResultSchema,
   PromptListChangedNotificationSchema,
-  PromptSchema,
   ResourceListChangedNotificationSchema,
   type LoggingMessageNotification,
   LoggingMessageNotificationSchema,
@@ -41,10 +38,6 @@ const toError = (error: unknown) => (error instanceof Error ? error : new Error(
 const TolerantListToolsResult = ListToolsResultSchema.extend({
   tools: ToolSchema.omit({ outputSchema: true }).array(),
 })
-const TolerantListPromptsResult = ListPromptsResultSchema.extend({
-  prompts: PromptSchema.array(),
-})
-
 export class NeedsAuthError extends Schema.TaggedError<NeedsAuthError>()("MCP.NeedsAuthError", {
   server: Schema.String,
 }) {
@@ -301,12 +294,8 @@ export const connect = Effect.fnUntraced(function* (
           const prompts = yield* Effect.tryPromise({
             try: () =>
               paginate(
-                async (cursor) => {
-                  const params = cursor === undefined ? undefined : { cursor }
-                  return client.request({ method: "prompts/list", params }, TolerantListPromptsResult, {
-                    timeout: catalogTimeout,
-                  })
-                },
+                (cursor) =>
+                  client.listPrompts(cursor === undefined ? undefined : { cursor }, { timeout: catalogTimeout }),
                 (result) => result.prompts,
               ),
             catch: toError,
@@ -396,11 +385,7 @@ export const connect = Effect.fnUntraced(function* (
       prompt: (input) =>
         Effect.tryPromise({
           try: (signal) =>
-            client.request(
-              { method: "prompts/get", params: { name: input.name, arguments: input.args ?? {} } },
-              GetPromptResultSchema,
-              { signal, timeout: executionTimeout },
-            ),
+            client.getPrompt({ name: input.name, arguments: input.args ?? {} }, { signal, timeout: executionTimeout }),
           catch: toError,
         }).pipe(
           Effect.map((result) => ({
