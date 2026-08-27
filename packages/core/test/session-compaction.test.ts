@@ -20,6 +20,8 @@ import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { App } from "@opencode-ai/core/app"
 import { Agent } from "@opencode-ai/core/agent"
+import { Model } from "@opencode-ai/core/model"
+import { Provider } from "@opencode-ai/core/provider"
 import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { Location } from "@opencode-ai/core/location"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -290,6 +292,54 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
       { type: Bus.versionedType(SessionEvent.Compaction.Started.type, 1) },
       { type: Bus.versionedType(SessionEvent.UsageRecorded.type, 1) },
       { type: Bus.versionedType(SessionEvent.Compaction.Ended.type, 1) },
+    ])
+  }),
+)
+
+it.effect("manual compaction records model resolution failures without calling the model", () =>
+  Effect.gen(function* () {
+    requests = []
+    const compaction = yield* SessionCompaction.Service
+    const store = yield* SessionStore.Service
+    const sessionID = Session.ID.make("ses_manual_resolution_failure")
+    const session = yield* insertSession(sessionID)
+    const modelRequests = yield* SessionModelRequest.Service
+    const inputID = SessionMessage.ID.make("msg_manual_resolution_failure")
+
+    expect(
+      yield* compaction.compactManual({
+        session,
+        resolveModel: () =>
+          Effect.fail(
+            new SessionRunnerModel.ModelUnavailableError({
+              providerID: Provider.ID.make("test"),
+              modelID: Model.ID.make("missing"),
+            }),
+          ),
+        prepare: modelRequests.prepare,
+        messages: [
+          {
+            id: SessionMessage.ID.create(),
+            type: "user",
+            text: "Summarize this conversation.",
+            time: { created: DateTime.makeUnsafe(0) },
+          },
+        ],
+        inputID,
+      }),
+    ).toEqual({
+      status: "failed",
+      error: { type: "provider.no-route", message: "Model unavailable: test/missing" },
+    })
+    expect(requests).toHaveLength(0)
+    expect(yield* store.context(sessionID)).toMatchObject([
+      {
+        id: inputID,
+        type: "compaction",
+        status: "failed",
+        reason: "manual",
+        error: { type: "provider.no-route", message: "Model unavailable: test/missing" },
+      },
     ])
   }),
 )

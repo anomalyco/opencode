@@ -168,7 +168,6 @@ const serialize = (message: SessionMessage.Info) => {
       })
       .join("\n")
   }
-  if (message.type === "system") return `[System update]: ${message.text}`
   if (message.type === "synthetic") return `[Synthetic context]: ${message.text}`
   if (message.type === "skill") return `[Skill activated: ${message.name}]\n${message.text}`
   if (message.type === "shell")
@@ -392,26 +391,27 @@ const make = (dependencies: Dependencies) => {
         error: { type: "compaction.unavailable", message: "Nothing to compact yet" },
         inputID: input.inputID,
       })
-    const resolved = yield* input.resolveModel(input.session).pipe(
-      Effect.catch((cause) =>
-        failed({
-          sessionID: input.session.id,
-          reason: "manual",
-          error: toSessionError(cause),
-          inputID: input.inputID,
-        }),
-      ),
+    return yield* input.resolveModel(input.session).pipe(
+      Effect.matchEffect({
+        onFailure: (cause) =>
+          failed({
+            sessionID: input.session.id,
+            reason: "manual",
+            error: toSessionError(cause),
+            inputID: input.inputID,
+          }),
+        onSuccess: (resolved) =>
+          execute({
+            session: input.session,
+            resolved,
+            prepare: input.prepare,
+            reason: "manual",
+            inputID: input.inputID,
+            started: input.started,
+            ...content,
+          }),
+      }),
     )
-    if ("status" in resolved) return resolved
-    return yield* execute({
-      session: input.session,
-      resolved,
-      prepare: input.prepare,
-      reason: "manual",
-      inputID: input.inputID,
-      started: input.started,
-      ...content,
-    })
   })
   return Service.of({
     transform: state.transform,
