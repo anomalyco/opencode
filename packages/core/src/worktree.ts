@@ -273,7 +273,7 @@ const layer = Layer.effect(
         .get()
         .pipe(Effect.orDie)
       const command = project?.commands?.start?.trim()
-      if (command && project) {
+      if (command) {
         const windows = process.platform === "win32"
         yield* processService
           .run(

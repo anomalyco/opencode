@@ -41,7 +41,7 @@ export interface Resolved {
   readonly previous?: ID
   readonly id: ID
   readonly directory: AbsolutePath
-  // This checkout's main directory, not the shared display canonical across clones.
+  // This checkout's main directory; the stored project canonical may be another clone.
   readonly canonical: AbsolutePath
   readonly vcs?: Vcs
   readonly vcsBackend?: string
