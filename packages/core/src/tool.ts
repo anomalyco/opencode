@@ -211,8 +211,7 @@ const layer = Layer.effect(
           }
           const direct = new Map(Array.from(active).filter(([, tool]) => tool.options?.codemode === false))
           const codemode = new Map(Array.from(active).filter(([, tool]) => tool.options?.codemode !== false))
-          const executeRule = rules.findLast((rule) => Wildcard.match("execute", rule.action))
-          const codemodeEnabled = executeRule?.resource !== "*" || executeRule.effect !== "deny"
+          const codemodeEnabled = !whollyDisabled("execute", rules)
           const codemodeTool = codemodeEnabled
             ? CodeModeTool.create(codemode, (name, tool, input, context) =>
                 beforeExecute(name, input, context).pipe(
