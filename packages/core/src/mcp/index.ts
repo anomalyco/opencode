@@ -273,14 +273,12 @@ export const layer = (options?: Options) =>
           return MCPOAuth.provider({ ...base, store: MCPOAuth.memoryStore() })
         const credentialID = found.id
         const methodID = found.value.methodID
-        const integrationID = entry.integrationID
         // Tracks the refresh token this provider last presented, so invalidate can tell whether the SDK
         // rejected the currently-stored credential or a snapshot another connection has already rotated past.
         let presented = found.value.refresh
         const readOAuthCredential = async () => {
-          const stored = await Effect.runPromise(credentials.list(integrationID))
-          const match = stored.find((credential) => credential.id === credentialID)
-          return match && match.value.type === "oauth" ? match.value : undefined
+          const stored = await Effect.runPromise(credentials.get(credentialID))
+          return stored?.value.type === "oauth" ? stored.value : undefined
         }
         return MCPOAuth.provider({
           ...base,
