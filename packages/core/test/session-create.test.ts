@@ -31,6 +31,7 @@ import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { SessionTransfer } from "@opencode-ai/core/session/transfer"
+import { ToolOutput } from "@opencode-ai/core/tool-output"
 import { Workspace } from "@opencode-ai/core/workspace"
 import { testEffect } from "./lib/effect"
 import { globalProjectLayer } from "./lib/project"
@@ -984,6 +985,61 @@ describe("Session.create", () => {
         expect(shell?.output?.output).toContain("attached")
         expect(shell?.output?.truncated).toBe(false)
         expect(shell?.time.completed).toBeDefined()
+      }),
+    ),
+  )
+
+  it.live("truncates direct shell output using the shared shell preview policy", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const session = yield* Session.Service
+        const created = yield* session.create({
+          location: Location.Ref.make({ directory: AbsolutePath.make(directory) }),
+        })
+        const bytes = ToolOutput.MAX_BYTES + 1024
+        const command =
+          process.platform === "win32"
+            ? `[Console]::Out.Write('output-start' + ('x' * ${bytes}) + 'output-end')`
+            : `printf output-start; head -c ${bytes} /dev/zero | tr '\\0' 'x'; printf output-end`
+
+        yield* session.shell({ sessionID: created.id, command })
+
+        const messages = yield* session.messages({ sessionID: created.id, order: "asc" })
+        const shell = messages.find((message): message is SessionMessage.Shell => message.type === "shell")
+        expect(shell?.output?.truncated).toBe(true)
+        expect(shell?.output?.output).not.toContain("output-start")
+        expect(shell?.output?.output).toContain("output-end")
+        expect(shell?.output?.output).toContain("output truncated; full output saved to:")
+      }),
+    ),
+  )
+
+  it.live("applies configured output limits to direct shell commands", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(() =>
+          Bun.write(
+            path.join(directory, "opencode.json"),
+            JSON.stringify({ tool_output: { max_lines: 2, max_bytes: 1_000 } }),
+          ),
+        )
+        const session = yield* Session.Service
+        const created = yield* session.create({
+          location: Location.Ref.make({ directory: AbsolutePath.make(directory) }),
+        })
+        const command =
+          process.platform === "win32"
+            ? "[Console]::Out.Write('one' + [Environment]::NewLine + 'two' + [Environment]::NewLine + 'three')"
+            : "printf 'one\\ntwo\\nthree'"
+
+        yield* session.shell({ sessionID: created.id, command })
+
+        const messages = yield* session.messages({ sessionID: created.id, order: "asc" })
+        const shell = messages.find((message): message is SessionMessage.Shell => message.type === "shell")
+        expect(shell?.output?.truncated).toBe(true)
+        expect(shell?.output?.output).not.toContain("one")
+        expect(shell?.output?.output.replaceAll("\r\n", "\n")).toStartWith("two\nthree")
+        expect(shell?.output?.output).toContain("output truncated; full output saved to:")
       }),
     ),
   )
