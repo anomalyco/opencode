@@ -176,7 +176,7 @@ const layer: Layer.Layer<Service, never, Auth.Service | Plugin.Service> = Layer.
         }
       }
 
-      const result = yield* Effect.promise(() => method.authorize(input.inputs))
+      const result = yield* Effect.promise(() => Promise.resolve(method.authorize(input.inputs)))
       pending.set(input.providerID, result)
       return {
         url: result.url,
