@@ -36,6 +36,50 @@ function createModel(fetchFn: ReturnType<typeof mock>) {
 // from forking the OpenAI Responses model), which left it unreachable by anything reading the
 // "copilot" namespace and let stale itemIds slip past stripping meant for that namespace.
 describe("doGenerate", () => {
+  test("resolves forced tool choices from supplied definitions", async () => {
+    const requests: unknown[] = []
+    const model = createModel(
+      mock(async (_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+        requests.push(await new Response(init?.body).json())
+        return new Response(
+          JSON.stringify({
+            id: "resp_1",
+            created_at: 0,
+            model: "test-model",
+            output: [],
+            usage: { input_tokens: 1, output_tokens: 1 },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        )
+      }),
+    )
+    const hostedTool = { type: "provider" as const, id: "openai.web_search" as const, name: "lookup", args: {} }
+
+    await model.doGenerate({
+      prompt: TEST_PROMPT,
+      tools: [hostedTool],
+      toolChoice: { type: "tool", toolName: "lookup" },
+    })
+    await model.doGenerate({
+      prompt: TEST_PROMPT,
+      tools: [{ type: "function", name: "web_search", inputSchema: { type: "object" } }],
+      toolChoice: { type: "tool", toolName: "web_search" },
+    })
+    await model.doGenerate({ prompt: TEST_PROMPT, tools: [hostedTool], toolChoice: { type: "auto" } })
+    await model.doGenerate({ prompt: TEST_PROMPT, tools: [hostedTool] })
+
+    expect(requests).toMatchObject([
+      { tools: [{ type: "web_search" }], tool_choice: { type: "web_search" } },
+      {
+        tools: [{ type: "function", name: "web_search" }],
+        tool_choice: { type: "function", name: "web_search" },
+      },
+      { tools: [{ type: "web_search" }], tool_choice: "auto" },
+      { tools: [{ type: "web_search" }] },
+    ])
+    expect(requests[3]).not.toHaveProperty("tool_choice")
+  })
+
   test("attaches item metadata under the copilot namespace, not openai", async () => {
     const mockFetch = createMockFetch({
       id: "resp_1",
@@ -129,6 +173,55 @@ describe("doGenerate", () => {
 })
 
 describe("doStream", () => {
+  test("keeps a hosted search's supplied name through stream completion", async () => {
+    const model = createModel(
+      createStreamFetch([
+        {
+          type: "response.output_item.added",
+          output_index: 0,
+          item: {
+            type: "web_search_call",
+            id: "search_1",
+            status: "in_progress",
+            action: { type: "search", query: "news" },
+          },
+        },
+        {
+          type: "response.output_item.done",
+          output_index: 0,
+          item: {
+            type: "web_search_call",
+            id: "search_1",
+            status: "completed",
+            action: { type: "search", query: "news" },
+          },
+        },
+      ]),
+    )
+    const result = await model.doStream({
+      prompt: TEST_PROMPT,
+      tools: [{ type: "provider", id: "openai.web_search", name: "lookup", args: {} }],
+    })
+    const reader = result.stream.getReader()
+    const events: LanguageModelV3StreamPart[] = []
+    while (true) {
+      const item = await reader.read()
+      if (item.done) break
+      if (
+        item.value.type === "tool-input-start" ||
+        item.value.type === "tool-call" ||
+        item.value.type === "tool-result"
+      )
+        events.push(item.value)
+    }
+
+    expect(events).toMatchObject([
+      { type: "tool-input-start", id: "search_1", toolName: "lookup" },
+      { type: "tool-call", toolCallId: "search_1", toolName: "lookup" },
+      { type: "tool-result", toolCallId: "search_1", toolName: "lookup" },
+    ])
+  })
+
   test("streams sequential Copilot reasoning summary blocks", async () => {
     const model = createModel(
       createStreamFetch([

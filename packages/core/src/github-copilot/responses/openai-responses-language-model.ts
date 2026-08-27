@@ -366,13 +366,21 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
       toolChoice,
       strictJsonSchema,
     })
+    const selectedTool =
+      toolChoice?.type === "tool" ? tools?.find((tool) => tool.name === toolChoice.toolName) : undefined
 
     return {
       webSearchToolName,
       args: {
         ...baseArgs,
         tools: openaiTools,
-        tool_choice: openaiToolChoice,
+        tool_choice:
+          toolChoice?.type === "tool"
+            ? ((selectedTool?.type === "provider" ? getProviderToolChoice(selectedTool.id) : undefined) ?? {
+                type: "function" as const,
+                name: toolChoice.toolName,
+              })
+            : openaiToolChoice,
       },
       warnings: [...warnings, ...toolWarnings],
     }
@@ -985,7 +993,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
                 controller.enqueue({
                   type: "tool-call",
                   toolCallId: value.item.id,
-                  toolName: "web_search",
+                  toolName: webSearchToolName ?? "web_search",
                   input: JSON.stringify({ action: value.item.action }),
                   providerExecuted: true,
                 })
@@ -993,7 +1001,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
                 controller.enqueue({
                   type: "tool-result",
                   toolCallId: value.item.id,
-                  toolName: "web_search",
+                  toolName: webSearchToolName ?? "web_search",
                   result: { status: value.item.status },
                 })
               } else if (value.item.type === "computer_call") {
@@ -1672,6 +1680,22 @@ type ResponsesModelConfig = {
   requiredAutoTruncation: boolean
   supportsFlexProcessing: boolean
   supportsPriorityProcessing: boolean
+}
+
+function getProviderToolChoice(id: LanguageModelV3ProviderTool["id"]) {
+  switch (id) {
+    case "openai.file_search":
+      return { type: "file_search" } as const
+    case "openai.web_search_preview":
+      return { type: "web_search_preview" } as const
+    case "openai.web_search":
+      return { type: "web_search" } as const
+    case "openai.code_interpreter":
+      return { type: "code_interpreter" } as const
+    case "openai.image_generation":
+      return { type: "image_generation" } as const
+  }
+  return undefined
 }
 
 function getResponsesModelConfig(modelId: string): ResponsesModelConfig {
