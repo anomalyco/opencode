@@ -32,9 +32,10 @@ export type MutableInfo = Omit<Types.DeepMutable<Info>, "api"> & {
 
 export function parse(input: string): { providerID: ProviderV2.ID; modelID: ID } {
   const [providerID, ...modelID] = input.split("/")
+  const trimmed = modelID.join("/").replace(/\/+$/, "")
   return {
     providerID: ProviderV2.ID.make(providerID),
-    modelID: ID.make(modelID.join("/")),
+    modelID: ID.make(trimmed),
   }
 }
 
