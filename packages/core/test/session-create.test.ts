@@ -92,6 +92,33 @@ function withTmp<A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>) {
 }
 
 describe("Session.create", () => {
+  liveIt.live("preserves the project canonical directory when creating a session in another clone", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const main = AbsolutePath.make(path.join(directory, "repo"))
+        const clone = AbsolutePath.make(path.join(directory, "other-clone"))
+        yield* Effect.promise(async () => {
+          await $`git init -q ${main}`.cwd(directory)
+          await $`git -c user.name=Test -c user.email=test@opencode.test -c commit.gpgsign=false commit --allow-empty -qm root`
+            .cwd(main)
+            .quiet()
+          await $`git remote add origin git@github.com:owner/repo.git`.cwd(main)
+          await $`git clone --no-hardlinks ${main} ${clone}`.quiet()
+          await $`git remote set-url origin https://github.com/owner/repo.git`.cwd(clone)
+        })
+        const sessions = yield* Session.Service
+        const projects = yield* Project.Service
+        const first = yield* sessions.create({ location: Location.Ref.make({ directory: main }) })
+        const second = yield* sessions.create({ location: Location.Ref.make({ directory: clone }) })
+
+        expect(second.projectID).toBe(first.projectID)
+        expect((yield* projects.list()).find((project) => project.id === first.projectID)?.canonical).toBe(main)
+        expect((yield* sessions.get(first.id)).location.directory).toBe(main)
+        expect((yield* sessions.get(second.id)).location.directory).toBe(clone)
+      }),
+    ),
+  )
+
   liveIt.live("follows the directory's project identity established after creation", () =>
     withTmp((directory) =>
       Effect.gen(function* () {

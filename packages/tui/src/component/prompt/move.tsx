@@ -20,15 +20,24 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
   const [destination, setDestination] = createSignal<MoveSessionSelection>()
 
   async function create(name: string) {
-    const projectID = await resolveProjectID()
-    if (!projectID) return
     setCreating(true)
     setProgress("Creating worktree")
     try {
+      const sessionID = input.sessionID()
+      const session = sessionID ? await resolveSession(sessionID) : undefined
+      if (sessionID && !session) throw new Error("Unable to determine current session location")
+      const location = session?.location ?? {
+        ...data.location.default(),
+        directory: data.location.default().directory || paths.cwd,
+      }
+      if (!data.location.info(location)) await data.location.syncInfo(location)
+      const project = data.location.info(location)?.project
+      if (!project) throw new Error("Unable to determine current project")
       const result = await client.api.worktree.create({
-        projectID,
+        projectID: project.id,
         strategy: "git",
-        directory: path.join(paths.worktree, projectID.slice(0, 6)),
+        from: project.canonical,
+        directory: path.join(paths.worktree, project.id.slice(0, 6)),
         name,
       })
       const directory = result.directory

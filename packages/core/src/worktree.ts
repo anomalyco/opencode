@@ -267,7 +267,7 @@ const layer = Layer.effect(
         }),
       )
       const project = yield* db
-        .select({ worktree: ProjectTable.worktree, commands: ProjectTable.commands })
+        .select({ commands: ProjectTable.commands })
         .from(ProjectTable)
         .where(eq(ProjectTable.id, input.projectID))
         .get()
@@ -280,7 +280,7 @@ const layer = Layer.effect(
             ChildProcess.make(windows ? command : "bash", windows ? [] : ["-lc", command], {
               cwd: result.directory,
               env: {
-                OPENCODE_WORKTREE_BASE: project.worktree,
+                OPENCODE_WORKTREE_BASE: sourceDirectory,
                 OPENCODE_WORKTREE_PATH: result.directory,
               },
               extendEnv: true,
