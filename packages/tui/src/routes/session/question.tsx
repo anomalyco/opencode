@@ -5,6 +5,7 @@ import type { TextareaRenderable } from "@opentui/core"
 import { selectedForeground, tint, useTheme } from "../../context/theme"
 import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
 import { useSDK } from "../../context/sdk"
+import { useSync } from "../../context/sync"
 import { SplitBorder } from "../../ui/border"
 import { useTuiConfig } from "../../config"
 import { useBindings, useOpencodeModeStack } from "../../keymap"
@@ -13,6 +14,7 @@ const QUESTION_MODE = "question"
 
 export function QuestionPrompt(props: { request: QuestionRequest; directory?: string }) {
   const sdk = useSDK()
+  const sync = useSync()
   const { theme } = useTheme()
   const renderer = useRenderer()
   const tuiConfig = useTuiConfig()
@@ -45,19 +47,32 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
     return store.answers[store.tab]?.includes(value) ?? false
   })
 
+  function forceDismiss() {
+    sync.set("question", props.request.sessionID, [])
+  }
+
   function submit() {
     const answers = questions().map((_, i) => store.answers[i] ?? [])
-    void sdk.client.question.reply({
+    sdk.client.question.reply({
       requestID: props.request.id,
       directory: props.directory,
       answers,
+    }).then(() => {
+      // server will send question.replied event — sync handles it
+    }).catch(() => {
+      // question already gone server-side; dismiss locally
+      forceDismiss()
     })
   }
 
   function reject() {
-    void sdk.client.question.reject({
+    sdk.client.question.reject({
       requestID: props.request.id,
       directory: props.directory,
+    }).then(() => {
+      // server will send question.rejected event — sync handles it
+    }).catch(() => {
+      forceDismiss()
     })
   }
 
@@ -71,10 +86,14 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
       setStore("custom", inputs)
     }
     if (single()) {
-      void sdk.client.question.reply({
+      sdk.client.question.reply({
         requestID: props.request.id,
         directory: props.directory,
         answers: [[answer]],
+      }).then(() => {
+        // server will send question.replied event — sync handles it
+      }).catch(() => {
+        forceDismiss()
       })
       return
     }
