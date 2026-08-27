@@ -1658,10 +1658,9 @@ export type ExperimentalPersistentPtyListOperation<E = never> = (
 
 export type ExperimentalPersistentPtyCreateInput = {
   readonly sessionID: Session.ID
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   readonly command?: string | undefined
   readonly args: ReadonlyArray<string>
-  readonly cwd?: string | undefined
+  readonly cwd: string
   readonly title: string
   readonly env: { readonly [x: string]: string }
   readonly size?: { readonly cols: number; readonly rows: number } | undefined

@@ -1698,7 +1698,6 @@ export function make(options: ClientOptions) {
             {
               method: "POST",
               path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/terminal`,
-              query: { location: input["location"] },
               body: {
                 command: input["command"],
                 args: input["args"],

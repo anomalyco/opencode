@@ -6,7 +6,6 @@ import path from "node:path"
 import { expect } from "bun:test"
 import { PersistentPty } from "@opencode-ai/schema/persistent-pty"
 import { Session } from "@opencode-ai/schema/session"
-import { ShellSelect } from "@opencode-ai/core/shell/select"
 import { Effect, Schema } from "effect"
 import { HttpServer } from "effect/unstable/http"
 import { it } from "../../core/test/lib/effect"
@@ -33,7 +32,6 @@ smoke(
         delete process.env.OPENCODE_PTY_RUNTIME_DIR
         process.env.XDG_RUNTIME_DIR = runtime
         process.env.SHELL = "/bin/sh"
-        ShellSelect.resolve.reset()
         return {
           database,
           directory: path.join(
@@ -60,8 +58,13 @@ smoke(
           expect(existsSync(path.join(fixture.directory, "service.json"))).toBeFalse()
           expect((yield* request(base, "GET", `/api/experimental/session/${sessionID}/terminal`)).data).toEqual([])
           expect(existsSync(path.join(fixture.directory, "service.json"))).toBeFalse()
-          const defaults = { args: [], title: "default shell", env: { SHELL: "/missing/client/zsh" } }
-          const createPath = `/api/experimental/session/${sessionID}/terminal?location[directory]=${encodeURIComponent(fixture.root)}`
+          const defaults = {
+            args: [],
+            cwd: fixture.root,
+            title: "default shell",
+            env: { SHELL: "/missing/client/zsh" },
+          }
+          const createPath = `/api/experimental/session/${sessionID}/terminal`
           const terminal = Schema.decodeUnknownSync(PersistentPty.Info)(
             (yield* request(base, "POST", createPath, defaults)).data,
           )
@@ -202,7 +205,6 @@ smoke(
           restore("OPENCODE_PTY_RUNTIME_DIR", fixture.environment.runtime)
           restore("XDG_RUNTIME_DIR", fixture.environment.xdg)
           restore("SHELL", fixture.environment.shell)
-          ShellSelect.resolve.reset()
         }),
     ),
   20_000,

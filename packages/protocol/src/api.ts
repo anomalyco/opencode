@@ -19,7 +19,7 @@ import { HealthGroup } from "./groups/health.js"
 import { ServerGroup } from "./groups/server.js"
 import { DebugGroup } from "./groups/debug.js"
 import { PtyGroup } from "./groups/pty.js"
-import { makePersistentPtyGroup } from "./groups/persistent-pty.js"
+import { PersistentPtyGroup } from "./groups/persistent-pty.js"
 import { ShellGroup } from "./groups/shell.js"
 import { ReferenceGroup } from "./groups/reference.js"
 import { Authorization } from "./middleware/authorization.js"
@@ -89,7 +89,7 @@ type ApiGroups<
   | typeof WorktreeGroup
   | typeof WorkspaceGroup
   | typeof GenerateGroup
-  | ReturnType<typeof makePersistentPtyGroup<LocationId, LocationService>>
+  | typeof PersistentPtyGroup
   | LocationGroups<LocationId>
   | FormGroups<LocationId, LocationService, FormLocationId, FormLocationService>
   | SessionGroups<SessionLocationId, SessionLocationService>
@@ -170,7 +170,7 @@ const makeApiFromGroup = <
     .add(SkillGroup.middleware(locationMiddleware))
     .add(eventGroup)
     .add(PtyGroup.middleware(locationMiddleware))
-    .add(makePersistentPtyGroup(locationMiddleware))
+    .add(PersistentPtyGroup)
     .add(ShellGroup.middleware(locationMiddleware))
     .add(ReferenceGroup.middleware(locationMiddleware))
     .add(WorktreeGroup)

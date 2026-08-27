@@ -1246,7 +1246,6 @@ const EndpointExperimentalPersistentPtyCreate =
     preserveEffect<ExperimentalPersistentPtyCreateOutput>()(
       raw["persistentPty.create"]({
         params: { sessionID: input["sessionID"] },
-        query: { location: input["location"] },
         payload: {
           command: input["command"],
           args: input["args"],

@@ -11,6 +11,7 @@ import { Bus } from "../bus.js"
 import { Database } from "../database/database.js"
 import { Pty } from "@opencode-ai/schema/pty"
 import { Global } from "@opencode-ai/util/global"
+import { ShellSelect } from "../shell/select.js"
 import {
   makeDaemonTransport,
   type DaemonTransport,
@@ -66,7 +67,7 @@ export interface Interface {
   readonly create: (
     sessionID: Session.ID,
     input: {
-      readonly command: string
+      readonly command?: string
       readonly args: readonly string[]
       readonly cwd: string
       readonly title: string
@@ -154,7 +155,7 @@ export const layer = Layer.effect(
     const create = Effect.fn("PersistentPty.create")(function* (
       sessionID: Session.ID,
       input: {
-        readonly command: string
+        readonly command?: string
         readonly args: readonly string[]
         readonly cwd: string
         readonly title: string
@@ -167,7 +168,7 @@ export const layer = Layer.effect(
         daemon,
         {
           op: "create",
-          program: input.command,
+          program: input.command ?? ShellSelect.environment(global.bin),
           args: input.args,
           cwd: input.cwd,
           title: input.title,

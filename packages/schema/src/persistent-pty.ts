@@ -18,7 +18,7 @@ export interface Info extends Schema.Schema.Type<typeof Info> {}
 export const CreateInput = Schema.Struct({
   command: optional(Schema.String),
   args: Schema.Array(Schema.String),
-  cwd: optional(Schema.String),
+  cwd: Schema.String,
   title: Schema.String,
   env: Schema.Record(Schema.String, Schema.String),
   size: optional(Schema.Struct({ cols: PositiveInt, rows: PositiveInt })),

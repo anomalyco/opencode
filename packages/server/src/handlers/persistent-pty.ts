@@ -1,8 +1,5 @@
 import { PersistentPty } from "@opencode-ai/core/persistent-pty"
 import { PtyTicket } from "@opencode-ai/core/pty/ticket"
-import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor-service"
-import { Location } from "@opencode-ai/core/location"
-import { ShellSelect } from "@opencode-ai/core/shell/select"
 import { ForbiddenError, PtyNotFoundError, ServiceUnavailableError } from "@opencode-ai/protocol/errors"
 import {
   PTY_CONNECT_TICKET_QUERY,
@@ -32,16 +29,12 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
       .handle(
         "persistentPty.create",
         Effect.fn(function* (ctx) {
-          const plugins = yield* PluginSupervisor.Service
-          yield* plugins.flush
-          const location = yield* Location.Service
-          const shell = yield* ShellSelect.Service
           return {
             data: yield* pty
               .create(ctx.params.sessionID, {
-                command: ctx.payload.command ?? (yield* shell.resolve({ priority: "config" })),
+                command: ctx.payload.command,
                 args: ctx.payload.args,
-                cwd: ctx.payload.cwd ?? location.directory,
+                cwd: ctx.payload.cwd,
                 title: ctx.payload.title,
                 env: ctx.payload.env,
                 cols: ctx.payload.size?.cols,
