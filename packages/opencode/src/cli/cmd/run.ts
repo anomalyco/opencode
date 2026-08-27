@@ -181,7 +181,8 @@ export const RunCommand = effectCmd({
         alias: ["f"],
         type: "string",
         array: true,
-        describe: "file(s) to attach to message",
+        nargs: 1,
+        describe: "file(s) to attach to message, repeat -f for each file",
       })
       .option("title", {
         type: "string",
