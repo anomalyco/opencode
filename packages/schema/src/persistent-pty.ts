@@ -15,6 +15,14 @@ export const Info = Schema.Struct({
 }).annotate({ identifier: "PersistentPty.Info" })
 export interface Info extends Schema.Schema.Type<typeof Info> {}
 
+export const Handoff = Schema.Struct({
+  directory: Schema.String,
+  instanceID: Schema.String,
+  ticket: Schema.String,
+  expiresAt: Schema.Number,
+}).annotate({ identifier: "PersistentPty.Handoff" })
+export interface Handoff extends Schema.Schema.Type<typeof Handoff> {}
+
 export const CreateInput = Schema.Struct({
   command: optional(Schema.String),
   args: Schema.Array(Schema.String),

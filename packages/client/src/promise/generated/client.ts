@@ -199,6 +199,7 @@ import type {
   ExperimentalPersistentPtyCreateInput,
   ExperimentalPersistentPtyCreateOutput,
   ExperimentalPersistentPtyShutdownOutput,
+  ExperimentalPersistentPtyPrepareRestartOutput,
   ExperimentalPersistentPtyGetInput,
   ExperimentalPersistentPtyGetOutput,
   ExperimentalPersistentPtyUpdateInput,
@@ -1720,6 +1721,17 @@ export function make(options: ClientOptions) {
               successStatus: 204,
               declaredStatuses: [503, 401, 400],
               empty: true,
+            },
+            requestOptions,
+          ),
+        prepareRestart: (requestOptions?: RequestOptions) =>
+          request<ExperimentalPersistentPtyPrepareRestartOutput>(
+            {
+              method: "POST",
+              path: `/api/experimental/persistent-pty/prepare-restart`,
+              successStatus: 200,
+              declaredStatuses: [503, 401, 400],
+              empty: false,
             },
             requestOptions,
           ),

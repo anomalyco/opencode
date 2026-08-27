@@ -376,6 +376,8 @@ export type SessionStatus =
 
 export type PtyTicketConnectToken = { ticket: string; expires_in: number }
 
+export type PersistentPtyHandoff = { directory: string; instanceID: string; ticket: string; expiresAt: number }
+
 export type ShellInfo1 = {
   id: string
   status: "running" | "exited" | "timeout" | "killed"
@@ -5806,6 +5808,8 @@ export type ExperimentalPersistentPtyCreateInput = {
 export type ExperimentalPersistentPtyCreateOutput = { data: PersistentPtyInfo }["data"]
 
 export type ExperimentalPersistentPtyShutdownOutput = void
+
+export type ExperimentalPersistentPtyPrepareRestartOutput = { handoff: PersistentPtyHandoff | null }
 
 export type ExperimentalPersistentPtyGetInput = { readonly ptyID: { readonly ptyID: string }["ptyID"] }
 

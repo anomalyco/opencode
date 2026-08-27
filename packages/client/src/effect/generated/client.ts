@@ -203,6 +203,7 @@ import type {
   ExperimentalPersistentPtyCreateInput,
   ExperimentalPersistentPtyCreateOutput,
   ExperimentalPersistentPtyShutdownOutput,
+  ExperimentalPersistentPtyPrepareRestartOutput,
   ExperimentalPersistentPtyGetInput,
   ExperimentalPersistentPtyGetOutput,
   ExperimentalPersistentPtyUpdateInput,
@@ -1265,6 +1266,11 @@ const EndpointExperimentalPersistentPtyShutdown = (raw: RawClient["server.experi
     raw["persistentPty.shutdown"]({}).pipe(Effect.mapError(mapClientError)),
   )
 
+const EndpointExperimentalPersistentPtyPrepareRestart = (raw: RawClient["server.experimental"]) => () =>
+  preserveEffect<ExperimentalPersistentPtyPrepareRestartOutput>()(
+    raw["persistentPty.prepareRestart"]({}).pipe(Effect.mapError(mapClientError)),
+  )
+
 const EndpointExperimentalPersistentPtyGet =
   (raw: RawClient["server.experimental"]) => (input: ExperimentalPersistentPtyGetInput) =>
     preserveEffect<ExperimentalPersistentPtyGetOutput>()(
@@ -1318,6 +1324,7 @@ const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
     list: EndpointExperimentalPersistentPtyList(raw),
     create: EndpointExperimentalPersistentPtyCreate(raw),
     shutdown: EndpointExperimentalPersistentPtyShutdown(raw),
+    prepareRestart: EndpointExperimentalPersistentPtyPrepareRestart(raw),
     get: EndpointExperimentalPersistentPtyGet(raw),
     update: EndpointExperimentalPersistentPtyUpdate(raw),
     snapshot: EndpointExperimentalPersistentPtySnapshot(raw),

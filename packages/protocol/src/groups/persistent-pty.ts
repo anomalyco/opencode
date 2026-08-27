@@ -41,6 +41,12 @@ export const PersistentPtyGroup = HttpApiGroup.make("server.experimental")
     }),
   )
   .add(
+    HttpApiEndpoint.post("persistentPty.prepareRestart", "/api/experimental/persistent-pty/prepare-restart", {
+      success: Schema.Struct({ handoff: Schema.NullOr(PersistentPty.Handoff) }),
+      error: [ServiceUnavailableError],
+    }),
+  )
+  .add(
     HttpApiEndpoint.get("persistentPty.get", "/api/experimental/persistent-pty/:ptyID", {
       params: { ptyID: Pty.ID },
       success: Schema.Struct({ data: PersistentPty.Info }),

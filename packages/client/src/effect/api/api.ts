@@ -1689,6 +1689,19 @@ export type ExperimentalPersistentPtyShutdownOperation<E = never> = () => Effect
   E
 >
 
+export type ExperimentalPersistentPtyPrepareRestartOutput = {
+  readonly handoff: {
+    readonly directory: string
+    readonly instanceID: string
+    readonly ticket: string
+    readonly expiresAt: number
+  } | null
+}
+export type ExperimentalPersistentPtyPrepareRestartOperation<E = never> = () => Effect.Effect<
+  ExperimentalPersistentPtyPrepareRestartOutput,
+  E
+>
+
 export type ExperimentalPersistentPtyGetInput = { readonly ptyID: Pty.ID }
 export type ExperimentalPersistentPtyGetOutput = {
   readonly id: Pty.ID
@@ -1775,6 +1788,7 @@ export interface ExperimentalApi<E = never> {
     readonly list: ExperimentalPersistentPtyListOperation<E>
     readonly create: ExperimentalPersistentPtyCreateOperation<E>
     readonly shutdown: ExperimentalPersistentPtyShutdownOperation<E>
+    readonly prepareRestart: ExperimentalPersistentPtyPrepareRestartOperation<E>
     readonly get: ExperimentalPersistentPtyGetOperation<E>
     readonly update: ExperimentalPersistentPtyUpdateOperation<E>
     readonly snapshot: ExperimentalPersistentPtySnapshotOperation<E>

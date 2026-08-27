@@ -27,8 +27,13 @@ export async function resolveOpencodePty(target: Target): Promise<OpencodePtyAss
     .map((value) => (value === "glibc" ? "gnu" : value))
     .join("-")
   const name = `@opencode-ai/pty-${suffix}`
-  const source = pty.resolve(`${name}/bin/opencode-pty`)
-  const manifest: unknown = JSON.parse(await readFile(pty.resolve(`${name}/package.json`), "utf8"))
+  const local = process.env.OPENCODE_PTY_BIN
+  if (local && (target.platform !== process.platform || target.arch !== process.arch))
+    throw new Error("OPENCODE_PTY_BIN can only be embedded in a build for the current platform and architecture")
+  const source = local ? path.resolve(local) : pty.resolve(`${name}/bin/opencode-pty`)
+  const manifest: unknown = local
+    ? { version: "local" }
+    : JSON.parse(await readFile(pty.resolve(`${name}/package.json`), "utf8"))
   if (!manifest || typeof manifest !== "object" || !("version" in manifest) || typeof manifest.version !== "string")
     throw new Error(`Invalid package metadata for ${name}`)
 
