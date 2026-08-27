@@ -387,18 +387,19 @@ const layer = Layer.effect(
       ignores?: Repository
       maximumUntrackedFileBytes?: number
     }) {
-      const list = (args: string[]) =>
-        repositoryOperation("refresh", input.repository, args).pipe(
-          Effect.map((result) => result.text.split("\0").filter(Boolean)),
-        )
-      const [tracked, untracked] = yield* Effect.all(
-        [
-          list(["diff-files", "--name-only", "-z", "--", input.scope]),
-          list(["ls-files", "--others", "--exclude-standard", "-z", "--", input.scope]),
-        ],
-        { concurrency: 2 },
+      const status = parseStatus(
+        (yield* repositoryOperation("refresh", input.repository, [
+          "-c",
+          "diff.ignoreSubmodules=untracked",
+          "status",
+          "--porcelain=v2",
+          "-z",
+          "--untracked-files=all",
+          "--",
+          input.scope,
+        ])).text,
       )
-      const candidates = Array.from(new Set([...tracked, ...untracked]))
+      const candidates = Array.from(new Set([...status.tracked, ...status.untracked]))
       if (!candidates.length) return { skipped: [] }
       const ignored = input.ignores
         ? new Set(
@@ -409,11 +410,11 @@ const layer = Layer.effect(
               .filter(Boolean),
           )
         : new Set<string>()
-      const allowed = candidates.filter((item) => !ignored.has(item))
+      const allowed = new Set(candidates.filter((item) => !ignored.has(item)))
       const maximum = input.maximumUntrackedFileBytes
       const skipped = maximum
         ? (yield* Effect.forEach(
-            untracked.filter((item) => allowed.includes(item)),
+            status.untracked.filter((item) => allowed.has(item)),
             (item) =>
               fs.stat(path.join(input.repository.worktree, item)).pipe(
                 Effect.map((info) =>
@@ -424,7 +425,8 @@ const layer = Layer.effect(
             { concurrency: 8 },
           )).filter((item): item is RelativePath => item !== undefined)
         : []
-      const stage = allowed.filter((item) => !skipped.includes(RelativePath.make(item)))
+      const skippedSet = new Set(skipped)
+      const stage = Array.from(allowed).filter((item) => !skippedSet.has(RelativePath.make(item)))
       const remove = [...ignored, ...skipped]
       if (remove.length)
         yield* repositoryOperation(
@@ -742,6 +744,44 @@ function execute(cwd: string, proc: AppProcess.Interface) {
             }) satisfies Result,
         ),
       )
+}
+
+function parseStatus(output: string) {
+  const tracked: string[] = []
+  const untracked: string[] = []
+  const entries = output.split("\0")
+  for (let index = 0; index < entries.length; index++) {
+    const entry = entries[index]
+    if (!entry) continue
+    const kind = entry[0]
+    if (kind === "?") {
+      untracked.push(entry.slice(2))
+      continue
+    }
+    if (kind === "u") {
+      const path = statusPath(entry, 10)
+      if (path) tracked.push(path)
+      continue
+    }
+    if (kind !== "1" && kind !== "2") continue
+    const status = entry.slice(2, 4)
+    const submodule = entry.slice(5, 9)
+    const changed = submodule[0] === "N" || submodule[1] !== "." || submodule[2] !== "."
+    const path = status[1] === "." || !changed ? undefined : statusPath(entry, kind === "1" ? 8 : 9)
+    if (path) tracked.push(path)
+    if (kind === "2") index++
+  }
+  return { tracked, untracked }
+}
+
+function statusPath(entry: string, fields: number) {
+  let offset = 0
+  for (let field = 0; field < fields; field++) {
+    offset = entry.indexOf(" ", offset)
+    if (offset === -1) return
+    offset++
+  }
+  return entry.slice(offset)
 }
 
 function resolvePath(cwd: string, value: string) {
