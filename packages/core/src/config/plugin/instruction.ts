@@ -36,7 +36,7 @@ export const Plugin = define({
 
       const publish = (update: Watcher.Update) => PubSub.publish(changes, update.path).pipe(Effect.asVoid)
       const candidates = [
-        globalFile,
+        ...(discovery.global ? [globalFile] : []),
         ...(project ? ancestorDirectories(start, stop).map((directory) => join(directory, "AGENTS.md")) : []),
       ]
       for (const path of new Set(candidates)) {
@@ -51,6 +51,7 @@ export const Plugin = define({
       })
 
       const globalSource = Effect.fn("ConfigInstructionPlugin.globalSource")(function* () {
+        if (!discovery.global) return []
         const file = yield* read(globalFile)
         return file ? [file] : []
       })

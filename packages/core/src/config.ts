@@ -53,6 +53,9 @@ export class UpdateError extends Schema.TaggedError<UpdateError>()("Config.Updat
 
 export const Options = Schema.Struct({
   project: Schema.optional(Schema.Boolean),
+  // false skips the global config dir, ~/.claude, and ~/.agents; wellknown,
+  // file, and content entries still load.
+  global: Schema.optional(Schema.Boolean),
   file: Schema.optional(Schema.String),
   content: Schema.optional(Schema.String),
 })
@@ -220,22 +223,23 @@ export const layer = (options?: Options) =>
                 })
                 .pipe(Effect.orDie)
 
+        const globalEnabled = options?.global !== false
         // We load certain files from a few other folders in the ecosystem
         const claude = [
           ...new Set([
-            ...((yield* fs.isDir(globalClaudeDirectory)) ? [globalClaudeDirectory] : []),
+            ...(globalEnabled && (yield* fs.isDir(globalClaudeDirectory)) ? [globalClaudeDirectory] : []),
             ...discovered.filter((item) => path.basename(item) === ".claude").toReversed(),
           ]),
         ].map((directory) => new ClaudeDirectory({ type: "claude", path: AbsolutePath.make(directory) }))
         const agents = [
           ...new Set([
-            ...((yield* fs.isDir(globalAgentsDirectory)) ? [globalAgentsDirectory] : []),
+            ...(globalEnabled && (yield* fs.isDir(globalAgentsDirectory)) ? [globalAgentsDirectory] : []),
             ...discovered.filter((item) => path.basename(item) === ".agents").toReversed(),
           ]),
         ].map((directory) => new AgentsDirectory({ type: "agents", path: AbsolutePath.make(directory) }))
 
         const directories = [
-          globalDirectory,
+          ...(globalEnabled ? [globalDirectory] : []),
           ...discovered
             .filter((item) => path.basename(item) === ".opencode")
             .toReversed()
@@ -274,14 +278,19 @@ export const layer = (options?: Options) =>
             : []
 
         const supplementary = yield* Effect.forEach(directories, loadDirectory).pipe(Effect.orDie)
+        // The global config dir, when enabled, is directories[0]: its entries
+        // sit below explicit and direct files, while project directories rank
+        // above them.
+        const globalSupplementary = globalEnabled ? (supplementary[0] ?? []) : []
+        const projectSupplementary = globalEnabled ? supplementary.slice(1).flat() : supplementary.flat()
         return [
           ...(yield* loadWellknown().pipe(Effect.orDie)),
           ...claude,
           ...agents,
-          ...(supplementary[0] ?? []),
+          ...globalSupplementary,
           ...explicit,
           ...direct,
-          ...supplementary.slice(1).flat(),
+          ...projectSupplementary,
           ...content,
         ]
       })
