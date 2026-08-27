@@ -13,7 +13,7 @@ import { Command } from "./command.js"
 import { Bus } from "./bus.js"
 import { Integration } from "./integration.js"
 import { KV } from "./kv.js"
-import { MCP } from "./mcp/index.js"
+import { Mcp } from "./mcp/index.js"
 import { Location } from "./location.js"
 import { PluginHost } from "./plugin/host.js"
 import { PluginRuntime } from "./plugin/runtime.js"
@@ -197,7 +197,7 @@ export const node = makeLocationNode({
     Command.node,
     Integration.node,
     KV.node,
-    MCP.node,
+    Mcp.node,
     Location.node,
     Reference.node,
     Skill.node,
