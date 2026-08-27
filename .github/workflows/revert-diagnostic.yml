@@ -25,16 +25,14 @@ jobs:
           git config --global user.name "opencode"
       - name: Build test dependencies
         run: bun turbo run build --filter='@opencode-ai/core^...'
-      - name: Reproduce at the existing timeout
+      - name: Reproduce under parallel process load
         continue-on-error: true
         timeout-minutes: 4
-        working-directory: packages/core
-        run: bun run test test/session-revert.test.ts --rerun-each 20 --timeout 5000
+        run: bun .github/scripts/revert-diagnostic.ts 5000
         env:
           OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: "true"
-      - name: Measure through completion
+      - name: Measure loaded executions through completion
         timeout-minutes: 4
-        working-directory: packages/core
-        run: bun run test test/session-revert.test.ts --rerun-each 20 --timeout 30000
+        run: bun .github/scripts/revert-diagnostic.ts 30000
         env:
           OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: "true"
