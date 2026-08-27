@@ -218,83 +218,116 @@ export const TuiThreadCommand = cmd({
       }
       process.on("SIGUSR2", reload)
 
+      let triggerFatal: ((error: unknown) => void) | undefined
+
       let stopped = false
       const stop = async () => {
         if (stopped) return
         stopped = true
         process.off("SIGUSR2", reload)
         await withTimeout(client.call("shutdown", undefined), 5000).catch(() => {})
+        // Keep disconnects observable until immediately before our own termination, so a
+        // crash mid-shutdown still fast-rejects the pending call instead of idling out at 5s.
+        client.expectDisconnect()
         worker.terminate()
       }
 
-      const prompt = await input(args.prompt)
-      const config = await TuiConfig.get()
-
-      const network = resolveNetworkOptionsNoConfig(args)
-      const external = hasArg("--port") || hasArg("--hostname") || network.mdns === true
-
-      const headers = external ? ServerAuth.headers() : undefined
-
-      const transport = external
-        ? {
-            url: (await client.call("server", network)).url,
-            fetch: undefined,
-            events: undefined,
-            headers,
-          }
-        : {
-            url: "http://opencode.internal",
-            fetch: createWorkerFetch(client),
-            events: createEventSource(client),
-          }
-
       try {
-        await validateSession({
-          url: transport.url,
-          sessionID: args.session,
-          directory: cwd,
-          fetch: transport.fetch,
-          headers,
-        })
-      } catch (error) {
-        UI.error(errorMessage(error))
-        process.exitCode = 1
-        return
-      }
+        const prompt = await input(args.prompt)
+        const config = await TuiConfig.get()
 
-      setTimeout(() => {
-        client.call("checkUpgrade", { directory: cwd }).catch(() => {})
-      }, 1000).unref?.()
+        const network = resolveNetworkOptionsNoConfig(args)
+        const external = hasArg("--port") || hasArg("--hostname") || network.mdns === true
 
-      try {
-        const { Effect } = await import("effect")
-        const { run } = await import("../tui/layer")
-        const { createLegacyTuiPluginHost } = await import("@/plugin/tui/runtime")
-        await Effect.runPromise(
-          run({
+        const headers = external ? ServerAuth.headers() : undefined
+
+        const transport = external
+          ? {
+              url: (await client.call("server", network)).url,
+              fetch: undefined,
+              events: undefined,
+              headers,
+            }
+          : {
+              url: "http://opencode.internal",
+              fetch: createWorkerFetch(client),
+              events: createEventSource(client),
+            }
+
+        try {
+          await validateSession({
             url: transport.url,
-            async onSnapshot() {
-              const tui = writeHeapSnapshot("tui.heapsnapshot")
-              const server = await client.call("snapshot", undefined)
-              return [tui, server]
-            },
-            config,
-            pluginHost: createLegacyTuiPluginHost(),
+            sessionID: args.session,
             directory: cwd,
             fetch: transport.fetch,
-            headers: transport.headers,
-            events: transport.events,
-            args: {
-              continue: args.continue,
-              sessionID: args.session,
-              agent: args.agent,
-              model: args.model,
-              prompt,
-              fork: args.fork,
-              auto: args.auto || args.yolo || args["dangerously-skip-permissions"],
-            },
-          }),
-        )
+            headers,
+          })
+        } catch (error) {
+          UI.error(errorMessage(error))
+          process.exitCode = 1
+          return
+        }
+
+        setTimeout(() => {
+          client.call("checkUpgrade", { directory: cwd }).catch(() => {})
+        }, 1000).unref?.()
+
+        const { Effect, Fiber } = await import("effect")
+        const { run } = await import("../tui/layer")
+        const { createLegacyTuiPluginHost } = await import("@/plugin/tui/runtime")
+        try {
+          const fiber = Effect.runFork(
+            run({
+              url: transport.url,
+              async onSnapshot() {
+                const tui = writeHeapSnapshot("tui.heapsnapshot")
+                const server = await client.call("snapshot", undefined)
+                return [tui, server]
+              },
+              config,
+              pluginHost: createLegacyTuiPluginHost(),
+              directory: cwd,
+              fetch: transport.fetch,
+              headers: transport.headers,
+              events: transport.events,
+              onReady: (controls) => {
+                triggerFatal = controls.triggerFatal
+              },
+              args: {
+                continue: args.continue,
+                sessionID: args.session,
+                agent: args.agent,
+                model: args.model,
+                prompt,
+                fork: args.fork,
+                auto: args.auto || args.yolo || args["dangerously-skip-permissions"],
+              },
+            }),
+          )
+
+          type RunOutcome = { kind: "done" } | { kind: "early"; error: unknown }
+          // Registered here (rather than at client construction) so that if the worker
+          // already died during the dynamic imports above, onDisconnect's dead-state
+          // replay fires the handler immediately instead of the signal being dropped.
+          const early = new Promise<RunOutcome>((resolve) => {
+            client.onDisconnect((error) => {
+              if (triggerFatal) return triggerFatal(error)
+              resolve({ kind: "early", error })
+            })
+          })
+          const done: Promise<RunOutcome> = Effect.runPromise(Fiber.join(fiber)).then(() => ({ kind: "done" }))
+
+          const outcome = await Promise.race([done, early])
+          if (outcome.kind === "early") {
+            // Interrupt (not just abandon) the fiber so its finalizers run and the
+            // terminal is restored before we fall through to stop() / process.exit().
+            await Effect.runPromise(Fiber.interrupt(fiber))
+            UI.error(errorMessage(outcome.error))
+            process.exitCode = 1
+          }
+        } finally {
+          triggerFatal = undefined
+        }
       } finally {
         await stop()
       }
@@ -303,7 +336,7 @@ export const TuiThreadCommand = cmd({
         unguard?.()
       } catch {}
     }
-    process.exit(0)
+    process.exit(process.exitCode ?? 0)
   },
 })
 // scratch

@@ -149,6 +149,8 @@ export type TuiInput = {
   headers?: RequestInit["headers"]
   events?: EventSource
   pluginHost: TuiPluginHost
+  // Exposes fatal shutdown after renderer setup so idle transport failures restore the terminal.
+  onReady?: (controls: { triggerFatal: (error: unknown) => void }) => void
 }
 
 function errorMessage(error: unknown) {
@@ -234,6 +236,28 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
         () => Effect.sync(() => process.off("SIGHUP", onSighup)),
       )
       renderer.once("destroy", () => Deferred.doneUnsafe(shutdown, Effect.void))
+      // Route process and transport failures through renderer teardown and error reporting.
+      yield* Effect.acquireRelease(
+        Effect.sync(() => {
+          let handled = false
+          const onFatal = (error: unknown) => {
+            if (handled) return
+            handled = true
+            // undefined is the clean-exit sentinel; normalize reasonless failures.
+            exit.reason = error ?? new Error("Unhandled fatal error in TUI process")
+            if (!renderer.isDestroyed) destroyRenderer(renderer)
+          }
+          process.on("unhandledRejection", onFatal)
+          process.on("uncaughtException", onFatal)
+          input.onReady?.({ triggerFatal: onFatal })
+          return onFatal
+        }),
+        (onFatal) =>
+          Effect.sync(() => {
+            process.off("unhandledRejection", onFatal)
+            process.off("uncaughtException", onFatal)
+          }),
+      )
       const pluginRuntime = createPluginRuntime()
 
       yield* Effect.tryPromise(async () => {
@@ -351,13 +375,20 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
         }, renderer)
       })
       yield* Deferred.await(shutdown)
-      return { epilogue: exit.epilogue, reason: exit.reason }
+      // Captured here, before scope finalizers unmount the render tree (which
+      // resets the epilogue via Session's onCleanup). exit.reason is read below
+      // instead, since a transport failure (triggerFatal via onDisconnect) can
+      // still land while those finalizers are running and must not be missed.
+      return { epilogue: exit.epilogue }
     }),
   )
   yield* Effect.sync(() => {
     win32FlushInputBuffer()
-    if (result.reason !== undefined)
-      process.stderr.write((cliErrorMessage(result.reason) ?? errorFormat(result.reason)) + "\n")
+    if (exit.reason !== undefined) {
+      process.stderr.write((cliErrorMessage(exit.reason) ?? errorFormat(exit.reason)) + "\n")
+      // cliErrorMessage may already set process.exitCode for a tagged CliError; don't override it.
+      if (process.exitCode === undefined) process.exitCode = 1
+    }
     if (result.epilogue) process.stdout.write(result.epilogue + "\n")
   })
 })
