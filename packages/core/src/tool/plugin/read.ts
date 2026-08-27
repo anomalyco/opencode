@@ -169,7 +169,7 @@ export const toModelContent = (path: string, offset: number | undefined, output:
     ] as const
 
   if (output.type === "list-page") {
-    const start = offset ?? 1
+    const start = offset || 1
     const content = [
       output.entries.length === 0
         ? `Read directory ${path}, 0 entries`
