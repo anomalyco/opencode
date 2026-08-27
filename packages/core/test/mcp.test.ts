@@ -1282,7 +1282,7 @@ test("serializes concurrent MCP lifecycle operations", async () => {
   )
 })
 
-testEffect(Layer.empty).live("isolates invalid MCP tools and preserves overrides through catalog updates", () =>
+testEffect(Layer.empty).live("isolates invalid MCP tools and preserves plugin transforms through catalog updates", () =>
   Effect.gen(function* () {
     const tool = (server: string, name: string, description = name) =>
       new MCP.Tool({
@@ -1316,6 +1316,12 @@ testEffect(Layer.empty).live("isolates invalid MCP tools and preserves overrides
           execute: () => Effect.succeed({ output: "override" }),
         })
       })
+      const mutation = yield* registry.transform((draft) => {
+        draft.update("other_lookup", (tool) => {
+          tool.description += " updated"
+        })
+        draft.remove("repaired_lookup")
+      })
 
       yield* Ref.set(catalog, [tool("demo", "y".repeat(65)), ...healthy, tool("demo", "added"), namespace])
       yield* bus.publish(McpEvent.ToolsChanged, { server: "demo" })
@@ -1328,6 +1334,9 @@ testEffect(Layer.empty).live("isolates invalid MCP tools and preserves overrides
       ])
       expect((yield* toolDefinitions(registry)).find((tool) => tool.name === "demo_search")?.description).toBe(
         "Override search",
+      )
+      expect((yield* toolDefinitions(registry)).find((tool) => tool.name === "other_lookup")?.description).toBe(
+        "lookup updated",
       )
       yield* Effect.forEach(["demo_search", "other_lookup"], (name) =>
         executeTool(registry, {
@@ -1359,11 +1368,18 @@ testEffect(Layer.empty).live("isolates invalid MCP tools and preserves overrides
         "demo_search",
         "demo_status",
         "other_lookup",
-        "repaired_lookup",
         "execute",
       ])
       expect((yield* toolDefinitions(registry)).find((tool) => tool.name === "demo_search")?.description).toBe(
         "Override search",
+      )
+      expect((yield* toolDefinitions(registry)).find((tool) => tool.name === "other_lookup")?.description).toBe(
+        "lookup updated",
+      )
+      yield* mutation.dispose
+      expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toContain("repaired_lookup")
+      expect((yield* toolDefinitions(registry)).find((tool) => tool.name === "other_lookup")?.description).toBe(
+        "lookup",
       )
 
       yield* Ref.set(catalog, [tool("demo", "search", "Latest search"), tool("demo", "refreshed")])

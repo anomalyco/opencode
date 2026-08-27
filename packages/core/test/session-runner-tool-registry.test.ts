@@ -73,6 +73,115 @@ const transform = (service: Tool.Interface, tools: Readonly<Record<string, Info>
   )
 
 describe("Tool", () => {
+  it.effect("replays mutations on refreshed sources and restores tools on disposal and scope cleanup", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      let text = "original"
+      const source = yield* Scope.make()
+      yield* service
+        .transform((draft) => {
+          draft.add({ ...constant(text), name: "echo", options: { namespace: "acme", codemode: false } })
+          draft.add({ ...make(), name: "hidden" })
+        })
+        .pipe(Scope.provide(source))
+      const original = yield* service.snapshot()
+      const update = yield* service.transform((draft) => {
+        draft.update("missing", () => {
+          throw new Error("must not create a tool")
+        })
+        draft.remove("missing")
+        draft.update("acme_echo", (tool) => {
+          const execute = tool.execute
+          tool.description = "Updated"
+          tool.execute = (input, context) =>
+            execute(input, context).pipe(
+              Effect.map((result) => ({ ...result, output: { text: `${result.output.text} updated` } })),
+            )
+        })
+      })
+      const scope = yield* Scope.make()
+      yield* service.transform((draft) => draft.remove("hidden")).pipe(Scope.provide(scope))
+      expect((yield* service.snapshot()).codeModeCatalog).toEqual([])
+      expect((yield* executeTool(service, call("acme_echo"))).output).toEqual({ text: "original updated" })
+
+      text = "refreshed"
+      const reload = yield* service.reload().pipe(Effect.forkChild({ startImmediately: true }))
+      yield* TestClock.adjust("500 millis")
+      yield* Fiber.join(reload)
+      const refreshed = yield* service.snapshot()
+      expect(refreshed.definitions[0]?.description).toBe("Updated")
+      expect(refreshed.codeModeCatalog).toEqual([])
+      expect((yield* refreshed.execute(call("acme_echo"))).output).toEqual({ text: "refreshed updated" })
+      expect((yield* original.execute(call("acme_echo"))).output).toEqual({ text: "original" })
+
+      yield* update.dispose
+      yield* update.dispose
+      expect((yield* executeTool(service, call("acme_echo"))).output).toEqual({ text: "refreshed" })
+      yield* Scope.close(scope, Exit.void)
+      expect((yield* service.snapshot()).codeModeCatalog?.map((tool) => tool.path)).toEqual(["hidden"])
+
+      yield* service.transform((draft) =>
+        draft.update("acme_echo", (tool) => {
+          tool.description = "Updated again"
+        }),
+      )
+      yield* Scope.close(source, Exit.void)
+      expect((yield* service.snapshot()).definitions.map((tool) => tool.name)).toEqual(["execute"])
+    }),
+  )
+
+  it.effect("updates schemas and executors without renaming tools and applies removal in order", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      yield* service.transform((draft) => {
+        draft.add({ ...make(), options: { namespace: "acme.tools", codemode: false } })
+        draft.add({ ...make(), name: "removed", options: { codemode: false } })
+        draft.remove("removed")
+        draft.update("removed", () => {
+          throw new Error("must not resurrect a tool")
+        })
+        draft.remove("acme_tools_echo")
+        draft.add({ ...make(), options: { namespace: "acme.tools", codemode: false } })
+        draft.update("acme_tools_echo", (tool) => {
+          tool.name = "renamed"
+          tool.options = { namespace: "other", codemode: false }
+          tool.input = Schema.Struct({ value: Schema.Finite })
+          tool.output = Schema.Finite
+          tool.execute = ({ value }) => Effect.succeed({ output: value + 1 })
+        })
+      })
+      const snapshot = yield* service.snapshot()
+      expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["acme_tools_echo", "execute"])
+      expect(snapshot.definitions[0]?.inputSchema.properties).toEqual({ value: { type: "number" } })
+      expect(
+        (yield* snapshot.execute({
+          ...call("acme_tools_echo"),
+          call: {
+            type: "tool-call",
+            id: "updated",
+            name: "acme_tools_echo",
+            input: { value: 2 },
+          },
+        })).output,
+      ).toBe(3)
+      expect(yield* snapshot.execute(call("acme_tools_echo")).pipe(Effect.flip)).toBeInstanceOf(Tool.Error)
+    }),
+  )
+
+  it.effect("skips invalid updates without dropping the existing definition", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      yield* transform(service, { echo: make() }, { codemode: false })
+      yield* service.transform((draft) =>
+        draft.update("echo", (tool) => {
+          Object.assign(tool, { description: undefined })
+        }),
+      )
+      expect((yield* service.snapshot()).definitions[0]?.description).toBe("Echo text")
+      expect((yield* executeTool(service, call("echo"))).output).toEqual({ text: "echo" })
+    }),
+  )
+
   it.effect("replays empty sources on reload and keeps advertised snapshots", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service

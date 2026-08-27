@@ -4,7 +4,7 @@ export type { Context, Metadata, Options, Result } from "@opencode-ai/schema/too
 
 import { ToolDefinition, type ToolCall } from "@opencode-ai/ai"
 import { Tool } from "@opencode-ai/schema/tool"
-import { Context, Effect, Layer, Result, Schema, SchemaIssue } from "effect"
+import { Context, Effect, Layer, Result, Schema, SchemaIssue, Types } from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import type { Agent } from "./agent.js"
 import { CodeModeCatalog } from "./codemode/catalog.js"
@@ -25,6 +25,8 @@ export class RegistrationError extends Schema.TaggedError<RegistrationError>()("
 
 export interface Draft {
   readonly add: (tool: Tool.Info) => void
+  readonly update: (id: string, update: (tool: Types.Mutable<Tool.Info>) => void) => void
+  readonly remove: (id: string) => void
 }
 
 type Data = {
@@ -155,6 +157,24 @@ const layer = Layer.effect(
             return
           }
           draft.tools.set(effectiveName(tool), { ...tool, options: tool.options && { ...tool.options } })
+        },
+        update: (id, update) => {
+          const current = draft.tools.get(id)
+          if (!current) return
+          const tool = { ...current, options: current.options && { ...current.options } }
+          update(tool)
+          tool.name = current.name
+          if (tool.options?.namespace !== current.options?.namespace)
+            tool.options = { ...tool.options, namespace: current.options?.namespace }
+          const error = registrationError(tool)
+          if (error) {
+            draft.errors.push({ tool, error })
+            return
+          }
+          draft.tools.set(id, tool)
+        },
+        remove: (id) => {
+          draft.tools.delete(id)
         },
       }),
       finalize: () =>

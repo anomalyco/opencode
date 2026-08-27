@@ -829,7 +829,7 @@ interface StorageDomain {
 Register typed tools with Effect `Schema`. The executor receives decoded input and returns an Effect containing typed
 output, display content, or metadata.
 
-The draft is add-only and the transform callback is synchronous: it must not return an Effect or Promise. Load
+The draft supports `add`, `update`, and `remove`. The transform callback is synchronous: it must not return an Effect or Promise. Load
 external data before registering or reloading. OpenCode replays active transforms in registration order on a fresh
 draft; for the same effective tool name, a later valid registration overrides an earlier one.
 
@@ -857,6 +857,22 @@ effect: (ctx) =>
 Call `yield* ctx.tool.reload()` after changing source data captured by the callback. Reload replays active transforms
 without changing their order; it does not rerun the plugin effect.
 
+`update` and `remove` target the effective tool name, including its namespace (`acme_greeting` above). Dots in
+namespaces and unsupported characters in tool names become `_`. Missing names are ignored; creating a tool requires
+`add` with a complete definition. Updates preserve the name and namespace. Assign new schemas or options to replace
+them rather than mutating nested values. Invalid updates are logged and leave the previous definition intact.
+
+```ts
+yield* ctx.tool.transform((draft) => {
+  draft.update("acme_greeting", (tool) => {
+    tool.description = "Greet the user by name"
+  })
+  draft.remove("acme_obsolete")
+})
+```
+
+Updates and removals replay in order with additions, including after MCP catalog refreshes.
+
 `transform` returns a scoped registration. Run `yield* registration.dispose` to remove its transform and rebuild
 from the remaining transforms, revealing any earlier definition it overrode. Disposal is idempotent, and closing
 the plugin scope also disposes its registrations.
@@ -873,6 +889,8 @@ interface ToolDraft {
   add<Input extends Tool.ValueSchema<any>, Output extends Tool.ValueSchema<any> | undefined>(
     tool: Tool.Info<Input, Output>,
   ): void
+  update(id: string, update: (tool: Types.Mutable<Tool.Info>) => void): void
+  remove(id: string): void
 }
 
 interface ToolDomain {

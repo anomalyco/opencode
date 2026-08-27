@@ -301,6 +301,28 @@ export function fromPromise(plugin: Plugin) {
                         ...tool,
                         execute: (input, context) => executePromiseTool(tool, input, context),
                       }),
+                    update: (id, update) =>
+                      draft.update(id, (tool) => {
+                        const execute = tool.execute
+                        const value: Info = {
+                          ...tool,
+                          execute: (input, context) =>
+                            run(
+                              execute(input, {
+                                ...context,
+                                progress: (update) => Effect.promise(() => context.progress(update)),
+                              }),
+                            ),
+                        }
+                        update(value)
+                        Object.assign(tool, value, {
+                          output: value.output,
+                          options: value.options,
+                          execute: (input: Parameters<Info["execute"]>[0], context: Tool.Context) =>
+                            executePromiseTool(value, input, context),
+                        })
+                      }),
+                    remove: draft.remove,
                   }),
                 ),
               ),

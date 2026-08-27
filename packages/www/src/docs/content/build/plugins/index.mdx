@@ -784,7 +784,7 @@ interface StorageScanResult {
 
 ### Tools
 
-Register tools with an add-only transform. The callback is synchronous, including in Promise plugins; load external
+Register, update, and remove tools with a transform. The callback is synchronous, including in Promise plugins; load external
 data before registering or reloading. OpenCode replays active transforms in registration order on a fresh draft.
 For the same effective tool name, a later valid registration overrides an earlier one.
 
@@ -815,6 +815,23 @@ changing their order; it does not rerun plugin setup.
 await ctx.tool.reload()
 ```
 
+Use `update` and `remove` with the effective tool name, including its namespace (`acme_greeting` above). Dots in
+namespaces and unsupported characters in tool names become `_`. Missing names are ignored; creating a tool requires
+`add` with a complete definition. Updates preserve the name and namespace. Assign new schemas or options to replace
+them rather than mutating nested values. Invalid updates are logged and leave the previous definition intact.
+
+```ts
+await ctx.tool.transform((draft) => {
+  draft.update("acme_greeting", (tool) => {
+    tool.description = "Greet the user by name"
+  })
+  draft.remove("acme_obsolete")
+})
+```
+
+Updates and removals replay in order with additions, including after MCP catalog refreshes. Disposing their
+registration removes those changes and rebuilds from the remaining transforms.
+
 Dispose a registration to remove its transform and rebuild from the remaining transforms, revealing any earlier
 definition it overrode. Disposal is idempotent, and unloading the plugin also disposes its registrations.
 
@@ -839,6 +856,8 @@ interface ToolContext {
 
 interface ToolDraft {
   add(tool: ToolInfo): void
+  update(id: string, update: (tool: Types.Mutable<ToolInfo>) => void): void
+  remove(id: string): void
 }
 ```
 

@@ -694,6 +694,86 @@ describe("fromPromise", () => {
     }),
   )
 
+  it.live("adapts tool updates, executor wrapping, and removal across replay and disposal", () =>
+    Effect.gen(function* () {
+      const plugins = yield* Plugin.Service
+      const registry = yield* Tool.Service
+      const host = yield* PluginHost.make(plugins)
+      const progress: Tool.Metadata[] = []
+      let greeting = "Hello"
+      const registrations: Array<{ dispose: () => Promise<void> }> = []
+      yield* host.tool.transform((draft) => {
+        const text = greeting
+        draft.add({
+          name: "hello",
+          description: "Hello",
+          options: { namespace: "acme", codemode: false },
+          input: Schema.Struct({ name: Schema.String }),
+          output: Schema.String,
+          execute: ({ name }, context) =>
+            context.progress({ phase: "original" }).pipe(Effect.as({ output: `${text}, ${name}!` })),
+        })
+        draft.add({
+          name: "temporary",
+          description: "Temporary",
+          input: Schema.Struct({}),
+          options: { codemode: false },
+          execute: () => Effect.succeed({ content: "temporary" }),
+        })
+      })
+      yield* PluginPromise.fromPromise(
+        define({
+          id: "promise-tool-mutations",
+          setup: async (ctx) => {
+            registrations.push(
+              await ctx.tool.transform((draft) => {
+                draft.update("missing", () => {
+                  throw new Error("must not create a tool")
+                })
+                draft.update("acme_hello", (tool) => {
+                  const execute = tool.execute
+                  tool.description = "Wrapped"
+                  delete tool.output
+                  tool.execute = async (input, context) => {
+                    const result = await execute(input, context)
+                    return { content: `${result.output} Wrapped.` }
+                  }
+                })
+                draft.remove("temporary")
+              }),
+            )
+            greeting = "Hi"
+            await ctx.tool.reload()
+          },
+        }),
+      ).effect(host)
+      const snapshot = yield* registry.snapshot()
+      expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["acme_hello", "execute"])
+      expect(snapshot.definitions[0]?.description).toBe("Wrapped")
+      expect(snapshot.definitions[0]?.outputSchema).toBeUndefined()
+      expect(
+        yield* snapshot.execute({
+          sessionID: Session.ID.make("ses_promise_tool_update"),
+          agent: Agent.ID.make("build"),
+          messageID: SessionMessage.ID.make("msg_promise_tool_update"),
+          call: { type: "tool-call", id: "call_update", name: "acme_hello", input: { name: "world" } },
+          progress: (update) =>
+            Effect.sync(() => {
+              progress.push(update)
+            }),
+        }),
+      ).toMatchObject({ content: [{ type: "text", text: "Hi, world! Wrapped." }] })
+      expect(progress).toEqual([{ phase: "original" }])
+      const registration = registrations[0]
+      if (!registration) return yield* Effect.die("Promise tool registration was not captured")
+      yield* Effect.promise(() => registration.dispose())
+      yield* Effect.promise(() => registration.dispose())
+      const restored = yield* registry.snapshot()
+      expect(restored.definitions.map((tool) => tool.name)).toEqual(["acme_hello", "temporary", "execute"])
+      expect(restored.definitions[0]?.description).toBe("Hello")
+    }),
+  )
+
   it.effect("returns content-only plugin results through Code Mode", () =>
     Effect.gen(function* () {
       const plugins = yield* Plugin.Service
