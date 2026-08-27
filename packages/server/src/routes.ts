@@ -19,6 +19,7 @@ import { ShellSelect } from "@opencode-ai/core/shell/select"
 import { Job } from "@opencode-ai/core/job"
 import { MCP } from "@opencode-ai/core/mcp/index"
 import { Global } from "@opencode-ai/util/global"
+import { CrossSpawnSpawner } from "@opencode-ai/util/cross-spawn-spawner"
 import { InstructionDiscovery } from "@opencode-ai/core/instruction-discovery"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import { LocationActivity } from "@opencode-ai/core/location-activity"
@@ -68,6 +69,7 @@ const applicationServiceNodes = [
   LocationActivity.node,
   SessionRestart.node,
   Workspace.node,
+  CrossSpawnSpawner.node,
 ] as const
 const applicationServices = LayerNode.group(applicationServiceNodes)
 

@@ -48,6 +48,7 @@ import {
 import { createStore, produce, reconcile } from "solid-js/store"
 import type { SessionInbox } from "@opencode-ai/schema/session-inbox"
 import { batch, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
+import { LocationSyncError, type LocationSyncResource } from "./location-sync-error"
 
 export type DataSessionStatus = "idle" | "running"
 
@@ -1616,7 +1617,11 @@ export function createData(config: CreateDataInput) {
       syncInfo(ref?: LocationRef) {
         const current = ref ?? defaultLocation()
         return sync.run(`location:${locationKey(current)}`, async () => {
-          const location = await api().location.get({ location: locationQuery(current) })
+          const location = await api()
+            .location.get({ location: locationQuery(current) })
+            .catch((cause) => {
+              throw new LocationSyncError(current, "info", cause)
+            })
           const key = locationKey(location)
           if (!store.location[key]) setStore("location", key, {})
           setStore("location", key, "info", location)
@@ -1628,20 +1633,29 @@ export function createData(config: CreateDataInput) {
       async sync(ref?: LocationRef) {
         await result.location.syncInfo(ref)
         const location = ref ?? defaultLocation()
-        await Promise.all([
-          result.location.vcs.sync(location),
-          result.location.agent.sync(location),
-          result.location.command.sync(location),
-          result.location.integration.sync(location),
-          result.location.mcp.server.sync(location),
-          result.location.mcp.resource.sync(location),
-          result.location.model.sync(location),
-          result.location.provider.sync(location),
-          result.location.reference.sync(location),
-          result.location.skill.sync(location),
-          result.shell.sync(location),
-          result.session.form.sync("global", location),
-        ])
+        // Reads commit independently. A rejection identifies the failed resource;
+        // successful reads remain cached and failed reads can be retried.
+        const resources = {
+          vcs: result.location.vcs.sync(location),
+          agent: result.location.agent.sync(location),
+          command: result.location.command.sync(location),
+          integration: result.location.integration.sync(location),
+          "mcp.server": result.location.mcp.server.sync(location),
+          "mcp.resource": result.location.mcp.resource.sync(location),
+          model: result.location.model.sync(location),
+          provider: result.location.provider.sync(location),
+          reference: result.location.reference.sync(location),
+          skill: result.location.skill.sync(location),
+          shell: result.shell.sync(location),
+          form: result.session.form.sync("global", location),
+        } satisfies Record<Exclude<LocationSyncResource, "info">, Promise<void>>
+        await Promise.all(
+          (Object.keys(resources) as (keyof typeof resources)[]).map((resource) =>
+            resources[resource].catch((cause) => {
+              throw new LocationSyncError(location, resource, cause)
+            }),
+          ),
+        )
       },
       invalidate(ref?: LocationRef) {
         const location = ref ?? defaultLocation()

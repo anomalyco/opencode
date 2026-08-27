@@ -415,7 +415,7 @@ export function make(options: ClientOptions) {
             path: `/api/location`,
             query: { location: input?.["location"] },
             successStatus: 200,
-            declaredStatuses: [401, 400],
+            declaredStatuses: [404, 401, 400],
             empty: false,
           },
           requestOptions,

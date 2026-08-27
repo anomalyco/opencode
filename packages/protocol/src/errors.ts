@@ -62,6 +62,16 @@ export class ProviderNotFoundError extends Schema.TaggedError<ProviderNotFoundEr
   { httpApiStatus: 404 },
 ) {}
 
+export class LocationDirectoryError extends Schema.TaggedError<LocationDirectoryError>()(
+  "LocationDirectoryError",
+  {
+    directory: Schema.String,
+    reason: Schema.Literals(["not_found", "not_directory"]),
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 },
+) {}
+
 export class ProjectNotFoundError extends Schema.TaggedError<ProjectNotFoundError>()(
   "ProjectNotFoundError",
   {

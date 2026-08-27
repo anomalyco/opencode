@@ -13,6 +13,7 @@ import { SPINNER_FRAMES } from "../../src/component/spinner-frames"
 import { ClientProvider } from "../../src/context/client"
 import { DataProvider } from "../../src/context/data"
 import { LocationProvider } from "../../src/context/location"
+import { ToastProvider } from "../../src/ui/toast"
 import { RouteProvider } from "../../src/context/route"
 import { TuiAppProvider } from "../../src/context/runtime"
 import { SessionTabsProvider } from "../../src/context/session-tabs"
@@ -74,14 +75,20 @@ for (const orientation of ["horizontal", "vertical"] as const) {
                 <RouteProvider initialRoute={{ type: "home" }}>
                   <ClientProvider api={createApi(createFetch(undefined, createEventStream()).fetch)}>
                     <DataProvider directory={temporary.path}>
-                      <LocationProvider>
-                        <SessionTabsProvider>
-                          <ThemeProvider mode="dark" source={emptyThemeSource}>
-                            <Colors />
-                            <SessionTabs controller={controller} orientation={orientation} animations={animations()} />
-                          </ThemeProvider>
-                        </SessionTabsProvider>
-                      </LocationProvider>
+                      <ToastProvider>
+                        <LocationProvider>
+                          <SessionTabsProvider>
+                            <ThemeProvider mode="dark" source={emptyThemeSource}>
+                              <Colors />
+                              <SessionTabs
+                                controller={controller}
+                                orientation={orientation}
+                                animations={animations()}
+                              />
+                            </ThemeProvider>
+                          </SessionTabsProvider>
+                        </LocationProvider>
+                      </ToastProvider>
                     </DataProvider>
                   </ClientProvider>
                 </RouteProvider>

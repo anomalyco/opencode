@@ -1,7 +1,10 @@
 import type { LocationGetOutput, LocationRef } from "@opencode-ai/client"
+import { LocationSyncError } from "@opencode-ai/client/solid"
 import { createContext, createMemo, createSignal, onCleanup, useContext, type ParentProps } from "solid-js"
 import { useClient } from "./client"
 import { useData } from "./data"
+import { useToast } from "../ui/toast"
+import { errorMessage } from "../util/error"
 
 const context = createContext<{
   readonly current: LocationGetOutput | undefined
@@ -14,6 +17,7 @@ const context = createContext<{
 export function LocationProvider(props: ParentProps) {
   const client = useClient()
   const data = useData()
+  const toast = useToast()
   const [ref, setRef] = createSignal<LocationRef>()
   const [error, setError] = createSignal<{ readonly location: LocationRef; readonly cause: unknown }>()
   let generation = 0
@@ -36,7 +40,16 @@ export function LocationProvider(props: ParentProps) {
         current.workspaceID !== location.workspaceID
       )
         return
-      setError({ location, cause })
+      if (client.connection.status() !== "connected") return
+      if (cause instanceof LocationSyncError && cause.reason === "missing") {
+        setError({ location, cause })
+        return
+      }
+      toast.show({
+        variant: "error",
+        message: errorMessage(cause),
+        action: { label: "Retry", run: () => sync(ref()) },
+      })
     })
   }
 

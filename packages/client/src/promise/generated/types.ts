@@ -2318,6 +2318,15 @@ export type InvalidRequestError = {
 export const isInvalidRequestError = (value: unknown): value is InvalidRequestError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "InvalidRequestError"
 
+export type LocationDirectoryError = {
+  readonly _tag: "LocationDirectoryError"
+  readonly directory: string
+  readonly reason: "not_found" | "not_directory"
+  readonly message: string
+}
+export const isLocationDirectoryError = (value: unknown): value is LocationDirectoryError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "LocationDirectoryError"
+
 export type AgentNotFoundError = {
   readonly _tag: "AgentNotFoundError"
   readonly agentID: string

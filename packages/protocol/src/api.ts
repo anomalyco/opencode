@@ -36,7 +36,6 @@ import { ConfigGroup } from "./groups/config.js"
 import { WorkspaceGroup } from "./groups/workspace.js"
 
 type LocationGroups<LocationId extends HttpApiMiddleware.AnyId> =
-  | HttpApiGroup.AddMiddleware<typeof LocationGroup, LocationId>
   | HttpApiGroup.AddMiddleware<typeof AgentGroup, LocationId>
   | HttpApiGroup.AddMiddleware<typeof PluginGroup, LocationId>
   | HttpApiGroup.AddMiddleware<typeof ModelGroup, LocationId>
@@ -83,6 +82,7 @@ type ApiGroups<
   Event extends HttpApiGroup.Constraint,
 > =
   | typeof HealthGroup
+  | typeof LocationGroup
   | typeof ServerGroup
   | typeof DebugGroup
   | typeof MigrationGroup
@@ -151,7 +151,7 @@ const makeApiFromGroup = <
   HttpApi.make("server")
     .add(HealthGroup)
     .add(ServerGroup)
-    .add(LocationGroup.middleware(locationMiddleware))
+    .add(LocationGroup)
     .add(AgentGroup.middleware(locationMiddleware))
     .add(PluginGroup.middleware(locationMiddleware))
     .add(makeSessionGroup(sessionLocationMiddleware))

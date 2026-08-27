@@ -8,6 +8,7 @@ import { ConfigProvider, useConfig } from "../../src/config"
 import { ClientProvider, useClient } from "../../src/context/client"
 import { DataProvider, useData } from "../../src/context/data"
 import { LocationProvider } from "../../src/context/location"
+import { ToastProvider } from "../../src/ui/toast"
 import { RouteProvider, useRoute } from "../../src/context/route"
 import { TuiAppProvider } from "../../src/context/runtime"
 import { SessionTabsProvider, useSessionTabs } from "../../src/context/session-tabs"
@@ -170,11 +171,13 @@ async function renderSessionTabs(
             >
               <ClientProvider api={createApi(calls.fetch)}>
                 <DataProvider directory={options?.launchDirectory ?? directory}>
-                  <LocationProvider>
-                    <SessionTabsProvider>
-                      <Probe />
-                    </SessionTabsProvider>
-                  </LocationProvider>
+                  <ToastProvider>
+                    <LocationProvider>
+                      <SessionTabsProvider>
+                        <Probe />
+                      </SessionTabsProvider>
+                    </LocationProvider>
+                  </ToastProvider>
                 </DataProvider>
               </ClientProvider>
             </RouteProvider>

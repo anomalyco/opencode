@@ -20,6 +20,7 @@ import { createApi, createEventStream, createFetch, directory, json, worktree } 
 import { emptyThemeSource } from "../../fixture/fixture"
 import { TestTuiContexts } from "../../fixture/tui-environment"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
+import { Toast, ToastProvider, useToast } from "../../../src/ui/toast"
 
 const formFields = [{ key: "authorization", type: "external", url: "https://example.com" }] satisfies [
   {
@@ -47,10 +48,12 @@ function DataProvider(props: ParentProps) {
   return (
     <ConfigProvider config={config}>
       <DataProviderBase directory={process.cwd()}>
-        <LocationProvider>
-          <SyncLocation />
-          {props.children}
-        </LocationProvider>
+        <ToastProvider>
+          <LocationProvider>
+            <SyncLocation />
+            {props.children}
+          </LocationProvider>
+        </ToastProvider>
       </DataProviderBase>
     </ConfigProvider>
   )
@@ -76,6 +79,124 @@ function durable<const Version extends number>(
 function durable(sessionID: string, seq = 0, version = 1) {
   return { aggregateID: sessionID, seq, version }
 }
+
+test.each(["resource", "server", "transport"])(
+  "location %s failures offer retry instead of choosing a directory",
+  async (kind) => {
+    const events = createEventStream()
+    let fail = false
+    let requests = 0
+    const endpoint = kind === "resource" ? "/api/model" : "/api/location"
+    const calls = createFetch((url) => {
+      if (url.pathname !== endpoint) return
+      requests++
+      if (!fail) return
+      if (kind === "transport") throw new Error("connection refused")
+      return json({ message: "server restarting" }, { status: 503 })
+    }, events)
+    let location!: ReturnType<typeof useLocation>
+    let data!: ReturnType<typeof useData>
+    let toast!: ReturnType<typeof useToast>
+    let client!: ReturnType<typeof useClient>
+    function Probe() {
+      location = useLocation()
+      data = useData()
+      toast = useToast()
+      client = useClient()
+      return (
+        <ThemeProvider mode="dark" source={emptyThemeSource}>
+          <Toast />
+        </ThemeProvider>
+      )
+    }
+    const app = await testRender(() => (
+      <TestTuiContexts>
+        <ClientProvider api={createApi(calls.fetch)}>
+          <DataProvider>
+            <Probe />
+          </DataProvider>
+        </ClientProvider>
+      </TestTuiContexts>
+    ))
+    try {
+      await wait(() => client.connection.status() === "connected")
+      await data.location.sync()
+      fail = true
+      data.location.invalidate()
+      location.set({ directory })
+      await wait(() => requests >= 2)
+      await wait(() => toast.currentToast !== null || location.error !== undefined)
+      expect(location.error).toBeUndefined()
+      expect(toast.currentToast?.message).toContain(kind === "resource" ? "model" : "info")
+      expect(toast.currentToast?.action?.label).toBe("Retry")
+      await app.renderOnce()
+      const frame = app.captureCharFrame().split("\n")
+      const row = frame.findIndex((line) => line.includes("Retry"))
+      expect(row).toBeGreaterThanOrEqual(0)
+      expect(frame.join("\n")).not.toContain("Session location unavailable")
+      fail = false
+      const before = requests
+      await app.mockMouse.click(frame[row]!.indexOf("Retry"), row)
+      await wait(() => requests > before)
+      await wait(() => data.location.model.list() !== undefined)
+      expect(location.error).toBeUndefined()
+      expect(toast.currentToast).toBeNull()
+    } finally {
+      app.renderer.destroy()
+    }
+  },
+)
+
+test("confirmed missing locations still show directory recovery and clear on reconnect", async () => {
+  const events = createEventStream()
+  let missing = true
+  const target = `${directory}/missing`
+  const calls = createFetch((url) => {
+    if (url.pathname !== "/api/location" || url.searchParams.get("location[directory]") !== target) return
+    if (missing)
+      return json(
+        {
+          _tag: "LocationDirectoryError",
+          directory: target,
+          reason: "not_found",
+          message: "Directory not found",
+        },
+        { status: 404 },
+      )
+    return json({ directory: target, project: { id: "proj_test", directory: target } })
+  }, events)
+  let location!: ReturnType<typeof useLocation>
+  let client!: ReturnType<typeof useClient>
+  function Probe() {
+    location = useLocation()
+    client = useClient()
+    return <box />
+  }
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <ClientProvider api={createApi(calls.fetch)}>
+        <DataProviderBase directory={directory}>
+          <ToastProvider>
+            <LocationProvider>
+              <Probe />
+            </LocationProvider>
+          </ToastProvider>
+        </DataProviderBase>
+      </ClientProvider>
+    </TestTuiContexts>
+  ))
+  try {
+    await wait(() => client.connection.status() === "connected")
+    location.set({ directory: target })
+    await wait(() => location.error !== undefined)
+    expect(location.error?.location.directory).toBe(target)
+    missing = false
+    events.disconnect()
+    await wait(() => location.current?.directory === target && location.error === undefined, 4000)
+  } finally {
+    app.renderer.destroy()
+  }
+})
 
 test("does not preload session summaries into the data context", async () => {
   const events = createEventStream()

@@ -8,6 +8,7 @@ import { ClientProvider } from "../../../src/context/client"
 import { DataProvider, useData } from "../../../src/context/data"
 import { Keymap } from "../../../src/context/keymap"
 import { LocationProvider } from "../../../src/context/location"
+import { ToastProvider } from "../../../src/ui/toast"
 import { RouteProvider, useRoute } from "../../../src/context/route"
 import { ThemeProvider } from "../../../src/context/theme"
 import { Composer } from "../../../src/routes/session/composer"
@@ -97,13 +98,15 @@ async function renderComposer(
           <Keymap.Provider>
             <ClientProvider api={createApi(calls.fetch)}>
               <DataProvider directory={process.cwd()}>
-                <LocationProvider>
-                  <RouteProvider initialRoute={{ type: "session", sessionID: "parent" }}>
-                    <ThemeProvider mode="dark" source={{ discover: async () => ({}) }}>
-                      <Content />
-                    </ThemeProvider>
-                  </RouteProvider>
-                </LocationProvider>
+                <ToastProvider>
+                  <LocationProvider>
+                    <RouteProvider initialRoute={{ type: "session", sessionID: "parent" }}>
+                      <ThemeProvider mode="dark" source={{ discover: async () => ({}) }}>
+                        <Content />
+                      </ThemeProvider>
+                    </RouteProvider>
+                  </LocationProvider>
+                </ToastProvider>
               </DataProvider>
             </ClientProvider>
             <AppExit />
