@@ -809,6 +809,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       const { createUnified } = yield* Effect.promise(() => import("ai-gateway-provider/providers/unified"))
       const { createOpenAI } = yield* Effect.promise(() => import("ai-gateway-provider/providers/openai"))
       const { createAnthropic } = yield* Effect.promise(() => import("ai-gateway-provider/providers/anthropic"))
+      const { createOpenAICompatible } = yield* Effect.promise(() => import("@ai-sdk/openai-compatible"))
 
       const metadata = iife(() => {
         if (input.options?.metadata) return input.options.metadata
@@ -855,9 +856,23 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           // The Unified API addresses Workers AI both with the explicit "workers-ai/" prefix and as
           // bare "@cf/..." ids. Third-party providers must not receive the token; they rely on the
           // gateway's stored/BYOK keys instead.
+          // Workers AI is Cloudflare's own upstream, so it rides the unified compat route with the
+          // Cloudflare token as its upstream Authorization header.
           const isWorkersAi = modelID.startsWith("workers-ai/") || modelID.startsWith("@cf/")
-          const unified = createUnified(isWorkersAi ? { apiKey: apiToken } : {})
-          return aigateway(unified(modelID))
+          if (isWorkersAi) return aigateway(createUnified({ apiKey: apiToken })(modelID))
+
+          // Every other third-party provider (google, xai, alibaba, deepseek, moonshotai, …) is only
+          // served by Cloudflare's catalog-aware REST API. The universal/compat gateway route rejects
+          // them with "Invalid provider" (the gateway's compat endpoint doesn't front those upstreams),
+          // so point an OpenAI-compatible client at the REST endpoint and bind it to the gateway with
+          // cf-aig-gateway-id — that keeps requests gateway-routed (analytics/caching/BYOK), not a
+          // bypass. models.dev ids (provider/model, dotted) pass through unchanged.
+          return createOpenAICompatible({
+            name: "cloudflare-ai-gateway",
+            baseURL: `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/v1`,
+            apiKey: apiToken,
+            headers: { "cf-aig-gateway-id": gateway },
+          })(modelID)
         },
         options: {},
       }
