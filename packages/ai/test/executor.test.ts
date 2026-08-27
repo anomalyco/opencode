@@ -1,10 +1,10 @@
 import { describe, expect } from "bun:test"
-import { Deferred, Effect, Fiber, Layer, Ref, Stream } from "effect"
-import { Headers, HttpClient, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { Deferred, Effect, Fiber, Ref, Stream } from "effect"
+import { Headers, HttpClientError, HttpClientRequest } from "effect/unstable/http"
 import { LLM, AIError } from "../src/index.js"
 import { LLMClient, RequestExecutor, WebSocketTransport, type WebSocketChannelExecutor } from "../src/route.js"
-import * as OpenAIChat from "../src/protocols/openai-chat.js"
-import * as OpenAI from "../src/providers/openai.js"
+import { route } from "../src/protocols/openai-chat.js"
+import { configure } from "../src/providers/openai.js"
 import { dynamicResponse, fixedResponse, systemError } from "./lib/http.js"
 import { deltaChunk } from "./lib/openai-chunks.js"
 import { sseEvents, sseRaw } from "./lib/sse.js"
@@ -17,47 +17,6 @@ const request = HttpClientRequest.post("https://provider.test/v1/chat?api_key=se
 const secretRequest = HttpClientRequest.post("https://provider.test/v1/chat?api_key=query-secret-123&debug=1").pipe(
   HttpClientRequest.setHeaders(Headers.fromInput({ authorization: "Bearer header-secret-456" })),
 )
-
-const responsesLayer = (responses: ReadonlyArray<Response>) =>
-  RequestExecutor.layer.pipe(
-    Layer.provide(
-      Layer.unwrap(
-        Effect.gen(function* () {
-          const cursor = yield* Ref.make(0)
-          return Layer.succeed(
-            HttpClient.HttpClient,
-            HttpClient.make((request) =>
-              Effect.gen(function* () {
-                const index = yield* Ref.getAndUpdate(cursor, (value) => value + 1)
-                return HttpClientResponse.fromWeb(request, responses[index] ?? responses[responses.length - 1])
-              }),
-            ),
-          )
-        }),
-      ),
-    ),
-  )
-
-const countedResponsesLayer = (attempts: Ref.Ref<number>, responses: ReadonlyArray<Response>) =>
-  RequestExecutor.layer.pipe(
-    Layer.provide(
-      Layer.unwrap(
-        Effect.gen(function* () {
-          const cursor = yield* Ref.make(0)
-          return Layer.succeed(
-            HttpClient.HttpClient,
-            HttpClient.make((request) =>
-              Effect.gen(function* () {
-                yield* Ref.update(attempts, (value) => value + 1)
-                const index = yield* Ref.getAndUpdate(cursor, (value) => value + 1)
-                return HttpClientResponse.fromWeb(request, responses[index] ?? responses[responses.length - 1])
-              }),
-            ),
-          )
-        }),
-      ),
-    ),
-  )
 
 const expectAIError = (error: unknown) => {
   expect(error).toBeInstanceOf(AIError)
@@ -85,15 +44,14 @@ describe("RequestExecutor", () => {
       })
     }).pipe(
       Effect.provide(
-        responsesLayer([
-          new Response(
-            new ReadableStream({
-              start(controller) {
-                controller.error(systemError("ECONNRESET", "disconnected query-secret-123 header-secret-456"))
-              },
-            }),
-          ),
-        ]),
+        fixedResponse(
+          new ReadableStream({
+            start(controller) {
+              controller.error(systemError("ECONNRESET", "disconnected query-secret-123 header-secret-456"))
+            },
+          }),
+          {},
+        ),
       ),
     ),
   )
@@ -112,15 +70,14 @@ describe("RequestExecutor", () => {
       })
     }).pipe(
       Effect.provide(
-        responsesLayer([
-          new Response(
-            new ReadableStream({
-              pull(controller) {
-                controller.error(new TypeError("fetch failed", { cause: systemError("ECONNRESET", "socket closed") }))
-              },
-            }),
-          ),
-        ]),
+        fixedResponse(
+          new ReadableStream({
+            pull(controller) {
+              controller.error(new TypeError("fetch failed", { cause: systemError("ECONNRESET", "socket closed") }))
+            },
+          }),
+          {},
+        ),
       ),
     ),
   )
@@ -134,7 +91,7 @@ describe("RequestExecutor", () => {
 
       expectAIError(error)
       expect(error.reason.message).toBe("plugin rejected request")
-    }).pipe(Effect.provide(responsesLayer([]))),
+    }).pipe(Effect.provide(dynamicResponse(() => Effect.die(new Error("unexpected HTTP request"))))),
   )
 
   it.effect("reports the request sent by middleware", () =>
@@ -188,11 +145,9 @@ describe("RequestExecutor", () => {
       expect(error.reason).toMatchObject({ _tag: "InvalidRequest", classification: "context-overflow" })
     }).pipe(
       Effect.provide(
-        responsesLayer([
-          new Response('{"error":{"code":"context_length_exceeded","message":"prompt too long"}}', {
-            status: 400,
-          }),
-        ]),
+        fixedResponse('{"error":{"code":"context_length_exceeded","message":"prompt too long"}}', {
+          status: 400,
+        }),
       ),
     ),
   )
@@ -208,7 +163,7 @@ describe("RequestExecutor", () => {
         classification: "payload-too-large",
         http: { response: { status: 413 } },
       })
-    }).pipe(Effect.provide(responsesLayer([new Response("request too large", { status: 413 })]))),
+    }).pipe(Effect.provide(fixedResponse("request too large", { status: 413 }))),
   )
 
   it.effect("classifies Anthropic request_too_large as context overflow", () =>
@@ -224,11 +179,9 @@ describe("RequestExecutor", () => {
       })
     }).pipe(
       Effect.provide(
-        responsesLayer([
-          new Response('{"error":{"type":"request_too_large","message":"Request exceeds the maximum size"}}', {
-            status: 413,
-          }),
-        ]),
+        fixedResponse('{"error":{"type":"request_too_large","message":"Request exceeds the maximum size"}}', {
+          status: 413,
+        }),
       ),
     ),
   )
@@ -242,7 +195,7 @@ describe("RequestExecutor", () => {
       expect(error.reason).toMatchObject({ _tag: "InvalidRequest" })
       expect("classification" in error.reason ? error.reason.classification : undefined).toBeUndefined()
       expect(error.reason.message).toBe("Provider request failed with HTTP 400")
-    }).pipe(Effect.provide(responsesLayer([new Response("invalid parameter", { status: 400 })]))),
+    }).pipe(Effect.provide(fixedResponse("invalid parameter", { status: 400 }))),
   )
 
   it.effect("preserves structured provider messages from large error bodies", () =>
@@ -256,15 +209,13 @@ describe("RequestExecutor", () => {
       expect(errorHttp(error)?.bodyTruncated).toBeUndefined()
     }).pipe(
       Effect.provide(
-        responsesLayer([
-          new Response(
-            JSON.stringify({
-              model: "gpt-5.6-sol",
-              error: { type: "invalid_request", message: largeProviderMessage },
-            }),
-            { status: 400 },
-          ),
-        ]),
+        fixedResponse(
+          JSON.stringify({
+            model: "test-model",
+            error: { type: "invalid_request", message: largeProviderMessage },
+          }),
+          { status: 400 },
+        ),
       ),
     ),
   )
@@ -279,7 +230,7 @@ describe("RequestExecutor", () => {
         _tag: "InvalidRequest",
         message: "Provider request failed with HTTP 400",
       })
-    }).pipe(Effect.provide(responsesLayer([new Response('{"error":{"message":"  "}}', { status: 400 })]))),
+    }).pipe(Effect.provide(fixedResponse('{"error":{"message":"  "}}', { status: 400 }))),
   )
 
   it.effect("classifies provider rate limits hidden behind HTTP 400", () =>
@@ -291,7 +242,7 @@ describe("RequestExecutor", () => {
 
           expectAIError(error)
           expect(error.reason).toMatchObject({ _tag: "RateLimit" })
-        }).pipe(Effect.provide(responsesLayer([new Response(body, { status: 400 })])))
+        }).pipe(Effect.provide(fixedResponse(body, { status: 400 })))
 
       yield* classify("Request rate increased too quickly")
       yield* classify('{"type":"error","error":{"type":"too_many_requests"}}')
@@ -308,7 +259,7 @@ describe("RequestExecutor", () => {
 
           expectAIError(error)
           expect(error.reason).toMatchObject({ _tag: "ProviderInternal" })
-        }).pipe(Effect.provide(responsesLayer([new Response(body, { status: 400 })])))
+        }).pipe(Effect.provide(fixedResponse(body, { status: 400 })))
 
       yield* classify('{"code":"resource_exhausted"}')
       yield* classify('{"code":"service_unavailable"}')
@@ -346,12 +297,10 @@ describe("RequestExecutor", () => {
       expect(errorHttp(error)?.body).toBe("rate limited")
     }).pipe(
       Effect.provide(
-        responsesLayer([
-          new Response("rate limited", {
-            status: 429,
-            headers: { "retry-after-ms": "0", "x-request-id": "req_123", "x-api-key": "secret" },
-          }),
-        ]),
+        fixedResponse("rate limited", {
+          status: 429,
+          headers: { "retry-after-ms": "0", "x-request-id": "req_123", "x-api-key": "secret" },
+        }),
       ),
     ),
   )
@@ -365,7 +314,7 @@ describe("RequestExecutor", () => {
       expect(errorHttp(error)?.request.headers["x-safe"]).toBe("visible")
       expect(errorHttp(error)?.response?.headers["x-safe"]).toBe("response-secret")
     }).pipe(
-      Effect.provide(responsesLayer([new Response("bad", { status: 400, headers: { "x-safe": "response-secret" } })])),
+      Effect.provide(fixedResponse("bad", { status: 400, headers: { "x-safe": "response-secret" } })),
       Effect.provideService(Headers.CurrentRedactedNames, ["x-safe"]),
     ),
   )
@@ -385,20 +334,18 @@ describe("RequestExecutor", () => {
       })
     }).pipe(
       Effect.provide(
-        responsesLayer([
-          new Response("rate limited", {
-            status: 429,
-            headers: {
-              "retry-after-ms": "0",
-              "x-ratelimit-limit-requests": "500",
-              "x-ratelimit-limit-tokens": "30000",
-              "x-ratelimit-remaining-requests": "499",
-              "x-ratelimit-remaining-tokens": "29900",
-              "x-ratelimit-reset-requests": "1s",
-              "x-ratelimit-reset-tokens": "10s",
-            },
-          }),
-        ]),
+        fixedResponse("rate limited", {
+          status: 429,
+          headers: {
+            "retry-after-ms": "0",
+            "x-ratelimit-limit-requests": "500",
+            "x-ratelimit-limit-tokens": "30000",
+            "x-ratelimit-remaining-requests": "499",
+            "x-ratelimit-remaining-tokens": "29900",
+            "x-ratelimit-reset-requests": "1s",
+            "x-ratelimit-reset-tokens": "10s",
+          },
+        }),
       ),
     ),
   )
@@ -418,20 +365,18 @@ describe("RequestExecutor", () => {
       })
     }).pipe(
       Effect.provide(
-        responsesLayer([
-          new Response("overloaded", {
-            status: 529,
-            headers: {
-              "retry-after-ms": "0",
-              "anthropic-ratelimit-requests-limit": "100",
-              "anthropic-ratelimit-requests-remaining": "12",
-              "anthropic-ratelimit-requests-reset": "2026-05-06T12:00:00Z",
-              "anthropic-ratelimit-input-tokens-limit": "10000",
-              "anthropic-ratelimit-input-tokens-remaining": "9000",
-              "anthropic-ratelimit-input-tokens-reset": "2026-05-06T12:00:10Z",
-            },
-          }),
-        ]),
+        fixedResponse("overloaded", {
+          status: 529,
+          headers: {
+            "retry-after-ms": "0",
+            "anthropic-ratelimit-requests-limit": "100",
+            "anthropic-ratelimit-requests-remaining": "12",
+            "anthropic-ratelimit-requests-reset": "2026-05-06T12:00:00Z",
+            "anthropic-ratelimit-input-tokens-limit": "10000",
+            "anthropic-ratelimit-input-tokens-remaining": "9000",
+            "anthropic-ratelimit-input-tokens-reset": "2026-05-06T12:00:10Z",
+          },
+        }),
       ),
     ),
   )
@@ -444,10 +389,14 @@ describe("RequestExecutor", () => {
         return yield* executor.execute(request).pipe(Effect.flip)
       }).pipe(
         Effect.provide(
-          countedResponsesLayer(attempts, [
-            new Response("busy", { status: 503, headers: { "retry-after-ms": "0" } }),
-            new Response("ok", { status: 200 }),
-          ]),
+          dynamicResponse((input) =>
+            Effect.gen(function* () {
+              const attempt = yield* Ref.getAndUpdate(attempts, (value) => value + 1)
+              return attempt === 0
+                ? input.respond("busy", { status: 503, headers: { "retry-after-ms": "0" } })
+                : input.respond("ok", { status: 200 })
+            }),
+          ),
         ),
       )
 
@@ -468,12 +417,10 @@ describe("RequestExecutor", () => {
           expect(error.reason).toMatchObject({ _tag: "ProviderInternal", status })
         }).pipe(
           Effect.provide(
-            responsesLayer([
-              new Response("provider failure", {
-                status,
-                headers: { "retry-after-ms": "0" },
-              }),
-            ]),
+            fixedResponse("provider failure", {
+              status,
+              headers: { "retry-after-ms": "0" },
+            }),
           ),
         )
 
@@ -484,21 +431,29 @@ describe("RequestExecutor", () => {
 
   it.effect("preserves large authentication error bodies", () =>
     Effect.gen(function* () {
-      const executor = yield* RequestExecutor.Service
-      const error = yield* executor.execute(request).pipe(Effect.flip)
+      const attempts = yield* Ref.make(0)
+      const error = yield* Effect.gen(function* () {
+        const executor = yield* RequestExecutor.Service
+        return yield* executor.execute(request).pipe(Effect.flip)
+      }).pipe(
+        Effect.provide(
+          dynamicResponse((input) =>
+            Effect.gen(function* () {
+              const attempt = yield* Ref.getAndUpdate(attempts, (value) => value + 1)
+              return attempt === 0
+                ? input.respond("x".repeat(20_000), { status: 401 })
+                : input.respond("should not retry", { status: 200 })
+            }),
+          ),
+        ),
+      )
 
       expectAIError(error)
       expect(error.reason).toMatchObject({ _tag: "Authentication" })
       expect(errorHttp(error)?.bodyTruncated).toBeUndefined()
       expect(errorHttp(error)?.body).toHaveLength(20_000)
-    }).pipe(
-      Effect.provide(
-        responsesLayer([
-          new Response("x".repeat(20_000), { status: 401 }),
-          new Response("should not retry", { status: 200 }),
-        ]),
-      ),
-    ),
+      expect(yield* Ref.get(attempts)).toBe(1)
+    }),
   )
 
   it.effect("preserves response body fields", () =>
@@ -512,11 +467,9 @@ describe("RequestExecutor", () => {
       )
     }).pipe(
       Effect.provide(
-        responsesLayer([
-          new Response('{"error":{"message":"bad","key":"body-secret","detail":"api_key=query-secret"}}', {
-            status: 400,
-          }),
-        ]),
+        fixedResponse('{"error":{"message":"bad","key":"body-secret","detail":"api_key=query-secret"}}', {
+          status: 400,
+        }),
       ),
     ),
   )
@@ -530,9 +483,7 @@ describe("RequestExecutor", () => {
       expect(errorHttp(error)?.body).toBe("provider echoed query-secret-123 and authorization header-secret-456")
     }).pipe(
       Effect.provide(
-        responsesLayer([
-          new Response("provider echoed query-secret-123 and authorization header-secret-456", { status: 400 }),
-        ]),
+        fixedResponse("provider echoed query-secret-123 and authorization header-secret-456", { status: 400 }),
       ),
     ),
   )
@@ -540,9 +491,7 @@ describe("RequestExecutor", () => {
   it.effect("does not re-execute after a successful response reaches stream parsing", () =>
     Effect.gen(function* () {
       const attempts = yield* Ref.make(0)
-      const model = OpenAIChat.route
-        .with({ endpoint: { baseURL: "https://api.openai.test/v1" } })
-        .model({ id: "gpt-4o-mini" })
+      const model = route.with({ endpoint: { baseURL: "https://api.openai.test/v1" } }).model({ id: "gpt-4o-mini" })
       const error = yield* LLMClient.generate(LLM.request({ model, prompt: "Say hello." })).pipe(
         Effect.provide(
           dynamicResponse((input) =>
@@ -570,7 +519,7 @@ describe("RequestExecutor", () => {
 })
 
 describe("WebSocket channel execution", () => {
-  const model = OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).responses("gpt-4.1-mini")
+  const model = configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).responses("gpt-4.1-mini")
   const request = LLM.request({ model, prompt: "Say hello." })
   const frames = [
     JSON.stringify({ type: "response.output_text.delta", item_id: "msg_1", delta: "Hi" }),
