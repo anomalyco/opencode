@@ -96,15 +96,18 @@ test("replaces only the selected text and leaves the caret after the paste", asy
   await page.evaluate(() => navigator.clipboard.writeText("one\ntwo"))
   await page.keyboard.type("before replace after")
   await expect(input).toHaveText("before replace after")
-  const position = await input.evaluate((element) => {
+  await page.evaluate(() => document.fonts.ready)
+  const word = await input.evaluate((element) => {
     const range = document.createRange()
     range.setStart(element.firstChild!, 7)
     range.setEnd(element.firstChild!, 14)
-    const word = range.getBoundingClientRect()
-    const editor = element.getBoundingClientRect()
-    return { x: word.x + word.width / 2 - editor.x, y: word.y + word.height / 2 - editor.y }
+    const rect = range.getBoundingClientRect()
+    return { x: rect.x, y: rect.y + rect.height / 2, width: rect.width }
   })
-  await input.dblclick({ position })
+  await page.mouse.move(word.x, word.y)
+  await page.mouse.down()
+  await page.mouse.move(word.x + word.width, word.y, { steps: 5 })
+  await page.mouse.up()
   await expect.poll(() => page.evaluate(() => window.getSelection()?.toString())).toBe("replace")
   await page.keyboard.press("ControlOrMeta+V")
   await expect.poll(() => input.innerText()).toBe("before one\ntwo after")
