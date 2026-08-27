@@ -4,7 +4,6 @@ import type { Context as PluginContext } from "@opencode-ai/plugin/effect/plugin
 import { ToolFailure } from "@opencode-ai/ai"
 import { FileDiff } from "@opencode-ai/schema/file-diff"
 import { Effect, Result, Schema } from "effect"
-import path from "path"
 import { Bom } from "@opencode-ai/util/bom"
 import { Environment } from "../../environment/index.js"
 import { Formatter } from "../../formatter.js"
@@ -87,8 +86,10 @@ export const Plugin = {
             const parsed = Patch.parse(input.patchText)
             const lockTargets = Result.isSuccess(parsed)
               ? parsed.success.flatMap((hunk) => [
-                  path.resolve(location.directory, hunk.path),
-                  ...(hunk.type === "update" && hunk.movePath ? [path.resolve(location.directory, hunk.movePath)] : []),
+                  LocationMutation.resolvePath(location.directory, hunk.path),
+                  ...(hunk.type === "update" && hunk.movePath
+                    ? [LocationMutation.resolvePath(location.directory, hunk.movePath)]
+                    : []),
                 ])
               : []
             const fail = (operation: string, error: unknown) => {
