@@ -9,6 +9,7 @@ import {
   type ModelUsagePoint,
   type StatsModelData,
 } from "@opencode-ai/stats-core/domain/home"
+import { statModel } from "@opencode-ai/stats-core/domain/model-normalization"
 import { createAsync, query, useParams } from "@solidjs/router"
 import { createMemo, createSignal, createUniqueId, For, onMount, Show, type JSX } from "solid-js"
 import { getRequestEvent } from "solid-js/web"
@@ -40,6 +41,8 @@ import {
 } from "../stats-shell"
 
 const statsUnfurlPath = "banner.png"
+const glmFlashCatalogId = "zhipuai/glm-5.3-flash"
+const glmFlashModel = "glm-5.3-flash"
 const shortMonths = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"] as const
 
 type IsoCountryCode = readonly [string, string, string]
@@ -89,14 +92,21 @@ export default function StatsModel() {
   const stats = createMemo(() => page()?.stats)
   const githubStars = createAsync(() => getGitHubStars())
   const [themePreference, setThemePreference] = createSignal<ThemePreference>("system")
-  const modelName = createMemo(() => catalogEntry()?.name ?? stats()?.model ?? modelParam() ?? i18n.t("model.fallback"))
-  const labName = createMemo(() => formatCatalogLabName(catalogEntry()?.lab ?? stats()?.provider ?? labParam()))
-  const modelTitle = createMemo(() => i18n.t("model.title", { model: modelName() }))
-  const modelDescription = createMemo(() => i18n.t("model.description", { model: modelName() }))
-  const modelPath = createMemo(
-    () =>
-      `/data/${catalogEntry()?.id ?? [labParam(), stats()?.slug ?? modelParam()].filter((part) => part.length > 0).join("/")}`,
+  const canonicalModel = createMemo(() => statModel(stats()?.model ?? modelParam(), undefined))
+  const modelName = createMemo(
+    () => catalogEntry()?.name ?? publicModelName(canonicalModel()) ?? i18n.t("model.fallback"),
   )
+  const labName = createMemo(() => formatCatalogLabName(catalogEntry()?.lab ?? stats()?.provider ?? labParam()))
+  const formerName = createMemo(() => formerModelName(canonicalModel()))
+  const searchModelName = createMemo(() => (formerName() ? `${modelName()} (formerly ${formerName()})` : modelName()))
+  const modelTitle = createMemo(() => i18n.t("model.title", { model: searchModelName() }))
+  const modelDescription = createMemo(() => i18n.t("model.description", { model: searchModelName() }))
+  const modelPath = createMemo(() => {
+    const fallback = formerName()
+      ? glmFlashCatalogId
+      : [labParam(), stats()?.slug ?? canonicalModel()].filter((part) => part.length > 0).join("/")
+    return `/data/${catalogEntry()?.id ?? fallback}`
+  })
   const modelUrl = createMemo(() => localizedUrl(language.locale(), modelPath()))
   const statsUnfurlUrl = new URL(statsUnfurlPath, localizedUrl("en", "/data/")).toString()
   const modelHeaderLinks = createMemo<readonly HeaderLink[]>(() => [
@@ -167,6 +177,7 @@ export default function StatsModel() {
                   catalog={catalogEntry() ?? null}
                   catalogData={page()?.catalog ?? null}
                   labName={labName()}
+                  formerName={formerName()}
                 />
                 <ModelOverview catalog={catalogEntry() ?? null} />
                 <ModelMomentumSection data={stats() ?? null} />
@@ -255,6 +266,7 @@ function ModelHero(props: {
   catalog: ModelCatalogEntry | null
   catalogData: ModelPageCatalog | null
   labName: string
+  formerName?: string
 }) {
   const i18n = useI18n()
   const language = useLanguage()
@@ -336,6 +348,7 @@ function ModelHero(props: {
         when={props.data}
         fallback={
           <p data-slot="model-hero-state">
+            <Show when={props.formerName}>{(name) => <span>{`Formerly ${name()}.`}</span>}</Show>
             <span>Listed</span>
             <span>across the shared model catalog.</span>
           </p>
@@ -343,6 +356,7 @@ function ModelHero(props: {
       >
         {(data) => (
           <p data-slot="model-hero-rankline">
+            <Show when={props.formerName}>{(name) => <span>{`Formerly ${name()}.`}</span>}</Show>
             <span>Ranked</span>
             <span data-slot="model-hero-rank-group">
               <span data-slot="model-hero-pill">{formatHeroRank(data().rank)}</span>
@@ -1437,4 +1451,14 @@ function providerSlug(provider: string) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .replace(/-{2,}/g, "-")
+}
+
+function formerModelName(model: string) {
+  return statModel(model, undefined) === glmFlashModel ? "ox-alpha" : undefined
+}
+
+function publicModelName(model: string) {
+  if (model === "unknown") return undefined
+  if (model === glmFlashModel) return "GLM-5.3-Flash"
+  return model
 }
