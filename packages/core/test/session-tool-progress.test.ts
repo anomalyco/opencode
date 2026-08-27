@@ -29,7 +29,7 @@ const model = { id: Model.ID.make("model"), providerID: Provider.ID.make("provid
 
 const content = (text: string) => [{ type: "text" as const, text }] as const
 
-describe("Tool.Metadata", () => {
+describe("Session tool progress", () => {
   it.effect("keeps progress live-only and terminal settlements durable", () =>
     Effect.gen(function* () {
       const { db } = yield* Database.Service

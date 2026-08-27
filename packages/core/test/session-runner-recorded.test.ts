@@ -1,5 +1,5 @@
 import { HttpRecorder } from "@opencode-ai/http-recorder"
-import * as OpenAIChat from "@opencode-ai/ai/protocols/openai-chat"
+import { OpenAIChat } from "@opencode-ai/ai/protocols/openai-chat"
 import { Auth, LLMClient, RequestExecutor } from "@opencode-ai/ai/route"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Database } from "@opencode-ai/core/database/database"
@@ -23,7 +23,7 @@ import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionRunCoordinator } from "@opencode-ai/core/session/run-coordinator"
 import { SessionRunner } from "@opencode-ai/core/session/runner/index"
-import * as SessionRunnerLLM from "@opencode-ai/core/session/runner/llm"
+import { SessionRunnerLLM } from "@opencode-ai/core/session/runner/llm"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { Tool } from "@opencode-ai/core/tool"
 import { SessionTable } from "@opencode-ai/core/session/sql"
@@ -323,11 +323,11 @@ describe("SessionModelRequest HTTP bridge", () => {
         .onConflictDoNothing()
         .run()
         .pipe(Effect.orDie)
-      const retrySessionID = Session.ID.make("ses_model_request_http_retry")
+      const sessionID = Session.ID.make("ses_model_request_http")
       yield* db
         .insert(SessionTable)
         .values({
-          id: retrySessionID,
+          id: sessionID,
           project_id: Project.ID.global,
           slug: "test",
           directory: "/project",
@@ -337,16 +337,16 @@ describe("SessionModelRequest HTTP bridge", () => {
         .run()
         .pipe(Effect.orDie)
       const session = yield* Session.Service
-      yield* session.prompt({ sessionID: retrySessionID, text: "Say hello.", resume: false })
+      yield* session.prompt({ sessionID, text: "Say hello.", resume: false })
 
-      yield* session.resume(retrySessionID)
+      yield* session.resume(sessionID)
 
       expect(methods).toEqual(["POST"])
       expect(headers).toEqual(["effect"])
       expect(seen).toEqual(["request", "response:200:effect"])
       expect(bodies).toHaveLength(1)
       expect(bodies[0]?.byteLength).toBeGreaterThan(0)
-      expect((yield* session.context(retrySessionID))[1]).toMatchObject({
+      expect((yield* session.context(sessionID))[1]).toMatchObject({
         type: "assistant",
         content: [{ type: "text", text: "Hooked!" }],
       })
