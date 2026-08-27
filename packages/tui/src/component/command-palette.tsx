@@ -36,7 +36,6 @@ export function CommandPaletteDialog() {
   )
   const settingOptions = settings.map((setting) => ({
     title: setting.title,
-    description: setting.description,
     category: setting.category,
     searchText: setting.keywords?.join(" "),
     searchFooter: `Settings · ${setting.category}`,

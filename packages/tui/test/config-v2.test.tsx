@@ -78,7 +78,6 @@ test("shows the TPS default in session settings", () => {
 test("names tool grouping explicitly in settings", () => {
   expect(settings.find((setting) => setting.path.join(".") === "session.grouping")).toMatchObject({
     title: "Tool grouping",
-    description: "Group reads and searches.",
     category: "Session",
     default: "auto",
     values: ["none", "auto"],
