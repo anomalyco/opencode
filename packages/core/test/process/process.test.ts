@@ -41,6 +41,17 @@ describe("AppProcess", () => {
       }),
     )
 
+    it.live(
+      "maps spawn failures to AppProcessError",
+      Effect.gen(function* () {
+        const svc = yield* AppProcess.Service
+        const error = yield* svc.run(ChildProcess.make("opencode-missing-command-run")).pipe(Effect.flip)
+
+        expect(error).toBeInstanceOf(AppProcess.AppProcessError)
+        expect(error.command).toBe("opencode-missing-command-run")
+      }),
+    )
+
     it.effect(
       "captures stdout and stderr in emission order",
       Effect.gen(function* () {
@@ -294,6 +305,19 @@ describe("AppProcess", () => {
   })
 
   describe("runStream", () => {
+    it.live(
+      "maps streaming spawn failures to AppProcessError",
+      Effect.gen(function* () {
+        const svc = yield* AppProcess.Service
+        const error = yield* svc
+          .runStream(ChildProcess.make("opencode-missing-command-stream"))
+          .pipe(Stream.runCollect, Effect.flip)
+
+        expect(error).toBeInstanceOf(AppProcess.AppProcessError)
+        expect(error.command).toBe("opencode-missing-command-stream")
+      }),
+    )
+
     it.live(
       "emits lines incrementally and ends cleanly on exit 0",
       Effect.gen(function* () {
