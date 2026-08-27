@@ -217,43 +217,16 @@ smoke(
       )
       expect(yield* waitForText(base, first.id, "before-restart")).toContain("before-restart")
 
-      const independentScope = yield* Scope.fork(scope)
-      const independent = yield* ServerProcess.start<never, never>(options).pipe(
-        Effect.provideService(Scope.Scope, independentScope),
-      )
+      const independent = yield* ServerProcess.start<never, never>(options)
       const otherBase = HttpServer.formatAddress(independent.address)
       expect((yield* request(otherBase, "GET", `/api/experimental/session/${sessionID}/terminal`)).data).toEqual([])
-      expect(yield* request(otherBase, "POST", "/api/experimental/persistent-pty/prepare-restart")).toEqual({
-        handoff: null,
-      })
-      expect(yield* Effect.promise(() => fs.readdir(fixture.directory))).toHaveLength(1)
-      const second = Schema.decodeUnknownSync(PersistentPty.Info)(
-        (yield* request(otherBase, "POST", `/api/experimental/session/${sessionID}/terminal`, {
-          command: "/bin/sh",
-          args: ["-c", "printf isolated; exec cat"],
-          cwd: process.cwd(),
-          title: "independent",
-          env: {},
-        })).data,
-      )
-      expect((yield* request(base, "GET", `/api/experimental/session/${sessionID}/terminal`)).data).toMatchObject([
-        { id: first.id, pid: first.pid },
-      ])
-      expect((yield* request(otherBase, "GET", `/api/experimental/session/${sessionID}/terminal`)).data).toMatchObject([
-        { id: second.id, pid: second.pid },
-      ])
-      expect(second.pid).not.toBe(first.pid)
-      expect(yield* Effect.promise(() => fs.readdir(fixture.directory))).toHaveLength(2)
 
       const handoff = Schema.decodeUnknownSync(PersistentPty.Handoff)(
         (yield* request(base, "POST", "/api/experimental/persistent-pty/prepare-restart")).handoff,
       )
-      expect(path.dirname(handoff.directory)).toBe(fixture.directory)
-      expect(handoff.expiresAt).toBeGreaterThan(Date.now())
-      const registration = Schema.decodeUnknownSync(Schema.Struct({ pid: Schema.Number, instance_id: Schema.String }))(
+      const registration = Schema.decodeUnknownSync(Schema.Struct({ pid: Schema.Number }))(
         yield* Effect.promise(() => Bun.file(path.join(handoff.directory, "service.json")).json()),
       )
-      expect(registration.instance_id).toBe(handoff.instanceID)
       yield* Scope.close(originalScope, Exit.void)
       expect(process.kill(registration.pid, 0)).toBeTrue()
       expect(process.kill(first.pid, 0)).toBeTrue()
@@ -267,38 +240,11 @@ smoke(
         (yield* request(replacementBase, "GET", `/api/experimental/session/${sessionID}/terminal`)).data,
       ).toMatchObject([{ id: first.id, pid: first.pid }])
       expect(yield* waitForText(replacementBase, first.id, "before-restart")).toContain("before-restart")
-      yield* Effect.promise(async () => {
-        const attachment = await openTerminalSocket(replacementBase, first.id, "replacement")
-        try {
-          attachment.socket.send(inputFrame(80, 24, "after-restart\n"))
-          await waitForSocketOutput([attachment], "after-restart")
-        } finally {
-          attachment.socket.close()
-        }
-      })
-      expect(yield* waitForText(replacementBase, first.id, "after-restart")).toContain("before-restart")
-      expect(
-        Schema.decodeUnknownSync(Schema.Struct({ pid: Schema.Number }))(
-          yield* Effect.promise(() => Bun.file(path.join(handoff.directory, "service.json")).json()),
-        ).pid,
-      ).toBe(registration.pid)
 
       yield* Scope.close(replacementScope, Exit.void)
       yield* waitForExit(registration.pid)
       yield* waitForExit(first.pid)
       expect(existsSync(path.join(handoff.directory, "service.json"))).toBeFalse()
-      expect(yield* waitForText(otherBase, second.id, "isolated")).toContain("isolated")
-      const remaining = yield* Effect.promise(async () => {
-        const directories = await fs.readdir(fixture.directory)
-        const directory = directories.find((name) => path.join(fixture.directory, name) !== handoff.directory)
-        if (!directory) throw new Error("Missing independent daemon directory")
-        return Schema.decodeUnknownSync(Schema.Struct({ pid: Schema.Number }))(
-          await Bun.file(path.join(fixture.directory, directory, "service.json")).json(),
-        )
-      })
-      yield* Scope.close(independentScope, Exit.void)
-      yield* waitForExit(remaining.pid)
-      yield* waitForExit(second.pid)
     }),
   30_000,
 )

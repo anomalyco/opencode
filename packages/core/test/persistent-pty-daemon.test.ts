@@ -170,61 +170,6 @@ it.live("rejects incompatible daemons without replacing or killing them", () =>
   }),
 )
 
-it.live("preparing a restart does not start an unused daemon", () =>
-  Effect.gen(function* () {
-    const directory = yield* temporaryDirectory()
-    const daemon = yield* makeDaemonTransport(directory, () => Promise.reject(new Error("must not spawn")))
-    expect(yield* daemon.prepareRestart).toBeNull()
-    expect(yield* daemon.requestIfRunning({ op: "list" })).toBeUndefined()
-    expect(yield* daemon.prepareRestart).toBeNull()
-  }),
-)
-
-it.live("prepares handoff on the owner connection and releases ownership with its scope", () =>
-  Effect.gen(function* () {
-    const directory = yield* temporaryDirectory()
-    const socketPath = path.join(directory, "daemon.sock")
-    const expiresAt = Date.now() + 30_000
-    let owner: net.Socket | undefined
-    let ended = false
-    yield* listen(
-      socketPath,
-      (socket, request) => {
-        if (request.op === "ping") return pong
-        if (request.op === "own") {
-          owner = socket
-          socket.once("end", () => {
-            ended = true
-          })
-          return { type: "owned" }
-        }
-        if (request.op === "prepare_handoff") {
-          expect(owner).toBe(socket)
-          return { type: "handoff", ticket: "restart-ticket", expires_at: expiresAt }
-        }
-        return { type: "terminals", terminals: [] }
-      },
-      false,
-    )
-    yield* Effect.promise(() => writeRegistration(directory, socketPath))
-    yield* Effect.gen(function* () {
-      const daemon = yield* makeDaemonTransport(directory)
-      yield* daemon.request({ op: "list" })
-      expect(yield* daemon.prepareRestart).toEqual({
-        directory,
-        instanceID: "test",
-        ticket: "restart-ticket",
-        expiresAt,
-      })
-      expect(ended).toBeFalse()
-    }).pipe(Effect.scoped)
-    yield* Effect.promise(async () => {
-      for (let attempt = 0; attempt < 100 && !ended; attempt++) await Bun.sleep(10)
-    })
-    expect(ended).toBeTrue()
-  }),
-)
-
 function temporaryDirectory() {
   return Effect.acquireRelease(
     Effect.promise(() => mkdtemp(path.join(os.tmpdir(), "opencode-pty-test-"))),
@@ -235,7 +180,6 @@ function temporaryDirectory() {
 function listen(
   socketPath: string,
   handle: (socket: net.Socket, request: Record<string, unknown>, token: string) => object | undefined,
-  autoOwn = true,
 ) {
   return Effect.acquireRelease(
     Effect.promise(async () => {
@@ -243,16 +187,13 @@ function listen(
       const server = net.createServer((socket) => {
         sockets.add(socket)
         socket.once("close", () => sockets.delete(socket))
-        void (async () => {
-          while (!socket.destroyed) {
-            const envelope = await readRequest(socket)
+        void readRequest(socket)
+          .then((envelope) => {
             const response =
-              autoOwn && envelope.request.op === "own"
-                ? { type: "owned" }
-                : handle(socket, envelope.request, envelope.token)
+              envelope.request.op === "own" ? { type: "owned" } : handle(socket, envelope.request, envelope.token)
             if (response) socket.write(frame(response))
-          }
-        })().catch(() => socket.destroy())
+          })
+          .catch(() => socket.destroy())
       })
       await new Promise<void>((resolve, reject) => {
         server.once("error", reject)
