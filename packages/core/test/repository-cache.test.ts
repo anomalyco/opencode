@@ -27,7 +27,8 @@ describe("RepositoryCache", () => {
           await fs.writeFile(path.join(localPath, "stale.txt"), "stale")
         })
 
-        const result = yield* (yield* RepositoryCache.Service).ensure({ reference: fixture.reference })
+        const cache = yield* RepositoryCache.Service
+        const result = yield* cache.ensure({ reference: fixture.reference })
 
         expect(result.status).toBe("cloned")
         expect(yield* exists(path.join(localPath, "stale.txt"))).toBe(false)
@@ -96,7 +97,8 @@ describe("RepositoryCache", () => {
       Effect.gen(function* () {
         yield* Effect.promise(() => git(fixture.root, "clone", fixture.remote, path.join(fixture.root, "repos")))
 
-        const result = yield* (yield* RepositoryCache.Service).ensure({ reference: fixture.reference })
+        const cache = yield* RepositoryCache.Service
+        const result = yield* cache.ensure({ reference: fixture.reference })
 
         expect(result.status).toBe("cloned")
         expect(yield* read(path.join(result.localPath, "README.md"))).toBe("one\n")
