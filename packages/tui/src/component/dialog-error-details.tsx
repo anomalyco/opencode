@@ -4,12 +4,19 @@ import { createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import { useConfig } from "../config"
 import { useClipboard } from "../context/clipboard"
 import { Keymap } from "../context/keymap"
+import { useLocation } from "../context/location"
+import { useRoute } from "../context/route"
 import { getScrollAcceleration } from "../util/scroll"
 import { useTheme } from "../context/theme"
+import { emptyPrompt } from "../prompt/history"
+import { useDialog } from "../ui/dialog"
 import { useToast } from "../ui/toast"
 
-export function DialogErrorDetails(props: { title: string; error: string; onBack: () => void }) {
+export function DialogErrorDetails(props: { title: string; error: string; context?: string; onBack: () => void }) {
   const clipboard = useClipboard()
+  const dialog = useDialog()
+  const location = useLocation()
+  const route = useRoute()
   const toast = useToast()
   const theme = useTheme("elevated")
   const overlayTheme = useTheme("overlay")
@@ -49,11 +56,24 @@ export function DialogErrorDetails(props: { title: string; error: string; onBack
       .catch(toast.error)
   }
 
+  const investigate = () => {
+    route.navigate({
+      type: "home",
+      location: location.ref,
+      prompt: {
+        ...emptyPrompt(),
+        text: `Investigate why this OpenCode component failed in the current project.\n\n${props.title}${props.context ? `\n${props.context}` : ""}\nError: ${props.error}\n\nInspect the relevant project and global OpenCode configuration, startup or loading behavior, required environment variables or credentials, dependencies, and logs. Identify the root cause and recommend a fix.`,
+      },
+    })
+    dialog.clear()
+  }
+
   Keymap.createLayer(() => ({
     mode: "modal",
     commands: [
       { bind: "escape", title: "Back", group: "Dialog", run: props.onBack },
       { bind: "c", title: "Copy details", group: "Dialog", run: copy },
+      { bind: "i", title: "Investigate error", group: "Dialog", run: investigate },
     ],
   }))
 
@@ -95,12 +115,18 @@ export function DialogErrorDetails(props: { title: string; error: string; onBack
           </text>
         </scrollbox>
       </box>
-      <box flexDirection="row" justifyContent="space-between" paddingLeft={2} paddingRight={2}>
-        <text>
+      <box flexDirection="row" gap={3} paddingLeft={2} paddingRight={2}>
+        <text flexGrow={1}>
           <span style={{ fg: theme.text.default }}>
             <b>{scrollable() ? "↑/↓" : ""}</b>
           </span>
           <span style={{ fg: theme.text.subdued }}>{scrollable() ? " scroll" : ""}</span>
+        </text>
+        <text onMouseUp={investigate}>
+          <span style={{ fg: theme.text.default }}>
+            <b>i</b>
+          </span>
+          <span style={{ fg: theme.text.subdued }}> investigate</span>
         </text>
         <text onMouseUp={copy}>
           <span style={{ fg: copied() ? theme.text.feedback.success.default : theme.text.default }}>

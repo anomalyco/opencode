@@ -1,6 +1,7 @@
 export * as Skill from "./skill.js"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import type { FSUtil } from "@opencode-ai/util/fs-util"
 import path from "path"
 import { Context, Effect, Layer, Types } from "effect"
 import { Skill } from "@opencode-ai/schema/skill"
@@ -52,6 +53,21 @@ export const toModelOutput = (skill: Info, files: ReadonlyArray<string>) => {
   ].join("\n")
 }
 
+export const prepare = Effect.fn("Skill.prepare")(function* (fs: FSUtil.Interface, skill: Info) {
+  const directory = path.dirname(skill.location)
+  const files =
+    path.basename(skill.location) === "SKILL.md"
+      ? (yield* fs.scan("**/*", { cwd: directory, absolute: true, include: "file", dot: true }))
+          .filter((file) => path.basename(file) !== "SKILL.md")
+          .toSorted()
+          .slice(0, 10)
+      : []
+  return {
+    directory,
+    output: toModelOutput(skill, files),
+  }
+})
+
 export type Data = {
   skills: Map<ID, Types.DeepMutable<Info>>
 }
@@ -64,6 +80,7 @@ export type Draft = {
 }
 
 export interface Interface extends State.Transformable<Draft> {
+  readonly get: (id: ID) => Effect.Effect<Info | undefined>
   readonly list: () => Effect.Effect<Info[]>
 }
 
@@ -98,6 +115,9 @@ const layer = Layer.effect(
     return Service.of({
       transform: state.transform,
       reload: state.reload,
+      get: Effect.fn("Skill.get")(function* (id) {
+        return state.get().skills.get(id)
+      }),
       list: Effect.fn("Skill.list")(function* () {
         return Array.from(state.get().skills.values())
       }),

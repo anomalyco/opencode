@@ -1,9 +1,9 @@
-export * as MCPClient from "./client.js"
+export * as McpClient from "./client.js"
 
 import path from "node:path"
 import { pathToFileURL } from "node:url"
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
+import { StreamableHTTPClientTransport, StreamableHTTPError } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js"
 import { UnauthorizedError, type OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js"
 import {
@@ -29,7 +29,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js"
 import { Cause, Effect, Exit, Schema } from "effect"
 import { ConfigMCP } from "@opencode-ai/schema/config/mcp"
-import { MCPStdio } from "./stdio.js"
+import { McpStdio } from "./stdio.js"
 
 const DEFAULT_STARTUP_TIMEOUT = 30_000
 const DEFAULT_CATALOG_TIMEOUT = 30_000
@@ -191,10 +191,38 @@ export const connect = Effect.fnUntraced(function* (
   elicitation?: ElicitationHandler,
   clientInfo: Implementation = { name: "opencode", version: "unknown" },
 ) {
-  const transport: Transport = yield* Effect.gen(function* () {
+  const initialize = Effect.fnUntraced(function* (transport: Transport) {
+    const client = new Client(clientInfo, {
+      capabilities: {
+        ...(elicitation ? { elicitation: { form: { applyDefaults: true }, url: {} } } : {}),
+        // https://github.com/anomalyco/opencode/issues/2308
+        roots: {},
+      },
+    })
+    client.setRequestHandler(ListRootsRequestSchema, () =>
+      Promise.resolve({ roots: [{ uri: pathToFileURL(directory).href }] }),
+    )
+    if (elicitation) {
+      client.setRequestHandler(ElicitRequestSchema, (request, extra) =>
+        Effect.runPromise(elicitation.create({ server, params: request.params, signal: extra.signal })),
+      )
+      client.setNotificationHandler(ElicitationCompleteNotificationSchema, (notification) =>
+        Effect.runPromise(elicitation.complete({ server, elicitationID: notification.params.elicitationId })),
+      )
+    }
+
+    yield* Effect.tryPromise({
+      try: (signal) =>
+        client.connect(transport, { timeout: config.timeout?.startup ?? DEFAULT_STARTUP_TIMEOUT, signal }),
+      catch: (error) => error,
+    }).pipe(Effect.onError(() => Effect.promise(() => transport.close()).pipe(Effect.ignore)))
+    return client
+  })
+
+  const exit = yield* Effect.gen(function* () {
     if (config.type === "local") {
       const [command, ...args] = config.command
-      return yield* MCPStdio.make({
+      const transport = yield* McpStdio.make({
         server,
         command,
         args,
@@ -204,38 +232,32 @@ export const connect = Effect.fnUntraced(function* (
           ...config.environment,
         },
       })
+      return yield* initialize(transport)
     }
     if (!URL.canParse(config.url))
       return yield* new ConnectError({ server, message: `Invalid MCP URL for "${server}"` })
-    return new StreamableHTTPClientTransport(new URL(config.url), {
-      requestInit: config.headers ? { headers: config.headers } : undefined,
-      authProvider,
-    })
-  })
-  const client = new Client(clientInfo, {
-    capabilities: {
-      ...(elicitation ? { elicitation: { form: { applyDefaults: true }, url: {} } } : {}),
-      // https://github.com/anomalyco/opencode/issues/2308
-      roots: {},
-    },
-  })
-  client.setRequestHandler(ListRootsRequestSchema, () =>
-    Promise.resolve({ roots: [{ uri: pathToFileURL(directory).href }] }),
-  )
-  if (elicitation) {
-    client.setRequestHandler(ElicitRequestSchema, (request, extra) =>
-      Effect.runPromise(elicitation.create({ server, params: request.params, signal: extra.signal })),
-    )
-    client.setNotificationHandler(ElicitationCompleteNotificationSchema, (notification) =>
-      Effect.runPromise(elicitation.complete({ server, elicitationID: notification.params.elicitationId })),
-    )
-  }
+    // Prefer raw tools for our Code Mode without changing the configured URL used for OAuth identity.
+    const url = new URL(config.url)
+    const addedCodemode = config.codemode !== false && !url.searchParams.has("codemode")
+    if (addedCodemode) url.searchParams.set("codemode", "false")
+    const open = (url: URL) =>
+      initialize(
+        new StreamableHTTPClientTransport(url, {
+          requestInit: config.headers ? { headers: config.headers } : undefined,
+          authProvider,
+        }),
+      )
 
-  const exit = yield* Effect.tryPromise({
-    try: (signal) => client.connect(transport, { timeout: config.timeout?.startup ?? DEFAULT_STARTUP_TIMEOUT, signal }),
-    catch: (error) => error,
+    return yield* open(url).pipe(
+      Effect.catch((error) => {
+        if (!addedCodemode || !(error instanceof StreamableHTTPError) || error.code !== 404) return Effect.fail(error)
+        // Some servers reject unknown query params. Retry once with the user's original URL.
+        return open(new URL(config.url))
+      }),
+    )
   }).pipe(Effect.exit)
   if (Exit.isSuccess(exit)) {
+    const client = exit.value
     // Closing the client closes the transport, which ends stdin and then kills through the spawner
     // handle if the server does not exit cleanly. The process scope remains a final backstop.
     yield* Effect.addFinalizer(() => Effect.promise(() => client.close()).pipe(Effect.ignore))
@@ -437,7 +459,6 @@ export const connect = Effect.fnUntraced(function* (
     } satisfies Connection
   }
 
-  yield* Effect.promise(() => transport.close()).pipe(Effect.ignore)
   const error = Cause.squash(exit.cause)
   if (error instanceof UnauthorizedError) return yield* new NeedsAuthError({ server })
   return yield* new ConnectError({ server, message: error instanceof Error ? error.message : String(error) })

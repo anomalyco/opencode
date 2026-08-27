@@ -79,15 +79,23 @@ opencode2 plugin list --builtin
 opencode2 plugin remove opencode-acme-plugin@1.2.0
 ```
 
-Package installation accepts npm names with versions, tags, or ranges. Configure local paths directly instead of using
-Git, tarball, or npm alias targets with `plugin add`.
+Package installation accepts npm names with versions, tags, or ranges, plus npm-compatible Git package specifications.
+Git repositories can use hosted shortcuts, HTTPS, or SSH, including private repositories available through your existing
+Git credentials.
 
 ```sh
 opencode2 plugin add @acme/opencode-plugin@beta
+opencode2 plugin add github:acme/opencode-plugin
+opencode2 plugin add git+ssh://git@github.com/acme/opencode-plugin.git#main
+opencode2 plugin add 'github:acme/plugins#main::path:packages/opencode-plugin'
 ```
 
-Changes under watched config directories reload automatically. Restart OpenCode after changing an installed package
-version or an unwatched dependency.
+Branches, tags, complete commit hashes, and npm's `::path:` repository-subdirectory selectors are supported. Configure
+local paths directly; tarball and npm alias targets are not accepted by `plugin add`.
+
+Changes under watched config directories reload automatically. On server startup, OpenCode refreshes unpinned package and
+Git plugins once, then uses that result for the lifetime of the server. Exact npm versions and full Git commit hashes stay
+pinned. Changes to unwatched local dependencies may still require restarting OpenCode.
 
 ```sh
 touch .opencode/plugins/concise.ts

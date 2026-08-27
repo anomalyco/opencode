@@ -45,7 +45,7 @@ const declineDefect = (cause: Cause.Cause<Tool.Error>) => {
   return decline ? Result.succeed(decline) : Result.fail(cause)
 }
 
-interface Prepared {
+export interface Prepared {
   readonly request: LLMRequest
   readonly options: StreamOptions
   /**
@@ -297,17 +297,17 @@ export const layer = Layer.effect(
       )
       // Hooks mutate this record in place: edit descriptions and schemas, rename, or remove.
       const definitions = Object.fromEntries(Array.from(given, ([definition, tool]) => [tool.name, definition]))
-      const context =
-        input.contextHooks === false
-          ? { system: input.transcript.system, messages: input.transcript.messages, tools: definitions }
-          : yield* hooks.trigger("session", "context", {
-              sessionID: session.id,
-              agent: input.scope.agentID,
-              model: resolved.ref,
-              system: input.transcript.system,
-              messages: input.transcript.messages,
-              tools: definitions,
-            })
+      const context: PluginHooks.Domains["session"]["context"] = {
+        sessionID: session.id,
+        agent: input.scope.agentID,
+        model: resolved.ref,
+        system: input.transcript.system,
+        messages: input.transcript.messages,
+        tools: definitions,
+        generation: {},
+        providerOptions: {},
+      }
+      if (input.contextHooks !== false) yield* hooks.trigger("session", "context", context)
       // Match each surviving entry back to its tool, by recognizing a moved definition or
       // by key. Identity wins so a definition moved onto another tool's name still executes
       // the tool it describes. Entries matching neither were invented by a hook and dropped.
@@ -333,6 +333,8 @@ export const layer = Layer.effect(
           messages: boundImages(unsupportedParts(context.messages, resolved.capabilities)),
           tools: Array.from(hooked, ([name, tool]) => ({ ...tool, name })),
           toolChoice: input.toolChoice,
+          generation: Object.keys(context.generation).length === 0 ? undefined : context.generation,
+          providerOptions: Object.keys(context.providerOptions).length === 0 ? undefined : context.providerOptions,
         }),
       )
       const hasHttpHooks =
@@ -358,15 +360,10 @@ export const layer = Layer.effect(
           ? { webSocket: transport.bind(session.id) }
           : {}),
       }
-      const executeTool: Prepared["executeTool"] = (input) => {
-        const tool = hooked.get(input.call.name)
-        // A registered tool absent from the hooked set was removed or renamed by a hook.
-        if (!tool && registry.has(input.call.name))
-          return new Tool.Error({ message: `Tool is not available for this request: ${input.call.name}` })
-        return tools
-          .execute(tool ? { ...input, call: { ...input.call, name: tool.name } } : input)
+      const executeTool: Prepared["executeTool"] = (input) =>
+        tools
+          .execute({ ...input, definitions: hooked })
           .pipe(Effect.catchCauseFilter(declineDefect, (decline) => Effect.fail(decline)))
-      }
       return {
         request,
         options,

@@ -108,7 +108,9 @@ test("the tab context menu keeps preview tabs open without offering promotion fo
     await app.waitForFrame((frame) => frame.includes("Rename"))
     expect(app.captureCharFrame()).not.toContain("Keep open")
 
-    await app.mockMouse.click(5, 0)
+    app.mockInput.pressKey("c", { ctrl: true })
+    await app.waitForFrame((frame) => !frame.includes("Rename"))
+
     await app.mockMouse.click(40, 0, MouseButton.RIGHT)
     await app.waitForFrame((frame) => frame.includes("Keep open"))
     const frame = app.captureCharFrame().split("\n")

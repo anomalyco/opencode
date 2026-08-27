@@ -533,32 +533,43 @@ interface IntegrationDomain extends Omit<IntegrationApi<unknown>, "wellknown"> {
 
 ### MCP
 
-List servers and change connection state.
+List MCP servers and their current connection state.
 
 ```ts
 effect: (ctx) =>
   Effect.gen(function* () {
     const mcp = ctx.mcp
     const servers = yield* mcp.list().pipe(Effect.orDie)
-    yield* mcp.connect({ server: "docs" }).pipe(Effect.orDie)
-    yield* mcp.disconnect({ server: "docs" }).pipe(Effect.orDie)
     yield* Effect.logInfo("MCP servers", { count: servers.data.length })
   }),
 ```
 
-Add servers through the API, or transform and reload their configuration.
+Plugins manage MCP servers only through transforms. Use `draft.set` to add or replace a server, `draft.update` to
+change its configuration, and `draft.remove` to remove it. Inspect configuration with `draft.list` and `draft.get`.
 
 ```ts
 effect: (ctx) =>
   Effect.gen(function* () {
     const mcp = ctx.mcp
-    yield* mcp
-      .add({ server: "docs", config: { type: "remote", url: "https://mcp.example.com" } })
-      .pipe(Effect.orDie)
     yield* mcp.transform((draft) => {
+      const servers = draft.list()
+      const docs = draft.get("docs")
+      draft.set("docs", { type: "remote", url: "https://mcp.example.com" })
       draft.update("docs", (server) => (server.disabled = false))
       draft.remove("legacy")
     })
+  }),
+```
+
+Set `disabled: true` in a transform to disable a server and disconnect it, or `disabled: false` to enable it and allow
+OpenCode to connect. OpenCode reconciles server lifecycle from the transformed configuration.
+
+Call `reload()` after external state used by a transform changes to reapply transforms and reconcile the servers.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const mcp = ctx.mcp
     yield* mcp.reload()
   }),
 ```
@@ -575,7 +586,7 @@ interface MCPDraft {
   remove(name: string): void
 }
 
-interface MCPDomain extends Omit<McpApi<unknown>, "resource"> {
+interface MCPDomain extends Pick<McpApi<unknown>, "list"> {
   readonly transform: Transform<MCPDraft>
   readonly reload: () => Effect.Effect<void>
 }
@@ -818,6 +829,10 @@ interface StorageDomain {
 Register typed tools with Effect `Schema`. The executor receives decoded input and returns an Effect containing typed
 output, display content, or metadata.
 
+The draft supports `add`, `update`, and `remove`. The transform callback is synchronous: it must not return an Effect or Promise. Load
+external data before registering or reloading. OpenCode replays active transforms in registration order on a fresh
+draft; for the same effective tool name, a later valid registration overrides an earlier one.
+
 ```ts
 effect: (ctx) =>
   Effect.gen(function* () {
@@ -839,18 +854,51 @@ effect: (ctx) =>
   }),
 ```
 
+Call `yield* ctx.tool.reload()` after changing source data captured by the callback. Reload replays active transforms
+without changing their order; it does not rerun the plugin effect.
+
+Tools have an `id` containing their effective name, and `get()` returns `undefined` when that ID is not present. Use
+`update` and `remove` with the effective tool name, including its namespace (`acme_greeting` above). Dots in
+namespaces and unsupported characters in tool names become `_`. Missing names are ignored; creating a tool requires
+`add` with a complete definition. Updates preserve the name and namespace. Assign new schemas or options to replace
+them rather than mutating nested values. Invalid updates are logged and leave the previous definition intact.
+
+```ts
+yield* ctx.tool.transform((draft) => {
+  draft.update("acme_greeting", (tool) => {
+    tool.description = "Greet the user by name"
+  })
+  draft.remove("acme_obsolete")
+})
+```
+
+Updates and removals replay in order with additions, including after MCP catalog refreshes.
+
+`transform` returns a scoped registration. Run `yield* registration.dispose` to remove its transform and rebuild
+from the remaining transforms, revealing any earlier definition it overrode. Disposal is idempotent, and closing
+the plugin scope also disposes its registrations.
+
+Each model request captures a tool snapshot. Reload and disposal affect future snapshots, not the definitions or
+executors already captured by an existing request. Executors that close over mutable plugin data still observe
+that data; capture a value inside the transform when it must remain tied to that definition.
+
 Schemas: [`Tool.Content`](/api#schema-Tool.Content), [`Tool.TextContent`](/api#schema-Tool.TextContent),
 [`Tool.FileContent`](/api#schema-Tool.FileContent).
 
 ```ts
 interface ToolDraft {
+  list(): readonly (Tool.Info & { readonly id: string })[]
+  get(id: string): (Tool.Info & { readonly id: string }) | undefined
   add<Input extends Tool.ValueSchema<any>, Output extends Tool.ValueSchema<any> | undefined>(
     tool: Tool.Info<Input, Output>,
   ): void
+  update(id: string, update: (tool: Types.Mutable<Tool.Info>) => void): void
+  remove(id: string): void
 }
 
 interface ToolDomain {
   readonly transform: Transform<ToolDraft>
+  readonly reload: () => Effect.Effect<void>
 }
 ```
 

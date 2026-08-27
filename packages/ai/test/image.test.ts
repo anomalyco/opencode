@@ -7,6 +7,37 @@ import { it } from "./lib/effect.js"
 import { dynamicResponse } from "./lib/http.js"
 
 describe("Image", () => {
+  for (const provider of [OpenAI, Google, XAI, ZAI]) {
+    const model = provider.configure({ apiKey: "test", baseURL: "https://image.test" }).image("image-model")
+    for (const body of ['{"data":42,"candidates":42,"opaque":{"nested":[1,2]},"trace":"outer"}', '{"invalid":']) {
+      it.effect(`retains ${model.provider} image response body and decode cause: ${body}`, () =>
+        Effect.gen(function* () {
+          const error = yield* Image.generate({ model, prompt: "hello" }).pipe(Effect.flip)
+          expect(error.reason._tag).toBe("InvalidProviderOutput")
+          expect(error.message).toContain("invalid response")
+          expect(error.reason.body).toBe(body)
+          expect(error.reason.http).toMatchObject({ status: 200, headers: { "x-image-trace": "trace-1" } })
+          expect(error.reason.http?.url).toStartWith("https://image.test/")
+          expect(error.reason.cause).toBeInstanceOf(Error)
+        }).pipe(
+          Effect.provide(
+            ImageClient.layer.pipe(
+              Layer.provide(
+                dynamicResponse((input) =>
+                  Effect.succeed(
+                    input.respond(body, {
+                      headers: { "content-type": "application/json", "x-image-trace": "trace-1" },
+                    }),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      )
+    }
+  }
+
   it.effect("generates images through the OpenAI Images API", () =>
     Effect.gen(function* () {
       const response = yield* Image.generate({
@@ -530,22 +561,17 @@ describe("Image", () => {
         Effect.sync(() => {
           expect(error.reason._tag).toBe("InvalidProviderOutput")
           if (error.reason._tag !== "InvalidProviderOutput") return
-          expect(error.reason.message).toContain("finish reasons: IMAGE_SAFETY")
-          expect(error.reason.providerMetadata).toEqual({
-            google: {
-              promptFeedback: { blockReason: "SAFETY" },
-              candidates: [
-                {
-                  index: 0,
-                  finishReason: "IMAGE_SAFETY",
-                  finishMessage: "The generated image was blocked by safety filters.",
-                  safetyRatings: [{ category: "HARM_CATEGORY_DANGEROUS_CONTENT", blocked: true }],
-                  citationMetadata: undefined,
-                  groundingMetadata: undefined,
-                  parts: [{ type: "text", text: "blocked", thought: false, thoughtSignature: undefined }],
-                },
-              ],
-            },
+          expect(error.message).toContain("finish reasons: IMAGE_SAFETY")
+          expect(JSON.parse(error.reason.body ?? "")).toEqual({
+            promptFeedback: { blockReason: "SAFETY" },
+            candidates: [
+              {
+                finishReason: "IMAGE_SAFETY",
+                finishMessage: "The generated image was blocked by safety filters.",
+                safetyRatings: [{ category: "HARM_CATEGORY_DANGEROUS_CONTENT", blocked: true }],
+                content: { parts: [{ text: "blocked", thought: false }] },
+              },
+            ],
           })
         }),
       ),

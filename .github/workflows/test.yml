@@ -42,7 +42,7 @@ jobs:
       - name: Find affected packages
         id: packages
         env:
-          TURBO_SCM_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          TURBO_SCM_BASE: ${{ github.event_name == 'pull_request' && format('{0}^1', github.sha) || github.event.before }}
           TURBO_SCM_HEAD: ${{ github.sha }}
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
@@ -71,6 +71,7 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -110,9 +111,16 @@ jobs:
 
       - name: Run unit tests
         timeout-minutes: 20
-        run: GITHUB_ACTIONS=false bun turbo test
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            GITHUB_ACTIONS=false bun turbo test
+            exit 0
+          fi
+          GITHUB_ACTIONS=false bun turbo test --affected
         env:
           OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: ${{ runner.os == 'Windows' && 'true' || 'false' }}
+          TURBO_SCM_BASE: ${{ github.event_name == 'pull_request' && format('{0}^1', github.sha) || github.event.before }}
+          TURBO_SCM_HEAD: ${{ github.sha }}
 
       - name: Verify published codemode package
         if: runner.os == 'Linux'
@@ -122,8 +130,15 @@ jobs:
       - name: Verify packed workerd SDK
         if: runner.os == 'Linux'
         timeout-minutes: 15
-        working-directory: packages/sdk
-        run: bun run verify:package
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            bun turbo verify:package --filter=@opencode-ai/sdk
+            exit 0
+          fi
+          bun turbo verify:package --affected --filter=@opencode-ai/sdk
+        env:
+          TURBO_SCM_BASE: ${{ github.event_name == 'pull_request' && format('{0}^1', github.sha) || github.event.before }}
+          TURBO_SCM_HEAD: ${{ github.sha }}
 
       - name: Verify compiled service lifecycle
         if: always()
@@ -222,12 +237,18 @@ jobs:
         working-directory: packages/app
         run: bunx playwright install chromium
 
-      - name: Run app e2e tests
+      - name: Run app e2e tests against production build
         if: env.E2E_ENABLED == 'true'
-        run: bun --cwd packages/app test:e2e:local
+        run: bun --cwd packages/app test:e2e:built
         env:
           CI: true
         timeout-minutes: 30
+
+      - name: Verify service worker precaching and upgrades
+        if: env.E2E_ENABLED == 'true'
+        working-directory: packages/app
+        run: bunx playwright test --config e2e/service-worker/playwright.config.ts
+        timeout-minutes: 5
 
       - name: Upload Playwright artifacts
         if: always() && env.E2E_ENABLED == 'true'

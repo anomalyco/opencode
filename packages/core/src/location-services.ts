@@ -23,9 +23,10 @@ import { Location } from "./location.js"
 import { LocationMutation } from "./location-mutation.js"
 import { LocationServiceMap } from "./location-service-map.js"
 import { ModelResolver } from "./model-resolver.js"
-import { MCP } from "./mcp/index.js"
+import { Mcp } from "./mcp/index.js"
 import { Permission } from "./permission.js"
 import { Plugin } from "./plugin.js"
+import { PluginHooks } from "./plugin/hooks.js"
 import { PluginSupervisor } from "./plugin/supervisor.js"
 import { Worktree } from "./worktree.js"
 import { Pty } from "./pty.js"
@@ -69,6 +70,7 @@ const locationServiceNodes = [
   ModelResolver.node,
   AISDK.node,
   Plugin.node,
+  PluginHooks.node,
   PluginSupervisor.node,
   Worktree.refreshNode,
   FileSystemSearch.node,
@@ -82,7 +84,7 @@ const locationServiceNodes = [
   LocationMutation.node,
   FileMutation.node,
   Formatter.node,
-  MCP.node,
+  Mcp.node,
   Permission.node,
   Tool.node,
   ToolOutput.node,

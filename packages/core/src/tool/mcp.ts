@@ -2,11 +2,11 @@ export * as McpTool from "./mcp.js"
 
 import { ToolFailure } from "@opencode-ai/ai"
 import { McpEvent } from "@opencode-ai/schema/mcp-event"
-import { Context, Effect, Exit, Fiber, type JsonSchema, Layer, Scope, Semaphore, Stream } from "effect"
+import { Context, Effect, Fiber, type JsonSchema, Layer, Semaphore, Stream } from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Bus } from "../bus.js"
 
-import { MCP } from "../mcp/index.js"
+import { Mcp } from "../mcp/index.js"
 import { Permission } from "../permission.js"
 import { Tool } from "../tool.js"
 
@@ -26,22 +26,19 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Mc
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const mcp = yield* MCP.Service
+    const mcp = yield* Mcp.Service
     const tools = yield* Tool.Service
     const bus = yield* Bus.Service
     const permission = yield* Permission.Service
-    const scope = yield* Scope.Scope
     const lock = Semaphore.makeUnsafe(1)
-    let current: Scope.Closeable | undefined
+    let discovered: Mcp.Tool[] = []
 
-    // Register the current tool set under a fresh child scope, then close the previous one so the
-    // registry never has a gap where MCP tools disappear mid-swap.
-    const reconcile = lock.withPermit(
-      Effect.gen(function* () {
-        const discovered = yield* mcp.tools()
-        const next = yield* Scope.fork(scope)
-        yield* tools
-          .transform((draft) => {
+    // Register once after initial discovery; only subsequent updates need a debounced reload.
+    const initial = yield* lock
+      .withPermit(
+        Effect.gen(function* () {
+          discovered = yield* mcp.tools()
+          yield* tools.transform((draft) => {
             for (const tool of discovered) {
               const schema = (tool.inputSchema ?? {}) as JsonSchema.JsonSchema
               draft.add({
@@ -115,15 +112,19 @@ export const layer = Layer.effect(
               })
             }
           })
-          .pipe(Scope.provide(next), Effect.orDie)
-        if (current) yield* Scope.close(current, Exit.void)
-        current = next
+        }),
+      )
+      .pipe(Effect.forkScoped)
+    const reconcile = lock.withPermit(
+      Effect.gen(function* () {
+        discovered = yield* mcp.tools()
+        yield* tools.reload()
       }),
     )
 
-    const initial = yield* reconcile.pipe(Effect.forkScoped)
     yield* bus.subscribe(McpEvent.ToolsChanged).pipe(
-      Stream.runForEach(() => reconcile),
+      // Each read loads the whole catalog, so queued notifications need only one refresh.
+      Stream.runForEachArray(() => reconcile),
       Effect.forkScoped({ startImmediately: true }),
     )
     return Service.of({ flush: Effect.asVoid(Fiber.await(initial)) })
@@ -133,5 +134,5 @@ export const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Tool.node, MCP.node, Bus.node, Permission.node],
+  deps: [Tool.node, Mcp.node, Bus.node, Permission.node],
 })

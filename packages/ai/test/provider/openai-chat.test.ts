@@ -903,6 +903,70 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("uses the configured provider metadata namespace for reasoning and usage", () =>
+    Effect.gen(function* () {
+      const selected = LanguageModel.update(model, {
+        route: { ...model.route, providerMetadataKey: "vendor" },
+      })
+      const details = [{ type: "reasoning.text", text: "thinking", signature: "signed" }]
+      const response = yield* LLMClient.generate(LLMRequest.update(request, { model: selected })).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { choices: [{ delta: { reasoning: "thinking", reasoning_details: details } }] },
+              deltaChunk({ content: "Hello" }),
+              deltaChunk({}, "stop"),
+              usageChunk({ prompt_tokens: 5, completion_tokens: 2, total_tokens: 7 }),
+            ),
+          ),
+        ),
+      )
+
+      expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
+        vendor: { reasoningField: "reasoning", reasoningDetails: details },
+      })
+      expect(response.usage?.providerMetadata).toEqual({
+        vendor: { prompt_tokens: 5, completion_tokens: 2, total_tokens: 7 },
+      })
+
+      const replay = yield* compileRequest(LLM.request({ model: selected, messages: [response.message] }))
+      expect(replay.body.messages).toEqual([
+        { role: "assistant", content: "Hello", reasoning: "thinking", reasoning_details: details },
+      ])
+    }),
+  )
+
+  it.effect("falls back to the selected provider for the metadata namespace", () =>
+    Effect.gen(function* () {
+      const compatible = model.route.with({ provider: "deepseek" }).model({ id: "deepseek-chat" })
+      const selected = LanguageModel.update(compatible, {
+        route: { ...compatible.route, providerMetadataKey: undefined },
+      })
+      const response = yield* LLMClient.generate(LLMRequest.update(request, { model: selected })).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              deltaChunk({ reasoning_content: "thinking" }),
+              deltaChunk({ content: "Hello" }),
+              deltaChunk({}, "stop"),
+              usageChunk({ prompt_tokens: 5, completion_tokens: 2, total_tokens: 7 }),
+            ),
+          ),
+        ),
+      )
+
+      expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
+        deepseek: { reasoningField: "reasoning_content" },
+      })
+      expect(response.usage?.providerMetadata).toEqual({
+        deepseek: { prompt_tokens: 5, completion_tokens: 2, total_tokens: 7 },
+      })
+
+      const replay = yield* compileRequest(LLM.request({ model: selected, messages: [response.message] }))
+      expect(replay.body.messages).toEqual([{ role: "assistant", content: "Hello", reasoning_content: "thinking" }])
+    }),
+  )
+
   it.effect("parses and replays a configured custom reasoning field", () =>
     Effect.gen(function* () {
       const custom = LanguageModel.update(model, { compatibility: { reasoningField: "vendor_reasoning" } })
@@ -1393,7 +1457,7 @@ describe("OpenAI Chat route", () => {
       expect(error.message).toContain("OpenAI Chat tool call delta is missing id or name")
       expect(error.reason._tag).toBe("InvalidProviderOutput")
       if (error.reason._tag !== "InvalidProviderOutput") return
-      expect(decodeJson(error.reason.raw ?? "")).toMatchObject({
+      expect(decodeJson(error.reason.body ?? "")).toMatchObject({
         choices: [{ finish_reason: "tool_calls" }],
       })
     }),
@@ -1470,9 +1534,9 @@ describe("OpenAI Chat route", () => {
       )
 
       expect((yield* Ref.get(events)).some((event) => event.type === "text-delta")).toBeTrue()
+      expect(error.message).toBe("ECONNRESET: socket closed unexpectedly")
       expect(error.reason).toMatchObject({
         _tag: "Transport",
-        message: "ECONNRESET: socket closed unexpectedly",
         transport: "http",
         operation: "read",
         code: "ECONNRESET",
@@ -1488,9 +1552,9 @@ describe("OpenAI Chat route", () => {
         Effect.flip,
       )
 
+      expect(error.message).toBe("ECONNRESET: socket closed before output")
       expect(error.reason).toMatchObject({
         _tag: "Transport",
-        message: "ECONNRESET: socket closed before output",
         transport: "http",
         operation: "read",
         code: "ECONNRESET",
@@ -1511,7 +1575,7 @@ describe("OpenAI Chat route", () => {
       )
 
       expect(error).toBeInstanceOf(AIError)
-      expect(error.reason).toMatchObject({ _tag: "InvalidRequest", message: "Bad request" })
+      expect(error).toMatchObject({ reason: { _tag: "InvalidRequest" }, message: "Bad request" })
     }),
   )
 

@@ -33,6 +33,7 @@ export function TabNavItem(props: {
   dragging?: boolean
   pressed?: boolean
   hidden?: boolean
+  orientation?: "horizontal" | "vertical"
 }) {
   const [editing, setEditing] = createSignal(false)
   const [titleOverflowing, setTitleOverflowing] = createSignal(false)
@@ -180,6 +181,7 @@ export function TabNavItem(props: {
       }}
       data-titlebar-tab
       data-slot="titlebar-tab-item"
+      data-orientation={props.orientation ?? "horizontal"}
       data-title-overflow={titleOverflowing()}
       data-editing={editing()}
       class="group relative flex h-7 w-full min-w-0 select-none flex-row items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-[6px] px-1.5 [container-type:inline-size]"
@@ -278,6 +280,13 @@ export function TabNavItem(props: {
             event.preventDefault()
           }}
         />
+        <Show when={props.orientation === "vertical" && projectName()}>
+          {(name) => (
+            <span data-slot="tab-project" dir="auto">
+              {name()}
+            </span>
+          )}
+        </Show>
       </a>
 
       <div data-slot="tab-close">
@@ -299,6 +308,7 @@ export function TabNavItem(props: {
   return (
     <TabPreviewPopover
       trigger={tab}
+      orientation={props.orientation}
       open={popoverOpen() && !previewBlocked()}
       onOpenChange={(value) => {
         if (value && previewBlocked()) return
@@ -325,6 +335,7 @@ export function DraftTabItem(props: {
   dragging?: boolean
   pressed?: boolean
   hidden?: boolean
+  orientation?: "horizontal" | "vertical"
 }) {
   const language = useLanguage()
   const closeTab = (event: MouseEvent) => {
@@ -337,6 +348,7 @@ export function DraftTabItem(props: {
       ref={(el) => forwardTabRef(props.ref, el)}
       data-titlebar-tab
       data-slot="titlebar-tab-item"
+      data-orientation={props.orientation ?? "horizontal"}
       data-active={props.active}
       data-dragging={props.dragging}
       data-state={props.active || props.pressed ? "pressed" : undefined}

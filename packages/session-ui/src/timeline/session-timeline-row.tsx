@@ -6,12 +6,9 @@ import type {
 } from "@opencode-ai/client/promise"
 import { Card } from "@opencode-ai/ui/card"
 import { useI18n } from "@opencode-ai/ui/context/i18n"
-import { TextReveal } from "@opencode-ai/ui/text-reveal"
-import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { For, Show, createMemo, type Accessor, type JSX } from "solid-js"
 import type { SessionUserActions, SessionUserComment } from "../actions"
-import { BasicTool } from "../components/basic-tool"
 import { useData } from "../context"
 import { TimelineSeparator } from "../components/timeline-separator"
 import {
@@ -22,9 +19,16 @@ import {
   SessionUserMessage,
   currentContentDefaultOpen,
 } from "../message/current-message"
-import { SessionCompactionMessage } from "../message/message-content"
+import { AssistantReasoningContent, SessionCompactionMessage } from "../message/message-content"
+import type { ContextGroupPart } from "../tools/tool-renderer"
 import { SessionRetry } from "../components/session-retry"
-import { createReactiveTimelineProjection, Timeline, TimelineRow, unwrapErrorMessage } from "./projection"
+import {
+  createReactiveTimelineProjection,
+  Timeline,
+  TimelineRow,
+  unwrapErrorMessage,
+  type ReasoningMode,
+} from "./projection"
 
 const emptyAssistantMessages: SessionMessageAssistant[] = []
 type Projection = ReturnType<typeof createReactiveTimelineProjection>
@@ -41,7 +45,7 @@ export function createSessionTimelineRowRenderer(input: {
   projection: Projection
   presentation: (message: SessionMessageUser) => SessionUserPresentation | undefined
   actions?: SessionUserActions
-  showReasoningSummaries: Accessor<boolean>
+  reasoningMode: Accessor<ReasoningMode>
   shellToolDefaultOpen: Accessor<boolean>
   editToolDefaultOpen: Accessor<boolean>
   disclosure: {
@@ -79,19 +83,24 @@ export function createSessionTimelineRowRenderer(input: {
 
   const renderAssistant = (row: Accessor<TimelineRow.AssistantPart>, onSizeChange?: () => void) => {
     if (row().group.type === "context") {
-      const tools = createMemo(() => {
+      const parts = createMemo(() => {
         const group = row().group
         if (group.type !== "context") return []
-        return group.refs.flatMap((ref) => {
+        return group.refs.flatMap<ContextGroupPart>((ref) => {
           const message = input.projection.messageByID().get(ref.messageID)
           const content = Timeline.resolveContent(message, ref.partID)
-          return message?.type === "assistant" && content?.type === "tool" ? [content] : []
+          if (content?.type === "tool") return [content]
+          if (content?.type === "reasoning") return [{ ...content, id: ref.partID }]
+          return []
         })
       })
       const key = () => `context:${row().group.key}`
       return (
         <SessionContextToolGroup
-          tools={tools()}
+          parts={parts()}
+          reasoningDefaultOpen={input.reasoningMode() === "full"}
+          reasoningOpen={(id) => input.disclosure.value(id)}
+          onReasoningOpenChange={(id, open) => input.disclosure.set(id, open)}
           open={input.disclosure.value(key()) === true}
           busy={
             workingTurn(row().userMessageID) &&
@@ -154,8 +163,10 @@ export function createSessionTimelineRowRenderer(input: {
     const defaultOpen = createMemo(() => {
       const item = content()
       if (!item) return undefined
+      if (item.type === "reasoning") return input.reasoningMode() === "full"
       return currentContentDefaultOpen(item, input.shellToolDefaultOpen(), input.editToolDefaultOpen())
     })
+    const disclosureKey = () => (content()?.type === "reasoning" ? ref()!.partID : row().group.key)
     return (
       <Show when={message()}>
         {(message) => (
@@ -168,8 +179,8 @@ export function createSessionTimelineRowRenderer(input: {
                 showAssistantCopyPartID={copyContentID(row().userMessageID)}
                 turnDurationMs={duration(row().userMessageID)}
                 defaultOpen={defaultOpen()}
-                toolOpen={input.disclosure.value(row().group.key) ?? defaultOpen()}
-                onToolOpenChange={(open) => input.disclosure.set(row().group.key, open)}
+                toolOpen={input.disclosure.value(disclosureKey()) ?? defaultOpen()}
+                onToolOpenChange={(open) => input.disclosure.set(disclosureKey(), open)}
                 onContentRendered={onSizeChange}
               />
             )}
@@ -229,10 +240,12 @@ export function createSessionTimelineRowRenderer(input: {
       id={props.row._tag === "UserMessage" ? input.anchor?.(props.row.userMessageID) : undefined}
       data-message-id={props.row.userMessageID}
       data-timeline-row={props.row._tag}
+      data-timeline-spacing={props.row._tag === "AssistantPart" ? props.row.spacing : undefined}
       classList={{
         "min-w-0 w-full max-w-full": true,
         "md:max-w-[1000px] md:mx-auto": input.centered?.(),
-        "pt-3": props.row._tag === "AssistantPart" && props.row.previousAssistantPart,
+        "pt-2": props.row._tag === "AssistantPart" && props.row.spacing === "tool",
+        "pt-4": props.row._tag === "AssistantPart" && props.row.spacing === "content",
       }}
     >
       <div data-component="session-turn" class="min-w-0 w-full relative" style={{ height: "auto" }}>
@@ -366,7 +379,7 @@ export function createSessionTimelineRowRenderer(input: {
                         fallback={
                           <div
                             data-slot="session-timeline-notice"
-                            class={`w-full pt-3 pb-1 text-13-regular text-text-weak ${padding()}`}
+                            class={`w-full truncate pt-3 pb-1 text-13-regular text-text-weak ${padding()}`}
                           >
                             <bdi dir="auto" class="text-13-medium">
                               {content().label}
@@ -473,11 +486,13 @@ export function createSessionTimelineRowRenderer(input: {
         if (value._tag !== "AssistantPart") throw new Error("Expected an assistant-part timeline row")
         return value
       }
+      // Construct once per row key, not inside JSX that reruns when group refs change.
+      const content = renderAssistant(current, onSizeChange)
       return (
         <Frame row={current()}>
           <div data-slot="session-turn-message-container" class={`w-full ${padding()}`}>
             <div data-slot="session-turn-assistant-content" aria-hidden={workingTurn(current().userMessageID)}>
-              {renderAssistant(current, onSizeChange)}
+              {content}
             </div>
           </div>
         </Frame>
@@ -489,39 +504,28 @@ export function createSessionTimelineRowRenderer(input: {
         if (value._tag !== "Thinking") throw new Error("Expected a thinking timeline row")
         return value
       }
-      const animateHeading = createMemo<boolean>((previous) => previous ?? !current().reasoningHeading)
+      const content = createMemo(() => {
+        const ref = current().ref
+        const content = Timeline.resolveContent(input.projection.messageByID().get(ref.messageID), ref.partID)
+        return content?.type === "reasoning" ? content : undefined
+      })
       return (
         <Frame row={current()}>
           <div data-slot="session-turn-message-container" class={`w-full ${padding()}`}>
             <div data-slot="session-turn-thinking-row">
-              <BasicTool
-                icon="mcp"
-                status="running"
-                compact
-                locked
-                hideDetails
-                trigger={
-                  <div data-slot="session-turn-thinking">
-                    <div data-slot="basic-tool-tool-info-structured">
-                      <div data-slot="basic-tool-tool-info-main">
-                        <span data-slot="basic-tool-tool-title">
-                          <TextShimmer text={i18n.t("ui.sessionTurn.status.thinking")} />
-                        </span>
-                        <Show when={!input.showReasoningSummaries()}>
-                          <span data-slot="basic-tool-tool-subtitle">
-                            <TextReveal
-                              text={current().reasoningHeading}
-                              class="session-turn-thinking-heading"
-                              travel={animateHeading() ? 25 : 0}
-                              duration={animateHeading() ? 700 : 0}
-                            />
-                          </span>
-                        </Show>
-                      </div>
-                    </div>
-                  </div>
-                }
-              />
+              <Show when={content()}>
+                {(content) => (
+                  <AssistantReasoningContent
+                    id={current().ref.partID}
+                    content={content()}
+                    streaming
+                    defaultOpen={input.reasoningMode() === "full"}
+                    open={input.disclosure.value(current().ref.partID)}
+                    onOpenChange={(open) => input.disclosure.set(current().ref.partID, open)}
+                    onContentRendered={onSizeChange}
+                  />
+                )}
+              </Show>
             </div>
           </div>
         </Frame>

@@ -39,6 +39,7 @@ async function renderSessionTabs(
     sessionTimes?: Record<string, { idle?: number; viewed?: number }>
     sessionOutcomes?: Record<string, "succeeded" | "failed" | "interrupted">
     newLocation?: "launch" | "inherit"
+    launchDirectory?: string
     tabsEnabled?: boolean
     viewFailures?: number
     preview?: boolean
@@ -168,7 +169,7 @@ async function renderSessionTabs(
               initialRoute={options?.home ? { type: "home" } : { type: "session", sessionID: initialSessionID }}
             >
               <ClientProvider api={createApi(calls.fetch)}>
-                <DataProvider>
+                <DataProvider directory={options?.launchDirectory ?? directory}>
                   <LocationProvider>
                     <SessionTabsProvider>
                       <Probe />
@@ -752,6 +753,64 @@ test("ignores subagent unread state on the root tab", async () => {
   }
 })
 
+test("distinguishes family questions and permissions without clearing them on selection", async () => {
+  const setup = await renderSessionTabs("root", {
+    home: true,
+    persisted: ["root"],
+    sessionParents: { child: "root" },
+  })
+  try {
+    await wait(() => setup.data.session.get("child") !== undefined)
+    expect(setup.tabs.status("root").attention).toBe(false)
+
+    setup.emit({
+      id: "evt_question",
+      created: 1,
+      type: "form.created",
+      data: {
+        form: {
+          id: "frm_question",
+          sessionID: "child",
+          title: "Choose an approach",
+          fields: [{ key: "approach", type: "string", title: "Approach" }],
+        },
+      },
+    })
+    await wait(() => setup.tabs.status("root").attention === "question")
+
+    setup.tabs.select("root")
+    await wait(() => setup.tabs.current() === "root")
+    expect(setup.tabs.status("root").attention).toBe("question")
+
+    setup.emit({
+      id: "evt_permission",
+      created: 2,
+      type: "permission.asked",
+      data: { id: "per_command", sessionID: "root", action: "shell", resources: ["bun run test"] },
+    })
+    await wait(() => setup.tabs.status("root").attention === "permission")
+    expect(setup.tabs.status("child").attention).toBe("permission")
+
+    setup.emit({
+      id: "evt_permission_reply",
+      created: 3,
+      type: "permission.replied",
+      data: { sessionID: "root", requestID: "per_command", reply: "once" },
+    })
+    await wait(() => setup.tabs.status("root").attention === "question")
+
+    setup.emit({
+      id: "evt_question_reply",
+      created: 4,
+      type: "form.replied",
+      data: { sessionID: "child", id: "frm_question", answer: {} },
+    })
+    await wait(() => setup.tabs.status("root").attention === false)
+  } finally {
+    await setup.destroy()
+  }
+})
+
 test("concurrent TUIs do not alternate shared tab titles from divergent session caches", async () => {
   await using temporary = await tmpdir()
   const state = temporary.path
@@ -892,13 +951,17 @@ test("tracks a temporary new session tab across close and creation", async () =>
   }
 })
 
-test("add opens the new session tab in the launch directory by default", async () => {
-  const setup = await renderSessionTabs("first", { sessionDirectories: { first: `${directory}/worktree` } })
+test("add opens the new session tab in the resolved server launch directory", async () => {
+  const launchDirectory = `${directory}/server`
+  const setup = await renderSessionTabs("first", {
+    launchDirectory,
+    sessionDirectories: { first: `${directory}/worktree` },
+  })
 
   try {
     await wait(() => setup.tabs.current() === "first" && setup.data.session.get("first") !== undefined)
     setup.tabs.add()
-    expect(setup.route.data).toEqual({ type: "home", location: { directory } })
+    expect(setup.route.data).toEqual({ type: "home", location: { directory: launchDirectory } })
     await wait(() => setup.tabs.newTab())
     expect(setup.tabs.tabs().map((tab) => tab.sessionID)).toEqual(["first"])
   } finally {

@@ -4,7 +4,7 @@ import { Command } from "@opencode-ai/core/command"
 import { Bus } from "@opencode-ai/core/bus"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Location } from "@opencode-ai/core/location"
-import { MCP } from "@opencode-ai/core/mcp/index"
+import { Mcp } from "@opencode-ai/core/mcp/index"
 import { CommandPlugin } from "@opencode-ai/core/plugin/command"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/schema/session"
@@ -24,8 +24,8 @@ const locationLayer = Layer.succeed(
   Location.Service.of(location({ directory }, { projectDirectory: project })),
 )
 const it = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Command.node, MCP.node, Bus.node]), [
-    [MCP.node, emptyMcpLayer],
+  AppNodeBuilder.build(LayerNode.group([Command.node, Mcp.node, Bus.node]), [
+    [Mcp.node, emptyMcpLayer],
     [Location.node, locationLayer],
   ]),
 )

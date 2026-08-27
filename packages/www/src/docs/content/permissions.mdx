@@ -140,9 +140,16 @@ permission scanner. The default remains the tree-sitter scanner.
 }
 ```
 
-When enabled, the portable scanner is authoritative and tree-sitter is not
-consulted. Unsupported syntax, including heredocs, requests permission for the
-original shell command without inferring external directories.
+When enabled, shell commands are analyzed only by the portable scanner.
+Tree-sitter is not used as a fallback or a second opinion. If the scanner
+cannot analyze a command, the shell tool reports a scanner error rather than
+silently retrying with Tree-sitter. These failures are experimental parser
+gaps to fix, not permission denials.
+
+The flag changes parser selection, not permission policy. Existing rules,
+saved approval patterns, and best-effort directory inference continue to apply.
+There is no additional approval mode or blanket unknown-directory restriction.
+With the flag disabled, the existing Tree-sitter path is unchanged.
 
 ## Defaults
 
@@ -220,7 +227,7 @@ When an `ask` rule matches, clients can reply with:
 Saved approvals are durable and project-scoped. They are additional `allow`
 rules, but they can never override a configured `deny`. The proposed saved
 pattern may be broader than the displayed resource: several tools propose `*`,
-shell proposes the exact command text, and skills and subagents propose their
+shell proposes command prefixes, and skills and subagents propose their
 IDs. Review the confirmation carefully and remove saved approvals that are no
 longer needed.
 

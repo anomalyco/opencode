@@ -134,6 +134,23 @@ const promotedFromMessage = Effect.fn("SessionInbox.promotedFromMessage")(functi
   return yield* Effect.die(new LifecycleConflict({ id }))
 })
 
+/** Reconciles pending or delivered work without preparing a new admission payload. */
+export const reconcile = Effect.fn("SessionInbox.reconcile")(function* (
+  db: DatabaseService,
+  request: {
+    readonly id: SessionMessage.ID
+    readonly sessionID: SessionSchema.ID
+    readonly delivery: Delivery
+  },
+) {
+  const existing = yield* find(db, request.id)
+  if (existing !== undefined) {
+    if (existing.type === "compaction") return yield* Effect.die(new LifecycleConflict({ id: request.id }))
+    return existing
+  }
+  return yield* promotedFromMessage(db, request.sessionID, request.id, request.delivery)
+})
+
 export const admit = Effect.fn("SessionInbox.admit")(function* (
   db: DatabaseService,
   bus: Bus.Interface,
@@ -143,13 +160,8 @@ export const admit = Effect.fn("SessionInbox.admit")(function* (
     readonly item: Item
   },
 ) {
-  const existing = yield* find(db, request.id)
-  if (existing !== undefined) {
-    if (existing.type === "compaction") return yield* Effect.die(new LifecycleConflict({ id: request.id }))
-    return existing
-  }
-  const promoted = yield* promotedFromMessage(db, request.sessionID, request.id, request.item.delivery)
-  if (promoted !== undefined) return promoted
+  const existing = yield* reconcile(db, { ...request, delivery: request.item.delivery })
+  if (existing !== undefined) return existing
   return yield* bus
     .publish(SessionEvent.InboxEnqueued, {
       inboxID: request.id,

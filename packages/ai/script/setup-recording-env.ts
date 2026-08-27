@@ -157,9 +157,9 @@ const PROVIDERS: ReadonlyArray<Provider> = [
     id: "togetherai",
     label: "TogetherAI",
     tier: "compatible",
-    note: "Existing OpenAI-compatible text/tool recorded tests",
-    vars: [{ name: "TOGETHER_AI_API_KEY" }],
-    validate: (env) => validateBearer("https://api.together.xyz/v1/models", Redacted.make(env.TOGETHER_AI_API_KEY)),
+    note: "Native Together AI text/tool recorded tests",
+    vars: [{ name: "TOGETHER_API_KEY" }],
+    validate: (env) => validateBearer("https://api.together.xyz/v1/models", Redacted.make(env.TOGETHER_API_KEY)),
   },
   {
     id: "minimax",
@@ -200,8 +200,8 @@ const PROVIDERS: ReadonlyArray<Provider> = [
   {
     id: "cerebras",
     label: "Cerebras",
-    tier: "optional",
-    note: "OpenAI-compatible bridge",
+    tier: "compatible",
+    note: "Native Cerebras text/tool/tool-loop recorded tests",
     vars: [{ name: "CEREBRAS_API_KEY" }],
     validate: (env) => validateBearer("https://api.cerebras.ai/v1/models", Redacted.make(env.CEREBRAS_API_KEY)),
   },

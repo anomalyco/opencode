@@ -3,7 +3,7 @@ export * as PluginHost from "./host.js"
 import { Plugin } from "@opencode-ai/plugin/effect"
 import type { IntegrationMethodRegistration } from "@opencode-ai/plugin/effect/integration"
 import { EventManifest } from "@opencode-ai/schema/event-manifest"
-import { Mcp } from "@opencode-ai/schema/mcp"
+import { ServerConfig } from "@opencode-ai/schema/mcp"
 import { App } from "../app.js"
 import { Effect, Schema, Stream } from "effect"
 import { Agent } from "../agent.js"
@@ -16,7 +16,7 @@ import { Integration } from "../integration.js"
 import { KV } from "../kv.js"
 import { Location } from "../location.js"
 import { Model } from "../model.js"
-import { MCP } from "../mcp/index.js"
+import { Mcp } from "../mcp/index.js"
 import { PluginRuntime } from "./runtime.js"
 import { Provider } from "../provider.js"
 import { Reference } from "../reference.js"
@@ -41,7 +41,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
   const bus = yield* Bus.Service
   const integration = yield* Integration.Service
   const kv = yield* KV.Service
-  const mcp = yield* MCP.Service
+  const mcp = yield* Mcp.Service
   const location = yield* Location.Service
   const reference = yield* Reference.Service
   const skill = yield* Skill.Service
@@ -73,6 +73,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
 
   return {
     app,
+    location: locationInfo(),
     options: {},
     agent: {
       get: (input) => {
@@ -288,33 +289,13 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
         if (ref && !isCurrentLocation(ref)) return runtime.location.mcp.list(ref)
         return response(mcp.servers())
       },
-      add: (input) => {
-        const ref = locationRef(input)
-        if (ref && !isCurrentLocation(ref)) return runtime.location.mcp.add(ref, input.server, input.config)
-        return mcp.add(input.server, input.config)
-      },
-      remove: (input) => {
-        const ref = locationRef(input)
-        if (ref && !isCurrentLocation(ref)) return runtime.location.mcp.remove(ref, input.server)
-        return mcp.remove(input.server)
-      },
-      connect: (input) => {
-        const ref = locationRef(input)
-        if (ref && !isCurrentLocation(ref)) return runtime.location.mcp.connect(ref, input.server)
-        return mcp.connect(input.server)
-      },
-      disconnect: (input) => {
-        const ref = locationRef(input)
-        if (ref && !isCurrentLocation(ref)) return runtime.location.mcp.disconnect(ref, input.server)
-        return mcp.disconnect(input.server)
-      },
       reload: mcp.reload,
       transform: (callback) =>
         mcp.transform((draft) => {
           callback({
             list: () => draft.list().map(([name, config]) => [name, mutable(config)]),
             get: (name) => mutable(draft.get(name)),
-            set: (name, config) => draft.set(name, Schema.decodeUnknownSync(Mcp.ServerConfig)(config)),
+            set: (name, config) => draft.set(name, Schema.decodeUnknownSync(ServerConfig)(config)),
             update: draft.update,
             remove: draft.remove,
           })
@@ -377,14 +358,8 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
       hook: (name, callback) => hooks.register("shell", name, callback),
     },
     tool: {
-      transform: (callback) =>
-        tools
-          .transform((draft) =>
-            callback({
-              add: (tool) => draft.add(tool),
-            }),
-          )
-          .pipe(Effect.orDie, Effect.as({ dispose: Effect.void })),
+      transform: tools.transform,
+      reload: tools.reload,
       hook: (name, callback) => hooks.register("tool", name, callback),
     },
     vcs: {
@@ -442,6 +417,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
       generate: (input) => runtime.session.generate(input).pipe(Effect.map((text) => ({ text }))),
       command: runtime.session.command,
       rename: runtime.session.rename,
+      move: runtime.session.move,
       synthetic: runtime.session.synthetic,
       interrupt: (input) =>
         runtime.session

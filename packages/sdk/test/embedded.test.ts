@@ -6,6 +6,7 @@ import { OpenAIChat } from "@opencode-ai/ai/protocols"
 import { TestLLM } from "@opencode-ai/ai/testing"
 import { llmClient } from "@opencode-ai/core/effect/app-node-platform"
 import { makeMemoryDriver } from "@opencode-ai/core/environment/index"
+import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { WorkspaceDriver } from "@opencode-ai/core/workspace/driver"
 import { Deferred, Effect, Fiber, Latch, Layer, Option, Ref, Schema, Stream } from "effect"
@@ -33,6 +34,70 @@ const sessionID = (fixture: Fixture) => fixture.sdk.Session.ID.create()
 
 const location = (fixture: Fixture) =>
   fixture.sdk.Location.Ref.make({ directory: fixture.sdk.AbsolutePath.make(fixture.directory) })
+
+for (const selection of ["explicit", "default"] as const) {
+  it.live(`first generate.text waits for inline providers with ${selection} model selection`, () =>
+    withEmbedded("opencode-embedded-generate-", (fixture) =>
+      Effect.gen(function* () {
+        const release = yield* Latch.make()
+        const llm = yield* TestLLM.Service.pipe(
+          Effect.provide(TestLLM.layer({ fallback: TestLLM.text("ready", "answer") })),
+        )
+        const supervisor = Layer.effect(
+          PluginSupervisor.Service,
+          Effect.gen(function* () {
+            const plugins = yield* PluginSupervisor.Service
+            return { flush: release.open.pipe(Effect.andThen(plugins.flush)) }
+          }),
+        ).pipe(Layer.provide(PluginSupervisor.layer))
+        const opencode = yield* fixture.sdk.OpenCode.create(
+          {
+            config: {
+              directory: fixture.directory,
+              project: false,
+              content: JSON.stringify({
+                model: "custom/fictional-chat",
+                providers: {
+                  custom: {
+                    package: "aisdk:@ai-sdk/openai-compatible",
+                    settings: { baseURL: "https://provider.example/v1" },
+                    models: { "fictional-chat": {} },
+                  },
+                },
+              }),
+            },
+            models: { fetch: false },
+            fs: { filewatcher: false },
+          },
+          {
+            overrides: [
+              [llmClient, Layer.succeed(LLMClient.Service, llm.client)],
+              [PluginSupervisor.node, { ...PluginSupervisor.node, implementation: supervisor }],
+            ],
+          },
+        )
+        // Hold provider activation until the request reaches readiness, regardless of startup speed.
+        yield* opencode.plugin({ id: "gate-catalog", effect: () => release.await })
+
+        const result = yield* opencode.generate.text({
+          prompt: "Say ready",
+          ...(selection === "explicit"
+            ? {
+                model: fixture.sdk.Model.Ref.make({
+                  providerID: fixture.sdk.Provider.ID.make("custom"),
+                  id: fixture.sdk.Model.ID.make("fictional-chat"),
+                }),
+              }
+            : {}),
+        })
+
+        expect(result.text).toBe("ready")
+        expect(llm.requests).toHaveLength(1)
+        expect(llm.requests[0]?.model).toMatchObject({ provider: "custom", id: "fictional-chat" })
+      }),
+    ),
+  )
+}
 
 it.live("exposes app metadata to plugins", () =>
   withEmbedded("opencode-embedded-app-", (fixture) =>
@@ -167,6 +232,87 @@ it.live(
         yield* Deferred.await(recommitted).pipe(Effect.timeout("5 seconds"))
 
         expect((yield* opencode.plugin.list({ location: ref })).data.map((plugin) => String(plugin.id))).toContain(id)
+      }),
+    ),
+  15_000,
+)
+
+it.live(
+  "evicts a Location without triggering connected client refetches",
+  () =>
+    withEmbedded("opencode-embedded-quiet-eviction-", (fixture) =>
+      Effect.gen(function* () {
+        const opencode = yield* fixture.sdk.OpenCode.create({
+          config: { directory: fixture.directory, project: false, content: "{}" },
+        })
+        const ref = location(fixture)
+        const connected = yield* Latch.make(false)
+        const booted = yield* Deferred.make<void>()
+        const boots = yield* Ref.make(0)
+        const updates = yield* Ref.make<string[]>([])
+
+        yield* opencode.plugin({
+          id: `quiet-eviction-${crypto.randomUUID()}`,
+          effect: (ctx) =>
+            Effect.gen(function* () {
+              yield* Ref.update(boots, (count) => count + 1)
+              yield* ctx.catalog.transform((catalog) => catalog.provider.update("eviction-test", () => {}))
+              yield* ctx.agent.transform((agents) => agents.update("eviction-test", () => {}))
+              yield* ctx.command.transform((commands) =>
+                commands.add({ name: "eviction-test", execute: () => Effect.void }),
+              )
+            }),
+        })
+        const subscriber = yield* opencode.events.subscribe().pipe(
+          Stream.runForEach((event) =>
+            Effect.gen(function* () {
+              if (event.type === "server.connected") {
+                yield* connected.open
+                return
+              }
+              if (event.location?.directory !== fixture.directory) return
+              if (event.type === "plugin.updated") {
+                yield* Deferred.succeed(booted, undefined)
+                return
+              }
+              if (
+                event.type !== "catalog.updated" &&
+                event.type !== "agent.updated" &&
+                event.type !== "command.updated"
+              )
+                return
+              yield* Ref.update(updates, (types) => [...types, event.type])
+              // A connected consumer re-reads invalidated resources through the real router.
+              if (event.type === "catalog.updated") {
+                yield* opencode.model.list({ location: ref })
+                yield* opencode.provider.list({ location: ref })
+                return
+              }
+              if (event.type === "agent.updated") {
+                yield* opencode.agent.list({ location: ref })
+                return
+              }
+              yield* opencode.command.list({ location: ref })
+            }),
+          ),
+          Effect.forkScoped,
+        )
+        yield* connected.await
+        yield* opencode.plugin.list({ location: ref })
+        yield* Deferred.await(booted).pipe(Effect.timeout("5 seconds"))
+        expect(yield* Ref.get(updates)).toEqual(
+          expect.arrayContaining(["catalog.updated", "agent.updated", "command.updated"]),
+        )
+        yield* Ref.set(updates, [])
+
+        yield* opencode.debug.location.evict({ location: ref })
+        // Allow the live event stream to deliver teardown notifications and any refetches.
+        yield* Effect.sleep("200 millis")
+
+        expect(yield* Ref.get(updates)).toEqual([])
+        expect(yield* Ref.get(boots)).toBe(1)
+        expect(yield* opencode.debug.location.list()).toEqual([])
+        expect(subscriber.pollUnsafe()).toBeUndefined()
       }),
     ),
   15_000,

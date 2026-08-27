@@ -103,7 +103,8 @@ export type NewSessionComposerAdapter = ComposerAdapterBase & {
   start: (
     selection: ComposerSelection,
     submission: ReturnType<typeof createComposerSubmission>,
-  ) => Promise<{ session: ComposerSession; cleanupReady: Promise<void> } | undefined>
+    message: SessionMessageUser,
+  ) => Promise<{ session: ComposerSession; cleanupReady: Promise<void>; complete?: () => Promise<void> } | undefined>
 }
 
 export type ComposerAdapter = ActiveComposerAdapter | NewSessionComposerAdapter

@@ -17,7 +17,7 @@ export function Home() {
   return (
     <div
       class={`
-        m-2 min-h-0 flex-1 self-stretch overflow-hidden rounded-[10px]
+        mx-2 mb-2 mt-[var(--shell-top-inset,8px)] min-h-0 flex-1 self-stretch overflow-hidden rounded-[10px]
         bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)]
       `}
     >

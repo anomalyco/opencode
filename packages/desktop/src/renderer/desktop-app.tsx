@@ -141,7 +141,10 @@ function DesktopWindow(props: {
       <AppBaseProviders
         locale={locale.latest}
         onNativeTranslations={(bundle) => void props.api.setNativeTranslations(bundle).catch(() => undefined)}
-        onThemeApplied={() => void props.api.themeReady()}
+        onThemeApplied={(mode, scheme) => {
+          void props.api.setTitlebar({ mode, scheme })
+          void props.api.themeReady()
+        }}
       >
         <Show when={true}>{(_) => <ReadyApp />}</Show>
       </AppBaseProviders>

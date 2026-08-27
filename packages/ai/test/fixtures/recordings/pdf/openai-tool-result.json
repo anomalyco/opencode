@@ -1,14 +1,7 @@
 {
   "version": 1,
   "metadata": {
-    "tags": [
-      "prefix:pdf",
-      "pdf",
-      "provider:openai",
-      "protocol:openai-responses",
-      "tool",
-      "tool-result"
-    ],
+    "tags": ["prefix:pdf", "pdf", "provider:openai", "protocol:openai-responses", "tool", "tool-result"],
     "name": "pdf/openai-tool-result",
     "recordedAt": "2026-08-25T03:29:08.297Z"
   },

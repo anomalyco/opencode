@@ -59,11 +59,13 @@ export interface Ref extends Schema.Schema.Type<typeof Ref> {}
 export const Ref = Schema.Struct({
   id: ID,
   name: Schema.String,
+  metadata: optional(Schema.Record(Schema.String, Schema.Any)),
 }).annotate({ identifier: "Integration.Ref" })
 
 export const Info = Schema.Struct({
   id: ID,
   name: Schema.String,
+  metadata: optional(Schema.Record(Schema.String, Schema.Any)),
   methods: Schema.Array(Method),
   connections: Schema.Array(Connection.Info),
 }).annotate({ identifier: "Integration.Info" })

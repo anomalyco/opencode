@@ -23,6 +23,7 @@ import {
 
 export const Plugin = define({
   id: "opencode.vcs.hg",
+  vcs: { id: "hg", markers: [".hg"] },
   effect: Effect.fn("VcsHgPlugin")(function* (ctx) {
     const location = yield* Location.Service
     if (location.vcs?.type !== "hg") return

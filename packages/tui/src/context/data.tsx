@@ -8,13 +8,13 @@ export type { FormWithLocation } from "@opencode-ai/client/solid"
 
 export const { use: useData, provider: DataProvider } = createSimpleContext({
   name: "Data",
-  init: () => {
+  init: (props: { directory: string }) => {
     const client = useClient()
     const data = createData({
       api: () => client.api,
       event: client.event,
       connection: client.connection,
-      directory: process.cwd(),
+      directory: props.directory,
     })
     data satisfies Plugin.Context["data"]
     return data

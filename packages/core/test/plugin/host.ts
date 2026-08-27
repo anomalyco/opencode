@@ -18,6 +18,16 @@ type Overrides = Partial<Omit<Plugin.Context, "options" | "session">> & {
 export function host(overrides: Overrides = {}): Plugin.Context {
   return {
     app: overrides.app ?? { name: "test", version: "test", channel: "test" },
+    location:
+      overrides.location ??
+      new Location.Info({
+        directory: AbsolutePath.make("/workspace"),
+        project: {
+          id: Project.ID.global,
+          directory: AbsolutePath.make("/workspace"),
+          canonical: AbsolutePath.make("/workspace"),
+        },
+      }),
     options: {},
     agent: overrides.agent ?? {
       get: () => Effect.die("unused agent.get"),
@@ -77,10 +87,6 @@ export function host(overrides: Overrides = {}): Plugin.Context {
     },
     mcp: overrides.mcp ?? {
       list: () => Effect.die("unused mcp.list"),
-      add: () => Effect.die("unused mcp.add"),
-      remove: () => Effect.die("unused mcp.remove"),
-      connect: () => Effect.die("unused mcp.connect"),
-      disconnect: () => Effect.die("unused mcp.disconnect"),
       transform: () => Effect.die("unused mcp.transform"),
       reload: () => Effect.die("unused mcp.reload"),
     },
@@ -114,6 +120,7 @@ export function host(overrides: Overrides = {}): Plugin.Context {
     },
     tool: overrides.tool ?? {
       transform: () => Effect.die("unused tool.transform"),
+      reload: () => Effect.die("unused tool.reload"),
       hook: () => Effect.die("unused tool.hook"),
     },
     vcs: overrides.vcs ?? {
@@ -140,6 +147,7 @@ export function host(overrides: Overrides = {}): Plugin.Context {
       generate: overrides.session?.generate ?? (() => Effect.die("unused session.generate")),
       command: overrides.session?.command ?? (() => Effect.die("unused session.command")),
       rename: overrides.session?.rename ?? (() => Effect.die("unused session.rename")),
+      move: overrides.session?.move ?? (() => Effect.die("unused session.move")),
       synthetic: overrides.session?.synthetic ?? (() => Effect.die("unused session.synthetic")),
       interrupt: overrides.session?.interrupt ?? (() => Effect.die("unused session.interrupt")),
       wait: overrides.session?.wait ?? (() => Effect.die("unused session.wait")),

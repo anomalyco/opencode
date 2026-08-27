@@ -164,6 +164,7 @@ const bodyOptions = (input: unknown) => {
 export const route = Route.make({
   id: ADAPTER,
   provider: profile.provider,
+  providerMetadataKey: "openrouter",
   protocol,
   endpoint: Endpoint.path("/chat/completions", { baseURL: profile.baseURL }),
   framing: Framing.sse,

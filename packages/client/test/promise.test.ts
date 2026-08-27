@@ -514,6 +514,115 @@ test("event.subscribe exposes the Promise event stream wire projection", async (
   expect(events[1]?.type === "session.model.selected" && events[1].created).toBe(1_717_171_717_000)
 })
 
+// Moved from packages/app/e2e/regression/session-timeline-transport.spec.ts
+test("event.subscribe keeps one request open while delivering multiple events", async () => {
+  const requests: Request[] = []
+  const events = [
+    { id: "evt_first", created: 1, type: "server.connected", data: {} },
+    { id: "evt_second", created: 2, type: "server.connected", data: {} },
+  ]
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async (input, init) => {
+      requests.push(input instanceof Request ? input : new Request(input, init))
+      return new Response(events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join(""), {
+        headers: { "content-type": "text/event-stream" },
+      })
+    },
+  })
+  const received = []
+  for await (const event of client.event.subscribe()) received.push(event)
+  expect(received).toEqual(events)
+  expect(requests).toHaveLength(1)
+})
+
+// Moved from packages/app/e2e/regression/session-timeline-transport.spec.ts
+test("event.subscribe delivers every event from one stream chunk", async () => {
+  const events = Array.from({ length: 4 }, (_, index) => ({
+    id: `evt_burst_${index}`,
+    created: index,
+    type: "server.connected",
+    data: {},
+  }))
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async () =>
+      new Response(new TextEncoder().encode(events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("")), {
+        headers: { "content-type": "text/event-stream" },
+      }),
+  })
+  const received = []
+  for await (const event of client.event.subscribe()) received.push(event)
+  expect(received).toEqual(events)
+  expect(new Set(received.map((event) => event.id)).size).toBe(4)
+})
+
+// Moved from packages/app/e2e/regression/session-timeline-transport.spec.ts
+test("event.subscribe parses split JSON and a split multibyte code point", async () => {
+  const event = {
+    id: "evt_split",
+    created: 1,
+    type: "server.connected",
+    data: { text: "split snowman \u2603\u2603\u2603" },
+  }
+  const encoded = new TextEncoder().encode(`data: ${JSON.stringify(event)}\n\n`)
+  const multibyte = encoded.indexOf(new TextEncoder().encode("\u2603")[0]!)
+  const boundaries = [9, multibyte + 1, multibyte + 2, encoded.length]
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async () =>
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            boundaries.forEach((end, index) =>
+              controller.enqueue(encoded.slice(index ? boundaries[index - 1] : 0, end)),
+            )
+            controller.close()
+          },
+        }),
+        { headers: { "content-type": "text/event-stream" } },
+      ),
+  })
+  await expect(client.event.subscribe()[Symbol.asyncIterator]().next()).resolves.toEqual({ done: false, value: event })
+})
+
+// Moved from packages/app/e2e/regression/session-timeline-transport.spec.ts
+test("event.subscribe ignores server heartbeat comments", async () => {
+  const event = { id: "evt_sentinel", created: 1, type: "server.connected", data: {} }
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async () =>
+      new Response(`: heartbeat\n\ndata: ${JSON.stringify(event)}\n\n: heartbeat\n\n`, {
+        headers: { "content-type": "text/event-stream" },
+      }),
+  })
+  const received = []
+  for await (const item of client.event.subscribe()) received.push(item)
+  expect(received).toEqual([event])
+})
+
+// Moved from packages/app/e2e/regression/session-timeline-transport.spec.ts
+test("event transport passes through ordinary health requests", async () => {
+  const requests: string[] = []
+  const event = { id: "evt_connected", created: 1, type: "server.connected", data: {} }
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      requests.push(new URL(request.url).pathname)
+      if (new URL(request.url).pathname === "/api/event") {
+        return new Response(`data: ${JSON.stringify(event)}\n\n`, {
+          headers: { "content-type": "text/event-stream" },
+        })
+      }
+      return Response.json({ healthy: true, version: "2.0.0", pid: 1 })
+    },
+  })
+  await expect(client.event.subscribe()[Symbol.asyncIterator]().next()).resolves.toEqual({ done: false, value: event })
+  await expect(client.health.get()).resolves.toEqual({ healthy: true, version: "2.0.0", pid: 1 })
+  expect(requests).toEqual(["/api/event", "/api/health"])
+})
+
 test("event.subscribe terminates on malformed Promise SSE data", async () => {
   const client = OpenCode.make({
     baseUrl: "http://localhost:3000",

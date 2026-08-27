@@ -1,9 +1,20 @@
 {
   "$schema": "https://v2-8-13.turborepo.dev/schema.json",
+  "globalDependencies": [
+    "patches/**",
+    "bunfig.toml",
+    ".npmrc",
+    ".github/actions/setup-bun/**",
+    ".github/workflows/test.yml"
+  ],
   "globalEnv": ["CI", "OPENCODE_DISABLE_SHARE"],
   "globalPassThroughEnv": ["CI", "OPENCODE_DISABLE_SHARE"],
   "tasks": {
     "typecheck": {},
+    "test:components": {
+      "outputs": [],
+      "cache": false
+    },
     "@opencode-ai/enterprise#typecheck": {
       "dependsOn": ["@opencode-ai/core#typecheck"]
     },
@@ -42,6 +53,10 @@
       "dependsOn": ["^build"],
       "outputs": []
     },
+    "@opencode-ai/latex#test": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
     "@opencode-ai/app#test": {
       "dependsOn": ["^build"],
       "outputs": []
@@ -52,6 +67,9 @@
     },
     "@opencode-ai/session-ui#test": {
       "dependsOn": ["^build"],
+      "outputs": []
+    },
+    "@opencode-ai/sdk#verify:package": {
       "outputs": []
     }
   }

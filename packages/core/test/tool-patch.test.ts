@@ -102,7 +102,7 @@ const withTool = <A, E, R>(
       AppNodeBuilder.build(LayerNode.group([Tool.node, LocationMutation.node, FileMutation.node, patchToolNode]), [
         [
           Environment.node,
-          transformEnvironmentFiles(activeLocation, (files) => ({
+          transformEnvironmentFiles((files) => ({
             read: (target, range) =>
               Effect.sync(() => {
                 if (!editApproved) readsBeforeEditApproval++

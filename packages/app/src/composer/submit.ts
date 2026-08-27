@@ -70,7 +70,7 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
       const started =
         input.adapter.kind === "active-session"
           ? { session: input.adapter.session(), cleanupReady: Promise.resolve() }
-          : await input.adapter.start(value.selection, submission)
+          : await input.adapter.start(value.selection, submission, handoffMessage(value))
       if (!started) return
       const session = started.session
 
@@ -80,7 +80,7 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
 
       const command = value.mode === "normal" ? findCommand(session, value.text) : undefined
       if (value.mode === "normal" && !command) {
-        if (value.images.length > 0) session.handoff?.set(handoffMessage(value))
+        session.handoff?.set(handoffMessage(value))
         const optimisticBusy = !input.adapter.working()
         if (optimisticBusy) session.data.session.setStatus(session.id, "running")
         const sending = sendPrompt(session, value).then(
@@ -88,6 +88,7 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
           (error) => ({ ok: false as const, error }),
         )
         await started.cleanupReady
+        await started.complete?.()
         input.adapter.submitted()
         submission.context
           .filter((item) => !!item.comment?.trim())
@@ -104,6 +105,7 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
       }
 
       await started.cleanupReady
+      await started.complete?.()
       input.adapter.submitted()
 
       if (value.mode === "shell") {
@@ -122,7 +124,6 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
         )
         return
       }
-
     } finally {
       submitting.delete(input.adapter.state)
     }
@@ -147,6 +148,19 @@ function handoffMessage(value: ComposerSubmission): SessionMessageUser {
     })),
     metadata: {
       displayText: value.text,
+      comments: value.context.flatMap((item) =>
+        item.comment?.trim()
+          ? [
+              {
+                path: item.path,
+                comment: item.comment.trim(),
+                ...(item.selection ? { selection: { ...item.selection } } : {}),
+                ...(item.preview !== undefined ? { preview: item.preview } : {}),
+                ...(item.commentOrigin ? { origin: item.commentOrigin } : {}),
+              },
+            ]
+          : [],
+      ),
       agent: value.selection.agent,
       model: {
         ...value.selection.model,

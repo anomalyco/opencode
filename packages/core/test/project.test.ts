@@ -145,21 +145,151 @@ async function rootCommit(dir: string) {
 }
 
 describe("Project.resolve", () => {
-  it.live("returns global for non-git directory", () =>
+  it.live("creates distinct deterministic projects for exact markerless directories", () =>
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireRelease(
         Effect.promise(() => tmpdir()),
         (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
       )
       const project = yield* Project.Service
+      const nested = path.join(tmp.path, "notes", "drafts")
+      yield* Effect.promise(() => fs.mkdir(nested, { recursive: true }))
 
       const result = yield* project.resolve(abs(tmp.path))
+      const repeated = yield* project.resolve(abs(`${tmp.path}${path.sep}.`))
+      const child = yield* project.resolve(abs(nested))
 
-      expect(result.id).toBe(Project.ID.make("global"))
-      expect(path.resolve(result.directory)).toBe(path.parse(tmp.path).root)
+      expect(result.id).not.toBe(Project.ID.global)
+      expect(repeated.id).toBe(result.id)
+      expect(child.id).not.toBe(result.id)
+      expect(result.directory).toBe(yield* real(tmp.path))
+      expect(child.directory).toBe(yield* real(nested))
       expect(result.canonical).toBe(result.directory)
       expect(result.previous).toBeUndefined()
       expect(result.vcs).toBeUndefined()
+    }),
+  )
+
+  it.live("discovers repository markers from automatically loaded plugins", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      yield* Effect.promise(async () => {
+        await fs.mkdir(path.join(tmp.path, ".opencode", "plugins"), { recursive: true })
+        await fs.mkdir(path.join(tmp.path, ".svn"))
+        await fs.mkdir(path.join(tmp.path, "nested", "directory"), { recursive: true })
+        await Bun.write(
+          path.join(tmp.path, ".opencode", "plugins", "svn.ts"),
+          'export default { id: "svn", vcs: { markers: [".svn"] }, setup() {} }',
+        )
+      })
+      const project = yield* Project.Service
+
+      const result = yield* project.resolve(abs(path.join(tmp.path, "nested", "directory")))
+
+      expect(result.directory).toBe(abs(tmp.path))
+      expect(result.canonical).toBe(abs(tmp.path))
+      expect(result.vcs).toEqual({ type: "svn", store: abs(path.join(tmp.path, ".svn")) })
+      expect(result.id).not.toBe(Project.ID.global)
+      expect((yield* project.list()).find((item) => item.id === result.id)?.vcs).toBe("svn")
+    }),
+  )
+
+  it.live("discovers repository markers from configured plugin files", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      yield* Effect.promise(async () => {
+        await fs.mkdir(path.join(tmp.path, ".pijul"))
+        await Bun.write(path.join(tmp.path, "opencode.jsonc"), '{ "plugins": ["./pijul.ts"] }')
+        await Bun.write(
+          path.join(tmp.path, "pijul.ts"),
+          'export default { id: "custom.pijul", vcs: { id: "pijul", markers: [".pijul"] }, setup() {} }',
+        )
+      })
+      const project = yield* Project.Service
+
+      const result = yield* project.resolve(abs(tmp.path))
+
+      expect(result.directory).toBe(abs(tmp.path))
+      expect(result.vcs?.type).toBe("pijul")
+    }),
+  )
+
+  it.live("prefers a nested plugin repository over its parent git repository", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      const nested = path.join(tmp.path, "nested")
+      yield* Effect.promise(async () => {
+        await initRepo(tmp.path, { commit: true })
+        await fs.mkdir(path.join(tmp.path, ".opencode", "plugins"), { recursive: true })
+        await fs.mkdir(path.join(nested, ".svn"), { recursive: true })
+        await Bun.write(
+          path.join(tmp.path, ".opencode", "plugins", "svn.ts"),
+          'export default { id: "svn", vcs: { markers: [".svn"] }, setup() {} }',
+        )
+      })
+      const project = yield* Project.Service
+
+      const result = yield* project.resolve(abs(nested))
+
+      expect(result.directory).toBe(abs(nested))
+      expect(result.vcs?.type).toBe("svn")
+    }),
+  )
+
+  it.live("preserves git identity when a plugin marker shares its repository", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      yield* Effect.promise(async () => {
+        await initRepo(tmp.path, { commit: true })
+        await fs.mkdir(path.join(tmp.path, ".opencode", "plugins"), { recursive: true })
+        await fs.mkdir(path.join(tmp.path, ".jj"))
+        await Bun.write(
+          path.join(tmp.path, ".opencode", "plugins", "jj.ts"),
+          'export default { id: "jj", vcs: { markers: [".jj"] }, setup() {} }',
+        )
+      })
+      const project = yield* Project.Service
+
+      const result = yield* project.resolve(abs(tmp.path))
+
+      expect(result.id).toBe(Project.ID.make(yield* Effect.promise(() => rootCommit(tmp.path))))
+      expect(result.vcs?.type).toBe("git")
+      expect(result.vcsBackend).toBe("jj")
+    }),
+  )
+
+  it.live("repository markers override markerless directory projects", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      const nested = path.join(tmp.path, "packages", "app")
+      yield* Effect.promise(() => fs.mkdir(nested, { recursive: true }))
+      const project = yield* Project.Service
+      const root = yield* project.resolve(abs(tmp.path))
+      const child = yield* project.resolve(abs(nested))
+
+      yield* Effect.promise(() => initRepo(tmp.path, { commit: true }))
+      const repository = yield* project.resolve(abs(nested))
+
+      expect(root.id).not.toBe(child.id)
+      expect(repository.id).not.toBe(root.id)
+      expect(repository.id).not.toBe(child.id)
+      expect(repository.directory).toBe(yield* real(tmp.path))
+      expect(repository.vcs?.type).toBe("git")
     }),
   )
 
@@ -219,6 +349,44 @@ describe("Project.resolve", () => {
         canonical: yield* real(after),
         name: "Preserved name",
       })
+    }),
+  )
+
+  it.live("keeps the canonical project directory when opening another clone", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      const main = path.join(tmp.path, "repo")
+      const clone = path.join(tmp.path, "other-clone")
+      const linked = path.join(tmp.path, "linked")
+      yield* Effect.promise(async () => {
+        await fs.mkdir(main)
+        await initRepo(main, { commit: true, remote: "git@github.com:owner/repo.git" })
+        await $`git clone --no-hardlinks ${main} ${clone}`.quiet()
+        await $`git remote set-url origin https://github.com/owner/repo.git`.cwd(clone).quiet()
+        await $`git worktree add ${linked} -b linked`.cwd(main).quiet()
+      })
+      const project = yield* Project.Service
+      const bus = yield* Bus.Service
+      const initial = yield* project.resolve(abs(main))
+      const updates: Project.Info[] = []
+      yield* bus.subscribe(ProjectSchema.Event.Updated).pipe(
+        Stream.runForEach((event) => Effect.sync(() => updates.push(event.data))),
+        Effect.forkScoped({ startImmediately: true }),
+      )
+
+      for (const directory of [clone, linked, main, clone]) {
+        const resolved = yield* project.resolve(abs(directory))
+        expect(resolved.id).toBe(initial.id)
+        expect(resolved.directory).toBe(abs(directory))
+        expect(resolved.canonical).toBe(abs(directory === clone ? clone : main))
+        expect((yield* project.list()).find((item) => item.id === initial.id)?.canonical).toBe(abs(main))
+      }
+      yield* Effect.yieldNow
+
+      expect(updates).toEqual([])
     }),
   )
 
@@ -408,6 +576,48 @@ describe("Project.resolve", () => {
       const result = yield* project.resolve(abs(tmp.path))
 
       expect(result.vcs?.type).toBe("git")
+    }),
+  )
+
+  it.live("prefers the nearest mercurial marker over an outer git repository", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      const nested = path.join(tmp.path, "nested")
+      yield* Effect.promise(async () => {
+        await initRepo(tmp.path, { commit: true })
+        await fs.mkdir(path.join(nested, ".hg"), { recursive: true })
+        await fs.mkdir(path.join(nested, "app"))
+      })
+      const project = yield* Project.Service
+
+      const result = yield* project.resolve(abs(path.join(nested, "app")))
+
+      expect(result.vcs?.type).toBe("hg")
+      expect(result.directory).toBe(yield* real(nested))
+    }),
+  )
+
+  it.live("prefers the nearest git marker over an outer mercurial repository", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      const nested = path.join(tmp.path, "nested")
+      yield* Effect.promise(async () => {
+        await fs.mkdir(path.join(tmp.path, ".hg"))
+        await fs.mkdir(path.join(nested, "app"), { recursive: true })
+        await initRepo(nested, { commit: true })
+      })
+      const project = yield* Project.Service
+
+      const result = yield* project.resolve(abs(path.join(nested, "app")))
+
+      expect(result.vcs?.type).toBe("git")
+      expect(result.directory).toBe(yield* real(nested))
     }),
   )
 

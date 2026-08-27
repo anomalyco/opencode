@@ -17,7 +17,7 @@ import { Session } from "@opencode-ai/core/session"
 import { SessionTransfer } from "@opencode-ai/core/session/transfer"
 import { ShellSelect } from "@opencode-ai/core/shell/select"
 import { Job } from "@opencode-ai/core/job"
-import { MCP } from "@opencode-ai/core/mcp/index"
+import { Mcp } from "@opencode-ai/core/mcp/index"
 import { Global } from "@opencode-ai/util/global"
 import { InstructionDiscovery } from "@opencode-ai/core/instruction-discovery"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
@@ -100,6 +100,7 @@ function makeRoutes<AuthError, AuthServices>(
   const pluginRuntimeCell = PluginRuntime.makeCell()
   const standard: LayerNode.Replacements = [
     [Database.node, Database.configured(options.database)],
+    [PersistentPty.node, PersistentPty.configured(options.pty)],
     [Bus.node, Bus.configured({ persist: options.events?.persist })],
     [App.node, App.configured(options.app)],
     [ModelsDev.node, ModelsDev.configured(options.models)],
@@ -117,8 +118,8 @@ function makeRoutes<AuthError, AuthServices>(
     [InstructionDiscovery.node, InstructionDiscovery.configured({ project: options.config?.project })],
     [ShellSelect.node, ShellSelect.configured({ gitbash: options.windows?.gitbash })],
     [
-      MCP.node,
-      MCP.configured({
+      Mcp.node,
+      Mcp.configured({
         clientInfo: {
           name: options.app?.name ?? "opencode",
           version: options.app?.version ?? "unknown",

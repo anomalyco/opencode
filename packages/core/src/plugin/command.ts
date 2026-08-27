@@ -4,7 +4,7 @@ import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Effect, Stream } from "effect"
 import { Bus } from "../bus.js"
 import { Location } from "../location.js"
-import { MCP } from "../mcp/index.js"
+import { Mcp } from "../mcp/index.js"
 import PROMPT_INITIALIZE from "./command/initialize.txt"
 import PROMPT_REVIEW from "./command/review.txt"
 
@@ -12,20 +12,18 @@ export const Plugin = define({
   id: "opencode.command",
   effect: Effect.fn(function* (ctx) {
     const location = yield* Location.Service
-    const mcp = yield* MCP.Service
+    const mcp = yield* Mcp.Service
     const bus = yield* Bus.Service
-    const loaded = { prompts: [] as MCP.Prompt[] }
-    yield* bus
-      .subscribe(MCP.PromptsChanged)
-      .pipe(
-        Stream.runForEach(() =>
-          mcp.prompts().pipe(
-            Effect.tap((prompts) => Effect.sync(() => (loaded.prompts = prompts))),
-            Effect.andThen(ctx.command.reload()),
-          ),
+    const loaded = { prompts: [] as Mcp.Prompt[] }
+    yield* bus.subscribe(Mcp.PromptsChanged).pipe(
+      Stream.runForEach(() =>
+        mcp.prompts().pipe(
+          Effect.tap((prompts) => Effect.sync(() => (loaded.prompts = prompts))),
+          Effect.andThen(ctx.command.reload()),
         ),
-        Effect.forkScoped({ startImmediately: true }),
-      )
+      ),
+      Effect.forkScoped({ startImmediately: true }),
+    )
     loaded.prompts = yield* mcp.prompts()
     yield* ctx.command.transform((draft) => {
       draft.add({

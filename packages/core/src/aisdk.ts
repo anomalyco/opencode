@@ -17,15 +17,14 @@ import type {
 } from "@ai-sdk/provider"
 import {
   FinishReason,
-  InvalidProviderOutputReason,
   LLMEvent,
   AIError,
   LanguageModel,
   ProviderID,
   ProviderMetadata,
-  TransportReason,
+  TransportError,
   ToolResultValue,
-  UnknownProviderReason,
+  UnknownProviderError,
   type ContentPart,
   type LLMRequest,
   type ToolDefinition,
@@ -613,12 +612,12 @@ function streamLanguage(language: LanguageModelV3, options: LanguageModelV3CallO
     Stream.unwrap(
       Effect.tryPromise({
         try: () => language.doStream(options),
-        catch: (error) => llmError("doStream", error),
+        catch: llmError,
       }).pipe(
         Effect.map((result) =>
           Stream.fromReadableStream({
             evaluate: () => result.stream,
-            onError: (error) => llmError("readStream", error),
+            onError: llmError,
           }).pipe(
             Stream.mapEffect((event) => streamPartEvents(state, event)),
             Stream.flatMap((events) => Stream.fromIterable(events)),
@@ -745,7 +744,7 @@ function streamPartEvents(
         }),
       ])
     case "error":
-      return Effect.fail(llmError("stream", event.error))
+      return Effect.fail(llmError(event.error))
   }
 }
 
@@ -795,45 +794,51 @@ function messageValue(input: unknown) {
   }
 }
 
-function llmError(method: string, error: unknown) {
-  const reason =
-    error instanceof AIError
-      ? new InvalidProviderOutputReason({ message: error.message })
-      : APICallError.isInstance(error)
-        ? apiCallErrorReason(error)
-        : new UnknownProviderReason({ message: unknownErrorMessage(error) })
+function llmError(error: unknown) {
+  if (error instanceof AIError) return error
+  if (APICallError.isInstance(error)) return apiCallError(error)
   return new AIError({
-    module: "AISDK",
-    method,
-    reason,
+    reason: new UnknownProviderError({
+      message: unknownErrorMessage(error),
+      body: errorBody(error),
+      cause: error,
+    }),
   })
 }
 
-function apiCallErrorReason(error: APICallError) {
-  const details = providerErrorDetails(error)
-  const reason = RequestExecutor.classifyHttpFailure({
-    message: details.message,
+function apiCallError(error: APICallError) {
+  const failure = RequestExecutor.httpFailure({
+    message: providerErrorMessage(error),
     url: error.url,
     status: error.statusCode,
-    code: details.code,
+    data: error.data,
     responseHeaders: error.responseHeaders,
-    responseBody: error.responseBody,
+    responseBody: error.responseBody ?? errorBody(error.data),
+    cause: error,
   })
-  if (error.statusCode !== undefined || !error.isRetryable) return reason
-  return new TransportReason({
-    message: reason.message,
-    transport: "http",
-    operation: "request",
-    code: error.name,
-    url: error.url,
-    http: "http" in reason ? reason.http : undefined,
+  if (error.statusCode !== undefined || !error.isRetryable) return failure
+  return new AIError({
+    reason: new TransportError({
+      message: failure.message,
+      body: failure.reason.body,
+      http: failure.reason.http,
+      cause: failure.reason.cause,
+      transport: "http",
+      operation: "request",
+      url: error.url,
+    }),
   })
 }
 
-const ProviderErrorCode = Schema.Union([Schema.String, Schema.Finite])
+function errorBody(value: unknown) {
+  if (typeof value === "string") return value
+  if (value instanceof Error || !Schema.is(Schema.Json)(value)) return undefined
+  return ProviderShared.encodeJson(value)
+}
+
 const ProviderErrorDetail = Schema.Struct({
   message: Schema.optionalKey(Schema.String),
-  code: Schema.optionalKey(ProviderErrorCode),
+  code: Schema.optionalKey(Schema.Union([Schema.String, Schema.Finite])),
 })
 const ProviderErrorBody = Schema.Struct({
   ...ProviderErrorDetail.fields,
@@ -848,7 +853,7 @@ function unknownErrorMessage(error: unknown) {
   return message.trim() === "" ? "Provider request failed" : message
 }
 
-function providerErrorDetails(error: APICallError) {
+function providerErrorMessage(error: APICallError) {
   const data = Option.getOrUndefined(decodeProviderError(error.data))
   const body = Option.getOrUndefined(decodeProviderError(error.responseBody))
   const details = [data?.error, data, body?.error, body]
@@ -857,11 +862,7 @@ function providerErrorDetails(error: APICallError) {
   const code = value === undefined ? undefined : String(value)
   const prefix =
     error.statusCode === undefined ? "Provider request failed" : `Provider request failed with HTTP ${error.statusCode}`
-  return {
-    code,
-    message:
-      error.message.trim() !== "" ? error.message : (message ?? (code === undefined ? prefix : `${prefix}: ${code}`)),
-  }
+  return error.message.trim() !== "" ? error.message : (message ?? (code === undefined ? prefix : `${prefix}: ${code}`))
 }
 
 export const node = makeLocationNode({ service: Service, layer: locationLayer, deps: [] })
