@@ -2,7 +2,7 @@ import { test, expect, describe, afterEach, beforeEach, spyOn } from "bun:test"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { httpClient } from "@opencode-ai/core/effect/app-node-platform"
-import { Cause, Effect, Exit, Layer, Option } from "effect"
+import { Cause, Effect, Exit, Layer, Logger, Option } from "effect"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/unstable/http"
 import { Config } from "@/config/config"
@@ -393,6 +393,157 @@ it.effect("updates global config and omits empty shell key in jsonc", () =>
       expect(writtenConfig).not.toContain('"shell"')
       expect(parsed.shell).toBeUndefined()
       expect(parsed.model).toBe("test/model")
+    }),
+  ),
+)
+
+it.effect("updates global JSON without removing native V2 configuration", () =>
+  withGlobalConfig(
+    {
+      config: {
+        mcp: {
+          servers: {
+            modern: { type: "local", command: ["modern-mcp"], disabled: true },
+          },
+        },
+        providers: { example: { settings: { apiKey: "keep-me" } } },
+      },
+    },
+    ({ dir }) =>
+      Effect.gen(function* () {
+        const messages: unknown[] = []
+        const updated = yield* Config.use.updateGlobal({ username: "updated" }).pipe(
+          Effect.provide(
+            Logger.layer([
+              Logger.make<unknown, void>((options) => {
+                messages.push(options.message)
+              }),
+            ]),
+          ),
+        )
+        const written = yield* FSUtil.use.readJson(path.join(dir, "opencode.json"))
+        expect(written).toMatchObject({
+          username: "updated",
+          mcp: { servers: { modern: { type: "local", command: ["modern-mcp"], disabled: true } } },
+          providers: { example: { settings: { apiKey: "keep-me" } } },
+        })
+        expect(updated.info.mcp?.modern).toMatchObject({ enabled: false })
+        expect(JSON.stringify(messages)).not.toContain("keep-me")
+        expect(
+          messages.filter((item) => Array.isArray(item) && item[0] === "configuration compatibility diagnostic"),
+        ).toEqual([
+          [
+            "configuration compatibility diagnostic",
+            expect.objectContaining({
+              source: path.join(dir, "opencode.json"),
+              kind: "unsupported",
+              path: ["providers"],
+            }),
+          ],
+        ])
+      }),
+  ),
+)
+
+it.effect("updates global JSONC without removing native V2 configuration", () =>
+  withGlobalConfig(
+    {
+      name: "opencode.jsonc",
+      config: {
+        mcp: {
+          servers: {
+            modern: { type: "local", command: ["modern-mcp"], disabled: true },
+          },
+        },
+        providers: { example: { settings: { apiKey: "keep-me" } } },
+      },
+    },
+    ({ dir }) =>
+      Effect.gen(function* () {
+        const updated = yield* Config.use.updateGlobal({ username: "updated" })
+        const written = yield* FSUtil.use.readJson(path.join(dir, "opencode.jsonc"))
+        expect(written).toMatchObject({
+          username: "updated",
+          mcp: { servers: { modern: { type: "local", command: ["modern-mcp"], disabled: true } } },
+          providers: { example: { settings: { apiKey: "keep-me" } } },
+        })
+        expect(updated.info.mcp?.modern).toMatchObject({ enabled: false })
+      }),
+  ),
+)
+
+it.effect("applies legacy global updates over existing native V2 settings", () =>
+  withGlobalConfig(
+    {
+      config: {
+        snapshots: true,
+        permissions: [{ action: "read", resource: "*", effect: "allow" }],
+        agents: { reviewer: { disabled: false } },
+        mcp: { servers: { modern: { type: "local", command: ["modern-mcp"], disabled: false } } },
+      },
+    },
+    () =>
+      Effect.gen(function* () {
+        const updated = yield* Config.use.updateGlobal({
+          snapshot: false,
+          permission: { read: "deny" },
+          agent: { reviewer: { disable: true } },
+          mcp: { modern: { enabled: false } },
+        })
+
+        expect(updated.info.snapshot).toBe(false)
+        expect(updated.info.permission?.read).toBe("deny")
+        expect(updated.info.agent?.reviewer?.disable).toBe(true)
+        expect(updated.info.mcp?.modern).toEqual({ enabled: false })
+      }),
+  ),
+)
+
+it.instance("updates project config without removing native V2 configuration", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* writeConfigEffect(
+      test.directory,
+      {
+        $schema: "https://opencode.ai/config.json",
+        mcp: { servers: { modern: { type: "local", command: ["modern-mcp"], disabled: true } } },
+        providers: { example: { settings: { apiKey: "keep-me" } } },
+      },
+      "config.json",
+    )
+
+    yield* Config.use.update({ username: "updated" })
+
+    expect(yield* FSUtil.use.readJson(path.join(test.directory, "config.json"))).toMatchObject({
+      username: "updated",
+      mcp: { servers: { modern: { type: "local", command: ["modern-mcp"], disabled: true } } },
+      providers: { example: { settings: { apiKey: "keep-me" } } },
+    })
+  }),
+)
+
+it.effect("native project MCP servers override inherited V1 disabled state", () =>
+  withConfigTree(
+    {
+      global: {
+        mcp: {
+          shared: { type: "local", command: ["global-mcp"], enabled: false },
+        },
+      },
+      project: {
+        mcp: {
+          servers: {
+            shared: { type: "local", command: ["project-mcp"] },
+          },
+        },
+      },
+    },
+    Effect.gen(function* () {
+      expect((yield* Config.use.get()).mcp?.shared).toMatchObject({
+        type: "local",
+        command: ["project-mcp"],
+        enabled: true,
+      })
     }),
   ),
 )
