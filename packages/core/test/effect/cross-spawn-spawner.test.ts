@@ -17,18 +17,7 @@ function js(code: string, opts?: ChildProcess.CommandOptions) {
 }
 
 function decodeByteStream(stream: Stream.Stream<Uint8Array, PlatformError.PlatformError>) {
-  return Stream.runCollect(stream).pipe(
-    Effect.map((chunks) => {
-      const total = chunks.reduce((acc, x) => acc + x.length, 0)
-      const out = new Uint8Array(total)
-      let off = 0
-      for (const chunk of chunks) {
-        out.set(chunk, off)
-        off += chunk.length
-      }
-      return new TextDecoder("utf-8").decode(out).trim()
-    }),
-  )
+  return Stream.mkUint8Array(stream).pipe(Effect.map((bytes) => new TextDecoder("utf-8").decode(bytes).trim()))
 }
 
 function alive(pid: number) {

@@ -186,7 +186,7 @@ describe("Integration", () => {
           value: Credential.Key.make({ type: "key", key: "secret", configuration: { accountId: "account" } }),
         }),
       ])
-      expect(Array.from(yield* Fiber.join(created), (event) => ({ type: event.type, data: event.data }))).toEqual([
+      expect((yield* Fiber.join(created)).map((event) => ({ type: event.type, data: event.data }))).toEqual([
         { type: Credential.Event.Updated.type, data: {} },
         { type: Credential.Event.Switched.type, data: { credentialID: stored[0]?.id, integrationID } },
       ])
