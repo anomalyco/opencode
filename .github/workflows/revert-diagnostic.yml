@@ -1,0 +1,40 @@
+name: revert diagnostic
+
+on:
+  push:
+    branches: [revert-timeout]
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: blacksmith-4vcpu-windows-2025
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - uses: ./.github/actions/setup-bun
+        with:
+          install-flags: --frozen-lockfile
+      - name: Configure fixture Git identity
+        run: |
+          git config --global user.email "bot@opencode.ai"
+          git config --global user.name "opencode"
+      - name: Build test dependencies
+        run: bun turbo run build --filter='@opencode-ai/core^...'
+      - name: Reproduce at the existing timeout
+        continue-on-error: true
+        timeout-minutes: 4
+        working-directory: packages/core
+        run: bun run test test/session-revert.test.ts --rerun-each 20 --timeout 5000
+        env:
+          OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: "true"
+      - name: Measure through completion
+        timeout-minutes: 4
+        working-directory: packages/core
+        run: bun run test test/session-revert.test.ts --rerun-each 20 --timeout 30000
+        env:
+          OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: "true"
