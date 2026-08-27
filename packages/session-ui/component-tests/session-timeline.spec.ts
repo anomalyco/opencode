@@ -25,7 +25,7 @@ story("space activates a focused timeline button instead of scrolling", async ({
   await page.setViewportSize({ width: 800, height: 240 })
   const timeline = await mount("current-session-terminal-work--terminal-commands", { args: { scenario: "collapsed" } })
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollHeight - innerHeight)).toBeGreaterThan(0)
-  const trigger = timeline.getByRole("button", { name: "Used Shell", exact: true })
+  const trigger = timeline.getByRole("button", { name: "Used 1 Shell", exact: true })
   await expect(trigger).toHaveAttribute("aria-expanded", "false")
   await trigger.focus()
   const before = await page.evaluate(() => window.scrollY)
