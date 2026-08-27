@@ -14,37 +14,42 @@ type Sidecar = {
 export async function prepare(file: string, info: Info, timeout: number) {
   const existing = await read(file)
   if (existing !== undefined && existing.expiresAt > Date.now() && same(existing.source, info)) return
-  const request = (operation: string) =>
-    fetch(new URL(`/api/experimental/persistent-pty/${operation}`, info.url), {
-      method: "POST",
-      headers:
-        info.password === undefined
-          ? undefined
-          : { authorization: "Basic " + Buffer.from(`opencode:${info.password}`).toString("base64") },
-      signal: AbortSignal.timeout(timeout),
-    })
-  const result = await request("handoff").then(
-    (response) => ({ response }),
+  const { ClientError, OpenCode } = await import("./promise/index.js")
+  const client = OpenCode.make({
+    baseUrl: info.url,
+    headers:
+      info.password === undefined
+        ? undefined
+        : { authorization: "Basic " + Buffer.from(`opencode:${info.password}`).toString("base64") },
+  })
+  const missing = (error: unknown) =>
+    error instanceof ClientError &&
+    error.reason === "UnexpectedStatus" &&
+    typeof error.cause === "object" &&
+    error.cause !== null &&
+    "status" in error.cause &&
+    error.cause.status === 404
+  const result = await client.experimental.persistentPty.handoff({ signal: AbortSignal.timeout(timeout) }).then(
+    (value) => ({ value }),
     (cause: unknown) => ({ cause }),
   )
-  if ("cause" in result || !result.response.ok) {
+  if ("cause" in result) {
     // Another caller may already have prepared and stopped this server.
     const concurrent = await read(file)
     if (concurrent !== undefined && concurrent.expiresAt > Date.now() && same(concurrent.source, info)) return
-    if ("cause" in result)
+    if (!missing(result.cause))
       throw new Error("Failed to prepare persistent terminals for service replacement", { cause: result.cause })
-  }
-  if (result.response.status === 404) {
     console.warn("Background service cannot hand off persistent terminals; shutting them down before replacement")
-    const shutdown = await request("shutdown")
-    if (!shutdown.ok && shutdown.status !== 404)
-      throw new Error(`Failed to shut down persistent terminals before service replacement: HTTP ${shutdown.status}`)
+    await client.experimental.persistentPty
+      .shutdown({ signal: AbortSignal.timeout(timeout) })
+      .catch((cause: unknown) => {
+        if (missing(cause)) return
+        throw new Error("Failed to shut down persistent terminals before service replacement", { cause })
+      })
     await publish(file, info, null)
     return
   }
-  if (!result.response.ok)
-    throw new Error(`Failed to prepare persistent terminals for service replacement: HTTP ${result.response.status}`)
-  const body: unknown = await result.response.json()
+  const body: unknown = result.value
   if (typeof body !== "object" || body === null || !("handoff" in body))
     throw new Error("Invalid persistent terminal handoff response")
   if (body.handoff === null) {
