@@ -159,19 +159,23 @@ describe("Tool", () => {
     }),
   )
 
-  it.effect("revalidates sources and rejects collisions without hiding earlier tools", () =>
+  it.effect("uses the last valid addition on replay and restores earlier transforms on disposal", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service
       yield* transform(service, { echo_tool: constant("base") }, { codemode: false })
       let source = [{ ...constant("overlay"), name: "echo.tool", options: { codemode: false } }]
-      yield* service.transform((draft) => source.forEach((tool) => draft.add(tool)))
+      const registration = yield* service.transform((draft) => source.forEach((tool) => draft.add(tool)))
       expect((yield* executeTool(service, call("echo_tool"))).output).toEqual({ text: "overlay" })
 
       source = [...source, { ...constant("collision"), name: "echo_tool", options: { codemode: false } }]
       const collision = yield* service.reload().pipe(Effect.forkChild({ startImmediately: true }))
       yield* TestClock.adjust("500 millis")
       yield* Fiber.join(collision)
+      expect((yield* executeTool(service, call("echo_tool"))).output).toEqual({ text: "collision" })
+
+      yield* registration.dispose
       expect((yield* executeTool(service, call("echo_tool"))).output).toEqual({ text: "base" })
+      yield* service.transform((draft) => source.forEach((tool) => draft.add(tool)))
 
       source = [{ ...constant("invalid"), name: "", options: { codemode: false } }]
       const invalid = yield* service.reload().pipe(Effect.forkChild({ startImmediately: true }))
@@ -202,7 +206,7 @@ describe("Tool", () => {
     }).pipe(Effect.provide(Logger.layer([logger])))
   })
 
-  it.effect("skips invalid, reserved, and colliding names without dropping healthy tools", () =>
+  it.effect("skips invalid and reserved names while letting the last normalized name win", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service
       yield* transform(
@@ -211,18 +215,18 @@ describe("Tool", () => {
           before: make(),
           "": make(),
           ["x".repeat(65)]: make(),
-          "echo.tool": make(),
-          echo_tool: make(),
+          "echo.tool": constant("first"),
+          echo_tool: constant("last"),
           execute: make(),
           after: make(),
         },
         { codemode: false },
       )
       const snapshot = yield* service.snapshot()
-      expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["after", "before", "execute"])
+      expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["after", "before", "echo_tool", "execute"])
       expect((yield* snapshot.execute(call("before"))).output).toEqual({ text: "before" })
       expect((yield* snapshot.execute(call("after"))).output).toEqual({ text: "after" })
-      expect((yield* snapshot.execute(call("echo_tool")).pipe(Effect.flip)).message).toBe("Unknown tool: echo_tool")
+      expect((yield* snapshot.execute(call("echo_tool"))).output).toEqual({ text: "last" })
       expect(snapshot.codeModeCatalog).toEqual([])
     }),
   )

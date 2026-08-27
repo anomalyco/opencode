@@ -27,6 +27,11 @@ export interface Draft {
   readonly add: (tool: Tool.Info) => void
 }
 
+type Data = {
+  tools: Map<string, Tool.Info>
+  errors: { tool: Tool.Info; error: RegistrationError }[]
+}
+
 export interface Interface extends State.Transformable<Draft> {
   readonly snapshot: (permissions?: Permission.Ruleset) => Effect.Effect<Snapshot>
 }
@@ -136,16 +141,25 @@ const layer = Layer.effect(
       }
     })
 
-    const state = State.create({
+    const state: State.Interface<Data, Draft> = State.create<Data, Draft>({
       name: "tool",
       initial: () => ({
-        tools: new Map<string, Tool.Info>(),
-        errors: new Array<{ tool: Tool.Info; error: RegistrationError }>(),
+        tools: new Map(),
+        errors: [],
       }),
-      draft: (draft) => draft,
-      finalize: (draft) =>
+      draft: (draft) => ({
+        add: (tool) => {
+          const error = registrationError(tool)
+          if (error) {
+            draft.errors.push({ tool, error })
+            return
+          }
+          draft.tools.set(effectiveName(tool), { ...tool, options: tool.options && { ...tool.options } })
+        },
+      }),
+      finalize: () =>
         Effect.forEach(
-          draft.errors,
+          state.get().errors,
           ({ tool, error }) =>
             Effect.logError("Skipping invalid tool registration", {
               name: tool.name,
@@ -157,33 +171,7 @@ const layer = Layer.effect(
     })
 
     return Service.of({
-      transform: (callback) =>
-        state.transform((draft) => {
-          const tools: Tool.Info[] = []
-          callback({ add: (tool) => tools.push(tool) })
-          const valid = tools.flatMap((tool) => {
-            const error = registrationError(tool)
-            if (error) {
-              draft.errors.push({ tool, error })
-              return []
-            }
-            return [{ key: effectiveName(tool), tool }]
-          })
-          // Reject collisions within one contribution, but allow later transforms to override it.
-          for (const entry of valid) {
-            if (valid.some((candidate) => candidate !== entry && candidate.key === entry.key)) {
-              draft.errors.push({
-                tool: entry.tool,
-                error: new RegistrationError({
-                  name: entry.key,
-                  message: `Duplicate normalized tool name: ${entry.key}`,
-                }),
-              })
-              continue
-            }
-            draft.tools.set(entry.key, { ...entry.tool, options: entry.tool.options && { ...entry.tool.options } })
-          }
-        }),
+      transform: state.transform,
       reload: state.reload,
       snapshot: Effect.fn("Tool.snapshot")((permissions) =>
         Effect.sync(() => {
