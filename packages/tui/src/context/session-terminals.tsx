@@ -3,7 +3,6 @@ import { createSignal, onCleanup } from "solid-js"
 import { createSimpleContext } from "./helper"
 import { useClient } from "./client"
 import { useConfig } from "../config"
-import { useData } from "./data"
 import { useEvent } from "./event"
 import { useStorage } from "./storage"
 
@@ -16,7 +15,6 @@ export const { use: useSessionTerminals, provider: SessionTerminalsProvider } = 
   init: () => {
     const client = useClient()
     const config = useConfig().data
-    const data = useData()
     const event = useEvent()
     const [focus, setFocus] = createSignal<string>()
     const storage = useStorage()
@@ -76,12 +74,9 @@ export const { use: useSessionTerminals, provider: SessionTerminalsProvider } = 
       refresh,
       selectTerminal,
       async newTerminal(sessionID: string): Promise<PersistentPtyInfo> {
-        const session = data.session.get(sessionID)
         const terminal = await client.api.experimental.persistentPty.create({
           sessionID,
-          command: process.env.SHELL || "/bin/sh",
           args: [],
-          cwd: session?.location.directory ?? process.cwd(),
           title: "Terminal",
           env: {},
         })

@@ -1707,7 +1707,7 @@ export function make(options: ClientOptions) {
                 size: input["size"],
               },
               successStatus: 200,
-              declaredStatuses: [400, 503, 401],
+              declaredStatuses: [400, 503, 404, 401],
               empty: false,
             },
             requestOptions,

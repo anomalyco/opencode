@@ -1658,9 +1658,9 @@ export type ExperimentalPersistentPtyListOperation<E = never> = (
 
 export type ExperimentalPersistentPtyCreateInput = {
   readonly sessionID: Session.ID
-  readonly command: string
+  readonly command?: string | undefined
   readonly args: ReadonlyArray<string>
-  readonly cwd: string
+  readonly cwd?: string | undefined
   readonly title: string
   readonly env: { readonly [x: string]: string }
   readonly size?: { readonly cols: number; readonly rows: number } | undefined

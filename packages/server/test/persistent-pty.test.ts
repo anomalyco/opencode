@@ -6,6 +6,7 @@ import path from "node:path"
 import { expect } from "bun:test"
 import { PersistentPty } from "@opencode-ai/schema/persistent-pty"
 import { Session } from "@opencode-ai/schema/session"
+import { ShellSelect } from "@opencode-ai/core/shell/select"
 import { Effect, Schema } from "effect"
 import { HttpServer } from "effect/unstable/http"
 import { it } from "../../core/test/lib/effect"
@@ -23,6 +24,7 @@ smoke(
           binary: process.env.OPENCODE_PTY_BIN,
           runtime: process.env.OPENCODE_PTY_RUNTIME_DIR,
           xdg: process.env.XDG_RUNTIME_DIR,
+          shell: process.env.SHELL,
         }
         const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-pty-server-test-"))
         const database = path.join(root, "opencode.db")
@@ -30,6 +32,8 @@ smoke(
         process.env.OPENCODE_PTY_BIN = binary
         delete process.env.OPENCODE_PTY_RUNTIME_DIR
         process.env.XDG_RUNTIME_DIR = runtime
+        process.env.SHELL = "/bin/sh"
+        ShellSelect.resolve.reset()
         return {
           database,
           directory: path.join(
@@ -53,19 +57,38 @@ smoke(
           })
           const base = HttpServer.formatAddress(server.address)
           const sessionID = Session.ID.make("ses_persistent_pty_test")
-          const events = yield* Effect.promise(() => openEventStream(base))
           expect(existsSync(path.join(fixture.directory, "service.json"))).toBeFalse()
           expect((yield* request(base, "GET", `/api/experimental/session/${sessionID}/terminal`)).data).toEqual([])
           expect(existsSync(path.join(fixture.directory, "service.json"))).toBeFalse()
+          const defaults = { args: [], title: "default shell", env: { SHELL: "/missing/client/zsh" } }
+          const missing = yield* request(
+            base,
+            "POST",
+            `/api/experimental/session/${sessionID}/terminal`,
+            defaults,
+          ).pipe(Effect.flip)
+          expect(missing.message).toContain("(404)")
+          yield* request(base, "POST", "/api/session", { id: sessionID, location: { directory: fixture.root } })
+          const terminal = Schema.decodeUnknownSync(PersistentPty.Info)(
+            (yield* request(base, "POST", `/api/experimental/session/${sessionID}/terminal`, defaults)).data,
+          )
+          expect(terminal.command).toBe("/bin/sh")
+          expect(terminal.cwd).toBe(fixture.root)
+          expect(terminal.cwd).not.toBe(process.cwd())
+          yield* request(base, "DELETE", `/api/experimental/persistent-pty/${terminal.id}`)
+          const events = yield* Effect.promise(() => openEventStream(base))
           const first = Schema.decodeUnknownSync(PersistentPty.Info)(
             (yield* request(base, "POST", `/api/experimental/session/${sessionID}/terminal`, {
-              command: "/bin/sh",
-              args: ["-c", "stty -echo; printf terminal-one; cat"],
+              command: "/usr/bin/env",
+              args: ["/bin/sh", "-c", "stty -echo; printf terminal-one; cat"],
               cwd: process.cwd(),
               title: "first",
               env: {},
             })).data,
           )
+          expect(first.command).toBe("/usr/bin/env")
+          expect(first.args).toEqual(["/bin/sh", "-c", "stty -echo; printf terminal-one; cat"])
+          expect(first.cwd).toBe(process.cwd())
           expect(yield* Effect.promise(() => events.next("persistent-pty.added"))).toMatchObject({
             data: { sessionID, terminal: { id: first.id } },
           })
@@ -185,6 +208,8 @@ smoke(
           restore("OPENCODE_PTY_BIN", fixture.environment.binary)
           restore("OPENCODE_PTY_RUNTIME_DIR", fixture.environment.runtime)
           restore("XDG_RUNTIME_DIR", fixture.environment.xdg)
+          restore("SHELL", fixture.environment.shell)
+          ShellSelect.resolve.reset()
         }),
     ),
   20_000,

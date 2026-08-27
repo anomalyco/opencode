@@ -1,5 +1,6 @@
 import { PersistentPty } from "@opencode-ai/core/persistent-pty"
 import { PtyTicket } from "@opencode-ai/core/pty/ticket"
+import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor-service"
 import { ForbiddenError, PtyNotFoundError, ServiceUnavailableError } from "@opencode-ai/protocol/errors"
 import {
   PTY_CONNECT_TICKET_QUERY,
@@ -29,6 +30,8 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
       .handle(
         "persistentPty.create",
         Effect.fn(function* (ctx) {
+          const plugins = yield* PluginSupervisor.Service
+          yield* plugins.flush
           return {
             data: yield* pty
               .create(ctx.params.sessionID, {
