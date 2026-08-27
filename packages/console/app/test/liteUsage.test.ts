@@ -72,4 +72,25 @@ describe("Go usage breakdown", () => {
     expect(result.rows.map((row) => row.multiplier)).toEqual([2, 1])
     expect(result.rows.map((row) => row.contributionPercent)).toEqual([40, 10])
   })
+
+  test("merges estimated and recorded rows that resolve to the same multiplier", () => {
+    const result = buildLiteUsageBreakdown({
+      usage: 600,
+      limit: 1_000,
+      sources: [
+        { model: "deepseek", name: "DeepSeek V4 Flash", cost: 100, quotaCost: 200, multiplier: 2, estimated: true },
+        { model: "deepseek", name: "DeepSeek V4 Flash", cost: 300, quotaCost: 600, multiplier: 2, estimated: false },
+        { model: "kimi", name: "Kimi", cost: 116, quotaCost: 116, multiplier: 1, estimated: false },
+      ],
+    })
+
+    expect(result.rows).toHaveLength(2)
+    expect(result.rows[0]).toMatchObject({
+      model: "deepseek",
+      cost: 400,
+      quotaCost: 800,
+      multiplier: 2,
+      estimated: false,
+    })
+  })
 })

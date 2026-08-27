@@ -18,7 +18,26 @@ export type LiteUsageBreakdownItem = {
 }
 
 export function buildLiteUsageBreakdown(input: { usage: number; limit: number; sources: LiteUsageBreakdownSource[] }) {
-  const rows: LiteUsageBreakdownItem[] = input.sources
+  // Historical rows store no costMultiplier and form their own query group,
+  // so a model whose fallback resolves to the recorded multiplier would show
+  // two identical rows. Merge by model + resolved multiplier; only genuine
+  // multiplier changes stay separate.
+  const merged = new Map<string, LiteUsageBreakdownSource>()
+  for (const source of input.sources) {
+    const key = `${source.model}\0${source.multiplier ?? "none"}`
+    const existing = merged.get(key)
+    if (!existing) {
+      merged.set(key, source)
+      continue
+    }
+    merged.set(key, {
+      ...existing,
+      cost: existing.cost + source.cost,
+      quotaCost: existing.quotaCost + source.quotaCost,
+      estimated: existing.estimated && source.estimated,
+    })
+  }
+  const rows: LiteUsageBreakdownItem[] = [...merged.values()]
     .filter((item) => item.cost !== 0 || item.quotaCost !== 0)
     .sort((a, b) => b.quotaCost - a.quotaCost)
     .map((item) => ({
