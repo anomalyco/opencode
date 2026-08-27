@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect"
+import { Effect, Option, Schema } from "effect"
 import { Tool } from "@opencode-ai/schema/tool"
 import { Route } from "../route/client.js"
 import { Auth } from "../route/auth.js"
@@ -125,12 +125,18 @@ const GeminiContentPart = Schema.Union([
   GeminiFunctionCallPart,
   GeminiFunctionResponsePart,
 ])
+const decodeGeminiContentPart = Schema.decodeUnknownOption(GeminiContentPart)
 
 const GeminiContent = Schema.Struct({
   role: optionalNull(Schema.Literals(["user", "model"])),
   parts: optionalNull(Schema.Array(GeminiContentPart)),
 })
 type GeminiContent = Schema.Schema.Type<typeof GeminiContent>
+
+const GeminiResponseContent = Schema.Struct({
+  role: optionalNull(Schema.Literals(["user", "model"])),
+  parts: optionalNull(Schema.Array(Schema.Unknown)),
+})
 
 const GeminiSystemInstruction = Schema.Struct({
   parts: Schema.Array(Schema.Struct({ text: Schema.String })),
@@ -200,7 +206,7 @@ const GeminiUsage = Schema.Struct({
 type GeminiUsage = Schema.Schema.Type<typeof GeminiUsage>
 
 const GeminiCandidate = Schema.Struct({
-  content: optionalNull(GeminiContent),
+  content: optionalNull(GeminiResponseContent),
   finishReason: optionalNull(Schema.String),
 })
 
@@ -222,6 +228,8 @@ const GeminiEvent = Schema.Struct({
 type GeminiEvent = Schema.Schema.Type<typeof GeminiEvent>
 
 interface ParserState {
+  readonly route: string
+  readonly providerMetadataKey: string
   readonly finishReason?: string
   readonly hasToolCalls: boolean
   readonly promptFeedback?: GeminiPromptFeedback
@@ -278,22 +286,23 @@ const lowerUserPart = Effect.fn("Gemini.lowerUserPart")(function* (part: TextPar
   return { inlineData: { mimeType: media.mime, data: media.base64 } }
 })
 
-const googleMetadata = (metadata: Record<string, unknown>): ProviderMetadata => ({ google: metadata })
+const providerMetadata = (key: string, metadata: Record<string, unknown>): ProviderMetadata => ({ [key]: metadata })
 
-const thoughtSignature = (providerMetadata: ProviderMetadata | undefined) => {
-  const google = providerMetadata?.google
-  return ProviderShared.isRecord(google) && typeof google.thoughtSignature === "string"
-    ? google.thoughtSignature
+const thoughtSignature = (metadata: ProviderMetadata | undefined, key: string) => {
+  const value = metadata?.[key]
+  return ProviderShared.isRecord(value) && typeof value.thoughtSignature === "string"
+    ? value.thoughtSignature
     : undefined
 }
 
-const lowerToolCall = (part: ToolCallPart, omitIds: boolean) => ({
+const lowerToolCall = (part: ToolCallPart, omitIds: boolean, metadataKey: string) => ({
   functionCall: { ...(omitIds ? {} : { id: part.id }), name: part.name, args: part.input },
-  thoughtSignature: thoughtSignature(part.providerMetadata),
+  thoughtSignature: thoughtSignature(part.providerMetadata, metadataKey),
 })
 
 const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMRequest) {
   const contents: GeminiContent[] = []
+  const metadataKey = request.model.route.providerMetadataKey ?? String(request.model.provider)
   const omitCallIds = omitsFunctionCallIds(request.model.id)
   const legacyToolMedia = routesLegacyToolMedia(request.model.id)
   let pendingMedia: GeminiInlineDataPart[] | undefined
@@ -335,15 +344,19 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
         if (!ProviderShared.supportsContent(part, ["text", "reasoning", "tool-call"]))
           return yield* ProviderShared.unsupportedContent("Gemini", "assistant", ["text", "reasoning", "tool-call"])
         if (part.type === "text") {
-          parts.push({ text: part.text, thoughtSignature: thoughtSignature(part.providerMetadata) })
+          parts.push({ text: part.text, thoughtSignature: thoughtSignature(part.providerMetadata, metadataKey) })
           continue
         }
         if (part.type === "reasoning") {
-          parts.push({ text: part.text, thought: true, thoughtSignature: thoughtSignature(part.providerMetadata) })
+          parts.push({
+            text: part.text,
+            thought: true,
+            thoughtSignature: thoughtSignature(part.providerMetadata, metadataKey),
+          })
           continue
         }
         if (part.type === "tool-call") {
-          const lowered = lowerToolCall(part, omitCallIds)
+          const lowered = lowerToolCall(part, omitCallIds, metadataKey)
           const signature = lowered.thoughtSignature
           parts.push({
             ...lowered,
@@ -491,7 +504,7 @@ const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMReque
 // `cachedContentTokenCount` subset. `candidatesTokenCount` is *exclusive*
 // of `thoughtsTokenCount` — visible-only, not a total — so we sum the two
 // to produce the inclusive `outputTokens` the rest of the contract expects.
-const mapUsage = (usage: GeminiUsage | undefined) => {
+const mapUsage = (usage: GeminiUsage | undefined, metadataKey: string) => {
   if (!usage) return undefined
   // Explicit provider nulls decode as `null`; normalize to `undefined` so the
   // token arithmetic below treats them like absent counts.
@@ -512,7 +525,7 @@ const mapUsage = (usage: GeminiUsage | undefined) => {
     cacheReadInputTokens: cached,
     reasoningTokens: thoughts,
     totalTokens: ProviderShared.totalTokens(promptTokens, outputTokens, usage.totalTokenCount ?? undefined),
-    providerMetadata: { google: usage },
+    providerMetadata: providerMetadata(metadataKey, usage),
   })
 }
 
@@ -560,10 +573,15 @@ const finish = (state: ParserState): ReadonlyArray<LLMEvent> => {
       lifecycle,
       events,
       "reasoning-0",
-      googleMetadata({ thoughtSignature: state.reasoningSignature }),
+      providerMetadata(state.providerMetadataKey, { thoughtSignature: state.reasoningSignature }),
     )
   if (state.textSignature !== undefined)
-    lifecycle = Lifecycle.textEnd(lifecycle, events, "text-0", googleMetadata({ thoughtSignature: state.textSignature }))
+    lifecycle = Lifecycle.textEnd(
+      lifecycle,
+      events,
+      "text-0",
+      providerMetadata(state.providerMetadataKey, { thoughtSignature: state.textSignature }),
+    )
   Lifecycle.finish(lifecycle, events, {
     reason: {
       normalized:
@@ -572,7 +590,9 @@ const finish = (state: ParserState): ReadonlyArray<LLMEvent> => {
     },
     usage: state.usage,
     providerMetadata:
-      state.promptFeedback === undefined ? undefined : googleMetadata({ promptFeedback: state.promptFeedback }),
+      state.promptFeedback === undefined
+        ? undefined
+        : providerMetadata(state.providerMetadataKey, { promptFeedback: state.promptFeedback }),
   })
   return events
 }
@@ -581,7 +601,9 @@ const step = (state: ParserState, event: GeminiEvent) => {
   const nextState = {
     ...state,
     promptFeedback: event.promptFeedback ?? state.promptFeedback,
-    usage: event.usageMetadata ? (mapUsage(event.usageMetadata) ?? state.usage) : state.usage,
+    usage: event.usageMetadata
+      ? (mapUsage(event.usageMetadata, state.providerMetadataKey) ?? state.usage)
+      : state.usage,
   }
   const candidate = event.candidates?.[0]
   if (!candidate?.content)
@@ -598,7 +620,21 @@ const step = (state: ParserState, event: GeminiEvent) => {
   // Supplier ids must be tracked across chunks of the same response, not just within one event's parts.
   const seenCallIds = new Set(nextState.seenCallIds)
 
-  for (const part of candidate.content.parts ?? []) {
+  for (const input of candidate.content.parts ?? []) {
+    if (
+      ProviderShared.isRecord(input) &&
+      !("text" in input) &&
+      !("inlineData" in input) &&
+      !("functionCall" in input) &&
+      !("functionResponse" in input)
+    )
+      continue
+    const decoded = decodeGeminiContentPart(input)
+    if (Option.isNone(decoded))
+      return Effect.fail(
+        ProviderShared.eventError(ADAPTER, `Invalid ${state.route} stream event`, ProviderShared.encodeJson(event)),
+      )
+    const part = decoded.value
     const signature = "thoughtSignature" in part && part.thoughtSignature ? part.thoughtSignature : undefined
     // Gemini attaches replay signatures to thought parts, visible text, or function calls;
     // each block kind must retain the signature attached to its own parts.
@@ -611,7 +647,7 @@ const step = (state: ParserState, event: GeminiEvent) => {
           events,
           "reasoning-0",
           part.text,
-          signature ? googleMetadata({ thoughtSignature: signature }) : undefined,
+          signature ? providerMetadata(state.providerMetadataKey, { thoughtSignature: signature }) : undefined,
         )
         continue
       }
@@ -619,14 +655,16 @@ const step = (state: ParserState, event: GeminiEvent) => {
         lifecycle,
         events,
         "reasoning-0",
-        reasoningSignature ? googleMetadata({ thoughtSignature: reasoningSignature }) : undefined,
+        reasoningSignature
+          ? providerMetadata(state.providerMetadataKey, { thoughtSignature: reasoningSignature })
+          : undefined,
       )
       lifecycle = Lifecycle.textDelta(
         lifecycle,
         events,
         "text-0",
         part.text,
-        textSignature ? googleMetadata({ thoughtSignature: textSignature }) : undefined,
+        textSignature ? providerMetadata(state.providerMetadataKey, { thoughtSignature: textSignature }) : undefined,
       )
       textSignature = undefined
       continue
@@ -646,7 +684,9 @@ const step = (state: ParserState, event: GeminiEvent) => {
         lifecycle,
         events,
         "reasoning-0",
-        reasoningSignature ? googleMetadata({ thoughtSignature: reasoningSignature }) : undefined,
+        reasoningSignature
+          ? providerMetadata(state.providerMetadataKey, { thoughtSignature: reasoningSignature })
+          : undefined,
       )
       lifecycle = Lifecycle.stepStart(lifecycle, events)
       events.push(
@@ -654,8 +694,9 @@ const step = (state: ParserState, event: GeminiEvent) => {
           id,
           name: part.functionCall.name,
           input,
-          providerMetadata:
-            part.thoughtSignature ? googleMetadata({ thoughtSignature: part.thoughtSignature }) : undefined,
+          providerMetadata: part.thoughtSignature
+            ? providerMetadata(state.providerMetadataKey, { thoughtSignature: part.thoughtSignature })
+            : undefined,
         }),
       )
       hasToolCalls = true
@@ -691,9 +732,14 @@ export const protocol = Protocol.make({
   },
   stream: {
     event: Protocol.jsonEvent(GeminiEvent),
-    initial: () => ({ hasToolCalls: false, lifecycle: Lifecycle.initial() }),
+    initial: (request) => ({
+      route: `${request.model.provider}/${request.model.route.id}`,
+      providerMetadataKey: request.model.route.providerMetadataKey ?? String(request.model.provider),
+      hasToolCalls: false,
+      lifecycle: Lifecycle.initial(),
+    }),
     step,
-    onHalt: finish,
+    onHalt: (state) => Effect.succeed(finish(state)),
   },
 })
 

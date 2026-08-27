@@ -167,6 +167,10 @@ function createSync() {
     has(key: string) {
       return state.has(key)
     },
+    pending(key: string) {
+      const active = state.get(key)
+      return active !== undefined && active !== true
+    },
     invalidate(key?: string) {
       if (key) {
         const active = state.get(key)
@@ -521,6 +525,9 @@ export function createData(config: CreateDataInput) {
         void result.location.vcs.sync().catch((error) => console.error("Failed to preload VCS info", error))
         void result.project.sync().catch((error) => console.error("Failed to preload projects", error))
         return
+      case "project.updated":
+        setStore("project", "info", event.data.id, reconcile(event.data))
+        return
       case "session.created":
         sessionOutbox.delete(event.data.sessionID)
         result.session.invalidate(event.data.sessionID)
@@ -614,7 +621,22 @@ export function createData(config: CreateDataInput) {
       }
       case "worktree.resolved": {
         for (const [sessionID, info] of Object.entries(store.session.info)) {
-          const adopted = Worktree.adopt({ projectID: info.projectID, directory: info.location.directory }, event.data)
+          const explicit = event.data.adopted?.includes(info.projectID)
+          const directory = explicit ? store.project.info[info.projectID]?.canonical : info.location.directory
+          if (!directory) {
+            if (info.location.workspaceID) continue
+            result.session.invalidate(sessionID)
+            void result.session.sync(sessionID)
+            continue
+          }
+          const adopted = Worktree.adopt(
+            {
+              projectID: info.projectID,
+              directory,
+              workspaceID: info.location.workspaceID,
+            },
+            event.data,
+          )
           if (!adopted) continue
           setStore("session", "info", sessionID, "projectID", adopted.projectID)
           setStore("session", "info", sessionID, "subpath", adopted.subpath)
@@ -705,6 +727,17 @@ export function createData(config: CreateDataInput) {
           match.time.completed = event.created
         })
         return
+      case "session.message.content.updated": {
+        if (store.session.message[event.data.sessionID])
+          message.update(event.data.sessionID, (draft, index) => {
+            const assistant = message.assistant(draft, index, event.data.messageID)
+            if (assistant) assistant.content = [...event.data.content]
+          })
+        if (!sync.pending(`session.message:${event.data.sessionID}`)) return
+        result.session.message.invalidate(event.data.sessionID)
+        void result.session.message.sync(event.data.sessionID)
+        return
+      }
       case "session.step.started":
         message.update(event.data.sessionID, (draft, index) => {
           const position = index.get(event.data.assistantMessageID)
@@ -717,6 +750,7 @@ export function createData(config: CreateDataInput) {
             existing.finish = undefined
             existing.rawFinish = undefined
             existing.providerState = undefined
+            existing.time.streamed = undefined
             existing.time.completed = undefined
             if (event.data.snapshot) existing.snapshot = { ...existing.snapshot, start: event.data.snapshot }
             return
@@ -736,6 +770,12 @@ export function createData(config: CreateDataInput) {
             snapshot: event.data.snapshot ? { start: event.data.snapshot } : undefined,
             time: { created: event.created },
           })
+        })
+        return
+      case "session.step.streamed":
+        message.update(event.data.sessionID, (draft, index) => {
+          const currentAssistant = message.assistant(draft, index, event.data.assistantMessageID)
+          if (currentAssistant) currentAssistant.time.streamed = event.created
         })
         return
       case "session.step.ended": {
@@ -1043,6 +1083,36 @@ export function createData(config: CreateDataInput) {
       case "form.cancelled":
         removeForm(event.data.sessionID, event.data.id, event.location)
         return
+    }
+
+    if (event.type === "credential.updated" || event.type === "credential.switched") {
+      Object.keys(store.location).forEach((key) => {
+        const ref = JSON.parse(key) as [string, string | null]
+        const location = { directory: ref[0], workspaceID: ref[1] ?? undefined }
+        if (event.type === "credential.updated") {
+          result.location.integration.invalidate(location)
+          void result.location.integration.sync(location)
+          return
+        }
+        setStore("location", key, (data) => ({
+          ...data,
+          integration: data?.integration?.map((integration) => {
+            if (integration.id !== event.data.integrationID) return integration
+            const active = integration.connections.find(
+              (connection) => connection.type === "credential" && connection.id === event.data.credentialID,
+            )
+            if (!active) return integration
+            return {
+              ...integration,
+              connections: [active, ...integration.connections.filter((connection) => connection !== active)],
+            }
+          }),
+        }))
+        result.location.model.invalidate(location)
+        result.location.provider.invalidate(location)
+        void Promise.all([result.location.model.sync(location), result.location.provider.sync(location)])
+      })
+      return
     }
 
     if (!event.location) return

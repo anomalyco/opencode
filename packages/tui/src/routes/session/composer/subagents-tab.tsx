@@ -126,10 +126,6 @@ export function SubagentsTab(props: { sessionID: string }) {
           },
         ]
       },
-      onClose: () => {
-        const parentID = session()?.parentID
-        if (parentID) navigate({ type: "session", sessionID: parentID })
-      },
     })
     onCleanup(cleanup)
   })

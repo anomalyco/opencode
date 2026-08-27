@@ -87,6 +87,7 @@ test("clears the terminal line with Command+Delete", async ({ page }) => {
   const terminal = page.locator('[data-component="terminal"]')
   await page.keyboard.press("Control+Backquote")
   await expect(terminal.locator("textarea")).toHaveCount(1)
+  await expect.poll(() => sendPtyOutput).toBeDefined()
 
   await page.keyboard.press("Meta+Backspace")
 
@@ -126,6 +127,8 @@ test("routes typing to the composer unless the open terminal is focused", async 
 
   const composer = page.locator('[data-component="composer-editor"]')
   const terminal = page.locator('[data-component="terminal"]')
+  await composer.click()
+  await expect(composer).toBeFocused()
   await page.keyboard.press("Control+Backquote")
   await expect(terminal).toBeVisible()
   await expect.poll(() => terminal.evaluate((element) => element.contains(document.activeElement))).toBe(true)

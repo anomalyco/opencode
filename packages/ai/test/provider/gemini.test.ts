@@ -515,7 +515,10 @@ describe("Gemini route", () => {
         {
           role: "model",
           parts: [
-            { functionCall: { id: "call_image", name: "read", args: { path: "pixel.png" } }, thoughtSignature: "sig_1" },
+            {
+              functionCall: { id: "call_image", name: "read", args: { path: "pixel.png" } },
+              thoughtSignature: "sig_1",
+            },
           ],
         },
         {
@@ -606,10 +609,7 @@ describe("Gemini route", () => {
       expect(prepared.body.contents).toEqual([
         {
           role: "model",
-          parts: [
-            { functionCall: { name: "shot", args: {} } },
-            { functionCall: { name: "shot", args: {} } },
-          ],
+          parts: [{ functionCall: { name: "shot", args: {} } }, { functionCall: { name: "shot", args: {} } }],
         },
         {
           role: "user",
@@ -906,6 +906,54 @@ describe("Gemini route", () => {
     }),
   )
 
+  it.effect("ignores unknown response parts", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents({
+              candidates: [
+                {
+                  content: {
+                    role: "model",
+                    parts: [
+                      { text: "Hello " },
+                      { executableCode: { language: "PYTHON", code: "print('ignored')" } },
+                      { text: "world" },
+                    ],
+                  },
+                  finishReason: "STOP",
+                },
+              ],
+            }),
+          ),
+        ),
+      )
+
+      expect(response.text).toBe("Hello world")
+      expect(response.finishReason).toEqual({ normalized: "stop", raw: "STOP" })
+    }),
+  )
+
+  it.effect("rejects malformed recognized response parts", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents({
+              candidates: [{ content: { role: "model", parts: [{ text: 42 }] } }],
+            }),
+          ),
+        ),
+        Effect.flip,
+      )
+
+      expect(error).toBeInstanceOf(AIError)
+      expect(error.reason).toMatchObject({ _tag: "InvalidProviderOutput" })
+      expect(error.message).toContain("Invalid google/gemini stream event")
+    }),
+  )
+
   it.effect("preserves thoughtSignature for reasoning and tool-call continuation", () =>
     Effect.gen(function* () {
       const body = sseEvents({
@@ -1023,7 +1071,9 @@ describe("Gemini route", () => {
       const prepared = yield* compileRequest(
         LLM.request({
           model,
-          messages: [Message.assistant([{ type: "text", text: "All done.", providerMetadata: delta?.providerMetadata }])],
+          messages: [
+            Message.assistant([{ type: "text", text: "All done.", providerMetadata: delta?.providerMetadata }]),
+          ],
         }),
       )
       expect(prepared.body.contents).toEqual([
@@ -1524,9 +1574,7 @@ describe("Gemini route", () => {
               { candidates: [{ content: { role: "model", parts: null } }] },
               { candidates: [{ content: null, finishReason: null }] },
               {
-                candidates: [
-                  { content: { role: "model", parts: [{ text: "Hello" }] }, finishReason: "STOP" as const },
-                ],
+                candidates: [{ content: { role: "model", parts: [{ text: "Hello" }] }, finishReason: "STOP" as const }],
               },
             ),
           ),

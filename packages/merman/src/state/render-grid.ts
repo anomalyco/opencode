@@ -1,6 +1,6 @@
-import type { StyledText } from "@opentui/core"
+import type { RGBA, StyledText } from "@opentui/core"
 import type { DiagramCanvas } from "../core/canvas.js"
-import { renderDiagramGridStyledText } from "../core/render-grid.js"
+import { renderDiagramGridStyledTextByStyle } from "../core/render-grid.js"
 import type { StateStyleColors } from "./style.js"
 import type { StateCellStyle } from "./types.js"
 
@@ -10,8 +10,12 @@ export function renderStateGridText(grid: StateGrid): string {
   return grid.toString({ trimTop: true, trimBottom: true })
 }
 
-export function renderStateGridStyledText(grid: StateGrid, colors: StateStyleColors): StyledText {
-  return renderDiagramGridStyledText(grid, (run) => (run.style ? colors[run.style] : undefined), undefined, {
+export function renderStateGridStyledText(
+  grid: StateGrid,
+  colors: StateStyleColors,
+  backgrounds?: Partial<Record<StateCellStyle, RGBA>>,
+): StyledText {
+  return renderDiagramGridStyledTextByStyle(grid, colors, backgrounds, {
     trimTop: true,
     trimBottom: true,
   })

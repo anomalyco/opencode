@@ -53,6 +53,19 @@ export function map(input: MapInput): Mapping | undefined {
           ...mapOpenAIOptions(input.settings),
         },
       }
+    case "@ai-sdk/cerebras":
+    case "@ai-sdk/deepinfra":
+    case "@ai-sdk/groq":
+    case "@ai-sdk/togetherai":
+      return {
+        package: `@opencode-ai/ai/providers/${input.packageName.slice("@ai-sdk/".length)}`,
+        settings: {
+          ...baseSettings,
+          ...mapAPIKey(input.settings),
+          ...mapProviderOptions(input.settings, ["apiKey", "baseURL", "fetch", "headers", "name"]),
+        },
+        ...(isStringRecord(input.settings.headers) ? { headers: input.settings.headers } : {}),
+      }
     case "@ai-sdk/google":
       return {
         package: "@opencode-ai/ai/providers/google",

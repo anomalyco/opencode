@@ -2,17 +2,20 @@ import { describe, expect } from "bun:test"
 import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
-import { Effect, Layer, Schema } from "effect"
+import { Effect, Stream } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { Bus } from "@opencode-ai/core/bus"
 import { Database } from "@opencode-ai/core/database/database"
 import { Project } from "@opencode-ai/core/project"
+import { ProjectSchema } from "@opencode-ai/core/project/schema"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Hash } from "@opencode-ai/util/hash"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
-const it = testEffect(Layer.merge(AppNodeBuilder.build(Project.node), AppNodeBuilder.build(Database.node)))
+const it = testEffect(AppNodeBuilder.build(LayerNode.group([Project.node, Database.node, Bus.node])))
 
 describe("Project.list", () => {
   it.effect("returns complete projects ordered by recent update", () =>
@@ -66,6 +69,55 @@ describe("Project.list", () => {
   )
 })
 
+describe("Project.update", () => {
+  it.effect("updates and clears project metadata", () =>
+    Effect.gen(function* () {
+      const db = (yield* Database.Service).db
+      const project = yield* Project.Service
+      const id = Project.ID.make("update")
+      yield* db
+        .insert(ProjectTable)
+        .values({
+          id,
+          worktree: abs("/update"),
+          sandboxes: [],
+          time_created: 1,
+          time_updated: 1,
+        })
+        .run()
+
+      expect(
+        yield* project.update({
+          projectID: id,
+          name: "Updated",
+          icon: { color: "blue", override: "data:image/png;base64,test" },
+          commands: { start: "bun install" },
+        }),
+      ).toMatchObject({
+        id,
+        name: "Updated",
+        icon: { color: "blue", override: "data:image/png;base64,test" },
+        commands: { start: "bun install" },
+      })
+
+      expect(
+        yield* project.update({
+          projectID: id,
+          name: "",
+          icon: { color: "", override: "" },
+          commands: { start: "" },
+        }),
+      ).toMatchObject({ id })
+      expect((yield* project.list())[0]).toEqual({
+        id,
+        canonical: abs("/update"),
+        time: { created: 1, updated: expect.any(Number) },
+        sandboxes: [],
+      })
+    }),
+  )
+})
+
 function remoteID(remote: string) {
   return Project.ID.make(Hash.fast(`git-remote:${remote}`))
 }
@@ -93,21 +145,210 @@ async function rootCommit(dir: string) {
 }
 
 describe("Project.resolve", () => {
-  it.live("returns global for non-git directory", () =>
+  it.live("creates distinct deterministic projects for exact markerless directories", () =>
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireRelease(
         Effect.promise(() => tmpdir()),
         (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
       )
       const project = yield* Project.Service
+      const nested = path.join(tmp.path, "notes", "drafts")
+      yield* Effect.promise(() => fs.mkdir(nested, { recursive: true }))
 
       const result = yield* project.resolve(abs(tmp.path))
+      const repeated = yield* project.resolve(abs(`${tmp.path}${path.sep}.`))
+      const child = yield* project.resolve(abs(nested))
 
-      expect(result.id).toBe(Project.ID.make("global"))
-      expect(path.resolve(result.directory)).toBe(path.parse(tmp.path).root)
+      expect(result.id).not.toBe(Project.ID.global)
+      expect(repeated.id).toBe(result.id)
+      expect(child.id).not.toBe(result.id)
+      expect(result.directory).toBe(yield* real(tmp.path))
+      expect(child.directory).toBe(yield* real(nested))
       expect(result.canonical).toBe(result.directory)
       expect(result.previous).toBeUndefined()
       expect(result.vcs).toBeUndefined()
+    }),
+  )
+
+  it.live("discovers repository markers from automatically loaded plugins", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      yield* Effect.promise(async () => {
+        await fs.mkdir(path.join(tmp.path, ".opencode", "plugins"), { recursive: true })
+        await fs.mkdir(path.join(tmp.path, ".svn"))
+        await fs.mkdir(path.join(tmp.path, "nested", "directory"), { recursive: true })
+        await Bun.write(
+          path.join(tmp.path, ".opencode", "plugins", "svn.ts"),
+          'export default { id: "svn", vcs: { markers: [".svn"] }, setup() {} }',
+        )
+      })
+      const project = yield* Project.Service
+
+      const result = yield* project.resolve(abs(path.join(tmp.path, "nested", "directory")))
+
+      expect(result.directory).toBe(abs(tmp.path))
+      expect(result.canonical).toBe(abs(tmp.path))
+      expect(result.vcs).toEqual({ type: "svn", store: abs(path.join(tmp.path, ".svn")) })
+      expect(result.id).not.toBe(Project.ID.global)
+      expect((yield* project.list()).find((item) => item.id === result.id)?.vcs).toBe("svn")
+    }),
+  )
+
+  it.live("discovers repository markers from configured plugin files", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      yield* Effect.promise(async () => {
+        await fs.mkdir(path.join(tmp.path, ".pijul"))
+        await Bun.write(path.join(tmp.path, "opencode.jsonc"), '{ "plugins": ["./pijul.ts"] }')
+        await Bun.write(
+          path.join(tmp.path, "pijul.ts"),
+          'export default { id: "custom.pijul", vcs: { id: "pijul", markers: [".pijul"] }, setup() {} }',
+        )
+      })
+      const project = yield* Project.Service
+
+      const result = yield* project.resolve(abs(tmp.path))
+
+      expect(result.directory).toBe(abs(tmp.path))
+      expect(result.vcs?.type).toBe("pijul")
+    }),
+  )
+
+  it.live("prefers a nested plugin repository over its parent git repository", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      const nested = path.join(tmp.path, "nested")
+      yield* Effect.promise(async () => {
+        await initRepo(tmp.path, { commit: true })
+        await fs.mkdir(path.join(tmp.path, ".opencode", "plugins"), { recursive: true })
+        await fs.mkdir(path.join(nested, ".svn"), { recursive: true })
+        await Bun.write(
+          path.join(tmp.path, ".opencode", "plugins", "svn.ts"),
+          'export default { id: "svn", vcs: { markers: [".svn"] }, setup() {} }',
+        )
+      })
+      const project = yield* Project.Service
+
+      const result = yield* project.resolve(abs(nested))
+
+      expect(result.directory).toBe(abs(nested))
+      expect(result.vcs?.type).toBe("svn")
+    }),
+  )
+
+  it.live("preserves git identity when a plugin marker shares its repository", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      yield* Effect.promise(async () => {
+        await initRepo(tmp.path, { commit: true })
+        await fs.mkdir(path.join(tmp.path, ".opencode", "plugins"), { recursive: true })
+        await fs.mkdir(path.join(tmp.path, ".jj"))
+        await Bun.write(
+          path.join(tmp.path, ".opencode", "plugins", "jj.ts"),
+          'export default { id: "jj", vcs: { markers: [".jj"] }, setup() {} }',
+        )
+      })
+      const project = yield* Project.Service
+
+      const result = yield* project.resolve(abs(tmp.path))
+
+      expect(result.id).toBe(Project.ID.make(yield* Effect.promise(() => rootCommit(tmp.path))))
+      expect(result.vcs?.type).toBe("git")
+      expect(result.vcsBackend).toBe("jj")
+    }),
+  )
+
+  it.live("repository markers override markerless directory projects", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      const nested = path.join(tmp.path, "packages", "app")
+      yield* Effect.promise(() => fs.mkdir(nested, { recursive: true }))
+      const project = yield* Project.Service
+      const root = yield* project.resolve(abs(tmp.path))
+      const child = yield* project.resolve(abs(nested))
+
+      yield* Effect.promise(() => initRepo(tmp.path, { commit: true }))
+      const repository = yield* project.resolve(abs(nested))
+
+      expect(root.id).not.toBe(child.id)
+      expect(repository.id).not.toBe(root.id)
+      expect(repository.id).not.toBe(child.id)
+      expect(repository.directory).toBe(yield* real(tmp.path))
+      expect(repository.vcs?.type).toBe("git")
+    }),
+  )
+
+  it.live("does not publish project updates for first or repeated resolutions", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      yield* Effect.promise(() => initRepo(tmp.path, { commit: true, remote: "git@github.com:owner/repo.git" }))
+      const project = yield* Project.Service
+      const bus = yield* Bus.Service
+      const updates: Project.Info[] = []
+      yield* bus.subscribe(ProjectSchema.Event.Updated).pipe(
+        Stream.runForEach((event) => Effect.sync(() => updates.push(event.data))),
+        Effect.forkScoped({ startImmediately: true }),
+      )
+
+      yield* project.resolve(abs(tmp.path))
+      yield* project.resolve(abs(tmp.path))
+      yield* Effect.yieldNow
+
+      expect(updates).toEqual([])
+    }),
+  )
+
+  it.live("publishes preserved project metadata when its canonical directory is renamed", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      const before = path.join(tmp.path, "before")
+      const after = path.join(tmp.path, "after")
+      yield* Effect.promise(() => fs.mkdir(before))
+      yield* Effect.promise(() => initRepo(before, { commit: true, remote: "git@github.com:owner/repo.git" }))
+      const project = yield* Project.Service
+      const bus = yield* Bus.Service
+      const initial = yield* project.resolve(abs(before))
+      yield* project.update({ projectID: initial.id, name: "Preserved name" })
+      const updates: Project.Info[] = []
+      yield* bus.subscribe(ProjectSchema.Event.Updated).pipe(
+        Stream.runForEach((event) => Effect.sync(() => updates.push(event.data))),
+        Effect.forkScoped({ startImmediately: true }),
+      )
+
+      yield* Effect.promise(() => fs.rename(before, after))
+      const renamed = yield* project.resolve(abs(after))
+      yield* Effect.yieldNow
+
+      expect(renamed.id).toBe(initial.id)
+      expect(renamed.canonical).toBe(yield* real(after))
+      expect(updates).toHaveLength(1)
+      expect(updates).toEqual((yield* project.list()).filter((item) => item.id === initial.id))
+      expect(updates[0]).toMatchObject({
+        id: initial.id,
+        canonical: yield* real(after),
+        name: "Preserved name",
+      })
     }),
   )
 
@@ -297,6 +538,48 @@ describe("Project.resolve", () => {
       const result = yield* project.resolve(abs(tmp.path))
 
       expect(result.vcs?.type).toBe("git")
+    }),
+  )
+
+  it.live("prefers the nearest mercurial marker over an outer git repository", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      const nested = path.join(tmp.path, "nested")
+      yield* Effect.promise(async () => {
+        await initRepo(tmp.path, { commit: true })
+        await fs.mkdir(path.join(nested, ".hg"), { recursive: true })
+        await fs.mkdir(path.join(nested, "app"))
+      })
+      const project = yield* Project.Service
+
+      const result = yield* project.resolve(abs(path.join(nested, "app")))
+
+      expect(result.vcs?.type).toBe("hg")
+      expect(result.directory).toBe(yield* real(nested))
+    }),
+  )
+
+  it.live("prefers the nearest git marker over an outer mercurial repository", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      const nested = path.join(tmp.path, "nested")
+      yield* Effect.promise(async () => {
+        await fs.mkdir(path.join(tmp.path, ".hg"))
+        await fs.mkdir(path.join(nested, "app"), { recursive: true })
+        await initRepo(nested, { commit: true })
+      })
+      const project = yield* Project.Service
+
+      const result = yield* project.resolve(abs(path.join(nested, "app")))
+
+      expect(result.vcs?.type).toBe("git")
+      expect(result.directory).toBe(yield* real(nested))
     }),
   )
 

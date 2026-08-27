@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMEvent } from "../../src/index.js"
+import { LLM, LLMEvent, Message } from "../../src/index.js"
 import { XAI } from "../../src/providers.js"
 import { OpenResponses } from "../../src/protocols/open-responses.js"
 import { OpenAIResponses } from "../../src/protocols/openai-responses.js"
@@ -14,13 +14,24 @@ import { sseEvents } from "../lib/sse.js"
 const model = XAI.configure({ apiKey: "test", baseURL: "https://api.x.ai/v1" }).responses("grok-4.6")
 
 describe("xAI Responses route", () => {
-  it.effect("extends the Open Responses baseline directly", () =>
+  it.effect("composes the Open Responses baseline with xAI extensions", () =>
     Effect.gen(function* () {
-      expect(XAIResponses.protocol.body).toBe(OpenResponses.protocol.body)
+      expect(XAIResponses.protocol.body).not.toBe(OpenResponses.protocol.body)
       expect(XAIResponses.protocol.body).not.toBe(OpenAIResponses.protocol.body)
 
       const prepared = yield* compileRequest(LLM.request({ model, prompt: "Hello" }))
       expect(prepared.protocol).toBe("xai-responses")
+      expect(prepared.body.store).toBe(false)
+      expect(prepared.body.include).toEqual(["reasoning.encrypted_content"])
+    }),
+  )
+
+  it.effect("allows callers to opt out of encrypted reasoning", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(LLM.request({ model, prompt: "Hello", providerOptions: { include: [] } }))
+
+      expect(prepared.body.store).toBe(false)
+      expect(prepared.body.include).toBeUndefined()
     }),
   )
 
@@ -59,16 +70,106 @@ describe("xAI Responses route", () => {
     }),
   )
 
-  it.effect("parses xAI hosted tool items", () =>
+  it.effect("routes xAI reasoning summaries by output index", () =>
     Effect.gen(function* () {
-      const response = yield* LLMClient.generate(LLM.request({ model, prompt: "Search X" })).pipe(
+      const response = yield* LLMClient.generate(LLM.request({ model, prompt: "Think" })).pipe(
         Effect.provide(
           fixedResponse(
             sseEvents(
               {
-                type: "response.output_item.done",
-                item: { type: "x_search_call", id: "x_search_1", status: "completed", action: { query: "news" } },
+                type: "response.output_item.added",
+                output_index: 3,
+                item: { type: "reasoning", id: "reasoning_1" },
               },
+              {
+                type: "response.reasoning_summary_text.delta",
+                output_index: 3,
+                item_id: "wrong_reasoning",
+                summary_index: 0,
+                delta: "Considering.",
+              },
+              {
+                type: "response.output_item.done",
+                output_index: 3,
+                item: { type: "reasoning", id: "reasoning_1", encrypted_content: "opaque" },
+              },
+              { type: "response.completed", response: { id: "response_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.reasoning).toBe("Considering.")
+      expect(response.message.content.find((part) => part.type === "reasoning")).toMatchObject({
+        providerMetadata: { xai: { itemId: "reasoning_1", reasoningEncryptedContent: "opaque" } },
+      })
+    }),
+  )
+
+  it.effect("replays xAI hosted tool items when continuing with the same provider", () =>
+    Effect.gen(function* () {
+      const item = { type: "x_search_call", id: "x_search_1", status: "completed", action: { query: "news" } }
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([
+              {
+                type: "tool-result",
+                id: "x_search_1",
+                name: "x_search",
+                result: { type: "json", value: item },
+                providerExecuted: true,
+                providerMetadata: { xai: { itemId: "x_search_1" } },
+              },
+            ]),
+          ],
+        }),
+      )
+
+      expect(prepared.body.input).toEqual([item])
+    }),
+  )
+
+  it.effect("replays shared and xAI hosted tool items but rejects OpenAI extensions", () =>
+    Effect.gen(function* () {
+      const items = [
+        { type: "web_search_call", id: "ws_1", status: "completed" },
+        { type: "image_generation_call", id: "ig_1", status: "completed", result: "AQID" },
+        { type: "computer_call", id: "computer_1", status: "completed" },
+      ]
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: items.map((item) =>
+            Message.assistant({
+              type: "tool-result",
+              id: item.id,
+              name: item.type,
+              result: { type: "json", value: item },
+              providerExecuted: true,
+              providerMetadata: { xai: { itemId: item.id } },
+            }),
+          ),
+        }),
+      )
+
+      expect(prepared.body.input).toEqual([
+        items[0],
+        items[1],
+        { role: "user", content: [{ type: "input_text", text: JSON.stringify(items[2]) }] },
+      ])
+    }),
+  )
+
+  it.effect("parses xAI hosted tool items", () =>
+    Effect.gen(function* () {
+      const item = { type: "x_search_call", id: "x_search_1", status: "completed", action: { query: "news" } }
+      const response = yield* LLMClient.generate(LLM.request({ model, prompt: "Search X" })).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "response.output_item.done", item },
               { type: "response.completed", response: { id: "response_1" } },
             ),
           ),
@@ -80,6 +181,11 @@ describe("xAI Responses route", () => {
         name: "x_search",
         input: { query: "news" },
         providerExecuted: true,
+        providerMetadata: { xai: { itemId: "x_search_1" } },
+      })
+      expect(response.events.find(LLMEvent.is.toolResult)).toMatchObject({
+        result: { type: "json", value: item },
+        providerMetadata: { xai: { itemId: "x_search_1" } },
       })
     }),
   )

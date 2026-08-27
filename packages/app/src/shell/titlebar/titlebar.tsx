@@ -1,5 +1,6 @@
 import { createEffect, createMemo, createResource, Match, createSignal, Show, Switch, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
+import { Portal } from "solid-js/web"
 import { useLocation, useNavigate } from "@solidjs/router"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -26,6 +27,7 @@ import { newTabTooltipKeybind } from "@/shell/commands/tooltip-keybind"
 import { TitlebarRightMount } from "@/shell/titlebar/right-slot"
 
 const titlebarHeight = 36
+const windowsTitlebarHeight = 44 // Includes the content inset; matches the native Windows overlay.
 const minTitlebarZoom = 0.25
 const windowsControlsBaseWidth = 138 // 3 native Windows caption buttons at 46px each.
 const macTrafficLightsBaseWidth = 84
@@ -36,7 +38,11 @@ export type TitlebarUpdate = {
   install: () => void
 }
 
-export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visible: boolean; toggle: () => void } }) {
+export function Titlebar(props: {
+  update?: TitlebarUpdate
+  debugTools?: { visible: boolean; toggle: () => void }
+  verticalTabs?: { mount?: HTMLElement }
+}) {
   const platform = usePlatform()
   const command = useCommand()
   const language = useLanguage()
@@ -54,7 +60,7 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
   const titlebarZoom = () => (windows() ? Math.max(zoom(), minTitlebarZoom) : zoom())
   const minHeight = () => {
     if (mac()) return `${titlebarHeight / zoom()}px`
-    if (windows()) return `${titlebarHeight / Math.min(titlebarZoom(), 1)}px`
+    if (windows()) return `env(titlebar-area-height, ${windowsTitlebarHeight / Math.min(titlebarZoom(), 1)}px)`
     return undefined
   }
   const windowsControlsWidth = () => `${windowsControlsBaseWidth / Math.max(titlebarZoom(), 1)}px`
@@ -155,6 +161,7 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
               () => {
                 const route = layout.route()
                 if (route.type !== "session") return undefined
+                if (tabs.pendingSession(route.server, route.sessionId)) return undefined
                 const conn = global.servers.list().find((item) => ServerConnection.key(item) === route.server)
                 return conn ? { route, ctx: global.ensureServerCtx(conn) } : undefined
               },
@@ -163,6 +170,7 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
             const session = createMemo(() => {
               const route = layout.route()
               if (route.type !== "session") return
+              if (tabs.pendingSession(route.server, route.sessionId)) return
               const conn = global.servers.list().find((item) => ServerConnection.key(item) === route.server)
               const cached = conn ? global.ensureServerCtx(conn).data.session.get(route.sessionId) : undefined
               if (cached) return cached
@@ -214,6 +222,10 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
               }
 
               if (route.type === "session") {
+                if (tabs.pendingSession(route.server, route.sessionId)) {
+                  tabsStoreActions.addSessionTab({ server: route.server, sessionId: route.sessionId })
+                  return
+                }
                 const s = session()
                 if (!s) return
                 const sessionId = s.parentID ?? s.id
@@ -232,6 +244,12 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
               const route = layout.route()
               switch (route.type) {
                 case "session": {
+                  const pending = tabs.pendingSession(route.server, route.sessionId)
+                  if (pending) {
+                    const model = tabs.stateValue<ComposerState>(pending.draft, "prompt")?.model.current()
+                    void tabs.newDraft({ server: route.server, directory: pending.draft.directory }, "", model)
+                    return
+                  }
                   const activeSession = session()
                   if (!activeSession) return
 
@@ -324,7 +342,7 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
               <div
                 class="h-full flex-1 overflow-hidden flex flex-row items-center gap-1.5 px-2 md:pr-3"
                 classList={{
-                  "pt-2": !bottom(),
+                  "pt-2": !bottom() && !windows(),
                   "pb-2": bottom(),
                   "md:pl-2": macTrafficLights(),
                   "md:pl-4": !macTrafficLights(),
@@ -357,40 +375,82 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
                   />
                 </Tooltip>
 
-                <TitlebarTabStrip
-                  tabs={tabsStore}
-                  currentTab={currentTab()}
-                  forceTruncate={tabsAreOverflowing()}
-                  onOverflowChange={setTabsAreOverflowing}
-                  onNavigate={(tab, el) => {
-                    tabs.select(tab)
-                    el?.scrollIntoView({ behavior: "instant" })
-                  }}
-                  onClose={(tab) => {
-                    const index = tabsStore.findIndex((item) => tabKey(item) === tabKey(tab))
-                    if (index !== -1) tabsStoreActions.closeTab(index)
-                  }}
-                  onReorder={(keys) => tabsStoreActions.reorder(keys)}
-                />
-                <Tooltip
-                  placement="bottom"
-                  value={
+                <Show
+                  when={props.verticalTabs}
+                  fallback={
                     <>
-                      {language.t("command.session.new")}
-                      <Keybind keys={newTabTooltipKeybind(command)} variant="neutral" />
+                      <TitlebarTabStrip
+                        tabs={tabsStore}
+                        currentTab={currentTab()}
+                        forceTruncate={tabsAreOverflowing()}
+                        onOverflowChange={setTabsAreOverflowing}
+                        onNavigate={(tab, el) => {
+                          tabs.select(tab)
+                          el?.scrollIntoView({ behavior: "instant" })
+                        }}
+                        onClose={(tab) => {
+                          const index = tabsStore.findIndex((item) => tabKey(item) === tabKey(tab))
+                          if (index !== -1) tabsStoreActions.closeTab(index)
+                        }}
+                        onReorder={(keys) => tabsStoreActions.reorder(keys)}
+                      />
+                      <Tooltip
+                        placement="bottom"
+                        value={
+                          <>
+                            {language.t("command.session.new")}
+                            <Keybind keys={newTabTooltipKeybind(command)} variant="neutral" />
+                          </>
+                        }
+                      >
+                        <IconButton
+                          type="button"
+                          variant="ghost-muted"
+                          size="large"
+                          class="shrink-0"
+                          icon={<Icon name="plus" />}
+                          onClick={openNewTab}
+                          aria-label={language.t("command.session.new")}
+                        />
+                      </Tooltip>
                     </>
                   }
                 >
-                  <IconButton
-                    type="button"
-                    variant="ghost-muted"
-                    size="large"
-                    class="shrink-0"
-                    icon={<Icon name="plus" />}
-                    onClick={openNewTab}
-                    aria-label={language.t("command.session.new")}
-                  />
-                </Tooltip>
+                  {(vertical) => (
+                    <Show when={vertical().mount} keyed>
+                      {(mount) => (
+                        <Portal mount={mount}>
+                          <TitlebarTabStrip
+                            orientation="vertical"
+                            tabs={tabsStore}
+                            currentTab={currentTab()}
+                            forceTruncate={false}
+                            onOverflowChange={setTabsAreOverflowing}
+                            onNavigate={(tab, el) => {
+                              tabs.select(tab)
+                              el?.scrollIntoView({ behavior: "instant", block: "nearest" })
+                            }}
+                            onClose={(tab) => {
+                              const index = tabsStore.findIndex((item) => tabKey(item) === tabKey(tab))
+                              if (index !== -1) tabsStoreActions.closeTab(index)
+                            }}
+                            onReorder={(keys) => tabsStoreActions.reorder(keys)}
+                          />
+                          <button
+                            type="button"
+                            data-action="vertical-tabs-new-session"
+                            class="mt-1 flex h-7 w-full shrink-0 items-center gap-1.5 rounded-[6px] px-1.5 text-[13px] leading-4 text-v2-text-text-faint hover:bg-v2-background-bg-layer-02 hover:text-v2-text-text-base"
+                            onClick={openNewTab}
+                            aria-label={language.t("command.session.new")}
+                          >
+                            <Icon name="plus" />
+                            {language.t("command.session.new")}
+                          </button>
+                        </Portal>
+                      )}
+                    </Show>
+                  )}
+                </Show>
                 <div class="flex-1" />
                 <TitlebarRight state={rightState()} />
               </div>

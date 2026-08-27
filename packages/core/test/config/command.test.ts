@@ -1,11 +1,13 @@
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Deferred, Effect, Fiber, Layer, Option, PubSub, Schema, Stream } from "effect"
+import { DateTime, Deferred, Effect, Fiber, Layer, Option, PubSub, Schema, Stream } from "effect"
 import { advance, drain } from "../lib/clock"
 import { Directory, Document, Event, Info } from "@opencode-ai/schema/config"
+import { Session } from "@opencode-ai/schema/session"
+import { SessionInbox } from "@opencode-ai/schema/session-inbox"
+import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { Command } from "@opencode-ai/core/command"
-import { Agent } from "@opencode-ai/core/agent"
 import { Config } from "@opencode-ai/core/config"
 import { ConfigCommandPlugin } from "@opencode-ai/core/config/plugin/command"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -15,11 +17,11 @@ import { Bus } from "@opencode-ai/core/bus"
 import { Credential } from "@opencode-ai/core/credential"
 import { WellKnown } from "@opencode-ai/core/wellknown"
 import { Global } from "@opencode-ai/util/global"
+import { AppProcess } from "@opencode-ai/util/process"
 import { Location } from "@opencode-ai/core/location"
 import { MCP } from "@opencode-ai/core/mcp/index"
-import { Model } from "@opencode-ai/core/model"
-import { Provider } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
+import { ShellSelect } from "@opencode-ai/core/shell/select"
 import { Watcher } from "@opencode-ai/core/filesystem/watcher"
 import { emptyCredentialNode, emptyWellknownNode } from "../fixture/config-nodes"
 import { emptyConfigLayer, emptyMcpLayer, testLocationLayer } from "../fixture/mcp"
@@ -28,12 +30,25 @@ import { tmpdir } from "../fixture/tmpdir"
 import { testEffect } from "../lib/effect"
 import { host } from "../plugin/host"
 
+const shellLayer = Layer.succeed(
+  ShellSelect.Service,
+  ShellSelect.Service.of({
+    resolve: () => Effect.succeed("sh"),
+    transform: () => Effect.die("unused shell.transform"),
+    reload: () => Effect.die("unused shell.reload"),
+  }),
+)
+
 const it = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Command.node, Bus.node, FSUtil.node]), [
-    [MCP.node, emptyMcpLayer],
-    [Config.node, emptyConfigLayer],
-    [Location.node, testLocationLayer],
-  ]),
+  AppNodeBuilder.build(
+    LayerNode.group([Command.node, Bus.node, FSUtil.node, AppProcess.node, Location.node, ShellSelect.node]),
+    [
+      [MCP.node, emptyMcpLayer],
+      [Config.node, emptyConfigLayer],
+      [Location.node, testLocationLayer],
+      [ShellSelect.node, shellLayer],
+    ],
+  ),
 )
 const decode = Schema.decodeUnknownSync(Info)
 
@@ -65,6 +80,7 @@ Review files`,
           const bus = yield* Bus.Service
           const update = yield* bus.publish(Event.Updated, {})
           const updates = yield* PubSub.unbounded<typeof update>()
+          const prompts: { text: string; files?: readonly { readonly uri: string }[]; delivery?: string }[] = []
           yield* ConfigCommandPlugin.Plugin.effect(
             host({
               command: {
@@ -73,6 +89,20 @@ Review files`,
                 reload: command.reload,
               },
               event: { subscribe: () => Stream.fromPubSub(updates) },
+              session: {
+                prompt: (input) =>
+                  Effect.sync(() => {
+                    prompts.push({ text: input.text, files: input.files, delivery: input.delivery })
+                    return SessionInbox.User.make({
+                      id: SessionMessage.ID.make("msg_test"),
+                      sessionID: input.sessionID,
+                      timeCreated: DateTime.makeUnsafe(0),
+                      type: "user",
+                      payload: { text: input.text },
+                      delivery: input.delivery ?? "steer",
+                    })
+                  }),
+              },
             }),
           ).pipe(
             Effect.provide(
@@ -89,28 +119,46 @@ Review files`,
           expect(yield* command.list()).toEqual([
             Command.Info.make({
               name: "review",
-              template: "Review files",
               description: "File review",
-              agent: Agent.ID.make("reviewer"),
-              model: {
-                providerID: Provider.ID.make("anthropic"),
-                id: Model.ID.make("claude"),
-                variant: Model.VariantID.make("high"),
-              },
-              subtask: true,
             }),
-            Command.Info.make({ name: "empty", template: "" }),
-            Command.Info.make({ name: "nested/docs", template: "Write docs" }),
+            Command.Info.make({ name: "empty" }),
+            Command.Info.make({ name: "nested/docs" }),
+          ])
+          yield* command.execute({
+            name: "nested/docs",
+            invocation: {
+              sessionID: Session.ID.make("ses_test"),
+              prompt: { text: "details", files: [{ uri: "file:///tmp/context.md" }] },
+              delivery: "queue",
+            },
+          })
+          expect(prompts).toEqual([
+            {
+              text: "Write docs\n\ndetails",
+              files: [{ uri: "file:///tmp/context.md" }],
+              delivery: "queue",
+            },
           ])
 
-          yield* Effect.promise(() => fs.writeFile(path.join(tmp.path, "commands", "review.md"), "Review again"))
+          yield* Effect.promise(() =>
+            fs.writeFile(path.join(tmp.path, "commands", "review.md"), markdown("Review again", "Review again")),
+          )
           yield* Effect.sleep("10 millis")
           yield* PubSub.publish(updates, update)
           for (let attempt = 0; attempt < 100; attempt++) {
-            if ((yield* command.get("review"))?.template === "Review again") break
+            if ((yield* command.get("review"))?.description === "Review again") break
             yield* Effect.sleep("10 millis")
           }
-          expect((yield* command.get("review"))?.template).toBe("Review again")
+          expect((yield* command.get("review"))?.description).toBe("Review again")
+          yield* command.execute({
+            name: "review",
+            invocation: {
+              sessionID: Session.ID.make("ses_test"),
+              prompt: { text: "latest" },
+              delivery: "steer",
+            },
+          })
+          expect(prompts.at(-1)?.text).toBe("Review again\n\nlatest")
         }),
       ),
     ),
@@ -193,11 +241,13 @@ Review files`,
           yield* advance(() => reloads >= 1)
           expect(reloads).toBe(1)
 
-          yield* Effect.promise(() => fs.writeFile(path.join(directory, "review.md"), "Review twice"))
+          yield* Effect.promise(() =>
+            fs.writeFile(path.join(directory, "review.md"), markdown("Review twice", "Review twice")),
+          )
           yield* configTest.emitChange({ type: "update", path: path.join(directory, "review.md") })
           yield* advance(() => reloads >= 2)
           expect(reloads).toBe(2)
-          expect((yield* command.get("review"))?.template).toBe("Review twice")
+          expect((yield* command.get("review"))?.description).toBe("Review twice")
         }).pipe(Effect.provide(Config.testLayer([directoryEntry(tmp.path)]))),
       ),
     ),
@@ -232,10 +282,12 @@ Review files`,
           expect(reloads).toBe(0)
 
           // The feed stays live after unrelated updates.
-          yield* Effect.promise(() => fs.writeFile(path.join(directory, "review.md"), "Review related"))
+          yield* Effect.promise(() =>
+            fs.writeFile(path.join(directory, "review.md"), markdown("Review related", "Review related")),
+          )
           yield* configTest.emitChange({ type: "create", path: path.join(directory, "review.md") })
           yield* advance(() => reloads >= 1)
-          expect((yield* command.get("review"))?.template).toBe("Review related")
+          expect((yield* command.get("review"))?.description).toBe("Review related")
         }).pipe(Effect.provide(Config.testLayer([directoryEntry(tmp.path)]))),
       ),
     ),
@@ -272,28 +324,47 @@ describeNative("ConfigCommandPlugin native watcher", () => {
         yield* watchReady(config, global)
 
         const created = yield* nextCommandUpdate(bus)
-        yield* fs.writeFileString(path.join(global, "commands", "review.md"), "Review native")
+        yield* fs.writeFileString(
+          path.join(global, "commands", "review.md"),
+          markdown("Review native", "Review native"),
+        )
         yield* Fiber.join(created).pipe(Effect.timeout("10 seconds"))
-        expect((yield* command.get("review"))?.template).toBe("Review native")
+        expect((yield* command.get("review"))?.description).toBe("Review native")
 
         const updated = yield* nextCommandUpdate(bus)
-        yield* fs.writeFileString(path.join(global, "commands", "review.md"), "Review native again")
+        yield* fs.writeFileString(
+          path.join(global, "commands", "review.md"),
+          markdown("Review native again", "Review native again"),
+        )
         yield* Fiber.join(updated).pipe(Effect.timeout("10 seconds"))
-        expect((yield* command.get("review"))?.template).toBe("Review native again")
+        expect((yield* command.get("review"))?.description).toBe("Review native again")
       }).pipe(
         Effect.provide(
-          AppNodeBuilder.build(LayerNode.group([Command.node, Config.node, Bus.node, FSUtil.node]), [
-            [
+          AppNodeBuilder.build(
+            LayerNode.group([
+              Command.node,
+              Config.node,
+              Bus.node,
+              FSUtil.node,
+              AppProcess.node,
+              Global.node,
               Location.node,
-              Layer.succeed(
-                Location.Service,
-                Location.Service.of(location({ directory: AbsolutePath.make(path.join(tmp, "project")) })),
-              ),
+              ShellSelect.node,
+            ]),
+            [
+              [
+                Location.node,
+                Layer.succeed(
+                  Location.Service,
+                  Location.Service.of(location({ directory: AbsolutePath.make(path.join(tmp, "project")) })),
+                ),
+              ],
+              [Global.node, Global.layerWith({ config: global, home: path.join(global, "home") })],
+              [ShellSelect.node, shellLayer],
+              [Credential.node, emptyCredentialNode],
+              [WellKnown.node, emptyWellknownNode],
             ],
-            [Global.node, Global.layerWith({ config: global, home: path.join(global, "home") })],
-            [Credential.node, emptyCredentialNode],
-            [WellKnown.node, emptyWellknownNode],
-          ]),
+          ),
         ),
       )
     }),
@@ -337,6 +408,10 @@ function directoryEntry(directory: string) {
   return new Directory({ type: "directory", path: AbsolutePath.make(directory) })
 }
 
+function markdown(description: string, template: string) {
+  return `---\ndescription: ${description}\n---\n${template}`
+}
+
 function sourceCases() {
   return [
     {
@@ -345,33 +420,37 @@ function sourceCases() {
       mutate: (directory: string) =>
         Effect.promise(async () => {
           const file = path.join(directory, "review.md")
-          await fs.writeFile(file, "Review created")
+          await fs.writeFile(file, markdown("Review created", "Review created"))
           return [{ type: "create" as const, path: file }]
         }),
       verify: (command: Command.Interface) =>
         Effect.gen(function* () {
-          expect((yield* command.get("review"))?.template).toBe("Review created")
+          expect((yield* command.get("review"))?.description).toBe("Review created")
         }),
     },
     {
       name: "updated",
       prepare: (directory: string) =>
-        Effect.promise(() => fs.writeFile(path.join(directory, "review.md"), "Review first")),
+        Effect.promise(() =>
+          fs.writeFile(path.join(directory, "review.md"), markdown("Review first", "Review first")),
+        ),
       mutate: (directory: string) =>
         Effect.promise(async () => {
           const file = path.join(directory, "review.md")
-          await fs.writeFile(file, "Review updated")
+          await fs.writeFile(file, markdown("Review updated", "Review updated"))
           return [{ type: "update" as const, path: file }]
         }),
       verify: (command: Command.Interface) =>
         Effect.gen(function* () {
-          expect((yield* command.get("review"))?.template).toBe("Review updated")
+          expect((yield* command.get("review"))?.description).toBe("Review updated")
         }),
     },
     {
       name: "renamed",
       prepare: (directory: string) =>
-        Effect.promise(() => fs.writeFile(path.join(directory, "review.md"), "Review renamed")),
+        Effect.promise(() =>
+          fs.writeFile(path.join(directory, "review.md"), markdown("Review renamed", "Review renamed")),
+        ),
       mutate: (directory: string) =>
         Effect.promise(async () => {
           const previous = path.join(directory, "review.md")
@@ -385,7 +464,7 @@ function sourceCases() {
       verify: (command: Command.Interface) =>
         Effect.gen(function* () {
           expect(yield* command.get("review")).toBeUndefined()
-          expect((yield* command.get("release"))?.template).toBe("Review renamed")
+          expect((yield* command.get("release"))?.description).toBe("Review renamed")
         }),
     },
     {

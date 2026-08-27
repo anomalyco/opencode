@@ -79,6 +79,7 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
       commands: [
         Spec.make("agents", { description: "List all agents" }),
         Spec.make("config", { description: "List configuration sources" }),
+        Spec.make("paths", { description: "Show global paths (data, config, cache, state)" }),
       ],
     }),
     Spec.make("console", {
@@ -180,7 +181,7 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
         Spec.make("add", {
           description: "Install a plugin and add it to the global configuration",
           params: {
-            package: Argument.string("package").pipe(Argument.withDescription("npm registry package specifier")),
+            package: Argument.string("package").pipe(Argument.withDescription("npm registry or Git package specifier")),
           },
         }),
         Spec.make("remove", {

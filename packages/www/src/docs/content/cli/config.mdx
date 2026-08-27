@@ -18,6 +18,16 @@ Set `$XDG_CONFIG_HOME` to use a different config directory:
 $XDG_CONFIG_HOME/opencode/cli.json
 ```
 
+Add the published JSON Schema for editor validation and autocomplete:
+
+```json title="cli.json"
+{
+  "$schema": "https://opencode.ai/v2/cli.json"
+}
+```
+
+OpenCode includes this automatically when it creates or migrates your CLI config.
+
 ## Theme
 
 Set the theme and color mode:
@@ -145,6 +155,20 @@ Configure diff presentation:
 | `tree`   | boolean                       | Shows the diff file tree.                                     |
 | `single` | boolean                       | Shows only the selected file patch.                           |
 | `view`   | `auto`, `split`, or `unified` | Sets the layout. `auto` chooses based on the available width. |
+
+## Tabs
+
+Choose **Tabs > Indicators** in settings, or set `tabs.indicators` in `cli.json`:
+
+```json title="cli.json"
+{
+  "tabs": {
+    "indicators": "numbers"
+  }
+}
+```
+
+`status` (the default) shows status icons. `numbers` always shows tab numbers, retaining their status colors and background animations. Both modes work with horizontal and vertical tabs. Ctrl+number shortcuts switch tabs in either mode.
 
 ## Terminal
 

@@ -16,6 +16,7 @@ import { HealthHandler } from "./handlers/health"
 import { ServerHandler } from "./handlers/server"
 import { DebugHandler } from "./handlers/debug"
 import { PtyHandler } from "./handlers/pty"
+import { PersistentPtyHandler } from "./handlers/persistent-pty"
 import { ShellHandler } from "./handlers/shell"
 import { ReferenceHandler } from "./handlers/reference"
 import { LocationHandler } from "./handlers/location"
@@ -29,6 +30,7 @@ import { VcsHandler } from "./handlers/vcs"
 import { EventFeed } from "./event-feed"
 import { MigrationHandler } from "./handlers/migration"
 import { ConfigHandler } from "./handlers/config"
+import { WorkspaceHandler } from "./handlers/workspace"
 
 export const handlers = Layer.mergeAll(
   HealthHandler,
@@ -55,9 +57,11 @@ export const handlers = Layer.mergeAll(
   SkillHandler,
   EventHandler.pipe(Layer.provide(EventFeed.layer)),
   PtyHandler,
+  PersistentPtyHandler,
   ShellHandler,
   ReferenceHandler,
   WorktreeHandler,
+  WorkspaceHandler,
   VcsHandler,
   ConfigHandler,
 )

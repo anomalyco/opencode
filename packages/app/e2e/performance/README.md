@@ -44,6 +44,7 @@ The suite contains:
 - single-session tab close timing through stable home restoration
 - cached session repaint and mutation tracing
 - streaming timeline throughput, RAF-gap, long-task, geometry, and remount diagnostics
+- retained renderer heap with a large model catalog across repeated session navigation
 
 All benchmarks import the shared `benchmark` fixture. Pages created through Playwright's `page` fixture automatically capture main-frame navigation history and emit a Chrome trace when `OPENCODE_PERFORMANCE_TRACE_DIR` is set. Benchmarks that need isolated browser contexts use `withBenchmarkPage`, which owns the context and the same diagnostics lifecycle.
 
@@ -77,6 +78,26 @@ The streaming scenario's 30x CPU throttle is a deterministic stress profile, not
 Benchmarks do not assert machine-dependent performance budgets. Streaming processes 160 deltas by default and reports renderer-observed completion time, throughput, RAF callback-gap distributions, frame-budget equivalents, and long tasks through final geometry settlement. Delta count and delivery batch are included in result context when overridden. These are main-thread callback diagnostics, not compositor presentation or dropped-frame measurements. Visual-only and geometry metrics are `null` when their probes are disabled. Tab metrics describe sampled DOM observations. Assertions verify scenario and metric collection completion. Repeated repaint states are run-length grouped, but every original observation timestamp is retained alongside raw mutation batches and layout shifts.
 
 Committed smoke and regression tests continue to own correctness coverage for pagination, tab paint, context resize, collapse state, and composer spacing.
+
+Tab-switch timing starts at `mousedown`, when mouse-selected tabs actually navigate, with a `click` fallback for keyboard activation. The probe excludes hidden/transparent content and intersects answers with their virtual-row clip and viewport. The tab workload requires the destination's final answer to be visible with Markdown ready. These results are not directly comparable to older click-start, geometry-only measurements. `stableObservedMs` includes confirmation across three correct samples; `firstCorrectObservedMs` is the first sample meeting all content and geometry checks. Neither is a compositor presentation timestamp.
+
+Each tab scenario reports one sample, including its raw observations. Use Playwright's `--repeat-each=5` for repeated measurements. Cached scenarios warm the destination at the same panel width before leaving it; a separate resized scenario validates reuse after opening the review pane changes that width.
+
+```sh
+bunx playwright test --config e2e/performance/playwright.config.ts \
+  timeline/session-tab-switch-benchmark.spec.ts --repeat-each=5
+```
+
+## Retained renderer memory
+
+Run the catalog workload against the production app bundle:
+
+```sh
+bunx playwright test --config e2e/performance/playwright.config.ts \
+  timeline/provider-memory-benchmark.spec.ts --repeat-each=3
+```
+
+`PROVIDER_MEMORY_MODELS` defaults to 1,200 and `PROVIDER_MEMORY_SWITCHES` defaults to 10. Each sample records Chromium's `Runtime.getHeapUsage` and `Memory.getDOMCounters` after an explicit garbage collection. This measures retained state, not allocation peaks or normal GC timing. It does not include worker heaps, the Electron main/GPU processes, or the OpenCode server, and must not be reported as total desktop RAM. Use identical model counts and navigation sequences for before/after comparisons.
 
 ## Chrome traces
 

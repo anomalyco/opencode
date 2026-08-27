@@ -36,8 +36,9 @@ test("dispatch passes slash input through the registered command", async () => {
   ))
   try {
     dispatch!("project.cd")
+    dispatch!("project.cd", "")
     dispatch!("project.cd", "src/components with spaces")
-    expect(received).toEqual([undefined, "src/components with spaces"])
+    expect(received).toEqual([undefined, "", "src/components with spaces"])
   } finally {
     app.renderer.destroy()
   }

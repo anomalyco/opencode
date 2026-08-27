@@ -22,6 +22,21 @@ export const CredentialGroup = HttpApiGroup.make("server.credential")
   )
   .annotateMerge(OpenApi.annotations({ title: "credential" }))
   .add(
+    HttpApiEndpoint.post("credential.activate", "/api/credential/:credentialID/activate", {
+      params: { credentialID: Credential.ID },
+      query: LocationQuery,
+      success: HttpApiSchema.NoContent,
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.credential.activate",
+          summary: "Activate credential",
+          description: "Activate a stored integration credential.",
+        }),
+      ),
+  )
+  .add(
     HttpApiEndpoint.delete("credential.remove", "/api/credential/:credentialID", {
       params: { credentialID: Credential.ID },
       query: LocationQuery,

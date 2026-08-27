@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createSignal, For, on, Show, type Accessor, type JSX } from "solid-js"
-import createPresence from "solid-presence"
 import { createStore } from "solid-js/store"
+import { createAnimatedPresence } from "@/runtime/animated-presence"
 import type { SessionUserActions } from "@opencode-ai/session-ui/actions"
 import { Badge } from "@opencode-ai/ui/badge"
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
@@ -342,16 +342,14 @@ function MessageTimelineView(
   const projection = props.data.projection
   const sessionDirectory = createMemo(() => props.session.data.info()?.location.directory ?? sdk().directory)
   const project = createMemo(() => {
-    const projectID = props.session.data.info()?.projectID
-    const value = projectID
-      ? data.project.get(projectID)
-      : data.project.list().find((item) => containsDirectory(item.canonical, sessionDirectory()))
-    if (!value) return undefined
-    return { ...value, worktree: value.canonical, worktrees: [] }
+    const session = props.session.data.info()
+    const projects = server.ctx.sync.data.project
+    return session
+      ? projectForSession(session, projects)
+      : projects.find((item) => containsDirectory(item.worktree, sessionDirectory()))
   })
   const workspaceSession = createMemo(() => isWorkspaceDirectory(project(), sessionDirectory()))
-  const showProjectIcon = () =>
-    import.meta.env.VITE_OPENCODE_CHANNEL !== "prod" && settings.general.showProjectIcon()
+  const showProjectIcon = () => import.meta.env.VITE_OPENCODE_CHANNEL !== "prod" && settings.general.showProjectIcon()
   const avatarProject = createMemo(() => {
     if (!showProjectIcon()) return
     const session = props.session.data.info()
@@ -388,7 +386,7 @@ function MessageTimelineView(
   const pinned = createMemo(() => props.pinned)
   const messageByID = projection.messageByID
   const virtualized = createTimelineVirtualizer({
-    sessionKey: props.data.sessionKey,
+    sessionKey: () => `${server.key}/${props.data.sessionID()}`,
     projection,
     showHeader,
     pinned,
@@ -460,7 +458,7 @@ function MessageTimelineView(
       }
     },
     actions: props.actions,
-    showReasoningSummaries: props.data.showReasoningSummaries,
+    reasoningMode: props.data.reasoningMode,
     shellToolDefaultOpen: props.data.shellToolPartsExpanded,
     editToolDefaultOpen: props.data.editToolPartsExpanded,
     disclosure: virtualized.disclosure,
@@ -470,26 +468,16 @@ function MessageTimelineView(
   })
   const backgroundHintPartID = createMemo(() => {
     const blocking = new Set(props.background.blocking().map((task) => task.partID))
-    const row = projection
+    if (blocking.size === 0) return
+    return projection
       .rows()
-      .findLast(
-        (row) => row._tag === "AssistantPart" && row.group.type === "part" && blocking.has(row.group.ref.partID),
+      .flatMap((row) =>
+        row._tag === "AssistantPart" ? (row.group.type === "part" ? [row.group.ref] : row.group.refs) : [],
       )
-    if (row?._tag !== "AssistantPart" || row.group.type !== "part") return
-    return row.group.ref.partID
+      .findLast((ref) => blocking.has(ref.partID))?.partID
   })
   const [backgroundHintRef, setBackgroundHintRef] = createSignal<HTMLDivElement>()
-  const backgroundHintVisibility = createMemo<{ show: boolean; animate: boolean }>(
-    (previous) => {
-      const show = backgroundHintPartID() !== undefined
-      return { show, animate: previous.animate || previous.show !== show }
-    },
-    { show: backgroundHintPartID() !== undefined, animate: false },
-  )
-  const backgroundHintPresence = createPresence({
-    show: () => backgroundHintVisibility().show,
-    element: () => backgroundHintRef() ?? null,
-  })
+  const backgroundHintPresence = createAnimatedPresence(backgroundHintPartID, () => backgroundHintRef() ?? null)
   return (
     <VirtualizedTimeline
       workspaceSession={workspaceSession}
@@ -507,9 +495,9 @@ function MessageTimelineView(
               class="duration-150 motion-reduce:animate-none"
               classList={{
                 [`flex h-9 items-start pt-3 ${turnPadding()}`]: true,
-                "animate-in fade-in": backgroundHintVisibility().animate && backgroundHintVisibility().show,
+                "animate-in fade-in": backgroundHintPresence.animate() && backgroundHintPresence.show(),
                 "animate-out fade-out fill-mode-forwards":
-                  backgroundHintVisibility().animate && !backgroundHintVisibility().show,
+                  backgroundHintPresence.animate() && !backgroundHintPresence.show(),
               }}
             >
               <BackgroundMoveHint />

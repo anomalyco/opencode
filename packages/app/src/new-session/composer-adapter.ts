@@ -1,6 +1,7 @@
 import { base64Encode } from "@opencode-ai/util/encode"
 import { getDirectory } from "@opencode-ai/util/path"
 import type { SessionMessageUser } from "@opencode-ai/client/promise"
+import { Session } from "@opencode-ai/schema/session"
 import { startTransition } from "solid-js"
 import type { NewSessionComposerAdapter } from "@/composer/adapter"
 import { useComposerState } from "@/composer/persistence"
@@ -20,6 +21,7 @@ import { clearSessionMessageHandoff, setSessionMessageHandoff } from "@/session/
 export function createNewSessionComposerAdapter(props: {
   draftID: string
   worktree: () => string
+  branch: () => string | undefined
   submitted: () => void
 }) {
   const route = useSessionKey()
@@ -42,19 +44,32 @@ export function createNewSessionComposerAdapter(props: {
     controls,
     working: () => false,
     submitted: props.submitted,
-    async start(selection, submission) {
+    async start(selection, submission, message) {
+      const draftID = props.draftID
       const projectDirectory = location().directory
       const worktree = props.worktree()
+      const branch = props.branch()
+      const id = Session.ID.create()
+      const pending =
+        worktree === "create"
+          ? tabs.prepareSession(draftID, { server: server.key, sessionId: id }, { message, selection })
+          : undefined
+      await pending?.ready
       const sessionDirectory = await resolveSessionDirectory({
         projectDirectory,
         worktree,
+        branch,
         data,
         serverSDK,
         language,
       })
-      if (!sessionDirectory) return
+      if (!sessionDirectory) {
+        await pending?.rollback()
+        return
+      }
 
       const created = data.session.create({
+        id,
         agent: selection.agent,
         model: {
           id: selection.model.modelID,
@@ -73,7 +88,14 @@ export function createNewSessionComposerAdapter(props: {
           return { ok: false as const, error }
         },
       )
-      const afterCreation = async <T,>(run: () => Promise<T>) => {
+      if (pending && !(await creation).ok) {
+        // Keep retries on the worktree that was already created, not another new checkout.
+        data.project.invalidate()
+        await data.project.sync().catch(() => undefined)
+        await pending.rollback(sessionDirectory)
+        return
+      }
+      const afterCreation = async <T>(run: () => Promise<T>) => {
         const result = await creation
         if (!result.ok) throw result.error
         return run()
@@ -83,13 +105,13 @@ export function createNewSessionComposerAdapter(props: {
         SessionRouteKey.fromRoute(base64Encode(sessionDirectory), created.id),
       )
       const cleanupReady = startTransition(() => {
-        tabs.updateDraft(props.draftID, { worktree: undefined })
+        if (!pending) tabs.updateDraft(draftID, { worktree: undefined, branch: undefined })
         local.session.promote(sessionDirectory, created.id, {
           agent: selection.agent,
           model: selection.model,
           variant: selection.variant ?? null,
         })
-        tabs.promoteDraft(props.draftID, { server: server.key, sessionId: created.id })
+        if (!pending) tabs.promoteDraft(draftID, { server: server.key, sessionId: created.id })
         submission.retarget(
           prompt.capture(
             { dir: base64Encode(sessionDirectory), id: created.id },
@@ -100,6 +122,7 @@ export function createNewSessionComposerAdapter(props: {
 
       return {
         cleanupReady,
+        complete: pending?.complete,
         session: {
           id: created.id,
           directory: sessionDirectory,
@@ -131,7 +154,7 @@ export function createNewSessionComposerAdapter(props: {
 
   return {
     adapter,
-    project: createComposerProjectControls({ draftId: props.draftID }),
+    project: createComposerProjectControls({ draftId: props.draftID, worktree: props.worktree }),
     model,
     ready: prompt.ready,
   }
@@ -161,6 +184,7 @@ function createMessageHandoff(key: string, sessionID: string, event: ServerSDK["
 async function resolveSessionDirectory(input: {
   projectDirectory: string
   worktree: string
+  branch?: string
   data: ReturnType<typeof useData>
   serverSDK: ReturnType<typeof useServerSDK>
   language: ReturnType<typeof useLanguage>
@@ -172,6 +196,7 @@ async function resolveSessionDirectory(input: {
     .create({
       projectID: input.data.location.info({ directory: input.projectDirectory })?.project.id ?? "",
       strategy: "git",
+      branch: input.branch,
       directory: getDirectory(
         input.data.location.info({ directory: input.projectDirectory })?.project.directory ?? input.projectDirectory,
       ),

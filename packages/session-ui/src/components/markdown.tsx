@@ -617,7 +617,10 @@ function updateBlock(container: HTMLDivElement, index: number, block: RenderedBl
     updateCodeBlock(container, current, block, labels)
     return
   }
-  const existing = current instanceof HTMLDivElement && current.dataset.markdownKey === block.key ? current : undefined
+  const existing =
+    current instanceof HTMLDivElement && current.dataset.markdownKey === block.key && !renderedCodeTokens.has(current)
+      ? current
+      : undefined
   if (existing?.dataset.markdownHash === block.hash) return
 
   const next = existing ?? document.createElement("div")
@@ -625,28 +628,27 @@ function updateBlock(container: HTMLDivElement, index: number, block: RenderedBl
   next.dataset.markdownKey = block.key
   next.dataset.markdownHash = block.hash
   next.style.display = "contents"
-  const source = document.createElement("div")
+  const rendered = renderedMarkdown.get(next)
+  // Keep live renderers in control of their DOM, including after completion.
+  const source = rendered || block.mode === "live" ? document.createElement("div") : next
   source.innerHTML = block.html
   markInlineCode(source)
   markCodeLinks(source)
-  const html = source.innerHTML
 
-  if (existing) {
-    const rendered = renderedMarkdown.get(existing)
-    if (rendered) {
-      rendered.renderer.update(html, block.mode === "live", rendered.raw !== block.raw)
-      rendered.raw = block.raw
-      return
-    }
-    existing.innerHTML = ""
-    renderedMarkdown.set(existing, {
-      renderer: createMarkdownRenderer(existing, html, block.mode === "live"),
-      raw: block.raw,
-    })
+  if (rendered) {
+    rendered.renderer.update(source.innerHTML, block.mode === "live", rendered.raw !== block.raw)
+    rendered.raw = block.raw
     return
   }
+  if (block.mode === "live") {
+    next.replaceChildren()
+    renderedMarkdown.set(next, {
+      renderer: createMarkdownRenderer(next, source.innerHTML, true),
+      raw: block.raw,
+    })
+  }
 
-  renderedMarkdown.set(next, { renderer: createMarkdownRenderer(next, html, block.mode === "live"), raw: block.raw })
+  if (existing) return
   if (!current) {
     container.appendChild(next)
     return
@@ -662,7 +664,10 @@ function updateCodeBlock(
   block: Extract<RenderedBlock, { mode: "code" }>,
   labels: CopyLabels,
 ) {
-  const existing = current instanceof HTMLDivElement && current.dataset.markdownKey === block.key ? current : undefined
+  const existing =
+    current instanceof HTMLDivElement && current.dataset.markdownKey === block.key && renderedCodeTokens.has(current)
+      ? current
+      : undefined
   const next = existing ?? document.createElement("div")
   next.dataset.markdownBlock = ""
   next.dataset.markdownKey = block.key

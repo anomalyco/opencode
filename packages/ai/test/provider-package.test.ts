@@ -26,6 +26,10 @@ describe("provider package entrypoints", () => {
       import("@opencode-ai/ai/providers/amazon-bedrock/mantle"),
       import("@opencode-ai/ai/providers/amazon-bedrock/mantle/chat"),
       import("@opencode-ai/ai/providers/amazon-bedrock/mantle/responses"),
+      import("@opencode-ai/ai/providers/togetherai"),
+      import("@opencode-ai/ai/providers/cerebras"),
+      import("@opencode-ai/ai/providers/deepinfra"),
+      import("@opencode-ai/ai/providers/groq"),
     ])
 
     for (const module of modules) expect(module.model).toBeFunction()
@@ -33,6 +37,24 @@ describe("provider package entrypoints", () => {
     expect(modules[8].model).toBe(modules[9].model)
     expect(modules[12].model).toBe(modules[13].model)
     expect(modules[19].model).toBe(modules[20].model)
+  })
+
+  test("maps DeepInfra package settings onto its native executable model", async () => {
+    const DeepInfra = await import("@opencode-ai/ai/providers/deepinfra")
+    const settings = {
+      apiKey: "fixture",
+      baseURL: "https://provider.example.test/v1/",
+      headers: { "x-application": "opencode" },
+      body: { service_tier: "priority" },
+      providerOptions: { reasoningEffort: "high" as const },
+    }
+    const deepinfra = DeepInfra.model("google/gemma-3-27b-it", settings)
+
+    expect(deepinfra.route.id).toBe("deepinfra-chat")
+    expect(deepinfra.route.endpoint.baseURL).toBe("https://provider.example.test/v1/openai")
+    expect(deepinfra.route.defaults.providerOptions).toEqual(settings.providerOptions)
+    expect(deepinfra.route.defaults.headers).toEqual(settings.headers)
+    expect(deepinfra.route.defaults.http?.body).toEqual(settings.body)
   })
 
   test("maps OpenRouter and xAI package settings onto executable models", async () => {
@@ -95,7 +117,11 @@ describe("provider package entrypoints", () => {
     })
     expect(selected.route.defaults.headers).toEqual({ "x-application": "opencode" })
     expect(selected.route.defaults.http?.body).toEqual({ service_tier: "priority" })
-    expect(selected.route.defaults.providerOptions).toEqual({ reasoningEffort: "low", store: true })
+    expect(selected.route.defaults.providerOptions).toEqual({
+      reasoningEffort: "low",
+      store: true,
+      include: ["reasoning.encrypted_content"],
+    })
   })
 
   test("maps Anthropic-compatible settings onto the executable model", async () => {
@@ -285,7 +311,10 @@ describe("provider package entrypoints", () => {
       baseURL: "https://aiplatform.googleapis.com/v1/projects/vertex-project/locations/global/endpoints/openapi",
       path: "/responses",
     })
-    expect(responses.route.defaults.providerOptions).toEqual({ store: false })
+    expect(responses.route.defaults.providerOptions).toEqual({
+      store: false,
+      include: ["reasoning.encrypted_content"],
+    })
   })
 
   test("rejects conflicting Vertex auth settings at runtime", async () => {

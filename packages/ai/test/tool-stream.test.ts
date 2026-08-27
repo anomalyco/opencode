@@ -23,9 +23,11 @@ describe("ToolStream", () => {
 
       expect(first.events).toEqual([
         { type: "tool-input-start", id: "call_1", name: "lookup" },
-        { type: "tool-input-delta", id: "call_1", name: "lookup", text: '{"query"' },
+        { type: "tool-input-delta", id: "call_1", name: "lookup", text: '{"query"', input: {} },
       ])
-      expect(second.events).toEqual([{ type: "tool-input-delta", id: "call_1", name: "lookup", text: ':"weather"}' }])
+      expect(second.events).toEqual([
+        { type: "tool-input-delta", id: "call_1", name: "lookup", text: ':"weather"}', input: { query: "weather" } },
+      ])
       expect(finished).toEqual({
         tools: {},
         events: [
@@ -33,6 +35,45 @@ describe("ToolStream", () => {
           { type: "tool-call", id: "call_1", name: "lookup", input: { query: "weather" } },
         ],
       })
+    }),
+  )
+
+  it.effect("exposes cumulative partial string values", () =>
+    Effect.gen(function* () {
+      const result = ToolStream.appendOrStart(
+        ADAPTER,
+        ToolStream.empty<number>(),
+        0,
+        { id: "call_1", name: "lookup", text: '{"query":"wea' },
+        "missing tool",
+      )
+      if (ToolStream.isError(result)) return yield* result
+
+      expect(result.events.at(-1)).toEqual({
+        type: "tool-input-delta",
+        id: "call_1",
+        name: "lookup",
+        text: '{"query":"wea',
+        input: { query: "wea" },
+      })
+    }),
+  )
+
+  it.effect("defaults partial input to an empty object when the accumulated value cannot be parsed", () =>
+    Effect.gen(function* () {
+      const result = ToolStream.appendOrStart(
+        ADAPTER,
+        ToolStream.empty<number>(),
+        0,
+        { id: "call_1", name: "lookup", text: "x" },
+        "missing tool",
+      )
+      if (ToolStream.isError(result)) return yield* result
+
+      expect(result.events).toEqual([
+        { type: "tool-input-start", id: "call_1", name: "lookup" },
+        { type: "tool-input-delta", id: "call_1", name: "lookup", text: "x", input: {} },
+      ])
     }),
   )
 
@@ -91,7 +132,7 @@ describe("ToolStream", () => {
     }),
   )
 
-  it.effect("finalizes malformed local input as a non-executable tool error", () =>
+  it.effect("finalizes incomplete local input using the partial JSON parser", () =>
     Effect.gen(function* () {
       const tools = ToolStream.start(ToolStream.empty<string>(), "item_1", {
         id: "call_1",
@@ -103,18 +144,46 @@ describe("ToolStream", () => {
       expect(finished).toEqual({
         tools: {},
         events: [
-          {
-            type: "tool-input-error",
-            id: "call_1",
-            name: "lookup",
-            raw: '{"query":"partial',
-          },
+          { type: "tool-input-end", id: "call_1", name: "lookup" },
+          { type: "tool-call", id: "call_1", name: "lookup", input: { query: "partial" } },
         ],
       })
     }),
   )
 
-  it.effect("preserves valid siblings when one parallel input is malformed", () =>
+  it.effect("repairs malformed string escapes in final local input", () =>
+    Effect.gen(function* () {
+      const tools = ToolStream.start(ToolStream.empty<string>(), "item_1", {
+        id: "call_1",
+        name: "lookup",
+        input: '{"path":"A\\H","text":"first\tsecond"}',
+      })
+      const finished = yield* ToolStream.finish(ADAPTER, tools, "item_1")
+
+      expect(finished.events).toEqual([
+        { type: "tool-input-end", id: "call_1", name: "lookup" },
+        { type: "tool-call", id: "call_1", name: "lookup", input: { path: "A\\H", text: "first\tsecond" } },
+      ])
+    }),
+  )
+
+  it.effect("defaults unrecoverable local input to an empty object", () =>
+    Effect.gen(function* () {
+      const tools = ToolStream.start(ToolStream.empty<string>(), "item_1", {
+        id: "call_1",
+        name: "lookup",
+        input: "invalid",
+      })
+      const finished = yield* ToolStream.finish(ADAPTER, tools, "item_1")
+
+      expect(finished.events).toEqual([
+        { type: "tool-input-end", id: "call_1", name: "lookup" },
+        { type: "tool-call", id: "call_1", name: "lookup", input: {} },
+      ])
+    }),
+  )
+
+  it.effect("recovers incomplete input alongside valid parallel tool calls", () =>
     Effect.gen(function* () {
       const valid = ToolStream.start(ToolStream.empty<number>(), 0, {
         id: "call_valid",
@@ -133,12 +202,8 @@ describe("ToolStream", () => {
         events: [
           { type: "tool-input-end", id: "call_valid", name: "lookup" },
           { type: "tool-call", id: "call_valid", name: "lookup", input: { query: "weather" } },
-          {
-            type: "tool-input-error",
-            id: "call_invalid",
-            name: "lookup",
-            raw: '{"query":"partial',
-          },
+          { type: "tool-input-end", id: "call_invalid", name: "lookup" },
+          { type: "tool-call", id: "call_invalid", name: "lookup", input: { query: "partial" } },
         ],
       })
     }),

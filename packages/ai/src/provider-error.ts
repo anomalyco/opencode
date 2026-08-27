@@ -40,15 +40,16 @@ const patterns = [
   /model_context_window_exceeded/i,
   /too many tokens/i,
   /token limit exceeded/i,
+  /request_too_large/i,
 ]
 
-const payloadPatterns = [/request_too_large/i, /request entity too large/i, /payload too large/i, /request too large/i]
+const payloadPatterns = [/request entity too large/i, /payload too large/i, /request too large/i]
 
 const exclusions = [/^(throttling error|service unavailable):/i, /rate limit/i, /too many requests/i]
 
 export const isContextOverflow = (message: string) =>
   !exclusions.some((pattern) => pattern.test(message)) &&
-  (patterns.some((pattern) => pattern.test(message)) || /^400\s*(status code)?\s*\(no body\)/i.test(message))
+  (patterns.some((pattern) => pattern.test(message)) || /^4(?:00|13)\s*(status code)?\s*\(no body\)/i.test(message))
 
 export const isPayloadTooLarge = (message: string) => payloadPatterns.some((pattern) => pattern.test(message))
 
@@ -106,6 +107,7 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
     clientScoped &&
     (codes.includes("context_length_exceeded") ||
       codes.includes("model_context_window_exceeded") ||
+      codes.includes("request_too_large") ||
       isContextOverflow(text))
   )
     return new InvalidRequestReason({ ...common, classification: "context-overflow" })

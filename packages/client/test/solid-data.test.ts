@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { createRoot } from "solid-js"
 import { createData, type CreateDataInput } from "../src/solid"
-import { OpenCode, type OpenCodeEvent, type SessionInfo } from "../src/promise"
+import { OpenCode, type OpenCodeEvent, type Project, type SessionInfo } from "../src/promise"
 
 const session = (viewed: number): SessionInfo => ({
   id: "ses_refresh",
@@ -72,6 +72,285 @@ test("revalidates after an event overtakes an active session read", async () => 
   }
 })
 
+test("updates authoritative cached project metadata from live events", async () => {
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  const original: Project = {
+    id: "project_renamed",
+    canonical: "/projects/original",
+    name: "Original custom name",
+    time: { created: 1, updated: 1 },
+    sandboxes: [],
+  }
+  const unrelated: Project = {
+    id: "project_unrelated",
+    canonical: "/projects/unrelated",
+    name: "Unrelated project",
+    time: { created: 1, updated: 1 },
+    sandboxes: [],
+  }
+  let requests = 0
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      if (!request.url.endsWith("/api/project")) throw new Error(`Unexpected request: ${request.url}`)
+      requests++
+      return Response.json([original, unrelated])
+    },
+  })
+  const event: CreateDataInput["event"] = {
+    on: () => () => {},
+    listen(handler) {
+      listeners.add(handler)
+      return () => listeners.delete(handler)
+    },
+  }
+  const setup = createRoot((dispose) => ({
+    data: createData({ api: () => api, directory: "/projects/original", event }),
+    dispose,
+  }))
+
+  try {
+    await setup.data.project.sync()
+    expect(setup.data.project.get(original.id)).toEqual(original)
+
+    const updated: OpenCodeEvent = {
+      id: "evt_project_renamed",
+      created: 2,
+      type: "project.updated",
+      data: {
+        ...original,
+        canonical: "/projects/renamed",
+        name: "Updated custom name",
+        time: { ...original.time, updated: 2 },
+      },
+    }
+    listeners.forEach((listener) => listener({ name: updated.type, details: updated }))
+
+    expect(setup.data.project.get(original.id)?.canonical).toBe("/projects/renamed")
+    expect(setup.data.project.get(original.id)?.name).toBe("Updated custom name")
+    expect(setup.data.project.get(unrelated.id)).toEqual(unrelated)
+    expect(requests).toBe(1)
+
+    const reset: OpenCodeEvent = {
+      id: "evt_project_name_reset",
+      created: 3,
+      type: "project.updated",
+      data: {
+        id: original.id,
+        canonical: "/projects/renamed-again",
+        time: { ...original.time, updated: 3 },
+        sandboxes: [],
+      },
+    }
+    listeners.forEach((listener) => listener({ name: reset.type, details: reset }))
+
+    expect(setup.data.project.get(original.id)?.canonical).toBe("/projects/renamed-again")
+    expect(setup.data.project.get(original.id)?.name).toBeUndefined()
+    expect(setup.data.project.get(unrelated.id)).toEqual(unrelated)
+    expect(requests).toBe(1)
+  } finally {
+    setup.dispose()
+  }
+})
+
+test("adopts cached directory-project sessions when their repository is resolved", async () => {
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  const refreshed: SessionInfo = {
+    ...session(0),
+    id: "ses_uncached",
+    projectID: "repository",
+    location: { directory: "/unknown-alias" },
+    subpath: "app",
+  }
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      if (!request.url.endsWith("/api/session/ses_uncached")) throw new Error(`Unexpected request: ${request.url}`)
+      return Response.json({ data: refreshed })
+    },
+  })
+  const setup = createRoot((dispose) => ({
+    data: createData({
+      api: () => api,
+      directory: "/repo",
+      event: {
+        on: () => () => {},
+        listen(handler) {
+          listeners.add(handler)
+          return () => listeners.delete(handler)
+        },
+      },
+    }),
+    dispose,
+  }))
+
+  try {
+    const sessions: SessionInfo[] = [
+      { ...session(0), id: "ses_root", projectID: "directory-root", location: { directory: "/repo" } },
+      { ...session(0), id: "ses_nested", projectID: "directory-nested", location: { directory: "/repo/app" } },
+      {
+        ...session(0),
+        id: "ses_alias",
+        projectID: "directory-nested",
+        location: { directory: "/repo/alias/../app" },
+      },
+      { ...session(0), id: "ses_symlink", projectID: "directory-nested", location: { directory: "/shortcut" } },
+      { ...refreshed, projectID: "directory-uncached" },
+      { ...session(0), id: "ses_global", projectID: "global", location: { directory: "/repo/legacy" } },
+      { ...session(0), id: "ses_escaped", projectID: "global", location: { directory: "/repo/../other" } },
+      { ...session(0), id: "ses_other", projectID: "other-repository", location: { directory: "/repo/vendor" } },
+      { ...session(0), id: "ses_sibling", projectID: "global", location: { directory: "/repo-other" } },
+      {
+        ...session(0),
+        id: "ses_remote",
+        projectID: "directory-root",
+        location: { directory: "/repo", workspaceID: "workspace-remote" },
+      },
+    ]
+    sessions.forEach((item) => setup.data.session.remember(item))
+    for (const project of [
+      { id: "directory-root", canonical: "/repo" },
+      { id: "directory-nested", canonical: "/repo/app" },
+    ]) {
+      const updated: OpenCodeEvent = {
+        id: `evt_${project.id}`,
+        created: 0,
+        type: "project.updated",
+        data: { ...project, time: { created: 0, updated: 0 }, sandboxes: [] },
+      }
+      listeners.forEach((listener) => listener({ name: updated.type, details: updated }))
+    }
+
+    const resolved: OpenCodeEvent = {
+      id: "evt_repository_resolved",
+      created: 1,
+      type: "worktree.resolved",
+      durable: { aggregateID: "repository", seq: 0, version: 1 },
+      data: {
+        projectID: "repository",
+        directory: "/repo",
+        previous: "global",
+        adopted: ["directory-root", "directory-nested", "directory-uncached"],
+      },
+    }
+    listeners.forEach((listener) => listener({ name: resolved.type, details: resolved }))
+
+    expect(setup.data.session.get("ses_root")?.projectID).toBe("repository")
+    expect(setup.data.session.get("ses_root")?.subpath).toBeUndefined()
+    expect(setup.data.session.get("ses_nested")).toMatchObject({ projectID: "repository", subpath: "app" })
+    expect(setup.data.session.get("ses_alias")).toMatchObject({ projectID: "repository", subpath: "app" })
+    expect(setup.data.session.get("ses_symlink")).toMatchObject({ projectID: "repository", subpath: "app" })
+    expect(setup.data.session.get("ses_global")).toMatchObject({ projectID: "repository", subpath: "legacy" })
+    expect(setup.data.session.get("ses_escaped")?.projectID).toBe("global")
+    expect(setup.data.session.get("ses_other")?.projectID).toBe("other-repository")
+    expect(setup.data.session.get("ses_sibling")?.projectID).toBe("global")
+    expect(setup.data.session.get("ses_remote")?.projectID).toBe("directory-root")
+    await wait(() => setup.data.session.get("ses_uncached")?.projectID === "repository")
+    expect(setup.data.session.get("ses_uncached")?.subpath).toBe("app")
+  } finally {
+    setup.dispose()
+  }
+})
+
+test("refreshes global credential events across every loaded location and workspace", async () => {
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  const requests: URL[] = []
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      const url = new URL(request.url)
+      requests.push(url)
+      const directory = url.searchParams.get("location[directory]") ?? "/project"
+      return Response.json({
+        location: {
+          directory,
+          workspaceID: url.searchParams.get("location[workspace]") ?? undefined,
+          project: { id: "project", directory, canonical: directory },
+        },
+        data: [],
+      })
+    },
+  })
+  const setup = createRoot((dispose) => ({
+    data: createData({
+      api: () => api,
+      directory: "/project",
+      event: {
+        on: () => () => {},
+        listen(handler) {
+          listeners.add(handler)
+          return () => listeners.delete(handler)
+        },
+      },
+      connection: { status: () => "connected" },
+    }),
+    dispose,
+  }))
+  const locations = [{ directory: "/project" }, { directory: "/other", workspaceID: "workspace-other" }]
+
+  try {
+    await Promise.all(
+      locations.flatMap((location) => [
+        setup.data.location.integration.sync(location),
+        setup.data.location.model.sync(location),
+        setup.data.location.provider.sync(location),
+      ]),
+    )
+    requests.length = 0
+
+    const updated: OpenCodeEvent = {
+      id: "evt_credential.updated",
+      created: 1,
+      type: "credential.updated",
+      data: {},
+    }
+    listeners.forEach((listener) => listener({ name: updated.type, details: updated }))
+    await wait(() => requests.length === 2)
+    expect(
+      requests.map((url) => [
+        url.pathname,
+        url.searchParams.get("location[directory]"),
+        url.searchParams.get("location[workspace]"),
+      ]),
+    ).toEqual([
+      ["/api/integration", "/project", null],
+      ["/api/integration", "/other", "workspace-other"],
+    ])
+    requests.length = 0
+
+    for (const credentialID of ["credential", null]) {
+      const switched: OpenCodeEvent = {
+        id: `evt_credential.switched.${credentialID}`,
+        created: 2,
+        type: "credential.switched",
+        data: { credentialID, integrationID: "integration" },
+      }
+      listeners.forEach((listener) => listener({ name: switched.type, details: switched }))
+      await wait(() => requests.length === 4)
+      expect(
+        requests.map((url) => [
+          url.pathname,
+          url.searchParams.get("location[directory]"),
+          url.searchParams.get("location[workspace]"),
+        ]),
+      ).toEqual(
+        expect.arrayContaining([
+          ["/api/model", "/project", null],
+          ["/api/provider", "/project", null],
+          ["/api/model", "/other", "workspace-other"],
+          ["/api/provider", "/other", "workspace-other"],
+        ]),
+      )
+      requests.length = 0
+    }
+  } finally {
+    setup.dispose()
+  }
+})
+
 test("reports optimistic sessions as creating until the request settles", async () => {
   const release = Promise.withResolvers<void>()
   const api = OpenCode.make({
@@ -130,6 +409,77 @@ test("loads bounded message pages", async () => {
     expect(requests).toHaveLength(2)
     expect(Object.fromEntries(requests[0].searchParams)).toEqual({ limit: "20", order: "desc" })
     expect(Object.fromEntries(requests[1].searchParams)).toEqual({ cursor: "next", limit: "20" })
+  } finally {
+    setup.dispose()
+  }
+})
+
+test("preserves assistant content replacement events across an active message read", async () => {
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  const release = Promise.withResolvers<void>()
+  let requests = 0
+  const content = [
+    { type: "text" as const, text: "replacement" },
+    { type: "reasoning" as const, text: "reasoning", time: { created: 3 } },
+  ]
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async () => {
+      const current = ++requests
+      if (current === 2) await release.promise
+      return Response.json({
+        data: [
+          {
+            id: "msg_assistant",
+            type: "assistant",
+            agent: "build",
+            model: { id: "model", providerID: "provider" },
+            content: current === 3 ? content : [{ type: "text", text: "original" }],
+            time: { created: 1, completed: 2 },
+          },
+        ],
+        cursor: {},
+      })
+    },
+  })
+  const setup = createRoot((dispose) => ({
+    data: createData({
+      api: () => api,
+      directory: "/project",
+      event: {
+        on: () => () => {},
+        listen(handler) {
+          listeners.add(handler)
+          return () => listeners.delete(handler)
+        },
+      },
+    }),
+    dispose,
+  }))
+
+  try {
+    await setup.data.session.message.sync("ses_refresh")
+    setup.data.session.message.invalidate("ses_refresh")
+    const stale = setup.data.session.message.sync("ses_refresh")
+    await wait(() => requests === 2)
+    const updated: OpenCodeEvent = {
+      id: "evt_message_updated",
+      created: 3,
+      type: "session.message.content.updated",
+      durable: { aggregateID: "ses_refresh", seq: 3, version: 1 },
+      data: {
+        sessionID: "ses_refresh",
+        messageID: "msg_assistant",
+        content,
+      },
+    }
+    listeners.forEach((listener) => listener({ name: updated.type, details: updated }))
+
+    expect(setup.data.session.message.list("ses_refresh")[0]).toMatchObject({ content })
+    release.resolve()
+    await stale
+    await wait(() => requests === 3)
+    expect(setup.data.session.message.list("ses_refresh")[0]).toMatchObject({ content })
   } finally {
     setup.dispose()
   }

@@ -113,6 +113,32 @@ test("reactive count updates preserve measured row sizes", () => {
   })
 })
 
+test("explicit measurement refreshes a cached row size with a custom measurer", () => {
+  const root = document.createElement("div")
+  const element = document.createElement("div")
+  element.dataset.index = "0"
+  Object.defineProperty(element, "offsetHeight", { value: 120 })
+
+  const virtualizer = new Virtualizer<HTMLDivElement, HTMLDivElement>({
+    count: 1,
+    estimateSize: () => 60,
+    initialRect: { width: 400, height: 200 },
+    getScrollElement: () => root,
+    scrollToFn: () => {},
+    observeElementRect: () => {},
+    observeElementOffset: () => {},
+    measureElement: (node) => node.offsetHeight,
+  })
+
+  virtualizer.getTotalSize()
+  virtualizer.resizeItem(0, 60)
+  virtualizer._willUpdate()
+  virtualizer.measureElement(element)
+
+  expect(virtualizer.itemSizeCache.get(0)).toBe(120)
+  expect(virtualizer.getTotalSize()).toBe(120)
+})
+
 test("initial rect projects rows before a scroll element connects", () => {
   createRoot((dispose) => {
     const virtualizer = createVirtualizer<HTMLDivElement, HTMLDivElement>({

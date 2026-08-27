@@ -8,7 +8,7 @@ import type { SessionModel } from "./model"
 import { sessionPanelLayout } from "./session-panel-layout"
 import { clampSessionPanelWidth, sessionPanelWidthMax } from "./session-panel-width"
 
-export function createSessionScreenLayout(session: SessionModel, serverScope: string) {
+export function createSessionScreenLayout(session: SessionModel) {
   const layout = useLayout()
   const settings = useSettings()
   const size = createSizing()
@@ -92,7 +92,6 @@ export function createSessionScreenLayout(session: SessionModel, serverScope: st
     centered: createMemo(() => session.isDesktop()),
     files: { open: fileTreeOpen },
     panel: {
-      key: createMemo(() => (session.identity.params.id ? `${serverScope}\0${session.identity.params.id}` : undefined)),
       max: panelMax,
       ref: (element: HTMLDivElement) => {
         row = element

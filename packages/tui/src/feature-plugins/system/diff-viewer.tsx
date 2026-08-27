@@ -424,6 +424,12 @@ function DiffViewer(props: { context: Plugin.Context }) {
       run: close,
     },
     {
+      id: "app.exit",
+      title: "Close diff viewer",
+      group: "VCS",
+      run: close,
+    },
+    {
       id: "diff.down",
       title: "Move diff viewer down",
       group: "VCS",

@@ -7,6 +7,7 @@ import { HttpTransport } from "./transport/index.js"
 import type { HttpMiddleware, Transport, TransportRuntime, WebSocketChannelExecutor } from "./transport/index.js"
 import type { Protocol } from "./protocol.js"
 import { applyCachePolicy } from "../cache-policy.js"
+import { sanitizeSurrogates } from "../utils/sanitize.js"
 import * as ProviderShared from "../protocols/shared.js"
 import type { ProtocolID, ProviderOptions } from "../schema/index.js"
 import {
@@ -88,6 +89,7 @@ export interface RouteDefaultsInput {
 export interface RoutePatch<Body, Prepared> extends RouteDefaultsInput {
   readonly id?: string
   readonly provider?: string | ProviderID
+  readonly providerMetadataKey?: string
   readonly auth?: Auth.Definition
   readonly transport?: Transport<Body, Prepared, unknown>
   readonly endpoint?: EndpointPatch<Body>
@@ -288,11 +290,16 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
       defaults: routeInput.defaults ?? {},
       body: protocol.body,
       with: (patch: RoutePatch<Body, Prepared>) => {
-        const { id, provider, auth, transport, endpoint, ...defaults } = patch
+        const { id, provider, providerMetadataKey, auth, transport, endpoint, ...defaults } = patch
         return build({
           ...routeInput,
           id: id ?? routeInput.id,
           provider: provider ?? routeInput.provider,
+          providerMetadataKey:
+            providerMetadataKey ??
+            (provider !== undefined && String(provider) !== String(routeInput.provider)
+              ? String(provider)
+              : routeInput.providerMetadataKey),
           auth: auth ?? routeInput.auth,
           endpoint: endpoint ? Endpoint.merge(routeInput.endpoint, endpoint) : routeInput.endpoint,
           transport: (transport as Transport<Body, Prepared, Frame> | undefined) ?? routeInput.transport,
@@ -321,12 +328,28 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
                 Stream.mapEffect(decodeEvent(route)),
                 protocol.stream.terminal ? Stream.takeUntil(protocol.stream.terminal) : (stream) => stream,
               )
-              const stream = events.pipe(
-                Stream.mapAccumEffect(
-                  () => protocol.stream.initial(request),
-                  protocol.stream.step,
-                  protocol.stream.onHalt ? { onHalt: protocol.stream.onHalt } : undefined,
-                ),
+              const stream = Stream.suspend(() => {
+                let state = protocol.stream.initial(request)
+                const parsed = events.pipe(
+                  Stream.mapEffect((event) =>
+                    protocol.stream.step(state, event).pipe(
+                      Effect.map(([next, output]) => {
+                        state = next
+                        return output
+                      }),
+                    ),
+                  ),
+                  Stream.flatMap(Stream.fromIterable),
+                )
+                const onHalt = protocol.stream.onHalt
+                return onHalt
+                  ? parsed.pipe(
+                      Stream.concat(
+                        Stream.suspend(() => Stream.unwrap(onHalt(state).pipe(Effect.map(Stream.fromIterable)))),
+                      ),
+                    )
+                  : parsed
+              }).pipe(
                 Stream.catchCause((cause) => Stream.fail(streamError(route, `Failed to read ${route} stream`, cause))),
                 requireTerminalEvent(route),
               )
@@ -382,7 +405,8 @@ export function make<Body, Prepared, Frame, Event, State>(
 }
 
 const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest, options?: StreamOptions) {
-  const resolved = applyCachePolicy(resolveRequestOptions(request))
+  const original = applyCachePolicy(resolveRequestOptions(request))
+  const resolved = LLMRequest.update(original, sanitizeSurrogates({ ...LLMRequest.input(original), model: undefined }))
   const route = resolved.model.route
 
   const body = yield* route.body

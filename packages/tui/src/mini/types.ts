@@ -93,6 +93,7 @@ export type FooterQueuedPrompt = {
   messageID: string
   prompt: RunPrompt
   delivery: RunDelivery
+  skills?: ReadonlyArray<{ id: string; name: string }>
 }
 
 export type QueuedPromptAction = "steer" | "cancel"

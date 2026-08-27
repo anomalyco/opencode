@@ -12,8 +12,12 @@ describe("updater", () => {
   test("automatically updates patches and minors", () => {
     expect(action("1.2.3", "1.2.4", true)).toBe("upgrade")
     expect(action("1.2.3", "1.3.0", true)).toBe("upgrade")
-    expect(action("1.2.3", "1.2.4", "notify")).toBe("upgrade")
-    expect(action("1.2.3", "1.3.0", "notify")).toBe("upgrade")
+  })
+
+  test("reports patches and minors without automatically installing them", () => {
+    expect(action("1.2.3", "1.2.4", "notify")).toBe("notify")
+    expect(action("1.2.3", "1.3.0", "notify")).toBe("notify")
+    expect(action("1.2.3", "1.2.3", "notify")).toBe("none")
   })
 
   test("skips when autoupdate is disabled", () => {

@@ -81,6 +81,10 @@ export function createAppearanceSettingsController() {
       setCode: (value: string) => settings.appearance.setFont(value),
       setTerminal: (value: string) => settings.appearance.setTerminalFont(value),
     },
+    tabs: {
+      current: settings.appearance.tabLayout,
+      select: settings.appearance.setTabLayout,
+    },
   }
 }
 

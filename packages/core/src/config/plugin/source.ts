@@ -4,12 +4,13 @@ import { Directory, Document, type Entry } from "@opencode-ai/schema/config"
 import { ConfigPlugin } from "@opencode-ai/schema/config/plugin"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { Context, Effect, Layer, Option, Predicate, PubSub, Schema, Scope, Stream } from "effect"
+import { Context, Effect, Layer, Option, PubSub, Scope, Stream } from "effect"
 import path from "path"
 import { fileURLToPath } from "url"
 import { Config } from "../../config.js"
 import { Watcher } from "../../filesystem/watcher.js"
 import { Location } from "../../location.js"
+import { PluginSourceDirectory } from "../../plugin/source-directory.js"
 
 export type Operation =
   | {
@@ -124,7 +125,10 @@ const scan = Effect.fn("ConfigPluginSource.scan")(function* (
 ) {
   const discovered = yield* Effect.forEach(
     entries.filter((entry): entry is Directory => entry.type === "directory"),
-    (entry) => discoverDirectory(fs, entry.path),
+    (entry) =>
+      PluginSourceDirectory.discover(fs, entry.path).pipe(
+        Effect.map((targets) => targets.map((target): Operation => ({ type: "add", target, options: {} }))),
+      ),
   ).pipe(Effect.map((items) => items.flat()))
   const configured = entries
     .filter((entry): entry is Document => entry.type === "document")
@@ -153,75 +157,10 @@ const scan = Effect.fn("ConfigPluginSource.scan")(function* (
   })
 })
 
-const sourceDirectories = ["plugin", "plugins"] as const
-const Package = Schema.Struct({
-  exports: Schema.optional(Schema.Unknown),
-  module: Schema.optional(Schema.Unknown),
-  main: Schema.optional(Schema.Unknown),
-})
-const decodePackage = Schema.decodeUnknownOption(Package)
-
-function discoverDirectory(fs: FSUtil.Interface, directory: string) {
-  return Effect.gen(function* () {
-    const children = (yield* Effect.forEach(sourceDirectories, (source) =>
-      fs.readDirectoryEntries(path.join(directory, source)).pipe(
-        Effect.orElseSucceed(() => []),
-        Effect.map((entries) =>
-          entries.map((entry) => ({ ...entry, target: path.join(directory, source, entry.name) })),
-        ),
-      ),
-    ))
-      .flat()
-      .sort((a, b) => (a.target < b.target ? -1 : a.target > b.target ? 1 : 0))
-    const targets = yield* Effect.forEach(children, (entry) => discoverChild(fs, entry))
-    return targets.flatMap(Option.toArray).map((target): Operation => ({ type: "add", target, options: {} }))
-  })
-}
-
-function discoverChild(fs: FSUtil.Interface, entry: FSUtil.DirEntry & { target: string }) {
-  return Effect.gen(function* () {
-    const source = entry.target.endsWith(".ts") || entry.target.endsWith(".js")
-    if (entry.type === "file" && source) return Option.some(entry.target)
-    if (entry.type === "directory") return yield* discoverPackage(fs, entry.target)
-    if (entry.type !== "symlink") return Option.none<string>()
-    if (source && (yield* fs.isFile(entry.target))) return Option.some(entry.target)
-    if (yield* fs.isDir(entry.target)) return yield* discoverPackage(fs, entry.target)
-    return Option.none<string>()
-  })
-}
-
-function discoverPackage(fs: FSUtil.Interface, directory: string) {
-  return Effect.gen(function* () {
-    const root = yield* fs.resolve(directory)
-    const manifest = yield* fs
-      .readJson(path.join(directory, "package.json"))
-      .pipe(Effect.map(decodePackage), Effect.orElseSucceed(Option.none))
-    const configured = Option.isSome(manifest)
-      ? [manifest.value.exports, manifest.value.module, manifest.value.main].filter(Predicate.isString)
-      : []
-    return yield* Effect.findFirst(
-      [...configured, "index.ts", "index.js"]
-        .filter((entry) => !path.isAbsolute(entry))
-        .map((entry) => path.resolve(directory, entry))
-        .filter((entry) => FSUtil.contains(directory, entry)),
-      (entry) =>
-        fs
-          .isFile(entry)
-          .pipe(
-            Effect.flatMap((exists) =>
-              exists
-                ? fs.resolve(entry).pipe(Effect.map((resolved) => FSUtil.contains(root, resolved)))
-                : Effect.succeed(false),
-            ),
-          ),
-    )
-  })
-}
-
 function isPluginSource(entries: readonly Entry[], file: string) {
   return entries.some(
     (entry) =>
       entry.type === "directory" &&
-      sourceDirectories.some((directory) => FSUtil.contains(path.join(entry.path, directory), file)),
+      PluginSourceDirectory.names.some((directory) => FSUtil.contains(path.join(entry.path, directory), file)),
   )
 }

@@ -38,7 +38,7 @@ export function currentContentDefaultOpen(
   // Errored tools render the error card, which starts collapsed.
   if (content.state.status === "error") return false
   if (content.name === "shell" || content.name === "execute") return shellExpanded
-  if (content.name === "patch") return true
+  if (content.name === "patch") return editExpanded
   if (content.name !== "edit" && content.name !== "write") return undefined
   if (!editExpanded) return false
   const files = currentToolMetadata(content).files

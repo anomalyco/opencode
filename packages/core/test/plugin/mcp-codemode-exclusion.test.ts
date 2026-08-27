@@ -21,7 +21,12 @@ it.effect("defaults only known Code Mode MCP servers to direct tools", () =>
       {
         name: "cloudflare code mode",
         server: { type: "remote", url: "https://mcp.cloudflare.com/mcp/" },
-        codemode: false,
+        codemode: undefined,
+      },
+      {
+        name: "cloudflare raw tools",
+        server: { type: "remote", url: "https://mcp.cloudflare.com/mcp?codemode=false" },
+        codemode: undefined,
       },
       {
         name: "cloudflare docs",

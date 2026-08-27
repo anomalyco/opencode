@@ -2,7 +2,6 @@ export * as PluginRuntime from "./runtime.js"
 
 import { Context, Effect, Layer } from "effect"
 import { Agent } from "../agent.js"
-import { Mcp } from "@opencode-ai/schema/mcp"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { Job } from "../job.js"
 import { Location } from "../location.js"
@@ -20,14 +19,16 @@ export interface Interface {
     | "generate"
     | "command"
     | "rename"
+    | "move"
     | "resume"
     | "switchAgent"
     | "switchModel"
     | "interrupt"
     | "synthetic"
     | "wait"
+    | "context"
   >
-  readonly job: Pick<Job.Interface, "start" | "wait" | "block" | "background" | "cancel">
+  readonly job: Pick<Job.Interface, "start" | "wait" | "block" | "background" | "cancel" | "completeBackground">
   readonly location: {
     readonly agent: {
       readonly list: (
@@ -38,10 +39,6 @@ export interface Interface {
       readonly list: (
         ref: Location.Ref,
       ) => Effect.Effect<{ readonly location: Location.Info; readonly data: MCP.ServerInfo[] }, unknown>
-      readonly add: (ref: Location.Ref, server: string, config: Mcp.ServerConfig) => Effect.Effect<void, unknown>
-      readonly remove: (ref: Location.Ref, server: string) => Effect.Effect<void, unknown>
-      readonly connect: (ref: Location.Ref, server: string) => Effect.Effect<void, unknown>
-      readonly disconnect: (ref: Location.Ref, server: string) => Effect.Effect<void, unknown>
     }
   }
 }
@@ -75,12 +72,14 @@ export const layerWithCell = (cell: Cell) =>
         generate: (input) => require(cell, (runtime) => runtime.session.generate(input)),
         command: (input) => require(cell, (runtime) => runtime.session.command(input)),
         rename: (input) => require(cell, (runtime) => runtime.session.rename(input)),
+        move: (input) => require(cell, (runtime) => runtime.session.move(input)),
         resume: (sessionID) => require(cell, (runtime) => runtime.session.resume(sessionID)),
         switchAgent: (input) => require(cell, (runtime) => runtime.session.switchAgent(input)),
         switchModel: (input) => require(cell, (runtime) => runtime.session.switchModel(input)),
         interrupt: (sessionID) => require(cell, (runtime) => runtime.session.interrupt(sessionID)),
         synthetic: (input) => require(cell, (runtime) => runtime.session.synthetic(input)),
         wait: (sessionID) => require(cell, (runtime) => runtime.session.wait(sessionID)),
+        context: (sessionID) => require(cell, (runtime) => runtime.session.context(sessionID)),
       },
       job: {
         start: (input) => require(cell, (runtime) => runtime.job.start(input)),
@@ -88,6 +87,8 @@ export const layerWithCell = (cell: Cell) =>
         block: (input) => require(cell, (runtime) => runtime.job.block(input)),
         background: (id) => require(cell, (runtime) => runtime.job.background(id)),
         cancel: (id) => require(cell, (runtime) => runtime.job.cancel(id)),
+        completeBackground: (notificationID) =>
+          require(cell, (runtime) => runtime.job.completeBackground(notificationID)),
       },
       location: {
         agent: {
@@ -95,10 +96,6 @@ export const layerWithCell = (cell: Cell) =>
         },
         mcp: {
           list: (ref) => require(cell, (runtime) => runtime.location.mcp.list(ref)),
-          add: (ref, server, config) => require(cell, (runtime) => runtime.location.mcp.add(ref, server, config)),
-          remove: (ref, server) => require(cell, (runtime) => runtime.location.mcp.remove(ref, server)),
-          connect: (ref, server) => require(cell, (runtime) => runtime.location.mcp.connect(ref, server)),
-          disconnect: (ref, server) => require(cell, (runtime) => runtime.location.mcp.disconnect(ref, server)),
         },
       },
     }),
@@ -143,14 +140,6 @@ export const providerLayerWithCell = (cell: Cell) =>
                   data: yield* mcp.servers(),
                 }
               }).pipe(Effect.provide(locations.get(ref))),
-            add: (ref, server, config) =>
-              MCP.Service.use((mcp) => mcp.add(server, config)).pipe(Effect.provide(locations.get(ref))),
-            remove: (ref, server) =>
-              MCP.Service.use((mcp) => mcp.remove(server)).pipe(Effect.provide(locations.get(ref))),
-            connect: (ref, server) =>
-              MCP.Service.use((mcp) => mcp.connect(server)).pipe(Effect.provide(locations.get(ref))),
-            disconnect: (ref, server) =>
-              MCP.Service.use((mcp) => mcp.disconnect(server)).pipe(Effect.provide(locations.get(ref))),
           },
         },
       }

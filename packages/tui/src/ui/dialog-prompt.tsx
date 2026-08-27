@@ -100,11 +100,11 @@ export function DialogPrompt(props: DialogPromptProps) {
           cursorStyle={config.cursor}
         />
         <Show when={props.busy}>
-          <Spinner color={theme.text.subdued}>{props.busyText ?? "Working..."}</Spinner>
+          <Spinner color={theme.text.subdued}>{props.busyText ?? "Working…"}</Spinner>
         </Show>
       </box>
       <box paddingBottom={1} gap={1} flexDirection="row">
-        <Show when={!props.busy} fallback={<text fg={theme.text.subdued}>processing...</text>}>
+        <Show when={!props.busy} fallback={<text fg={theme.text.subdued}>processing…</text>}>
           <Show when={shortcuts.get("dialog.prompt.submit")}>
             <text fg={theme.text.default}>
               {shortcuts.get("dialog.prompt.submit")} <span style={{ fg: theme.text.subdued }}>submit</span>

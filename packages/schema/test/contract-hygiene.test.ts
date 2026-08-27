@@ -6,6 +6,7 @@ import { Form } from "../src/form.js"
 import { Mcp } from "../src/mcp.js"
 import { Model } from "../src/model.js"
 import { Project } from "../src/project.js"
+import { SkillAttachment } from "../src/prompt.js"
 import { Provider } from "../src/provider.js"
 import { Pty } from "../src/pty.js"
 import { Session } from "../src/session.js"
@@ -77,6 +78,16 @@ describe("contract hygiene", () => {
         time: { ...info.time, idle: DateTime.makeUnsafe(2), viewed: DateTime.makeUnsafe(1) },
       }).time,
     ).toEqual({ created: 0, updated: 0, idle: 2, viewed: 1 })
+  })
+
+  test("skill attachments retain legacy references while accepting prepared instructions", () => {
+    const reference = { id: Skill.ID.make("effect"), name: Skill.Name.make("Effect") }
+    expect(Schema.decodeUnknownSync(SkillAttachment)(reference)).toEqual(reference)
+    expect(Schema.encodeSync(SkillAttachment)({ ...reference, text: undefined })).toEqual(reference)
+    expect(Schema.decodeUnknownSync(SkillAttachment)({ ...reference, text: "Use Effect" })).toEqual({
+      ...reference,
+      text: "Use Effect",
+    })
   })
 
   test("session inbox items omit the internal enqueue sequence", () => {

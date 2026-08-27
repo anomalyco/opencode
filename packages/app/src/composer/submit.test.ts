@@ -229,6 +229,50 @@ describe("Composer submission", () => {
     })
   })
 
+  test("previews the first prompt while starting and hands it off before completing preparation", async () => {
+    const draft = createMemoryComposerState({ prompt: "prepare my worktree" }).capture()
+    const preview = Promise.withResolvers<SessionMessageUser>()
+    const ready = Promise.withResolvers<void>()
+    const calls: string[] = []
+    const handoff: SessionMessageUser[] = []
+    const target = session({
+      calls,
+      handoff: { set: (message) => handoff.push(message), clear() {} },
+      prompt: async () => undefined,
+    })
+    const adapter: NewSessionComposerAdapter = {
+      kind: "new-session",
+      state: draft,
+      ready: () => true,
+      controls,
+      working: () => false,
+      submitted() {},
+      async start(_selection, _submission, message) {
+        preview.resolve(message)
+        await ready.promise
+        return {
+          session: target,
+          cleanupReady: Promise.resolve(),
+          async complete() {
+            expect(handoff).toHaveLength(1)
+            expect(handoff[0]?.id).toBe(message.id)
+            expect(handoff[0]?.text).toBe("prepare my worktree")
+            calls.push("complete")
+          },
+        }
+      },
+    }
+
+    const submitted = submitInput(adapter).submit(new Event("submit"))
+    expect(await preview.promise).toMatchObject({ type: "user", text: "prepare my worktree" })
+    expect(calls).toEqual([])
+    expect(draft.current()).toMatchObject([{ content: "prepare my worktree" }])
+    ready.resolve()
+    await submitted
+    expect(calls).toContain("complete")
+    expect(draft.current()).toEqual([{ type: "text", content: "", start: 0, end: 0 }])
+  })
+
   test("does not restore a prompt already acknowledged by the durable inbox", async () => {
     const state = createMemoryComposerState({ prompt: "admitted prompt" }).capture()
     const checked = Promise.withResolvers<void>()

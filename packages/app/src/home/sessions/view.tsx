@@ -1,6 +1,6 @@
 import type { SessionInfo } from "@opencode-ai/client/promise"
 import { Key } from "@solid-primitives/keyed"
-import { createMemo, For, Index, onCleanup, Show, Suspense } from "solid-js"
+import { createMemo, For, Index, onCleanup, Show } from "solid-js"
 import { createStore, type SetStoreFunction } from "solid-js/store"
 import { InlineInput } from "@opencode-ai/ui/inline-input"
 import { Spinner } from "@opencode-ai/ui/spinner"
@@ -44,6 +44,7 @@ function isBackgroundOpen(event: MouseEvent) {
 export type HomeSessionsViewProps = {
   language: ReturnType<typeof useLanguage>
   groups: HomeSessionGroup[]
+  loading: boolean
   showProjectName: boolean
   server: ServerConnection.Key
   canCreateSession: boolean
@@ -97,22 +98,20 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
     >
       <div class="sticky top-0 z-30 shrink-0 bg-v2-background-bg-base pb-3 pt-6 lg:pt-12" onWheel={props.onWheel}>
         <HomeSessionSearch {...props} />
-        <Suspense>
-          <Show when={props.groups.length > 0 && props.canCreateSession}>
-            <div class="pointer-events-none absolute right-0 top-[84px] z-20 flex lg:top-[108px]">
-              <Button
-                data-action="home-new-session"
-                variant="ghost-muted"
-                size="normal"
-                icon="edit"
-                class="pointer-events-auto h-7 px-2 [font-weight:530]"
-                onClick={props.onCreateSession}
-              >
-                {props.language.t("command.session.new")}
-              </Button>
-            </div>
-          </Show>
-        </Suspense>
+        <Show when={props.groups.length > 0 && props.canCreateSession}>
+          <div class="pointer-events-none absolute right-0 top-[84px] z-20 flex lg:top-[108px]">
+            <Button
+              data-action="home-new-session"
+              variant="ghost-muted"
+              size="normal"
+              icon="edit"
+              class="pointer-events-auto h-7 px-2 [font-weight:530]"
+              onClick={props.onCreateSession}
+            >
+              {props.language.t("command.session.new")}
+            </Button>
+          </div>
+        </Show>
       </div>
       <div class="pointer-events-none sticky top-[84px] z-40 h-0 -mr-3 lg:top-[108px]">
         <div
@@ -122,7 +121,8 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
         />
       </div>
       <div class="-mr-3 min-h-[calc(100cqh-72px)] lg:min-h-[calc(100cqh-96px)]">
-        <Suspense
+        <Show
+          when={!props.loading}
           fallback={
             <div class="pt-3">
               <HomeSessionSkeleton label={props.language.t("common.loading")} />
@@ -164,7 +164,7 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
               </Index>
             </div>
           </Show>
-        </Suspense>
+        </Show>
       </div>
     </section>
   )

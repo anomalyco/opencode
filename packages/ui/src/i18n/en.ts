@@ -110,6 +110,7 @@ const source = {
   "ui.messagePart.context.list.other": "{{count}} lists",
   "ui.messagePart.context.match.one": "({{count}} match)",
   "ui.messagePart.context.match.other": "({{count}} matches)",
+  "ui.messagePart.tools.used": "Used {{tools}}",
 
   "ui.list.loading": "Loading",
   "ui.list.empty": "No results",
@@ -131,6 +132,7 @@ const source = {
   "ui.promptInput.label": "Prompt",
   "ui.promptInput.placeholder.shell": "Enter shell command...",
   "ui.promptInput.placeholder.normal": "Ask anything, {{slash}} for commands, {{at}} for context...",
+  "ui.promptInput.placeholder.followUp": "Add follow-up, {{slash}} for commands, {{at}} for context...",
   "ui.promptInput.add": "Add images and files",
   "ui.promptInput.attachments": "Images and files",
   "ui.promptInput.context": "Context",
@@ -140,6 +142,9 @@ const source = {
   "ui.promptInput.chooseVariant": "Choose model variant",
   "ui.promptInput.send": "Send",
   "ui.promptInput.stop": "Stop",
+  "ui.promptInput.steer": "Steer",
+  "ui.promptInput.queue": "Queue",
+  "ui.promptInput.steerHint": "Send without interrupting",
 
   "ui.tabs.close": "Close tab",
 
@@ -154,6 +159,8 @@ const source = {
   "ui.tool.loaded": "Loaded",
   "ui.tool.loadedFile": "Loaded {{path}}",
   "ui.tool.loadedSkill": "Loaded {{name}} skill",
+  "ui.tool.loadedSkills.one": "Loaded {{name}} skill",
+  "ui.tool.loadedSkills.other": "Loaded {{name}} skills",
   "ui.tool.list": "List",
   "ui.tool.glob": "Glob",
   "ui.tool.grep": "Grep",
@@ -207,6 +214,7 @@ const source = {
   "ui.message.revertMessage": "Revert message",
   "ui.message.copyResponse": "Copy response",
   "ui.message.copied": "Copied",
+  "ui.message.thought": "Thought",
   "ui.message.duration.seconds": "{{count}}s",
   "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",
   "ui.message.interrupted": "Interrupted",

@@ -74,6 +74,7 @@ describe("SkillTool", () => {
             Skill.Service.of({
               transform: (_transform) => Effect.die("unused"),
               reload: () => Effect.die("unused"),
+              get: (id) => Effect.succeed(current.find((skill) => skill.id === id)),
               list: () => Effect.succeed(current),
             }),
           )

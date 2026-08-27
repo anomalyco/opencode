@@ -35,7 +35,8 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
 import { McpTool } from "@opencode-ai/core/tool/mcp"
 import { Tool } from "@opencode-ai/core/tool"
-import { DateTime, Deferred, Effect, Exit, Fiber, Layer, PubSub, Schedule, Schema, Sink, Stream } from "effect"
+import { DateTime, Deferred, Effect, Exit, Fiber, Layer, PubSub, Ref, Schedule, Schema, Sink, Stream } from "effect"
+import { TestClock } from "effect/testing"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { ExitCode, makeHandle, ProcessId } from "effect/unstable/process/ChildProcessSpawner"
 import { Image } from "@opencode-ai/core/image"
@@ -77,6 +78,7 @@ function resourceServer(
         templateLists: 0,
         toolLists: 0,
         initializations: 0,
+        urls: [] as string[],
       }
       const protocol = new Server(
         { name: "mcp-resources", version: "1.0.0" },
@@ -145,6 +147,7 @@ function resourceServer(
       const http = Bun.serve({
         port: 0,
         fetch: async (request) => {
+          state.urls.push(request.url)
           const body: unknown = request.method === "POST" ? await request.clone().json() : undefined
           if (typeof body === "object" && body !== null && "method" in body && body.method === "initialize") {
             state.initializations += 1
@@ -234,6 +237,7 @@ function resourceMcpLayer(
             active: unusedIntegration,
             resolve: unusedIntegration,
             key: unusedIntegration,
+            activate: unusedIntegration,
             update: unusedIntegration,
             remove: unusedIntegration,
           },
@@ -717,6 +721,40 @@ test("applies configured MCP timeouts to resource operations", async () => {
   await expect(read).rejects.toThrow("Request timed out")
 })
 
+for (const entry of [
+  { name: "default", query: "", codemode: undefined, expected: "?codemode=false" },
+  { name: "explicit local code mode", query: "", codemode: true, expected: "?codemode=false" },
+  { name: "direct tools", query: "", codemode: false, expected: "" },
+  {
+    name: "existing query",
+    query: "?source=opencode",
+    codemode: undefined,
+    expected: "?source=opencode&codemode=false",
+  },
+  { name: "explicit remote code mode", query: "?codemode=true", codemode: undefined, expected: "?codemode=true" },
+  { name: "explicit remote opt-out", query: "?codemode=false", codemode: undefined, expected: "?codemode=false" },
+  { name: "portal opt-out", query: "?codemode=off", codemode: undefined, expected: "?codemode=off" },
+]) {
+  testEffect(Layer.empty).live(`remote MCP code mode preference: ${entry.name}`, () =>
+    Effect.gen(function* () {
+      const server = yield* resourceServer()
+      const config = new ConfigMCP.Remote({
+        type: "remote",
+        url: server.url + entry.query,
+        oauth: false,
+        codemode: entry.codemode,
+      })
+      const connection = yield* connect("resources", config, import.meta.dir)
+      yield* connection.tools()
+      expect(server.state.initializations).toBe(1)
+      expect(server.state.toolLists).toBe(1)
+      expect(server.state.urls.length).toBeGreaterThanOrEqual(3)
+      expect(new Set(server.state.urls)).toEqual(new Set([server.url + entry.expected]))
+      expect(config.url).toBe(server.url + entry.query)
+    }),
+  )
+}
+
 test("lists, reads, and reports MCP resource changes", async () => {
   await Effect.runPromise(
     Effect.scoped(
@@ -995,6 +1033,58 @@ test("adds, disconnects, and reconnects MCP servers at runtime", async () => {
   )
 })
 
+testEffect(resourceMcpLayer(new ConfigMCP.Local({ type: "local", command: ["unused"], disabled: true }))).live(
+  "manages live MCP servers entirely through scoped transforms",
+  () =>
+    Effect.gen(function* () {
+      const service = yield* MCP.Service
+
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          yield* service.transform((draft) => {
+            draft.set("dynamic", {
+              type: "local",
+              command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-output-schema.ts")],
+            })
+          })
+          expect((yield* service.servers()).find((server) => server.name === "dynamic")?.status.status).toBe(
+            "connected",
+          )
+          expect(yield* service.tools()).toHaveLength(2)
+
+          const settings = { disabled: true }
+          yield* service.transform((draft) => {
+            draft.update("dynamic", (server) => {
+              server.disabled = settings.disabled
+            })
+          })
+          expect((yield* service.servers()).find((server) => server.name === "dynamic")?.status.status).toBe("disabled")
+          expect(yield* service.tools()).toEqual([])
+
+          settings.disabled = false
+          yield* service.reload()
+          expect((yield* service.servers()).find((server) => server.name === "dynamic")?.status.status).toBe(
+            "connected",
+          )
+          expect(yield* service.tools()).toHaveLength(2)
+
+          const removed = yield* service.transform((draft) => draft.remove("dynamic"))
+          expect((yield* service.servers()).some((server) => server.name === "dynamic")).toBe(false)
+          expect(yield* service.tools()).toEqual([])
+
+          yield* removed.dispose
+          expect((yield* service.servers()).find((server) => server.name === "dynamic")?.status.status).toBe(
+            "connected",
+          )
+          expect(yield* service.tools()).toHaveLength(2)
+        }),
+      )
+
+      expect((yield* service.servers()).map((server) => server.name)).toEqual([MCP.ServerName.make("resources")])
+      expect(yield* service.tools()).toEqual([])
+    }),
+)
+
 test("restores runtime MCP config when a transform is disposed", async () => {
   await Effect.runPromise(
     Effect.scoped(
@@ -1024,9 +1114,7 @@ test("restores runtime MCP config when a transform is disposed", async () => {
         yield* transformed.dispose
         expect(observed).toBe("original")
       }).pipe(
-        Effect.provide(
-          resourceMcpLayer(new ConfigMCP.Local({ type: "local", command: ["unused"], disabled: true })),
-        ),
+        Effect.provide(resourceMcpLayer(new ConfigMCP.Local({ type: "local", command: ["unused"], disabled: true }))),
       ),
     ),
   )
@@ -1190,6 +1278,197 @@ test("serializes concurrent MCP lifecycle operations", async () => {
           ),
         )
       }),
+    ),
+  )
+})
+
+testEffect(Layer.empty).live("isolates invalid MCP tools and preserves plugin transforms through catalog updates", () =>
+  Effect.gen(function* () {
+    const tool = (server: string, name: string, description = name) =>
+      new MCP.Tool({
+        server: MCP.ServerName.make(server),
+        name,
+        description,
+        codemode: false,
+        inputSchema: { type: "object", properties: {} },
+      })
+    const healthy = [tool("demo", "search"), tool("other", "lookup")]
+    const namespace = tool("x".repeat(65), "lookup")
+    const catalog = yield* Ref.make([tool("demo", "x".repeat(65)), ...healthy, namespace])
+
+    yield* Effect.gen(function* () {
+      const registry = yield* Tool.Service
+      const registration = yield* McpTool.Service
+      const bus = yield* Bus.Service
+      yield* registration.flush
+      expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual([
+        "demo_search",
+        "other_lookup",
+        "execute",
+      ])
+      const override = yield* registry.transform((draft) => {
+        draft.add({
+          name: "search",
+          options: { namespace: "demo", codemode: false },
+          description: "Override search",
+          input: Schema.Struct({}),
+          output: Schema.String,
+          execute: () => Effect.succeed({ output: "override" }),
+        })
+      })
+      const mutation = yield* registry.transform((draft) => {
+        draft.update("other_lookup", (tool) => {
+          tool.description += " updated"
+        })
+        draft.remove("repaired_lookup")
+      })
+
+      yield* Ref.set(catalog, [tool("demo", "y".repeat(65)), ...healthy, tool("demo", "added"), namespace])
+      yield* bus.publish(McpEvent.ToolsChanged, { server: "demo" })
+      yield* waitForTool(registry, "demo_added")
+      expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual([
+        "demo_added",
+        "demo_search",
+        "other_lookup",
+        "execute",
+      ])
+      expect((yield* toolDefinitions(registry)).find((tool) => tool.name === "demo_search")?.description).toBe(
+        "Override search",
+      )
+      expect((yield* toolDefinitions(registry)).find((tool) => tool.name === "other_lookup")?.description).toBe(
+        "lookup updated",
+      )
+      yield* Effect.forEach(["demo_search", "other_lookup"], (name) =>
+        executeTool(registry, {
+          sessionID: Session.ID.make("ses_mcp_invalid_catalog"),
+          ...toolIdentity,
+          call: { type: "tool-call", id: `call_${name}`, name, input: {} },
+        }).pipe(
+          Effect.tap((result) =>
+            Effect.sync(() =>
+              expect(result).toMatchObject({
+                status: "completed",
+                output: name === "demo_search" ? "override" : "healthy",
+              }),
+            ),
+          ),
+        ),
+      )
+
+      yield* Ref.set(catalog, [
+        tool("demo", "status"),
+        tool("other", "lookup"),
+        tool("demo", "added"),
+        tool("repaired", "lookup"),
+      ])
+      yield* bus.publish(McpEvent.ToolsChanged, { server: "demo" })
+      yield* waitForTool(registry, "demo_status")
+      expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual([
+        "demo_added",
+        "demo_search",
+        "demo_status",
+        "other_lookup",
+        "execute",
+      ])
+      expect((yield* toolDefinitions(registry)).find((tool) => tool.name === "demo_search")?.description).toBe(
+        "Override search",
+      )
+      expect((yield* toolDefinitions(registry)).find((tool) => tool.name === "other_lookup")?.description).toBe(
+        "lookup updated",
+      )
+      yield* mutation.dispose
+      expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toContain("repaired_lookup")
+      expect((yield* toolDefinitions(registry)).find((tool) => tool.name === "other_lookup")?.description).toBe(
+        "lookup",
+      )
+
+      yield* Ref.set(catalog, [tool("demo", "search", "Latest search"), tool("demo", "refreshed")])
+      yield* bus.publish(McpEvent.ToolsChanged, { server: "demo" })
+      yield* waitForTool(registry, "demo_refreshed")
+      expect((yield* toolDefinitions(registry)).find((tool) => tool.name === "demo_search")?.description).toBe(
+        "Override search",
+      )
+
+      yield* override.dispose
+      expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual([
+        "demo_refreshed",
+        "demo_search",
+        "execute",
+      ])
+      expect((yield* toolDefinitions(registry)).find((tool) => tool.name === "demo_search")?.description).toBe(
+        "Latest search",
+      )
+      expect(
+        yield* executeTool(registry, {
+          sessionID: Session.ID.make("ses_mcp_invalid_catalog"),
+          ...toolIdentity,
+          call: { type: "tool-call", id: "call_restored_search", name: "demo_search", input: {} },
+        }),
+      ).toMatchObject({ status: "completed", output: "healthy" })
+    }).pipe(
+      Effect.provide(
+        Layer.fresh(
+          AppNodeBuilder.build(LayerNode.group([Tool.node, McpTool.node, Bus.node]), [
+            [
+              MCP.node,
+              Layer.mock(MCP.Service, {
+                tools: () => Ref.get(catalog),
+                callTool: (input) =>
+                  Effect.succeed(
+                    new MCP.ToolResult({
+                      server: MCP.ServerName.make(input.server),
+                      tool: input.name,
+                      isError: false,
+                      content: [{ type: "text", text: "healthy" }],
+                    }),
+                  ),
+              }),
+            ],
+            [Permission.node, Layer.mock(Permission.Service, { assert: () => Effect.void })],
+            [Image.node, imagePassthrough],
+          ]),
+        ),
+      ),
+    )
+  }),
+)
+
+testEffect(Layer.empty).effect("coalesces queued MCP tool notifications after initial registration", () => {
+  let reads = 0
+  return Effect.gen(function* () {
+    const registry = yield* Tool.Service
+    const registration = yield* McpTool.Service
+    const bus = yield* Bus.Service
+    yield* registration.flush
+    expect(reads).toBe(1)
+    expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["demo_read_1", "execute"])
+
+    yield* bus.publish(McpEvent.ToolsChanged, { server: "demo" })
+    yield* TestClock.adjust("250 millis")
+    yield* Effect.forEach(Array.from({ length: 20 }), () => bus.publish(McpEvent.ToolsChanged, { server: "demo" }))
+    yield* TestClock.adjust("2 seconds")
+    expect(reads).toBe(3)
+    expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["demo_read_3", "execute"])
+  }).pipe(
+    Effect.provide(
+      AppNodeBuilder.build(LayerNode.group([Tool.node, McpTool.node, Bus.node]), [
+        [
+          MCP.node,
+          Layer.mock(MCP.Service, {
+            tools: () =>
+              Effect.sync(() => [
+                new MCP.Tool({
+                  server: MCP.ServerName.make("demo"),
+                  name: `read_${++reads}`,
+                  codemode: false,
+                  inputSchema: { type: "object", properties: {} },
+                }),
+              ]),
+          }),
+        ],
+        [Permission.node, Layer.mock(Permission.Service, { assert: () => Effect.void })],
+        [Image.node, imagePassthrough],
+      ]),
     ),
   )
 })

@@ -23,6 +23,14 @@ export const VcsHandler = HttpApiBuilder.group(Api, "server.vcs", (handlers) =>
           }),
         ),
       )
+      .handle("vcs.branches", (ctx) =>
+        response(
+          Effect.gen(function* () {
+            const vcs = yield* Vcs.Service
+            return yield* vcs.branches({ search: ctx.query.search, limit: Math.min(ctx.query.limit ?? 50, 100) })
+          }),
+        ),
+      )
       .handle("vcs.diff", (ctx) =>
         response(
           Effect.gen(function* () {

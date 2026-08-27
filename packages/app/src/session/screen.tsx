@@ -4,7 +4,6 @@ import createPresence from "solid-presence"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { SessionHeader } from "@/session/header/session-header"
 import { useLayout } from "@/shell/state/layout"
-import { useServerSDK } from "@/runtime/server/client"
 import { useSettings } from "@/settings/model"
 import { MessageTimeline } from "@/session/timeline/message-timeline"
 import type { SessionModel } from "@/session/model"
@@ -23,10 +22,9 @@ import { SessionIdentityHeader } from "./session-identity-header"
 export function SessionScreen(props: { session: SessionModel }) {
   const session = props.session
   const layout = useLayout()
-  const serverSDK = useServerSDK()
   const settings = useSettings()
   const isDesktop = session.isDesktop
-  const screen = createSessionScreenLayout(session, serverSDK.scope)
+  const screen = createSessionScreenLayout(session)
   const timeline = createSessionTimelineInteraction(session)
   const messagesReady = timeline.ready
   const [store, setStore] = createStore({
@@ -164,7 +162,7 @@ export function SessionScreen(props: { session: SessionModel }) {
   return (
     <>
       <SessionHeader />
-      <div class="flex-1 min-h-0 flex flex-col gap-2 p-2">
+      <div class="flex-1 min-h-0 flex flex-col gap-2 px-2 pb-2 pt-[var(--shell-top-inset,8px)]">
         <div ref={screen.panel.ref} class="relative flex-1 min-h-0 flex flex-col md:flex-row gap-2">
           <div
             classList={{
@@ -177,12 +175,10 @@ export function SessionScreen(props: { session: SessionModel }) {
               width: screen.panel.width(),
             }}
           >
-            <Show when={screen.panel.key()} keyed>
-              {(_) => (
-                <SessionPanelFrame raised={!!session.identity.params.id}>
-                  <ErrorBoundary fallback={sessionErrorFallback}>{sessionPanelContent()}</ErrorBoundary>
-                </SessionPanelFrame>
-              )}
+            <Show when={!!session.identity.params.id}>
+              <SessionPanelFrame raised>
+                <ErrorBoundary fallback={sessionErrorFallback}>{sessionPanelContent()}</ErrorBoundary>
+              </SessionPanelFrame>
             </Show>
 
             <Show when={screen.panel.resizable()}>

@@ -1,8 +1,8 @@
 export * as Npm from "./npm.js"
 
 import path from "path"
+import { createHash } from "node:crypto"
 import { Effect, Schema, Context, Layer, Option, FileSystem } from "effect"
-import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem"
 import { FSUtil } from "./fs-util.js"
 import { Global } from "./global.js"
 import { EffectFlock } from "./effect-flock.js"
@@ -27,7 +27,7 @@ export interface EntryPoint {
 export interface Interface {
   readonly add: (
     pkg: string,
-    options?: { readonly subpaths?: readonly string[] },
+    options?: { readonly subpaths?: readonly string[]; readonly refresh?: boolean },
   ) => Effect.Effect<EntryPoint, InstallFailedError | EffectFlock.LockError>
   readonly resolve: (pkg: string, options?: { readonly subpaths?: readonly string[] }) => Effect.Effect<EntryPoint>
   readonly which: (pkg: string, bin?: string) => Effect.Effect<string | undefined>
@@ -50,6 +50,26 @@ export async function isRegistryPackage(pkg: string) {
   } catch {
     return false
   }
+}
+
+export async function isInstallablePackage(pkg: string) {
+  const { default: npa } = await import("npm-package-arg")
+  try {
+    const result = npa(pkg)
+    return result.type === "git" || (result.name !== undefined && ["version", "range", "tag"].includes(result.type))
+  } catch {
+    return false
+  }
+}
+
+export async function cacheKey(pkg: string) {
+  const { default: npa } = await import("npm-package-arg")
+  try {
+    if (npa(pkg).type === "git") return `git-${createHash("sha256").update(pkg).digest("hex")}`
+  } catch {
+    // Preserve the existing fallback for invalid and non-registry package strings.
+  }
+  return sanitize(pkg)
 }
 
 const resolveEntryPoint = (name: string, dir: string, subpaths: readonly string[] = [""]): EntryPoint => {
@@ -77,6 +97,10 @@ interface ArboristTree {
   edgesOut: Map<string, { to?: ArboristNode }>
 }
 
+const PackageJson = Schema.Struct({
+  dependencies: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+})
+
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -84,15 +108,32 @@ const layer = Layer.effect(
     const global = yield* Global.Service
     const fs = yield* FileSystem.FileSystem
     const flock = yield* EffectFlock.Service
-    const directory = (pkg: string) => path.join(global.cache, "packages", sanitize(pkg))
-    const reify = (input: { dir: string; add?: string[] }) =>
+    const directory = (pkg: string) =>
+      Effect.map(
+        Effect.promise(() => cacheKey(pkg)),
+        (key) => path.join(global.cache, "packages", key),
+      )
+    const installedName = Effect.fnUntraced(function* (pkg: string, dir: string, parsedName?: string) {
+      if (parsedName) return parsedName
+      const manifest = yield* afs
+        .readJson(path.join(dir, "package.json"))
+        .pipe(Effect.flatMap(Schema.decodeUnknownEffect(PackageJson)), Effect.option)
+      if (Option.isSome(manifest)) {
+        const name = Object.keys(manifest.value.dependencies ?? {})[0]
+        if (name) return name
+      }
+      return pkg
+    })
+    const refreshed = new Set<string>()
+    const reify = (input: { dir: string; add?: string[]; update?: boolean }) =>
       Effect.gen(function* () {
         yield* flock.acquire(`npm-install:${input.dir}`)
         const { Arborist } = yield* Effect.promise(() => import("@npmcli/arborist"))
         const add = input.add ?? []
         const npmOptions = yield* NpmConfig.load(input.dir)
+        const options = input.update ? { ...npmOptions, preferOnline: true, noGitRevCache: true } : npmOptions
         const arborist = new Arborist({
-          ...npmOptions,
+          ...options,
           path: input.dir,
           binLinks: true,
           progress: false,
@@ -102,8 +143,9 @@ const layer = Layer.effect(
         return yield* Effect.tryPromise({
           try: () =>
             arborist.reify({
-              ...npmOptions,
+              ...options,
               add,
+              update: input.update,
               save: true,
               saveType: "prod",
             }),
@@ -120,25 +162,41 @@ const layer = Layer.effect(
         }),
       )
 
-    const add = Effect.fn("Npm.add")(function* (pkg: string, options?: { readonly subpaths?: readonly string[] }) {
+    const add = Effect.fn("Npm.add")(function* (
+      pkg: string,
+      options?: { readonly subpaths?: readonly string[]; readonly refresh?: boolean },
+    ) {
       const { default: npa } = yield* Effect.promise(() => import("npm-package-arg"))
-      const dir = directory(pkg)
-      const name = (() => {
+      const parsed = (() => {
         try {
-          return npa(pkg).name ?? pkg
+          return npa(pkg)
         } catch {
-          return pkg
+          return undefined
         }
       })()
+      const parsedName = parsed?.name ?? undefined
+      const dir = yield* directory(pkg)
+      const name = yield* installedName(pkg, dir, parsedName)
+      const cached = yield* afs.existsSafe(path.join(dir, "node_modules", name))
+      const refresh = options?.refresh && isMutable(parsed) && !refreshed.has(pkg)
 
-      if (yield* afs.existsSafe(path.join(dir, "node_modules", name))) {
+      if (refresh) {
+        refreshed.add(pkg)
+        if (cached)
+          yield* reify({ dir, add: [pkg], update: true }).pipe(
+            Effect.catchCause(() => Effect.logWarning("failed to refresh cached package; using installed version")),
+          )
+      }
+
+      if (cached) {
         return resolveEntryPoint(name, path.join(dir, "node_modules", name), options?.subpaths)
       }
 
       const tree = yield* reify({ dir, add: [pkg] })
       const first = tree.edgesOut.values().next().value?.to
       if (!first) {
-        const result = resolveEntryPoint(name, path.join(dir, "node_modules", name), options?.subpaths)
+        const installed = yield* installedName(pkg, dir, parsedName)
+        const result = resolveEntryPoint(installed, path.join(dir, "node_modules", installed), options?.subpaths)
         if (result.entrypoint) return result
         return yield* new InstallFailedError({ add: [pkg], dir })
       }
@@ -150,20 +208,22 @@ const layer = Layer.effect(
       options?: { readonly subpaths?: readonly string[] },
     ) {
       const { default: npa } = yield* Effect.promise(() => import("npm-package-arg"))
-      const name = (() => {
+      const parsedName = (() => {
         try {
-          return npa(pkg).name ?? pkg
+          return npa(pkg).name ?? undefined
         } catch {
-          return pkg
+          return undefined
         }
       })()
-      const dir = path.join(directory(pkg), "node_modules", name)
+      const root = yield* directory(pkg)
+      const name = yield* installedName(pkg, root, parsedName)
+      const dir = path.join(root, "node_modules", name)
       if (!(yield* afs.existsSafe(dir))) return { directory: dir }
       return resolveEntryPoint(name, dir, options?.subpaths)
     })
 
     const which = Effect.fn("Npm.which")(function* (pkg: string, bin?: string) {
-      const dir = directory(pkg)
+      const dir = yield* directory(pkg)
       const binDir = path.join(dir, "node_modules", ".bin")
 
       const pick = Effect.fnUntraced(function* () {
@@ -239,4 +299,11 @@ export async function resolve(...args: Parameters<Interface["resolve"]>) {
 
 export async function which(...args: Parameters<Interface["which"]>) {
   return runPromise((svc) => svc.which(...args))
+}
+
+function isMutable(parsed: { readonly type: string; readonly gitCommittish?: string | null } | undefined) {
+  if (!parsed) return false
+  if (["tag", "range"].includes(parsed.type)) return true
+  if (parsed.type !== "git") return false
+  return !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/i.test(parsed.gitCommittish ?? "")
 }

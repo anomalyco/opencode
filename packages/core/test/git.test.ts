@@ -131,6 +131,37 @@ describe("Git worktrees", () => {
 })
 
 describe("Git trees", () => {
+  it.live("lists both sides of a rename as separate file changes", () =>
+    Effect.gen(function* () {
+      const root = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+      )
+      yield* Effect.promise(async () => {
+        await initRepo(root.path)
+        await $`git config diff.renames true`.cwd(root.path).quiet()
+        await Bun.write(path.join(root.path, "old name.txt"), "Preserve this content.\n")
+      })
+      const git = yield* Git.Service
+      const repository = yield* git.repo.discover(AbsolutePath.make(root.path))
+      if (!repository) throw new Error("Repository not found")
+      const before = yield* git.tree.capture({ repository, scopes: [RelativePath.make(".")] })
+      yield* Effect.promise(() => fs.rename(path.join(root.path, "old name.txt"), path.join(root.path, "new name.txt")))
+      const after = yield* git.tree.capture({ repository, scopes: [RelativePath.make(".")] })
+
+      expect(yield* git.tree.files({ repository, from: before, to: after })).toEqual([
+        RelativePath.make("new name.txt"),
+        RelativePath.make("old name.txt"),
+      ])
+      expect(
+        (yield* git.tree.diff({ repository, from: before, to: after })).map((file) => [file.file, file.status]),
+      ).toEqual([
+        ["new name.txt", "added"],
+        ["old name.txt", "deleted"],
+      ])
+    }),
+  )
+
   it.live("captures, compares, previews, and restores scoped trees", () =>
     Effect.gen(function* () {
       const root = yield* Effect.acquireRelease(

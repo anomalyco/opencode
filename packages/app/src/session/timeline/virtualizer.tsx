@@ -1,8 +1,15 @@
-import { createVirtualizer, defaultRangeExtractor, elementScroll, type VirtualItem } from "@tanstack/solid-virtual"
+import {
+  createVirtualizer,
+  defaultRangeExtractor,
+  elementScroll,
+  type Range,
+  type VirtualItem,
+} from "@tanstack/solid-virtual"
 import { isScrollKeyTarget, scrollKey, scrollKeyOwner, ScrollView } from "@opencode-ai/ui/scroll-view"
 import { TimelineRow } from "@opencode-ai/session-ui/timeline/projection"
 import { useLanguage } from "@/runtime/i18n/language"
 import {
+  batch,
   createEffect,
   createMemo,
   createSignal,
@@ -68,11 +75,12 @@ export function createTimelineVirtualizer(input: Input) {
   const coldBottomMount = !initialMeasurements?.length && input.pinned()
   const [listRoot, setListRoot] = createSignal<HTMLDivElement>()
   const [toolOpen, setToolOpen] = createStore<Record<string, boolean | undefined>>(cached?.toolOpen ?? {})
-  const [renderOverscan, setRenderOverscan] = createSignal(initialMeasurements?.length || coldBottomMount ? 6 : 20)
+  const [overscan, setOverscan] = createSignal(2)
   const rows = input.projection.rows
   const rowByKey = input.projection.rowByKey
   const knownKeys = new Set(rows().map(TimelineRow.key))
   const addedKeys = new Set<string>()
+  const measuredElements = new WeakSet<Element>()
   let touchStart: number | undefined
   let pointerHeld = false
   let maxScroll = 0
@@ -92,6 +100,20 @@ export function createTimelineVirtualizer(input: Input) {
     initialOffset: () => (input.pinned() ? Number.MAX_SAFE_INTEGER : 0),
     initialMeasurementsCache: initialMeasurements,
     estimateSize: () => fallbackItemSize,
+    // A newly observed element gets a real ResizeObserver box before paint. Reuse
+    // its snapshot on attachment, but later explicit measurements must read layout
+    // so deferred/rewrapped content cannot keep stale, clipped heights (TanStack/virtual#1183).
+    measureElement: (element, entry, instance) => {
+      const initial = !measuredElements.has(element)
+      measuredElements.add(element)
+      const box = entry?.borderBoxSize[0]
+      if (box) return Math.round(box.blockSize)
+      if (initial) {
+        const size = instance.itemSizeCache.get(instance.options.getItemKey(instance.indexFromElement(element)))
+        if (size !== undefined) return size
+      }
+      return element.offsetHeight
+    },
     scrollToFn: (offset, options, instance) => {
       if (virtualContent) virtualContent.style.height = `${instance.getTotalSize()}px`
       elementScroll(offset, options, instance)
@@ -122,41 +144,59 @@ export function createTimelineVirtualizer(input: Input) {
       return input.showHeader() ? 64 : 0
     },
     paddingEnd: 64,
-    rangeExtractor: (range) => {
+    get rangeExtractor() {
       const id = input.projection.activeMessageID()
       const active = id ? (input.projection.messageLastRowIndex().get(id) ?? -1) : -1
-      const indexes = defaultRangeExtractor({ ...range, overscan: renderOverscan() })
-      return filterVirtualIndexes(
-        [...new Set([...indexes, ...(active < 0 ? [] : [active])])].sort((a, b) => a - b),
-        range.count,
-      )
+      const buffer = overscan()
+      return (range: Range) => {
+        const indexes = defaultRangeExtractor({ ...range, overscan: buffer })
+        return filterVirtualIndexes(
+          [...new Set([...indexes, ...(active < 0 ? [] : [active])])].sort((a, b) => a - b),
+          range.count,
+        )
+      }
     },
   })
   const resizeItem = virtualizer.resizeItem
-  let resizeAnchorScheduled = false
-  // Rows measure asynchronously, so the last row can still hold its estimate when TanStack
-  // reconciles the end. Coalesce one correction per measurement batch, before paint.
-  const anchorResizedBottom = () => {
-    if (resizeAnchorScheduled) return
-    resizeAnchorScheduled = true
+  const pendingSizes = new Map<number, { key: string; size: number }>()
+  let resizeScheduled = false
+  // Read the whole measurement delivery before committing reactive row sizes.
+  // Otherwise each row can render and force layout before the next is measured.
+  virtualizer.resizeItem = (index, size) => {
+    const row = rows()[index]
+    if (!row) return
+    const key = TimelineRow.key(row)
+    if (virtualizer.itemSizeCache.get(key) === size) {
+      pendingSizes.delete(index)
+      return
+    }
+    pendingSizes.set(index, { key, size })
+    if (resizeScheduled) return
+    resizeScheduled = true
     queueMicrotask(() => {
-      resizeAnchorScheduled = false
+      resizeScheduled = false
+      if (!pendingSizes.size) return
+      const sizes = [...pendingSizes]
+      pendingSizes.clear()
+      batch(() => {
+        sizes.forEach(([index, value]) => {
+          const row = rows()[index]
+          if (row && TimelineRow.key(row) === value.key) resizeItem(index, value.size)
+        })
+      })
       if (!input.pinned()) return
-      virtualizer.scrollToEnd()
+      const root = listRoot()
+      // Reopening a settled scroll-to-end operation can fight subsequent keyboard scrolling.
+      if (root && Math.abs(root.scrollHeight - root.clientHeight - root.scrollTop) > endEpsilon)
+        virtualizer.scrollToEnd()
     })
   }
-  virtualizer.resizeItem = (index, size) => {
-    resizeItem(index, size)
-    if (listRoot() && input.pinned()) anchorResizedBottom()
-  }
+  onCleanup(() => pendingSizes.clear())
   virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item, _delta, instance) => {
     // Prepended rows can resize more than once as deferred content mounts. Keep
     // compensating while they remain entirely above the visible content fold.
     if (addedKeys.has(String(item.key)))
-      return (
-        item.end <=
-        (instance.scrollOffset ?? 0) + instance.scrollAdjustments + instance.options.scrollMargin
-      )
+      return item.end <= (instance.scrollOffset ?? 0) + instance.scrollAdjustments + instance.options.scrollMargin
     const first = instance.range?.startIndex
     return first !== undefined && item.index < first
   }
@@ -177,50 +217,41 @@ export function createTimelineVirtualizer(input: Input) {
     })
   })
 
+  let settleFrame: number | undefined
   let overscanFrame: number | undefined
+  let overscanTimer: number | undefined
+  const expandOverscan = () => {
+    overscanFrame = requestAnimationFrame(() => {
+      overscanFrame = undefined
+      // Let the visible rows paint before building the normal interaction buffer.
+      overscanTimer = window.setTimeout(() => {
+        overscanTimer = undefined
+        setOverscan(20)
+      }, 0)
+    })
+  }
   const pendingMeasurements = () =>
     virtualizer.getVirtualItems().some((item) => !virtualizer.itemSizeCache.has(item.key))
   const settleColdBottom = () => {
     if (input.pinned()) virtualizer.scrollToEnd()
     if (virtualContent?.querySelector(pendingMarkdown) || pendingMeasurements()) {
-      overscanFrame = requestAnimationFrame(settleColdBottom)
+      settleFrame = requestAnimationFrame(settleColdBottom)
       return
     }
-    overscanFrame = requestAnimationFrame(() => {
+    settleFrame = requestAnimationFrame(() => {
       if (input.pinned()) virtualizer.scrollToEnd()
       if (virtualContent?.querySelector(pendingMarkdown) || pendingMeasurements()) {
         settleColdBottom()
         return
       }
-      overscanFrame = undefined
-      const content = virtualContent
-      if (!content) return
-      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-        content.style.removeProperty("visibility")
-        return
-      }
-      const animation = ["animate-in", "fade-in", "duration-150"]
-      const clearAnimation = (event: AnimationEvent) => {
-        if (event.target !== content) return
-        content.removeEventListener("animationend", clearAnimation)
-        content.removeEventListener("animationcancel", clearAnimation)
-        content.classList.remove(...animation)
-      }
-      content.addEventListener("animationend", clearAnimation)
-      content.addEventListener("animationcancel", clearAnimation)
-      content.classList.add(...animation)
-      content.style.removeProperty("visibility")
+      settleFrame = undefined
+      virtualContent?.style.removeProperty("visibility")
+      expandOverscan()
     })
   }
   onMount(() => {
-    overscanFrame = requestAnimationFrame(() => {
-      if (renderOverscan() < 20) setRenderOverscan(20)
-      if (!coldBottomMount) {
-        overscanFrame = undefined
-        return
-      }
-      settleColdBottom()
-    })
+    if (coldBottomMount) settleFrame = requestAnimationFrame(settleColdBottom)
+    if (!coldBottomMount) expandOverscan()
   })
 
   let measuredSessionKey = input.sessionKey()
@@ -247,11 +278,13 @@ export function createTimelineVirtualizer(input: Input) {
   const handleListWheel = (event: WheelEvent & { currentTarget: HTMLDivElement }) => {
     input.onUserScroll(event.target)
     if (event.deltaY < 0) input.onUnpin()
+    setOverscan(20)
   }
 
   const handleListTouchStart = (event: TouchEvent) => {
     input.onUserScroll(event.target)
     touchStart = event.touches[0]?.clientY
+    setOverscan(20)
   }
 
   const handleListTouchMove = (event: TouchEvent & { currentTarget: HTMLDivElement }) => {
@@ -268,14 +301,19 @@ export function createTimelineVirtualizer(input: Input) {
   const handleListPointerDown = (event: PointerEvent & { currentTarget: HTMLDivElement }) => {
     input.onUserScroll(event.target)
     pointerHeld = true
-    const release = () => {
-      pointerHeld = false
-      window.removeEventListener("pointerup", release)
-      window.removeEventListener("pointercancel", release)
-    }
-    window.addEventListener("pointerup", release)
-    window.addEventListener("pointercancel", release)
+    setOverscan(20)
   }
+  const releasePointer = () => {
+    pointerHeld = false
+  }
+  onMount(() => {
+    window.addEventListener("pointerup", releasePointer)
+    window.addEventListener("pointercancel", releasePointer)
+  })
+  onCleanup(() => {
+    window.removeEventListener("pointerup", releasePointer)
+    window.removeEventListener("pointercancel", releasePointer)
+  })
 
   const handleListKeyDown = (event: KeyboardEvent & { currentTarget: HTMLDivElement }) => {
     const key = scrollKey(event)
@@ -284,6 +322,7 @@ export function createTimelineVirtualizer(input: Input) {
     if (scrollKeyOwner(event.currentTarget, event.target, key) !== event.currentTarget) return
     input.onUserScroll(event.currentTarget)
     if (upwardKeys.has(key)) input.onUnpin()
+    setOverscan(20)
   }
 
   // Following resumes by arriving at the end, either by scrolling there or by content shrinking
@@ -406,7 +445,6 @@ export function createTimelineVirtualizer(input: Input) {
           <Show when={input.showHeader()}>{props.header}</Show>
           <div
             data-timeline-virtual-content
-            class="motion-reduce:animate-none"
             ref={(element) => {
               virtualContent = element
               input.setContentRef(element)
@@ -438,7 +476,9 @@ export function createTimelineVirtualizer(input: Input) {
     cache.delete(ownerSessionKey)
     cache.set(ownerSessionKey, { measurements: virtualizer.takeSnapshot(), toolOpen: { ...toolOpen } })
     while (cache.size > 16) cache.delete(cache.keys().next().value!)
+    if (settleFrame !== undefined) cancelAnimationFrame(settleFrame)
     if (overscanFrame !== undefined) cancelAnimationFrame(overscanFrame)
+    if (overscanTimer !== undefined) window.clearTimeout(overscanTimer)
     input.setScrollRef(undefined)
     input.setRevealMessage?.(() => {})
     input.setScrollToEnd?.(() => {})

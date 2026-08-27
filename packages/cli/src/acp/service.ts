@@ -326,6 +326,7 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
         cwd: state.cwd,
         start: prepared.start,
         writeTextFile: capabilities.writeTextFile,
+        action: prepared.command !== undefined,
         control,
         connectionSignal: input.connection.signal,
         sessionSignal: state.abort.signal,
@@ -377,9 +378,8 @@ async function submitPrompt(client: OpenCodeClient, session: Attached, prompt: P
     return client.session.command(
       {
         sessionID: session.id,
-        id: prompt.start.id,
         command: prompt.command.name,
-        arguments: prompt.slash?.args,
+        text: prompt.slash?.args ?? "",
         files: prompt.files,
         delivery: "steer",
       },

@@ -35,6 +35,8 @@ describe("PluginHooks", () => {
         system: [SystemPart.make("first")],
         messages: [Message.user("original")],
         tools: {},
+        generation: {},
+        providerOptions: {},
       }
 
       expect(yield* hooks.trigger("session", "context", event)).toBe(event)

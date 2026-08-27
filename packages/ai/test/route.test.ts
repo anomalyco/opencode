@@ -40,4 +40,13 @@ describe("Route.with", () => {
       "x-patch": "patch",
     })
   })
+
+  test("assigns metadata ownership to a replacement provider and preserves explicit overrides", () => {
+    const route = OpenAIChat.route.with({ provider: "azure" })
+    const overridden = route.with({ providerMetadataKey: "custom-azure" }).with({ headers: { "x-test": "value" } })
+
+    expect(route.providerMetadataKey).toBe("azure")
+    expect(overridden.providerMetadataKey).toBe("custom-azure")
+    expect(overridden.defaults).not.toHaveProperty("providerMetadataKey")
+  })
 })

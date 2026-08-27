@@ -1,50 +1,72 @@
 # @opencode-ai/sdk
 
-Effect-native scoped OpenCode host for in-process applications.
-
-The SDK executes Server's assembled HTTP router in memory. It opens no listener and performs no network I/O, while preserving the same routing, middleware, handlers, codecs, and errors as the network client.
+In-process OpenCode host for Promise and Effect applications. The SDK executes Server's assembled HTTP router in memory, opening no listener and adding no network hop.
 
 ```ts
 import { OpenCode } from "@opencode-ai/sdk"
+
+await using opencode = await OpenCode.create()
+const session = await opencode.sessions.create({
+  location: { directory: "/workspace" },
+})
+```
+
+Pass imported Promise plugins in `plugins`, or register one later with `await opencode.plugin(plugin)`.
+
+The Promise API uses the same values, errors, request options, and `AsyncIterable` streams as `@opencode-ai/client`.
+
+Embedded hosts are silent by default. Set `log` to receive structured log entries:
+
+```ts
+await using opencode = await OpenCode.create({
+  log: {
+    level: "warn",
+    emit: (entry) => console.error(entry.message, entry.attributes, entry.cause),
+  },
+})
+```
+
+`close()` and `Symbol.asyncDispose` release router resources, Location services, fibers, and scoped plugin registrations.
+
+## Workerd
+
+Use the Workerd entrypoint inside a Cloudflare Durable Object. Hold one host for the lifetime of the object instance rather than creating one per request.
+
+```ts
+import { OpenCodeWorkerd } from "@opencode-ai/sdk/workerd"
+import myPlugin from "./my-plugin"
+
+export class OpenCodeDO {
+  private readonly opencode: Promise<OpenCodeWorkerd.Interface>
+
+  constructor(state: DurableObjectState) {
+    this.opencode = state.blockConcurrencyWhile(() =>
+      OpenCodeWorkerd.create({
+        storage: state.storage,
+        config: { default_agent: "build" },
+        plugins: [myPlugin],
+      }),
+    )
+  }
+
+  async fetch() {
+    const opencode = await this.opencode
+    return Response.json(await opencode.health.get())
+  }
+}
+```
+
+`blockConcurrencyWhile` keeps every Durable Object event out until the host is ready and resets the object if initialization fails. The retained Promise gives request handlers direct access to the same host after startup. Configuration is a typed JavaScript object, and plugins are imported values bundled with the Worker.
+
+## Effect
+
+The Effect-native API remains available from `@opencode-ai/sdk/effect`:
+
+```ts
+import { OpenCode } from "@opencode-ai/sdk/effect"
 
 const opencode = yield * OpenCode.create()
 const session = yield * opencode.sessions.get({ sessionID })
 ```
 
-It also exports `Tool` for plugins that add tools with `ctx.tool.transform(...)`. Embedded plugins run through the ordinary discovery flow and register tools into each Location's `ToolRegistry` through the normal `Tools.Service.register(...)` path. Closing the owning Effect Scope releases router resources, location services, fibers, and scoped tool registrations.
-
-Embedded hosts are silent by default. Set `log` to receive structured log entries at the selected minimum level:
-
-```ts
-const opencode =
-  yield *
-  OpenCode.create({
-    log: {
-      level: "warn",
-      emit: (entry) => console.error(entry.message, entry.attributes, entry.cause),
-    },
-  })
-```
-
-`sessions.events({ sessionID, after })` replays durable events after the optional aggregate sequence, then emits newly committed durable events. `sessions.interrupt(...)` targets execution owned by this host, and `sessions.message(...)` retrieves one projected Session message.
-
-The same constructor is available as a service Layer:
-
-```ts
-const program = Effect.gen(function* () {
-  const opencode = yield* OpenCode.Service
-  return yield* opencode.sessions.get({ sessionID })
-})
-
-yield * program.pipe(Effect.provide(OpenCode.layer()))
-```
-
-`OpenCode.layer(options)` adapts the scoped `OpenCode.create(options)` convenience constructor for dependency injection.
-
-Workspace providers are host infrastructure configured when the SDK is constructed. Workspace lifecycle operations remain on the typed facade:
-
-```ts
-const opencode = yield * OpenCode.create({ workspaceProviders: { modal: modalWorkspaceProvider } })
-const workspace = yield * opencode.workspace.create({ provider: "modal" })
-yield * opencode.workspace.destroy({ workspaceID: workspace.id })
-```
+The Effect Workerd entrypoint is `@opencode-ai/sdk/workerd/effect`.

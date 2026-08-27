@@ -1,6 +1,14 @@
 import { expect, test } from "bun:test"
-import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode-ai/client"
-import { cacheReuseDrop, messageBoundaryIDs, reduceSessionRows, turnDuration } from "../../../src/routes/session/rows"
+import type { SessionMessageAssistant, SessionMessageAssistantTool, SessionMessageInfo } from "@opencode-ai/client"
+import {
+  backgroundToolRowIndex,
+  cacheReuseDrop,
+  messageBoundaryIDs,
+  reduceSessionRows,
+  sessionRowID,
+  turnDuration,
+  turnTokensPerSecond,
+} from "../../../src/routes/session/rows"
 
 test("measures turn duration from the user prompt across assistant steps", () => {
   const first = assistant("assistant-1", [])
@@ -14,6 +22,28 @@ test("measures turn duration from the user prompt across assistant steps", () =>
   ]
 
   expect(turnDuration(final, messages)).toBe(29_000)
+})
+
+test("measures turn output throughput across model steps without tool time", () => {
+  const first = assistant("assistant-1", [])
+  first.time = { created: 8_000, streamed: 10_000, completed: 20_000 }
+  first.tokens = { input: 10, output: 20, reasoning: 5, cache: { read: 0, write: 0 } }
+  const final = assistant("assistant-2", [])
+  final.time = { created: 27_000, streamed: 30_000, completed: 31_000 }
+  final.tokens = { input: 20, output: 30, reasoning: 10, cache: { read: 0, write: 0 } }
+  const messages: SessionMessageInfo[] = [
+    { type: "user", id: "user-1", text: "Question", time: { created: 1_000 } },
+    first,
+    final,
+  ]
+
+  expect(turnTokensPerSecond(final, messages)).toBe(10)
+})
+
+test("omits turn throughput when a stream boundary is unavailable", () => {
+  const final = assistant("assistant-1", [])
+  final.tokens = { input: 10, output: 20, reasoning: 0, cache: { read: 0, write: 0 } }
+  expect(turnTokensPerSecond(final, [final])).toBeUndefined()
 })
 
 test("filters OpenAI cache quantization from cache reuse drops", () => {
@@ -114,6 +144,78 @@ test("assigns assistant boundaries to the first rendered row instead of the firs
   const rows = reduceSessionRows(messages)
 
   expect(messageBoundaryIDs(rows, messages)).toEqual(["user-1", "assistant-1", undefined, undefined])
+})
+
+test("assigns stable IDs to tool rows for direct navigation", () => {
+  const messages: SessionMessageInfo[] = [
+    assistant("assistant-1", [
+      { type: "text", text: "Starting a shell" },
+      { type: "tool", id: "shell-1", name: "shell", state: pending(), time: { created: 2 } },
+    ]),
+    assistant("assistant-2", [
+      { type: "tool", id: "shell-2", name: "shell", state: pending(), time: { created: 3 } },
+    ]),
+  ]
+  const rows = reduceSessionRows(messages)
+  const boundaries = messageBoundaryIDs(rows, messages)
+
+  expect(rows.map((row, index) => sessionRowID(row, boundaries[index]))).toEqual([
+    "assistant-1",
+    "session-part:assistant-1:shell-1",
+    "assistant-2",
+  ])
+})
+
+test("finds background tool launch rows for completion navigation", () => {
+  const messages: SessionMessageInfo[] = [
+    assistant("assistant-1", [
+      { type: "tool", id: "shell-1", name: "shell", state: pending(), time: { created: 1 } },
+    ]),
+    assistant("assistant-2", [
+      {
+        type: "tool",
+        id: "subagent-1",
+        name: "subagent",
+        state: completed({ sessionID: "child-1", status: "running" }),
+        time: { created: 2 },
+      },
+    ]),
+    {
+      type: "synthetic",
+      id: "completion-1",
+      text: "First background run completed",
+      description: "First run",
+      time: { created: 3 },
+    },
+    assistant("assistant-3", [
+      {
+        type: "tool",
+        id: "subagent-2",
+        name: "subagent",
+        state: completed({ sessionID: "child-1", status: "running" }),
+        time: { created: 4 },
+      },
+      {
+        type: "tool",
+        id: "subagent-foreground",
+        name: "subagent",
+        state: completed({ sessionID: "child-1", status: "completed" }),
+        time: { created: 5 },
+      },
+    ]),
+    {
+      type: "synthetic",
+      id: "completion-2",
+      text: "Second background run completed",
+      description: "Second run",
+      time: { created: 6 },
+    },
+  ]
+  const rows = reduceSessionRows(messages)
+
+  expect(backgroundToolRowIndex(rows, messages, { source: "shell", id: "shell-1" }, "completion-2")).toBe(0)
+  expect(backgroundToolRowIndex(rows, messages, { source: "subagent", id: "child-1" }, "completion-1")).toBe(1)
+  expect(backgroundToolRowIndex(rows, messages, { source: "subagent", id: "child-1" }, "completion-2")).toBe(3)
 })
 
 test("groups exploration parts across assistant messages until a delimiter", () => {
@@ -407,4 +509,15 @@ function assistant(id: string, content: SessionMessageAssistant["content"]): Ses
 
 function pending() {
   return { status: "streaming" as const, input: "" }
+}
+
+function completed(
+  metadata: Record<string, string>,
+): Extract<SessionMessageAssistantTool["state"], { status: "completed" }> {
+  return {
+    status: "completed",
+    input: {},
+    content: [{ type: "text", text: "Background" }],
+    metadata,
+  }
 }

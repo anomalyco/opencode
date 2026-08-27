@@ -18,6 +18,16 @@ type Overrides = Partial<Omit<Plugin.Context, "options" | "session">> & {
 export function host(overrides: Overrides = {}): Plugin.Context {
   return {
     app: overrides.app ?? { name: "test", version: "test", channel: "test" },
+    location:
+      overrides.location ??
+      new Location.Info({
+        directory: AbsolutePath.make("/workspace"),
+        project: {
+          id: Project.ID.global,
+          directory: AbsolutePath.make("/workspace"),
+          canonical: AbsolutePath.make("/workspace"),
+        },
+      }),
     options: {},
     agent: overrides.agent ?? {
       get: () => Effect.die("unused agent.get"),
@@ -48,6 +58,9 @@ export function host(overrides: Overrides = {}): Plugin.Context {
     event: overrides.event ?? {
       subscribe: () => Stream.empty,
     },
+    generate: overrides.generate ?? {
+      text: () => Effect.die("unused generate.text"),
+    },
     integration: overrides.integration ?? {
       list: () => Effect.die("unused integration.list"),
       get: () => Effect.die("unused integration.get"),
@@ -74,12 +87,14 @@ export function host(overrides: Overrides = {}): Plugin.Context {
     },
     mcp: overrides.mcp ?? {
       list: () => Effect.die("unused mcp.list"),
-      add: () => Effect.die("unused mcp.add"),
-      remove: () => Effect.die("unused mcp.remove"),
-      connect: () => Effect.die("unused mcp.connect"),
-      disconnect: () => Effect.die("unused mcp.disconnect"),
       transform: () => Effect.die("unused mcp.transform"),
       reload: () => Effect.die("unused mcp.reload"),
+    },
+    permission: overrides.permission ?? {
+      hook: () => Effect.die("unused permission.hook"),
+      list: () => Effect.die("unused permission.list"),
+      get: () => Effect.die("unused permission.get"),
+      reply: () => Effect.die("unused permission.reply"),
     },
     plugin: overrides.plugin ?? {
       list: () => Effect.die("unused plugin.list"),
@@ -105,7 +120,16 @@ export function host(overrides: Overrides = {}): Plugin.Context {
     },
     tool: overrides.tool ?? {
       transform: () => Effect.die("unused tool.transform"),
+      reload: () => Effect.die("unused tool.reload"),
       hook: () => Effect.die("unused tool.hook"),
+    },
+    vcs: overrides.vcs ?? {
+      get: () => Effect.die("unused vcs.get"),
+      branches: () => Effect.die("unused vcs.branches"),
+      status: () => Effect.die("unused vcs.status"),
+      diff: () => Effect.die("unused vcs.diff"),
+      transform: () => Effect.die("unused vcs.transform"),
+      reload: () => Effect.die("unused vcs.reload"),
     },
     websearch: overrides.websearch ?? {
       providers: () => Effect.die("unused websearch.providers"),
@@ -123,9 +147,11 @@ export function host(overrides: Overrides = {}): Plugin.Context {
       generate: overrides.session?.generate ?? (() => Effect.die("unused session.generate")),
       command: overrides.session?.command ?? (() => Effect.die("unused session.command")),
       rename: overrides.session?.rename ?? (() => Effect.die("unused session.rename")),
+      move: overrides.session?.move ?? (() => Effect.die("unused session.move")),
       synthetic: overrides.session?.synthetic ?? (() => Effect.die("unused session.synthetic")),
       interrupt: overrides.session?.interrupt ?? (() => Effect.die("unused session.interrupt")),
       wait: overrides.session?.wait ?? (() => Effect.die("unused session.wait")),
+      context: overrides.session?.context ?? (() => Effect.die("unused session.context")),
     },
   }
 }

@@ -30,7 +30,7 @@ export const BindingValueSchema = Schema.Union([
   Schema.Literal("none"),
   BindingItem,
   Schema.Array(BindingItem),
-])
+]).annotate({ identifier: "TuiKeybind.BindingValue" })
 export type BindingValueSchema = Schema.Schema.Type<typeof BindingValueSchema>
 
 type Definition = {
@@ -87,6 +87,11 @@ export const Definitions = {
   "theme.switch_mode": keybind("none", "Switch between light and dark theme mode"),
   "theme.mode.lock": keybind("none", "Lock or unlock theme mode"),
   "session.sidebar.toggle": keybind("<leader>b", "Toggle sidebar"),
+  "pane.focus.left": keybind("<leader>left", "Focus session pane"),
+  "pane.focus.right": keybind("<leader>right", "Focus terminal pane"),
+  "terminal.select": keybind("<leader>down", "Select terminal"),
+  "terminal.toggle": keybind("none", "Toggle terminal pane"),
+  "terminal.close": keybind("<leader>up", "Close terminal pane"),
   "session.toggle.scrollbar": keybind("none", "Toggle session scrollbar"),
   "opencode.status": keybind("<leader>s", "View status"),
   "opencode.debug": keybind("none", "View debug info"),
@@ -234,6 +239,9 @@ export const Definitions = {
   "composer.shell.up": keybind("up", "Previous shell"),
   "composer.shell.down": keybind("down", "Next shell"),
   "composer.shell.kill": keybind("ctrl+d", "Kill shell command"),
+  "composer.terminal.up": keybind("up,k", "Previous terminal"),
+  "composer.terminal.down": keybind("down,j", "Next terminal"),
+  "composer.terminal.select": keybind("return", "Select terminal"),
 
   "dialog.select.prev": keybind("up,ctrl+p", "Move to previous dialog item"),
   "dialog.select.next": keybind("down,ctrl+n", "Move to next dialog item"),
@@ -243,6 +251,8 @@ export const Definitions = {
   "dialog.select.end": keybind("end", "Move to last dialog item"),
   "dialog.select.submit": keybind("return", "Submit selected dialog item"),
   "dialog.prompt.submit": keybind("return", "Submit dialog prompt"),
+  "dialog.integration.rename": keybind("ctrl+r", "Rename integration account"),
+  "dialog.integration.delete": keybind("ctrl+d", "Delete integration account"),
   "dialog.worktree.generate": keybind("tab", "Generate worktree name"),
   "dialog.move_session.new": keybind("ctrl+m", "New worktree"),
   "dialog.move_session.delete": keybind("ctrl+d", "Delete worktree"),

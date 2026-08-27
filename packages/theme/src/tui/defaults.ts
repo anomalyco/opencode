@@ -121,6 +121,12 @@ export const DEFAULT_THEME = {
         $disabled: "$hue.neutral.500",
         $selected: "$hue.interactive.700",
       },
+      status: {
+        running: "$hue.interactive.800",
+        question: "$text.feedback.info.default",
+        permission: "$text.feedback.warning.default",
+        unread: "$hue.accent.800",
+      },
       feedback: {
         error: { default: "$hue.red.700", subdued: "$hue.red.600" },
         warning: { default: "$hue.yellow.800", subdued: "$hue.yellow.700" },
@@ -335,6 +341,12 @@ export const DEFAULT_THEME = {
         $pressed: "$hue.neutral.200",
         $disabled: "$hue.neutral.500",
         $selected: "$hue.interactive.500",
+      },
+      status: {
+        running: "$hue.interactive.200",
+        question: "$text.feedback.info.default",
+        permission: "$text.feedback.warning.default",
+        unread: "$hue.accent.200",
       },
       feedback: {
         error: { default: "$hue.red.300", subdued: "$hue.red.400" },

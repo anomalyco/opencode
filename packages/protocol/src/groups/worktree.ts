@@ -42,7 +42,7 @@ export const WorktreeGroup = HttpApiGroup.make("server.worktree")
       OpenApi.annotations({
         identifier: "v2.worktree.create",
         summary: "Create worktree",
-        description: "Create a worktree for a project.",
+        description: "Create a worktree for a project and run its configured setup script.",
       }),
     ),
   )

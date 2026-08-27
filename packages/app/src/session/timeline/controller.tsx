@@ -104,7 +104,9 @@ export function createTimelineController(input: { session: TimelineSessionSource
   const projection = createTimelineProjection({
     sessionMessages: projectedMessages,
     status: input.session.data.status,
-    showReasoningSummaries: settings.general.showReasoningSummaries,
+    reasoningMode: settings.general.reasoningMode,
+    shellToolDefaultOpen: settings.general.shellToolPartsExpanded,
+    editToolDefaultOpen: settings.general.editToolPartsExpanded,
     pendingUserMessageIDs,
   })
   const [pending, setPending] = createStore({ rename: false })
@@ -168,15 +170,15 @@ export function createTimelineController(input: { session: TimelineSessionSource
     const sessions = data.session.list().filter((item) => !item.parentID && !item.time?.archived)
     const index = sessions.findIndex((item) => item.id === id)
     const next = index === -1 ? undefined : (sessions[index + 1] ?? sessions[index - 1])
-    const success = await serverSDK.api.session
-      .remove({ sessionID: id })
+    const removed = removedSessionIDs(data.session.list(), id)
+    const success = await data.session
+      .remove(id)
       .then(() => true)
       .catch((error) => {
         showToast({ title: language.t("session.delete.failed.title"), description: errorMessage(error) })
         return false
       })
     if (!success) return false
-    const removed = removedSessionIDs(data.session.list(), id)
     void navigateAfterRemoval(id, session.parentID, next?.id)
     notifySessionTabsRemoved({ server: server.key, directory: sdk().directory, sessionIDs: [...removed] })
     return true
@@ -233,7 +235,7 @@ export function createTimelineController(input: { session: TimelineSessionSource
       childTitle,
       showHeader,
       projection,
-      showReasoningSummaries: settings.general.showReasoningSummaries,
+      reasoningMode: settings.general.reasoningMode,
       shellToolPartsExpanded: settings.general.shellToolPartsExpanded,
       editToolPartsExpanded: settings.general.editToolPartsExpanded,
     },

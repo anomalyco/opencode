@@ -475,8 +475,14 @@ describe("Bedrock Converse route", () => {
       ])
       const events = response.events.filter((event) => event.type === "tool-input-delta")
       expect(events).toEqual([
-        { type: "tool-input-delta", id: "tool_1", name: "lookup", text: '{"query"' },
-        { type: "tool-input-delta", id: "tool_1", name: "lookup", text: ':"weather"}' },
+        { type: "tool-input-delta", id: "tool_1", name: "lookup", text: '{"query"', input: {} },
+        {
+          type: "tool-input-delta",
+          id: "tool_1",
+          name: "lookup",
+          text: ':"weather"}',
+          input: { query: "weather" },
+        },
       ])
       expect(response.events.at(-1)).toMatchObject({
         type: "finish",
@@ -485,7 +491,7 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
-  it.effect("emits malformed tool input as an unexecuted tool error", () =>
+  it.effect("recovers incomplete tool input at finalization", () =>
     Effect.gen(function* () {
       const body = eventStreamBody(
         ["messageStart", { role: "assistant" }],
@@ -502,10 +508,10 @@ describe("Bedrock Converse route", () => {
       )
       const response = yield* LLMClient.generate(baseRequest).pipe(Effect.provide(fixedBytes(body)))
 
-      expect(response.events.find((event) => event.type === "tool-input-error")).toMatchObject({
+      expect(response.events.find((event) => event.type === "tool-call")).toMatchObject({
         id: "tool_1",
         name: "lookup",
-        raw: '{"query":"partial',
+        input: { query: "partial" },
       })
       expect(response.finishReason).toEqual({ normalized: "tool-calls", raw: "end_turn" })
     }),
@@ -558,6 +564,57 @@ describe("Bedrock Converse route", () => {
         {
           role: "assistant",
           content: [{ reasoningContent: { reasoningText: { text: "Let me think.", signature: "sig_1" } } }],
+        },
+      ])
+    }),
+  )
+
+  it.effect("round-trips reassigned provider reasoning and usage metadata in its own namespace", () =>
+    Effect.gen(function* () {
+      const compatible = model.route.with({ provider: "custom-bedrock" }).model({ id: model.id })
+      const redactedData = "cmVkYWN0ZWQtdGhpbmtpbmc="
+      const response = yield* LLMClient.generate(LLMRequest.update(baseRequest, { model: compatible })).pipe(
+        Effect.provide(
+          fixedBytes(
+            eventStreamBody(
+              ["messageStart", { role: "assistant" }],
+              ["contentBlockDelta", { contentBlockIndex: 0, delta: { reasoningContent: { text: "Let me think." } } }],
+              ["contentBlockDelta", { contentBlockIndex: 0, delta: { reasoningContent: { signature: "custom_sig" } } }],
+              ["contentBlockStop", { contentBlockIndex: 0 }],
+              [
+                "contentBlockDelta",
+                { contentBlockIndex: 1, delta: { reasoningContent: { redactedContent: redactedData } } },
+              ],
+              ["contentBlockStop", { contentBlockIndex: 1 }],
+              ["messageStop", { stopReason: "end_turn" }],
+              ["metadata", { usage: { inputTokens: 5, outputTokens: 2, totalTokens: 7 } }],
+            ),
+          ),
+        ),
+      )
+
+      expect(response.message.content).toEqual([
+        {
+          type: "reasoning",
+          text: "Let me think.",
+          providerMetadata: { "custom-bedrock": { signature: "custom_sig" } },
+        },
+        { type: "reasoning", text: "", providerMetadata: { "custom-bedrock": { redactedData } } },
+      ])
+      expect(response.usage?.providerMetadata).toEqual({
+        "custom-bedrock": { inputTokens: 5, outputTokens: 2, totalTokens: 7 },
+      })
+
+      const prepared = yield* compileRequest(
+        LLM.request({ model: compatible, messages: [response.message], cache: "none" }),
+      )
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "assistant",
+          content: [
+            { reasoningContent: { reasoningText: { text: "Let me think.", signature: "custom_sig" } } },
+            { reasoningContent: { redactedContent: redactedData } },
+          ],
         },
       ])
     }),
@@ -707,6 +764,32 @@ describe("Bedrock Converse route", () => {
           content: [{ toolResult: { toolUseId: "tool_1", content: [{ text: "sunny" }], status: "success" } }],
         },
       ])
+    }),
+  )
+
+  it.effect("ignores unknown normal stream events", () =>
+    Effect.gen(function* () {
+      const body = concat([
+        eventFrame("messageStart", { role: "assistant" }),
+        eventFrame("futureEvent", { message: "Ignore this" }),
+        eventFrame("messageStop", { stopReason: "end_turn" }),
+      ])
+      const response = yield* LLMClient.generate(baseRequest).pipe(Effect.provide(fixedBytes(body)))
+
+      expect(response.finishReason).toEqual({ normalized: "stop", raw: "end_turn" })
+    }),
+  )
+
+  it.effect("fails unknown stream exceptions after message stop", () =>
+    Effect.gen(function* () {
+      const body = concat([
+        eventFrame("messageStart", { role: "assistant" }),
+        eventFrame("messageStop", { stopReason: "end_turn" }),
+        exceptionFrame("futureException", { message: "A future provider failure" }),
+      ])
+      const error = yield* LLMClient.generate(baseRequest).pipe(Effect.provide(fixedBytes(body)), Effect.flip)
+
+      expect(error.reason).toMatchObject({ _tag: "UnknownProvider", message: "A future provider failure" })
     }),
   )
 
