@@ -2,7 +2,7 @@ export * as Snapshot from "./snapshot.js"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import path from "path"
-import { Context, Effect, Fiber, Layer, Schema, Scope } from "effect"
+import { Context, Duration, Effect, Fiber, Layer, Schema, Scope } from "effect"
 import { File } from "./file.js"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Git } from "./git.js"
@@ -12,6 +12,7 @@ import { AbsolutePath, RelativePath } from "./schema.js"
 import { ID } from "@opencode-ai/schema/snapshot"
 import { Hash } from "@opencode-ai/util/hash"
 import { State } from "./state.js"
+import { EffectFlock } from "@opencode-ai/util/effect-flock"
 
 export { ID }
 
@@ -69,6 +70,11 @@ export interface Interface extends State.Transformable<Draft> {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Snapshot") {}
 
+const LOCK_TIMEOUT_MS = 30_000
+const CAPTURE_LOCK_TIMEOUT_MS = 100
+const INITIAL_LOCK_RETRY_MS = 5_000
+const MAX_LOCK_RETRY_MS = 60_000
+
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -76,6 +82,7 @@ const layer = Layer.effect(
     const git = yield* Git.Service
     const global = yield* Global.Service
     const location = yield* Location.Service
+    const flock = yield* EffectFlock.Service
     const lifetime = yield* Scope.Scope
     const state = State.create<{ enabled: boolean }, Draft>({
       name: "snapshot",
@@ -87,7 +94,7 @@ const layer = Layer.effect(
       }),
     })
     // Cache a scope-owned fiber so caller cancellation stops waiting without poisoning shared initialization.
-    const repositoryFiber = yield* Effect.cached(
+    const [repositoryFiber, invalidateRepository] = yield* Effect.cachedInvalidateWithTTL(
       Effect.gen(function* () {
         const source = yield* git.repo.discover(location.project.directory)
         if (!source) return yield* new Error({ operation: "capture", message: "Project is not a Git repository" })
@@ -95,15 +102,27 @@ const layer = Layer.effect(
         const gitDirectory = AbsolutePath.make(
           path.join(global.data, "snapshot", location.project.id, Hash.fast(worktree)),
         )
-        const snapshotRepository = (yield* fs.existsSafe(path.join(gitDirectory, "HEAD")))
-          ? new Git.Repository({ worktree, gitDirectory, commonDirectory: gitDirectory })
-          : yield* git.repo
+        const snapshotRepository = yield* flock.withLock(
+          Effect.gen(function* () {
+            if (yield* fs.existsSafe(path.join(gitDirectory, "HEAD")))
+              return new Git.Repository({ worktree, gitDirectory, commonDirectory: gitDirectory })
+            return yield* git.repo
               .create({ worktree, gitDirectory, seed: source })
               .pipe(Effect.mapError((cause) => failure("capture", cause)))
+          }),
+          gitDirectory,
+          undefined,
+          { timeoutMs: LOCK_TIMEOUT_MS },
+        )
         return { source, worktree, snapshotRepository }
       }).pipe(Effect.forkIn(lifetime)),
+      Duration.infinity,
     )
-    const repository = repositoryFiber.pipe(Effect.uninterruptible, Effect.flatMap(Fiber.join))
+    const repository = repositoryFiber.pipe(
+      Effect.uninterruptible,
+      Effect.flatMap(Fiber.join),
+      Effect.tapError((cause) => (lockFailure(cause) ? invalidateRepository : Effect.void)),
+    )
 
     const scope = Effect.fnUntraced(function* (worktree: AbsolutePath) {
       const relative = path.relative(worktree, location.directory)
@@ -113,21 +132,48 @@ const layer = Layer.effect(
     })
 
     const enabled = () => location.vcs?.type === "git" && state.get().enabled
+    let retryAt = Number.NEGATIVE_INFINITY
+    let retryMs = INITIAL_LOCK_RETRY_MS
 
     const capture = Effect.fn("Snapshot.capture")(function* () {
       if (!enabled()) return undefined
+      if ((yield* Effect.clockWith((clock) => clock.currentTimeMillis)) < retryAt) return undefined
       return yield* Effect.gen(function* () {
         const repo = yield* repository
-        return ID.make(
-          yield* git.tree.capture({
-            repository: repo.snapshotRepository,
-            scopes: [yield* scope(repo.worktree)],
-            ignores: repo.source,
-            maximumUntrackedFileBytes: 2 * 1024 * 1024,
+        const snapshot = yield* flock.withLock(
+          Effect.gen(function* () {
+            if ((yield* Effect.clockWith((clock) => clock.currentTimeMillis)) < retryAt) return undefined
+            return ID.make(
+              yield* git.tree.capture({
+                repository: repo.snapshotRepository,
+                scopes: [yield* scope(repo.worktree)],
+                ignores: repo.source,
+                maximumUntrackedFileBytes: 2 * 1024 * 1024,
+              }),
+            )
           }),
+          repo.snapshotRepository.gitDirectory,
+          undefined,
+          { timeoutMs: CAPTURE_LOCK_TIMEOUT_MS },
         )
+        if (snapshot !== undefined) {
+          retryAt = Number.NEGATIVE_INFINITY
+          retryMs = INITIAL_LOCK_RETRY_MS
+        }
+        return snapshot
       }).pipe(
-        Effect.catch((cause) => Effect.logWarning("failed to capture snapshot", { cause }).pipe(Effect.as(undefined))),
+        Effect.catch((cause) =>
+          Effect.gen(function* () {
+            const lock = lockFailure(cause)
+            const delay = lock ? retryMs : undefined
+            if (lock) {
+              retryAt = (yield* Effect.clockWith((clock) => clock.currentTimeMillis)) + retryMs
+              retryMs = Math.min(retryMs * 2, MAX_LOCK_RETRY_MS)
+            }
+            yield* Effect.logWarning("failed to capture snapshot", { cause, retryMs: delay })
+            return undefined
+          }),
+        ),
       )
     })
 
@@ -181,9 +227,12 @@ const layer = Layer.effect(
     const restore = Effect.fn("Snapshot.restore")(function* (input: RestoreInput) {
       if (!enabled()) return yield* new Error({ operation: "restore", message: "Snapshots are disabled" })
       const repo = yield* repository.pipe(Effect.mapError((cause) => failure("restore", cause)))
-      yield* git.tree
-        .restore({ repository: repo.snapshotRepository, files: yield* plan(repo.worktree, input) })
-        .pipe(Effect.mapError((cause) => failure("restore", cause)))
+      yield* flock.withLock(
+        git.tree.restore({ repository: repo.snapshotRepository, files: yield* plan(repo.worktree, input) }),
+        repo.snapshotRepository.gitDirectory,
+        undefined,
+        { timeoutMs: LOCK_TIMEOUT_MS },
+      ).pipe(Effect.mapError((cause) => failure("restore", cause)))
     })
 
     return Service.of({ transform: state.transform, reload: state.reload, capture, files, diff, restore })
@@ -193,7 +242,7 @@ const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [FSUtil.node, Git.node, Global.node, Location.node],
+  deps: [FSUtil.node, Git.node, Global.node, Location.node, EffectFlock.node],
 })
 
 export const noopLayer = Layer.succeed(
@@ -215,4 +264,9 @@ function failure(operation: Error["operation"], cause: unknown) {
     message: cause instanceof globalThis.Error ? cause.message : String(cause),
     cause,
   })
+}
+
+function lockFailure(cause: unknown) {
+  if (cause instanceof EffectFlock.LockTimeoutError || cause instanceof EffectFlock.LockCompromisedError) return true
+  return cause instanceof Git.OperationError && /index\.lock|another git process|unable to create.*lock/i.test(cause.message)
 }

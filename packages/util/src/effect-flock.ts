@@ -82,8 +82,17 @@ export namespace EffectFlock {
   export interface Interface {
     readonly acquire: (key: string, dir?: string, options?: Options) => Effect.Effect<void, LockError, Scope.Scope>
     readonly withLock: {
-      (key: string, dir?: string): <A, E, R>(body: Effect.Effect<A, E, R>) => Effect.Effect<A, E | LockError, R>
-      <A, E, R>(body: Effect.Effect<A, E, R>, key: string, dir?: string): Effect.Effect<A, E | LockError, R>
+      (
+        key: string,
+        dir?: string,
+        options?: Options,
+      ): <A, E, R>(body: Effect.Effect<A, E, R>) => Effect.Effect<A, E | LockError, R>
+      <A, E, R>(
+        body: Effect.Effect<A, E, R>,
+        key: string,
+        dir?: string,
+        options?: Options,
+      ): Effect.Effect<A, E | LockError, R>
     }
   }
 
@@ -295,10 +304,15 @@ export namespace EffectFlock {
 
       const withLock: Interface["withLock"] = Function.dual(
         (args) => Effect.isEffect(args[0]),
-        <A, E, R>(body: Effect.Effect<A, E, R>, key: string, dir?: string): Effect.Effect<A, E | LockError, R> =>
+        <A, E, R>(
+          body: Effect.Effect<A, E, R>,
+          key: string,
+          dir?: string,
+          options?: Options,
+        ): Effect.Effect<A, E | LockError, R> =>
           Effect.scoped(
             Effect.gen(function* () {
-              yield* acquire(key, dir)
+              yield* acquire(key, dir, options)
               return yield* body
             }),
           ),

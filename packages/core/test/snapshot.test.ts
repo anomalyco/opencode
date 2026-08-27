@@ -2,7 +2,8 @@ import { $ } from "bun"
 import { describe, expect } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { Deferred, Effect, Fiber, Layer } from "effect"
+import { Deferred, Effect, Fiber, Function, Layer } from "effect"
+import { TestClock } from "effect/testing"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Git } from "@opencode-ai/core/git"
 import { Global } from "@opencode-ai/util/global"
@@ -10,6 +11,7 @@ import { Location } from "@opencode-ai/core/location"
 import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
 import { Snapshot } from "@opencode-ai/core/snapshot"
 import { Hash } from "@opencode-ai/util/hash"
+import { EffectFlock } from "@opencode-ai/util/effect-flock"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
@@ -122,6 +124,98 @@ describe("Snapshot", () => {
             expect(yield* read(path.join(location, "added.txt"))).toBe("added\n")
             expect(yield* read(path.join(project, "outside.txt"))).toBe("changed outside\n")
           }).pipe(Effect.provide(layer))
+        }),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  testEffect(Layer.empty).live("retries lazy repository initialization after lock timeout", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.gen(function* () {
+          const project = path.join(tmp.path, "project")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(project)
+            await fs.writeFile(path.join(project, "tracked.txt"), "one\n")
+            await initGit(project)
+          })
+          const flock = yield* EffectFlock.Service.pipe(Effect.provide(AppNodeBuilder.build(EffectFlock.node)))
+          let acquisitions = 0
+          const withLock: EffectFlock.Interface["withLock"] = Function.dual(
+            (args) => Effect.isEffect(args[0]),
+            <A, E, R>(body: Effect.Effect<A, E, R>, key: string, directory?: string, options?: EffectFlock.Options) => {
+              acquisitions++
+              if (acquisitions === 1) return Effect.fail(new EffectFlock.LockTimeoutError({ key }))
+              return flock.withLock(body, key, directory, options)
+            },
+          )
+          const instrumented = EffectFlock.Service.of({
+            ...flock,
+            withLock,
+          })
+          const layer = AppNodeBuilder.build(Snapshot.node, [
+            [
+              Location.node,
+              Location.boundNode(Location.Ref.make({ directory: AbsolutePath.make(project) })),
+            ],
+            [Global.node, Global.layerWith({ data: tmp.path, config: path.join(tmp.path, "config") })],
+            [EffectFlock.node, Layer.succeed(EffectFlock.Service, instrumented)],
+          ])
+
+          yield* Effect.gen(function* () {
+            const snapshot = yield* Snapshot.Service
+            expect(yield* snapshot.capture()).toBeUndefined()
+            expect(acquisitions).toBe(1)
+            yield* TestClock.adjust("5 seconds")
+            expect(yield* snapshot.capture()).toBeDefined()
+            expect(acquisitions).toBe(3)
+          }).pipe(Effect.provide(layer), Effect.provide(TestClock.layer()))
+        }),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  testEffect(Layer.empty).live("backs off a stale index lock and recovers without removing it", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.gen(function* () {
+          const project = path.join(tmp.path, "project")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(project)
+            await fs.writeFile(path.join(project, "tracked.txt"), "one\n")
+            await initGit(project)
+          })
+          const projectID = yield* Effect.gen(function* () {
+            return (yield* Location.Service).project.id
+          }).pipe(
+            Effect.provide(
+              AppNodeBuilder.build(Location.boundNode(Location.Ref.make({ directory: AbsolutePath.make(project) }))),
+            ),
+          )
+          const lock = path.join(
+            tmp.path,
+            "snapshot",
+            projectID,
+            Hash.fast(yield* Effect.promise(() => fs.realpath(project))),
+            "index.lock",
+          )
+
+          yield* Effect.gen(function* () {
+            const snapshot = yield* Snapshot.Service
+            expect(yield* snapshot.capture()).toBeDefined()
+            yield* Effect.promise(() => fs.writeFile(lock, ""))
+            yield* Effect.promise(() => fs.writeFile(path.join(project, "tracked.txt"), "two\n"))
+
+            expect(yield* snapshot.capture()).toBeUndefined()
+            expect(yield* Effect.promise(() => fs.stat(lock))).toBeDefined()
+            yield* Effect.promise(() => fs.rm(lock))
+            expect(yield* snapshot.capture()).toBeUndefined()
+
+            yield* TestClock.adjust("5 seconds")
+            expect(yield* snapshot.capture()).toBeDefined()
+          }).pipe(Effect.provide(snapshotLayer(tmp.path, project)), Effect.provide(TestClock.layer()))
         }),
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
     ),
