@@ -103,6 +103,7 @@ export namespace FSUtil {
       const resolve = Effect.fn("FileSystem.resolve")(function* (input: string) {
         const resolved = path.resolve(windowsPath(input))
         return yield* fs.realPath(resolved).pipe(
+          Effect.map((real) => (process.platform === "darwin" ? realpathSync.native(resolved) : real)),
           Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(resolved)),
           Effect.orDie,
         )
