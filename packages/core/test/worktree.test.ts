@@ -15,6 +15,7 @@ import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { Worktree } from "@opencode-ai/core/worktree"
 import { WorktreeDirectory } from "@opencode-ai/core/worktree/directory"
 import { WorktreeTable } from "@opencode-ai/core/worktree/sql"
+import { initRepo } from "./fixture/git"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
@@ -28,15 +29,6 @@ function abs(input: string) {
 }
 
 const gitWorktree = Worktree.StrategyID.make("git")
-
-async function initRepo(directory: string) {
-  await $`git init`.cwd(directory).quiet()
-  await $`git config core.fsmonitor false`.cwd(directory).quiet()
-  await $`git config commit.gpgsign false`.cwd(directory).quiet()
-  await $`git config user.email test@opencode.test`.cwd(directory).quiet()
-  await $`git config user.name Test`.cwd(directory).quiet()
-  await $`git commit --allow-empty -m root`.cwd(directory).quiet()
-}
 
 function setup() {
   return Effect.gen(function* () {
