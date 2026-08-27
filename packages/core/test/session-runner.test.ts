@@ -3323,27 +3323,9 @@ describe("SessionRunnerLLM", () => {
       yield* session.resume(sessionID)
 
       const expected = [
-        { type: "user", text: "Echo twice" },
-        {
-          type: "assistant",
-          content: [
-            {
-              type: "tool",
-              id: "tool_0",
-              state: { status: "completed", content: [{ type: "text", text: "first" }] },
-            },
-          ],
-        },
-        {
-          type: "assistant",
-          content: [
-            {
-              type: "tool",
-              id: "tool_0",
-              state: { status: "completed", content: [{ type: "text", text: "second" }] },
-            },
-          ],
-        },
+        Expected.user("Echo twice"),
+        Expected.assistant({}, [Expected.completedTool({ id: "tool_0" }, { content: [Expected.text("first")] })]),
+        Expected.assistant({}, [Expected.completedTool({ id: "tool_0" }, { content: [Expected.text("second")] })]),
       ]
       expect(executions).toEqual(["first", "second"])
       expect(requests).toHaveLength(3)

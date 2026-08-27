@@ -13,35 +13,13 @@ export const assistant = <const Fields extends object, Content>(fields: Fields, 
   content,
 })
 
-type ToolFields = {
-  readonly input?: unknown
-  readonly content?: unknown
-  readonly metadata?: unknown
-  readonly status?: never
-}
-
-type ToolIdentity = {
-  readonly id?: unknown
-  readonly name?: unknown
-  readonly executed?: unknown
-  readonly providerState?: unknown
-  readonly providerResultState?: unknown
-  readonly time?: unknown
-}
-
-export const completedTool = <Identity extends ToolIdentity, Fields extends ToolFields>(
-  identity: Identity,
-  fields: Fields,
-) => ({
+export const completedTool = <Identity extends object, Fields extends object>(identity: Identity, fields: Fields) => ({
   ...identity,
   type: "tool" as const,
   state: { ...fields, status: "completed" as const },
 })
 
-export const failedTool = <Identity extends ToolIdentity, Fields extends ToolFields & { readonly error?: unknown }>(
-  identity: Identity,
-  fields: Fields,
-) => ({
+export const failedTool = <Identity extends object, Fields extends object>(identity: Identity, fields: Fields) => ({
   ...identity,
   type: "tool" as const,
   state: { ...fields, status: "error" as const },
