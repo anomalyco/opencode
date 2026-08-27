@@ -361,12 +361,8 @@ const textOffset = (tree: TextNode, newline: number) => {
     if (!child) return tree.summary.bytes
     node = child
   }
-  for (const [index, byte] of node.bytes.entries()) {
-    if (byte !== 10) continue
-    remaining--
-    if (remaining === 0) return offset + index + 1
-  }
-  return tree.summary.bytes
+  const end = nthNewline(node.bytes, remaining)
+  return end === undefined ? tree.summary.bytes : offset + end
 }
 
 const nthNewline = (bytes: Uint8Array, count: number) => {
