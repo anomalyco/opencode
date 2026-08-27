@@ -1259,8 +1259,14 @@ describe("session.message-v2.toModelMessage", () => {
     ])
   })
 
-  test("substitutes space for empty text between signed reasoning blocks", async () => {
-    // Reproduces the bug pattern: [reasoning(sig), text(""), reasoning(sig), text(full)]
+  test("drops empty text between signed reasoning blocks to preserve signature validity", async () => {
+    // Anthropic signs reasoning blocks and rejects any modification to the
+    // assistant message that contains them.  An empty text part ("") can
+    // appear as a structural separator between reasoning groups.  Previously
+    // it was rewritten to " " to survive AI-SDK filtering, but that mutation
+    // itself causes Anthropic to reject the signed blocks as "modified".
+    // Dropping the empty separator is safe because step-start parts already
+    // delimit reasoning groups.
     const assistantID = "m-assistant"
     const input: SessionV1.WithParts[] = [
       {
@@ -1288,10 +1294,62 @@ describe("session.message-v2.toModelMessage", () => {
 
     const result = await MessageV2.toModelMessages(input, model)
 
-    // step-start splits into two assistant messages; SDK's groupIntoBlocks merges them later
     expect(result).toHaveLength(2)
-    expect((result[0].content as any[]).find((p) => p.type === "text").text).toBe(" ")
+    // First reasoning group: no text part at all (empty separator dropped)
+    expect((result[0].content as any[]).find((p) => p.type === "text")).toBeUndefined()
+    const reasoning0 = (result[0].content as any[]).find((p) => p.type === "reasoning")
+    expect(reasoning0).toBeDefined()
+    expect(reasoning0.providerOptions?.anthropic?.signature).toBe("sig1")
+    // Second reasoning group: non-empty text preserved
+    const reasoning1 = (result[1].content as any[]).find((p) => p.type === "reasoning")
+    expect(reasoning1).toBeDefined()
+    expect(reasoning1.providerOptions?.anthropic?.signature).toBe("sig2")
     expect((result[1].content as any[]).find((p) => p.type === "text").text).toBe("the answer")
+  })
+
+  test("preserves redacted thinking blocks with empty text during replay", async () => {
+    // Redacted thinking (text: "" with anthropic.redactedData) must survive
+    // toModelMessages without mutation. The empty text separator between
+    // redacted reasoning and a normal text part must be dropped (not mutated
+    // to " ") so the signed redactedData block is not invalidated.
+    const assistantID = "m-assistant-redacted"
+    const input: SessionV1.WithParts[] = [
+      {
+        info: assistantInfo(assistantID, "m-parent"),
+        parts: [
+          { ...basePart(assistantID, "p1"), type: "step-start" },
+          {
+            ...basePart(assistantID, "p2"),
+            type: "reasoning",
+            text: "",
+            metadata: { anthropic: { redactedData: "encrypted-blob" } },
+          },
+          { ...basePart(assistantID, "p3"), type: "text", text: "" },
+          { ...basePart(assistantID, "p4"), type: "step-start" },
+          {
+            ...basePart(assistantID, "p5"),
+            type: "reasoning",
+            text: "thinking-two",
+            metadata: { anthropic: { signature: "sig2" } },
+          },
+          { ...basePart(assistantID, "p6"), type: "text", text: "response" },
+        ] as SessionV1.Part[],
+      },
+    ]
+
+    const result = await MessageV2.toModelMessages(input, model)
+
+    expect(result).toHaveLength(2)
+    // First group: redacted reasoning present, no text separator
+    const reasoning0 = (result[0].content as any[]).find((p) => p.type === "reasoning")
+    expect(reasoning0).toBeDefined()
+    expect(reasoning0.providerOptions?.anthropic?.redactedData).toBe("encrypted-blob")
+    expect((result[0].content as any[]).find((p) => p.type === "text")).toBeUndefined()
+    // Second group: signed reasoning + normal text
+    const reasoning1 = (result[1].content as any[]).find((p) => p.type === "reasoning")
+    expect(reasoning1).toBeDefined()
+    expect(reasoning1.providerOptions?.anthropic?.signature).toBe("sig2")
+    expect((result[1].content as any[]).find((p) => p.type === "text").text).toBe("response")
   })
 
   test("leaves empty text alone when reasoning signature is under 'bedrock' namespace", async () => {

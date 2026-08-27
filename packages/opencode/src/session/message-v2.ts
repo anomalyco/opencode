@@ -259,27 +259,27 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
         role: "assistant",
         parts: [],
       }
-      // Anthropic adaptive thinking can persist assistant turns like:
-      // step-start, reasoning(signature), text(""), step-start,
-      // reasoning(signature). The empty text part is a structural separator,
-      // but it does not carry the signature metadata itself. Dropping it shifts
-      // signed thinking positions after step-start splitting/provider regrouping;
-      // keeping it as "" is filtered by the AI SDK and rejected by Anthropic.
-      // It is unclear whether this shape originates in our stream processing,
-      // a proxy, or a lower-level library, but preserving a non-empty separator
-      // here is the only safe replay point we have.
-      // Use a single space so the separator survives replay without changing
-      // the neighboring signed reasoning blocks.
+      // Anthropic extended thinking signs reasoning blocks and rejects any
+      // modification to the assistant message that contains them — including
+      // mutations to adjacent text parts that shift content-block indices.
+      // An empty text part ("") can appear as a structural separator between
+      // reasoning groups (e.g. step-start, reasoning(sig), text(""),
+      // step-start, reasoning(sig)).  Previously this was rewritten to a
+      // single space (" ") to survive AI-SDK filtering, but that mutation
+      // itself causes Anthropic to reject the signed reasoning blocks as
+      // "modified".  Dropping the empty separator is safe because step-start
+      // parts already delimit reasoning groups, and the absence of the text
+      // part does not change the signed blocks themselves.
       const hasSignedReasoning = msg.parts.some((part) => {
         if (part.type !== "reasoning") return false
         return part.metadata?.anthropic?.signature != null
       })
       for (const part of msg.parts) {
         if (part.type === "text") {
-          const text = part.text === "" && hasSignedReasoning ? " " : part.text
+          if (part.text === "" && hasSignedReasoning) continue
           assistantMessage.parts.push({
             type: "text",
-            text,
+            text: part.text,
             ...(differentModel ? {} : { providerMetadata: part.metadata }),
           })
         }
@@ -361,6 +361,12 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
         }
         if (part.type === "reasoning") {
           if (differentModel) {
+            // When replaying to a different model, signed reasoning blocks
+            // cannot be preserved verbatim (the signature is Anthropic-specific).
+            // Downgrade readable thinking to plain text and silently drop
+            // redacted thinking (which has no readable content).  This is a
+            // one-way transformation for cross-provider replay only; same-model
+            // replay preserves the signed block below.
             if (part.text.trim().length > 0)
               assistantMessage.parts.push({
                 type: "text",
