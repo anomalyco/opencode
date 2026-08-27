@@ -1,0 +1,5 @@
+#!/bin/bash
+# Post-install script for OpenCode macOS .pkg
+# Ensures the binary is executable after installation.
+chmod 755 /usr/local/bin/opencode
+exit 0
