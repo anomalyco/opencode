@@ -69,7 +69,7 @@ describe("skill", () => {
       const output = Skill.fmt(
         [
           {
-            name: "tagged-skill",
+            name: "tagged<&skill",
             description: "Compare A < B & C.",
             location: "/tmp/plugin.git#v1.3.0/SKILL.md",
             content: "",
@@ -84,6 +84,8 @@ describe("skill", () => {
         { verbose: true },
       )
 
+      expect(output).toContain("<name>tagged&lt;&amp;skill</name>")
+      expect(output).not.toContain("<name>tagged<&skill</name>")
       expect(output).toContain("<location>/tmp/plugin.git#v1.3.0/SKILL.md</location>")
       expect(output).toContain("<location>&lt;built-in&gt;</location>")
       expect(output).toContain("<description>Compare A &lt; B &amp; C.</description>")

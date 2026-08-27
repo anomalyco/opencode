@@ -46,7 +46,7 @@ export const SkillTool = Tool.define(
           return {
             title: `Loaded skill: ${info.name}`,
             output: [
-              `<skill_content name="${info.name}">`,
+              `<skill_content name="${escapeHtml(info.name)}">`,
               `# Skill: ${info.name}`,
               "",
               info.content.trim(),
