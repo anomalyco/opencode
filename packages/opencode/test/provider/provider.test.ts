@@ -252,6 +252,8 @@ it.instance(
     const provider = providers[ProviderV2.ID.make("custom-provider")]
     expect(provider.models["deepseek-r1"].capabilities.interleaved).toEqual({ field: "reasoning_content" })
     expect(provider.models["deepseek-details"].capabilities.interleaved).toEqual({ field: "reasoning_details" })
+    expect(provider.models["deepseek-text"].capabilities.interleaved).toEqual({ field: "reasoning_text" })
+    expect(provider.models["custom-reasoning"].capabilities.interleaved).toEqual({ field: "vendor_reasoning" })
     expect(provider.models["custom-model"].capabilities.interleaved).toBe(false)
     expect(
       providers[ProviderV2.ID.make("custom-anthropic-provider")].models["deepseek-r1"].capabilities.interleaved,
@@ -267,6 +269,8 @@ it.instance(
           models: {
             "deepseek-r1": { name: "DeepSeek R1" },
             "deepseek-details": { name: "DeepSeek Details", interleaved: { field: "reasoning_details" } },
+            "deepseek-text": { name: "DeepSeek Text", interleaved: "reasoning_text" },
+            "custom-reasoning": { name: "Custom Reasoning", interleaved: { field: "vendor_reasoning" } },
             "custom-model": { name: "Custom Model" },
           },
           options: { apiKey: "custom-key" },
@@ -1462,6 +1466,7 @@ test("models.dev normalization fills required response fields", () => {
         id: "gpt-5.4",
         name: "GPT-5.4",
         family: "gpt",
+        interleaved: "reasoning_text",
         cost: { input: 2.5, output: 15 },
         limit: { context: 1_050_000, input: 922_000, output: 128_000 },
       },
@@ -1474,6 +1479,7 @@ test("models.dev normalization fills required response fields", () => {
   expect(model.capabilities.reasoning).toBe(false)
   expect(model.capabilities.attachment).toBe(false)
   expect(model.capabilities.toolcall).toBe(true)
+  expect(model.capabilities.interleaved).toEqual({ field: "reasoning_text" })
   expect(model.release_date).toBe("")
 })
 
@@ -1540,6 +1546,33 @@ test("models.dev reasoning options replace generated variants and unsupported to
   })
   expect(models.anthropicCompatible.variants).toEqual({ max: { effort: "max" } })
   expect(models["gemini-3-pro-fast"].variants).toEqual(models.override.variants)
+})
+
+test("MERGE Gateway exposes declared effort variants without model-specific handling", () => {
+  const provider = {
+    id: "merge-gateway",
+    name: "MERGE Gateway",
+    env: ["MERGE_GATEWAY_API_KEY"],
+    npm: "merge-gateway-ai-sdk-provider",
+    models: {
+      "openai/gpt-5.6-sol": {
+        id: "openai/gpt-5.6-sol",
+        name: "GPT-5.6 Sol",
+        reasoning: true,
+        reasoning_options: [{ type: "effort", values: ["none", "low", "medium", "high", "xhigh", "max"] }],
+        limit: { context: 128_000, output: 64_000 },
+      },
+    },
+  } as unknown as ModelsDev.Provider
+
+  expect(Provider.fromModelsDevProvider(provider).models["openai/gpt-5.6-sol"].variants).toEqual({
+    none: { reasoningEffort: "none" },
+    low: { reasoningEffort: "low" },
+    medium: { reasoningEffort: "medium" },
+    high: { reasoningEffort: "high" },
+    xhigh: { reasoningEffort: "xhigh" },
+    max: { reasoningEffort: "max" },
+  })
 })
 
 test("public provider info omits invalid models", () => {
@@ -1872,6 +1905,32 @@ it.instance("Google Vertex: keeps regional Claude endpoints unchanged", () =>
     const language = yield* provider.getLanguage(model)
     expect(languageBaseURL(language)).toBe(
       "https://europe-west1-aiplatform.googleapis.com/v1/projects/test-project/locations/europe-west1/publishers/anthropic/models",
+    )
+  }),
+)
+
+it.instance("Google Vertex: uses REP endpoint for Gemini continental multi-regions", () =>
+  Effect.gen(function* () {
+    yield* set("GOOGLE_CLOUD_PROJECT", "test-project")
+    yield* set("VERTEX_LOCATION", "eu")
+    const provider = yield* Provider.Service
+    const model = yield* provider.getModel(ProviderV2.ID.make("google-vertex"), ModelV2.ID.make("gemini-3.5-flash"))
+    const language = yield* provider.getLanguage(model)
+    expect(languageBaseURL(language)).toBe(
+      "https://aiplatform.eu.rep.googleapis.com/v1beta1/projects/test-project/locations/eu/publishers/google",
+    )
+  }),
+)
+
+it.instance("Google Vertex: keeps regional Gemini endpoints unchanged", () =>
+  Effect.gen(function* () {
+    yield* set("GOOGLE_CLOUD_PROJECT", "test-project")
+    yield* set("VERTEX_LOCATION", "europe-west1")
+    const provider = yield* Provider.Service
+    const model = yield* provider.getModel(ProviderV2.ID.make("google-vertex"), ModelV2.ID.make("gemini-3.5-flash"))
+    const language = yield* provider.getLanguage(model)
+    expect(languageBaseURL(language)).toBe(
+      "https://europe-west1-aiplatform.googleapis.com/v1beta1/projects/test-project/locations/europe-west1/publishers/google",
     )
   }),
 )

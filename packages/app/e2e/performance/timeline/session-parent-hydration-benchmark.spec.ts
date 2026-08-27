@@ -41,7 +41,12 @@ const assistants = Array.from({ length: 14 }, (_, index) => {
 const messages = [user, ...assistants]
 const target = fixture.sessions.find((session) => session.id === fixture.targetID)!
 const lastID = userID
-const lastPartID = assistants.at(-1)!.parts.at(-1)!.id
+const lastAssistant = assistants.at(-1)!
+const lastPart = lastAssistant.parts.at(-1)!
+const lastPartID =
+  lastPart.type === "tool"
+    ? lastPart.id
+    : `${lastAssistant.info.id}:${lastPart.type}:${lastAssistant.parts.filter((part) => part.type === lastPart.type).length - 1}`
 
 benchmark("hydrates an orphaned latest turn after a cold session click", async ({ browser, report }, testInfo) => {
   benchmark.setTimeout(180_000)
@@ -107,9 +112,25 @@ async function trial(page: Page, mode: ParentHydrationBenchmarkMode) {
       return { items: items.slice(start, end), cursor: start > 0 ? items[start]!.info.id : undefined }
     },
   })
-  await page.route(`**/session/${fixture.targetID}`, (route) =>
-    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(target) }),
-  )
+  await page.route(`**/session/${fixture.targetID}`, (route) => {
+    const current = new URL(route.request().url()).pathname.startsWith("/api/")
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(
+        current
+          ? {
+              data: {
+                ...target,
+                cost: 0,
+                tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+                location: { directory: target.directory },
+              },
+            }
+          : target,
+      ),
+    })
+  })
   await installStressSessionTabs(page, { sessionIDs: [fixture.sourceID] })
   await page.goto(stressSessionHref(fixture.sourceID))
   await expectSessionTitle(page, fixture.expected.sourceTitle)
@@ -144,8 +165,8 @@ async function trial(page: Page, mode: ParentHydrationBenchmarkMode) {
     parent: requests.filter((request) => request.type === "parent").length,
   }
   if (mode === "candidate") {
-    expect(requestCounts.parent).toBe(1)
-    expect(historyGates).toBe(1)
+    expect(requestCounts.parent).toBe(0)
+    expect(historyGates).toBe(0)
   }
   return { metrics, requestCounts, historyGateCount: historyGates }
 }

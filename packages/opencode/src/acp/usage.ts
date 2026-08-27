@@ -83,6 +83,10 @@ export function messageLoaderFromSDK(sdk: SDK): MessageLoaderInterface {
 
 export const messageLoaderLayer = (sdk: SDK) => Layer.succeed(MessageLoader, messageLoaderFromSDK(sdk))
 
+export function contextTokens(message: AssistantTokenCost): number {
+  return message.tokens.input + message.tokens.cache.read + message.tokens.cache.write
+}
+
 export function buildUsage(message: AssistantTokenCost): Usage {
   const cachedReadTokens = message.tokens.cache.read
   const cachedWriteTokens = message.tokens.cache.write
@@ -207,7 +211,7 @@ const layer = Layer.effect(
             sessionId: input.sessionID,
             update: {
               sessionUpdate: "usage_update",
-              used: message.tokens.input + message.tokens.cache.read,
+              used: contextTokens(message),
               size,
               cost: { amount: totalSessionCost(messages), currency: "USD" },
             },

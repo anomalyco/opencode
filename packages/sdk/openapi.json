@@ -548,7 +548,7 @@
             }
           }
         },
-        "description": "Upgrade opencode to the specified version or latest if not specified.",
+        "description": "Upgrade opencode to the specified version.",
         "summary": "Upgrade opencode",
         "requestBody": {
           "content": {
@@ -560,6 +560,7 @@
                     "type": "string"
                   }
                 },
+                "required": ["target"],
                 "additionalProperties": false
               }
             }
@@ -20820,15 +20821,28 @@
                 "interleaved": {
                   "anyOf": [
                     {
-                      "type": "boolean",
-                      "enum": [true]
+                      "type": "boolean"
+                    },
+                    {
+                      "type": "string",
+                      "enum": ["reasoning", "reasoning_content", "reasoning_text"]
+                    },
+                    {
+                      "type": "string"
                     },
                     {
                       "type": "object",
                       "properties": {
                         "field": {
-                          "type": "string",
-                          "enum": ["reasoning", "reasoning_content", "reasoning_details"]
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": ["reasoning", "reasoning_content", "reasoning_text"]
+                            },
+                            {
+                              "type": "string"
+                            }
+                          ]
                         }
                       },
                       "required": ["field"],
@@ -21641,8 +21655,15 @@
                     "type": "object",
                     "properties": {
                       "field": {
-                        "type": "string",
-                        "enum": ["reasoning", "reasoning_content", "reasoning_details"]
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": ["reasoning", "reasoning_content", "reasoning_text"]
+                          },
+                          {
+                            "type": "string"
+                          }
+                        ]
                       }
                     },
                     "required": ["field"],

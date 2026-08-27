@@ -5,7 +5,6 @@ import { previewSelectedLines } from "@opencode-ai/session-ui/pierre/selection-b
 import { useFile, selectionFromLines, type FileSelection, type SelectedLineRange } from "@/context/file"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
-import { useLocal } from "@/context/local"
 import { usePermission } from "@/context/permission"
 import { usePrompt } from "@/context/prompt"
 import { useSDK } from "@/context/sdk"
@@ -13,12 +12,15 @@ import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
 import { showToast } from "@/utils/toast"
+import { downloadSessionExport, fetchSessionExport, sessionExportFilename } from "@/utils/session-export"
 import { findLast } from "@opencode-ai/core/util/array"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { extractPromptFromParts } from "@/utils/prompt"
-import { UserMessage } from "@opencode-ai/sdk/v2"
+import { Message, Part, UserMessage } from "@opencode-ai/sdk/v2"
 import { useSessionLayout } from "@/pages/session/session-layout"
+import { useSessionArchive } from "@/pages/session/session-archive"
 import { createSessionOwnership } from "./session-ownership"
+import { useLocal } from "@/context/local"
 
 export type SessionCommandContext = {
   navigateMessageByOffset: (offset: number) => void
@@ -40,7 +42,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const dialog = useDialog()
   const file = useFile()
   const language = useLanguage()
-  const local = useLocal()
   const permission = usePermission()
   const prompt = usePrompt()
   const sdk = useSDK()
@@ -48,9 +49,11 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const sync = useSync()
   const terminal = useTerminal()
   const layout = useLayout()
+  const local = useLocal()
   const navigate = useNavigate()
   const { params, sessionKey, tabs, view } = useSessionLayout()
   const sessionOwnership = createSessionOwnership(sessionKey)
+  const sessionArchive = useSessionArchive()
   const openDialog = async <T,>(load: () => Promise<T>, show: (value: T) => void) => {
     const owner = sessionOwnership.capture()
     const value = await load()
@@ -99,7 +102,8 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const visibleUserMessages = () => {
     const revert = info()?.revert?.messageID
     if (!revert) return userMessages()
-    return userMessages().filter((m) => m.id < revert)
+    const boundary = userMessages().findIndex((message) => message.id === revert)
+    return boundary < 0 ? userMessages() : userMessages().slice(0, boundary)
   }
 
   const showAllFiles = () => {
@@ -231,6 +235,31 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       )
   }
 
+  const exportSession = async () => {
+    const sessionID = params.id
+    if (!sessionID) return
+    try {
+      const data = await fetchSessionExport({
+        sessionID,
+        client: sdk().client,
+      })
+      const filename = sessionExportFilename(data.info)
+      downloadSessionExport(filename, data)
+      showToast({
+        variant: "success",
+        icon: "circle-check",
+        title: language.t("toast.session.export.success.title"),
+        description: language.t("toast.session.export.success.description", { filename }),
+      })
+    } catch (err) {
+      showToast({
+        variant: "error",
+        title: language.t("toast.session.export.failed.title"),
+        description: err instanceof Error ? err.message : language.t("toast.session.export.failed.description"),
+      })
+    }
+  }
+
   const openFile = () => {
     void openDialog(
       () => import("@/components/dialog-select-file"),
@@ -306,27 +335,29 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     const sessionID = params.id
     if (!sessionID) return
     const owner = sessionOwnership.capture()
-    const client = sdk().client
+    const session = sdk().api.session
     const directory = sdk().directory
     const promptSession = prompt.capture()
     const revert = info()?.revert?.messageID
     const messages = userMessages()
-    const message = findLast(messages, (x) => !revert || x.id < revert)
+    const boundary = revert ? messages.findIndex((message) => message.id === revert) : messages.length
+    if (boundary < 0) return
+    const message = messages[boundary - 1]
     if (!message) return
     const parts = sync().data.part[message.id]
 
     if (sync().data.session_working(sessionID)) {
-      await client.session.abort({ sessionID }).catch(() => {})
+      await session.interrupt({ sessionID }).catch(() => {})
     }
 
     await runCommand({
       owner,
       prompt: promptSession,
-      request: () => client.session.revert({ sessionID, messageID: message.id }),
+      request: () => session.revert.stage({ sessionID, messageID: message.id }),
       updatePrompt: (promptSession) => {
         if (parts) promptSession.set(extractPromptFromParts(parts, { directory }))
       },
-      updateViewport: () => setActiveMessage(findLast(messages, (x) => x.id < message.id)),
+      updateViewport: () => setActiveMessage(messages[boundary - 2]),
     })
   }
 
@@ -334,21 +365,23 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     const sessionID = params.id
     if (!sessionID) return
     const owner = sessionOwnership.capture()
-    const client = sdk().client
+    const session = sdk().api.session
     const messages = userMessages()
     const promptSession = prompt.capture()
 
     const revertMessageID = info()?.revert?.messageID
     if (!revertMessageID) return
 
-    const next = messages.find((x) => x.id > revertMessageID)
+    const boundary = messages.findIndex((message) => message.id === revertMessageID)
+    if (boundary < 0) return
+    const next = messages[boundary + 1]
     if (!next) {
       await runCommand({
         owner,
         prompt: promptSession,
-        request: () => client.session.unrevert({ sessionID }),
+        request: () => session.revert.clear({ sessionID }),
         updatePrompt: (promptSession) => promptSession.reset(),
-        updateViewport: () => setActiveMessage(findLast(messages, (x) => x.id >= revertMessageID)),
+        updateViewport: () => setActiveMessage(messages.at(-1)),
       })
       return
     }
@@ -356,9 +389,9 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     await runCommand({
       owner,
       prompt: promptSession,
-      request: () => client.session.revert({ sessionID, messageID: next.id }),
+      request: () => session.revert.stage({ sessionID, messageID: next.id }),
       updatePrompt: () => undefined,
-      updateViewport: () => setActiveMessage(findLast(messages, (x) => x.id < next.id)),
+      updateViewport: () => setActiveMessage(messages[boundary]),
     })
   }
 
@@ -375,10 +408,9 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       return
     }
 
-    await sdk().client.session.summarize({
+    await sdk().api.session.compact({
       sessionID,
-      modelID: model.id,
-      providerID: model.provider.id,
+      model: { providerID: model.provider.id, modelID: model.id },
     })
   }
 
@@ -458,6 +490,24 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       slash: "fork",
       disabled: !params.id || visibleUserMessages().length === 0,
       onSelect: fork,
+    }),
+    sessionCommand({
+      id: "session.export",
+      title: language.t("command.session.export"),
+      description: language.t("command.session.export.description"),
+      slash: "export",
+      disabled: !params.id,
+      onSelect: exportSession,
+    }),
+    sessionCommand({
+      id: "session.archive",
+      title: language.t("command.session.archive"),
+      keybind: "mod+shift+backspace",
+      disabled: !params.id,
+      onSelect: () => {
+        const id = params.id
+        if (id) void sessionArchive.archive(id)
+      },
     }),
   ]
 

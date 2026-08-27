@@ -204,10 +204,18 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     }
 
     const search = (query: string, dirs: "true" | "false", options?: { limit?: number; signal?: AbortSignal }) =>
-      sdk()
-        .client.find.files({ query, dirs, limit: options?.limit }, { signal: options?.signal })
+      serverSDK()
+        .api.file.find(
+          {
+            location: { directory: sdk().directory },
+            query,
+            type: dirs === "true" ? "directory" : "file",
+            limit: options?.limit,
+          },
+          { signal: options?.signal },
+        )
         .then(
-          (x) => (x.data ?? []).map(path.normalize),
+          (x) => x.data.map((entry) => path.normalize(entry.path)),
           (error) => {
             if (options?.signal?.aborted) throw error
             return []
