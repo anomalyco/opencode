@@ -29,7 +29,7 @@ smoke(
       const base = HttpServer.formatAddress(server.address)
       const sessionID = Session.ID.make("ses_persistent_pty_test")
       expect(existsSync(fixture.directory)).toBeFalse()
-      expect(yield* request(base, "POST", "/api/experimental/persistent-pty/prepare-restart")).toEqual({
+      expect(yield* request(base, "POST", "/api/experimental/persistent-pty/handoff")).toEqual({
         handoff: null,
       })
       expect((yield* request(base, "GET", `/api/experimental/session/${sessionID}/terminal`)).data).toEqual([])
@@ -222,7 +222,7 @@ smoke(
       expect((yield* request(otherBase, "GET", `/api/experimental/session/${sessionID}/terminal`)).data).toEqual([])
 
       const handoff = Schema.decodeUnknownSync(PersistentPty.Handoff)(
-        (yield* request(base, "POST", "/api/experimental/persistent-pty/prepare-restart")).handoff,
+        (yield* request(base, "POST", "/api/experimental/persistent-pty/handoff")).handoff,
       )
       const registration = Schema.decodeUnknownSync(Schema.Struct({ pid: Schema.Number }))(
         yield* Effect.promise(() => Bun.file(path.join(handoff.directory, "service.json")).json()),

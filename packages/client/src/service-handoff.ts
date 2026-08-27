@@ -23,7 +23,7 @@ export async function prepare(file: string, info: Info, timeout: number) {
           : { authorization: "Basic " + Buffer.from(`opencode:${info.password}`).toString("base64") },
       signal: AbortSignal.timeout(timeout),
     })
-  const result = await request("prepare-restart").then(
+  const result = await request("handoff").then(
     (response) => ({ response }),
     (cause: unknown) => ({ cause }),
   )

@@ -105,7 +105,7 @@ export interface Interface {
   readonly snapshot: (id: Pty.ID) => Effect.Effect<Snapshot, NotFoundError | UnavailableError>
   readonly remove: (id: Pty.ID) => Effect.Effect<void, NotFoundError | UnavailableError>
   readonly shutdown: () => Effect.Effect<void, UnavailableError>
-  readonly prepareRestart: () => Effect.Effect<Handoff | null, UnavailableError>
+  readonly handoff: () => Effect.Effect<Handoff | null, UnavailableError>
   readonly attach: (
     id: Pty.ID,
     input: {
@@ -283,9 +283,7 @@ export const configured = (options: Options = {}) =>
         if (response.type !== "ok") return yield* unexpected(response)
       })
 
-      const prepareRestart = Effect.fn("PersistentPty.prepareRestart")(() =>
-        daemon.prepareRestart.pipe(Effect.mapError(unavailable)),
-      )
+      const handoff = Effect.fn("PersistentPty.handoff")(() => daemon.handoff.pipe(Effect.mapError(unavailable)))
 
       const removeVisibleExit = (id: Pty.ID) => {
         if (removing.has(id)) return
@@ -344,7 +342,7 @@ export const configured = (options: Options = {}) =>
         snapshot,
         remove,
         shutdown,
-        prepareRestart,
+        handoff,
         attach,
       })
     }),

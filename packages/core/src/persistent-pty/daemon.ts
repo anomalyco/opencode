@@ -134,7 +134,7 @@ export interface DaemonTransport {
   readonly request: (value: object, start?: boolean) => Effect.Effect<WireResponse, DaemonError>
   readonly requestIfRunning: (value: object) => Effect.Effect<WireResponse | undefined, DaemonError>
   readonly shutdown: Effect.Effect<WireResponse | undefined, DaemonError>
-  readonly prepareRestart: Effect.Effect<Handoff | null, DaemonError>
+  readonly handoff: Effect.Effect<Handoff | null, DaemonError>
   readonly subscribe: (
     id: number,
     input: {
@@ -151,7 +151,7 @@ export interface DaemonTransport {
 export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport")(function* (
   directory: string,
   binary: () => Promise<string> = () => Promise.resolve(process.env.OPENCODE_PTY_BIN || "opencode-pty"),
-  handoff?: Handoff,
+  inherited?: Handoff,
 ) {
   const startup = Semaphore.makeUnsafe(1)
   let registration: Registration | undefined
@@ -324,7 +324,7 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
     return yield* Effect.fail(new DaemonError({ kind: "connect", message: "opencode-pty did not stop" }))
   })
 
-  const prepareRestart = startup.withPermit(
+  const handoff = startup.withPermit(
     Effect.gen(function* () {
       const current = owner
       const registered = registration
@@ -365,16 +365,16 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
   })
 
   // A replacement must own its inherited daemon before the server becomes ready.
-  if (handoff) {
-    if (handoff.expiresAt <= Date.now())
+  if (inherited) {
+    if (inherited.expiresAt <= Date.now())
       return yield* Effect.fail(new DaemonError({ kind: "registration", message: "PTY restart handoff expired" }))
     const current = yield* discover()
-    if (current.instance_id !== handoff.instanceID)
+    if (current.instance_id !== inherited.instanceID)
       return yield* Effect.fail(new DaemonError({ kind: "registration", message: "PTY restart daemon changed" }))
-    yield* claim(current, handoff.ticket)
+    yield* claim(current, inherited.ticket)
   }
 
-  return { request, requestIfRunning, shutdown, prepareRestart, subscribe } satisfies DaemonTransport
+  return { request, requestIfRunning, shutdown, handoff, subscribe } satisfies DaemonTransport
 })
 
 async function openOwner(registration: Registration, ticket: string | undefined, signal: AbortSignal) {

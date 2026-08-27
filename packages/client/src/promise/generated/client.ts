@@ -199,7 +199,7 @@ import type {
   ExperimentalPersistentPtyCreateInput,
   ExperimentalPersistentPtyCreateOutput,
   ExperimentalPersistentPtyShutdownOutput,
-  ExperimentalPersistentPtyPrepareRestartOutput,
+  ExperimentalPersistentPtyHandoffOutput,
   ExperimentalPersistentPtyGetInput,
   ExperimentalPersistentPtyGetOutput,
   ExperimentalPersistentPtyUpdateInput,
@@ -1724,11 +1724,11 @@ export function make(options: ClientOptions) {
             },
             requestOptions,
           ),
-        prepareRestart: (requestOptions?: RequestOptions) =>
-          request<ExperimentalPersistentPtyPrepareRestartOutput>(
+        handoff: (requestOptions?: RequestOptions) =>
+          request<ExperimentalPersistentPtyHandoffOutput>(
             {
               method: "POST",
-              path: `/api/experimental/persistent-pty/prepare-restart`,
+              path: `/api/experimental/persistent-pty/handoff`,
               successStatus: 200,
               declaredStatuses: [503, 401, 400],
               empty: false,

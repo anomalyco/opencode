@@ -5809,7 +5809,7 @@ export type ExperimentalPersistentPtyCreateOutput = { data: PersistentPtyInfo }[
 
 export type ExperimentalPersistentPtyShutdownOutput = void
 
-export type ExperimentalPersistentPtyPrepareRestartOutput = { handoff: PersistentPtyHandoff | null }
+export type ExperimentalPersistentPtyHandoffOutput = { handoff: PersistentPtyHandoff | null }
 
 export type ExperimentalPersistentPtyGetInput = { readonly ptyID: { readonly ptyID: string }["ptyID"] }
 

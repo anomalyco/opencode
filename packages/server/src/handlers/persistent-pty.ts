@@ -52,9 +52,9 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
         }),
       )
       .handle(
-        "persistentPty.prepareRestart",
+        "persistentPty.handoff",
         Effect.fn(function* () {
-          return { handoff: yield* pty.prepareRestart().pipe(mapUnavailable) }
+          return { handoff: yield* pty.handoff().pipe(mapUnavailable) }
         }),
       )
       .handle(
