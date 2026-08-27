@@ -90,7 +90,7 @@ describe("CommandPlugin.Plugin", () => {
         name: "review",
         invocation: {
           sessionID: Session.ID.make("ses_test"),
-          prompt: { text: "  branch feature  " },
+          prompt: { text: "  branch $& $$ $` $'  " },
           delivery: "steer",
         },
       })
@@ -117,7 +117,7 @@ describe("CommandPlugin.Plugin", () => {
           delivery: "queue",
         },
         {
-          text: PROMPT_REVIEW.replace("${path}", project).replaceAll("$ARGUMENTS", "branch feature"),
+          text: PROMPT_REVIEW.replace("${path}", project).replaceAll("$ARGUMENTS", () => "branch $& $$ $` $'"),
           files: undefined,
           delivery: "steer",
         },

@@ -89,7 +89,7 @@ export const Plugin = define({
 
 function append(template: string, input: string) {
   const value = input.trim()
-  if (template.includes("$ARGUMENTS")) return template.replaceAll("$ARGUMENTS", value)
+  if (template.includes("$ARGUMENTS")) return template.replaceAll("$ARGUMENTS", () => value)
   return [template, value].filter(Boolean).join("\n\n")
 }
 
