@@ -74,7 +74,7 @@ export const dict = {
 
   "dialog.usageExceeded.freeTier.title": "Osiągnięto limit darmowy",
   "dialog.usageExceeded.freeTier.description":
-    "Subskrybuj OpenCode Go, aby uzyskać niezawodny dostęp do najlepszych modeli open source, od $5/miesiąc.",
+    "Subskrybuj OpenCode Go za $10/miesiąc, aby uzyskać niezawodny dostęp do najlepszych modeli open source.",
   "dialog.usageExceeded.freeTier.actionLabel": "Subskrybuj",
   "dialog.usageExceeded.accountRateLimit.title": "Osiągnięto limit Go",
   "dialog.usageExceeded.accountRateLimit.description":
