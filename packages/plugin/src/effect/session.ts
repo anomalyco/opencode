@@ -3,7 +3,7 @@ import type { GenerationOptionsFields, Message, SystemPart } from "@opencode-ai/
 import type { Agent } from "@opencode-ai/schema/agent"
 import type { Model } from "@opencode-ai/schema/model"
 import type { Session } from "@opencode-ai/schema/session"
-import type { JsonSchema } from "effect"
+import type { JsonSchema, Types } from "effect"
 import type { ModelHooks } from "./registration.js"
 
 export interface SessionContext {
@@ -13,7 +13,8 @@ export interface SessionContext {
   system: Array<SystemPart>
   messages: Array<Message>
   tools: Record<string, { description: string; input: JsonSchema.JsonSchema }>
-  generation: { -readonly [Key in keyof GenerationOptionsFields]: GenerationOptionsFields[Key] }
+  /** Request overrides; unset fields retain route and model defaults. */
+  generation: Types.DeepMutable<GenerationOptionsFields>
   providerOptions: Record<string, unknown>
 }
 

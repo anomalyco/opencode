@@ -344,7 +344,7 @@ describe("fromPromise", () => {
               event.system.push(SystemPart.make("Promise hook"))
               delete event.tools.echo
               event.generation.temperature = 0.4
-              event.providerOptions.reasoning = { effort: "medium" }
+              event.providerOptions.reasoningEffort = "medium"
             })
           },
         }),
@@ -365,7 +365,7 @@ describe("fromPromise", () => {
       expect(event.system.map((part) => part.text)).toEqual(["Initial", "Promise hook"])
       expect(event.tools).toEqual({})
       expect(event.generation).toEqual({ temperature: 0.4 })
-      expect(event.providerOptions).toEqual({ reasoning: { effort: "medium" } })
+      expect(event.providerOptions).toEqual({ reasoningEffort: "medium" })
     }),
   )
 

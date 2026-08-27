@@ -1043,7 +1043,7 @@ describe("SessionRunnerLLM", () => {
           event.generation.topP = 0.9
           event.generation.topK = 40
           event.generation.maxTokens = 2048
-          event.providerOptions.reasoning = { effort: "high" }
+          event.providerOptions.reasoningEffort = "high"
         }),
       )
       yield* admit(session, "Original message")
@@ -1058,7 +1058,7 @@ describe("SessionRunnerLLM", () => {
       expect(requests[0]?.tools.map((tool) => tool.name)).not.toContain("echo")
       expect(requests[0]?.tools.map((tool) => tool.name)).not.toContain("unregistered")
       expect(requests[0]?.generation).toMatchObject({ temperature: 0.2, topP: 0.9, topK: 40, maxTokens: 2048 })
-      expect(requests[0]?.providerOptions).toEqual({ reasoning: { effort: "high" } })
+      expect(requests[0]?.providerOptions).toEqual({ reasoningEffort: "high" })
       expect(executions).toEqual([])
       expect(yield* session.context(sessionID)).toMatchObject([
         { type: "user", text: "Original message" },

@@ -297,25 +297,17 @@ export const layer = Layer.effect(
       )
       // Hooks mutate this record in place: edit descriptions and schemas, rename, or remove.
       const definitions = Object.fromEntries(Array.from(given, ([definition, tool]) => [tool.name, definition]))
-      const context =
-        input.contextHooks === false
-          ? {
-              system: input.transcript.system,
-              messages: input.transcript.messages,
-              tools: definitions,
-              generation: {},
-              providerOptions: {},
-            }
-          : yield* hooks.trigger("session", "context", {
-              sessionID: session.id,
-              agent: input.scope.agentID,
-              model: resolved.ref,
-              system: input.transcript.system,
-              messages: input.transcript.messages,
-              tools: definitions,
-              generation: {},
-              providerOptions: {},
-            })
+      const context: PluginHooks.Domains["session"]["context"] = {
+        sessionID: session.id,
+        agent: input.scope.agentID,
+        model: resolved.ref,
+        system: input.transcript.system,
+        messages: input.transcript.messages,
+        tools: definitions,
+        generation: {},
+        providerOptions: {},
+      }
+      if (input.contextHooks !== false) yield* hooks.trigger("session", "context", context)
       // Match each surviving entry back to its tool, by recognizing a moved definition or
       // by key. Identity wins so a definition moved onto another tool's name still executes
       // the tool it describes. Entries matching neither were invented by a hook and dropped.
@@ -341,8 +333,8 @@ export const layer = Layer.effect(
           messages: boundImages(unsupportedParts(context.messages, resolved.capabilities)),
           tools: Array.from(hooked, ([name, tool]) => ({ ...tool, name })),
           toolChoice: input.toolChoice,
-          ...(Object.keys(context.generation).length === 0 ? {} : { generation: context.generation }),
-          ...(Object.keys(context.providerOptions).length === 0 ? {} : { providerOptions: context.providerOptions }),
+          generation: Object.keys(context.generation).length === 0 ? undefined : context.generation,
+          providerOptions: Object.keys(context.providerOptions).length === 0 ? undefined : context.providerOptions,
         }),
       )
       const hasHttpHooks =
