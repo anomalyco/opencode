@@ -83,7 +83,7 @@ const testLayer = AppNodeBuilder.build(
     [Config.node, config],
     [Image.node, imageLayer],
   ],
-) as unknown as Layer.Layer<unknown>
+)
 
 const it = testEffect(testLayer)
 
