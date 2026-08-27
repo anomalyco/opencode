@@ -8,7 +8,7 @@ import { Share } from "~/core/share"
 import { Resource } from "sst"
 import { timingSafeEqual } from "node:crypto"
 
-const app = new Hono()
+export const app = new Hono()
 
 app
   .basePath("/api")
@@ -105,13 +105,26 @@ app
             },
           },
         },
+        404: {
+          description: "Share not found",
+          content: {
+            "application/json": {
+              schema: resolver(z.object({ error: z.string() })),
+            },
+          },
+        },
       },
     }),
     validator("param", z.object({ shareID: z.string() })),
     async (c) => {
       const { shareID } = c.req.valid("param")
-      c.header("Cache-Control", "public, max-age=30, s-maxage=300, stale-while-revalidate=86400")
-      return c.json(await Share.data(shareID))
+      c.header("Cache-Control", "private, no-store")
+      const data = await Share.data(shareID).catch((error) => {
+        if (error instanceof Share.Errors.NotFound) return undefined
+        throw error
+      })
+      if (!data) return c.json({ error: `Share not found: ${shareID}` }, 404)
+      return c.json(data)
     },
   )
   .delete(
