@@ -14,7 +14,7 @@ import { Generate } from "@opencode-ai/core/generate"
 import { Integration } from "@opencode-ai/core/integration"
 import { KV } from "@opencode-ai/core/kv"
 import { Location } from "@opencode-ai/core/location"
-import { MCP } from "@opencode-ai/core/mcp/index"
+import { Mcp } from "@opencode-ai/core/mcp/index"
 import { Npm } from "@opencode-ai/util/npm"
 import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
@@ -72,7 +72,7 @@ export const PluginTestLayer = LayerNode.compile(
     Command.node,
     Integration.node,
     KV.node,
-    MCP.node,
+    Mcp.node,
     PluginRuntime.node,
     Permission.node,
     PluginHooks.node,
@@ -89,7 +89,7 @@ export const PluginTestLayer = LayerNode.compile(
     [Location.node, tempLocationLayer],
     [Npm.node, npmLayer],
     [Config.node, Config.testLayer()],
-    [MCP.node, emptyMcpLayer],
+    [Mcp.node, emptyMcpLayer],
     [Generate.node, generateLayer],
     [Permission.node, permissionLayer],
   ],

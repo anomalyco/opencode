@@ -1,13 +1,13 @@
 import { Effect, Layer, Stream } from "effect"
 import { Config } from "@opencode-ai/core/config"
 import { Location } from "@opencode-ai/core/location"
-import { MCP } from "@opencode-ai/core/mcp/index"
+import { Mcp } from "@opencode-ai/core/mcp/index"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { location } from "./location"
 
 export const emptyMcpLayer = Layer.succeed(
-  MCP.Service,
-  MCP.Service.of({
+  Mcp.Service,
+  Mcp.Service.of({
     transform: () => Effect.die("unused mcp.transform"),
     reload: () => Effect.die("unused mcp.reload"),
     servers: () => Effect.succeed([]),
@@ -20,7 +20,7 @@ export const emptyMcpLayer = Layer.succeed(
     instructions: () => Effect.succeed([]),
     prompts: () => Effect.succeed([]),
     prompt: () => Effect.undefined,
-    resourceCatalog: () => Effect.succeed(MCP.ResourceCatalog.make({ resources: [], templates: [] })),
+    resourceCatalog: () => Effect.succeed(Mcp.ResourceCatalog.make({ resources: [], templates: [] })),
     readResource: () => Effect.undefined,
   }),
 )
