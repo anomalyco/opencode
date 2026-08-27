@@ -15,7 +15,7 @@ import { SessionMessage } from "../message.js"
 import { SessionSchema } from "../schema.js"
 import { SessionStore } from "../store.js"
 import { SessionTitle } from "../title.js"
-import { DrainResult, Service, type Continuation } from "./index.js"
+import { DrainResult, Service, type Interface } from "./index.js"
 import { Snapshot } from "../../snapshot.js"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { llmClient } from "../../effect/app-node-platform.js"
@@ -71,12 +71,7 @@ const layer = Layer.effect(
     // Title generation starts once input is visible and must not delay model execution.
     const titles = yield* FiberMap.make<SessionSchema.ID, void, never>()
 
-    const drain = Effect.fn("SessionRunner.drain")(function* (input: {
-      readonly sessionID: SessionSchema.ID
-      readonly force: boolean
-      readonly continuation?: Continuation
-      readonly promotable?: SessionInbox.Promotable
-    }) {
+    const drain = Effect.fn("SessionRunner.drain")(function* (input: Parameters<Interface["drain"]>[0]) {
       const sessionID = input.sessionID
       let force = input.force
       let continuing = input.continuation !== undefined

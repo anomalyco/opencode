@@ -4,7 +4,7 @@ import os from "node:os"
 import path from "node:path"
 import { Context, Effect, Layer, Schema } from "effect"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
-import { Added, Handoff, Removed } from "@opencode-ai/schema/persistent-pty"
+import { Added, Handoff, PersistentPty, Removed } from "@opencode-ai/schema/persistent-pty"
 import { Session } from "@opencode-ai/schema/session"
 import { Bus } from "../bus.js"
 import { Pty } from "@opencode-ai/schema/pty"
@@ -26,19 +26,9 @@ export { Handoff } from "@opencode-ai/schema/persistent-pty"
 export const Options = Schema.Struct({ handoff: Schema.optional(Handoff) })
 export type Options = typeof Options.Type
 
-export type Info = Pty.Info & {
-  readonly sessionID: Session.ID
-  readonly foregroundProcess: string | null
-  readonly size: { readonly cols: number; readonly rows: number }
-  readonly output: { readonly head: number; readonly tail: number }
-}
+export type Info = PersistentPty.Info
 
-export type Snapshot = {
-  readonly info: Info
-  readonly text: string
-  readonly checkpoint: Uint8Array
-  readonly cursor: { readonly x: number; readonly y: number }
-}
+export type Snapshot = PersistentPty.Snapshot
 
 export type Attachment = {
   readonly info: Info
@@ -158,15 +148,7 @@ export const configured = (options: Options = {}) =>
 
       const create = Effect.fn("PersistentPty.create")(function* (
         sessionID: Session.ID,
-        input: {
-          readonly command?: string
-          readonly args: readonly string[]
-          readonly cwd?: string
-          readonly title: string
-          readonly env: Readonly<Record<string, string>>
-          readonly cols?: number
-          readonly rows?: number
-        },
+        input: Parameters<Interface["create"]>[1],
       ) {
         const response = yield* request(
           daemon,
@@ -302,14 +284,7 @@ export const configured = (options: Options = {}) =>
 
       const attach = Effect.fn("PersistentPty.attach")(function* (
         id: Pty.ID,
-        input: {
-          readonly cursor: number
-          readonly attachmentID: string
-          readonly role: Role
-          readonly takeover?: boolean
-          readonly onEvent: (event: StreamEvent) => void
-          readonly onEnd: () => void
-        },
+        input: Parameters<Interface["attach"]>[1],
       ) {
         yield* get(id)
         const attachment = yield* daemon
