@@ -5,6 +5,7 @@ import { Effect, Schema, Stream } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Config } from "@opencode-ai/core/config"
 import { ConfigProviderPlugin } from "@opencode-ai/core/config/plugin/provider"
+import { ConfigNormalize } from "@opencode-ai/core/config/normalize"
 import { Integration } from "@opencode-ai/core/integration"
 import { Model } from "@opencode-ai/core/model"
 import { Plugin } from "@opencode-ai/core/plugin"
@@ -151,6 +152,54 @@ describe("ConfigProviderPlugin.Plugin", () => {
       })
     }),
   )
+
+  for (const scenario of [
+    { name: "omitted capabilities", legacy: {}, overrides: {} },
+    {
+      name: "input-only modalities",
+      legacy: { modalities: { input: ["text", "image", "pdf"] } },
+      overrides: { input: ["text", "image", "pdf"] },
+    },
+    {
+      name: "output-only modalities",
+      legacy: { modalities: { output: ["audio"] } },
+      overrides: { output: ["audio"] },
+    },
+    { name: "enabled tools", legacy: { tool_call: true }, overrides: { tools: true } },
+    { name: "disabled tools", legacy: { tool_call: false }, overrides: { tools: false } },
+    {
+      name: "explicit empty modalities",
+      legacy: { modalities: { input: [], output: [] } },
+      overrides: { input: [], output: [] },
+    },
+    {
+      name: "fully specified capabilities",
+      legacy: { tool_call: false, modalities: { input: ["audio"], output: ["text"] } },
+      overrides: { tools: false, input: ["audio"], output: ["text"] },
+    },
+  ]) {
+    it.effect(`uses native model defaults for migrated ${scenario.name}`, () =>
+      Effect.gen(function* () {
+        const catalog = yield* Catalog.Service
+        const providerID = Provider.ID.make("custom")
+        const result = ConfigNormalize.normalize({ provider: { custom: { models: { migrated: scenario.legacy } } } })
+        if (result.type !== "normalized") throw new Error("Expected normalized config")
+        expect(result.diagnostics).toEqual([])
+
+        yield* addPlugin([
+          new Document({
+            type: "document",
+            info: decode({ providers: { custom: { models: { native: {} } } } }),
+          }),
+          new Document({ type: "document", info: decode(result.encoded) }),
+        ])
+
+        const native = required(yield* catalog.model.get(providerID, Model.ID.make("native")))
+        const migrated = required(yield* catalog.model.get(providerID, Model.ID.make("migrated")))
+        expect(migrated.capabilities).toEqual({ ...native.capabilities, ...scenario.overrides })
+      }),
+    )
+  }
 
   it.effect("keeps configured model variant bodies unchanged", () =>
     Effect.gen(function* () {
