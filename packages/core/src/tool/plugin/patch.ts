@@ -1,6 +1,6 @@
 export * as PatchTool from "./patch.js"
 
-import type { Context as PluginContext } from "@opencode-ai/plugin/effect/plugin"
+import type { Context } from "@opencode-ai/plugin/effect/plugin"
 import { ToolFailure } from "@opencode-ai/ai"
 import { FileDiff } from "@opencode-ai/schema/file-diff"
 import { Effect, Result, Schema } from "effect"
@@ -65,7 +65,7 @@ type Prepared =
 
 export const Plugin = {
   id: "opencode.tool.patch",
-  effect: Effect.fn("PatchTool.Plugin")(function* (ctx: PluginContext) {
+  effect: Effect.fn("PatchTool.Plugin")(function* (ctx: Context) {
     const environment = yield* Environment.Service
     const mutation = yield* LocationMutation.Service
     const fileMutation = yield* FileMutation.Service
