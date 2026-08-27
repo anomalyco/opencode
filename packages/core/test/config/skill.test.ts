@@ -25,14 +25,9 @@ import { testEffect } from "../lib/effect"
 import { host } from "../plugin/host"
 
 const emptyDiscovery = SkillDiscovery.Service.of({ pull: () => Effect.succeed([]) })
-const discoveryLayer = Layer.succeed(SkillDiscovery.Service, emptyDiscovery)
 const watcherLayer = Watcher.testLayer
 const it = testEffect(
-  Layer.mergeAll(
-    AppNodeBuilder.build(LayerNode.group([Skill.node, Bus.node, FSUtil.node])),
-    discoveryLayer,
-    watcherLayer,
-  ),
+  Layer.merge(AppNodeBuilder.build(LayerNode.group([Skill.node, Bus.node, FSUtil.node])), watcherLayer),
 )
 const decode = Schema.decodeUnknownSync(Info)
 
