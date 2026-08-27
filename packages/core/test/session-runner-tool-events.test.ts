@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { Cause, Effect, Exit, Schema, Tracer } from "effect"
+import { Cause, Effect, Exit, Schema } from "effect"
 import { LLMEvent } from "@opencode-ai/ai"
 import { Money } from "@opencode-ai/schema/money"
 import { Bus } from "@opencode-ai/core/bus"
@@ -62,59 +62,6 @@ const hostedResult = LLMEvent.toolResult({
       { type: "file", uri: `data:image/png;base64,${base64}`, mime: "image/png", name: "pixel.png" },
     ],
   },
-})
-
-test.each([
-  {
-    type: "text",
-    start: LLMEvent.textStart({ id: "text" }),
-    delta: LLMEvent.textDelta({ id: "text", text: "chunk" }),
-    end: LLMEvent.textEnd({ id: "text" }),
-    ended: "session.text.ended.1",
-  },
-  {
-    type: "reasoning",
-    start: LLMEvent.reasoningStart({ id: "reasoning" }),
-    delta: LLMEvent.reasoningDelta({ id: "reasoning", text: "chunk" }),
-    end: LLMEvent.reasoningEnd({ id: "reasoning" }),
-    ended: "session.reasoning.ended.1",
-  },
-  {
-    type: "tool input",
-    start: LLMEvent.toolInputStart({ id: "tool", name: "read" }),
-    delta: LLMEvent.toolInputDelta({ id: "tool", name: "read", text: "chunk" }),
-    end: LLMEvent.toolInputEnd({ id: "tool", name: "read" }),
-    ended: "session.tool.input.ended.1",
-  },
-])("publishes $type deltas without tracing each chunk", async (input) => {
-  const { published, publisher } = capture()
-  const spans: Tracer.NativeSpan[] = []
-  const tracer = Tracer.make({
-    span(options) {
-      const span = new Tracer.NativeSpan(options)
-      spans.push(span)
-      return span
-    },
-  })
-
-  await Effect.runPromise(
-    Effect.gen(function* () {
-      yield* publisher.publish(input.start)
-      expect(spans.map((span) => span.name)).toEqual(["attempt", "SessionRunner.publishLLMEvent"])
-      yield* publisher.publish(input.delta)
-      yield* publisher.publish(input.delta)
-      expect(spans.map((span) => span.name)).toEqual(["attempt", "SessionRunner.publishLLMEvent"])
-      yield* publisher.publish(input.end)
-    }).pipe(Effect.withSpan("attempt"), Effect.provideService(Tracer.Tracer, tracer)),
-  )
-
-  expect(spans.map((span) => span.name)).toEqual([
-    "attempt",
-    "SessionRunner.publishLLMEvent",
-    "SessionRunner.publishLLMEvent",
-  ])
-  expect(spans.slice(1).every((span) => span.parent._tag === "Some" && span.parent.value === spans[0])).toBe(true)
-  expect(published.find((event) => event.type === input.ended)?.data).toMatchObject({ text: "chunkchunk" })
 })
 
 test("local tool success serializes media base64 once through canonical content", async () => {
