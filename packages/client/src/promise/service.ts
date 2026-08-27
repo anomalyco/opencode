@@ -10,7 +10,7 @@ import {
 } from "../service-contender.js"
 import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service-timing.js"
 import { matchesVersion } from "../service-version.js"
-import { ServiceHandoff } from "../service-handoff.js"
+import { PtyHandoff } from "../pty-handoff.js"
 import type { ServiceHealth } from "./generated/types.js"
 
 export * from "../service.js"
@@ -48,11 +48,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
     const [command, ...args] = options.command ?? ["opencode", "serve", "--service"]
     if (command === undefined) throw new Error("Missing service command")
     try {
-      return spawnServiceContender(
-        command,
-        args,
-        await ServiceHandoff.environment(options.file ?? fallback(), options.env),
-      )
+      return spawnServiceContender(command, args, await PtyHandoff.environment(options.file ?? fallback(), options.env))
     } catch (cause) {
       throw new Error("Failed to start server", { cause })
     }
@@ -70,7 +66,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
         if (timeouts.count >= 3) {
           announce("missing")
           console.warn("Background service is unresponsive; recovery cannot preserve persistent terminals")
-          await ServiceHandoff.clear(options.file ?? fallback())
+          await PtyHandoff.clear(options.file ?? fallback())
           await terminate(registration.info, options, timing)
           timeouts = undefined
           lastSpawn = Date.now() - spawnDelay
@@ -82,18 +78,18 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
         const service = registration.service
         const compatible = !service.legacy && matchesVersion(service.version, options)
         if (compatible && service.state === "ready") {
-          await ServiceHandoff.complete(options.file ?? fallback(), service.info)
+          await PtyHandoff.complete(options.file ?? fallback(), service.info)
           return service.endpoint
         }
         if (compatible && service.state === "failed") throw new Error("Background service failed to start")
         if (!compatible) {
           announce("version-mismatch", service.version)
           if (!service.legacy && service.state === "ready")
-            await ServiceHandoff.prepare(options.file ?? fallback(), service.info, timing.requestTimeout)
+            await PtyHandoff.prepare(options.file ?? fallback(), service.info, timing.requestTimeout)
           else {
             if (!service.legacy)
               console.warn("Background service is not ready; replacement cannot preserve persistent terminals")
-            await ServiceHandoff.clear(options.file ?? fallback())
+            await PtyHandoff.clear(options.file ?? fallback())
           }
           await terminate(service.info, options, timing).catch(() => undefined)
           lastSpawn = 0
@@ -123,7 +119,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
 
 /** Stop the registered local service. */
 export async function stop(options: StopOptions = {}) {
-  await ServiceHandoff.clear(options.file ?? fallback())
+  await PtyHandoff.clear(options.file ?? fallback())
   const info = await read(options.file)
   if (info !== undefined) await terminate(info, options, defaultEnsureTiming)
 }
