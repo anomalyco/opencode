@@ -215,17 +215,6 @@ export const Plugin = {
                 prepared,
                 (change) =>
                   Effect.gen(function* () {
-                    if (change.type === "add") {
-                      yield* environment.files
-                        .write(change.target.absolute, new TextEncoder().encode(change.content))
-                        .pipe(Effect.mapError((error) => fail(`Failed to write ${change.target.resource}`, error)))
-                      applied.push({
-                        type: change.type,
-                        resource: change.target.resource,
-                        target: change.target.absolute,
-                      })
-                      return
-                    }
                     if (change.type === "delete") {
                       yield* environment.files
                         .remove(change.target.absolute)
@@ -237,7 +226,7 @@ export const Plugin = {
                       })
                       return
                     }
-                    if (change.moveTarget) {
+                    if (change.type === "update" && change.moveTarget) {
                       const moveTarget = change.moveTarget
                       yield* environment.files
                         .write(moveTarget.absolute, new TextEncoder().encode(change.content))
