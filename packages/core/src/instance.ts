@@ -23,6 +23,7 @@ import { Mcp } from "./mcp/index.js"
 import { Permission } from "./permission.js"
 import { Plugin } from "./plugin.js"
 import { PluginHooks } from "./plugin/hooks.js"
+import { InstancePlugins } from "./plugin/instance.js"
 import { PluginSupervisor } from "./plugin/supervisor.js"
 import { Worktree } from "./worktree.js"
 import { Pty } from "./pty.js"
@@ -66,6 +67,7 @@ const nodes = [
   AISDK.node,
   Plugin.node,
   PluginHooks.node,
+  InstancePlugins.node,
   PluginSupervisor.node,
   Worktree.refreshNode,
   FileSystemSearch.node,
@@ -109,10 +111,20 @@ export const graph = LayerNode.group<typeof nodes>(nodes)
 export type Services = LayerNode.Output<typeof graph>
 export type Error = LayerNode.Error<typeof graph>
 
+export interface Options {
+  // Plugins this instance is born with; empty and absent are equivalent.
+  readonly plugins?: InstancePlugins.List
+  readonly replacements?: LayerNode.Replacements
+}
+
 // One instance is one compiled, fresh copy of the graph standing on a directory.
-export function layer(ref: Location.Ref, replacements: LayerNode.Replacements = []) {
+export function layer(ref: Location.Ref, options: Options = {}) {
   const startedAt = performance.now()
-  const allReplacements = replacements.concat([[Location.node, Location.boundNode(ref)]])
+  // Bound pairs come last, so they win over caller replacements of the same nodes.
+  const allReplacements = (options.replacements ?? []).concat([
+    [Location.node, Location.boundNode(ref)],
+    [InstancePlugins.node, InstancePlugins.bound(options.plugins ?? [])],
+  ])
   // Apply replacements during hoist, not afterward: replacements can
   // introduce new tagged dependencies (Location.boundNode depends on
   // Project), and the hoist walk is the only pass that can still slice
