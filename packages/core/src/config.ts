@@ -224,38 +224,38 @@ export const layer = (options?: Options) =>
                 .pipe(Effect.orDie)
 
         const globalEnabled = options?.global !== false
-        // The upward walk can reach the user's home directory. Home-level
-        // .claude/.agents are global config however they are found, so a
-        // global: false caller excludes them from the walk's results too.
-        const excludedGlobals = new Set(
-          globalEnabled ? [] : [globalClaudeDirectory, globalAgentsDirectory].map((item) => path.resolve(item)),
+        // A walked path that resolves into a global root is global config
+        // however the walk reached it (home above the project, or a location
+        // beneath the global config dir), so global: false excludes it
+        // uniformly — classified once here, not per consumer below.
+        const globalRoots = [globalDirectory, globalClaudeDirectory, globalAgentsDirectory].map((item) =>
+          path.resolve(item),
         )
+        const visible = globalEnabled
+          ? discovered
+          : discovered.filter((item) => {
+              const resolved = path.resolve(item)
+              return !globalRoots.some((root) => resolved === root || resolved.startsWith(root + path.sep))
+            })
         // We load certain files from a few other folders in the ecosystem
         const claude = [
           ...new Set([
             ...(globalEnabled && (yield* fs.isDir(globalClaudeDirectory)) ? [globalClaudeDirectory] : []),
-            ...discovered
-              .filter((item) => path.basename(item) === ".claude" && !excludedGlobals.has(path.resolve(item)))
-              .toReversed(),
+            ...visible.filter((item) => path.basename(item) === ".claude").toReversed(),
           ]),
         ].map((directory) => new ClaudeDirectory({ type: "claude", path: AbsolutePath.make(directory) }))
         const agents = [
           ...new Set([
             ...(globalEnabled && (yield* fs.isDir(globalAgentsDirectory)) ? [globalAgentsDirectory] : []),
-            ...discovered
-              .filter((item) => path.basename(item) === ".agents" && !excludedGlobals.has(path.resolve(item)))
-              .toReversed(),
+            ...visible.filter((item) => path.basename(item) === ".agents").toReversed(),
           ]),
         ].map((directory) => new AgentsDirectory({ type: "agents", path: AbsolutePath.make(directory) }))
 
-        const directories = [
-          ...(globalEnabled ? [globalDirectory] : []),
-          ...discovered
-            .filter((item) => path.basename(item) === ".opencode")
-            .toReversed()
-            .map((directory) => AbsolutePath.make(directory)),
-        ]
-        const directPaths = discovered
+        const projectDirectories = visible
+          .filter((item) => path.basename(item) === ".opencode")
+          .toReversed()
+          .map((directory) => AbsolutePath.make(directory))
+        const directPaths = visible
           .filter((item) => ![".agents", ".claude", ".opencode"].includes(path.basename(item)))
           .toReversed()
         fileTargets.clear()
@@ -287,12 +287,13 @@ export const layer = (options?: Options) =>
               )
             : []
 
-        const supplementary = yield* Effect.forEach(directories, loadDirectory).pipe(Effect.orDie)
-        // The global config dir, when enabled, is directories[0]: its entries
-        // sit below explicit and direct files, while project directories rank
-        // above them.
-        const globalSupplementary = globalEnabled ? (supplementary[0] ?? []) : []
-        const projectSupplementary = globalEnabled ? supplementary.slice(1).flat() : supplementary.flat()
+        // Global entries sit below explicit and direct files; project
+        // directories rank above them.
+        const globalSupplementary = globalEnabled ? yield* loadDirectory(globalDirectory).pipe(Effect.orDie) : []
+        const projectSupplementary = yield* Effect.forEach(projectDirectories, loadDirectory).pipe(
+          Effect.orDie,
+          Effect.map((entries) => entries.flat()),
+        )
         return [
           ...(yield* loadWellknown().pipe(Effect.orDie)),
           ...claude,

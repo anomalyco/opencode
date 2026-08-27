@@ -38,11 +38,12 @@ const instances = Layer.effect(
   LocationServiceMap.Service,
   LayerMap.make(
     (ref: Location.Ref) => {
-      const vanilla = path.basename(ref.directory) === "vanilla"
+      const name = path.basename(ref.directory)
       return Instance.layer(ref, {
-        discovery: !vanilla,
+        // "bare" exercises the vanilla defaults themselves: no caller Config.
+        discovery: name !== "vanilla" && name !== "bare",
         // Caller replacements win over the vanilla defaults.
-        replacements: [[Global.node, tempGlobalLayer], ...(vanilla ? hostConfig : [])],
+        replacements: [[Global.node, tempGlobalLayer], ...(name === "vanilla" ? hostConfig : [])],
       })
     },
     { idleTimeToLive: Duration.infinity },
@@ -99,6 +100,13 @@ describe("Instance vanilla", () => {
           // explicit plugin operations.
           expect(vanilla.shell).toBe("vanilla-host")
           expect(vanilla.toolNames).not.toContain("shell")
+
+          // Bare vanilla: the defaults themselves, with no caller Config.
+          const bare = yield* read(yield* plant("bare"))
+          expect(bare.documents).toEqual([])
+          expect(bare.instructions).toEqual([])
+          expect(bare.shell).toBeUndefined()
+          expect(bare.toolNames).toContain("shell")
 
           const discovery = yield* read(yield* plant("discovery"))
           expect(discovery.documents.length).toBeGreaterThan(0)

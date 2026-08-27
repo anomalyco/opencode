@@ -142,13 +142,14 @@ const vanillaReplacements: LayerNode.Replacements = [
 // One instance is one compiled, fresh copy of the graph standing on a directory.
 export function layer(ref: Location.Ref, options: Options = {}) {
   const startedAt = performance.now()
-  const defaults: LayerNode.Replacements = options.discovery === false ? vanillaReplacements : []
-  // Bound pairs come last, so they win over caller replacements of the same nodes.
-  const bound: LayerNode.Replacements = [
+  // Ordered: vanilla defaults, then caller replacements (which win over the
+  // defaults), then bound pairs (which win over everything).
+  const allReplacements: LayerNode.Replacements = [
+    ...(options.discovery === false ? vanillaReplacements : []),
+    ...(options.replacements ?? []),
     [Location.node, Location.boundNode(ref, { discovery: options.discovery })],
     [InstancePlugins.node, InstancePlugins.bound(options.plugins ?? [])],
   ]
-  const allReplacements = defaults.concat(options.replacements ?? [], bound)
   // Apply replacements during hoist, not afterward: replacements can
   // introduce new tagged dependencies (Location.boundNode depends on
   // Project), and the hoist walk is the only pass that can still slice

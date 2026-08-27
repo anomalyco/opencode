@@ -171,6 +171,42 @@ describe("Config", () => {
     ),
   )
 
+  it.live("excludes global config reached through the project walk when global is disabled", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) => {
+        // The location sits BENEATH the global config dir, so the upward walk
+        // reaches the global opencode.json as a direct file.
+        const global = path.join(tmp.path, "global")
+        const project = path.join(global, "plugins", "demo")
+        return Effect.promise(async () => {
+          await fs.mkdir(project, { recursive: true })
+          await fs.writeFile(path.join(global, "opencode.json"), JSON.stringify({ shell: "global-sentinel" }))
+        }).pipe(
+          Effect.andThen(
+            // Fixture control: with global enabled the file loads.
+            Effect.gen(function* () {
+              const config = yield* Config.Service
+              expect(Config.latest(yield* config.entries(), "shell")).toBe("global-sentinel")
+            }).pipe(Effect.provide(testLayer(project, global))),
+          ),
+          Effect.andThen(
+            Effect.gen(function* () {
+              const config = yield* Config.Service
+              expect(Config.latest(yield* config.entries(), "shell")).toBeUndefined()
+            }).pipe(
+              Effect.provide(
+                testLayer(project, global, project, undefined, undefined, undefined, undefined, { global: false }),
+              ),
+            ),
+          ),
+        )
+      }),
+    ),
+  )
+
   it.effect("fails updates when no file-backed document exists", () =>
     Effect.gen(function* () {
       const config = yield* Config.Service
