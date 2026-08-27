@@ -1,7 +1,7 @@
 import path from "path"
 import fs from "fs/promises"
-import { describe, expect } from "bun:test"
-import { Effect, Fiber, Layer, Logger, PubSub, Schema, Stream } from "effect"
+import { describe, expect, test } from "bun:test"
+import { Effect, Fiber, Layer, Logger, Schema, Stream } from "effect"
 import { FastCheck } from "effect/testing"
 import { Config } from "@opencode-ai/core/config"
 import { AgentsDirectory, Directory, Document, Event, Info } from "@opencode-ai/schema/config"
@@ -78,10 +78,7 @@ const provider = {
 
 describe("Config", () => {
   it.live("updates the first file-backed document", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ).pipe(
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) => {
         const global = path.join(tmp.path, "global")
         const project = path.join(tmp.path, "project")
@@ -125,10 +122,7 @@ describe("Config", () => {
   )
 
   it.live("loads explicit file and content overrides in priority order", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ).pipe(
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) => {
         const global = path.join(tmp.path, "global")
         const project = path.join(tmp.path, "project")
@@ -163,10 +157,7 @@ describe("Config", () => {
   )
 
   it.live("skips project configuration when project discovery is disabled", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ).pipe(
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) => {
         const global = path.join(tmp.path, "global")
         const project = path.join(tmp.path, "project")
@@ -194,10 +185,7 @@ describe("Config", () => {
   )
 
   it.live("reloads external config and publishes directory updates", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ).pipe(
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
           const global = path.join(tmp.path, "global")
@@ -230,10 +218,7 @@ describe("Config", () => {
   )
 
   it.live("exposes filesystem updates under config roots through changes", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ).pipe(
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
           const global = path.join(tmp.path, "global")
@@ -265,10 +250,7 @@ describe("Config", () => {
   // watch being torn down, making recreation invisible) only reproduces with
   // path-faithful event delivery.
   it.live("keeps watching a deleted config file so recreating it reloads", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ).pipe(
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
           const global = path.join(tmp.path, "global")
@@ -338,26 +320,24 @@ describe("Config", () => {
     }).pipe(Effect.provide(Config.testLayer())),
   )
 
-  it.effect("returns the latest defined scalar from priority-ordered documents", () =>
-    Effect.sync(() => {
-      const entries = [
-        new Document({
-          type: "document",
-          info: new Info({ model: selection("openrouter/openai/gpt-5") }),
-        }),
-        new Directory({ type: "directory", path: AbsolutePath.make("/skills") }),
-        new AgentsDirectory({ type: "agents", path: AbsolutePath.make("/agents") }),
-        new Document({ type: "document", info: new Info({}) }),
-        new Document({
-          type: "document",
-          info: new Info({ model: selection("openrouter/openai/gpt-5.5") }),
-        }),
-      ]
+  test("returns the latest defined scalar from priority-ordered documents", () => {
+    const entries = [
+      new Document({
+        type: "document",
+        info: new Info({ model: selection("openrouter/openai/gpt-5") }),
+      }),
+      new Directory({ type: "directory", path: AbsolutePath.make("/skills") }),
+      new AgentsDirectory({ type: "agents", path: AbsolutePath.make("/agents") }),
+      new Document({ type: "document", info: new Info({}) }),
+      new Document({
+        type: "document",
+        info: new Info({ model: selection("openrouter/openai/gpt-5.5") }),
+      }),
+    ]
 
-      expect(Config.latest(entries, "model")).toEqual(selection("openrouter/openai/gpt-5.5"))
-      expect(Config.latest(entries, "default_agent")).toBeUndefined()
-    }),
-  )
+    expect(Config.latest(entries, "model")).toEqual(selection("openrouter/openai/gpt-5.5"))
+    expect(Config.latest(entries, "default_agent")).toBeUndefined()
+  })
 
   it.live("tolerates unavailable authenticated wellknown config and reloads it later", () =>
     Effect.acquireUseRelease(
@@ -549,268 +529,241 @@ describe("Config", () => {
     ).pipe(Effect.provide(Logger.layer([logger])))
   })
 
-  it.effect("migrates arbitrary v1 configuration into valid v2 configuration", () =>
-    Effect.sync(() => {
-      FastCheck.assert(
-        FastCheck.property(Schema.toArbitrary(ConfigV1.Info)(FastCheck), (info) => {
-          const parsed = Schema.decodeUnknownSync(ConfigV1.Info)(
-            Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(
-              Schema.encodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(info),
-            ),
-          )
-          Schema.decodeUnknownSync(Info)(ConfigMigrateV1.migrate(parsed), { errors: "all" })
-        }),
-        { numRuns: 100 },
-      )
-    }),
-  )
+  test("migrates arbitrary v1 configuration into valid v2 configuration", () => {
+    FastCheck.assert(
+      FastCheck.property(Schema.toArbitrary(ConfigV1.Info)(FastCheck), (info) => {
+        const parsed = Schema.decodeUnknownSync(ConfigV1.Info)(
+          Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(
+            Schema.encodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(info),
+          ),
+        )
+        Schema.decodeUnknownSync(Info)(ConfigMigrateV1.migrate(parsed), { errors: "all" })
+      }),
+      { numRuns: 100 },
+    )
+  }, 30_000)
 
-  it.effect("migrates the v1 experimental subagent depth", () =>
-    Effect.sync(() => {
-      expect(ConfigMigrateV1.migrate({ experimental: { subagent_depth: 2 } }).experimental?.subagent_depth).toBe(2)
-    }),
-  )
+  test("migrates the v1 experimental subagent depth", () => {
+    expect(ConfigMigrateV1.migrate({ experimental: { subagent_depth: 2 } }).experimental?.subagent_depth).toBe(2)
+  })
 
-  it.effect("migrates the v1 small model to the title agent", () =>
-    Effect.sync(() => {
-      expect(
-        ConfigMigrateV1.migrate({
-          small_model: "anthropic/claude-haiku-4-5",
-          agent: { title: { prompt: "Custom title prompt" } },
-        }).agents?.title,
-      ).toEqual({
-        model: { providerID: "anthropic", model: "claude-haiku-4-5" },
-        system: "Custom title prompt",
-      })
-    }),
-  )
+  test("migrates the v1 small model to the title agent", () => {
+    expect(
+      ConfigMigrateV1.migrate({
+        small_model: "anthropic/claude-haiku-4-5",
+        agent: { title: { prompt: "Custom title prompt" } },
+      }).agents?.title,
+    ).toEqual({
+      model: { providerID: "anthropic", model: "claude-haiku-4-5" },
+      system: "Custom title prompt",
+    })
+  })
 
-  it.effect("migrates v1 provider lists to policies", () =>
-    Effect.sync(() => {
-      expect(
-        ConfigMigrateV1.migrate({
-          enabled_providers: ["anthropic", "openai"],
-          disabled_providers: ["openai"],
-        }).experimental?.policies,
-      ).toEqual([
-        { action: "provider.use", resource: "*", effect: "deny" },
-        { action: "provider.use", resource: "anthropic", effect: "allow" },
-        { action: "provider.use", resource: "openai", effect: "allow" },
-        { action: "provider.use", resource: "openai", effect: "deny" },
-      ])
-      expect(ConfigMigrateV1.migrate({ enabled_providers: [] }).experimental?.policies).toEqual([
-        { action: "provider.use", resource: "*", effect: "deny" },
-      ])
-    }),
-  )
+  test("migrates v1 provider lists to policies", () => {
+    expect(
+      ConfigMigrateV1.migrate({
+        enabled_providers: ["anthropic", "openai"],
+        disabled_providers: ["openai"],
+      }).experimental?.policies,
+    ).toEqual([
+      { action: "provider.use", resource: "*", effect: "deny" },
+      { action: "provider.use", resource: "anthropic", effect: "allow" },
+      { action: "provider.use", resource: "openai", effect: "allow" },
+      { action: "provider.use", resource: "openai", effect: "deny" },
+    ])
+    expect(ConfigMigrateV1.migrate({ enabled_providers: [] }).experimental?.policies).toEqual([
+      { action: "provider.use", resource: "*", effect: "deny" },
+    ])
+  })
 
-  it.effect("migrates v1 provider setup options into AISDK settings", () =>
-    Effect.sync(() => {
-      const migrated = ConfigMigrateV1.migrate({
-        provider: {
-          bedrock: {
-            npm: "@ai-sdk/amazon-bedrock",
-            models: { claude: { provider: { npm: "@ai-sdk/anthropic" } } },
-            options: {
-              headers: { "x-test": "1" },
-              body: { trace: true },
-              region: "us-east-1",
-              profile: "dev",
-            },
+  test("migrates v1 provider setup options into AISDK settings", () => {
+    const migrated = ConfigMigrateV1.migrate({
+      provider: {
+        bedrock: {
+          npm: "@ai-sdk/amazon-bedrock",
+          models: { claude: { provider: { npm: "@ai-sdk/anthropic" } } },
+          options: {
+            headers: { "x-test": "1" },
+            body: { trace: true },
+            region: "us-east-1",
+            profile: "dev",
           },
         },
-      })
+      },
+    })
 
-      expect(migrated.providers?.bedrock).toMatchObject({
-        package: Provider.aisdk("@ai-sdk/amazon-bedrock"),
-        models: { claude: { package: Provider.aisdk("@ai-sdk/anthropic") } },
-        settings: { region: "us-east-1", profile: "dev" },
-        headers: { "x-test": "1" },
-        body: { trace: true },
-      })
-    }),
-  )
+    expect(migrated.providers?.bedrock).toMatchObject({
+      package: Provider.aisdk("@ai-sdk/amazon-bedrock"),
+      models: { claude: { package: Provider.aisdk("@ai-sdk/anthropic") } },
+      settings: { region: "us-east-1", profile: "dev" },
+      headers: { "x-test": "1" },
+      body: { trace: true },
+    })
+  })
 
-  it.effect("renames old provider IDs while migrating v1 configuration", () =>
-    Effect.sync(() => {
-      const migrated = ConfigMigrateV1.migrate({
-        model: "azure-cognitive-services/deployment",
-        enabled_providers: ["google-vertex-anthropic"],
-        disabled_providers: ["azure-cognitive-services"],
-        agent: {
-          reviewer: { model: "google-vertex-anthropic/claude-sonnet" },
+  test("renames old provider IDs while migrating v1 configuration", () => {
+    const migrated = ConfigMigrateV1.migrate({
+      model: "azure-cognitive-services/deployment",
+      enabled_providers: ["google-vertex-anthropic"],
+      disabled_providers: ["azure-cognitive-services"],
+      agent: {
+        reviewer: { model: "google-vertex-anthropic/claude-sonnet" },
+      },
+      command: {
+        review: { template: "Review", model: "azure-cognitive-services/deployment" },
+      },
+      provider: {
+        "azure-cognitive-services": {
+          npm: "@ai-sdk/azure",
+          env: ["AZURE_COGNITIVE_SERVICES_RESOURCE_NAME", "AZURE_COGNITIVE_SERVICES_API_KEY"],
+          models: { deployment: {} },
         },
+        "google-vertex-anthropic": {
+          npm: "@ai-sdk/google-vertex/anthropic",
+          options: { project: "test-project", location: "us-central1" },
+          models: { "claude-sonnet": {} },
+        },
+      },
+    })
+
+    expect(migrated.model).toEqual({ providerID: "azure", model: "deployment" })
+    expect(migrated.agents?.reviewer?.model).toEqual({ providerID: "google-vertex", model: "claude-sonnet" })
+    expect(migrated.commands?.review?.model).toEqual({ providerID: "azure", model: "deployment" })
+    expect(migrated.experimental?.policies).toEqual([
+      { action: "provider.use", resource: "*", effect: "deny" },
+      { action: "provider.use", resource: "google-vertex", effect: "allow" },
+      { action: "provider.use", resource: "azure", effect: "deny" },
+    ])
+    expect(migrated.providers?.azure).toMatchObject({
+      env: ["AZURE_COGNITIVE_SERVICES_API_KEY"],
+      package: Provider.aisdk("@ai-sdk/azure"),
+      models: { deployment: {} },
+    })
+    expect(migrated.providers?.["azure-cognitive-services"]).toBeUndefined()
+    expect(migrated.providers?.["google-vertex"]).toMatchObject({
+      settings: { project: "test-project", location: "us-central1" },
+      models: {
+        "claude-sonnet": { package: Provider.aisdk("@ai-sdk/google-vertex/anthropic") },
+      },
+    })
+    expect(migrated.providers?.["google-vertex"]).not.toHaveProperty("package")
+    expect(migrated.providers?.["google-vertex-anthropic"]).toBeUndefined()
+  })
+
+  test("preserves the generated base URL for v1 Azure OpenAI-compatible providers", () => {
+    const migrated = ConfigMigrateV1.migrate({
+      provider: {
+        "azure-cognitive-services": {
+          npm: "@ai-sdk/openai-compatible",
+          env: ["AZURE_COGNITIVE_SERVICES_RESOURCE_NAME", "AZURE_COGNITIVE_SERVICES_API_KEY"],
+        },
+      },
+    })
+
+    expect(migrated.providers?.azure).toMatchObject({
+      env: ["AZURE_COGNITIVE_SERVICES_API_KEY"],
+      package: Provider.aisdk("@ai-sdk/openai-compatible"),
+      settings: {
+        baseURL: "https://${AZURE_COGNITIVE_SERVICES_RESOURCE_NAME}.cognitiveservices.azure.com/openai",
+      },
+    })
+  })
+
+  test("ignores old provider IDs when the current provider ID is configured", () => {
+    const migrated = ConfigMigrateV1.migrate({
+      provider: {
+        azure: { models: { current: {} } },
+        "azure-cognitive-services": { models: { legacy: {} } },
+        "google-vertex": { models: { gemini: {} } },
+        "google-vertex-anthropic": { models: { claude: {} } },
+      },
+    })
+
+    expect(migrated.providers?.azure?.models).toEqual({ current: expect.anything() })
+    expect(migrated.providers?.["google-vertex"]?.models).toEqual({ gemini: expect.anything() })
+  })
+
+  test("preserves the built-in package for v1 Vertex Anthropic custom models", () => {
+    const migrated = ConfigMigrateV1.migrate({
+      provider: {
+        "google-vertex-anthropic": {
+          models: { claude: {} },
+        },
+      },
+    })
+
+    expect(migrated.providers?.["google-vertex"]?.package).toBeUndefined()
+    expect(migrated.providers?.["google-vertex"]?.models?.claude?.package).toBe(
+      Provider.aisdk("@ai-sdk/google-vertex/anthropic"),
+    )
+  })
+
+  test("migrates v1 interleaved fields to compatibility", () => {
+    const migrated = ConfigMigrateV1.migrate({
+      provider: {
+        custom: {
+          models: {
+            object: { interleaved: { field: "vendor_reasoning" } },
+            string: { interleaved: "reasoning_text" },
+            boolean: { interleaved: true },
+          },
+        },
+      },
+    })
+
+    expect(migrated.providers?.custom?.models?.object?.compatibility).toEqual({
+      reasoningField: "vendor_reasoning",
+    })
+    expect(migrated.providers?.custom?.models?.string?.compatibility).toEqual({ reasoningField: "reasoning_text" })
+    expect(migrated.providers?.custom?.models?.boolean?.compatibility).toBeUndefined()
+  })
+
+  test("migrates v1 command configuration", () => {
+    expect(
+      ConfigMigrateV1.migrate({
         command: {
-          review: { template: "Review", model: "azure-cognitive-services/deployment" },
-        },
-        provider: {
-          "azure-cognitive-services": {
-            npm: "@ai-sdk/azure",
-            env: ["AZURE_COGNITIVE_SERVICES_RESOURCE_NAME", "AZURE_COGNITIVE_SERVICES_API_KEY"],
-            models: { deployment: {} },
-          },
-          "google-vertex-anthropic": {
-            npm: "@ai-sdk/google-vertex/anthropic",
-            options: { project: "test-project", location: "us-central1" },
-            models: { "claude-sonnet": {} },
+          review: {
+            template: "Review changes",
+            description: "Review code",
+            agent: "reviewer",
+            model: "anthropic/claude",
+            variant: "high",
+            subtask: true,
           },
         },
-      })
+      }).commands,
+    ).toEqual({
+      review: {
+        template: "Review changes",
+        description: "Review code",
+        agent: "reviewer",
+        model: { providerID: "anthropic", model: "claude", variant: "high" },
+        subtask: true,
+      },
+    })
+  })
 
-      expect(migrated.model).toEqual({ providerID: "azure", model: "deployment" })
-      expect(migrated.agents?.reviewer?.model).toEqual({ providerID: "google-vertex", model: "claude-sonnet" })
-      expect(migrated.commands?.review?.model).toEqual({ providerID: "azure", model: "deployment" })
-      expect(migrated.experimental?.policies).toEqual([
-        { action: "provider.use", resource: "*", effect: "deny" },
-        { action: "provider.use", resource: "google-vertex", effect: "allow" },
-        { action: "provider.use", resource: "azure", effect: "deny" },
-      ])
-      expect(migrated.providers?.azure).toMatchObject({
-        env: ["AZURE_COGNITIVE_SERVICES_API_KEY"],
-        package: Provider.aisdk("@ai-sdk/azure"),
-        models: { deployment: {} },
-      })
-      expect(migrated.providers?.["azure-cognitive-services"]).toBeUndefined()
-      expect(migrated.providers?.["google-vertex"]).toMatchObject({
-        settings: { project: "test-project", location: "us-central1" },
-        models: {
-          "claude-sonnet": { package: Provider.aisdk("@ai-sdk/google-vertex/anthropic") },
+  test("normalizes renamed permission actions when migrating v1 permissions", () => {
+    expect(
+      ConfigMigrateV1.migrate({
+        permission: {
+          task: "ask",
+          bash: { "git status": "allow", "*": "deny" },
+          write: "deny",
+          read: "allow",
         },
-      })
-      expect(migrated.providers?.["google-vertex"]).not.toHaveProperty("package")
-      expect(migrated.providers?.["google-vertex-anthropic"]).toBeUndefined()
-    }),
-  )
-
-  it.effect("preserves the generated base URL for v1 Azure OpenAI-compatible providers", () =>
-    Effect.sync(() => {
-      const migrated = ConfigMigrateV1.migrate({
-        provider: {
-          "azure-cognitive-services": {
-            npm: "@ai-sdk/openai-compatible",
-            env: ["AZURE_COGNITIVE_SERVICES_RESOURCE_NAME", "AZURE_COGNITIVE_SERVICES_API_KEY"],
-          },
-        },
-      })
-
-      expect(migrated.providers?.azure).toMatchObject({
-        env: ["AZURE_COGNITIVE_SERVICES_API_KEY"],
-        package: Provider.aisdk("@ai-sdk/openai-compatible"),
-        settings: {
-          baseURL: "https://${AZURE_COGNITIVE_SERVICES_RESOURCE_NAME}.cognitiveservices.azure.com/openai",
-        },
-      })
-    }),
-  )
-
-  it.effect("ignores old provider IDs when the current provider ID is configured", () =>
-    Effect.sync(() => {
-      const migrated = ConfigMigrateV1.migrate({
-        provider: {
-          azure: { models: { current: {} } },
-          "azure-cognitive-services": { models: { legacy: {} } },
-          "google-vertex": { models: { gemini: {} } },
-          "google-vertex-anthropic": { models: { claude: {} } },
-        },
-      })
-
-      expect(migrated.providers?.azure?.models).toEqual({ current: expect.anything() })
-      expect(migrated.providers?.["google-vertex"]?.models).toEqual({ gemini: expect.anything() })
-    }),
-  )
-
-  it.effect("preserves the built-in package for v1 Vertex Anthropic custom models", () =>
-    Effect.sync(() => {
-      const migrated = ConfigMigrateV1.migrate({
-        provider: {
-          "google-vertex-anthropic": {
-            models: { claude: {} },
-          },
-        },
-      })
-
-      expect(migrated.providers?.["google-vertex"]?.package).toBeUndefined()
-      expect(migrated.providers?.["google-vertex"]?.models?.claude?.package).toBe(
-        Provider.aisdk("@ai-sdk/google-vertex/anthropic"),
-      )
-    }),
-  )
-
-  it.effect("migrates v1 interleaved fields to compatibility", () =>
-    Effect.sync(() => {
-      const migrated = ConfigMigrateV1.migrate({
-        provider: {
-          custom: {
-            models: {
-              object: { interleaved: { field: "vendor_reasoning" } },
-              string: { interleaved: "reasoning_text" },
-              boolean: { interleaved: true },
-            },
-          },
-        },
-      })
-
-      expect(migrated.providers?.custom?.models?.object?.compatibility).toEqual({
-        reasoningField: "vendor_reasoning",
-      })
-      expect(migrated.providers?.custom?.models?.string?.compatibility).toEqual({ reasoningField: "reasoning_text" })
-      expect(migrated.providers?.custom?.models?.boolean?.compatibility).toBeUndefined()
-    }),
-  )
-
-  it.effect("migrates v1 command configuration", () =>
-    Effect.sync(() => {
-      expect(
-        ConfigMigrateV1.migrate({
-          command: {
-            review: {
-              template: "Review changes",
-              description: "Review code",
-              agent: "reviewer",
-              model: "anthropic/claude",
-              variant: "high",
-              subtask: true,
-            },
-          },
-        }).commands,
-      ).toEqual({
-        review: {
-          template: "Review changes",
-          description: "Review code",
-          agent: "reviewer",
-          model: { providerID: "anthropic", model: "claude", variant: "high" },
-          subtask: true,
-        },
-      })
-    }),
-  )
-
-  it.effect("normalizes renamed permission actions when migrating v1 permissions", () =>
-    Effect.sync(() => {
-      expect(
-        ConfigMigrateV1.migrate({
-          permission: {
-            task: "ask",
-            bash: { "git status": "allow", "*": "deny" },
-            write: "deny",
-            read: "allow",
-          },
-        }).permissions,
-      ).toEqual([
-        { action: "subagent", resource: "*", effect: "ask" },
-        { action: "shell", resource: "git status", effect: "allow" },
-        { action: "shell", resource: "*", effect: "deny" },
-        { action: "edit", resource: "*", effect: "deny" },
-        { action: "read", resource: "*", effect: "allow" },
-      ])
-    }),
-  )
+      }).permissions,
+    ).toEqual([
+      { action: "subagent", resource: "*", effect: "ask" },
+      { action: "shell", resource: "git status", effect: "allow" },
+      { action: "shell", resource: "*", effect: "deny" },
+      { action: "edit", resource: "*", effect: "deny" },
+      { action: "read", resource: "*", effect: "allow" },
+    ])
+  })
 
   it.live("returns an empty configuration when directory files do not exist", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ).pipe(
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
           const config = yield* Config.Service
@@ -825,10 +778,7 @@ describe("Config", () => {
   )
 
   it.live("deduplicates global ecosystem directories found during upward discovery", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ).pipe(
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
           const global = path.join(tmp.path, "global")
@@ -857,10 +807,7 @@ describe("Config", () => {
   )
 
   it.live("does not watch ecosystem config roots", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ).pipe(
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
           yield* Effect.promise(() =>
@@ -888,10 +835,7 @@ describe("Config", () => {
   )
 
   it.live("loads opencode JSON and JSONC files from lowest to highest priority", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ).pipe(
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
           yield* Effect.promise(() =>
@@ -1002,10 +946,7 @@ describe("Config", () => {
   )
 
   it.live("does not load legacy config.json files", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ).pipe(
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
           yield* Effect.promise(() =>
@@ -1024,10 +965,7 @@ describe("Config", () => {
   )
 
   it.live("accepts $schema metadata without writing it into config files", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ).pipe(
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
           const file = path.join(tmp.path, "opencode.json")
@@ -1051,10 +989,7 @@ describe("Config", () => {
   )
 
   it.live("loads supported scalar and resource configuration", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ).pipe(
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
           yield* Effect.promise(() =>
@@ -1240,10 +1175,7 @@ describe("Config", () => {
   )
 
   it.live("migrates the deprecated reference key into references", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ).pipe(
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
           yield* Effect.promise(() =>
@@ -1276,10 +1208,7 @@ describe("Config", () => {
   )
 
   it.live("migrates v1 configuration when a v1-only key is present", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ).pipe(
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
           yield* Effect.promise(() =>
@@ -1451,10 +1380,7 @@ describe("Config", () => {
   )
 
   it.live("ignores an invalid file while loading valid config values", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ).pipe(
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
           yield* Effect.promise(() =>
@@ -1480,10 +1406,7 @@ describe("Config", () => {
   )
 
   it.live("loads global and ancestor configuration across the project boundary", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ).pipe(
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) => {
         const global = path.join(tmp.path, "global")
         const root = path.join(tmp.path, "repo")
