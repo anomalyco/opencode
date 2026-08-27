@@ -8,6 +8,7 @@ import { Bus } from "@opencode-ai/core/bus"
 import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { PluginRuntime } from "@opencode-ai/core/plugin/runtime"
+import { ToolInputRepairPlugin } from "@opencode-ai/core/plugin/tool-input-repair"
 import { Location } from "@opencode-ai/core/location"
 import { Project } from "@opencode-ai/core/project"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -571,6 +572,112 @@ describe("Plugin", () => {
         "plain",
         "execute",
       ])
+    }),
+  )
+
+  it.effect("repairs tool input before validating its original schema", () =>
+    Effect.gen(function* () {
+      const plugins = yield* Plugin.Service
+      const registry = yield* Tool.Service
+      const executed: unknown[] = []
+      const plugin = EffectPlugin.define({
+        id: "repairable-tool",
+        effect: (ctx) =>
+          ctx.tool
+            .transform((draft) =>
+              draft.add({
+                name: "repairable",
+                options: { codemode: false },
+                description: "Repairable",
+                input: Schema.Struct({ count: Schema.Int, enabled: Schema.Boolean }),
+                execute: (input) => Effect.sync(() => executed.push(input)).pipe(Effect.as({ content: "ok" })),
+              }),
+            )
+            .pipe(Effect.orDie),
+      })
+
+      yield* plugins.activate([versioned(ToolInputRepairPlugin.Plugin), versioned(plugin)])
+      const toolSet = yield* registry.snapshot()
+      yield* toolSet.execute({
+        sessionID: Session.ID.make("ses_repair"),
+        agent: Agent.ID.make("build"),
+        messageID: SessionMessage.ID.make("msg_repair"),
+        call: {
+          type: "tool-call",
+          id: "call-repair",
+          name: "repairable",
+          input: '{"count":"2","enabled":"true","extra":true}',
+        },
+      })
+
+      expect(executed).toEqual([{ count: 2, enabled: true }])
+
+      yield* registry.transform((draft) => {
+        draft.update("repairable", (tool) => {
+          tool.input = Schema.Struct({ count: Schema.Boolean, enabled: Schema.Boolean })
+        })
+      })
+      const updated = yield* registry.snapshot()
+      yield* updated.execute({
+        sessionID: Session.ID.make("ses_repair"),
+        agent: Agent.ID.make("build"),
+        messageID: SessionMessage.ID.make("msg_repair"),
+        call: {
+          type: "tool-call",
+          id: "call-updated",
+          name: "repairable",
+          input: { count: "false", enabled: "true" },
+        },
+      })
+      expect(executed).toEqual([
+        { count: 2, enabled: true },
+        { count: false, enabled: true },
+      ])
+
+      yield* registry.transform((draft) => draft.remove("repairable"))
+      const removed = yield* registry.snapshot()
+      expect(
+        (yield* removed
+          .execute({
+            sessionID: Session.ID.make("ses_repair"),
+            agent: Agent.ID.make("build"),
+            messageID: SessionMessage.ID.make("msg_repair"),
+            call: { type: "tool-call", id: "call-removed", name: "repairable", input: {} },
+          })
+          .pipe(Effect.flip)).message,
+      ).toBe("Unknown tool: repairable")
+    }),
+  )
+
+  it.effect("repairs outer Code Mode input and looks up namespaced inner tool schemas", () =>
+    Effect.gen(function* () {
+      const plugins = yield* Plugin.Service
+      const registry = yield* Tool.Service
+      const executed: unknown[] = []
+      yield* plugins.activate([versioned(ToolInputRepairPlugin.Plugin)])
+      yield* registry.transform((draft) =>
+        draft.add({
+          name: "count",
+          options: { namespace: "example" },
+          description: "Record a count",
+          input: Schema.Struct({ count: Schema.Int }),
+          execute: (input) => Effect.sync(() => executed.push(input)).pipe(Effect.as({ content: "ok" })),
+        }),
+      )
+
+      const snapshot = yield* registry.snapshot()
+      yield* snapshot.execute({
+        sessionID: Session.ID.make("ses_repair"),
+        agent: Agent.ID.make("build"),
+        messageID: SessionMessage.ID.make("msg_repair"),
+        call: {
+          type: "tool-call",
+          id: "call-codemode-repair",
+          name: "execute",
+          input: JSON.stringify({ code: 'return await tools.example.count({ count: "3" })' }),
+        },
+      })
+      expect(executed).toEqual([{ count: 3 }])
     }),
   )
 

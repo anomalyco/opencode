@@ -85,6 +85,7 @@ import { PluginRuntime } from "./runtime.js"
 import { SkillPlugin } from "./skill.js"
 import { VcsHgPlugin } from "./vcs/hg.js"
 import { SystemPromptPlugin } from "./system-prompt.js"
+import { ToolInputRepairPlugin } from "./tool-input-repair.js"
 import { VariantPlugin } from "./variant.js"
 import { VcsGitPlugin } from "./vcs/git.js"
 import { WarmingPlugin } from "./warming.js"
@@ -234,6 +235,7 @@ export const requirements = LayerNode.group([
 export type InternalPlugin = Plugin<Requirements | Scope.Scope>
 
 const pre = [
+  ToolInputRepairPlugin.Plugin,
   ConfigMCPPlugin.Plugin,
   MCPCodeModeExclusionPlugin.Plugin,
   WellKnownPlugin.Plugin,

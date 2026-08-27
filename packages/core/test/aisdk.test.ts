@@ -498,6 +498,34 @@ it.effect("does not treat SSE comment heartbeats as model progress", () =>
   }),
 )
 
+it.effect("preserves valid stringified object tool arguments for execution hooks", () =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    const input = '{"count":"2"}'
+    const raw = JSON.stringify(input)
+    yield* aisdk.hook.sdk((event) => {
+      event.sdk = {
+        languageModel: () =>
+          streamModel([
+            { type: "tool-input-start", id: "call_1", toolName: "lookup" },
+            { type: "tool-input-delta", id: "call_1", delta: raw },
+            { type: "tool-input-end", id: "call_1" },
+            { type: "tool-call", toolCallId: "call_1", toolName: "lookup", input: raw },
+            { type: "finish", finishReason: { unified: "tool-calls", raw: "tool_calls" }, usage },
+          ]),
+      }
+    })
+
+    const resolved = yield* aisdk.model(model("test-ai-sdk"))
+    const response = yield* LLMClient.generate(LLM.request({ model: resolved, prompt: "Lookup" })).pipe(
+      Effect.provide(client),
+    )
+
+    expect(response.events.find(LLMEvent.is.toolCall)).toMatchObject({ id: "call_1", name: "lookup", input })
+    expect(response.events.some(LLMEvent.is.toolInputError)).toBeFalse()
+  }),
+)
+
 it.effect("emits malformed AI SDK tool input without executing it", () =>
   Effect.gen(function* () {
     const aisdk = yield* AISDK.Service
