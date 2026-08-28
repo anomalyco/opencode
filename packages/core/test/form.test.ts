@@ -19,6 +19,17 @@ const input = {
 } satisfies Form.CreateInput
 
 describe("Form", () => {
+  it.effect("validates absolute URI formats without restricting schemes", () =>
+    Effect.sync(() => {
+      const fields = [{ key: "uri", type: "string", format: "uri" }] satisfies ReadonlyArray<Form.Field>
+
+      expect(Form.validateAnswer(fields, { uri: "https://example.com/path" })).toBeUndefined()
+      expect(Form.validateAnswer(fields, { uri: "mailto:user@example.com" })).toBeUndefined()
+      expect(Form.validateAnswer(fields, { uri: "relative/path" })).toBe("Expected URI for form field: uri")
+      expect(Form.validateAnswer(fields, { uri: "://invalid" })).toBe("Expected URI for form field: uri")
+    }),
+  )
+
   it.effect("returns a terminal cancelled state from ask", () =>
     Effect.gen(function* () {
       const service = yield* Form.Service
