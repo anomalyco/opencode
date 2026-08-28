@@ -296,6 +296,23 @@ describe("ConfigFile", () => {
     ),
   )
 
+  it.live("ignores callback return values instead of replacing the document", () =>
+    withTempDir((tmp) =>
+      Effect.gen(function* () {
+        const fs = yield* FSUtil.Service
+        const target = path.join(tmp.path, "opencode.json")
+        yield* fs.writeFileString(target, "{}")
+
+        expect(yield* ConfigFile.update(target, () => new Date(0))).toEqual({})
+        expect(yield* fs.readFileString(target)).toBe("{}")
+
+        const updated = yield* ConfigFile.update(target, (draft) => (draft.shell = "updated"))
+        expect(updated).toEqual({ shell: "updated" })
+        expect(yield* fs.readJson(target)).toEqual(updated)
+      }),
+    ),
+  )
+
   it.live("rejects non-JSON mutations before writing", () =>
     withTempDir((tmp) =>
       Effect.gen(function* () {

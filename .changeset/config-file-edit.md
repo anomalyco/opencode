@@ -8,6 +8,7 @@ explicitly, and each edit reads the current file without configuration discovery
 watchers. Catch `ConfigFile.UpdateError` instead of `Config.UpdateError`.
 
 The callback and returned value are raw JSON objects, not normalized `Config.Info`.
+The synchronous callback mutates an owned source clone; its return value is ignored.
 Edit source keys directly, including legacy keys, and use `delete` to remove them.
 Substitution expressions and unrelated fields remain unchanged. The editor validates
 JSON syntax and values; configuration normalization and substitution remain the

@@ -4,7 +4,6 @@ import { isDeepStrictEqual } from "node:util"
 import { isRecord } from "@opencode-ai/ai/utils/record"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Effect, Schema, Semaphore } from "effect"
-import { produce, type Draft } from "immer"
 import { applyEdits, createScanner, findNodeAtLocation, modify, parse, parseTree, type ParseError } from "jsonc-parser"
 
 export class UpdateError extends Schema.TaggedError<UpdateError>()("ConfigFile.UpdateError", {
@@ -12,20 +11,22 @@ export class UpdateError extends Schema.TaggedError<UpdateError>()("ConfigFile.U
   cause: Schema.optional(Schema.Defect()),
 }) {}
 
-const isDocument = Schema.is(Schema.JsonObject)
+const isJson = Schema.is(Schema.MutableJson)
+const isDocument = (value: unknown): value is Schema.MutableJsonObject => isRecord(value) && isJson(value)
 const lock = Semaphore.makeUnsafe(1)
 
 /**
  * Edits an existing JSON(C) file using raw source values, not resolved Config.Info.
+ * The synchronous callback mutates a source clone; its return value is ignored.
  * Validates JSON only; normalization and substitution remain the reader's job.
  * Does not discover files, start watchers, or refresh Config state.
  * Read-modify-write calls are serialized within this process.
  */
-export const update: (
-  filepath: string,
-  mutate: (draft: Draft<Schema.JsonObject>) => void,
-) => Effect.Effect<Schema.JsonObject, UpdateError, FSUtil.Service> = Effect.fn("ConfigFile.update")(
-  function* (filepath: string, mutate: (draft: Draft<Schema.JsonObject>) => void) {
+export const update = Effect.fn("ConfigFile.update")(
+  function* (
+    filepath: string,
+    mutate: (draft: Schema.MutableJsonObject) => void,
+  ): Effect.fn.Return<Schema.JsonObject, UpdateError, FSUtil.Service> {
     const fs = yield* FSUtil.Service
     const text = yield* fs
       .readFileString(filepath)
@@ -36,7 +37,11 @@ export const update: (
       return yield* Effect.fail(new UpdateError({ message: `Invalid config file: ${filepath}` }))
 
     const next = yield* Effect.try({
-      try: () => produce(current, mutate),
+      try: () => {
+        const draft = structuredClone(current)
+        mutate(draft)
+        return draft
+      },
       catch: (cause) => new UpdateError({ message: "Config update failed", cause }),
     })
     if (!isDocument(next))
