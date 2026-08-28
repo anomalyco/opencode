@@ -2,8 +2,7 @@ import { describe, expect } from "bun:test"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import { Effect, Exit, Stream } from "effect"
-import type * as PlatformError from "effect/PlatformError"
+import { Effect, Exit, PlatformError, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { CrossSpawnSpawner } from "@opencode-ai/util/cross-spawn-spawner"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
@@ -244,11 +243,11 @@ describe("cross-spawn spawner", () => {
     )
 
     fx.effect(
-      "kills a child when scope exits",
+      "uses the configured kill signal when scope exits",
       Effect.gen(function* () {
         const pid = yield* Effect.scoped(
           Effect.gen(function* () {
-            const handle = yield* js("setInterval(() => {}, 10_000)")
+            const handle = yield* js("setInterval(() => {}, 10_000)", { killSignal: "SIGKILL" })
             return Number(handle.pid)
           }),
         )

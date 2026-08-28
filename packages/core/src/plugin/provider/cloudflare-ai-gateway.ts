@@ -58,10 +58,8 @@ export const CloudflareAIGatewayPlugin = define({
         const config = gatewayConfig(evt.options)
         if (!config) return
         const metadata = gatewayMetadata(evt.options)
-        const { createAiGateway } = yield* Effect.promise(() => import("ai-gateway-provider")).pipe(Effect.orDie)
-        const { createUnified } = yield* Effect.promise(() => import("ai-gateway-provider/providers/unified")).pipe(
-          Effect.orDie,
-        )
+        const { createAiGateway } = yield* Effect.promise(() => import("ai-gateway-provider"))
+        const { createUnified } = yield* Effect.promise(() => import("ai-gateway-provider/providers/unified"))
         const gateway = createAiGateway({
           accountId: config.accountId,
           gateway: config.gatewayId,
