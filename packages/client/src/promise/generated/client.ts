@@ -1531,7 +1531,7 @@ export function make(options: ClientOptions) {
             path: `/api/fs/read/${encodePath(input.path)}`,
             query: { location: input["location"] },
             successStatus: 200,
-            declaredStatuses: [401, 400],
+            declaredStatuses: [404, 401, 400],
             empty: false,
             binary: true,
           },

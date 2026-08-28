@@ -8507,6 +8507,16 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "FileNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileNotFoundErrorEncoded"
+                }
+              }
+            }
           }
         },
         "description": "Serve one file relative to the requested location.",
@@ -13840,6 +13850,23 @@
         "required": ["file", "patch", "additions", "deletions", "status"],
         "additionalProperties": false
       },
+      "FileNotFoundErrorEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["FileNotFoundError"]
+          },
+          "path": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "path", "message"],
+        "additionalProperties": false
+      },
       "FileSystem.Entry": {
         "type": "object",
         "properties": {
@@ -14983,6 +15010,9 @@
           "name": {
             "type": "string"
           },
+          "metadata": {
+            "type": "object"
+          },
           "methods": {
             "type": "array",
             "items": {
@@ -15492,6 +15522,9 @@
         "properties": {
           "reasoningField": {
             "$ref": "#/components/schemas/Model.ReasoningField"
+          },
+          "requireReasoning": {
+            "type": "boolean"
           },
           "maxTokensField": {
             "$ref": "#/components/schemas/Model.MaxTokensField"

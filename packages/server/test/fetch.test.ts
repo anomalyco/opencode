@@ -1,9 +1,12 @@
 import { expect } from "bun:test"
+import fs from "node:fs/promises"
 import { createServer, type Server } from "node:http"
+import path from "node:path"
 import { makeMemoryDriver } from "@opencode-ai/core/environment/index"
 import { Workspace } from "@opencode-ai/core/workspace"
 import { WorkspaceDriver } from "@opencode-ai/core/workspace/driver"
 import { Effect } from "effect"
+import { tmpdir } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
 import { ServerFetch } from "../src/fetch"
 
@@ -94,6 +97,33 @@ it.live("serves unauthenticated and answers CORS preflight when no password is c
     )
     expect(preflight.headers.get("access-control-allow-origin")).toBe("http://localhost:3000")
   }),
+)
+
+it.live("returns 404 when a previously readable file is deleted", () =>
+  Effect.acquireUseRelease(
+    Effect.promise(() => tmpdir("opencode-fs-read-endpoint-")),
+    (tmp) =>
+      Effect.gen(function* () {
+        const handler = yield* ServerFetch.make(options)
+        const file = path.join(tmp.path, "deleted.txt")
+        yield* Effect.promise(() => fs.writeFile(file, "content"))
+        const url = new URL("http://opencode.local/api/fs/read/deleted.txt")
+        url.searchParams.set("location[directory]", tmp.path)
+
+        const readable = yield* Effect.promise(() => handler(new Request(url)))
+        expect(readable.status).toBe(200)
+
+        yield* Effect.promise(() => fs.unlink(file))
+        const missing = yield* Effect.promise(() => handler(new Request(url)))
+        expect(missing.status).toBe(404)
+        expect(yield* Effect.promise(() => missing.json())).toEqual({
+          _tag: "FileNotFoundError",
+          path: "deleted.txt",
+          message: "File not found: deleted.txt",
+        })
+      }),
+    (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+  ).pipe(Effect.scoped),
 )
 
 it.live("cancels a stale OpenAI OAuth callback server before falling back", () =>
