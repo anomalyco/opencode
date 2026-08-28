@@ -87,7 +87,6 @@ export const Plugin = define({
                   ...input.prompt,
                   sessionID: input.sessionID,
                   text: yield* evaluateTemplate(command.template, input.prompt.text, {
-                    config,
                     location,
                     processes,
                     shell,
@@ -152,7 +151,6 @@ function evaluateTemplate(
   template: string,
   input: string,
   services: {
-    readonly config: Config.Interface
     readonly location: Location.Info
     readonly processes: AppProcess.Interface
     readonly shell: ShellSelect.Interface

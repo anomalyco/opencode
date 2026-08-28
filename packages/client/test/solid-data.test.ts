@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test"
+import { getEventListeners } from "node:events"
 import { createRoot } from "solid-js"
 import { createData, type CreateDataInput } from "../src/solid"
 import { OpenCode, type OpenCodeEvent, type Project, type SessionInfo } from "../src/promise"
@@ -414,6 +415,120 @@ test("loads bounded message pages", async () => {
   }
 })
 
+test.each(["success", "failure", "cancel", "cancel-retry", "cancel-page", "join-cancel", "join-failure"])(
+  "bulk history (%s)",
+  async (mode) => {
+    const messages = [1, 2, 3].map((index) => ({
+      id: `msg_${index}`,
+      type: "user",
+      text: `Message ${index}`,
+      time: { created: index },
+    }))
+    const release = Promise.withResolvers<void>()
+    const controller = new AbortController()
+    const requests: URL[] = []
+    const publications: string[][] = []
+    const api = OpenCode.make({
+      baseUrl: "http://opencode.local",
+      fetch: async (input, init) => {
+        const url = new URL(input instanceof Request ? input.url : String(input))
+        requests.push(url)
+        const cursor = url.searchParams.get("cursor")
+        if (!cursor) return Response.json({ data: [messages[2]], cursor: { next: "recent" } })
+        if (cursor === "recent") {
+          if (mode.startsWith("join")) await release.promise
+          if (mode === "join-failure") return Response.json({ message: "offline" }, { status: 503 })
+          return Response.json({ data: [messages[2], messages[1]], cursor: { next: "oldest" } })
+        }
+        if (cursor === "oldest") return Response.json({ data: [messages[0]], cursor: { next: "empty" } })
+        expect(init?.signal).toBe(requests.length === 4 ? controller.signal : undefined)
+        await release.promise
+        if (mode === "failure") return Response.json({ message: "offline" }, { status: 503 })
+        return Response.json({ data: [], cursor: {} })
+      },
+    })
+    const setup = createRoot((dispose) => {
+      const data = createData({
+        api: () => api,
+        directory: "/project",
+        event: { on: () => () => {}, listen: () => () => {} },
+      })
+      return { data, dispose }
+    })
+
+    try {
+      await setup.data.session.message.sync("ses_refresh")
+      const newest = setup.data.session.message.get("ses_refresh", "msg_3")
+      const load = setup.data.session.message.loadMore(
+        "ses_refresh",
+        mode.startsWith("join")
+          ? undefined
+          : {
+              all: true,
+              signal: controller.signal,
+              beforePublish: () => {
+                publications.push(setup.data.session.message.list("ses_refresh").map((message) => message.id))
+                expect(setup.data.session.message.get("ses_refresh", "msg_3")).toBe(newest)
+              },
+            },
+      )
+      const joined = setup.data.session.message.loadMore("ses_refresh", { all: true, signal: controller.signal })
+      const settled = Promise.allSettled([load, joined])
+      if (mode.startsWith("join")) {
+        await wait(() => requests.length === 2)
+        expect(getEventListeners(controller.signal, "abort")).toHaveLength(1)
+        controller.abort()
+        let cancelled = false
+        void joined.then(() => {
+          cancelled = true
+        })
+        await wait(() => cancelled)
+        expect(setup.data.session.message.loading("ses_refresh")).toBe(true)
+        expect(getEventListeners(controller.signal, "abort")).toHaveLength(0)
+        release.resolve()
+        expect((await settled).map((result) => result.status)).toEqual(
+          mode === "join-failure" ? ["rejected", "fulfilled"] : ["fulfilled", "fulfilled"],
+        )
+        expect(requests.at(-1)?.searchParams.get("limit")).toBe("20")
+        expect(requests).toHaveLength(2)
+        expect(setup.data.session.message.more("ses_refresh")).toBe(true)
+        expect(setup.data.session.message.list("ses_refresh").map((message) => message.id)).toEqual(
+          mode === "join-failure" ? ["msg_3"] : ["msg_2", "msg_3"],
+        )
+        return
+      }
+      await wait(() => requests.length === 4)
+      expect(setup.data.session.message.loading("ses_refresh")).toBe(true)
+      expect(setup.data.session.message.list("ses_refresh").map((message) => message.id)).toEqual(["msg_3"])
+      expect(requests.slice(1).map((url) => url.searchParams.get("limit"))).toEqual(["200", "200", "200"])
+      if (mode.startsWith("cancel")) controller.abort()
+      const retry =
+        mode === "cancel-retry" || mode === "cancel-page"
+          ? setup.data.session.message.loadMore("ses_refresh", mode === "cancel-retry" ? { all: true } : undefined)
+          : undefined
+      release.resolve()
+      expect((await settled).map((result) => result.status)).toEqual(
+        mode === "failure" ? ["rejected", "rejected"] : ["fulfilled", "fulfilled"],
+      )
+      await retry
+      const success = mode === "success" || mode === "cancel-retry"
+      expect(setup.data.session.message.loading("ses_refresh")).toBe(false)
+      expect(setup.data.session.message.more("ses_refresh")).toBe(!success)
+      expect(setup.data.session.message.list("ses_refresh").map((message) => message.id)).toEqual(
+        success ? ["msg_1", "msg_2", "msg_3"] : mode === "cancel-page" ? ["msg_2", "msg_3"] : ["msg_3"],
+      )
+      expect(setup.data.session.message.get("ses_refresh", "msg_3")).toBe(newest)
+      expect(requests).toHaveLength(mode === "cancel-retry" ? 7 : mode === "cancel-page" ? 5 : 4)
+      if (mode === "cancel-page") expect(requests.at(-1)?.searchParams.get("limit")).toBe("20")
+      expect(publications).toEqual(mode === "success" ? [["msg_3"]] : [])
+      expect(getEventListeners(controller.signal, "abort")).toHaveLength(0)
+    } finally {
+      release.resolve()
+      setup.dispose()
+    }
+  },
+)
+
 test("preserves assistant content replacement events across an active message read", async () => {
   const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
   const release = Promise.withResolvers<void>()
@@ -484,6 +599,102 @@ test("preserves assistant content replacement events across an active message re
     setup.dispose()
   }
 })
+
+test.each([
+  "session.execution.succeeded",
+  "session.execution.failed",
+  "session.execution.interrupted",
+  "session.execution.started",
+  "session.deleted",
+] as const)("preserves %s activity when an older snapshot arrives", async (type) => {
+  const release = Promise.withResolvers<void>()
+  const requested = Promise.withResolvers<void>()
+  const setup = activityFixture(async () => {
+    requested.resolve()
+    await release.promise
+    return Response.json({
+      data: {
+        ...(type === "session.execution.started" ? {} : { ses_refresh: { type: "running" } }),
+        ses_hydrated: { type: "running" },
+      },
+    })
+  })
+
+  try {
+    if (type !== "session.execution.started") setup.data.session.setStatus("ses_refresh", "running")
+    setup.emit({ type: "server.connected", data: {} })
+    await requested.promise
+    setup.emit({
+      id: "evt_activity",
+      created: 2,
+      type,
+      durable: { aggregateID: "ses_refresh", seq: 2, version: 1 },
+      data: { sessionID: "ses_refresh", reason: "user" },
+    })
+    expect(setup.data.session.status("ses_refresh")).toBe(type === "session.execution.started" ? "running" : "idle")
+    release.resolve()
+    await wait(() => setup.data.session.status("ses_hydrated") === "running")
+    expect(setup.data.session.status("ses_refresh")).toBe(type === "session.execution.started" ? "running" : "idle")
+  } finally {
+    release.resolve()
+    setup.dispose()
+  }
+})
+
+test("ignores activity snapshots from an older connection", async () => {
+  const reads: ReturnType<typeof Promise.withResolvers<Response>>[] = []
+  const setup = activityFixture(() => {
+    const read = Promise.withResolvers<Response>()
+    reads.push(read)
+    return read.promise
+  })
+
+  try {
+    setup.emit({ type: "server.connected", data: {} })
+    await wait(() => reads.length === 1)
+    setup.emit({ type: "server.connected", data: {} })
+    await wait(() => reads.length === 2)
+    reads[1]?.resolve(Response.json({ data: { ses_new: { type: "running" } } }))
+    await wait(() => setup.data.session.status("ses_new") === "running")
+    reads[0]?.resolve(Response.json({ data: { ses_old: { type: "running" } } }))
+    await Bun.sleep(20)
+    expect(setup.data.session.status("ses_new")).toBe("running")
+    expect(setup.data.session.status("ses_old")).toBe("idle")
+  } finally {
+    reads.forEach((read) => read.resolve(Response.json({ data: {} })))
+    setup.dispose()
+  }
+})
+
+function activityFixture(read: () => Response | Promise<Response>) {
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      const path = new URL(request.url).pathname
+      if (path === "/api/session/active") return read()
+      if (path === "/api/project") return Response.json([])
+      if (path === "/api/location") return Response.json({ directory: "/project" })
+      return Response.json({ location: { directory: "/project" }, data: { branch: "main" } })
+    },
+  })
+  return createRoot((dispose) => ({
+    data: createData({
+      api: () => api,
+      directory: "/project",
+      event: {
+        on: () => () => {},
+        listen(handler) {
+          listeners.add(handler)
+          return () => listeners.delete(handler)
+        },
+      },
+    }),
+    emit: (details: OpenCodeEvent) => listeners.forEach((listener) => listener({ name: details.type, details })),
+    dispose,
+  }))
+}
 
 async function wait(check: () => boolean) {
   const started = Date.now()

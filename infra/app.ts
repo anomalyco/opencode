@@ -63,7 +63,8 @@ new sst.cloudflare.StaticSite("WebApp", {
   domain: "app." + domain,
   path: "packages/app",
   build: {
-    command: "bun turbo build",
+    // Preserve Sentry credentials and run source-map uploads on every deployment.
+    command: "bun run build",
     output: "./dist",
   },
 })

@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Cause, Deferred, Effect, Exit, Fiber, Layer, Option, Ref, Schema, Stream } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Layer, Ref, Schema, Stream } from "effect"
 import { Bus } from "@opencode-ai/core/bus"
 import { Event } from "@opencode-ai/schema/event"
 import { Session } from "@opencode-ai/schema/session"
@@ -228,10 +228,10 @@ describe("Bus", () => {
       )
 
       const event = yield* bus.publish(SyncMessage, { id: "one", text: "hello" })
-      yield* bus.publish(SyncMessage, { id: "one", text: "after unsubscribe" })
+      yield* bus.publish(SyncMessage, { id: "one", text: "second event" })
 
       expect(received[0]).toEqual(event)
-      expect(received[1]?.data).toEqual({ id: "one", text: "after unsubscribe" })
+      expect(received[1]?.data).toEqual({ id: "one", text: "second event" })
     }),
   )
 

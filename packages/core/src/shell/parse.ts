@@ -7,6 +7,7 @@ import path from "path"
 import type { Node } from "web-tree-sitter"
 import { shellParserWasm } from "#shell-parser-wasm"
 import { ShellSelect } from "./select.js"
+import { lazy } from "../util/lazy.js"
 import { Wildcard } from "../util/wildcard.js"
 
 type Part = { type: string; text: string }
@@ -355,10 +356,7 @@ function resolve(asset: string) {
   return fileURLToPath(new URL(asset, import.meta.url))
 }
 
-const load = (() => {
-  let loading: ReturnType<typeof initialize> | undefined
-  return () => (loading ??= initialize())
-})()
+const load = lazy(initialize)
 
 async function initialize() {
   const { Parser, Language } = await import("web-tree-sitter")
