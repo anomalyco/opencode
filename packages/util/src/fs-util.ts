@@ -1,4 +1,3 @@
-import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem"
 import path, { dirname, isAbsolute, join, relative, sep } from "path"
 import { realpathSync } from "fs"
 import { readdir } from "fs/promises"

@@ -19,6 +19,9 @@ export const Plugin = define({
   id: "opencode.config.instruction",
   effect: Effect.fn(function* () {
     const discovery = yield* InstructionDiscovery.Service
+    // Nothing this plugin watches or loads can contribute when both scopes
+    // are disabled; skip the resolves, the watcher fiber, and the transform.
+    if (!discovery.project && !discovery.global) return
     yield* Effect.gen(function* () {
       const fs = yield* FSUtil.Service
       const global = yield* Global.Service
@@ -35,9 +38,15 @@ export const Plugin = define({
       const loaded: { current: Loaded } = { current: { type: "available", files: [] } }
 
       const publish = (update: Watcher.Update) => PubSub.publish(changes, update.path).pipe(Effect.asVoid)
+      // The ancestor walk can reach the global file when the location sits
+      // beneath the global config dir; global: false excludes it there too.
       const candidates = [
-        globalFile,
-        ...(project ? ancestorDirectories(start, stop).map((directory) => join(directory, "AGENTS.md")) : []),
+        ...(discovery.global ? [globalFile] : []),
+        ...(project
+          ? ancestorDirectories(start, stop)
+              .map((directory) => join(directory, "AGENTS.md"))
+              .filter((file) => discovery.global || file !== globalFile)
+          : []),
       ]
       for (const path of new Set(candidates)) {
         const updates = yield* watcher.subscribe({ path, type: "file" })
@@ -51,15 +60,15 @@ export const Plugin = define({
       })
 
       const globalSource = Effect.fn("ConfigInstructionPlugin.globalSource")(function* () {
+        if (!discovery.global) return []
         const file = yield* read(globalFile)
         return file ? [file] : []
       })
 
       const projectSource = Effect.fn("ConfigInstructionPlugin.projectSource")(function* () {
         if (!project) return []
-        const discovered = new Set(
-          yield* Effect.forEach(yield* fs.up({ targets: ["AGENTS.md"], start, stop }), fs.resolve),
-        )
+        const walked = yield* Effect.forEach(yield* fs.up({ targets: ["AGENTS.md"], start, stop }), fs.resolve)
+        const discovered = new Set(walked.filter((file) => discovery.global || file !== globalFile))
         const files = yield* Effect.forEach(discovered, read, { concurrency: "unbounded" })
         if (files.some((file) => file === undefined)) return Instructions.unavailable
         return files.filter((file): file is InstructionDiscovery.File => file !== undefined)

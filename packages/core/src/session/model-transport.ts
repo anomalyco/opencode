@@ -41,7 +41,6 @@ interface Channel {
   readonly openedAt: number
   active?: Active
   closing: boolean
-  poisoned: boolean
   checkpoint?: ChannelCheckpoint
   pending?: { readonly token: object; readonly checkpoint: ChannelCheckpoint }
   reader?: Fiber.Fiber<unknown, unknown>
@@ -150,7 +149,6 @@ export const makeLayer = (connector: WebSocketConnector) =>
         channel: Channel,
         error: AIError,
       ) {
-        channel.poisoned = true
         if (owner.channel === channel) owner.channel = undefined
         if (channel.closing) return
         channel.closing = true
@@ -187,7 +185,6 @@ export const makeLayer = (connector: WebSocketConnector) =>
               connection,
               openedAt: yield* Clock.currentTimeMillis,
               closing: false,
-              poisoned: false,
             }
             owner.channel = channel
             channel.reader = yield* connection.messages.pipe(
@@ -274,13 +271,11 @@ export const makeLayer = (connector: WebSocketConnector) =>
         const current = owner.channel
         const rotateAfterMs = exchange.connect.rotateAfterMs ?? ROTATE_AFTER_MS
         const rotation = current
-          ? current.poisoned
-            ? "poisoned"
-            : current.affinity !== key
-              ? "affinity"
-              : now - current.openedAt >= rotateAfterMs
-                ? "age"
-                : undefined
+          ? current.affinity !== key
+            ? "affinity"
+            : now - current.openedAt >= rotateAfterMs
+              ? "age"
+              : undefined
           : undefined
         if (current && rotation) {
           yield* Effect.logDebug("session websocket rotating", {
@@ -361,7 +356,6 @@ export const makeLayer = (connector: WebSocketConnector) =>
 
         let terminal: ChannelObservation | undefined
         const token = {}
-        let staged: ChannelCheckpoint | undefined
         const frames = Stream.fromQueue(active.queue).pipe(
           Stream.timeoutOrElse({
             duration: IDLE_TIMEOUT,
@@ -382,7 +376,7 @@ export const makeLayer = (connector: WebSocketConnector) =>
               if (!observationTerminal(observation)) return
               terminal = observation
               lifecycle.delivery = "terminal"
-              staged = observation.type === "completed" ? observation.checkpoint : undefined
+              const staged = observation.type === "completed" ? observation.checkpoint : undefined
               if (staged) channel.pending = { token, checkpoint: staged }
               if (observation.type !== "completed" || !staged) channel.checkpoint = undefined
             }),

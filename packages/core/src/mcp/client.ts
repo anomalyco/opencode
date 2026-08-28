@@ -1,4 +1,4 @@
-export * as MCPClient from "./client.js"
+export * as McpClient from "./client.js"
 
 import path from "node:path"
 import { pathToFileURL } from "node:url"
@@ -10,17 +10,14 @@ import {
   CallToolResultSchema,
   ElicitationCompleteNotificationSchema,
   ElicitRequestSchema,
-  GetPromptResultSchema,
   type Implementation,
   type ElicitRequestFormParams,
   type ElicitRequestParams,
   type ElicitRequestURLParams,
   type ElicitResult,
-  ListPromptsResultSchema,
   ListRootsRequestSchema,
   ListToolsResultSchema,
   PromptListChangedNotificationSchema,
-  PromptSchema,
   ResourceListChangedNotificationSchema,
   type LoggingMessageNotification,
   LoggingMessageNotificationSchema,
@@ -29,7 +26,8 @@ import {
 } from "@modelcontextprotocol/sdk/types.js"
 import { Cause, Effect, Exit, Schema } from "effect"
 import { ConfigMCP } from "@opencode-ai/schema/config/mcp"
-import { MCPStdio } from "./stdio.js"
+import type { Session } from "@opencode-ai/schema/session"
+import { McpStdio } from "./stdio.js"
 
 const DEFAULT_STARTUP_TIMEOUT = 30_000
 const DEFAULT_CATALOG_TIMEOUT = 30_000
@@ -41,10 +39,6 @@ const toError = (error: unknown) => (error instanceof Error ? error : new Error(
 const TolerantListToolsResult = ListToolsResultSchema.extend({
   tools: ToolSchema.omit({ outputSchema: true }).array(),
 })
-const TolerantListPromptsResult = ListPromptsResultSchema.extend({
-  prompts: PromptSchema.array(),
-})
-
 export class NeedsAuthError extends Schema.TaggedError<NeedsAuthError>()("MCP.NeedsAuthError", {
   server: Schema.String,
 }) {
@@ -163,6 +157,7 @@ export interface Connection {
   readonly callTool: (input: {
     readonly name: string
     readonly args?: Record<string, unknown>
+    readonly sessionID?: Session.ID
   }) => Effect.Effect<CallToolResult, Error>
   readonly onClose: (callback: () => void) => void
   /** Registers a callback fired when the server emits an MCP logging notification. */
@@ -222,7 +217,7 @@ export const connect = Effect.fnUntraced(function* (
   const exit = yield* Effect.gen(function* () {
     if (config.type === "local") {
       const [command, ...args] = config.command
-      const transport = yield* MCPStdio.make({
+      const transport = yield* McpStdio.make({
         server,
         command,
         args,
@@ -301,12 +296,8 @@ export const connect = Effect.fnUntraced(function* (
           const prompts = yield* Effect.tryPromise({
             try: () =>
               paginate(
-                async (cursor) => {
-                  const params = cursor === undefined ? undefined : { cursor }
-                  return client.request({ method: "prompts/list", params }, TolerantListPromptsResult, {
-                    timeout: catalogTimeout,
-                  })
-                },
+                (cursor) =>
+                  client.listPrompts(cursor === undefined ? undefined : { cursor }, { timeout: catalogTimeout }),
                 (result) => result.prompts,
               ),
             catch: toError,
@@ -396,11 +387,7 @@ export const connect = Effect.fnUntraced(function* (
       prompt: (input) =>
         Effect.tryPromise({
           try: (signal) =>
-            client.request(
-              { method: "prompts/get", params: { name: input.name, arguments: input.args ?? {} } },
-              GetPromptResultSchema,
-              { signal, timeout: executionTimeout },
-            ),
+            client.getPrompt({ name: input.name, arguments: input.args ?? {} }, { signal, timeout: executionTimeout }),
           catch: toError,
         }).pipe(
           Effect.map((result) => ({
@@ -411,7 +398,11 @@ export const connect = Effect.fnUntraced(function* (
         Effect.tryPromise({
           try: (signal) =>
             client.callTool(
-              { name: input.name, arguments: input.args ?? {} },
+              {
+                name: input.name,
+                arguments: input.args ?? {},
+                ...(input.sessionID === undefined ? {} : { _meta: { sessionID: input.sessionID } }),
+              },
               CallToolResultSchema,
               // Keep progress tokens available while enforcing a hard wall-clock execution timeout.
               { signal, timeout: executionTimeout, onprogress: () => {} },
