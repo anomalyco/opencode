@@ -78,8 +78,7 @@ const locations = Layer.effect(
             Layer.mock(Snapshot.Service, {
               capture: () =>
                 ready ? Effect.undefined : Effect.die(new Error("Snapshot used before plugins were ready")),
-              restore: () =>
-                ready ? Effect.void : Effect.die(new Error("Snapshot used before plugins were ready")),
+              restore: () => (ready ? Effect.void : Effect.die(new Error("Snapshot used before plugins were ready"))),
             }),
             Layer.succeed(
               PluginSupervisor.Service,
@@ -172,8 +171,9 @@ const assistantRow = (id: SessionMessage.ID, seq: number) => {
 describe("Session.prompt", () => {
   it.effect("exposes the execution registry", () =>
     Effect.gen(function* () {
+      const session = yield* Session.Service
       activeSessions.add(sessionID)
-      expect(Array.from(yield* (yield* Session.Service).active)).toEqual([sessionID])
+      expect(Array.from(yield* session.active)).toEqual([sessionID])
     }).pipe(Effect.ensuring(Effect.sync(() => activeSessions.clear()))),
   )
 
@@ -557,7 +557,7 @@ describe("Session.prompt", () => {
       yield* session.resume(sessionID)
 
       expect(yield* session.messages({ sessionID })).toEqual([])
-      expect(yield* admitted(message.id)).not.toHaveProperty("promotedSeq")
+      expect((yield* session.inbox(sessionID)).map((item) => item.id)).toEqual([message.id])
       expect(executionCalls).toEqual([sessionID])
       expect(wakeCalls).toEqual([])
     }),

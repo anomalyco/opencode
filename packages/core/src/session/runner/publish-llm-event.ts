@@ -373,7 +373,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     (error: SessionError.Error, scope: "hosted" | "all" = "all") => failTools(error, scope),
   )
 
-  const publish = Effect.fn("SessionRunner.publishLLMEvent")(function* (event: LLMEvent) {
+  const publish = Effect.fnUntraced(function* (event: LLMEvent) {
     switch (event.type) {
       case "step-start":
         yield* startAssistant()
@@ -391,7 +391,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
         yield* text.append(event.id, event.text, providerState(event.providerMetadata))
         return
       case "text-end":
-        yield* text.end(event.id, providerState(event.providerMetadata))
+        yield* text.end(event.id, providerState(event.providerMetadata), event.text)
         return
       case "reasoning-start":
         outputStarted = true
@@ -407,7 +407,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
         yield* reasoning.append(event.id, event.text, providerState(event.providerMetadata))
         return
       case "reasoning-end":
-        yield* reasoning.end(event.id, providerState(event.providerMetadata))
+        yield* reasoning.end(event.id, providerState(event.providerMetadata), event.text)
         return
       case "tool-input-start":
         outputStarted = true
@@ -530,6 +530,8 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     }
   })
 
+  const publishTraced = Effect.fn("SessionRunner.publishLLMEvent")(publish)
+
   const progress = Effect.fnUntraced(function* (id: string, update: Tool.Metadata) {
     const tool = tools.get(id)
     if (!tool?.called || tool.settled) return yield* Effect.die(new Error(`Tool progress outside running call: ${id}`))
@@ -568,7 +570,11 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
   })
 
   return {
-    publish,
+    publish: (event: LLMEvent) => {
+      if (event.type === "text-delta" || event.type === "reasoning-delta" || event.type === "tool-input-delta")
+        return publish(event)
+      return publishTraced(event)
+    },
     progress,
     toolExecution,
     flush,

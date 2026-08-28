@@ -330,7 +330,6 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
 
     const toolCalls: Array<{
       id: string
-      type: "function"
       function: {
         name: string
         arguments: string
@@ -560,7 +559,6 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
 
                   toolCalls[index] = {
                     id: toolCallDelta.id,
-                    type: "function",
                     function: {
                       name: toolCallDelta.function.name,
                       arguments: toolCallDelta.function.arguments ?? "",

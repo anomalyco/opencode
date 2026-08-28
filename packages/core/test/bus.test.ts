@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Cause, Deferred, Effect, Exit, Fiber, Layer, Option, Ref, Schema, Stream } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Layer, Ref, Schema, Stream } from "effect"
 import { Bus } from "@opencode-ai/core/bus"
 import { Event } from "@opencode-ai/schema/event"
 import { Session } from "@opencode-ai/schema/session"
@@ -123,7 +123,7 @@ describe("Bus", () => {
       yield* bus.publish(Message, { text: "hello" })
       yield* bus.publish(CountMessage, { count: 2 })
 
-      const received = Array.from(yield* Fiber.join(fiber)).map((event) =>
+      const received = (yield* Fiber.join(fiber)).map((event) =>
         event.type === "test.message" ? event.data.text : event.data.count,
       )
       expect(received).toEqual(["hello", 2])
@@ -136,7 +136,7 @@ describe("Bus", () => {
       const fiber = yield* bus.subscribe(Message).pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
       yield* Effect.yieldNow
       const event = yield* bus.publish(Message, { text: "hello" })
-      const received = Array.from(yield* Fiber.join(fiber))
+      const received = yield* Fiber.join(fiber)
 
       expect(received).toEqual([event])
       expect(event.type).toBe("test.message")
@@ -212,8 +212,8 @@ describe("Bus", () => {
       yield* Effect.yieldNow
       const event = yield* bus.publish(Message, { text: "hello" })
 
-      expect(Array.from(yield* Fiber.join(typed))).toEqual([event])
-      expect(Array.from(yield* Fiber.join(wildcard))).toEqual([event])
+      expect(yield* Fiber.join(typed)).toEqual([event])
+      expect(yield* Fiber.join(wildcard)).toEqual([event])
     }),
   )
 
@@ -228,10 +228,10 @@ describe("Bus", () => {
       )
 
       const event = yield* bus.publish(SyncMessage, { id: "one", text: "hello" })
-      yield* bus.publish(SyncMessage, { id: "one", text: "after unsubscribe" })
+      yield* bus.publish(SyncMessage, { id: "one", text: "second event" })
 
       expect(received[0]).toEqual(event)
-      expect(received[1]?.data).toEqual({ id: "one", text: "after unsubscribe" })
+      expect(received[1]?.data).toEqual({ id: "one", text: "second event" })
     }),
   )
 
@@ -602,7 +602,7 @@ describe("Bus", () => {
 
       yield* bus.publish(DurableMessage, durableData(aggregateID, "two"))
 
-      expect(Array.from(yield* Fiber.join(fiber)).map((event) => [event.durable?.seq, event.data])).toEqual([
+      expect((yield* Fiber.join(fiber)).map((event) => [event.durable?.seq, event.data])).toEqual([
         [1, durableData(aggregateID, "one")],
         [2, durableData(aggregateID, "two")],
       ])
@@ -618,7 +618,7 @@ describe("Bus", () => {
 
       yield* bus.publish(DurableMessage, durableData(aggregateID, "one"))
 
-      expect(Array.from(yield* Fiber.join(fiber)).map((event) => [event.durable?.seq, event.data])).toEqual([
+      expect((yield* Fiber.join(fiber)).map((event) => [event.durable?.seq, event.data])).toEqual([
         [0, durableData(aggregateID, "zero")],
         [1, durableData(aggregateID, "one")],
       ])
@@ -653,7 +653,7 @@ describe("Bus", () => {
         yield* bus.publish(DurableMessage, durableData(aggregateID, "during handoff"))
         yield* Deferred.succeed(continueRead, undefined)
 
-        expect(Array.from(yield* Fiber.join(fiber)).map((event) => [event.durable?.seq, event.data])).toEqual([
+        expect((yield* Fiber.join(fiber)).map((event) => [event.durable?.seq, event.data])).toEqual([
           [0, durableData(aggregateID, "during handoff")],
         ])
       }).pipe(Effect.provide(eventLayer))
@@ -672,7 +672,7 @@ describe("Bus", () => {
         yield* bus.publish(DurableMessage, durableData(aggregateID, String(index)))
       }
 
-      expect(Array.from(yield* Fiber.join(fiber)).map((event) => [event.durable?.seq, event.data])).toEqual(
+      expect((yield* Fiber.join(fiber)).map((event) => [event.durable?.seq, event.data])).toEqual(
         Array.from({ length: count }, (_, index) => [index, durableData(aggregateID, String(index))]),
       )
     }),
@@ -688,7 +688,7 @@ describe("Bus", () => {
       yield* bus.publish(Message, { text: "live only" })
       yield* bus.publish(DurableMessage, durableData(aggregateID, "durable"))
 
-      expect(Array.from(yield* Fiber.join(fiber)).map((event) => event.type)).toEqual([DurableMessage.type])
+      expect((yield* Fiber.join(fiber)).map((event) => event.type)).toEqual([DurableMessage.type])
     }),
   )
 
@@ -1268,7 +1268,7 @@ describe("Bus", () => {
       yield* bus.publish(DurableMessage, durableData(aggregateID, "zero"))
       yield* bus.publish(DurableMessage, durableData(aggregateID, "one"))
 
-      const items = Array.from(yield* Stream.runCollect(bus.log({ aggregateID })))
+      const items = yield* Stream.runCollect(bus.log({ aggregateID }))
 
       expect(items.map((item) => (Bus.isSynced(item) ? item.type : item.durable?.seq))).toEqual([
         Event.Seq.make(0),
@@ -1284,9 +1284,9 @@ describe("Bus", () => {
       const bus = yield* Bus.Service
       const aggregateID = Session.ID.create()
 
-      const empty = Array.from(yield* Stream.runCollect(bus.log({ aggregateID })))
+      const empty = yield* Stream.runCollect(bus.log({ aggregateID }))
       yield* bus.publish(DurableMessage, durableData(aggregateID, "zero"))
-      const drained = Array.from(yield* Stream.runCollect(bus.log({ aggregateID, after: 0 })))
+      const drained = yield* Stream.runCollect(bus.log({ aggregateID, after: 0 }))
 
       expect(empty).toEqual([{ type: "log.synced", aggregateID }])
       expect(empty[0]).not.toHaveProperty("seq")
@@ -1306,7 +1306,7 @@ describe("Bus", () => {
 
       yield* bus.publish(DurableMessage, durableData(aggregateID, "one"))
 
-      const items = Array.from(yield* Fiber.join(fiber))
+      const items = yield* Fiber.join(fiber)
       expect(items.map((item) => (Bus.isSynced(item) ? item : item.durable?.seq))).toEqual([
         Event.Seq.make(0),
         { type: "log.synced", aggregateID, seq: Event.Seq.make(0) },
@@ -1330,7 +1330,7 @@ describe("Bus", () => {
         yield* bus.publish(DurableMessage, durableData(aggregateID, "three"))
         yield* bus.publish(DurableMessage, durableData(aggregateID, "four"))
 
-        const items = Array.from(yield* Stream.runCollect(bus.log({ aggregateID })))
+        const items = yield* Stream.runCollect(bus.log({ aggregateID }))
 
         expect(items.map((item) => (Bus.isSynced(item) ? item.type : item.durable?.seq))).toEqual([
           Event.Seq.make(0),
@@ -1378,7 +1378,7 @@ describe("Bus", () => {
         yield* bus.publish(DurableMessage, durableData(aggregateID, "one"))
         yield* Deferred.succeed(releaseRead, undefined)
 
-        const items = Array.from(yield* Fiber.join(fiber))
+        const items = yield* Fiber.join(fiber)
         expect(items.map((item) => (Bus.isSynced(item) ? item : item.durable?.seq))).toEqual([
           Event.Seq.make(0),
           { type: "log.synced", aggregateID, seq: Event.Seq.make(0) },

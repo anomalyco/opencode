@@ -11,6 +11,7 @@ describe("provider error classification", () => {
       "Input length 131393 exceeds the maximum allowed input length of 131040 tokens.",
       "The input (516368 tokens) is longer than the model's context length (262144 tokens).",
       "Prompt has 5,958,968 tokens, but the configured context size is 256,000 tokens",
+      "Range of input length should be [1, 129024]",
       "Too many tokens",
       "Token limit exceeded",
     ]
@@ -87,10 +88,12 @@ describe("provider error classification", () => {
     ])
   })
 
-  test("classifies network error text as provider internal", () => {
+  test("classifies any remaining 4xx status as an invalid request", () => {
     expect(
-      ["network error", "network-error", "network_error"].map((message) => classifyProviderFailure({ message })._tag),
-    ).toEqual(["ProviderInternal", "ProviderInternal", "ProviderInternal"])
+      [400, 402, 404, 418, 422, 451].map(
+        (status) => classifyProviderFailure({ message: `HTTP ${status}`, status })._tag,
+      ),
+    ).toEqual(Array(6).fill("InvalidRequest"))
   })
 
   test("classifies nested provider codes when a top-level code is also present", () => {
@@ -103,10 +106,12 @@ describe("provider error classification", () => {
     ).toEqual(["QuotaExceeded", "ProviderInternal", "InvalidRequest"])
   })
 
-  test("keeps unknown and malformed provider payloads non-retryable", () => {
+  test("leaves unrecognized failures unclassified for the retry default", () => {
     expect(classifyProviderFailure({ message: '{"error":{"message":"no_kv_space"}}' })._tag).toBe("UnknownProvider")
     expect(classifyProviderFailure({ message: '{"type":"error","error":{"code":123}}' })._tag).toBe("UnknownProvider")
     expect(classifyProviderFailure({ message: "not-json" })._tag).toBe("UnknownProvider")
+    expect(classifyProviderFailure({ message: "network error" })._tag).toBe("UnknownProvider")
+    expect(classifyProviderFailure({ message: "Provider returned error" })._tag).toBe("UnknownProvider")
   })
 })
 

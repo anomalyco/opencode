@@ -1,5 +1,5 @@
-import { createMemo, createResource, createSignal } from "solid-js"
-import type { SessionInfo } from "@opencode-ai/client"
+import { createMemo, createResource, createSignal, onCleanup, Show } from "solid-js"
+import type { OpenCodeEvent, SessionInfo } from "@opencode-ai/client"
 import { useTerminalDimensions } from "@opentui/solid"
 import type { RGBA } from "@opentui/core"
 import { dialogWidth, useDialog } from "../ui/dialog"
@@ -25,18 +25,7 @@ export const DialogOpenKey = Symbol("DialogOpen")
 
 type OpenTarget = { type: "session"; sessionID: string } | { type: "project"; directory: string }
 
-export async function loadDialogOpen(data: ReturnType<typeof useData>, client: ReturnType<typeof useClient>) {
-  const [, sessions] = await Promise.all([
-    data.project.sync().catch(() => {}),
-    client.api.session
-      .list({ limit: 50, order: "desc", parentID: null })
-      .then((response) => response.data)
-      .catch(() => [] as SessionInfo[]),
-  ])
-  return sessions
-}
-
-export function DialogOpen(props: { sessions: SessionInfo[] }) {
+export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: SessionInfo[]) => void }) {
   const dialog = useDialog()
   const route = useRoute()
   const data = useData()
@@ -51,6 +40,41 @@ export function DialogOpen(props: { sessions: SessionInfo[] }) {
   const shortcuts = Keymap.useShortcuts()
   const [filter, setFilter] = createSignal("")
   const [selectionMoved, setSelectionMoved] = createSignal(false)
+  let closed = false
+  onCleanup(() => {
+    closed = true
+  })
+  const [recent] = createResource(() => {
+    // A late read must not overwrite deletion or placement facts observed in flight.
+    const changed = new Map<string, Extract<OpenCodeEvent, { type: "session.deleted" | "session.moved" }>>()
+    const unsubscribe = client.event.listen((message) => {
+      const event = message.details
+      if (event.type === "session.deleted" || event.type === "session.moved") changed.set(event.data.sessionID, event)
+    })
+    onCleanup(unsubscribe)
+    return client.api.session
+      .list({ limit: 50, order: "desc", parentID: null })
+      .then((response) => {
+        if (!closed)
+          props.onLoad(
+            response.data.flatMap((session) => {
+              const event = changed.get(session.id)
+              if (!event) return [session]
+              if (event.type === "session.deleted") return []
+              return [moveOpenSession(props.sessions.find((entry) => entry.id === session.id) ?? session, event)]
+            }),
+          )
+        return true
+      })
+      .catch(() => false)
+      .finally(unsubscribe)
+  })
+  const [projects] = createResource(() =>
+    data.project.sync().then(
+      () => true,
+      () => false,
+    ),
+  )
 
   const [matched] = createResource(
     () => {
@@ -154,12 +178,34 @@ export function DialogOpen(props: { sessions: SessionInfo[] }) {
       preserveSelection={selectionMoved()}
       onMove={() => setSelectionMoved(true)}
       onFilter={setFilter}
+      emptyView={
+        <Show when={!recent.loading && !projects.loading}>
+          <box paddingLeft={4} paddingRight={4}>
+            <text fg={theme.text.subdued}>No recent sessions or projects</text>
+          </box>
+        </Show>
+      }
+      footer={
+        <box>
+          <Show when={recent.loading || projects.loading}>
+            <Spinner color={theme.text.subdued}>Refreshing sessions and projects...</Spinner>
+          </Show>
+          <Show when={recent() === false || projects() === false}>
+            <text fg={theme.text.feedback.error.default}>
+              Could not refresh{" "}
+              {recent() === false ? (projects() === false ? "sessions and projects" : "sessions") : "projects"}.
+            </text>
+          </Show>
+        </box>
+      }
       noMatchView={
         <box paddingLeft={4} paddingRight={4}>
           <text fg={theme.text.subdued}>
-            {shortcuts.get("session.list")
-              ? `No matches · search all sessions with ${shortcuts.get("session.list")}`
-              : "No matches"}
+            {recent.loading || projects.loading || matched.loading
+              ? "Searching sessions and projects..."
+              : shortcuts.get("session.list")
+                ? `No matches · search all sessions with ${shortcuts.get("session.list")}`
+                : "No matches"}
           </text>
         </box>
       }
@@ -175,6 +221,16 @@ export function DialogOpen(props: { sessions: SessionInfo[] }) {
       }}
     />
   )
+}
+
+export function moveOpenSession(session: SessionInfo, event: Extract<OpenCodeEvent, { type: "session.moved" }>) {
+  return {
+    ...session,
+    location: event.data.location,
+    projectID: event.data.projectID ?? session.projectID,
+    subpath: event.data.subpath,
+    time: { ...session.time, updated: Math.max(session.time.updated, event.created) },
+  }
 }
 
 function timeAgo(timestamp: number) {
