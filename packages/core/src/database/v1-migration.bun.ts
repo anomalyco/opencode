@@ -275,22 +275,22 @@ export function transformSession(input: TransformInput): TransformResult {
       if (paired.has(item.row.id)) return []
       const owned = byMessage.get(item.row.id)?.map((part) => part.value) ?? []
       if (item.value.role === "user") {
-        const compaction = owned.find((part) => part.type === "compaction")
-        if (compaction?.type === "compaction") {
+        const compaction = owned.find((part): part is SessionV1.CompactionPart => part.type === "compaction")
+        if (compaction) {
           const pairedSummary = messages.find(
-            (candidate) =>
+            (candidate): candidate is (typeof messages)[number] & { value: SessionV1.Assistant } =>
               candidate.value.role === "assistant" &&
               candidate.value.parentID === item.row.id &&
-              candidate.value.summary,
+              candidate.value.summary === true,
           )
-          if (!pairedSummary || pairedSummary.value.role !== "assistant") return []
+          if (!pairedSummary) return []
           paired.add(pairedSummary.row.id)
           if (pairedSummary.value.error || pairedSummary.value.time.completed === undefined) return []
           const summary = pairedSummary
           const summaryText = (byMessage.get(summary.row.id) ?? [])
             .map((part) => part.value)
-            .filter((part) => part.type === "text" && part.text.length > 0)
-            .map((part) => (part.type === "text" ? part.text : ""))
+            .filter((part): part is SessionV1.TextPart => part.type === "text" && part.text.length > 0)
+            .map((part) => part.text)
             .join("\n\n")
           const tailIndex = compaction.tail_start_id
             ? messages.findIndex((candidate) => candidate.row.id === compaction.tail_start_id)
@@ -313,16 +313,14 @@ export function transformSession(input: TransformInput): TransformResult {
           ]
         }
         const subtasks = owned.filter((part) => part.type === "subtask")
-        const visible = owned.filter((part) => part.type === "text" && !part.ignored)
-        const files = owned.filter((part) => part.type === "file")
-        const agents = owned.filter((part) => part.type === "agent")
+        const visible = owned.filter((part): part is SessionV1.TextPart => part.type === "text" && !part.ignored)
+        const files = owned.filter((part): part is SessionV1.FilePart => part.type === "file")
+        const agents = owned.filter((part): part is SessionV1.AgentPart => part.type === "agent")
         if (subtasks.length > 0 && visible.length === 0 && files.length === 0 && agents.length === 0) return []
-        const ordinary = visible.filter((part) => part.type === "text" && !part.synthetic)
-        const synthetic = visible.filter((part) => part.type === "text" && part.synthetic)
-        const attachments = files.flatMap((part) => (part.type === "file" ? migrateFile(part) : []))
-        const unavailable = files.flatMap((part) =>
-          part.type === "file" && !part.url.startsWith("data:") ? [unavailableFile(part)] : [],
-        )
+        const ordinary = visible.filter((part) => !part.synthetic)
+        const synthetic = visible.filter((part) => part.synthetic)
+        const attachments = files.flatMap((part) => migrateFile(part))
+        const unavailable = files.flatMap((part) => (!part.url.startsWith("data:") ? [unavailableFile(part)] : []))
         const text = owned
           .flatMap((part) => {
             if (part.type === "text" && !part.ignored && !part.synthetic) return [part.text]
@@ -330,16 +328,12 @@ export function transformSession(input: TransformInput): TransformResult {
             return []
           })
           .join("\n\n")
-        const agentAttachments = agents.map((part) =>
-          part.type === "agent"
-            ? {
-                name: part.name,
-                ...(part.source
-                  ? { mention: { text: part.source.value, start: part.source.start, end: part.source.end } }
-                  : {}),
-              }
-            : { name: "" },
-        )
+        const agentAttachments = agents.map((part) => ({
+          name: part.name,
+          ...(part.source
+            ? { mention: { text: part.source.value, start: part.source.start, end: part.source.end } }
+            : {}),
+        }))
         if (
           ordinary.length === 0 &&
           unavailable.length === 0 &&
@@ -351,7 +345,7 @@ export function transformSession(input: TransformInput): TransformResult {
             row(item.row, {
               id: item.row.id,
               type: "synthetic",
-              text: synthetic.map((part) => (part.type === "text" ? part.text : "")).join("\n\n"),
+              text: synthetic.map((part) => part.text).join("\n\n"),
               time: { created: item.row.time_created },
             }),
           ]
@@ -369,7 +363,7 @@ export function transformSession(input: TransformInput): TransformResult {
           row(item.row, {
             id: syntheticID(item.row.id, used),
             type: "synthetic",
-            text: synthetic.map((part) => (part.type === "text" ? part.text : "")).join("\n\n"),
+            text: synthetic.map((part) => part.text).join("\n\n"),
             time: { created: item.row.time_created },
           }),
         ]
@@ -443,7 +437,6 @@ export function transformSession(input: TransformInput): TransformResult {
     })
     .map((item, seq) => ({ ...item, seq }))
   const assistants = messages
-    .filter((item) => item.value.role === "assistant")
     .map((item) => item.value)
     .filter((item): item is SessionV1.Assistant => item.role === "assistant")
   const latestUser = messages.findLast((item) => {

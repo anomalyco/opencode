@@ -1,5 +1,5 @@
 import { expect } from "bun:test"
-import { createServer, type Server } from "node:http"
+import { createServer } from "node:http"
 import { makeMemoryDriver } from "@opencode-ai/core/environment/index"
 import { Workspace } from "@opencode-ai/core/workspace"
 import { WorkspaceDriver } from "@opencode-ai/core/workspace/driver"
@@ -10,15 +10,44 @@ import { ServerFetch } from "../src/fetch"
 const options = {
   app: { version: "test-version" },
   database: { path: ":memory:" },
+  models: { fetch: false },
   fs: { filewatcher: false },
 } as const
 
 type Handler = (request: Request) => Promise<Response>
 
-function occupy(server: Server, port: number) {
-  return Effect.callback<void, Error>((resume) => {
-    server.once("error", (error) => resume(Effect.fail(error)))
-    server.listen(port, "localhost", () => resume(Effect.void))
+function occupy(port: number, cancel = false) {
+  return Effect.gen(function* () {
+    const requests: string[] = []
+    // A localhost listener occupies only one family; Bun can bind the other.
+    const servers = ["127.0.0.1", "::1"].map((host) => ({
+      host,
+      server: createServer((request, response) => {
+        requests.push(request.url ?? "")
+        response.end(cancel ? "cancelled" : "still running", () => {
+          if (cancel) servers.forEach((item) => item.server.close())
+        })
+      }),
+    }))
+    yield* Effect.addFinalizer(() =>
+      Effect.forEach(servers, (item) =>
+        Effect.callback<void>((resume) => {
+          item.server.close(() => resume(Effect.void))
+          item.server.closeAllConnections()
+        }),
+      ),
+    )
+    yield* Effect.forEach(servers, (item) =>
+      Effect.callback<void, Error>((resume) => {
+        const onError = (error: Error) => resume(Effect.fail(error))
+        item.server.once("error", onError)
+        item.server.listen(port, item.host, () => {
+          item.server.off("error", onError)
+          resume(Effect.void)
+        })
+      }),
+    )
+    return requests
   })
 }
 
@@ -61,7 +90,7 @@ it.live("serves the HttpApi and enforces Basic auth like the Node server", () =>
     const body: unknown = yield* Effect.promise(() => response.json())
     if (typeof body !== "object" || body === null) throw new Error("Expected a health response object")
     expect((body as Record<string, unknown>)["healthy"]).toBe(true)
-  }).pipe(Effect.scoped),
+  }),
 )
 
 it.live("activates credentials through the HttpApi", () =>
@@ -71,7 +100,7 @@ it.live("activates credentials through the HttpApi", () =>
       handler(new Request("http://opencode.local/api/credential/cred_missing/activate", { method: "POST" })),
     )
     expect(response.status).toBe(204)
-  }).pipe(Effect.scoped),
+  }),
 )
 
 it.live("serves unauthenticated and answers CORS preflight when no password is configured", () =>
@@ -93,18 +122,12 @@ it.live("serves unauthenticated and answers CORS preflight when no password is c
       ),
     )
     expect(preflight.headers.get("access-control-allow-origin")).toBe("http://localhost:3000")
-  }).pipe(Effect.scoped),
+  }),
 )
 
 it.live("cancels a stale OpenAI OAuth callback server before falling back", () =>
   Effect.gen(function* () {
-    const requests: string[] = []
-    const blocker = createServer((request, response) => {
-      requests.push(request.url ?? "")
-      response.end("cancelled", () => blocker.close())
-    })
-    yield* occupy(blocker, 1455)
-    yield* Effect.addFinalizer(() => Effect.sync(() => blocker.close()))
+    const requests = yield* occupy(1455, true)
     const handler = yield* ServerFetch.make(options)
     yield* ready(handler)
     const response = yield* connectOpenAI(handler)
@@ -113,18 +136,12 @@ it.live("cancels a stale OpenAI OAuth callback server before falling back", () =
     expect(requests).toContain("/cancel")
     const body = (yield* Effect.promise(() => response.json())) as { data: { url: string } }
     expect(new URL(body.data.url).searchParams.get("redirect_uri")).toBe("http://localhost:1455/auth/callback")
-  }).pipe(Effect.scoped),
+  }),
 )
 
 it.live("falls back to port 1457 when OpenAI OAuth port 1455 remains busy", () =>
   Effect.gen(function* () {
-    const requests: string[] = []
-    const blocker = createServer((request, response) => {
-      requests.push(request.url ?? "")
-      response.end("still running")
-    })
-    yield* occupy(blocker, 1455)
-    yield* Effect.addFinalizer(() => Effect.sync(() => blocker.close()))
+    const requests = yield* occupy(1455)
     const handler = yield* ServerFetch.make(options)
     yield* ready(handler)
     const response = yield* connectOpenAI(handler)
@@ -133,17 +150,13 @@ it.live("falls back to port 1457 when OpenAI OAuth port 1455 remains busy", () =
     expect(requests).toContain("/cancel")
     const body = (yield* Effect.promise(() => response.json())) as { data: { url: string } }
     expect(new URL(body.data.url).searchParams.get("redirect_uri")).toBe("http://localhost:1457/auth/callback")
-  }).pipe(Effect.scoped),
+  }),
 )
 
 it.live("explains how to recover when both OpenAI OAuth callback ports are busy", () =>
   Effect.gen(function* () {
-    const preferred = createServer((_request, response) => response.end("still running"))
-    const fallback = createServer()
-    yield* occupy(preferred, 1455)
-    yield* occupy(fallback, 1457)
-    yield* Effect.addFinalizer(() => Effect.sync(() => preferred.close()))
-    yield* Effect.addFinalizer(() => Effect.sync(() => fallback.close()))
+    yield* occupy(1455)
+    yield* occupy(1457)
     const handler = yield* ServerFetch.make(options)
     yield* ready(handler)
     const response = yield* connectOpenAI(handler)
@@ -155,7 +168,7 @@ it.live("explains how to recover when both OpenAI OAuth callback ports are busy"
         "OpenAI browser login needs local port 1455 or 1457, but both are already in use. Stop the processes using those ports or choose ChatGPT Pro/Plus (headless), then try again.",
       kind: "integration_authorization",
     })
-  }).pipe(Effect.scoped),
+  }),
 )
 
 it.live("treats destroying a missing workspace as success", () =>
@@ -171,7 +184,7 @@ it.live("treats destroying a missing workspace as success", () =>
 
     expect(response.status).toBe(200)
     expect(yield* Effect.promise(() => response.json())).toEqual({ destroyed: false })
-  }).pipe(Effect.scoped),
+  }),
 )
 
 it.live("creates idempotent caller-identified workspaces through the HttpApi", () =>
@@ -213,7 +226,7 @@ it.live("creates idempotent caller-identified workspaces through the HttpApi", (
     const minted = yield* create({ provider: "fake" })
     expect(minted.status).toBe(200)
     expect(yield* Effect.promise(() => minted.json())).toMatchObject({ data: expect.stringMatching(/^wrk_/) })
-  }).pipe(Effect.scoped),
+  }),
 )
 
 it.live("serves the session view operation and missing-session error", () =>
@@ -260,7 +273,7 @@ it.live("serves the session view operation and missing-session error", () =>
       ),
     )
     expect(missing.status).toBe(404)
-  }).pipe(Effect.scoped),
+  }),
 )
 
 // Pins the eager-boot guarantee: the application layer is built before the handler returns, so
@@ -283,5 +296,5 @@ it.live("stays serviceable when the first request aborts", () =>
 
     const second = yield* Effect.promise(() => handler(new Request("http://opencode.local/api/health")))
     expect(second.status).toBe(200)
-  }).pipe(Effect.scoped),
+  }),
 )
