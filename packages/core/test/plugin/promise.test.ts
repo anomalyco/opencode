@@ -22,6 +22,8 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { define } from "@opencode-ai/plugin/promise/plugin"
 import type { Info } from "@opencode-ai/plugin/promise/tool"
 import { Money } from "@opencode-ai/schema/money"
+import { PersistentPty } from "@opencode-ai/schema/persistent-pty"
+import { Pty } from "@opencode-ai/schema/pty"
 import type { SessionHooks } from "@opencode-ai/plugin/effect/session"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
@@ -30,6 +32,84 @@ import { host as testHost } from "./host"
 const it = testEffect(PluginTestLayer)
 
 describe("fromPromise", () => {
+  it.effect("validates and forwards experimental terminal reads through the protocol schema", () =>
+    Effect.gen(function* () {
+      const seen: unknown[] = []
+      const terminal = PersistentPty.ReadResult.make({
+        ptyID: Pty.ID.make("pty_terminal"),
+        title: "Build",
+        cwd: "/workspace",
+        foregroundProcess: "bun",
+        screen: { text: "one\ntwo\nthree", cols: 80, rows: 2, cursor: { x: 3, y: 1 } },
+      })
+      const host = testHost({
+        experimental: {
+          terminal: {
+            read: (input) => {
+              seen.push(input)
+              return Effect.succeed(terminal)
+            },
+          },
+        },
+      })
+
+      yield* PluginPromise.fromPromise(
+        define({
+          id: "promise-terminal-read",
+          setup: async (ctx) => {
+            expect(Object.keys(ctx.experimental)).toEqual(["terminal"])
+            expect(Object.keys(ctx.experimental.terminal)).toEqual(["read"])
+            for (const lines of [0, -1, 1.5, 65536, NaN, Infinity, "3"]) {
+              await expect(
+                Reflect.apply(ctx.experimental.terminal.read, undefined, [{ sessionID: "ses_terminal", lines }]),
+              ).rejects.toBeDefined()
+            }
+            await expect(Reflect.apply(ctx.experimental.terminal.read, undefined, [{ lines: 3 }])).rejects.toBeDefined()
+            expect(seen).toEqual([])
+            expect(await ctx.experimental.terminal.read({ sessionID: "ses_terminal" })).toEqual(terminal)
+            expect(await ctx.experimental.terminal.read({ sessionID: "ses_terminal", lines: 3 })).toEqual(terminal)
+            await ctx.experimental.terminal.read({ sessionID: "ses_terminal", lines: 1 })
+            await ctx.experimental.terminal.read({ sessionID: "ses_terminal", lines: 65535 })
+          },
+        }),
+      ).effect(host)
+
+      expect(seen).toEqual([
+        { sessionID: Session.ID.make("ses_terminal") },
+        { sessionID: Session.ID.make("ses_terminal"), lines: 3 },
+        { sessionID: Session.ID.make("ses_terminal"), lines: 1 },
+        { sessionID: Session.ID.make("ses_terminal"), lines: 65535 },
+      ])
+    }),
+  )
+
+  it.effect("preserves null terminal reads and rejects daemon failures", () =>
+    Effect.gen(function* () {
+      const host = testHost({
+        experimental: {
+          terminal: {
+            read: (input) =>
+              input.sessionID === Session.ID.make("ses_failure")
+                ? Effect.fail(new Error("terminal daemon unavailable"))
+                : Effect.succeed(null),
+          },
+        },
+      })
+
+      yield* PluginPromise.fromPromise(
+        define({
+          id: "promise-terminal-null",
+          setup: async (ctx) => {
+            expect(await ctx.experimental.terminal.read({ sessionID: "ses_empty" })).toBeNull()
+            await expect(ctx.experimental.terminal.read({ sessionID: "ses_failure" })).rejects.toThrow(
+              "terminal daemon unavailable",
+            )
+          },
+        }),
+      ).effect(host)
+    }),
+  )
+
   it.effect("exposes the host location including workspace and project metadata", () =>
     Effect.gen(function* () {
       const plugins = yield* Plugin.Service
@@ -915,7 +995,7 @@ describe("fromPromise", () => {
     }),
   )
 
-  it.effect("returns content-only plugin results through Code Mode", () =>
+  it.effect("returns content-only plugin results and rejected Promises through Code Mode", () =>
     Effect.gen(function* () {
       const plugins = yield* Plugin.Service
       const registry = yield* Tool.Service
@@ -927,8 +1007,11 @@ describe("fromPromise", () => {
             tools.add({
               name: "demo_status",
               description: "Returns a status string",
-              input: Schema.Struct({}),
-              execute: async () => ({ content: [{ type: "text", text: "hello" }] }),
+              input: Schema.Struct({ fail: Schema.optionalKey(Schema.Boolean) }),
+              execute: async ({ fail }) => {
+                if (fail) await ctx.session.create({ agent: undefined })
+                return { content: [{ type: "text", text: "hello" }] }
+              },
               options: { codemode: true },
             })
           })
@@ -952,6 +1035,22 @@ describe("fromPromise", () => {
       expect(throughCodeMode).toMatchObject({
         output: { output: "hello", toolCalls: [{ tool: "demo_status", status: "completed" }] },
         content: [{ type: "text", text: "hello" }],
+      })
+      expect(
+        yield* toolSet.execute({
+          sessionID: Session.ID.make("ses_content_only_tool"),
+          agent: Agent.ID.make("build"),
+          messageID: SessionMessage.ID.make("msg_content_only_tool"),
+          call: {
+            type: "tool-call",
+            id: "call_failed_tool",
+            name: "execute",
+            input: { code: "return await tools.demo_status({ fail: true })" },
+          },
+        }),
+      ).toMatchObject({
+        content: [{ type: "text", text: 'Expected string | null\n  at ["agent"]' }],
+        metadata: { error: true },
       })
     }),
   )

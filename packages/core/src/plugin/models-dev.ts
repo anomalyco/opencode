@@ -37,7 +37,7 @@ export const ModelsDevPlugin = define({
         })
         for (const model of provider.models) {
           if (model.status === "deprecated") continue
-          catalog.model.update(provider.info.id, model.id, (draft) => Object.assign(draft, model))
+          catalog.model.update(provider.info.id, model.id, (draft) => Object.assign(draft, structuredClone(model)))
         }
       }
     })

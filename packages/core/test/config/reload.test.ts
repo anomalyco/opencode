@@ -34,6 +34,41 @@ const decode = Schema.decodeUnknownSync(Info)
 const document = path.join(import.meta.dir, "opencode.json")
 
 describe("config plugin reloads", () => {
+  it.effect("preserves reference precedence and insertion order across documents", () =>
+    Effect.gen(function* () {
+      const plugins = yield* Plugin.Service
+      const references = yield* Reference.Service
+      const host = yield* PluginHost.make(plugins)
+      yield* references.transform((draft) =>
+        draft.add(
+          "external",
+          Reference.LocalSource.make({ type: "local", path: AbsolutePath.make("/references/external") }),
+        ),
+      )
+      yield* ConfigReferencePlugin.Plugin.effect(host)
+
+      const result = yield* references.list()
+      expect(result.map((reference) => reference.name)).toEqual(["external", "shared", "first", "second"])
+      expect(result.find((reference) => reference.name === "shared")?.path).toBe(
+        AbsolutePath.make(path.resolve("/config/second/shared")),
+      )
+    }).pipe(
+      Effect.provide(
+        Config.testLayer([
+          referenceConfig("/config/first/opencode.json", {
+            shared: "./shared",
+            first: "./first",
+          }),
+          referenceConfig("/config/second/opencode.json", {
+            shared: "./shared",
+            second: "./second",
+          }),
+        ]),
+      ),
+      Effect.provideService(Global.Service, Global.Service.of(Global.make())),
+    ),
+  )
+
   it.live("reloads config-backed domains without reloading external plugins", () =>
     Effect.gen(function* () {
       const agents = yield* Agent.Service
@@ -99,6 +134,14 @@ function config(name: string) {
       references: { [name]: `/references/${name}` },
       providers: { [name]: { models: { chat: { name: `${title(name)} model` } } } },
     }),
+  })
+}
+
+function referenceConfig(file: string, references: Record<string, string>) {
+  return new Document({
+    type: "document",
+    path: AbsolutePath.make(file),
+    info: decode({ references }),
   })
 }
 

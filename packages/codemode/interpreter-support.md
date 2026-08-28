@@ -365,7 +365,7 @@ ultimate source of truth.
       `catch`.
 - [x] Source locations on unsupported-syntax diagnostics for JavaScript-shaped input; TypeScript transpilation may
       shift them.
-- [x] Sanitized model-visible diagnostics and explicit safe `ToolError` messages.
-- [ ] Distinguish user-thrown failures from interpreter defects and explicit tool refusals from sanitized internal tool
+- [x] Model-visible host failure messages and underlying causes, including output-validation errors.
+- [ ] Distinguish user-thrown failures from interpreter defects and explicit tool refusals from internal tool
       failures; preserve those categories in caught errors, promise rejection handlers, and `Promise.allSettled`
       reasons.

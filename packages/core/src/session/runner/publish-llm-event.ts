@@ -4,6 +4,7 @@ import type { Model } from "@opencode-ai/schema/model"
 import type { RelativePath } from "@opencode-ai/schema/schema"
 import type { Snapshot } from "@opencode-ai/schema/snapshot"
 import { Clock, Effect, Iterable } from "effect"
+import { isArrayNonEmpty, isReadonlyArrayNonEmpty } from "effect/Array"
 import { Bus } from "../../bus.js"
 import { SessionEvent } from "../event.js"
 import { SessionMessage } from "../message.js"
@@ -45,9 +46,6 @@ export interface StepRecord {
 /** Derives canonical model content from a provider-hosted tool result. */
 type NonEmptyContent = readonly [Tool.Content, ...Tool.Content[]]
 
-const nonEmpty = (content: ReadonlyArray<Tool.Content>): NonEmptyContent | undefined =>
-  content.length > 0 ? (content as NonEmptyContent) : undefined
-
 const stringify = (value: unknown) => {
   if (typeof value === "string") return value
   try {
@@ -58,10 +56,7 @@ const stringify = (value: unknown) => {
 }
 
 const hostedContent = (result: ToolResultValue): NonEmptyContent => {
-  if (result.type === "content") {
-    const content = nonEmpty(result.value)
-    if (content !== undefined) return content
-  }
+  if (result.type === "content" && isReadonlyArrayNonEmpty(result.value)) return result.value
   return [{ type: "text", text: stringify(result.value) }]
 }
 
@@ -378,7 +373,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     (error: SessionError.Error, scope: "hosted" | "all" = "all") => failTools(error, scope),
   )
 
-  const publish = Effect.fn("SessionRunner.publishLLMEvent")(function* (event: LLMEvent) {
+  const publish = Effect.fnUntraced(function* (event: LLMEvent) {
     switch (event.type) {
       case "step-start":
         yield* startAssistant()
@@ -396,7 +391,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
         yield* text.append(event.id, event.text, providerState(event.providerMetadata))
         return
       case "text-end":
-        yield* text.end(event.id, providerState(event.providerMetadata))
+        yield* text.end(event.id, providerState(event.providerMetadata), event.text)
         return
       case "reasoning-start":
         outputStarted = true
@@ -412,7 +407,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
         yield* reasoning.append(event.id, event.text, providerState(event.providerMetadata))
         return
       case "reasoning-end":
-        yield* reasoning.end(event.id, providerState(event.providerMetadata))
+        yield* reasoning.end(event.id, providerState(event.providerMetadata), event.text)
         return
       case "tool-input-start":
         outputStarted = true
@@ -535,6 +530,8 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     }
   })
 
+  const publishTraced = Effect.fn("SessionRunner.publishLLMEvent")(publish)
+
   const progress = Effect.fnUntraced(function* (id: string, update: Tool.Metadata) {
     const tool = tools.get(id)
     if (!tool?.called || tool.settled) return yield* Effect.die(new Error(`Tool progress outside running call: ${id}`))
@@ -561,19 +558,23 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
         : result.content === undefined
           ? []
           : [...result.content]
-    if (content.length === 0) return yield* Effect.die(new Error(`Tool execution has no content: ${id}`))
+    if (!isArrayNonEmpty(content)) return yield* Effect.die(new Error(`Tool execution has no content: ${id}`))
     yield* bus.publish(SessionEvent.Tool.Success, {
       sessionID: input.sessionID,
       assistantMessageID,
       id,
-      content: [content[0], ...content.slice(1)],
+      content,
       ...(result.metadata === undefined ? {} : { metadata: result.metadata }),
       executed: tool.providerExecuted,
     })
   })
 
   return {
-    publish,
+    publish: (event: LLMEvent) => {
+      if (event.type === "text-delta" || event.type === "reasoning-delta" || event.type === "tool-input-delta")
+        return publish(event)
+      return publishTraced(event)
+    },
     progress,
     toolExecution,
     flush,

@@ -27,30 +27,32 @@ export const Plugin = define({
 
     const scope = yield* Scope.Scope
     const sessions = new Map<Session.ID, { last: number; expires: number; settings: typeof defaults }>()
-    const loop: (sessionID: Session.ID) => Effect.Effect<void> = Effect.fn("WarmingPlugin.loop")(function* (sessionID) {
-      const current = sessions.get(sessionID)
-      if (!current) return
+    const loop: (sessionID: Session.ID) => Effect.Effect<void> = Effect.fn("WarmingPlugin.loop")(
+      function* (sessionID) {
+        const current = sessions.get(sessionID)
+        if (!current) return
 
-      const now = yield* Clock.currentTimeMillis
-      const next = Math.min(current.last + Duration.toMillis(current.settings.interval), current.expires)
-      if (now < next) {
-        yield* Effect.sleep(Duration.millis(next - now))
+        const now = yield* Clock.currentTimeMillis
+        const next = Math.min(current.last + Duration.toMillis(current.settings.interval), current.expires)
+        if (now < next) {
+          yield* Effect.sleep(Duration.millis(next - now))
+          return yield* loop(sessionID)
+        }
+        if (now >= current.expires) {
+          sessions.delete(sessionID)
+          return
+        }
+
+        const last = current.last
+        yield* Effect.logInfo("warming session", { sessionID, last })
+        yield* ctx.session
+          .generate({ sessionID, prompt: current.settings.prompt })
+          .pipe(Effect.catchCause((cause) => Effect.logWarning("failed to warm session", { sessionID, cause })))
+        const latest = sessions.get(sessionID)
+        if (latest === current && latest.last === last) latest.last = yield* Clock.currentTimeMillis
         return yield* loop(sessionID)
-      }
-      if (now >= current.expires) {
-        sessions.delete(sessionID)
-        return
-      }
-
-      const last = current.last
-      yield* Effect.logInfo("warming session", { sessionID, last })
-      yield* ctx.session
-        .generate({ sessionID, prompt: current.settings.prompt })
-        .pipe(Effect.catchCause((cause) => Effect.logWarning("failed to warm session", { sessionID, cause })))
-      const latest = sessions.get(sessionID)
-      if (latest === current && latest.last === last) latest.last = yield* Clock.currentTimeMillis
-      return yield* loop(sessionID)
-    })
+      },
+    )
 
     yield* ctx.session.hook("context", (event) =>
       Effect.gen(function* () {

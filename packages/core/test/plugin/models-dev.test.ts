@@ -1,7 +1,7 @@
 import path from "path"
 import { describe, expect } from "bun:test"
 import { Money } from "@opencode-ai/schema/money"
-import { Effect, Layer } from "effect"
+import { Effect, Exit, Layer, Scope } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Integration } from "@opencode-ai/core/integration"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -11,12 +11,16 @@ import { Location } from "@opencode-ai/core/location"
 import { Model } from "@opencode-ai/core/model"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { ModelsDevPlugin } from "@opencode-ai/core/plugin/models-dev"
+import { Plugin } from "@opencode-ai/core/plugin"
+import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { ProviderPlugins } from "@opencode-ai/core/plugin/provider"
 import { Provider } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
+import { withEnv } from "../fixture/env"
 import { location } from "../fixture/location"
 import { testEffect } from "../lib/effect"
 import { catalogHost, host, integrationHost } from "./host"
+import { PluginTestLayer } from "./fixture"
 
 const locationLayer = Layer.succeed(
   Location.Service,
@@ -26,31 +30,68 @@ const layer = AppNodeBuilder.build(LayerNode.group([Catalog.node, Integration.no
   [Location.node, locationLayer],
 ])
 const it = testEffect(layer)
+const real = testEffect(PluginTestLayer)
 const models = (file: string) =>
   AppNodeBuilder.build(ModelsDev.node, [[ModelsDev.node, ModelsDev.configured({ file, fetch: false })]])
 
-function withEnv<A, E, R>(variables: Record<string, string | undefined>, effect: () => Effect.Effect<A, E, R>) {
-  return Effect.acquireUseRelease(
-    Effect.sync(() => {
-      const previous = Object.fromEntries(Object.keys(variables).map((key) => [key, process.env[key]]))
-      Object.entries(variables).forEach(([key, value]) => {
-        if (value === undefined) delete process.env[key]
-        else process.env[key] = value
-      })
-      return previous
-    }),
-    effect,
-    (previous) =>
-      Effect.sync(() => {
-        Object.entries(previous).forEach(([key, value]) => {
-          if (value === undefined) delete process.env[key]
-          else process.env[key] = value
-        })
-      }),
-  )
-}
-
 describe("ModelsDevPlugin", () => {
+  real.effect("keeps the retained model seed unchanged across catalog replay", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const plugins = yield* Plugin.Service
+      const providerID = Provider.ID.make("acme")
+      const modelID = Model.ID.make("model")
+      const modelsDev = ModelsDev.Service.of({
+        get: () =>
+          Effect.succeed([
+            {
+              info: {
+                id: providerID,
+                name: "Acme",
+                activation: "auto",
+                package: Provider.aisdk("@ai-sdk/openai-compatible"),
+              },
+              environment: [],
+              models: [
+                {
+                  id: modelID,
+                  modelID,
+                  providerID,
+                  name: "Model",
+                  capabilities: { tools: true, input: [], output: [] },
+                  variants: [],
+                  time: { released: Date.parse("2026-01-01") },
+                  cost: [],
+                  status: "active",
+                  enabled: true,
+                  limit: { context: 128_000, output: 32_000 },
+                },
+              ],
+            },
+          ] satisfies readonly ModelsDev.Snapshot[]),
+        refresh: () => Effect.void,
+      })
+      const pluginHost = yield* PluginHost.make(plugins)
+      yield* ModelsDevPlugin.effect(pluginHost).pipe(Effect.provideService(ModelsDev.Service, modelsDev))
+
+      const scope = yield* Scope.make()
+      yield* catalog
+        .transform((draft) =>
+          draft.model.update(providerID, modelID, (model) => {
+            model.variants ??= []
+            model.variants.push({ id: Model.VariantID.make("configured") })
+          }),
+        )
+        .pipe(Scope.provide(scope))
+      expect((yield* catalog.model.get(providerID, modelID))?.variants).toEqual([
+        { id: Model.VariantID.make("configured") },
+      ])
+
+      yield* Scope.close(scope, Exit.void)
+      expect((yield* catalog.model.get(providerID, modelID))?.variants).toEqual([])
+    }),
+  )
+
   it.effect("projects normalized models.dev snapshots into the catalog", () =>
     Effect.gen(function* () {
       const integrations = yield* Integration.Service

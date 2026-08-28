@@ -32,19 +32,7 @@ type PathAction =
   | typeof ReadTool.name
   | typeof EditTool.name
 const pathActions = ["external_directory", "read", "edit"] as const satisfies readonly PathAction[]
-const agentKeys = new Set([
-  "model",
-  "variant",
-  "request",
-  "system",
-  "description",
-  "mode",
-  "hidden",
-  "color",
-  "steps",
-  "disabled",
-  "permissions",
-])
+const agentKeys = new Set(["variant", ...Object.keys(ConfigAgent.Info.fields)])
 
 export const Plugin = define({
   id: "opencode.config.agent",

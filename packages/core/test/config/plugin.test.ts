@@ -2,13 +2,15 @@ import fs from "fs/promises"
 import path from "path"
 import { pathToFileURL } from "url"
 import { describe, expect } from "bun:test"
-import { Plugin as EffectPlugin } from "@opencode-ai/plugin/effect"
+import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Agent } from "@opencode-ai/core/agent"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { ConfigPluginSource } from "@opencode-ai/core/config/plugin/source"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Global } from "@opencode-ai/util/global"
+import { Npm } from "@opencode-ai/util/npm"
 import { Bus } from "@opencode-ai/core/bus"
 import { Location } from "@opencode-ai/core/location"
 import { LocationServiceMap } from "@opencode-ai/core/location-services"
@@ -18,7 +20,7 @@ import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { Model } from "@opencode-ai/core/model"
 import { Provider } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
-import { Effect, Fiber, Logger, Stream } from "effect"
+import { Effect, Fiber, Layer, Logger, Schedule, Stream } from "effect"
 import { Database } from "../../src/database/database"
 import { tmpdir } from "../fixture/tmpdir"
 import { tempGlobalLayer } from "../fixture/global"
@@ -34,6 +36,40 @@ const staticIt = testEffect(
     [ConfigPluginSource.node, ConfigPluginSource.empty],
     [Global.node, tempGlobalLayer],
   ]),
+)
+const refreshNpm = makeGlobalNode({
+  service: Npm.Service,
+  layer: Layer.effect(
+    Npm.Service,
+    Effect.gen(function* () {
+      const global = yield* Global.Service
+      const directory = path.join(global.tmp, "background-refresh-plugin")
+      const installed = { directory, entrypoint: pathToFileURL(path.join(directory, "index.js")).href }
+      return Npm.Service.of({
+        add: (_pkg, options) =>
+          options?.refresh
+            ? Effect.gen(function* () {
+                yield* Effect.promise(() => Bun.write(path.join(directory, "refresh-requested"), ""))
+                yield* waitForFile(path.join(directory, "refresh-release")).pipe(Effect.orDie)
+                yield* Effect.promise(() => Bun.write(path.join(directory, "refresh-finished"), ""))
+                return installed
+              })
+            : Effect.succeed(installed),
+        resolve: () => Effect.succeed(installed),
+        which: () => Effect.succeed(undefined),
+      })
+    }),
+  ),
+  deps: [Global.node],
+})
+const refreshIt = testEffect(
+  AppNodeBuilder.build(
+    LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node, Global.node]),
+    [
+      [Global.node, tempGlobalLayer],
+      [Npm.node, refreshNpm],
+    ],
+  ),
 )
 
 describe("PluginSupervisor config", () => {
@@ -51,7 +87,6 @@ describe("PluginSupervisor config", () => {
       }),
     ),
   )
-
   it.live("allows the built-in Plan agent to be disabled", () =>
     withLocation(
       { agents: { plan: { disabled: true } } },
@@ -270,7 +305,7 @@ describe("PluginSupervisor config", () => {
   staticIt.live("uses only internal and SDK plugins when the static source is wired", () =>
     Effect.gen(function* () {
       const sdk = yield* SdkPlugins.Service
-      yield* sdk.register(EffectPlugin.define({ id: "static-sdk", effect: () => Effect.void }))
+      yield* sdk.register(define({ id: "static-sdk", effect: () => Effect.void }))
       yield* withLocation(
         { plugins: ["-*", path.join(import.meta.dir, "../plugin/fixtures/config-promise-plugin.ts")] },
         Effect.gen(function* () {
@@ -380,7 +415,7 @@ describe("PluginSupervisor config", () => {
   it.live("loads user plugins before internal post plugins", () =>
     Effect.gen(function* () {
       const sdk = yield* SdkPlugins.Service
-      yield* sdk.register(EffectPlugin.define({ id: "sdk-order", effect: () => Effect.void }))
+      yield* sdk.register(define({ id: "sdk-order", effect: () => Effect.void }))
       yield* withLocation(
         {
           plugins: [
@@ -427,6 +462,61 @@ describe("PluginSupervisor config", () => {
       }),
     ),
   )
+
+  it.live("unblocks flush when plugin activation fails", () =>
+    Effect.gen(function* () {
+      const sdk = yield* SdkPlugins.Service
+      yield* sdk.register(define({ id: "duplicate-id", effect: () => Effect.void }))
+      yield* sdk.register(define({ id: "duplicate-id", effect: () => Effect.void }))
+      yield* withLocation(
+        undefined,
+        Effect.gen(function* () {
+          yield* ready().pipe(Effect.timeout("2 seconds"))
+        }),
+      )
+    }),
+  )
+
+  refreshIt.live("refreshes active package plugins after setup without blocking flush", () =>
+    Effect.gen(function* () {
+      const global = yield* Global.Service
+      const directory = path.join(global.tmp, "background-refresh-plugin")
+      const activated = path.join(directory, "activated")
+      const release = path.join(directory, "release")
+      const refreshed = path.join(directory, "refresh-requested")
+      const refreshRelease = path.join(directory, "refresh-release")
+      const refreshFinished = path.join(directory, "refresh-finished")
+      yield* Effect.promise(async () => {
+        await fs.mkdir(directory, { recursive: true })
+        await fs.writeFile(
+          path.join(directory, "index.js"),
+          `export default {
+            id: "background-refresh-plugin",
+            async setup() {
+              await Bun.write(${JSON.stringify(activated)}, "")
+              while (!(await Bun.file(${JSON.stringify(release)}).exists())) await Bun.sleep(10)
+            },
+          }`,
+        )
+      })
+
+      yield* withLocation(
+        { plugins: ["background-refresh-plugin"] },
+        Effect.gen(function* () {
+          yield* waitForFile(activated)
+          yield* Effect.sleep("100 millis")
+          expect(yield* Effect.promise(() => Bun.file(refreshed).exists())).toBeFalse()
+          yield* Effect.promise(() => Bun.write(release, ""))
+          yield* waitForFile(refreshed)
+          yield* ready().pipe(Effect.timeout("2 seconds"))
+          yield* Effect.promise(() => Bun.write(refreshRelease, ""))
+          yield* waitForFile(refreshFinished)
+          const plugins = yield* Plugin.Service
+          expect((yield* plugins.list()).map((plugin) => String(plugin.id))).toContain("background-refresh-plugin")
+        }),
+      )
+    }),
+  )
 })
 
 const ready = Effect.fnUntraced(function* () {
@@ -434,16 +524,20 @@ const ready = Effect.fnUntraced(function* () {
   yield* supervisor.flush
 })
 
+const waitForFile = (file: string) =>
+  Effect.promise(() => Bun.file(file).exists()).pipe(
+    Effect.filterOrFail((exists) => exists),
+    Effect.retry({ times: 200, schedule: Schedule.spaced("10 millis") }),
+    Effect.timeout("2 seconds"),
+  )
+
 function withLocation<A, E, R>(
   config: unknown,
   effect: Effect.Effect<A, E, R>,
   fixtures = false,
   prepare?: (directory: string) => Promise<void>,
 ) {
-  return Effect.acquireRelease(
-    Effect.promise(() => tmpdir()),
-    (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-  ).pipe(
+  return Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
     Effect.tap((tmp) =>
       Effect.promise(async () => {
         await prepare?.(tmp.path)
