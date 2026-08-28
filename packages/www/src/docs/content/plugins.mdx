@@ -57,7 +57,7 @@ explicitly or move it under `.opencode/`.
 
 ```jsonc title="opencode.jsonc"
 {
-  "plugins": ["./plugins/local.ts"]
+  "plugins": ["./plugins/local.ts"],
 }
 ```
 
@@ -66,7 +66,7 @@ use `.*` to match an ID prefix. A later ID re-enables a plugin.
 
 ```jsonc title="opencode.jsonc"
 {
-  "plugins": ["*", "-opencode.provider.*", "opencode.provider.openai", "-acme.reviewer"]
+  "plugins": ["*", "-opencode.provider.*", "opencode.provider.openai", "-acme.reviewer"],
 }
 ```
 
@@ -93,9 +93,10 @@ opencode2 plugin add 'github:acme/plugins#main::path:packages/opencode-plugin'
 Branches, tags, complete commit hashes, and npm's `::path:` repository-subdirectory selectors are supported. Configure
 local paths directly; tarball and npm alias targets are not accepted by `plugin add`.
 
-Changes under watched config directories reload automatically. On server startup, OpenCode refreshes unpinned package and
-Git plugins once, then uses that result for the lifetime of the server. Exact npm versions and full Git commit hashes stay
-pinned. Changes to unwatched local dependencies may still require restarting OpenCode.
+Changes under watched config directories reload automatically. Server startup uses cached package plugins without checking
+the network. Run `opencode2 plugin add <package>` again to refresh an unpinned npm or Git plugin explicitly, then restart a
+running OpenCode server to load it. Exact npm versions and full Git commit hashes stay pinned. Changes to unwatched local
+dependencies may also require restarting OpenCode.
 
 ```sh
 touch .opencode/plugins/concise.ts
