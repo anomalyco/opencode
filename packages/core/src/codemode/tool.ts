@@ -3,7 +3,7 @@ export * as CodeModeTool from "./tool.js"
 import { CodeMode, Tool, toolError } from "@opencode-ai/codemode"
 import type { Content, Context, Error, Info, Metadata, Result } from "@opencode-ai/schema/tool"
 import { Effect, Ref, Schema, Semaphore } from "effect"
-import { definition } from "../tool/runtime.js"
+import { definition, normalizedName } from "../tool/runtime.js"
 
 const ExecuteFile = Schema.Struct({
   data: Schema.String,
@@ -165,7 +165,7 @@ function runtime(
 }
 
 function qualifiedName(registration: Info) {
-  const normalized = registration.name.replace(/[^a-zA-Z0-9_-]/g, "_")
+  const normalized = normalizedName(registration)
   if (registration.options?.namespace === undefined) return normalized
   return `${registration.options.namespace}.${normalized}`
 }

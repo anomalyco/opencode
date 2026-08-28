@@ -17,7 +17,7 @@ import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { tmpdir } from "./fixture/tmpdir"
+import { tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 import { globalProjectLayer } from "./lib/project"
 
@@ -49,7 +49,7 @@ const itWithUnavailableDestination = testEffect(
 
 describe("Session.move", () => {
   itWithUnavailableDestination.effect("rejects an unavailable destination before admitting the move", () =>
-    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+    tmpdirScoped().pipe(
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
           const session = yield* Session.Service
@@ -69,7 +69,7 @@ describe("Session.move", () => {
   )
 
   it.effect("applies a move immediately when the source directory no longer exists", () =>
-    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+    tmpdirScoped().pipe(
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
           const session = yield* Session.Service
@@ -105,7 +105,7 @@ describe("Session.move", () => {
   )
 
   it.effect("keeps a moved session out of its former directory's new identity", () =>
-    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+    tmpdirScoped().pipe(
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
           const session = yield* Session.Service

@@ -1,7 +1,7 @@
 import { Global } from "@opencode-ai/util/global"
 import { AppProcess } from "@opencode-ai/util/process"
 import { OPENCODE_CHANNEL, OPENCODE_LOCAL, OPENCODE_VERSION } from "../version"
-import { Context, Duration, Effect, FileSystem, Layer } from "effect"
+import { Context, Duration, Effect, FileSystem, Layer, Ref } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { parse, type ParseError } from "jsonc-parser"
 import path from "node:path"
@@ -38,6 +38,7 @@ export const layer = Layer.effect(
     const fs = yield* FileSystem.FileSystem
     const global = yield* Global.Service
     const appProcess = yield* AppProcess.Service
+    const installed = yield* Ref.make(OPENCODE_VERSION)
     const channel = OPENCODE_CHANNEL.replace(/[^a-zA-Z0-9._-]/g, "-")
 
     const readPolicy = Effect.fnUntraced(function* () {
@@ -112,18 +113,20 @@ export const layer = Layer.effect(
 
     const upgrade = Effect.fnUntraced(function* (method: Method, version: string) {
       const target = `${packageName}@${version}`
-      const commands: Record<Exclude<Method, "bun" | "curl">, string[]> = {
-        npm: ["npm", "install", "--global", target],
+      const commands: Record<Exclude<Method, "bun" | "curl" | "npm">, string[]> = {
         pnpm: ["pnpm", "add", "--global", `--allow-build=${packageName}`, target],
         yarn: ["yarn", "global", "add", target],
       }
       const result = yield* Effect.scoped(
         Effect.gen(function* () {
-          if (method === "bun") {
-            // Bun does not prune old versions from its shared package cache.
+          if (method === "bun" || method === "npm") {
             yield* fs.makeDirectory(global.cache, { recursive: true })
             const cache = yield* fs.makeTempDirectoryScoped({ directory: global.cache, prefix: "update-" })
-            return yield* run(["bun", "install", "--global", "--trust", "--cache-dir", cache, target], "5 minutes")
+            const command =
+              method === "bun"
+                ? ["bun", "install", "--global", "--trust", "--cache-dir", cache, target]
+                : ["npm", "install", "--global", "--cache", cache, target]
+            return yield* run(command, "5 minutes")
           }
           if (method === "curl") {
             yield* fs.makeDirectory(global.cache, { recursive: true })
@@ -156,18 +159,19 @@ export const layer = Layer.effect(
 
         return yield* Effect.gen(function* () {
           const version = yield* latest()
+          const current = yield* Ref.get(installed)
           yield* Effect.logInfo("update check", {
-            current: OPENCODE_VERSION,
+            current,
             latest: version,
           })
-          const next = action(OPENCODE_VERSION, version, policy)
+          const next = action(OPENCODE_VERSION, version, policy, current)
           if (next === "none") return yield* Effect.logInfo("update check done", { action: "up-to-date" })
-          if (next === "notify")
-            return yield* Effect.logInfo("OpenCode update available", { current: OPENCODE_VERSION, latest: version })
+          if (next === "notify") return yield* Effect.logInfo("OpenCode update available", { current, latest: version })
           const detected = yield* method()
           if (!detected) return yield* Effect.logWarning("automatic update skipped: installation method not found")
           yield* upgrade(detected, version)
-          yield* Effect.logInfo("updated OpenCode", { from: OPENCODE_VERSION, to: version, method: detected })
+          yield* Ref.set(installed, version)
+          yield* Effect.logInfo("updated OpenCode", { from: current, to: version, method: detected })
         })
       },
       Effect.catchCause((cause) => Effect.logWarning("automatic update failed", { cause })),

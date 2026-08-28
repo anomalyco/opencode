@@ -513,6 +513,7 @@ export function make(options: ClientOptions) {
               agent: input?.["agent"],
               model: input?.["model"],
               location: input?.["location"],
+              metadata: input?.["metadata"],
             },
             successStatus: 200,
             declaredStatuses: [401, 400],

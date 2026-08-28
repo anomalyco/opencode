@@ -1,6 +1,5 @@
 export * as ShellTool from "./shell.js"
 
-import path from "path"
 import { ToolFailure } from "@opencode-ai/ai"
 import type { Context as PluginContext } from "@opencode-ai/plugin/effect/plugin"
 import { Deferred, Effect, Schema, Scope } from "effect"
@@ -190,7 +189,10 @@ export const Plugin = {
                       portable,
                     })
                     const directories = yield* Effect.forEach(parsed.directories, (directory) =>
-                      mutation.resolve({ path: path.resolve(target.absolute, directory), kind: "directory" }),
+                      mutation.resolve({
+                        path: LocationMutation.resolvePath(target.absolute, directory),
+                        kind: "directory",
+                      }),
                     )
                     const external = [target, ...directories]
                       .map((item) => item.externalDirectory)

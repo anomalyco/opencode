@@ -92,17 +92,17 @@ test.each(["word", "line"] as const)("copy-on-select copies a %s selection witho
   expect(value.writes).toEqual(["selected"])
 })
 
-test("clears a click-only selection without copying", () => {
+test("ignores a click-only selection without copying or clearing", () => {
   const value = setup("x", true)
   expect(Selection.copy(value.renderer, value.toast, value.clipboard)).toBeFalse()
-  expect(value.clears()).toBe(1)
+  expect(value.clears()).toBe(0)
   expect(value.writes).toEqual([])
 })
 
-test("clears an empty dragged selection without copying", () => {
+test("ignores an empty dragged selection without copying or clearing", () => {
   const value = setup("", false)
   expect(Selection.copy(value.renderer, value.toast, value.clipboard)).toBeFalse()
-  expect(value.clears()).toBe(1)
+  expect(value.clears()).toBe(0)
   expect(value.writes).toEqual([])
 })
 
