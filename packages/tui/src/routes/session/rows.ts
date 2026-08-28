@@ -1,6 +1,7 @@
 import type { SessionInboxEnqueued, SessionMessageAssistant, SessionMessageInfo } from "@opencode-ai/client"
 import { createEffect, on, onCleanup, type Accessor } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
+import { messageCacheReleaseLimit } from "@opencode-ai/client/solid"
 import { useConfig } from "../../config"
 import { useData } from "../../context/data"
 import { useClient } from "../../context/client"
@@ -42,6 +43,10 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
   const client = useClient()
   const config = useConfig()
   const [rows, setRows] = createStore<SessionRow[]>([])
+  // The session view is keyed per session, so this instance only ever shows one session.
+  // Capture it at creation: by teardown time a shared route store already points at the
+  // destination, and releasing against the live accessor would drop the wrong cache.
+  const mounted = sessionID()
   const revertBoundary = () => data.session.get(sessionID())?.revert?.messageID
   const turnTokens = () => Boolean(config.data.debug?.turn_tokens)
 
@@ -280,6 +285,12 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
     }),
   ]
   onCleanup(() => subscriptions.forEach((unsubscribe) => unsubscribe()))
+  onCleanup(() => {
+    // Leaving a deeply scrolled session drops its cache so the next visit paints from one
+    // fresh page instead of reducing every page loaded during the previous visit.
+    if (data.session.message.list(mounted).length <= messageCacheReleaseLimit) return
+    data.session.message.release(mounted)
+  })
 
   return rows
 }
