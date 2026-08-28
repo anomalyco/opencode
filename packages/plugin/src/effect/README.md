@@ -29,38 +29,6 @@ Configuration supplied for the plugin is available as `ctx.options`.
 
 Registrations are owned by the plugin scope. Closing the scope removes them automatically; a registration may also be removed early through `dispose`.
 
-## Experimental Terminal Reads
-
-`ctx.experimental` has no compatibility guarantees. Its methods use the generated
-Effect client API contracts; terminal reads do not register a tool.
-
-The plugin's `experimental.terminal.read` maps to `experimental.persistentPty.read`
-in the server/client API.
-
-```ts
-const terminal = yield * ctx.experimental.terminal.read({ sessionID, lines: 100 })
-if (terminal) console.log(terminal.screen.text)
-```
-
-The result is `PersistentPty.ReadResult` or `null` when the session has no selected
-terminal. It contains `ptyID`, `title`, `cwd`, nullable `foregroundProcess`, and
-`screen: { text, cols, rows, cursor: { x, y } }`.
-
-The selected terminal is the one most recently successfully attached as controller,
-resized, given control, or sent input for that session. Reads, observer attachments, and
-hiding a terminal do not change the selection. The selection map is process-local
-and resets when the server restarts.
-
-Omitting `lines` returns the viewport height's worth of text. An explicit `lines`
-must be an integer from 1 through 65535 and counts the total number of trailing
-rows, not extra scrollback in addition to the viewport. `screen.cols` and
-`screen.rows` remain the actual PTY dimensions even when `screen.text` contains
-more rows than the viewport. Invalid `lines` and daemon errors fail the Effect;
-they are not converted to `null`.
-
-Rows retain physical wrapping and blank lines. Counts larger than the retained
-buffer return all available rows; reads do not follow the TUI's local scroll position.
-
 ## Transform Hooks
 
 Transform hooks contribute to stateful domains:
