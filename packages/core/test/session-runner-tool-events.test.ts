@@ -478,6 +478,7 @@ for (const kind of ["text", "reasoning"] as const) {
         const count = published.length
         yield* TestClock.adjust(1_000)
         expect(published).toHaveLength(count)
+        yield* publisher.checkPublicationFailure
         if (termination !== "end") expect(published.at(-1)?.type).toBe("session.step.failed.1")
       }),
     )
@@ -494,6 +495,7 @@ for (const kind of ["text", "reasoning"] as const) {
       yield* TestClock.adjust(1_000)
       expect(published).toHaveLength(count)
       expect(published.some((event) => event.type === `session.${kind}.delta`)).toBe(false)
+      yield* publisher.checkPublicationFailure
     }),
   )
 }

@@ -3,7 +3,7 @@ import type { Agent } from "@opencode-ai/schema/agent"
 import type { Model } from "@opencode-ai/schema/model"
 import type { RelativePath } from "@opencode-ai/schema/schema"
 import type { Snapshot } from "@opencode-ai/schema/snapshot"
-import { Effect, Fiber, Iterable, Scope, Semaphore } from "effect"
+import { Cause, Deferred, Effect, Fiber, Iterable, Scope, Semaphore } from "effect"
 import { isArrayNonEmpty, isReadonlyArrayNonEmpty } from "effect/Array"
 import { Bus } from "../../bus.js"
 import { SessionEvent } from "../event.js"
@@ -76,6 +76,8 @@ const hostedContent = (result: ToolResultValue): NonEmptyContent => {
  */
 export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, input: Input, scope: Scope.Scope) => {
   const deltaBatchInterval = 100
+  const publicationFailure = Deferred.makeUnsafe<Cause.Cause<never>>()
+  const awaitPublicationFailure = Deferred.await(publicationFailure).pipe(Effect.flatMap(Effect.failCause))
   type ToolState = {
     readonly name: string
     called: boolean
@@ -145,12 +147,19 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
         chunks.set(id, { ordinal, values: [], pending: "", state })
         return Effect.succeed(ordinal)
       })
-    const publishDelta = Effect.fnUntraced(function* (id: string, current: Fragment) {
-      if (!delta || !current.pending) return
-      const value = current.pending
-      current.pending = ""
-      yield* delta(id, value, current.ordinal)
-    }, Effect.uninterruptible)
+    const publishDelta = Effect.fnUntraced(
+      function* (id: string, current: Fragment) {
+        if (!delta || !current.pending) return
+        const value = current.pending
+        current.pending = ""
+        yield* delta(id, value, current.ordinal)
+      },
+      // Report before releasing the fragment lock, so end cannot overtake a failed timer.
+      Effect.tapCause((cause) =>
+        Cause.hasInterruptsOnly(cause) ? Effect.void : Deferred.succeed(publicationFailure, cause),
+      ),
+      Effect.uninterruptible,
+    )
     const append = Effect.fnUntraced(function* (id: string, value: string, state?: Record<string, unknown>) {
       const current = chunks.get(id)
       if (!current) return yield* Effect.die(new Error(`${name} delta before start: ${id}`))
@@ -582,6 +591,10 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
   })
 
   return {
+    awaitPublicationFailure,
+    checkPublicationFailure: Effect.suspend(() =>
+      Deferred.isDoneUnsafe(publicationFailure) ? awaitPublicationFailure : Effect.void,
+    ),
     publish: (event: LLMEvent) => {
       if (event.type === "text-delta" || event.type === "reasoning-delta" || event.type === "tool-input-delta")
         return publish(event)

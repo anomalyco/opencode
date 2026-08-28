@@ -131,7 +131,9 @@ export const make = Effect.gen(function* () {
           })
         }),
       ),
+      Effect.raceFirst(publisher.awaitPublicationFailure),
       Effect.ensuring(publisher.flush()),
+      Effect.andThen(publisher.checkPublicationFailure),
     )
 
     // Keep the final tool and Step events uninterruptible, even when the work itself is cancelled.
@@ -231,7 +233,7 @@ export const make = Effect.gen(function* () {
             ? { cost: SessionUsage.calculateCost(input.model.cost, record.finish.tokens), tokens: record.finish.tokens }
             : undefined
           if (record.failure) yield* publisher.publishStepFailure({ ...usage, snapshot, files })
-          if (record.finish && usage && !record.failure)
+          if (Exit.isSuccess(stream) && record.finish && usage && !record.failure)
             yield* bus.publish(SessionEvent.Step.Ended, {
               sessionID: input.sessionID,
               assistantMessageID: yield* publisher.startAssistant(),
