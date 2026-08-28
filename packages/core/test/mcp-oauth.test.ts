@@ -48,7 +48,7 @@ describe("MCP OAuth", () => {
     const credential = await Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {
-          const authorization = yield* MCPOAuth.authorize({
+          const authorization = yield* McpOAuth.authorize({
             name: "test",
             config: new ConfigMCP.Remote({
               type: "remote",
@@ -89,9 +89,9 @@ describe("MCP OAuth", () => {
         return Response.json({ access_token: "next", token_type: "Bearer" })
       },
     })
-    const store = MCPOAuth.memoryStore()
+    const store = McpOAuth.memoryStore()
     await store.saveTokens(
-      MCPOAuth.toTokens(
+      McpOAuth.toTokens(
         Credential.OAuth.make({
           type: "oauth",
           methodID: Integration.MethodID.make("oauth"),
@@ -102,7 +102,7 @@ describe("MCP OAuth", () => {
         }),
       ),
     )
-    const oauthProvider = MCPOAuth.provider({
+    const oauthProvider = McpOAuth.provider({
       redirectUrl: "http://127.0.0.1/callback",
       client: { id: "client" },
       onRedirect: () => undefined,
