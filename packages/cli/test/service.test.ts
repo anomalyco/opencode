@@ -3,7 +3,7 @@ import { Service, type Info } from "@opencode-ai/client/effect/service"
 import { Global } from "@opencode-ai/util/global"
 import { OPENCODE_VERSION } from "../src/version"
 import { expect, test } from "bun:test"
-import { Effect, Schema } from "effect"
+import { Effect, FileSystem, Schema } from "effect"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
@@ -71,6 +71,30 @@ test("service config manages environment variables", async () => {
         Effect.provide(NodeFileSystem.layer),
       ),
     )
+    expect(await Bun.file(path.join(root, "config", "service-local.json")).json()).toEqual({})
+  } finally {
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})
+
+test("service config manages additional URLs", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-urls-"))
+  const layer = Global.layerWith({ config: path.join(root, "config"), state: path.join(root, "state") })
+  try {
+    const run = <A, E>(effect: Effect.Effect<A, E, FileSystem.FileSystem | Global.Service>) =>
+      Effect.runPromise(effect.pipe(Effect.provide(layer), Effect.provide(NodeFileSystem.layer)))
+
+    await run(ServiceConfig.addUrl("https://primary.example.com/"))
+    await run(ServiceConfig.addUrl("https://secondary.example.com"))
+    await run(ServiceConfig.addUrl("https://primary.example.com"))
+    expect(await run(ServiceConfig.listUrls())).toEqual([
+      "https://primary.example.com",
+      "https://secondary.example.com",
+    ])
+
+    await run(ServiceConfig.removeUrl("https://primary.example.com/"))
+    expect(await run(ServiceConfig.listUrls())).toEqual(["https://secondary.example.com"])
+    await run(ServiceConfig.removeUrl("https://secondary.example.com"))
     expect(await Bun.file(path.join(root, "config", "service-local.json")).json()).toEqual({})
   } finally {
     await fs.rm(root, { recursive: true, force: true })
@@ -287,14 +311,17 @@ test("concurrent service processes elect one server", async () => {
   }
 }, 120_000)
 
-test("configured managed service port overrides the channel default", async () => {
+test("configured managed service settings reach the server", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-port-"))
   const port = await availablePort()
   const env = serviceEnv(root)
   const registration = path.join(root, "state", "opencode", "service-local.json")
   const config = path.join(root, "config", "opencode", "service-local.json")
   await fs.mkdir(path.join(root, "config", "opencode"), { recursive: true })
-  await fs.writeFile(config, JSON.stringify({ port, password: "" }))
+  await fs.writeFile(
+    config,
+    JSON.stringify({ port, password: "", urls: ["https://primary.example.com", "https://secondary.example.com"] }),
+  )
   const owner = Bun.spawn([process.execPath, path.join(import.meta.dir, "../src/index.ts"), "serve", "--service"], {
     env,
     stderr: "pipe",
@@ -305,6 +332,11 @@ test("configured managed service port overrides the channel default", async () =
     expect(new URL(info.url).port).toBe(String(port))
     expect(info.password).not.toBe("")
     expect((await Bun.file(config).json()).password).toBe(info.password)
+    expect(
+      await fetch(new URL("/api/server", info.url), {
+        headers: { authorization: "Basic " + btoa(`opencode:${info.password}`) },
+      }).then((response) => response.json()),
+    ).toEqual({ urls: ["https://primary.example.com", "https://secondary.example.com", info.url] })
     await Effect.runPromise(Service.stop({ file: registration }).pipe(Effect.provide(NodeFileSystem.layer)))
     await owner.exited
   } finally {

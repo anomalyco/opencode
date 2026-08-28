@@ -14,6 +14,7 @@ import { selfCommand } from "../util/process"
 export const Info = Schema.Struct({
   hostname: Schema.optional(Schema.String),
   port: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(65_535))),
+  urls: Schema.optional(Schema.Array(Schema.String)),
   password: Schema.optional(Schema.String),
   cors: Schema.optional(Schema.Array(Schema.String)),
   env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
@@ -217,6 +218,28 @@ export const set = Effect.fn("cli.service-config.set")(function* (key: string, v
   }
 })
 
+export const addUrl = Effect.fn("cli.service-config.add-url")(function* (value: string) {
+  const url = normalizeUrl(value)
+  const existing = yield* read()
+  if (existing.urls?.includes(url)) return
+  yield* Service.stop(yield* options())
+  yield* write({ ...existing, urls: [...(existing.urls ?? []), url] })
+})
+
+export const listUrls = Effect.fn("cli.service-config.list-urls")(function* () {
+  return (yield* read()).urls ?? []
+})
+
+export const removeUrl = Effect.fn("cli.service-config.remove-url")(function* (value: string) {
+  const url = normalizeUrl(value)
+  const existing = yield* read()
+  const urls = existing.urls?.filter((item) => item !== url) ?? []
+  if (urls.length === (existing.urls?.length ?? 0)) return
+  yield* Service.stop(yield* options())
+  const { urls: _urls, ...rest } = existing
+  yield* write(urls.length === 0 ? rest : { ...rest, urls })
+})
+
 export const unset = Effect.fn("cli.service-config.unset")(function* (key: string, name?: string) {
   const selected = configKey(key)
   if (selected !== "env" && name !== undefined) throw new Error(`Usage: opencode service unset ${selected}`)
@@ -256,5 +279,14 @@ export const unset = Effect.fn("cli.service-config.unset")(function* (key: strin
     }
   }
 })
+
+export function normalizeUrl(value: string) {
+  if (!URL.canParse(value)) throw new Error(`Invalid URL: ${value}`)
+  const url = new URL(value)
+  if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error("URL must use http:// or https://")
+  if (url.username || url.password) throw new Error("URL must not include credentials")
+  if (url.pathname !== "/" || url.search || url.hash) throw new Error("URL must not include a path, query, or fragment")
+  return url.origin
+}
 
 export * as ServiceConfig from "./service-config"
