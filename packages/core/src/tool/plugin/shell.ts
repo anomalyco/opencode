@@ -280,7 +280,8 @@ export const Plugin = {
                 Effect.onInterrupt(() => shell.remove(info.id).pipe(Effect.ignore)),
               )
               const job = yield* runtime.job.start({
-                id: context.id,
+                // CodeMode children share a tool-call ID, but each shell must own its job.
+                id: info.id,
                 type: name,
                 title: info.command,
                 metadata: { sessionID: context.sessionID, shellID: info.id },
@@ -295,7 +296,7 @@ export const Plugin = {
 
               if (input.background === true) {
                 yield* runtime.job.background(job.id)
-                yield* notifyWhenDone(context.sessionID, context.id, info.id, info.command, settled)
+                yield* notifyWhenDone(context.sessionID, job.id, info.id, info.command, settled)
                 return backgroundResult(info.id, info.file)
               }
 
@@ -304,7 +305,7 @@ export const Plugin = {
                 .pipe(Effect.onInterrupt(() => runtime.job.cancel(job.id).pipe(Effect.ignore)))
               if (result?.type === "backgrounded") {
                 yield* shell.timeout(info.id, 0)
-                yield* notifyWhenDone(context.sessionID, context.id, info.id, info.command, settled)
+                yield* notifyWhenDone(context.sessionID, job.id, info.id, info.command, settled)
                 return backgroundResult(info.id, info.file)
               }
               if (result?.info.status === "error")

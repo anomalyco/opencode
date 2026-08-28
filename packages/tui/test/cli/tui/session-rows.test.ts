@@ -218,6 +218,34 @@ test("finds background tool launch rows for completion navigation", () => {
   expect(backgroundToolRowIndex(rows, messages, { source: "subagent", id: "child-1" }, "completion-2")).toBe(3)
 })
 
+test("finds shell launch rows by shell ID while preserving legacy call ID navigation", () => {
+  const messages: SessionMessageInfo[] = [
+    assistant("assistant-1", [
+      {
+        type: "tool",
+        id: "call-1",
+        name: "shell",
+        state: completed({ shellID: "sh_first", status: "running" }),
+        time: { created: 1 },
+      },
+      {
+        type: "tool",
+        id: "call-2",
+        name: "shell",
+        state: completed({ shellID: "sh_second", status: "running" }),
+        time: { created: 2 },
+      },
+    ]),
+    { type: "synthetic", id: "completion", text: "Shell finished", time: { created: 3 } },
+  ]
+  const rows = reduceSessionRows(messages)
+
+  expect(backgroundToolRowIndex(rows, messages, { source: "shell", id: "sh_first" }, "completion")).toBe(0)
+  expect(backgroundToolRowIndex(rows, messages, { source: "shell", id: "sh_second" }, "completion")).toBe(1)
+  expect(backgroundToolRowIndex(rows, messages, { source: "shell", id: "call-1" }, "completion")).toBe(0)
+  expect(backgroundToolRowIndex(rows, messages, { source: "shell", id: "missing" }, "completion")).toBe(-1)
+})
+
 test("groups exploration parts across assistant messages until a delimiter", () => {
   const messages: SessionMessageInfo[] = [
     { type: "user", id: "user-1", text: "Explore", time: { created: 0 } },

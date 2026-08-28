@@ -1,6 +1,6 @@
 import { createEffect, createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
-import type { FormInfo, PermissionRequest } from "@opencode-ai/client/promise"
+import type { FormInfo, PermissionRequest, SessionMessageInfo } from "@opencode-ai/client/promise"
 import { useParams } from "@solidjs/router"
 import { showToast } from "@/shell/notifications/toast"
 import { useServerSDK } from "@/runtime/server/client"
@@ -115,22 +115,7 @@ export function createSessionRequestModel() {
         return []
       return [{ id: info.id, type: "subagent" as const, label: info.title ?? info.id }]
     })
-    const backgroundShells = messages.flatMap((message) => {
-      if (message.type !== "assistant") return []
-      return message.content.flatMap((part) => {
-        if (part.type !== "tool" || part.name !== "shell" || completed.has(part.id)) return []
-        if (part.state.status !== "completed" || part.state.metadata?.status !== "running") return []
-        const shellID = part.state.metadata.shellID
-        const command = part.state.input.command
-        return [
-          {
-            id: typeof shellID === "string" ? shellID : part.id,
-            type: "shell" as const,
-            label: typeof command === "string" ? command : part.id,
-          },
-        ]
-      })
-    })
+    const backgroundShells = selectBackgroundShells(messages)
     const running = data.shell.list({ directory: sdk().directory }).flatMap((shell) => {
       if (shell.status !== "running" || shell.metadata.sessionID !== id) return []
       if (
@@ -199,3 +184,29 @@ export function createSessionRequestModel() {
 }
 
 export type SessionRequestModel = ReturnType<typeof createSessionRequestModel>
+
+export function selectBackgroundShells(messages: SessionMessageInfo[]) {
+  const completed = new Set(
+    messages.flatMap((message) => {
+      if (message.type !== "synthetic" || message.metadata?.source !== "shell") return []
+      return [message.metadata.shellID, message.metadata.jobID].filter((id): id is string => typeof id === "string")
+    }),
+  )
+  return messages.flatMap((message) => {
+    if (message.type !== "assistant") return []
+    return message.content.flatMap((part) => {
+      if (part.type !== "tool" || part.name !== "shell" || completed.has(part.id)) return []
+      if (part.state.status !== "completed" || part.state.metadata?.status !== "running") return []
+      const shellID = part.state.metadata.shellID
+      if (typeof shellID === "string" && completed.has(shellID)) return []
+      const command = part.state.input.command
+      return [
+        {
+          id: typeof shellID === "string" ? shellID : part.id,
+          type: "shell" as const,
+          label: typeof command === "string" ? command : part.id,
+        },
+      ]
+    })
+  })
+}

@@ -379,7 +379,7 @@ describe("SessionRestart background recovery", () => {
       yield* seedSessions(database, [parent])
       yield* seedSessions(database, [child], { parent_id: parent, time_suspended: Date.now() })
       yield* seedBackground(jobs, parent, [
-        { id: "call-background-shell", shellID: "sh_background_orphan", command: "sleep 60" },
+        { id: "sh_background_orphan", shellID: "sh_background_orphan", command: "sleep 60" },
       ])
       yield* seedBackground(jobs, child, [{ id: "call-child-shell", shellID: "sh_child_orphan", command: "sleep 30" }])
 
@@ -413,7 +413,7 @@ describe("SessionRestart background recovery", () => {
           text: expect.stringContaining("server restarted"),
           metadata: {
             source: "shell",
-            jobID: "call-background-shell",
+            jobID: "sh_background_orphan",
             shellID: "sh_background_orphan",
             state: "cancelled",
           },

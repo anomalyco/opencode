@@ -2037,7 +2037,7 @@ function SessionNoticeMessageV2(props: { message: SessionMessageInfo }) {
   const source = () => stringValue(metadata()?.source)
   const target = createMemo<BackgroundToolTarget | undefined>(() => {
     if (source() === "shell") {
-      const id = stringValue(metadata()?.jobID)
+      const id = stringValue(metadata()?.shellID) ?? stringValue(metadata()?.jobID)
       return id ? { source: "shell", id } : undefined
     }
     if (source() === "subagent") {
