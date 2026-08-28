@@ -51,11 +51,8 @@ export function upsertProject(
     .values({ id: project.id, worktree: project.canonical, vcs, sandboxes: [] })
     .onConflictDoUpdate({
       target: ProjectTable.id,
-      set: { worktree: project.canonical, vcs: vcs ?? null },
-      setWhere: or(
-        ne(ProjectTable.worktree, project.canonical),
-        vcs ? or(isNull(ProjectTable.vcs), ne(ProjectTable.vcs, vcs)) : isNotNull(ProjectTable.vcs),
-      ),
+      set: { vcs: vcs ?? null },
+      setWhere: vcs ? or(isNull(ProjectTable.vcs), ne(ProjectTable.vcs, vcs)) : isNotNull(ProjectTable.vcs),
     })
     .run()
 }

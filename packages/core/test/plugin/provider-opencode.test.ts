@@ -3,13 +3,13 @@ import { Money } from "@opencode-ai/schema/money"
 import { Effect } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Credential } from "@opencode-ai/core/credential"
-import { Bus } from "@opencode-ai/core/bus"
 import { Integration } from "@opencode-ai/core/integration"
 import { Model } from "@opencode-ai/core/model"
 import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { OpencodePlugin } from "@opencode-ai/core/plugin/provider/opencode"
 import { Provider } from "@opencode-ai/core/provider"
+import { withEnv } from "../fixture/env"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
@@ -18,12 +18,7 @@ const it = testEffect(PluginTestLayer)
 const addPlugin = Effect.fn(function* () {
   const plugin = yield* Plugin.Service
   const host = yield* PluginHost.make(plugin)
-  const bus = yield* Bus.Service
-  const integration = yield* Integration.Service
-  yield* OpencodePlugin.effect(host).pipe(
-    Effect.provideService(Bus.Service, bus),
-    Effect.provideService(Integration.Service, integration),
-  )
+  yield* OpencodePlugin.effect(host)
 })
 
 function required<T>(value: T | undefined): T {
@@ -45,27 +40,6 @@ function eventually<A>(
   })
 }
 
-function withEnv<A, E, R>(vars: Record<string, string | undefined>, effect: () => Effect.Effect<A, E, R>) {
-  return Effect.acquireUseRelease(
-    Effect.sync(() => {
-      const previous = Object.fromEntries(Object.keys(vars).map((key) => [key, process.env[key]]))
-      Object.entries(vars).forEach(([key, value]) => {
-        if (value === undefined) delete process.env[key]
-        else process.env[key] = value
-      })
-      return previous
-    }),
-    effect,
-    (previous) =>
-      Effect.sync(() =>
-        Object.entries(previous).forEach(([key, value]) => {
-          if (value === undefined) delete process.env[key]
-          else process.env[key] = value
-        }),
-      ),
-  )
-}
-
 const cost = (input: number, output = 0) => [
   {
     input: Money.USDPerMillionTokens.make(input),
@@ -81,7 +55,8 @@ describe("OpencodePlugin", () => {
   it.effect("registers account and service account methods", () =>
     Effect.gen(function* () {
       yield* addPlugin()
-      expect((yield* (yield* Integration.Service).get(Integration.ID.make("opencode")))?.methods).toEqual([
+      const integrations = yield* Integration.Service
+      expect((yield* integrations.get(Integration.ID.make("opencode")))?.methods).toEqual([
         {
           id: Integration.MethodID.make("device"),
           type: "oauth",
@@ -140,7 +115,8 @@ describe("OpencodePlugin", () => {
           expect(requests).toContain("POST /console/auth/device/token")
           expect(requests).toContain("GET /console/api/user")
           expect(requests).toContain("GET /console/api/orgs")
-          expect((yield* (yield* Credential.Service).list(Integration.ID.make("opencode")))[0]?.value).toMatchObject({
+          const credentials = yield* Credential.Service
+          expect((yield* credentials.list(Integration.ID.make("opencode")))[0]?.value).toMatchObject({
             metadata: { server: `${server.url.origin}/console` },
           })
         }),
@@ -166,7 +142,8 @@ describe("OpencodePlugin", () => {
       (server) =>
         Effect.gen(function* () {
           yield* addPlugin()
-          const error = yield* (yield* Integration.Service).oauth
+          const integrations = yield* Integration.Service
+          const error = yield* integrations.oauth
             .connect({
               integrationID: Integration.ID.make("opencode"),
               methodID: Integration.MethodID.make("device"),
@@ -183,7 +160,8 @@ describe("OpencodePlugin", () => {
   it.effect("rejects non-HTTP OpenCode servers", () =>
     Effect.gen(function* () {
       yield* addPlugin()
-      const error = yield* (yield* Integration.Service).oauth
+      const integrations = yield* Integration.Service
+      const error = yield* integrations.oauth
         .connect({
           integrationID: Integration.ID.make("opencode"),
           methodID: Integration.MethodID.make("device"),
@@ -198,7 +176,8 @@ describe("OpencodePlugin", () => {
   it.effect("rejects non-string OpenCode servers", () =>
     Effect.gen(function* () {
       yield* addPlugin()
-      const error = yield* (yield* Integration.Service).oauth
+      const integrations = yield* Integration.Service
+      const error = yield* integrations.oauth
         .connect({
           integrationID: Integration.ID.make("opencode"),
           methodID: Integration.MethodID.make("device"),
@@ -299,7 +278,8 @@ describe("OpencodePlugin", () => {
             settings: { baseURL: `${server.url.origin}/v1`, custom: "value" },
             headers: { "x-org-id": "org" },
           })
-          expect(yield* (yield* Integration.Service).get(Integration.ID.make("remote"))).toBeUndefined()
+          const integrations = yield* Integration.Service
+          expect(yield* integrations.get(Integration.ID.make("remote"))).toBeUndefined()
 
           const model = required(yield* catalog.model.get(Provider.ID.make("remote"), Model.ID.make("model")))
           expect(model).toMatchObject({
@@ -365,19 +345,9 @@ describe("OpencodePlugin", () => {
       Effect.gen(function* () {
         const catalog = yield* Catalog.Service
         yield* catalog.transform((catalog) => {
-          const provider = Provider.Info.make({
-            ...Provider.Info.empty(Provider.ID.opencode),
-            package: Provider.aisdk("test-provider"),
-          })
-          const model = Model.Info.make({
-            ...Model.Info.default(provider.id, Model.ID.make("paid")),
-            modelID: Model.ID.make("paid"),
-            package: Provider.aisdk("test-provider"),
-            cost: cost(1),
-          })
-          catalog.provider.update(provider.id, () => {})
-          catalog.model.update(provider.id, model.id, (draft) => {
-            draft.cost = [...model.cost]
+          catalog.provider.update(Provider.ID.opencode, () => {})
+          catalog.model.update(Provider.ID.opencode, Model.ID.make("paid"), (draft) => {
+            draft.cost = cost(1)
           })
         })
         yield* addPlugin()
@@ -392,19 +362,9 @@ describe("OpencodePlugin", () => {
       Effect.gen(function* () {
         const catalog = yield* Catalog.Service
         yield* catalog.transform((catalog) => {
-          const provider = Provider.Info.make({
-            ...Provider.Info.empty(Provider.ID.opencode),
-            package: Provider.aisdk("test-provider"),
-          })
-          const model = Model.Info.make({
-            ...Model.Info.default(provider.id, Model.ID.make("free")),
-            modelID: Model.ID.make("free"),
-            package: Provider.aisdk("test-provider"),
-            cost: cost(0),
-          })
-          catalog.provider.update(provider.id, () => {})
-          catalog.model.update(provider.id, model.id, (draft) => {
-            draft.cost = [...model.cost]
+          catalog.provider.update(Provider.ID.opencode, () => {})
+          catalog.model.update(Provider.ID.opencode, Model.ID.make("free"), (draft) => {
+            draft.cost = cost(0)
           })
         })
         yield* addPlugin()
@@ -421,19 +381,9 @@ describe("OpencodePlugin", () => {
       Effect.gen(function* () {
         const catalog = yield* Catalog.Service
         yield* catalog.transform((catalog) => {
-          const provider = Provider.Info.make({
-            ...Provider.Info.empty(Provider.ID.opencode),
-            package: Provider.aisdk("test-provider"),
-          })
-          const model = Model.Info.make({
-            ...Model.Info.default(provider.id, Model.ID.make("output-only")),
-            modelID: Model.ID.make("output-only"),
-            package: Provider.aisdk("test-provider"),
-            cost: cost(0, 1),
-          })
-          catalog.provider.update(provider.id, () => {})
-          catalog.model.update(provider.id, model.id, (draft) => {
-            draft.cost = [...model.cost]
+          catalog.provider.update(Provider.ID.opencode, () => {})
+          catalog.model.update(Provider.ID.opencode, Model.ID.make("output-only"), (draft) => {
+            draft.cost = cost(0, 1)
           })
         })
         yield* addPlugin()
@@ -450,19 +400,9 @@ describe("OpencodePlugin", () => {
       Effect.gen(function* () {
         const catalog = yield* Catalog.Service
         yield* catalog.transform((catalog) => {
-          const provider = Provider.Info.make({
-            ...Provider.Info.empty(Provider.ID.opencode),
-            package: Provider.aisdk("test-provider"),
-          })
-          const model = Model.Info.make({
-            ...Model.Info.default(provider.id, Model.ID.make("paid")),
-            modelID: Model.ID.make("paid"),
-            package: Provider.aisdk("test-provider"),
-            cost: cost(1),
-          })
-          catalog.provider.update(provider.id, () => {})
-          catalog.model.update(provider.id, model.id, (draft) => {
-            draft.cost = [...model.cost]
+          catalog.provider.update(Provider.ID.opencode, () => {})
+          catalog.model.update(Provider.ID.opencode, Model.ID.make("paid"), (draft) => {
+            draft.cost = cost(1)
           })
         })
         yield* addPlugin()
@@ -484,19 +424,9 @@ describe("OpencodePlugin", () => {
           })
         })
         yield* catalog.transform((catalog) => {
-          const provider = Provider.Info.make({
-            ...Provider.Info.empty(Provider.ID.opencode),
-            package: Provider.aisdk("test-provider"),
-          })
-          const model = Model.Info.make({
-            ...Model.Info.default(provider.id, Model.ID.make("paid")),
-            modelID: Model.ID.make("paid"),
-            package: Provider.aisdk("test-provider"),
-            cost: cost(1),
-          })
-          catalog.provider.update(provider.id, () => {})
-          catalog.model.update(provider.id, model.id, (draft) => {
-            draft.cost = [...model.cost]
+          catalog.provider.update(Provider.ID.opencode, () => {})
+          catalog.model.update(Provider.ID.opencode, Model.ID.make("paid"), (draft) => {
+            draft.cost = cost(1)
           })
         })
         yield* addPlugin()
@@ -511,23 +441,12 @@ describe("OpencodePlugin", () => {
       Effect.gen(function* () {
         const catalog = yield* Catalog.Service
         yield* catalog.transform((catalog) => {
-          const provider = Provider.Info.make({
-            ...Provider.Info.empty(Provider.ID.opencode),
-            package: Provider.aisdk("test-provider"),
-            settings: { apiKey: "configured" },
-          })
-          const model = Model.Info.make({
-            ...Model.Info.default(provider.id, Model.ID.make("paid")),
-            modelID: Model.ID.make("paid"),
-            package: Provider.aisdk("test-provider"),
-            cost: cost(1),
-          })
-          catalog.provider.update(provider.id, (draft) => {
-            draft.package = provider.package
+          catalog.provider.update(Provider.ID.opencode, (draft) => {
+            draft.package = Provider.aisdk("test-provider")
             draft.settings = { apiKey: "configured" }
           })
-          catalog.model.update(provider.id, model.id, (draft) => {
-            draft.cost = [...model.cost]
+          catalog.model.update(Provider.ID.opencode, Model.ID.make("paid"), (draft) => {
+            draft.cost = cost(1)
           })
         })
         yield* addPlugin()
@@ -542,19 +461,9 @@ describe("OpencodePlugin", () => {
       Effect.gen(function* () {
         const catalog = yield* Catalog.Service
         yield* catalog.transform((catalog) => {
-          const provider = Provider.Info.make({
-            ...Provider.Info.empty(Provider.ID.openai),
-            package: Provider.aisdk("test-provider"),
-          })
-          const model = Model.Info.make({
-            ...Model.Info.default(provider.id, Model.ID.make("paid")),
-            modelID: Model.ID.make("paid"),
-            package: Provider.aisdk("test-provider"),
-            cost: cost(1),
-          })
-          catalog.provider.update(provider.id, () => {})
-          catalog.model.update(provider.id, model.id, (draft) => {
-            draft.cost = [...model.cost]
+          catalog.provider.update(Provider.ID.openai, () => {})
+          catalog.model.update(Provider.ID.openai, Model.ID.make("paid"), (draft) => {
+            draft.cost = cost(1)
           })
         })
         yield* addPlugin()

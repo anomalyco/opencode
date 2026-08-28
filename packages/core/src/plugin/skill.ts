@@ -50,7 +50,7 @@ export const Plugin = define({
 const reportContentWithDiagnostics = Effect.fn("SkillPlugin.reportContentWithDiagnostics")(function* (
   app: Context["app"],
 ) {
-  const plugins = yield* configuredPlugins().pipe(Effect.orElseSucceed(() => ["Unavailable: failed to inspect config"]))
+  const plugins = yield* configuredPlugins()
   return [
     ReportContent,
     "",

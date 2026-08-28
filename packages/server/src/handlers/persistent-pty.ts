@@ -21,6 +21,12 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
 
     return handlers
       .handle(
+        "persistentPty.read",
+        Effect.fn(function* (ctx) {
+          return { data: yield* pty.read(ctx.params.sessionID, ctx.query.lines).pipe(mapUnavailable) }
+        }),
+      )
+      .handle(
         "persistentPty.list",
         Effect.fn(function* (ctx) {
           return { data: yield* pty.list(ctx.params.sessionID).pipe(mapUnavailable) }
