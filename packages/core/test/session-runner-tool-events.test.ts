@@ -287,6 +287,29 @@ it.effect("batches reasoning deltas and flushes pending reasoning before the ter
   }),
 )
 
+test("authoritative end values replace accumulated deltas in the durable ended events", async () => {
+  const { published, publisher } = capture()
+  await Effect.runPromise(
+    Effect.forEach(
+      [
+        LLMEvent.textStart({ id: "text" }),
+        LLMEvent.textDelta({ id: "text", text: "Hel" }),
+        LLMEvent.textEnd({ id: "text", text: "Hello!" }),
+        LLMEvent.reasoningStart({ id: "reasoning" }),
+        LLMEvent.reasoningDelta({ id: "reasoning", text: "Thin" }),
+        LLMEvent.reasoningEnd({ id: "reasoning", text: "Thinking done." }),
+      ],
+      publisher.publish,
+      { discard: true },
+    ),
+  )
+
+  expect(published.find((event) => event.type === "session.text.ended.1")?.data).toMatchObject({ text: "Hello!" })
+  expect(published.find((event) => event.type === "session.reasoning.ended.1")?.data).toMatchObject({
+    text: "Thinking done.",
+  })
+})
+
 test("tool input deltas are accumulated without being published", async () => {
   const { published, publisher } = capture()
   await Effect.runPromise(

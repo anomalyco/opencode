@@ -8,14 +8,13 @@ import { ClipboardProvider, useClipboard } from "./context/clipboard"
 import { LogProvider, useLog, type LogSink } from "./context/log"
 import { ExitProvider, useExit } from "./context/exit"
 import { EpilogueProvider } from "./context/epilogue"
-import * as Selection from "./util/selection"
+import { Selection } from "./util/selection"
 import {
   CliRenderEvents,
   createCliRenderer,
   MouseButton,
   type CliRenderer,
   type CliRendererConfig,
-  type MouseEvent,
   type ThemeMode,
 } from "@opentui/core"
 import { RouteProvider, useRoute } from "./context/route"
@@ -72,6 +71,8 @@ import { DialogSessionList } from "./component/dialog-session-list"
 import { DialogOpen, DialogOpenKey, loadDialogOpen } from "./component/dialog-open"
 import { SessionTabs } from "./component/session-tabs"
 import { clampSessionTabsWidth, sessionTabsFitVertically, SESSION_SIDEBAR_WIDTH } from "./ui/layout"
+import { createPaneResize } from "./ui/pane-resize"
+import { PaneResizeHandle } from "./ui/pane-resize-handle"
 import { ThemeErrorToast } from "./component/theme-error-toast"
 import { createThemeSource, ThemeProvider, useTheme, useThemes } from "./context/theme"
 import { Home } from "./routes/home"
@@ -472,7 +473,6 @@ function App(props: { pair?: DialogPairCredentials }) {
   const client = useClient()
   const toast = useToast()
   const theme = useTheme()
-  const tabsTheme = useTheme("elevated")
   const { mode, supports, setMode, locked, lock, unlock } = useThemes()
   const data = useData()
   const location = useLocation()
@@ -495,38 +495,18 @@ function App(props: { pair?: DialogPairCredentials }) {
   const [layout, updateLayout] = useStorage().store<{ verticalTabsWidth?: number }>("layout", {
     initial: { verticalTabsWidth: SESSION_SIDEBAR_WIDTH },
   })
-  const [preferredTabsWidth, setPreferredTabsWidth] = createSignal(layout.verticalTabsWidth ?? SESSION_SIDEBAR_WIDTH)
-  const [tabsResizeHovered, setTabsResizeHovered] = createSignal(false)
-  const [tabsResizing, setTabsResizing] = createSignal(false)
-  let requestedTabsWidth = layout.verticalTabsWidth ?? SESSION_SIDEBAR_WIDTH
-  createEffect(() => {
-    if (tabsResizing()) return
-    requestedTabsWidth = layout.verticalTabsWidth ?? SESSION_SIDEBAR_WIDTH
-    setPreferredTabsWidth(requestedTabsWidth)
+  const tabsResize = createPaneResize({
+    value: () => layout.verticalTabsWidth ?? SESSION_SIDEBAR_WIDTH,
+    defaultValue: () => SESSION_SIDEBAR_WIDTH,
+    clamp: (width) => clampSessionTabsWidth(width, dimensions().width),
+    fromMouse: (event) => event.x + 1,
+    contains: (event, width) => event.x >= width - 1 && event.x <= width,
+    onCommit: (width) => {
+      void updateLayout((draft) => {
+        draft.verticalTabsWidth = width
+      }).catch((error) => console.error("Failed to persist TUI layout", error))
+    },
   })
-  const verticalTabsWidth = () => clampSessionTabsWidth(preferredTabsWidth(), dimensions().width)
-  const resizeVerticalTabs = (width: number) => setPreferredTabsWidth(clampSessionTabsWidth(width, dimensions().width))
-  const commitVerticalTabsWidth = (width: number) => {
-    const next = clampSessionTabsWidth(width, dimensions().width)
-    setPreferredTabsWidth(next)
-    if (requestedTabsWidth === next) return
-    requestedTabsWidth = next
-    void updateLayout((draft) => {
-      draft.verticalTabsWidth = next
-    }).catch((error) => console.error("Failed to persist TUI layout", error))
-  }
-  let tabsResizeMoved = false
-  let lastTabsBoundaryClick = 0
-  const finishTabsResize = (event: MouseEvent) => {
-    if (!tabsResizing()) return
-    const next = tabsResizeMoved ? event.x + 1 : verticalTabsWidth()
-    setTabsResizing(false)
-    lastTabsBoundaryClick = tabsResizeMoved ? 0 : Date.now()
-    commitVerticalTabsWidth(next)
-    const width = clampSessionTabsWidth(next, dimensions().width)
-    setTabsResizeHovered(event.x >= width - 1 && event.x <= width)
-    event.stopPropagation()
-  }
   let openingOpen: Promise<SessionInfo[]> | undefined
   // Toast once when an MCP server enters a failed or needs-auth state so the user knows to act,
   // without having to open the status panel. Tracking the last alerted status avoids re-toasting
@@ -558,14 +538,16 @@ function App(props: { pair?: DialogPairCredentials }) {
     }
   })
 
-  // Let selection copy/dismiss win ahead of normal bindings when explicit copy is required.
+  const copyOnSelectEnabled = () =>
+    (config.data.terminal?.copy ?? (process.platform === "win32" ? "manual" : "select")) === "select"
+
+  // Selection copy/dismiss must precede both app bindings and the terminal pane's raw key forwarding.
   const offSelectionKeys = keymap.intercept(
     "key",
     ({ event }) => {
-      if ((config.data.terminal?.copy ?? (process.platform === "win32" ? "manual" : "select")) === "select") return
-      Selection.handleSelectionKey(renderer, toast, event, clipboard)
+      Selection.handleSelectionKey(renderer, toast, event, clipboard, copyOnSelectEnabled())
     },
-    { priority: 1 },
+    { priority: 101 },
   )
   onCleanup(() => {
     offSelectionKeys()
@@ -583,11 +565,9 @@ function App(props: { pair?: DialogPairCredentials }) {
     renderer.clearSelection()
   }
   const terminalTitleEnabled = () => config.data.terminal?.title ?? true
-  const copyOnSelectEnabled = () =>
-    (config.data.terminal?.copy ?? (process.platform === "win32" ? "manual" : "select")) === "select"
   const pasteSummaryEnabled = () => config.data.prompt?.paste !== "full"
   const tabsVertical = () =>
-    config.data.tabs.layout === "vertical" && sessionTabsFitVertically(dimensions().width, preferredTabsWidth())
+    config.data.tabs.layout === "vertical" && sessionTabsFitVertically(dimensions().width, tabsResize.preferredSize())
   const tabsVisible = () => sessionTabs.enabled() && sessionTabs.tabs().length > 0 && route.data.type !== "plugin"
   const verticalTabsVisible = () => tabsVisible() && tabsVertical()
 
@@ -1293,18 +1273,12 @@ function App(props: { pair?: DialogPairCredentials }) {
         minHeight={0}
         flexDirection="row"
         position="relative"
-        onMouseDrag={(event) => {
-          if (!tabsResizing()) return
-          tabsResizeMoved = true
-          lastTabsBoundaryClick = 0
-          resizeVerticalTabs(event.x + 1)
-          event.stopPropagation()
-        }}
-        onMouseDragEnd={finishTabsResize}
-        onMouseUp={finishTabsResize}
+        onMouseDrag={tabsResize.onMouseDrag}
+        onMouseDragEnd={tabsResize.onMouseDragEnd}
+        onMouseUp={tabsResize.onMouseUp}
       >
         <Show when={verticalTabsVisible()}>
-          <SessionTabs orientation="vertical" width={verticalTabsWidth()} />
+          <SessionTabs orientation="vertical" width={tabsResize.size()} />
         </Show>
         <box flexGrow={1} minWidth={0} flexDirection="column">
           <Show when={plugins.ready()}>
@@ -1321,7 +1295,7 @@ function App(props: { pair?: DialogPairCredentials }) {
                     {(sessionID) => (
                       <SessionFrame
                         sessionID={sessionID}
-                        verticalTabsWidth={verticalTabsVisible() ? verticalTabsWidth() : 0}
+                        verticalTabsWidth={verticalTabsVisible() ? tabsResize.size() : 0}
                       />
                     )}
                   </Show>
@@ -1339,41 +1313,7 @@ function App(props: { pair?: DialogPairCredentials }) {
           </Show>
         </box>
         <Show when={verticalTabsVisible()}>
-          <box
-            position="absolute"
-            left={verticalTabsWidth() - 1}
-            top={0}
-            zIndex={10}
-            width={2}
-            height="100%"
-            onMouseOver={() => setTabsResizeHovered(true)}
-            onMouseOut={() => setTabsResizeHovered(false)}
-            onMouseDown={(event) => {
-              if (event.button !== MouseButton.LEFT) return
-              const now = Date.now()
-              if (now - lastTabsBoundaryClick < 300) {
-                lastTabsBoundaryClick = 0
-                setTabsResizing(false)
-                setTabsResizeHovered(false)
-                commitVerticalTabsWidth(SESSION_SIDEBAR_WIDTH)
-                event.preventDefault()
-                event.stopPropagation()
-                return
-              }
-              tabsResizeMoved = false
-              setTabsResizing(true)
-              event.preventDefault()
-              event.stopPropagation()
-            }}
-          >
-            <box
-              width={1}
-              height="100%"
-              backgroundColor={
-                tabsResizeHovered() || tabsResizing() ? tabsTheme.background.action.primary.hovered : undefined
-              }
-            />
-          </box>
+          <PaneResizeHandle resize={tabsResize} left={tabsResize.size() - 1} />
         </Show>
       </box>
       <Show when={devtools()}>

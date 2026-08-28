@@ -228,6 +228,57 @@ describe("Worktree", () => {
     }),
   )
 
+  projectIt.live("creates worktrees and runs setup from the selected clone", () =>
+    Effect.gen(function* () {
+      const root = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+      )
+      const main = abs(path.join(root.path, "repo"))
+      const clone = abs(path.join(root.path, "other-clone"))
+      yield* Effect.promise(async () => {
+        await fs.mkdir(main)
+        await initRepo(main)
+        await $`git remote add origin git@github.com:owner/repo.git`.cwd(main).quiet()
+        await $`git clone --no-hardlinks ${main} ${clone}`.quiet()
+        await $`git remote set-url origin https://github.com/owner/repo.git`.cwd(clone).quiet()
+        await $`git -c user.name=Test -c user.email=test@opencode.test -c commit.gpgsign=false commit --allow-empty -m clone`
+          .cwd(clone)
+          .quiet()
+      })
+      const projects = yield* Project.Service
+      const worktrees = yield* Worktree.Service
+      const initial = yield* projects.resolve(main)
+      const selected = yield* projects.resolve(clone)
+      yield* projects.update({
+        projectID: initial.id,
+        commands: {
+          start:
+            "bun -e \"await Bun.write('setup.json', JSON.stringify([process.env.OPENCODE_WORKTREE_BASE, process.env.OPENCODE_WORKTREE_PATH, process.cwd()]))\"",
+        },
+      })
+
+      const created = yield* worktrees.create({
+        projectID: selected.id,
+        strategy: gitWorktree,
+        from: selected.canonical,
+        directory: abs(path.join(root.path, "worktrees")),
+        name: "selected-clone",
+      })
+
+      expect(selected.id).toBe(initial.id)
+      expect((yield* projects.list()).find((project) => project.id === initial.id)?.canonical).toBe(main)
+      expect(yield* Effect.promise(() => $`git rev-parse HEAD`.cwd(created.directory).text())).toBe(
+        yield* Effect.promise(() => $`git rev-parse HEAD`.cwd(clone).text()),
+      )
+      expect(yield* Effect.promise(() => Bun.file(path.join(created.directory, "setup.json")).json())).toEqual([
+        clone,
+        created.directory,
+        created.directory,
+      ])
+    }),
+  )
+
   it.live("creates a git worktree from a selected branch", () =>
     Effect.gen(function* () {
       const input = yield* setup()
@@ -491,13 +542,20 @@ describe("Worktree", () => {
       const worktree = yield* Worktree.Service
       const bus = yield* Bus.Service
       const target = abs(`${input.root.path}-worktree-external`)
+      const unchanged = abs(`${input.root.path}-worktree-existing`)
       yield* Effect.addFinalizer(() =>
-        Effect.promise(() => fs.rm(target, { recursive: true, force: true })).pipe(Effect.ignore),
+        Effect.promise(() =>
+          Promise.all([target, unchanged].map((item) => fs.rm(item, { recursive: true, force: true }))),
+        ).pipe(Effect.ignore),
       )
       yield* Effect.promise(() => $`git worktree add --detach ${target} HEAD`.cwd(input.root.path).quiet())
+      yield* Effect.promise(() => $`git worktree add --detach ${unchanged} HEAD`.cwd(input.root.path).quiet())
       yield* input.db
         .insert(WorktreeTable)
-        .values({ project_id: input.projectID, directory: target })
+        .values([
+          { project_id: input.projectID, directory: target },
+          { project_id: input.projectID, directory: unchanged, strategy: "git" },
+        ])
         .run()
         .pipe(Effect.orDie)
       const fiber = yield* bus
@@ -506,18 +564,24 @@ describe("Worktree", () => {
       yield* Effect.yieldNow
 
       const discovered = abs(yield* Effect.promise(() => fs.realpath(target)))
+      const existing = abs(yield* Effect.promise(() => fs.realpath(unchanged)))
       expect(yield* worktree.refresh({ projectID: input.projectID })).toEqual({ updated: [discovered], removed: [] })
 
       expect(yield* stored(input.projectID)).toEqual(
         [
           { directory: input.sourceDirectory, strategy: null },
           { directory: discovered, strategy: "git" },
+          { directory: existing, strategy: "git" },
         ].toSorted((a, b) => a.directory.localeCompare(b.directory)),
       )
       expect(Array.from(yield* Fiber.join(fiber))[0]?.data).toEqual({ projectID: input.projectID })
 
       yield* Effect.promise(() => $`git worktree remove --force ${target}`.cwd(input.root.path).quiet())
-      expect(yield* worktree.refresh({ projectID: input.projectID })).toEqual({ updated: [], removed: [discovered] })
+      yield* Effect.promise(() => $`git worktree remove --force ${unchanged}`.cwd(input.root.path).quiet())
+      expect(yield* worktree.refresh({ projectID: input.projectID })).toEqual({
+        updated: [],
+        removed: [discovered, existing].toSorted(),
+      })
       expect(yield* stored(input.projectID)).toEqual([{ directory: input.sourceDirectory, strategy: null }])
     }),
   )
