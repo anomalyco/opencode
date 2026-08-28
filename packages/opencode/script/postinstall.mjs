@@ -23,7 +23,16 @@ const archMap = {
 }
 
 const platform = platformMap[os.platform()] ?? os.platform()
-const arch = archMap[os.arch()] ?? os.arch()
+let arch = archMap[os.arch()] ?? os.arch()
+
+// Windows on ARM: the native arm64 build cannot load OpenTUI because bun:ffi
+// (dlopen/TinyCC) is disabled in bun's windows-arm64 runtime. Use the x64 build,
+// which runs under Windows' x64 emulation and has full bun:ffi support.
+if (platform === "windows" && arch === "arm64") {
+  console.log("opencode: using the x64 build on Windows ARM64 (native build lacks bun:ffi support required by OpenTUI)")
+  arch = "x64"
+}
+
 const base = `opencode-${platform}-${arch}`
 const sourceBinary = platform === "windows" ? "opencode.exe" : "opencode"
 const targetBinary = path.join(__dirname, "bin", "opencode.exe")
