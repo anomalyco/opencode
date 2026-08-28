@@ -3,6 +3,7 @@ import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import {
   getStatsModelsComparisonData,
   type ModelUsagePoint,
+  type RetentionEntry,
   type StatsModelComparisonInput,
   type StatsModelComparisonEntry,
 } from "@opencode-ai/stats-core/domain/home"
@@ -949,6 +950,17 @@ function buildComparisonDetailSections(models: readonly ComparisonModel[]): Comp
       ],
       usage: models.map((model) => model.stats?.usage ?? []),
     },
+    {
+      title: "Retention",
+      badge: "Week 1",
+      rows: [
+        comparisonDetailRow(
+          "Returning users",
+          models.map((model) => retentionCell(model.stats?.weeklyRetention)),
+          "higher",
+        ),
+      ],
+    },
   ]
 }
 
@@ -1029,6 +1041,15 @@ function usageMetricCell(value: number | undefined, format: "compact" | "integer
 
 function percentCell(value: number | undefined): ComparisonDetailCell {
   return value === undefined ? { value: "No usage" } : { value: formatPercent(value), score: value }
+}
+
+function retentionCell(value: RetentionEntry | null | undefined): ComparisonDetailCell {
+  if (!value || value.rank === null) return { value: "Pending" }
+  return {
+    value: formatPercent(value.rate),
+    unit: `${formatTokens(value.eligibleUserWeeks)} user-weeks`,
+    score: value.rate,
+  }
 }
 
 function tokenCell(value: number | undefined, trend: number | undefined): ComparisonDetailCell {

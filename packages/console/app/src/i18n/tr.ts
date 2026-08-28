@@ -256,7 +256,7 @@ export const dict = {
   "zen.privacy.exceptionsLink": "aşağıdaki istisnalar",
 
   "go.title": "OpenCode Go | Herkes için düşük maliyetli kodlama modelleri",
-  "go.banner.text": "Ox Alpha Free sınırlı bir süre için Go'da kullanılabilir",
+  "go.banner.text": "GLM-5.3-Flash sınırlı bir süre için 2x kullanım limiti sunuyor",
   "go.meta.description":
     "Go ayda 10$'dır; cömert kullanım limitleri ve önde gelen kodlama modellerine güvenilir erişim sunar.",
   "go.hero.title": "Herkes için düşük maliyetli kodlama modelleri",
@@ -673,10 +673,18 @@ export const dict = {
   "workspace.lite.time.fewSeconds": "birkaç saniye",
   "workspace.lite.subscription.message": "OpenCode Go abonesisiniz.",
   "workspace.lite.subscription.manage": "Aboneliği Yönet",
-  "workspace.lite.subscription.rollingUsage": "Devam Eden Kullanım",
+  "workspace.lite.subscription.rollingUsage": "5 Saatlik Kullanım",
+  "workspace.lite.subscription.rollingQuota": "5 Saatlik Kota",
   "workspace.lite.subscription.weeklyUsage": "Haftalık Kullanım",
+  "workspace.lite.subscription.weeklyQuota": "Haftalık Kota",
   "workspace.lite.subscription.monthlyUsage": "Aylık Kullanım",
+  "workspace.lite.subscription.monthlyQuota": "Aylık Kota",
   "workspace.lite.subscription.resetsIn": "Sıfırlama süresi",
+  "workspace.lite.subscription.showDetails": "Ayrıntıları göster",
+  "workspace.lite.subscription.hideDetails": "Ayrıntıları gizle",
+  "workspace.lite.subscription.model": "Model",
+  "workspace.lite.subscription.contribution": "%",
+  "workspace.lite.subscription.total": "Toplam",
   "workspace.lite.subscription.useBalance": "Kullanım limitlerine ulaştıktan sonra mevcut bakiyenizi kullanın",
   "workspace.lite.subscription.selectProvider":
     'Go modellerini kullanmak için opencode yapılandırmanızda "OpenCode Go"\'yu sağlayıcı olarak seçin.',
