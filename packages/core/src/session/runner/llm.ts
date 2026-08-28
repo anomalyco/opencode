@@ -250,7 +250,6 @@ const layer = Layer.effect(
           agent: loaded.agent.id,
           model: loaded.model,
           prepared,
-          toolsDisabled: stepLimitReached,
           recoverContinuation,
           recoverOverflow: Effect.suspend(() =>
             recoverOverflow && compaction.enabled()
