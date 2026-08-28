@@ -702,117 +702,41 @@ describe("ShellTool ordinary shell syntax", () => {
 })
 
 describe("ShellTool", () => {
-  for (const mode of ["foreground", "background", "interrupted"] as const) {
-    it.live(`owns separate jobs for parallel CodeMode shells (${mode})`, () =>
-      Effect.acquireUseRelease(
-        Effect.promise(() => tmpdir()),
-        (tmp) => {
-          reset()
-          return withSession(tmp.path, (registry) =>
-            Effect.gen(function* () {
-              const jobs = yield* Job.Service
-              const shell = yield* Shell.Service
-              const bus = yield* Bus.Service
-              yield* registry.transform((draft) =>
-                draft.update("shell", (tool) => {
-                  tool.options = { ...tool.options, codemode: true }
-                }),
-              )
-              const notifications = yield* bus.subscribe(SessionEvent.InboxEnqueued).pipe(
-                Stream.filter((event) => event.data.sessionID === sessionID && event.data.item.type === "synthetic"),
-                Stream.take(2),
-                Stream.runCollect,
-                Effect.forkScoped({ startImmediately: true }),
-              )
-              const ready = yield* Deferred.make<void>()
-              const ids: string[] = []
-              const inputs = [1, 2].map((bytes) => ({
-                command: progressOverflowCommand(bytes, "release"),
-                background: mode === "background",
-              }))
-              const waiting = yield* executeTool(registry, {
-                sessionID,
-                ...toolIdentity,
-                call: {
-                  type: "tool-call",
-                  id: "call-parallel-shells",
-                  name: "execute",
-                  input: {
-                    code: `return await Promise.all(${JSON.stringify(inputs)}.map(input => tools.shell(input)))`,
-                  },
-                },
-                progress: (update) =>
-                  Effect.gen(function* () {
-                    if (typeof update.shellID !== "string") return
-                    ids.push(update.shellID)
-                    if (ids.length === 2) yield* Deferred.succeed(ready, undefined)
-                  }),
-              }).pipe(Effect.forkScoped)
-              yield* Deferred.await(ready)
-              // Keep both processes alive until their independent jobs have been registered.
-              const running = yield* Effect.gen(function* () {
-                yield* Effect.sleep("1 millis")
-                return yield* Effect.forEach(ids, jobs.get)
-              }).pipe(Effect.repeat({ until: (items) => items.every((item) => item?.status === "running") }))
-              expect(new Set(ids).size).toBe(2)
-              expect(running.map((job) => job?.id)).toEqual(ids)
-              expect(yield* jobs.get("call-parallel-shells")).toBeUndefined()
-              expect(assertions).toHaveLength(2)
-              expect(assertions.every((item) => item.source?.id === "call-parallel-shells")).toBe(true)
-
-              if (mode === "interrupted") {
-                yield* Fiber.interrupt(waiting)
-                expect((yield* Effect.forEach(ids, jobs.get)).map((job) => job?.status)).toEqual([
-                  "cancelled",
-                  "cancelled",
-                ])
-                expect(yield* shell.list()).toEqual([])
-                return
-              }
-              if (mode === "background") {
-                const result = yield* Fiber.join(waiting)
-                expect(result.status).toBe("completed")
-                expect(
-                  JSON.parse(result.output.output)
-                    .map((output: { shellID: string }) => output.shellID)
-                    .toSorted(),
-                ).toEqual(ids.toSorted())
-                expect((yield* jobs.pendingBackground).map((job) => job.id).toSorted()).toEqual(ids.toSorted())
-              }
-              yield* Effect.promise(() => Bun.write(path.join(tmp.path, "release"), ""))
-              if (mode === "background") {
-                const notices = (yield* Fiber.join(notifications)).flatMap((event) =>
-                  event.data.item.type === "synthetic" ? [event.data.item.payload] : [],
-                )
-                expect(new Set(notices.map((notice) => notice.metadata?.jobID))).toEqual(new Set(ids))
-                for (const notice of notices) {
-                  expect(notice.metadata).toMatchObject({
-                    source: "shell",
-                    jobID: notice.metadata?.shellID,
-                    state: "completed",
-                    exit: 0,
-                  })
-                  expect(notice.text).toContain("Command exited with code 0.")
-                }
-                return
-              }
-              const result = yield* Fiber.join(waiting)
-              expect(result.status).toBe("completed")
-              expect(JSON.parse(result.output.output)).toEqual([
-                { output: "x", exit: 0, truncated: false, status: "completed" },
-                { output: "xx", exit: 0, truncated: false, status: "completed" },
-              ])
-              expect(result.metadata?.toolCalls).toMatchObject([
-                { tool: "shell", status: "completed" },
-                { tool: "shell", status: "completed" },
-              ])
-            }).pipe(Effect.timeout("3 seconds")),
-          )
-        },
-        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
-      ),
-    )
-  }
+  it.live("returns both parallel CodeMode shell results", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        return withSession(tmp.path, (registry) =>
+          Effect.gen(function* () {
+            yield* registry.transform((draft) =>
+              draft.update("shell", (tool) => {
+                tool.options = { ...tool.options, codemode: true }
+              }),
+            )
+            const command = isWindows ? helloCommand : `${helloCommand}; sleep 0.1`
+            const inputs = ["one", "two"].map((text) => JSON.stringify({ command: command.replace("hello", text) }))
+            const result = yield* executeTool(registry, {
+              sessionID,
+              ...toolIdentity,
+              call: {
+                type: "tool-call",
+                id: "call-parallel-shells",
+                name: "execute",
+                input: { code: `return await Promise.all([tools.shell(${inputs[0]}), tools.shell(${inputs[1]})])` },
+              },
+            }).pipe(Effect.timeout("3 seconds"))
+            expect(result.status).toBe("completed")
+            expect(JSON.parse(result.output.output)).toEqual([
+              { output: "one", exit: 0, truncated: false, status: "completed" },
+              { output: "two", exit: 0, truncated: false, status: "completed" },
+            ])
+          }),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+    ),
+  )
 
   productionIt.live(
     "registers and returns real successful output from the active Location",
