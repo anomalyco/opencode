@@ -48,7 +48,7 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
       continue
     }
 
-    const plugin = yield* PluginModule.load(operation).pipe(
+    const plugin = yield* PluginModule.load(operation, { refresh: true }).pipe(
       Effect.catchCause((cause) =>
         Effect.logWarning("failed to load plugin", { target: operation.target, cause }).pipe(
           Effect.as({ error: Cause.pretty(cause) }),

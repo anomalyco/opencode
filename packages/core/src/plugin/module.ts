@@ -36,9 +36,11 @@ const Definition = Schema.Struct({
 
 export const load = Effect.fn("PluginModule.load")(function* (
   operation: Extract<ConfigPluginSource.Operation, { type: "add" }>,
+  options?: { readonly refresh?: boolean },
 ) {
   const npm = yield* Npm.Service
-  const entrypoint = path.isAbsolute(operation.target)
+  const local = path.isAbsolute(operation.target)
+  const entrypoint = local
     ? pathToFileURL(operation.target).href
     : (yield* npm.add(operation.target, { subpaths: ["server", ""] })).entrypoint
   if (!entrypoint) return yield* Effect.fail(new Error(`Plugin entrypoint not found: ${operation.target}`))
@@ -49,6 +51,14 @@ export const load = Effect.fn("PluginModule.load")(function* (
   const mod = yield* Effect.promise(() => importModule(source))
   const value = (yield* Schema.decodeUnknownEffect(Definition)(mod)).default
   const plugin = "effect" in value ? value : PluginPromise.fromPromise(value)
+  if (!local && options?.refresh) {
+    yield* npm.add(operation.target, { subpaths: ["server", ""], refresh: true }).pipe(
+      Effect.catchCause((cause) =>
+        Effect.logWarning("failed to refresh package plugin", { target: operation.target, cause }),
+      ),
+      Effect.forkDetach,
+    )
+  }
   return {
     id: plugin.id,
     tui: plugin.tui,

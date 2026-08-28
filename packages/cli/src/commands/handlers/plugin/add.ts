@@ -16,7 +16,7 @@ export default Runtime.handler(
     if (!(yield* Effect.promise(() => Npm.isInstallablePackage(input.package))))
       return yield* Effect.fail(new Error("Plugin target must be an npm registry package or Git package specifier"))
     const npm = yield* Npm.Service
-    const installed = yield* npm.add(input.package, { subpaths: ["server", ""], refresh: true })
+    const installed = yield* npm.add(input.package, { subpaths: ["server", ""] })
     const tui = yield* npm.resolve(input.package, { subpaths: ["tui"] })
     const target = configurationTarget(installed.entrypoint, tui.entrypoint)
     if (!target)
