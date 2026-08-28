@@ -197,18 +197,42 @@ test.each(["compaction", "canonical compaction", "user"])(
   },
 )
 
-test("removes the compaction listener when the data owner is disposed during a gate", async () => {
+test("keeps one event listener and removes it when the data owner is disposed during a gate", async () => {
   using fixture = setup()
   const gate = Promise.withResolvers<void>()
   const first = fixture.data.session.prompt({ sessionID, text: "First", gate: gate.promise })
   const compact = fixture.data.session.compact({ sessionID })
-  expect(fixture.listeners.size).toBe(2)
+  expect(fixture.listeners.size).toBe(1)
   fixture.dispose()
   expect(fixture.listeners.size).toBe(0)
   gate.resolve()
   fixture.response.resolve(Response.json({ data: item("msg_canonical") }))
   await Promise.all([first, compact])
   expect(fixture.listeners.size).toBe(0)
+})
+
+test("routes concurrent compaction observations by session through one listener", async () => {
+  const firstResponse = Promise.withResolvers<Response>()
+  const secondResponse = Promise.withResolvers<Response>()
+  using fixture = setup(async (request) => {
+    if (!request.url.endsWith("/compact")) return undefined
+    return request.url.includes(`/session/${sessionID}/`) ? firstResponse.promise : secondResponse.promise
+  })
+  const first = fixture.data.session.compact({ sessionID })
+  const second = fixture.data.session.compact({ sessionID: "ses_other" })
+  const firstID = fixture.data.session.pending.list(sessionID)[0].id
+  const secondID = fixture.data.session.pending.list("ses_other")[0].id
+  expect(fixture.listeners.size).toBe(1)
+  fixture.emit({ ...event, type: "session.inbox.cancelled", data: { sessionID, inboxID: firstID } })
+  expect(fixture.data.session.pending.list(sessionID)).toEqual([])
+  expect(fixture.data.session.pending.list("ses_other").map((row) => row.id)).toEqual([secondID])
+
+  firstResponse.resolve(Response.json({ data: item(firstID) }))
+  secondResponse.resolve(Response.json({ data: { ...item(secondID), sessionID: "ses_other" } }))
+  await Promise.all([first, second])
+  expect(fixture.data.session.pending.list(sessionID)).toEqual([])
+  expect(fixture.data.session.pending.list("ses_other")).toEqual([{ ...item(secondID), sessionID: "ses_other" }])
+  expect(fixture.listeners.size).toBe(1)
 })
 
 test.each(["gate", "prepare"])(

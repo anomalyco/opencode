@@ -305,21 +305,32 @@ export function createData(config: CreateDataInput) {
   // submission order. Each waits for the previous POST to settle, so one
   // failure does not block the next.
   const sending = new Map<string, Promise<unknown>>()
-  const compacting = new Map<string, Promise<SessionInboxCompaction>>()
-  const compactionListeners = new Set<() => void>()
-  onCleanup(() => {
-    compactionListeners.forEach((unsubscribe) => unsubscribe())
-    compactionListeners.clear()
-  })
+  const compacting = new Map<string, { id: string; observed: Set<string>; request: Promise<SessionInboxCompaction> }>()
+  onCleanup(() => compacting.clear())
 
   // Register `promise` under `key` until it settles. A later registration
   // replaces an earlier one; settlement only clears its own entry.
-  function track<Value>(map: Map<string, Promise<Value>>, key: string, promise: Promise<Value>) {
+  function track(map: Map<string, Promise<unknown>>, key: string, promise: Promise<unknown>) {
     map.set(key, promise)
     const settle = () => {
       if (map.get(key) === promise) map.delete(key)
     }
     void promise.then(settle, settle)
+  }
+
+  // Capture creation before settlement clears its entry, so dependent RPCs still see a failed create.
+  function sendAdmission<Value>(sessionID: string, send: () => Promise<Value>, gate?: Promise<unknown>) {
+    const created = creating.get(sessionID)
+    const previous = sending.get(sessionID)
+    const request = Promise.resolve()
+      .then(() => Promise.all([gate, created, previous]))
+      .then(send)
+    track(
+      sending,
+      sessionID,
+      request.catch(() => undefined),
+    )
+    return request
   }
 
   // Upsert an admitted inbox item into pending, input, and (for user and
@@ -662,6 +673,7 @@ export function createData(config: CreateDataInput) {
           draft.push(existing)
           message.reindex(draft, index, position)
         })
+        compacting.get(event.data.sessionID)?.observed.add(event.data.inboxID)
         return
       }
       case "session.inbox.delivery.changed":
@@ -669,6 +681,7 @@ export function createData(config: CreateDataInput) {
         return
       case "session.inbox.cancelled": {
         retractLocal(event.data.sessionID, event.data.inboxID)
+        compacting.get(event.data.sessionID)?.observed.add(event.data.inboxID)
         return
       }
       case "session.inbox.enqueued": {
@@ -679,6 +692,12 @@ export function createData(config: CreateDataInput) {
           timeCreated: event.created,
           ...event.data.item,
         })
+        if (event.data.item.type === "compaction") {
+          const active = compacting.get(event.data.sessionID)
+          active?.observed.add(event.data.inboxID)
+          if (active && active.id !== event.data.inboxID && outbox.delete(active.id))
+            removePending(event.data.sessionID, active.id)
+        }
         return
       }
       case "session.instructions.updated":
@@ -977,6 +996,7 @@ export function createData(config: CreateDataInput) {
             time: { created: event.created },
           })
         })
+        if (event.data.inputID) compacting.get(event.data.sessionID)?.observed.add(event.data.inputID)
         return
       case "session.execution.succeeded":
       case "session.execution.failed":
@@ -1074,6 +1094,7 @@ export function createData(config: CreateDataInput) {
           }
           message.append(draft, index, failed)
         })
+        if (event.data.inputID) compacting.get(event.data.sessionID)?.observed.add(event.data.inputID)
         return
       case "permission.asked":
         if (store.session.permission[event.data.sessionID]?.some((request) => request.id === event.data.id)) return
@@ -1270,9 +1291,7 @@ export function createData(config: CreateDataInput) {
             // Keep optimistic rows still awaiting their echo: this fetch may
             // have raced ahead of an in-flight admission the server does not
             // know about yet.
-            const inflight = (store.session.pending[sessionID] ?? []).filter(
-              (item) => outbox.has(item.id) && !pending.some((row) => row.id === item.id),
-            )
+            const inflight = (store.session.pending[sessionID] ?? []).filter((item) => outbox.has(item.id))
             const merged = inflight.length === 0 ? pending : [...pending, ...inflight]
             batch(() => {
               setStore("session", "pending", sessionID, reconcile(merged))
@@ -1348,12 +1367,11 @@ export function createData(config: CreateDataInput) {
       },
       compact(input: { sessionID: string; model?: ModelRef }) {
         const active = compacting.get(input.sessionID)
-        if (active) return active
-        const pending = store.session.pending[input.sessionID]?.find((item) => item.type === "compaction")
+        if (active) return active.request
         // A known pending control ID may be consumed while setup waits. Propose
         // a fresh ID and let the server coalesce, without duplicating its row.
         const id = SessionMessage.ID.create()
-        if (!pending) {
+        if (!store.session.pending[input.sessionID]?.some((item) => item.type === "compaction")) {
           outbox.add(id)
           admitLocal({
             id,
@@ -1368,52 +1386,26 @@ export function createData(config: CreateDataInput) {
         // speculative row on an echo, and remember consumed IDs until the POST
         // settles so its older response cannot resurrect a queued row.
         const observed = new Set<string>()
-        const unsubscribe = config.event.listen((message) => {
-          const event = message.details
-          if (event.type === "session.inbox.enqueued") {
-            if (event.data.sessionID !== input.sessionID || event.data.item.type !== "compaction") return
-            observed.add(event.data.inboxID)
-            if (event.data.inboxID !== id && outbox.delete(id)) removePending(input.sessionID, id)
-            return
-          }
-          if (event.type === "session.inbox.delivered" || event.type === "session.inbox.cancelled") {
-            if (event.data.sessionID !== input.sessionID) return
-            observed.add(event.data.inboxID)
-            return
-          }
-          if (event.type === "session.compaction.started" || event.type === "session.compaction.failed") {
-            if (event.data.sessionID !== input.sessionID || !event.data.inputID) return
-            observed.add(event.data.inputID)
-          }
+        const request = sendAdmission(input.sessionID, async () => {
+          if (input.model) await api().session.switchModel({ sessionID: input.sessionID, model: input.model })
+          return api().session.compact({ sessionID: input.sessionID, id })
         })
-        compactionListeners.add(unsubscribe)
-        const previous = sending.get(input.sessionID)
-        const created = creating.get(input.sessionID)
-        const request = Promise.resolve()
-          .then(() => Promise.all([created, previous]))
-          .then(() => input.model && api().session.switchModel({ sessionID: input.sessionID, model: input.model }))
-          .then(() => api().session.compact({ sessionID: input.sessionID, id }))
           .then((item) => {
             batch(() => {
               outbox.delete(id)
-              if (item.id !== id && !pending) removePending(input.sessionID, id)
+              if (item.id !== id) removePending(input.sessionID, id)
               if (!observed.has(item.id) && !messageIndex.get(input.sessionID)?.has(item.id)) admitLocal(item)
             })
             return item
           })
           .catch((error) => {
-            if (!pending && outbox.delete(id)) removePending(input.sessionID, id)
+            if (outbox.delete(id)) removePending(input.sessionID, id)
             throw error
           })
           .finally(() => {
-            if (compactionListeners.delete(unsubscribe)) unsubscribe()
+            if (compacting.get(input.sessionID)?.request === request) compacting.delete(input.sessionID)
           })
-        track(compacting, input.sessionID, request)
-        track(
-          sending,
-          input.sessionID,
-          request.catch(() => undefined),
-        )
+        compacting.set(input.sessionID, { id, observed, request })
         return request
       },
       // Optimistic prompt admission: render the prompt immediately under a
@@ -1448,27 +1440,14 @@ export function createData(config: CreateDataInput) {
             },
           })
         }
-        // Wrapped so even a synchronous client failure reaches the rollback.
-        // The POST additionally waits for the caller's gate, for any
-        // in-flight optimistic create of this session, and for the previous
-        // admission's POST: the row renders now, the send happens once the
-        // session exists server-side and earlier inputs are admitted.
-        const previous = sending.get(request.sessionID)
-        const created = creating.get(request.sessionID)
-        const send = Promise.resolve()
-          .then(() => Promise.all([gate, created, previous]))
-          // Model preparation must not run ahead of earlier admissions.
-          .then(() => prepare?.())
-          .then(() => api().session.prompt({ ...request, id }))
-        track(
-          sending,
+        return sendAdmission(
           request.sessionID,
-          send.then(
-            () => undefined,
-            () => undefined,
-          ),
-        )
-        return send.catch((error) => {
+          async () => {
+            await prepare?.()
+            return api().session.prompt({ ...request, id })
+          },
+          gate,
+        ).catch((error) => {
           // Roll back only rows this call admitted and the server has not
           // acknowledged: anything else is server state.
           if (fresh && outbox.delete(id)) retractLocal(request.sessionID, id)
