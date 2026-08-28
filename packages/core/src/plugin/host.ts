@@ -369,9 +369,10 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
     },
     vcs: {
       get: () => response(vcs.info()),
+      base: () => response(vcs.base()),
       branches: (input) => response(vcs.branches({ search: input?.search, limit: input?.limit })),
       status: () => response(vcs.status()),
-      diff: (input) => response(vcs.diff(input.mode, { context: input.context })),
+      diff: (input) => response(vcs.diff(input.mode, { context: input.context, base: input.base })),
       transform: vcs.transform,
       reload: vcs.reload,
     },

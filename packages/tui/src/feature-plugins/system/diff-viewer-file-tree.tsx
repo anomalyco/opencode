@@ -21,6 +21,7 @@ export type DiffViewerFileTreeProps = {
   readonly onRowClick?: (row: FileTreeRow) => void
   readonly onFileContextMenu?: (fileIndex: number, event: MouseEvent) => void
   readonly source?: string
+  readonly sourceDetail?: string
   readonly onSwitchSource?: () => void
   readonly footer?: JSX.Element
 }
@@ -65,7 +66,7 @@ export function DiffViewerFileTree(props: DiffViewerFileTreeProps) {
         paddingRight={2}
         backgroundColor={theme.background.default}
       >
-        <box height={1} flexShrink={0} flexDirection="row" marginBottom={1} gap={1}>
+        <box flexShrink={0} flexDirection={props.source ? "column" : "row"} marginBottom={1}>
           <text
             id="diff-source-switch"
             fg={
@@ -90,6 +91,11 @@ export function DiffViewerFileTree(props: DiffViewerFileTreeProps) {
           >
             {props.source ?? "Files"}
           </text>
+          <Show when={props.sourceDetail}>
+            <text fg={theme.text.subdued} wrapMode="none" truncate>
+              {props.sourceDetail}
+            </text>
+          </Show>
           <text fg={theme.text.subdued} wrapMode="none" flexShrink={0}>
             {reviewedCount()}/{props.files.length} reviewed
           </text>

@@ -1950,6 +1950,12 @@ export type VcsGetInput = {
 export type VcsGetOutput = { readonly location: Location.Info; readonly data: Vcs.Info }
 export type VcsGetOperation<E = never> = (input?: VcsGetInput) => Effect.Effect<VcsGetOutput, E>
 
+export type VcsBaseInput = {
+  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+}
+export type VcsBaseOutput = { readonly location: Location.Info; readonly data: Vcs.Base | null }
+export type VcsBaseOperation<E = never> = (input?: VcsBaseInput) => Effect.Effect<VcsBaseOutput, E>
+
 export type VcsStatusInput = {
   readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
 }
@@ -1967,6 +1973,7 @@ export type VcsBranchesOperation<E = never> = (input?: VcsBranchesInput) => Effe
 export type VcsDiffInput = {
   readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   readonly mode: Vcs.Mode
+  readonly base?: string | undefined
   readonly context?: number | undefined
 }
 export type VcsDiffOutput = { readonly location: Location.Info; readonly data: ReadonlyArray<FileDiff.Info> }
@@ -1974,6 +1981,7 @@ export type VcsDiffOperation<E = never> = (input: VcsDiffInput) => Effect.Effect
 
 export interface VcsApi<E = never> {
   readonly get: VcsGetOperation<E>
+  readonly base: VcsBaseOperation<E>
   readonly status: VcsStatusOperation<E>
   readonly branches: VcsBranchesOperation<E>
   readonly diff: VcsDiffOperation<E>

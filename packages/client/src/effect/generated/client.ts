@@ -244,6 +244,8 @@ import type {
   WorkspaceDestroyOutput,
   VcsGetInput,
   VcsGetOutput,
+  VcsBaseInput,
+  VcsBaseOutput,
   VcsStatusInput,
   VcsStatusOutput,
   VcsBranchesInput,
@@ -1468,6 +1470,11 @@ const EndpointVcsGet = (raw: RawClient["server.vcs"]) => (input?: VcsGetInput) =
     raw["vcs.get"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
+const EndpointVcsBase = (raw: RawClient["server.vcs"]) => (input?: VcsBaseInput) =>
+  preserveEffect<VcsBaseOutput>()(
+    raw["vcs.base"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
+  )
+
 const EndpointVcsStatus = (raw: RawClient["server.vcs"]) => (input?: VcsStatusInput) =>
   preserveEffect<VcsStatusOutput>()(
     raw["vcs.status"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
@@ -1482,13 +1489,14 @@ const EndpointVcsBranches = (raw: RawClient["server.vcs"]) => (input?: VcsBranch
 
 const EndpointVcsDiff = (raw: RawClient["server.vcs"]) => (input: VcsDiffInput) =>
   preserveEffect<VcsDiffOutput>()(
-    raw["vcs.diff"]({ query: { location: input["location"], mode: input["mode"], context: input["context"] } }).pipe(
-      Effect.mapError(mapClientError),
-    ),
+    raw["vcs.diff"]({
+      query: { location: input["location"], mode: input["mode"], base: input["base"], context: input["context"] },
+    }).pipe(Effect.mapError(mapClientError)),
   )
 
 const adaptGroupVcs = (raw: RawClient["server.vcs"]) => ({
   get: EndpointVcsGet(raw),
+  base: EndpointVcsBase(raw),
   status: EndpointVcsStatus(raw),
   branches: EndpointVcsBranches(raw),
   diff: EndpointVcsDiff(raw),

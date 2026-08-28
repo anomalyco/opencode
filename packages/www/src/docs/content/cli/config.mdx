@@ -141,6 +141,7 @@ Configure diff presentation:
 ```json title="cli.json"
 {
   "diffs": {
+    "source": "branch",
     "wrap": "word",
     "tree": true,
     "single": false,
@@ -149,12 +150,29 @@ Configure diff presentation:
 }
 ```
 
-| Field    | Values                        | Description                                                   |
-| -------- | ----------------------------- | ------------------------------------------------------------- |
-| `wrap`   | `word` or `none`              | Sets line wrapping.                                           |
-| `tree`   | boolean                       | Shows the diff file tree.                                     |
-| `single` | boolean                       | Shows only the selected file patch.                           |
-| `view`   | `auto`, `split`, or `unified` | Sets the layout. `auto` chooses based on the available width. |
+| Field    | Values                              | Description                                                   |
+| -------- | ----------------------------------- | ------------------------------------------------------------- |
+| `source` | `branch`, `committed`, or `working` | Sets the default review scope. Defaults to `branch`.          |
+| `wrap`   | `word` or `none`                    | Sets line wrapping.                                           |
+| `tree`   | boolean                             | Shows the diff file tree.                                     |
+| `single` | boolean                             | Shows only the selected file patch.                           |
+| `view`   | `auto`, `split`, or `unified`       | Sets the layout. `auto` chooses based on the available width. |
+
+`/diff` opens **Branch + uncommitted** by default. Press `d` to open **Diff source** and select a scope for the open viewer:
+
+| Source      | Label                | Compared contents                                                                                                 |
+| ----------- | -------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `branch`    | Branch + uncommitted | The merge base with the comparison branch to the working tree, including staged, unstaged, and untracked changes. |
+| `committed` | Branch only          | The merge base with the comparison branch to `HEAD`, excluding all uncommitted changes.                           |
+| `working`   | Uncommitted only     | `HEAD` to the working tree, including staged, unstaged, and untracked changes.                                    |
+
+For Git, the comparison branch is resolved when a branch scope is opened: the open pull request's base via GitHub CLI (`gh`), then `branch.<current-branch>.gh-merge-base` from Git config, then the repository's default branch. Each candidate must resolve to a locally available commit ref. A missing common ancestor is a comparison error, not a reason to try another candidate. The viewer shows the actual base, such as **vs v2**, and the PR number when known. Base lookup is lazy, not part of startup or status polling, and is reused while switching scopes in the same viewer.
+
+Selecting a scope does not change `cli.json`. Close and reopen `/diff` to return to `diffs.source`. To always start with uncommitted changes, set `"source": "working"`. A clean working tree never automatically changes the selected scope.
+
+When a VCS provider cannot report base metadata, the viewer displays **Base not reported**. **Branch + uncommitted** still uses the provider's branch comparison if supported; missing metadata does not change the scope to uncommitted changes. **Branch only** is unavailable without base metadata. An unresolved Git comparison reports an error rather than an empty diff; choose **Uncommitted only** to review working-tree changes instead. Before the first Git commit, combined review shows uncommitted files.
+
+Committed image previews are unavailable; **Branch only** never substitutes the current working-tree image.
 
 ## Tabs
 

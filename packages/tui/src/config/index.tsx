@@ -90,6 +90,9 @@ export const Info = Schema.Struct({
   ).annotate({ description: "System notification and sound settings" }),
   diffs: Schema.optional(
     Schema.Struct({
+      source: Schema.optional(Schema.Literals(["branch", "committed", "working"])).annotate({
+        description: "Default diff source; 'branch' includes branch and uncommitted changes",
+      }),
       wrap: Schema.optional(Schema.Literals(["word", "none"])).annotate({
         description: "Line wrapping behavior in diff output",
       }),

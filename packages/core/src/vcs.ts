@@ -5,7 +5,7 @@ import { Cause, Context, Effect, Layer, Schema, Stream } from "effect"
 import type { VcsDefinition, VcsDraft } from "@opencode-ai/plugin/effect/vcs"
 import { FileDiff } from "@opencode-ai/schema/file-diff"
 import { FileSystem } from "@opencode-ai/schema/filesystem"
-import { BranchList, FileStatus, Info, Mode } from "@opencode-ai/schema/vcs"
+import { Base, BranchList, FileStatus, Info, Mode } from "@opencode-ai/schema/vcs"
 import { VcsEvent } from "@opencode-ai/schema/vcs-event"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { FSUtil } from "@opencode-ai/util/fs-util"
@@ -14,10 +14,15 @@ import { Bus } from "./bus.js"
 import { State } from "./state.js"
 import { emptyPatch, MAX_TOTAL_PATCH_BYTES, PATCH_CONTEXT_LINES } from "./vcs/patch.js"
 
-export { BranchList, FileStatus, Info, Mode }
+export { Base, BranchList, FileStatus, Info, Mode }
+
+export class DiffError extends Schema.TaggedError<DiffError>()("Vcs.DiffError", {
+  message: Schema.String,
+}) {}
 
 export interface DiffOptions {
   readonly context?: number
+  readonly base?: string
 }
 
 export interface BranchOptions {
@@ -27,12 +32,15 @@ export interface BranchOptions {
 
 export interface Adapter {
   readonly info: () => Effect.Effect<Info>
+  readonly base?: () => Effect.Effect<Base | null, DiffError>
   readonly branches: (options?: BranchOptions) => Effect.Effect<BranchList>
   readonly status: () => Effect.Effect<FileStatus[]>
-  readonly diff: (mode: Mode, options?: DiffOptions) => Effect.Effect<FileDiff.Info[]>
+  readonly diff: (mode: Mode, options?: DiffOptions) => Effect.Effect<FileDiff.Info[], DiffError>
 }
 
-export interface Interface extends Adapter, State.Transformable<VcsDraft> {}
+export interface Interface extends Adapter, State.Transformable<VcsDraft> {
+  readonly base: () => Effect.Effect<Base | null, DiffError>
+}
 
 interface Data {
   readonly providers: Map<string, VcsDefinition>
@@ -56,6 +64,7 @@ const layer = Layer.effect(
       ...(vcs ? { store: vcs.store } : {}),
     }
     const decodeInfo = Schema.decodeUnknownEffect(Schema.toType(Info))
+    const decodeBase = Schema.decodeUnknownEffect(Schema.NullOr(Base))
     const decodeBranches = Schema.decodeUnknownEffect(BranchList)
     const decodeStatus = Schema.decodeUnknownEffect(Schema.Array(FileStatus))
     const decodeDiff = Schema.decodeUnknownEffect(Schema.Array(FileDiff.Info))
@@ -85,6 +94,27 @@ const layer = Layer.effect(
                 Effect.as(fallback),
               ),
         ),
+      )
+    const review = <A>(provider: VcsDefinition, operation: "base" | "diff", effect: Effect.Effect<A, unknown>) =>
+      effect.pipe(
+        Effect.catchCause((cause) => {
+          if (Cause.hasInterrupts(cause)) return Effect.failCause(cause).pipe(Effect.orDie)
+          const error = Cause.squash(cause)
+          return Effect.logWarning("vcs provider failed", { provider: provider.id, operation, cause }).pipe(
+            Effect.andThen(
+              Effect.fail(
+                error instanceof DiffError
+                  ? error
+                  : new DiffError({
+                      message:
+                        operation === "base"
+                          ? "VCS provider could not resolve a review base"
+                          : "VCS provider could not produce a diff",
+                    }),
+              ),
+            ),
+          )
+        }),
       )
     const refresh = Effect.fn("Vcs.refresh")(function* () {
       const provider = selected()
@@ -117,6 +147,11 @@ const layer = Layer.effect(
       info: Effect.fn("Vcs.info")(function* () {
         return current.info
       }),
+      base: Effect.fn("Vcs.base")(function* () {
+        const provider = selected()
+        if (!provider?.base) return null
+        return yield* review(provider, "base", provider.base(scope).pipe(Effect.flatMap(decodeBase)))
+      }),
       branches: Effect.fn("Vcs.branches")(function* (options?: BranchOptions) {
         const provider = selected()
         if (provider)
@@ -145,18 +180,18 @@ const layer = Layer.effect(
       diff: Effect.fn("Vcs.diff")(function* (mode: Mode, options?: DiffOptions) {
         const provider = selected()
         if (!provider) return []
-        const rows = yield* protect(
+        const rows = yield* review(
           provider,
           "diff",
           provider
             .diff({
               ...scope,
               mode,
+              ...(options?.base !== undefined ? { base: options.base } : {}),
               context: options?.context ?? PATCH_CONTEXT_LINES,
               maxOutputBytes: MAX_TOTAL_PATCH_BYTES,
             })
             .pipe(Effect.flatMap(decodeDiff)),
-          [],
         )
         let total = 0
         return rows.map((row) => {
