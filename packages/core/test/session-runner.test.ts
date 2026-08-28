@@ -582,6 +582,18 @@ const scenario = (
     }),
   )
 
+// Subscribe before resuming; model requests can arrive before retry backoff is scheduled.
+const subscribeRetries = (s: Scenario) =>
+  Effect.gen(function* () {
+    const scheduled = yield* Queue.unbounded<SessionMessage.ID>()
+    yield* s.bus.subscribe(SessionEvent.RetryScheduled).pipe(
+      Stream.filter((event) => event.data.sessionID === sessionID),
+      Stream.runForEach((event) => Queue.offer(scheduled, event.data.assistantMessageID)),
+      Effect.forkScoped({ startImmediately: true }),
+    )
+    return scheduled
+  })
+
 const providerUnavailable = () =>
   new AIError({
     reason: new TransportError({
@@ -4357,8 +4369,9 @@ describe("SessionRunnerLLM", () => {
     yield* s.llm.push(Stream.fail(providerUnavailable()))
     yield* s.llm.push(TestLLM.text("Recovered", "retry-success"))
 
+    const scheduled = yield* subscribeRetries(s)
     const run = yield* s.resume.pipe(Effect.forkChild)
-    yield* s.llm.wait(1)
+    yield* Queue.take(scheduled)
     yield* TestClock.adjust("1599 millis")
     expect(s.requests).toHaveLength(1)
     yield* TestClock.adjust("801 millis")
@@ -4379,13 +4392,9 @@ describe("SessionRunnerLLM", () => {
   scenario("does not start another physical attempt after interruption during retry backoff", function* (s) {
     yield* s.admit("Interrupt retry backoff")
     yield* s.llm.push(Stream.fail(providerUnavailable()), TestLLM.text("Must not run", "unused-retry"))
-    const scheduled = yield* s.bus.subscribe(SessionEvent.RetryScheduled).pipe(
-      Stream.filter((event) => event.data.sessionID === sessionID),
-      Stream.runHead,
-      Effect.forkScoped({ startImmediately: true }),
-    )
+    const scheduled = yield* subscribeRetries(s)
     const run = yield* s.resume.pipe(Effect.forkChild)
-    yield* Fiber.join(scheduled)
+    yield* Queue.take(scheduled)
     yield* s.session.interrupt(sessionID)
     const exit = yield* Fiber.await(run)
     expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBe(true)
@@ -4425,8 +4434,9 @@ describe("SessionRunnerLLM", () => {
     yield* s.llm.push(Stream.fail(incompleteStream()))
     yield* s.llm.push(TestLLM.text("Recovered", "incomplete-stream-success"))
 
+    const scheduled = yield* subscribeRetries(s)
     const run = yield* s.resume.pipe(Effect.forkChild)
-    yield* s.llm.wait(1)
+    yield* Queue.take(scheduled)
     yield* TestClock.adjust("2400 millis")
     yield* Fiber.join(run)
 
@@ -4446,8 +4456,9 @@ describe("SessionRunnerLLM", () => {
     ])
     yield* s.llm.push(TestLLM.text("Recovered", "unknown-finish-success"))
 
+    const scheduled = yield* subscribeRetries(s)
     const run = yield* s.resume.pipe(Effect.forkChild)
-    yield* s.llm.wait(1)
+    yield* Queue.take(scheduled)
     yield* TestClock.adjust("2400 millis")
     yield* Fiber.join(run)
 
@@ -4464,8 +4475,9 @@ describe("SessionRunnerLLM", () => {
     yield* s.llm.push(Stream.fail(rateLimited(5_000)))
     yield* s.llm.push(TestLLM.text("Recovered", "retry-after-success"))
 
+    const scheduled = yield* subscribeRetries(s)
     const run = yield* s.resume.pipe(Effect.forkChild)
-    yield* s.llm.wait(1)
+    yield* Queue.take(scheduled)
     yield* TestClock.adjust("4999 millis")
     expect(s.requests).toHaveLength(1)
     yield* TestClock.adjust("1 millis")
@@ -4478,8 +4490,9 @@ describe("SessionRunnerLLM", () => {
     yield* s.llm.push(Stream.fail(rateLimited(3_600_000)))
     yield* s.llm.push(TestLLM.text("Recovered", "retry-cap-success"))
 
+    const scheduled = yield* subscribeRetries(s)
     const run = yield* s.resume.pipe(Effect.forkChild)
-    yield* s.llm.wait(1)
+    yield* Queue.take(scheduled)
     yield* TestClock.adjust("899999 millis")
     expect(s.requests).toHaveLength(1)
     yield* TestClock.adjust("1 millis")
@@ -4500,8 +4513,9 @@ describe("SessionRunnerLLM", () => {
     )
     yield* s.llm.push(TestLLM.text(" continuation", "continued-text"))
 
+    const scheduled = yield* subscribeRetries(s)
     const run = yield* s.resume.pipe(Effect.forkChild)
-    yield* s.llm.wait(1)
+    yield* Queue.take(scheduled)
     yield* TestClock.adjust("2400 millis")
     yield* Fiber.join(run)
 
@@ -4549,8 +4563,9 @@ describe("SessionRunnerLLM", () => {
     ])
     yield* s.llm.push(TestLLM.text(" continuation", "unknown-continuation"))
 
+    const scheduled = yield* subscribeRetries(s)
     const run = yield* s.resume.pipe(Effect.forkChild)
-    yield* s.llm.wait(1)
+    yield* Queue.take(scheduled)
     yield* TestClock.adjust("2400 millis")
     yield* Fiber.join(run)
 
@@ -4579,8 +4594,9 @@ describe("SessionRunnerLLM", () => {
     )
     yield* s.llm.push(TestLLM.text(" continuation", "rate-limit-continuation"))
 
+    const scheduled = yield* subscribeRetries(s)
     const run = yield* s.resume.pipe(Effect.forkChild)
-    yield* s.llm.wait(1)
+    yield* Queue.take(scheduled)
     yield* TestClock.adjust("4999 millis")
     expect(s.requests).toHaveLength(1)
     yield* TestClock.adjust("1 millis")
@@ -4617,8 +4633,9 @@ describe("SessionRunnerLLM", () => {
     )
     yield* s.llm.push(TestLLM.text(" continuation", "unknown-failure-continuation"))
 
+    const scheduled = yield* subscribeRetries(s)
     const run = yield* s.resume.pipe(Effect.forkChild)
-    yield* s.llm.wait(1)
+    yield* Queue.take(scheduled)
     yield* TestClock.adjust("2400 millis")
     yield* Fiber.join(run)
 
@@ -4647,8 +4664,9 @@ describe("SessionRunnerLLM", () => {
     )
     yield* s.llm.push(TestLLM.text("Recovered", "reasoning-recovery"))
 
+    const scheduled = yield* subscribeRetries(s)
     const run = yield* s.resume.pipe(Effect.forkChild)
-    yield* s.llm.wait(1)
+    yield* Queue.take(scheduled)
     yield* TestClock.adjust("2400 millis")
     yield* Fiber.join(run)
 
@@ -4689,8 +4707,9 @@ describe("SessionRunnerLLM", () => {
     )
     yield* s.llm.push(TestLLM.text("Recovered", "reasoning-transport-recovery"))
 
+    const scheduled = yield* subscribeRetries(s)
     const run = yield* s.resume.pipe(Effect.forkChild)
-    yield* s.llm.wait(1)
+    yield* Queue.take(scheduled)
     yield* TestClock.adjust("2400 millis")
     yield* Fiber.join(run)
 
@@ -4725,9 +4744,9 @@ describe("SessionRunnerLLM", () => {
     )
     yield* s.llm.push(TestLLM.text("Recovered", "tool-recovery"))
 
+    const scheduled = yield* subscribeRetries(s)
     const run = yield* s.resume.pipe(Effect.forkChild)
-    yield* s.llm.wait(1)
-    while (!(yield* recordedEventTypes(sessionID)).includes("session.retry.scheduled.1")) yield* Effect.yieldNow
+    yield* Queue.take(scheduled)
     yield* TestClock.adjust("2400 millis")
     yield* Fiber.join(run)
 
@@ -4761,9 +4780,9 @@ describe("SessionRunnerLLM", () => {
     )
     yield* s.llm.push(TestLLM.text("Recovered", "tool-defect-recovery"))
 
+    const scheduled = yield* subscribeRetries(s)
     const run = yield* s.resume.pipe(Effect.forkChild)
-    yield* s.llm.wait(1)
-    while (!(yield* recordedEventTypes(sessionID)).includes("session.retry.scheduled.1")) yield* Effect.yieldNow
+    yield* Queue.take(scheduled)
     yield* TestClock.adjust("2400 millis")
     yield* Fiber.join(run)
 
@@ -4784,12 +4803,7 @@ describe("SessionRunnerLLM", () => {
   scenario(
     "shares retry accounting and assistant identity across transparent retries and partial continuations",
     function* (s) {
-      const scheduled = yield* Queue.unbounded<SessionMessage.ID>()
-      yield* s.bus.subscribe(SessionEvent.RetryScheduled).pipe(
-        Stream.filter((event) => event.data.sessionID === sessionID),
-        Stream.runForEach((event) => Queue.offer(scheduled, event.data.assistantMessageID)),
-        Effect.forkScoped({ startImmediately: true }),
-      )
+      const scheduled = yield* subscribeRetries(s)
       yield* s.admit("Mix retry paths")
       const failure = incompleteStream()
       const partial = TestLLM.failAfter(
@@ -4831,11 +4845,11 @@ describe("SessionRunnerLLM", () => {
       ),
     )
 
+    const scheduled = yield* subscribeRetries(s)
     const run = yield* s.resume.pipe(Effect.forkChild)
-    yield* s.llm.wait(1)
-    for (const [index, delay] of [2_400, 4_800, 9_600, 19_200].entries()) {
+    for (const delay of [2_400, 4_800, 9_600, 19_200]) {
+      yield* Queue.take(scheduled)
       yield* TestClock.adjust(delay)
-      yield* s.llm.wait(index + 2)
     }
     expect(yield* Fiber.join(run).pipe(Effect.flip)).toBe(failure)
     expect(s.requests).toHaveLength(5)
@@ -4849,11 +4863,11 @@ describe("SessionRunnerLLM", () => {
     const failure = providerUnavailable()
     yield* s.llm.always(Stream.fail(failure))
 
+    const scheduled = yield* subscribeRetries(s)
     const run = yield* s.resume.pipe(Effect.forkChild)
-    yield* s.llm.wait(1)
-    for (const [index, delay] of [2_400, 4_800, 9_600, 19_200].entries()) {
+    for (const delay of [2_400, 4_800, 9_600, 19_200]) {
+      yield* Queue.take(scheduled)
       yield* TestClock.adjust(delay)
-      yield* s.llm.wait(index + 2)
     }
     expect(yield* Fiber.join(run).pipe(Effect.flip)).toBe(failure)
     expect(s.requests).toHaveLength(5)
@@ -4898,8 +4912,9 @@ describe("SessionRunnerLLM", () => {
     yield* s.llm.push(Stream.fail(failure))
     yield* s.llm.push(TestLLM.tool("call-after-retry", "echo", { text: "recovered" }), TestLLM.stop())
 
+    const scheduled = yield* subscribeRetries(s)
     const run = yield* s.resume.pipe(Effect.forkChild)
-    yield* s.llm.wait(1)
+    yield* Queue.take(scheduled)
     yield* TestClock.adjust("2400 millis")
     yield* Fiber.join(run)
 
