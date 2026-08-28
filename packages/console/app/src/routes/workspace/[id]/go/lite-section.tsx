@@ -642,6 +642,7 @@ export function LiteSection(props: { lite: LiteSubscription | undefined }) {
           <ul data-slot="promo-models">
             <li>Grok 4.6</li>
             <li>GPT 5.6 Luna</li>
+            <li>GLM-5.3-Flash</li>
             <li>GLM-5.3</li>
             <li>GLM-5.2</li>
             <li>GLM-5.1</li>
@@ -653,6 +654,7 @@ export function LiteSection(props: { lite: LiteSubscription | undefined }) {
             <li>MiniMax M2.7</li>
             <li>Muse Spark 1.2 Contributor</li>
             <li>Qwen3.8 Max</li>
+            <li>Qwen3.8 Flash</li>
             <li>Qwen3.7 Max</li>
             <li>Qwen3.7 Plus</li>
             <li>Qwen3.6 Plus</li>
@@ -662,7 +664,6 @@ export function LiteSection(props: { lite: LiteSubscription | undefined }) {
             <li>MiMo-V2.5</li>
             <li>MiMo-V2.5-Pro</li>
             <li>Hy3</li>
-            <li>Ox Alpha Free</li>
           </ul>
           <p data-slot="promo-description">{i18n.t("workspace.lite.promo.footer")}</p>
           <div data-slot="subscribe-actions">
