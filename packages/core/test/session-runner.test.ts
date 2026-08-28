@@ -2897,6 +2897,54 @@ describe("SessionRunnerLLM", () => {
     ])
   })
 
+  scenario("keeps one durable reasoning part when reasoning closes after text", function* (s) {
+    yield* s.admit("Think and answer")
+
+    const details = [{ type: "reasoning.text", text: "thinking", signature: "signed", index: 0 }]
+    yield* s.llm.push(
+      TestLLM.stop(
+        LLMEvent.reasoningStart({ id: "reasoning-0" }),
+        LLMEvent.reasoningDelta({ id: "reasoning-0", text: "thinking" }),
+        LLMEvent.textStart({ id: "text-0" }),
+        LLMEvent.textDelta({ id: "text-0", text: "Hello" }),
+        LLMEvent.textDelta({ id: "text-0", text: " world" }),
+        LLMEvent.reasoningEnd({
+          id: "reasoning-0",
+          providerMetadata: { openai: { reasoningField: "reasoning", reasoningDetails: details } },
+        }),
+        LLMEvent.textEnd({ id: "text-0" }),
+      ),
+    )
+    yield* s.resume
+    yield* replaySessionProjection(sessionID)
+
+    const assistant = requireAssistant(yield* s.context)
+    expect(assistant.content.filter((part) => part.type === "reasoning")).toHaveLength(1)
+    expect(yield* s.context).toMatchObject([
+      Expected.user("Think and answer"),
+      Expected.assistant({}, [
+        {
+          type: "reasoning",
+          text: "thinking",
+          state: { reasoningField: "reasoning", reasoningDetails: details },
+        },
+        { type: "text", text: "Hello world" },
+      ]),
+    ])
+
+    yield* s.admit("Continue")
+    yield* s.llm.push([])
+    yield* s.resume
+
+    expect(s.requests[1]?.messages[1]?.content.filter((part) => part.type === "reasoning")).toEqual([
+      {
+        type: "reasoning",
+        text: "thinking",
+        providerMetadata: { openai: { reasoningField: "reasoning", reasoningDetails: details } },
+      },
+    ])
+  })
+
   scenario("restores durable text provider metadata in the next request", function* (s) {
     yield* s.admit("Check first")
 
