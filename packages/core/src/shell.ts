@@ -38,7 +38,6 @@ type Active = {
   // Immutable snapshot; lifecycle updates replace it via immer `produce`.
   info: Info
   file: string
-  size: number
   // Resolves with the terminal Info once the command exits, times out, or is killed. A wait
   // started after termination resolves immediately from the already-completed deferred.
   done: Deferred.Deferred<Info, NotFoundError>
@@ -118,6 +117,7 @@ const layer = () =>
       const global = yield* Global.Service
       const shell = yield* ShellSelect.Service
       const environment = yield* Environment.Service
+      const fs = yield* FSUtil.Service
       const hooks = yield* PluginHooks.Service
       const environments = yield* SessionEnvironment.Service
       const context = yield* Effect.context()
@@ -191,9 +191,13 @@ const layer = () =>
         const session = yield* require(id)
         const cursor = input?.cursor ?? 0
         const limit = input?.limit ?? 65536
-        if (cursor >= session.size) return { output: "", cursor: session.size, size: session.size, truncated: false }
+        const size = yield* fs.stat(session.file).pipe(
+          Effect.map((info) => Number(info.size)),
+          Effect.orElseSucceed(() => 0),
+        )
+        if (cursor >= size) return { output: "", cursor: size, size, truncated: false }
         const start = Math.max(0, cursor)
-        const length = Math.min(limit, session.size - start)
+        const length = Math.min(limit, size - start)
         const buffer = Buffer.alloc(length)
         const bytesRead = yield* Effect.promise(
           () =>
@@ -212,7 +216,7 @@ const layer = () =>
         return {
           output: buffer.subarray(0, bytesRead).toString("utf8"),
           cursor: start + bytesRead,
-          size: session.size,
+          size,
           truncated: false,
         }
       })
@@ -262,36 +266,32 @@ const layer = () =>
         runFork(
           Effect.scoped(
             Effect.gen(function* () {
-              const handle = yield* environment.spawner
-                .spawn(
-                  ChildProcess.make(invocation.shell, args, {
-                    cwd: invocation.cwd,
-                    env: invocation.env,
-                    stdin: "ignore",
-                    detached: process.platform !== "win32",
-                    forceKillAfter: Duration.seconds(3),
-                  }),
-                )
-                .pipe(
-                  Effect.mapError((cause) => new AppProcess.AppProcessError({ command: invocation.command, cause })),
-                )
+              const command = ChildProcess.make(invocation.shell, args, {
+                cwd: invocation.cwd,
+                env: invocation.env,
+                stdin: "ignore",
+                detached: process.platform !== "win32",
+                forceKillAfter: Duration.seconds(3),
+              })
+              const handle = yield* (
+                environment.spawner.spawnToFile?.(command, file) ?? environment.spawner.spawn(command)
+              ).pipe(Effect.mapError((cause) => new AppProcess.AppProcessError({ command: invocation.command, cause })))
               const session: Active = {
                 info: produce(info, (draft) => {
                   draft.pid = handle.pid
                 }),
                 file,
-                size: 0,
                 done: Deferred.makeUnsafe<Info, NotFoundError>(),
               }
               sessions.set(id, session)
 
-              const stream = createWriteStream(file)
+              // Native redirection may already have written output before spawn returned.
+              const stream = createWriteStream(file, { flags: "a" })
               const outputDone = Latch.makeUnsafe()
               const pump = handle.all.pipe(
                 Stream.runForEach((chunk: Uint8Array) =>
                   Effect.sync(() => {
                     stream.write(chunk)
-                    session.size += chunk.length
                   }),
                 ),
               )
@@ -396,6 +396,7 @@ export const node = makeLocationNode({
     Global.node,
     ShellSelect.node,
     Environment.node,
+    FSUtil.node,
     PluginHooks.node,
     SessionEnvironment.node,
     cleanupNode,

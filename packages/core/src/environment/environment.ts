@@ -10,7 +10,7 @@ import { Workspace } from "../workspace.js"
 
 export interface Interface {
   readonly files: Files
-  readonly spawner: ChildProcessSpawner["Service"]
+  readonly spawner: CrossSpawnSpawner.Spawner
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Environment") {}

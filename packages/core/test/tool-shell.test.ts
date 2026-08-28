@@ -1265,6 +1265,47 @@ describe("ShellTool", () => {
       ),
     { timeout: 15_000 },
   )
+  ;(isWindows ? it.live : it.live.skip)(
+    "captures append-only output without waiting for inherited handles",
+    () =>
+      Effect.gen(function* () {
+        const global = yield* Global.Service
+        reset()
+        yield* withSession(global.tmp, () =>
+          Effect.gen(function* () {
+            const shell = yield* Shell.Service
+            const expected = "x".repeat(1024 * 1024) + "TAILZ|protected"
+            const pidfile = path.join(global.tmp, "child.pid")
+            yield* Effect.promise(() =>
+              Bun.write(
+                path.join(global.tmp, "parent.cjs"),
+                [
+                  'const fs = require("node:fs")',
+                  'const child = require("node:child_process").spawn(process.execPath, ["-e", "setTimeout(() => {}, 15000)"], { detached: true, stdio: "inherit", cwd: require("node:os").tmpdir() })',
+                  'fs.writeFileSync("child.pid", String(child.pid)); child.unref()',
+                  'fs.writeSync(1, "x".repeat(1024 * 1024)); fs.writeSync(2, "TAIL")',
+                  'fs.writeSync(1, Buffer.from("Z"), 0, 1, 0)',
+                  'try { fs.ftruncateSync(1, 0) } catch { fs.writeSync(1, "|protected") }',
+                ].join("\n"),
+              ),
+            )
+            yield* Effect.addFinalizer(() =>
+              Effect.tryPromise(() => Bun.file(pidfile).text()).pipe(
+                Effect.flatMap((pid) => Effect.try(() => process.kill(Number(pid)))),
+                Effect.ignore,
+              ),
+            )
+            const info = yield* shell.create({ command: "node parent.cjs", timeout: 4000 })
+            const result = yield* shell.wait(info.id).pipe(Effect.timeoutOption("6 seconds"))
+            expect(result.valueOrUndefined).toMatchObject({ status: "exited", exit: 0 })
+            expect((yield* shell.output(info.id, { limit: expected.length + 1 })).output).toBe(expected)
+            const pid = Number(yield* Effect.promise(() => Bun.file(pidfile).text()))
+            expect(() => process.kill(pid, 0)).not.toThrow()
+          }),
+        )
+      }),
+    { timeout: 15_000 },
+  )
 
   it.live("returns the shell id for a background command", () =>
     Effect.acquireUseRelease(
