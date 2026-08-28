@@ -234,7 +234,7 @@ describe("Npm.add", () => {
 
     const first = await Effect.gen(function* () {
       const npm = yield* Npm.Service
-      const mutableEntry = yield* npm.add(mutable, { refresh: true })
+      const mutableEntry = yield* npm.add(mutable)
       const pinnedEntry = yield* npm.add(pinned, { refresh: true })
       yield* Effect.promise(async () => {
         await Bun.write(path.join(fixture.repository, "index.js"), 'export default { root: "second" }\n')
