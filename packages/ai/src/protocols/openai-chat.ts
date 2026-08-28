@@ -1054,10 +1054,10 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
       events.push(...result.events)
     }
 
-    const contentFiltered = finishReason?.normalized === "content-filter"
+    const incompleteTools = finishReason?.normalized === "content-filter" || finishReason?.normalized === "length"
     if (
       finishReason !== undefined &&
-      !contentFiltered &&
+      !incompleteTools &&
       state.finishReason === undefined &&
       Object.keys(pendingTools).length
     )
@@ -1067,10 +1067,10 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
         ProviderShared.encodeJson(event),
       )
 
-    // A content filter terminates the response without confirming pending tool calls.
+    // Filtering or truncation terminates the response without confirming pending tool calls.
     const finished =
       finishReason !== undefined &&
-      !contentFiltered &&
+      !incompleteTools &&
       state.finishReason === undefined &&
       Object.keys(tools).length > 0
         ? yield* ToolStream.finishAll(ADAPTER, tools)
