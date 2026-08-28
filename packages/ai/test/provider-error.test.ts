@@ -115,8 +115,10 @@ describe("provider error classification", () => {
         classifyProviderFailure({ message: "Invalid credentials, try again", status: 401 }),
         classifyProviderFailure({ message: "Quota exceeded, try again", status: 429 }),
         classifyProviderFailure({ message: "Rate limit exceeded, try again" }),
+        classifyProviderFailure({ message: "Upstream request failed: validation failed", status: 400 }),
+        classifyProviderFailure({ message: "Try again", status: 200 }),
       ].map((failure) => failure._tag),
-    ).toEqual(["Authentication", "QuotaExceeded", "RateLimit"])
+    ).toEqual(["Authentication", "QuotaExceeded", "RateLimit", "InvalidRequest", "ProviderInternal"])
   })
 
   test("classifies transient client statuses as provider internal", () => {

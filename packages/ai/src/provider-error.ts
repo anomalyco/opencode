@@ -141,7 +141,9 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
     input.status === 408 ||
     input.status === 409 ||
     (input.status !== undefined && input.status >= 500) ||
-    SERVER_ERROR_TEXT.test(text) ||
+    ((input.status === undefined || input.status < 400) &&
+      !codes.some((code) => INVALID_REQUEST_CODES.has(code)) &&
+      SERVER_ERROR_TEXT.test(text)) ||
     codes.some((code) => SERVER_CODES.has(code) || code.includes("exhausted") || code.includes("unavailable"))
   )
     return new ProviderInternalError({
