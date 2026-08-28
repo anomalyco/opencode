@@ -1,12 +1,12 @@
 import { AISDK } from "@opencode-ai/core/aisdk"
 import { describe, expect, mock } from "bun:test"
 import { Effect } from "effect"
-import { Catalog } from "@opencode-ai/core/catalog"
 import { Model } from "@opencode-ai/core/model"
 import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { GitLabPlugin } from "@opencode-ai/core/plugin/provider/gitlab"
 import { Provider } from "@opencode-ai/core/provider"
+import { withEnv } from "../fixture/env"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
@@ -15,31 +15,9 @@ const it = testEffect(PluginTestLayer)
 
 const addPlugin = Effect.fn(function* () {
   const plugin = yield* Plugin.Service
-  const aisdk = yield* AISDK.Service
   const host = yield* PluginHost.make(plugin)
   yield* GitLabPlugin.effect(host)
 })
-
-function withEnv<A, E, R>(vars: Record<string, string | undefined>, effect: () => Effect.Effect<A, E, R>) {
-  return Effect.acquireUseRelease(
-    Effect.sync(() => {
-      const previous = Object.fromEntries(Object.keys(vars).map((key) => [key, process.env[key]]))
-      Object.entries(vars).forEach(([key, value]) => {
-        if (value === undefined) delete process.env[key]
-        else process.env[key] = value
-      })
-      return previous
-    }),
-    effect,
-    (previous) =>
-      Effect.sync(() =>
-        Object.entries(previous).forEach(([key, value]) => {
-          if (value === undefined) delete process.env[key]
-          else process.env[key] = value
-        }),
-      ),
-  )
-}
 
 void mock.module("gitlab-ai-provider", () => ({
   VERSION: "test-version",
@@ -64,7 +42,6 @@ describe("GitLabPlugin", () => {
       () =>
         Effect.gen(function* () {
           gitlabSDKOptions.length = 0
-          const plugin = yield* Plugin.Service
           const aisdk = yield* AISDK.Service
           yield* addPlugin()
           yield* aisdk.runSDK({
@@ -102,7 +79,6 @@ describe("GitLabPlugin", () => {
       () =>
         Effect.gen(function* () {
           gitlabSDKOptions.length = 0
-          const plugin = yield* Plugin.Service
           const aisdk = yield* AISDK.Service
           yield* addPlugin()
           yield* aisdk.runSDK({
@@ -128,7 +104,6 @@ describe("GitLabPlugin", () => {
       () =>
         Effect.gen(function* () {
           gitlabSDKOptions.length = 0
-          const plugin = yield* Plugin.Service
           const aisdk = yield* AISDK.Service
           yield* addPlugin()
           yield* aisdk.runSDK({
@@ -170,7 +145,6 @@ describe("GitLabPlugin", () => {
   it.effect("ignores non-GitLab SDK packages", () =>
     Effect.gen(function* () {
       gitlabSDKOptions.length = 0
-      const plugin = yield* Plugin.Service
       const aisdk = yield* AISDK.Service
       yield* addPlugin()
       const result = yield* aisdk.runSDK({
@@ -189,7 +163,6 @@ describe("GitLabPlugin", () => {
 
   it.effect("uses workflowChat for duo workflow models and preserves selectedModelRef", () =>
     Effect.gen(function* () {
-      const plugin = yield* Plugin.Service
       const aisdk = yield* AISDK.Service
       const calls: [string, unknown][] = []
       yield* addPlugin()
@@ -223,7 +196,6 @@ describe("GitLabPlugin", () => {
 
   it.effect("uses exact static workflow model ids when the provider recognizes them", () =>
     Effect.gen(function* () {
-      const plugin = yield* Plugin.Service
       const aisdk = yield* AISDK.Service
       const calls: [string, unknown][] = []
       yield* addPlugin()
@@ -251,7 +223,6 @@ describe("GitLabPlugin", () => {
 
   it.effect("uses provider feature flags instead of model settings feature flags", () =>
     Effect.gen(function* () {
-      const plugin = yield* Plugin.Service
       const aisdk = yield* AISDK.Service
       const calls: [string, unknown][] = []
       yield* addPlugin()
@@ -278,7 +249,6 @@ describe("GitLabPlugin", () => {
 
   it.effect("uses agenticChat with provider aiGatewayHeaders and feature flags for normal models", () =>
     Effect.gen(function* () {
-      const plugin = yield* Plugin.Service
       const aisdk = yield* AISDK.Service
       const calls: [string, unknown][] = []
       yield* addPlugin()
