@@ -477,8 +477,8 @@ describe("SubagentTool", () => {
           expect(yield* call(missing, "call-missing-child")).toEqual({
             status: "error",
             error: {
-              type: "tool.execution",
-              message: `Subagent session not found: ${missing}`,
+              type: "unknown",
+              message: `Subagent session not found: ${missing}\nSession.NotFoundError`,
             },
           })
           expect(yield* call(unrelated.id, "call-unrelated-child")).toEqual({
