@@ -1,10 +1,10 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { Effect, Layer } from "effect"
 import { Command } from "@opencode-ai/core/command"
 import { Bus } from "@opencode-ai/core/bus"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Location } from "@opencode-ai/core/location"
-import { MCP } from "@opencode-ai/core/mcp/index"
+import { Mcp } from "@opencode-ai/core/mcp/index"
 import { CommandPlugin } from "@opencode-ai/core/plugin/command"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/schema/session"
@@ -16,6 +16,7 @@ import { emptyMcpLayer } from "../fixture/mcp"
 import { location } from "../fixture/location"
 import { testEffect } from "../lib/effect"
 import { host } from "./host"
+import PROMPT_REVIEW from "../../src/plugin/command/review.txt"
 
 const directory = AbsolutePath.make("/repo/packages/app")
 const project = AbsolutePath.make("/repo")
@@ -24,13 +25,18 @@ const locationLayer = Layer.succeed(
   Location.Service.of(location({ directory }, { projectDirectory: project })),
 )
 const it = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Command.node, MCP.node, Bus.node]), [
-    [MCP.node, emptyMcpLayer],
+  AppNodeBuilder.build(LayerNode.group([Command.node, Mcp.node, Bus.node]), [
+    [Mcp.node, emptyMcpLayer],
     [Location.node, locationLayer],
   ]),
 )
 
 describe("CommandPlugin.Plugin", () => {
+  test("refers to tools by their available capabilities", () => {
+    expect(PROMPT_REVIEW).toContain("Available documentation and code-search tools")
+    expect(PROMPT_REVIEW).not.toContain("Exa Code Context")
+  })
+
   it.effect("registers built-in init and review commands", () =>
     Effect.gen(function* () {
       const command = yield* Command.Service

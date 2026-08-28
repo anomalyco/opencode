@@ -28,8 +28,7 @@ const it = testEffect(PluginTestLayer)
 const addPlugin = Effect.fn(function* () {
   const plugin = yield* Plugin.Service
   const host = yield* PluginHost.make(plugin)
-  const integrations = yield* Integration.Service
-  yield* OpenAIPlugin.effect(host).pipe(Effect.provideService(Integration.Service, integrations))
+  yield* OpenAIPlugin.effect(host)
 })
 
 const addGithubCopilotPlugin = Effect.fn(function* () {
@@ -65,7 +64,8 @@ describe("OpenAIPlugin", () => {
   it.effect("registers browser and headless ChatGPT OAuth methods", () =>
     Effect.gen(function* () {
       yield* addPlugin()
-      expect((yield* (yield* Integration.Service).get(Integration.ID.make("openai")))?.methods).toEqual([
+      const integrations = yield* Integration.Service
+      expect((yield* integrations.get(Integration.ID.make("openai")))?.methods).toEqual([
         {
           id: Integration.MethodID.make("chatgpt-browser"),
           type: "oauth",

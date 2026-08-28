@@ -5,7 +5,7 @@ import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Bus } from "@opencode-ai/core/bus"
 import { Location } from "@opencode-ai/core/location"
 import { Pty } from "@opencode-ai/core/pty"
-import type { PtyID } from "@opencode-ai/core/pty/schema"
+import { PtyID } from "@opencode-ai/core/pty/schema"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { ShellSelect } from "@opencode-ai/core/shell/select"
 import { location } from "../fixture/location"
@@ -88,7 +88,7 @@ describe("pty", () => {
   it.live("returns typed not found errors for missing sessions", () =>
     Effect.gen(function* () {
       const pty = yield* Pty.Service
-      const id = "pty_missing" as PtyID
+      const id = PtyID.make("pty_missing")
 
       for (const result of [
         yield* pty.get(id).pipe(Effect.asVoid, Effect.exit),
