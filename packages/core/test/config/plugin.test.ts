@@ -431,8 +431,8 @@ describe("PluginSupervisor config", () => {
   it.live("unblocks flush when plugin activation fails", () =>
     Effect.gen(function* () {
       const sdk = yield* SdkPlugins.Service
-      yield* sdk.register(EffectPlugin.define({ id: "duplicate-id", effect: () => Effect.void }))
-      yield* sdk.register(EffectPlugin.define({ id: "duplicate-id", effect: () => Effect.void }))
+      yield* sdk.register(define({ id: "duplicate-id", effect: () => Effect.void }))
+      yield* sdk.register(define({ id: "duplicate-id", effect: () => Effect.void }))
       yield* withLocation(
         undefined,
         Effect.gen(function* () {
