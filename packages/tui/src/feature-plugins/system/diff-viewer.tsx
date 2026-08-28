@@ -67,8 +67,8 @@ function storedView(value: unknown): DiffView | undefined {
 }
 
 function diffSourceLabel(mode: DiffMode) {
-  if (mode === "branch") return "main branch"
-  return "working tree"
+  if (mode === "branch") return "Main branch"
+  return "Working tree"
 }
 
 function DiffViewer(props: { context: Plugin.Context }) {
@@ -617,7 +617,7 @@ export function DiffViewerContent(props: {
     dialog.set({ size: "medium", centered: true })
   }
 
-  const HelpShortcut = () => (
+  const HelpShortcut = (props: { compact?: boolean }) => (
     <Show when={helpShortcut()}>
       {(shortcut) => (
         <text
@@ -632,7 +632,10 @@ export function DiffViewerContent(props: {
             openHelpDialog()
           }}
         >
-          {shortcut()} <span style={{ fg: theme.text.subdued }}>help</span>
+          {props.compact ? "?" : shortcut()}
+          <Show when={!props.compact}>
+            <span style={{ fg: theme.text.subdued }}> help</span>
+          </Show>
         </text>
       )}
     </Show>
@@ -644,27 +647,6 @@ export function DiffViewerContent(props: {
 
   return (
     <box width="100%" height="100%" backgroundColor={theme.background.default}>
-      <box flexDirection="row" flexShrink={0} paddingTop={1} paddingLeft={2} paddingRight={2} gap={1}>
-        <text fg={theme.text.default} attributes={TextAttributes.BOLD}>
-          Diff
-        </text>
-        <text fg={theme.text.subdued}>{diffSourceLabel(mode())}</text>
-        <box flexGrow={1} />
-        <Show when={!props.loading && !props.error}>
-          <text fg={theme.text.subdued}>
-            {files().length} {files().length === 1 ? "file" : "files"}
-          </text>
-          <Show when={dimensions().width >= 60 && files().length > 0}>
-            <text fg={theme.text.subdued}>
-              · {singlePatch() ? "single file" : "all files"} · {view()}
-            </text>
-          </Show>
-        </Show>
-        <Show when={!showFileTree()}>
-          <HelpShortcut />
-        </Show>
-      </box>
-
       <box flexGrow={1} minHeight={0}>
         <Switch>
           <Match when={props.loading}>
@@ -700,6 +682,8 @@ export function DiffViewerContent(props: {
                   expandedNodes={expandedFileNodes()}
                   onRowClick={clickFileTreeRow}
                   onFileContextMenu={openFileMenu}
+                  source={diffSourceLabel(mode())}
+                  onSwitchSource={openSwitchDiffDialog}
                   footer={<HelpShortcut />}
                 />
               </Show>
@@ -714,7 +698,7 @@ export function DiffViewerContent(props: {
                       const entry = visiblePatchFiles().findLast(
                         (entry) => (patchNodeByFileIndex.get(entry.fileIndex)?.y ?? Infinity) <= scroll!.viewport.y,
                       )
-                      edge.borderColor =
+                      edge.backgroundColor =
                         entry && reviewedFileNames().has(entry.file.file)
                           ? theme.background.surface.overlay
                           : theme.diff.background.context
@@ -724,10 +708,7 @@ export function DiffViewerContent(props: {
                   }}
                   height={1}
                   flexShrink={0}
-                  border={["top"]}
-                  borderColor={theme.diff.background.context}
-                  backgroundColor={theme.background.default}
-                  customBorderChars={{ ...EmptyBorder, horizontal: "▄" }}
+                  backgroundColor={theme.diff.background.context}
                 />
                 <scrollbox
                   id="diff-patches"
@@ -880,6 +861,11 @@ export function DiffViewerContent(props: {
           </Match>
         </Switch>
       </box>
+      <Show when={!showFileTree()}>
+        <box position="absolute" top={1} right={0} width={1} height={1}>
+          <HelpShortcut compact />
+        </box>
+      </Show>
       <Show when={fileMenu()} keyed>
         {(state) => (
           <DiffFileMenu

@@ -176,7 +176,6 @@ test.each(["added", "deleted"] as const)("%s files use full width even in split 
     const diffs = findDiffs(viewer.app.renderer.root)
     expect(diffs).toHaveLength(1)
     expect(diffs[0].view).toBe("unified")
-    expect(viewer.app.captureCharFrame()).toContain("split")
     expect(viewer.app.captureCharFrame()).not.toMatch(/[├└┌┐┬┴─]/)
   } finally {
     viewer.app.renderer.destroy()
@@ -194,16 +193,16 @@ test.each([80, 160])("adapts navigation and modified patches at %i columns", asy
   }
 })
 
-test("the first file title sits below the half-row pane edge with a blank row below", async () => {
+test("the first file title sits below full-height top padding with a blank row below", async () => {
   const viewer = await renderDiffViewer(hunkDiff)
   try {
     await viewer.app.waitForFrame((frame) => frame.includes("const first"))
     const lines = viewer.app.captureCharFrame().split("\n")
     const title = lines.findIndex((line) => line.includes("src/file.txt"))
     expect(title).toBeGreaterThan(0)
-    const padding = viewer.app.captureSpans().lines[title - 1].spans.find((span) => span.text.includes("▄"))!
-    expect(padding.fg).not.toEqual(padding.bg)
-    expect(padding.fg).toEqual(
+    const padding = viewer.app.captureSpans().lines[title - 1].spans.find((span) => span.width > 2)!
+    expect(lines[title - 1].trim()).toBe("")
+    expect(padding.bg).toEqual(
       viewer.app.captureSpans().lines[title].spans.find((span) => span.text.includes("src/"))!.bg,
     )
     expect(lines[title + 1].trim()).toBe("")
@@ -221,11 +220,15 @@ test.each([100, 160])("shared pane edges align headings and stay fixed at %i col
     await viewer.app.flush()
     const lines = viewer.app.captureCharFrame().split("\n")
     const title = lines.findIndex((line) => line.includes("file00.txt"))
-    expect(lines.findIndex((line) => line.includes("Files") && line.includes("reviewed"))).toBe(title)
-    const caps = viewer.app.captureSpans().lines[title - 1].spans.filter((span) => span.text.includes("▄"))
+    expect(lines.findIndex((line) => line.includes("Working tree") && line.includes("reviewed"))).toBe(title)
+    const frame = viewer.app.captureSpans()
+    const caps = frame.lines[title - 1].spans.filter((span) => span.width > 2)
     expect(caps).toHaveLength(2)
-    caps.forEach((span) => expect(span.fg).not.toEqual(span.bg))
-    expect(lines[title - 2]).toContain("Diff working tree")
+    caps.forEach((span) => expect(span.text.trim()).toBe(""))
+    expect(caps[0].bg).toEqual(frame.lines[title].spans.find((span) => span.text.includes("Working tree"))!.bg)
+    expect(caps[1].bg).toEqual(frame.lines[title].spans.find((span) => span.text.includes("file00.txt"))!.bg)
+    expect(title).toBe(1)
+    expect(viewer.app.captureCharFrame()).not.toContain("Diff working tree")
     expect(lines[title + 1].slice(lines[title].indexOf("file00.txt")).trim()).toBe("")
     expect(lines[title + 2]).toContain("const first")
 
@@ -264,19 +267,24 @@ test.each(["dark", "light"] as const)("the pane edge matches the visible reviewe
     const scroll = findScrollBox(viewer.app.renderer.root)!
     const expectEdge = (file: string, collapsed = false) => {
       const frame = viewer.app.captureSpans()
-      const edge = frame.lines[scroll.viewport.y - 1].spans.findLast((span) => span.text.includes("▄"))!
+      const edge = frame.lines[scroll.viewport.y - 1].spans.find((span) => span.width === scroll.viewport.width)!
+      const page = frame.lines[scroll.viewport.y - 1].spans.at(-1)!.bg
       const title = frame.lines[scroll.viewport.y].spans.find((span) => span.text.includes(file))!
       expect(title, viewer.app.captureCharFrame()).toBeDefined()
-      expect(edge.fg).toEqual(title.bg)
-      expect(edge.fg).not.toEqual(edge.bg)
+      expect(edge.text.trim()).toBe("")
+      expect(edge.bg).toEqual(title.bg)
+      expect(edge.bg).not.toEqual(page)
+      expect(frame.lines[0].spans[0].bg).toEqual(
+        frame.lines[1].spans.find((span) => span.text.includes("Working tree"))!.bg,
+      )
       const bottom = frame.lines[scroll.viewport.y + 1].spans.findLast((span) => span.text.includes("▀"))
       if (!collapsed) {
         expect(bottom).toBeUndefined()
         return
       }
       expect(bottom?.text.trim()).toBe("▀".repeat(scroll.viewport.width))
-      expect(bottom?.fg).toEqual(edge.fg)
-      expect(bottom?.bg).toEqual(edge.bg)
+      expect(bottom?.fg).toEqual(edge.bg)
+      expect(bottom?.bg).toEqual(page)
     }
     expectEdge("file0.txt")
     viewer.app.mockInput.pressKey("m")
@@ -323,7 +331,7 @@ test("the sidebar holds a compact help hint and the patch pane reaches the scree
     const hint = viewer.app.renderer.root.findDescendantById("diff-help-shortcut")!
     expect(scroll.viewport.y + scroll.viewport.height).toBe(40)
     expect(hint.x).toBe(2)
-    expect(hint.y).toBe(38)
+    expect(hint.y).toBe(37)
     expect(
       findScrollBox(viewer.app.renderer.root, false)!.parent!.y +
         findScrollBox(viewer.app.renderer.root, false)!.parent!.height,
@@ -356,7 +364,7 @@ test("the sidebar holds a compact help hint and the patch pane reaches the scree
   }
 })
 
-test("the help hint moves to the top bar without reserving a bottom row when the sidebar is hidden", async () => {
+test("compact gutter help leaves the full patch viewport available when the sidebar is hidden", async () => {
   const viewer = await renderDiffViewer(hunkDiff, { width: 160, height: 24, kittyKeyboard: true })
   try {
     await viewer.app.waitForFrame((frame) => frame.includes("const first"))
@@ -365,6 +373,8 @@ test("the help hint moves to the top bar without reserving a bottom row when the
     const scroll = findScrollBox(viewer.app.renderer.root)!
     const hint = viewer.app.renderer.root.findDescendantById("diff-help-shortcut")!
     expect(hint.y).toBe(1)
+    expect(hint.x).toBe(159)
+    expect(scroll.viewport.y).toBe(1)
     expect(scroll.viewport.y + scroll.viewport.height).toBe(24)
     await viewer.app.mockMouse.click(hint.x, hint.y)
     await viewer.app.waitForFrame((frame) => frame.includes("Diff shortcuts"))
@@ -374,12 +384,18 @@ test("the help hint moves to the top bar without reserving a bottom row when the
 
     viewer.app.mockInput.pressKey("b")
     await viewer.app.flush()
-    expect(viewer.app.renderer.root.findDescendantById("diff-help-shortcut")!.y).toBe(22)
+    expect(viewer.app.renderer.root.findDescendantById("diff-help-shortcut")!.y).toBe(21)
     viewer.app.resize(80, 24)
     await viewer.app.flush()
     expect(viewer.app.renderer.root.findDescendantById("diff-help-shortcut")!.y).toBe(1)
+    expect(viewer.app.renderer.root.findDescendantById("diff-help-shortcut")!.x).toBe(79)
     expect(scroll.viewport.y + scroll.viewport.height).toBe(24)
-    expect(viewer.app.captureCharFrame().split("? help")).toHaveLength(2)
+    expect(viewer.app.captureCharFrame()).not.toContain("? help")
+    expect(viewer.app.captureCharFrame().split("\n")[1].at(-1)).toBe("?")
+    viewer.app.mockInput.pressKey("d")
+    await viewer.app.waitForFrame((frame) => frame.includes("Switch source"))
+    viewer.app.mockInput.pressEscape()
+    await viewer.app.waitForFrame((frame) => !frame.includes("Switch source"))
   } finally {
     viewer.app.renderer.destroy()
   }
@@ -435,7 +451,7 @@ test.each([
 
 test.each([80, 160])("file titles stick to the viewport and hand off while scrolling at %i columns", async (width) => {
   const viewer = await renderDiffViewer(
-    Array.from({ length: 3 }, (_, index) => ({ ...hunkDiff[0], file: `src/file${index}.txt` })),
+    Array.from({ length: 4 }, (_, index) => ({ ...hunkDiff[0], file: `src/file${index}.txt` })),
     { width, height: 18 },
   )
   try {
@@ -699,7 +715,7 @@ test.each([
     const menu = viewer.app.renderer.root.findDescendantById("diff-file-menu")!
     expect(
       viewer.app.captureSpans().lines[menu.y].spans.find((span) => span.text.includes("Mark complete"))!.bg,
-    ).not.toEqual(viewer.app.captureSpans().lines[3].spans.find((span) => span.text.includes("Files"))!.bg)
+    ).not.toEqual(viewer.app.captureSpans().lines[1].spans.find((span) => span.text.includes("Working tree"))!.bg)
     await viewer.app.mockMouse.click(menu.x + 1, menu.y)
     await viewer.app.waitForFrame((frame) => frame.includes("1/3 reviewed"))
     expect(viewer.app.captureCharFrame()).toMatch(/file01\.txt\s+✓/)
@@ -722,7 +738,7 @@ test.each([
 test.each(["escape", "outside"] as const)(
   "a clamped file menu dismisses with %s without closing the viewer",
   async (dismiss) => {
-    const viewer = await renderDiffViewer(hunkDiff, { width: 80, height: 18, kittyKeyboard: true })
+    const viewer = await renderDiffViewer(hunkDiff, { width: 80, height: 16, kittyKeyboard: true })
     try {
       await viewer.app.waitForFrame((frame) => frame.includes("const first"))
       await viewer.app.flush()
@@ -732,7 +748,7 @@ test.each(["escape", "outside"] as const)(
       const menu = viewer.app.renderer.root.findDescendantById("diff-file-menu")!
       expect(menu.x).toBeGreaterThanOrEqual(0)
       expect(menu.x + menu.width).toBeLessThanOrEqual(80)
-      expect(menu.y + menu.height).toBeLessThanOrEqual(18)
+      expect(menu.y + menu.height).toBeLessThanOrEqual(16)
       if (dismiss === "escape") viewer.app.mockInput.pressEscape()
       if (dismiss === "outside") await viewer.app.mockMouse.click(1, 1)
       await viewer.app.waitForFrame((frame) => !frame.includes("Mark complete"))
@@ -785,13 +801,14 @@ test("image previews use the diff session's filesystem location", async () => {
     const lines = viewer.app.captureCharFrame().split("\n")
     const row = lines.findIndex((line) => line.includes("Working tree preview"))
     const top = lines[lines.findIndex((line) => line.includes("assets/mock image.png")) - 1]
+    const header = viewer.app.renderer.root.findDescendantById("diff-file-header-0")!
     const background = viewer.app.captureSpans().lines[row].spans.find((span) => span.text.includes("Working tree"))!.bg
     const edges = viewer.app
       .captureSpans()
       .lines[row + 2].spans.flatMap((span) => Array.from({ length: span.width }, () => span.bg))
-    expect(top).toContain("▄")
-    expect(edges[top.indexOf("▄")]).toEqual(background)
-    expect(edges[top.lastIndexOf("▄")]).toEqual(background)
+    expect(top.trim()).toBe("")
+    expect(edges[header.x]).toEqual(background)
+    expect(edges[header.x + header.width - 1]).toEqual(background)
   } finally {
     viewer.app.renderer.destroy()
   }
@@ -927,8 +944,8 @@ test.each([
     const padding = viewer.app
       .captureSpans()
       .lines[row + 1].spans.flatMap((span) => Array.from({ length: span.width }, () => span.bg))
-    expect(padding[lines[title - 1].indexOf("▄")]).toEqual(header.backgroundColor)
-    expect(padding[lines[title - 1].lastIndexOf("▄")]).toEqual(header.backgroundColor)
+    expect(padding[header.x]).toEqual(header.backgroundColor)
+    expect(padding[header.x + header.width - 1]).toEqual(header.backgroundColor)
   } finally {
     viewer.app.renderer.destroy()
   }
@@ -1007,7 +1024,7 @@ test("folders are mouse controlled and n/p reveal files inside collapsed folders
       { ...hunkDiff[0], file: "src/b/second.txt" },
       { ...hunkDiff[0], file: "test/third.txt" },
     ],
-    { width: 160, height: 30 },
+    { width: 160, height: 28 },
   )
   try {
     await viewer.app.waitForFrame((frame) => frame.includes("const first"))
@@ -1306,8 +1323,10 @@ const session = {
   },
 }
 
-test("branch diff source requests branch VCS diff", async () => {
-  const viewer = await renderDiffViewer([], {
+test.each([100, 160])("the sidebar source picker switches VCS sources at %i columns", async (width) => {
+  const viewer = await renderDiffViewer(hunkDiff, {
+    width,
+    kittyKeyboard: true,
     initialRoute: {
       type: "plugin",
       id: "opencode.diffs",
@@ -1327,6 +1346,27 @@ test("branch diff source requests branch VCS diff", async () => {
       mode: "branch",
       context: "12",
     })
+    await viewer.app.waitForFrame((frame) => frame.includes("const first"))
+    await viewer.app.flush()
+    const source = () => viewer.app.renderer.root.findDescendantById("diff-source-switch")!
+    expect(source().y).toBe(1)
+    expect(viewer.app.captureCharFrame().split("\n")[1]).toContain("Main branch")
+    await viewer.app.mockMouse.click(source().x, source().y, MouseButton.RIGHT)
+    await viewer.app.flush()
+    expect(viewer.app.captureCharFrame()).not.toContain("Switch source")
+    await viewer.app.mockMouse.click(source().x, source().y)
+    await viewer.app.waitForFrame((frame) => frame.includes("Switch source"))
+    expect(viewer.app.renderer.getSelection()).toBeNull()
+    viewer.app.mockInput.pressArrow("up")
+    viewer.app.mockInput.pressEnter()
+    await viewer.app.waitForFrame((frame) => frame.includes("Working tree") && frame.includes("const first"))
+    expect(viewer.vcsDiffInput()).toEqual({ location: { directory: "/repo/session" }, mode: "working", context: "12" })
+    await viewer.app.mockMouse.click(source().x, source().y)
+    await viewer.app.waitForFrame((frame) => frame.includes("Switch source"))
+    viewer.app.mockInput.pressArrow("down")
+    viewer.app.mockInput.pressEnter()
+    await viewer.app.waitForFrame((frame) => frame.includes("Main branch") && frame.includes("const first"))
+    expect(viewer.vcsDiffInput()).toEqual({ location: { directory: "/repo/session" }, mode: "branch", context: "12" })
   } finally {
     viewer.app.renderer.destroy()
   }

@@ -91,13 +91,13 @@ describe("DiffViewerFileTree", () => {
     expect(lines.every((line) => line.startsWith("  ") && line.slice(30, 32) === "  ")).toBe(true)
   })
 
-  test.each(["dark", "light"] as const)("a half-row top replaces full top padding in %s mode", async (mode) => {
+  test.each(["dark", "light"] as const)("full top padding keeps the heading one row down in %s mode", async (mode) => {
     const frame = await renderFrame(
       () => <DiffViewerFileTree width={32} files={[{ file: "README.md" }]} loading={false} error={undefined} />,
       mode,
     )
     const lines = frame.split("\n")
-    expect(lines[0].trim()).toBe("▄".repeat(32))
+    expect(lines[0].trim()).toBe("")
     expect(lines[1].indexOf("Files")).toBe(2)
     expect(lines.find((line) => line.includes("README.md"))?.indexOf("≡")).toBe(2)
   })
@@ -252,5 +252,5 @@ function visibleLines(frame: string) {
   return frame
     .split("\n")
     .map((line) => line.trim().replace(/\s+/g, " "))
-    .filter((line) => line && !/^▄+$/.test(line))
+    .filter(Boolean)
 }

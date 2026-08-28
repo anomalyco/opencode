@@ -3,7 +3,6 @@ import { MouseButton, TextAttributes, type MouseEvent, type ScrollBoxRenderable 
 import { truncateFilePath } from "../../ui/file-path"
 import { stringWidth } from "../../util/string-width"
 import { useTheme } from "../../context/theme"
-import { EmptyBorder } from "../../ui/border"
 import { tint } from "../../theme/color"
 import { createEffect, createMemo, createSignal, For, Match, Show, Switch, type JSX } from "solid-js"
 import { buildFileTree, flattenFileTree, type FileTreeItem, type FileTreeRow } from "./diff-viewer-file-tree-utils"
@@ -21,12 +20,14 @@ export type DiffViewerFileTreeProps = {
   readonly expandedNodes?: ReadonlySet<number>
   readonly onRowClick?: (row: FileTreeRow) => void
   readonly onFileContextMenu?: (fileIndex: number, event: MouseEvent) => void
+  readonly source?: string
+  readonly onSwitchSource?: () => void
   readonly footer?: JSX.Element
 }
 
 export function DiffViewerFileTree(props: DiffViewerFileTreeProps) {
   const theme = useTheme("elevated")
-  const base = useTheme()
+  const [sourceHovered, setSourceHovered] = createSignal(false)
   const list = () => props.layout === "list"
   const tree = createMemo(() => buildFileTree(props.files))
   const rows = createMemo(() =>
@@ -54,15 +55,7 @@ export function DiffViewerFileTree(props: DiffViewerFileTreeProps) {
 
   return (
     <box width={props.width} height="100%" minWidth={0} minHeight={0} flexShrink={0} flexDirection="column">
-      <box
-        id="diff-tree-top-edge"
-        height={1}
-        flexShrink={0}
-        border={["top"]}
-        borderColor={theme.background.default}
-        backgroundColor={base.background.default}
-        customBorderChars={{ ...EmptyBorder, horizontal: "▄" }}
-      />
+      <box id="diff-tree-top-edge" height={1} flexShrink={0} backgroundColor={theme.background.default} />
       <box
         flexGrow={1}
         minWidth={0}
@@ -73,8 +66,29 @@ export function DiffViewerFileTree(props: DiffViewerFileTreeProps) {
         backgroundColor={theme.background.default}
       >
         <box height={1} flexShrink={0} flexDirection="row" marginBottom={1} gap={1}>
-          <text fg={theme.text.default} attributes={TextAttributes.BOLD} flexGrow={1} wrapMode="none" truncate>
-            Files
+          <text
+            id="diff-source-switch"
+            fg={
+              props.onSwitchSource
+                ? sourceHovered()
+                  ? theme.text.action.secondary.hovered
+                  : theme.text.action.secondary.default
+                : theme.text.default
+            }
+            attributes={TextAttributes.BOLD}
+            flexGrow={1}
+            wrapMode="none"
+            truncate
+            selectable={false}
+            onMouseOver={() => setSourceHovered(true)}
+            onMouseOut={() => setSourceHovered(false)}
+            onMouseUp={(event) => {
+              if (event.button !== MouseButton.LEFT) return
+              event.stopPropagation()
+              props.onSwitchSource?.()
+            }}
+          >
+            {props.source ?? "Files"}
           </text>
           <text fg={theme.text.subdued} wrapMode="none" flexShrink={0}>
             {reviewedCount()}/{props.files.length} reviewed
@@ -201,7 +215,7 @@ export function DiffViewerFileTree(props: DiffViewerFileTreeProps) {
           </Switch>
         </scrollbox>
         <Show when={props.footer}>
-          <box flexShrink={0} paddingTop={1}>
+          <box flexShrink={0} paddingTop={1} paddingBottom={1}>
             {props.footer}
           </box>
         </Show>
