@@ -10,6 +10,7 @@ import { ServerFetch } from "../src/fetch"
 const options = {
   app: { version: "test-version" },
   database: { path: ":memory:" },
+  config: { project: false },
   models: { fetch: false },
   fs: { filewatcher: false },
 } as const

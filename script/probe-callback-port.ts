@@ -3,6 +3,7 @@
 // THROWAWAY: native loopback diagnostic, not a fix or a regression test.
 // Run: bun script/probe-callback-port.ts
 import { createServer, type Server } from "node:http"
+import { spawn } from "node:child_process"
 import type { Socket } from "node:net"
 import timers from "node:timers/promises"
 
@@ -11,6 +12,7 @@ const modes = [
   "force-first",
   "fixed-force-first",
   "listen-callback",
+  "child-hold",
   "response-connection-close",
   "socket-reset-after-flush",
   "socket-destroy-after-flush",
@@ -35,7 +37,7 @@ console.log(
     platform: process.platform,
     arch: process.arch,
     retryDelaysMs: [200, 400, 600, 800, 1000, 1200, 1400, 1600, 1800],
-    note: "Nine retries after fetch settles; stop at first success. Final TCP observation at 2s. No fallback port.",
+    note: "Nine retries after fetch settles; stop at first success. TCP observation at 2s. Child-hold adds one bind after child release if retries fail. No fallback port.",
   }),
 )
 
@@ -59,6 +61,13 @@ try {
 async function probe(mode: (typeof modes)[number]) {
   const epoch = performance.now()
   const cancellation = new AbortController()
+  const child = {
+    process: undefined as ReturnType<typeof spawn> | undefined,
+    closed: false,
+    releaseRequested: false,
+    exited: Promise.withResolvers<void>(),
+    rebind: undefined as Awaited<ReturnType<typeof bind>> | undefined,
+  }
   const state = {
     port: 0,
     cancelAt: 0,
@@ -155,8 +164,18 @@ async function probe(mode: (typeof modes)[number]) {
 
   async function tcp(phase: string) {
     const snapshotAtMs = Math.round(performance.now() - epoch)
-    const snapshot = await tcpSnapshot(state.port, deadline.signal)
+    const snapshot = await tcpSnapshot(state.port, deadline.signal, child.process?.pid)
     log("tcp", { phase, snapshotAtMs, ...snapshot })
+  }
+
+  async function stopChild() {
+    if (!child.process) return
+    if (!child.closed) {
+      child.releaseRequested = true
+      log("child-release-request", { killRequested: child.process.kill("SIGKILL") })
+    }
+    await bounded(child.exited.promise, AbortSignal.timeout(1000))
+    log("child-release-complete", { closed: child.closed })
   }
 
   try {
@@ -177,6 +196,33 @@ async function probe(mode: (typeof modes)[number]) {
     log("occupied-bind", occupied)
     if (occupied.ok || occupied.error.code !== "EADDRINUSE")
       throw new Error("Expected localhost bind to fail with EADDRINUSE while both families are occupied")
+    if (mode === "child-hold") {
+      const ready = Promise.withResolvers<void>()
+      const pipe = process.platform === "win32" ? "overlapped" : "pipe"
+      // Match the normal Git spawner, including Windows overlapped stdio; the child opens no sockets itself.
+      child.process = spawn(
+        process.execPath,
+        ["-e", 'setTimeout(() => process.exit(1), 10000); process.stdout.write("ready\\n");'],
+        { detached: false, windowsHide: process.platform === "win32", stdio: ["ignore", pipe, pipe] },
+      )
+      child.process.once("error", () => ready.reject(new Error("Owned child failed to spawn")))
+      child.process.once("close", (code, signal) => {
+        child.closed = true
+        ready.reject(new Error("Owned child exited before readiness"))
+        child.exited.resolve()
+        log("child-close", { code, signal, releaseRequested: child.releaseRequested })
+      })
+      child.process.stderr?.resume()
+      const output = { text: "" }
+      child.process.stdout?.setEncoding("utf8").on("data", (chunk: string) => {
+        output.text += chunk
+        if (output.text === "ready\n") ready.resolve()
+        if (!"ready\n".startsWith(output.text)) ready.reject(new Error("Unexpected owned child readiness output"))
+      })
+      await bounded(ready.promise, AbortSignal.any([deadline.signal, AbortSignal.timeout(1000)]))
+      if (child.closed) throw new Error("Owned child exited before the hold window")
+      log("child-ready", { owned: true, detached: false, outputPipe: pipe, selfGuardMs: 10_000 })
+    }
     await tcp("occupied-baseline")
 
     state.cancelAt = performance.now()
@@ -221,6 +267,7 @@ async function probe(mode: (typeof modes)[number]) {
       const observation = { attempt, afterFetchMs: Math.round(performance.now() - state.fetchAt), ...result }
       attempts.push(observation)
       log("rebind", observation)
+      if (child.process && child.closed) throw new Error("Owned child exited during the hold window")
       if (result.ok) break
       if (result.error.code !== "EADDRINUSE")
         throw new Error(`Unexpected rebind error: ${JSON.stringify(result.error)}`)
@@ -231,9 +278,27 @@ async function probe(mode: (typeof modes)[number]) {
     await tcp("window-end")
     await Promise.all(state.snapshots)
     deadline.signal.throwIfAborted()
+    if (child.process) {
+      if (child.closed) throw new Error("Owned child exited before the hold window ended")
+      log("child-window-end", { alive: true })
+      if (!attempts.some((item) => item.ok)) {
+        await stopChild()
+        await tcp("after-child-release")
+        child.rebind = await bind(servers[2].server, state.port, "localhost", deadline.signal)
+        log("child-release-rebind", child.rebind)
+        await tcp("after-child-release-rebind")
+      }
+    }
     log("mode-result", {
-      expected: "localhost rebind succeeds within nine retries",
-      outcome: attempts.some((item) => item.ok) ? "success" : "failed",
+      expected:
+        mode === "child-hold"
+          ? "rebind succeeds while child lives, or child release restores bind after nine rejected retries"
+          : "localhost rebind succeeds within nine retries",
+      outcome: child.rebind?.ok
+        ? "child-release-restored-bind"
+        : attempts.some((item) => item.ok)
+          ? "success"
+          : "failed",
       occupiedRejected: true,
       firstSuccessAfterFetchMs: attempts.find((item) => item.ok)?.afterFetchMs ?? null,
       attempts,
@@ -243,11 +308,13 @@ async function probe(mode: (typeof modes)[number]) {
         .slice(0, 2)
         .map((item) => ({ host: item.host, listening: item.server.listening, closeEventObserved: item.closed })),
       socketOperation: state.socketOperation,
+      childReleaseRebind: child.rebind ?? null,
     })
   } finally {
     // Cleanup occurs only AFTER observations, so destroy() cannot silently change a mode's measured behavior.
     cancellation.abort()
     const cleanup = Promise.allSettled([
+      stopChild(),
       ...servers.map(
         (item) =>
           new Promise<void>((resolve) => {
@@ -264,7 +331,10 @@ async function probe(mode: (typeof modes)[number]) {
     ])
     const results = await bounded(cleanup, AbortSignal.timeout(1000))
     await Promise.all(state.snapshots)
-    log("cleanup-complete", { serversListening: servers.map((item) => item.server.listening) })
+    log("cleanup-complete", {
+      serversListening: servers.map((item) => item.server.listening),
+      ownedChildClosed: child.process ? child.closed : null,
+    })
     const failed = results.find((item) => item.status === "rejected")
     if (failed?.status === "rejected") throw failed.reason
   }
@@ -316,7 +386,7 @@ function socketInfo(socket: Socket) {
   }
 }
 
-async function tcpSnapshot(port: number, signal: AbortSignal) {
+async function tcpSnapshot(port: number, signal: AbortSignal, ownedChildPID?: number) {
   signal.throwIfAborted()
   const tool = process.platform === "win32" ? "netstat" : Bun.which("ss") ? "ss" : "lsof"
   if (!Bun.which(tool)) return { tool, unavailable: true, rows: [] }
@@ -338,13 +408,26 @@ async function tcpSnapshot(port: number, signal: AbortSignal) {
     const [output, exitCode] = await Promise.all([new Response(child.stdout).text(), child.exited])
     // netstat has no port filter. Never print its table, process IDs, command names, or account fields.
     // Retain only the chosen port and loopback/unspecified endpoints, even when a tool returns extra rows.
-    const rows = [] as { local: string; peer: string | null; state: string }[]
+    const rows = [] as {
+      local: string
+      peer: string | null
+      state: string
+      thisProcess?: boolean
+      ownedChild?: boolean
+    }[]
     const safe = (endpoint: string) => /^(127\.0\.0\.1|\[?::1\]?|0\.0\.0\.0|\[?::\]?|\*):[0-9*]+$/.test(endpoint)
     const selected = (endpoint: string) => endpoint.endsWith(`:${port}`)
-    const add = (local: string, peer: string | null, status: string) => {
+    const add = (local: string, peer: string | null, status: string, owner?: string) => {
       if (!safe(local) || (peer !== null && !safe(peer))) return
       if (!selected(local) && (peer === null || !selected(peer))) return
-      rows.push({ local, peer, state: status })
+      rows.push({
+        local,
+        peer,
+        state: status,
+        ...(owner === undefined
+          ? {}
+          : { thisProcess: owner === String(process.pid), ownedChild: owner === String(ownedChildPID) }),
+      })
     }
     if (tool === "lsof") {
       const current = { name: "" }
@@ -359,7 +442,8 @@ async function tcpSnapshot(port: number, signal: AbortSignal) {
     if (tool !== "lsof") {
       output.split(/\r?\n/).forEach((line) => {
         const fields = line.trim().split(/\s+/)
-        if (tool === "netstat" && fields[0] === "TCP" && fields.length >= 4) add(fields[1], fields[2], fields[3])
+        if (tool === "netstat" && fields[0] === "TCP" && fields.length >= 5)
+          add(fields[1], fields[2], fields[3], fields[4])
         if (tool === "ss" && fields.length >= 5) add(fields[3], fields[4], fields[0])
       })
     }
