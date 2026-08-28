@@ -8,7 +8,7 @@ import {
   type TextOptions,
 } from "@opentui/core"
 import { extend } from "@opentui/solid"
-import { coast, intensityAt } from "./tab-pulse"
+import { coast, intensityAt, smootherstep } from "./tab-pulse"
 
 type TitleShimmerOptions = TextOptions & {
   rename?: { title: string; pending: boolean }
@@ -17,7 +17,9 @@ type TitleShimmerOptions = TextOptions & {
 }
 
 const SHIMMER_DURATION = 1200
+const SHIMMER_FADE = 240
 const ARRIVAL_DURATION = 450
+const WIPE_FEATHER = 4
 const TRANSPARENT = RGBA.fromValues(0, 0, 0, 0)
 // Native text draws wide glyphs as a head followed by flagged continuation cells.
 const CONTINUATION = 0xc0000000 | 0
@@ -28,6 +30,8 @@ export class TitleShimmerRenderable extends TextRenderable {
   private _backdrop: RGBA
   private pendingTitle: string | undefined
   private elapsed = 0
+  private blend = 0
+  private fresh = true
   private arrival: number | undefined
   private scratch: OptimizedBuffer | undefined
   private previous: OptimizedBuffer | undefined
@@ -46,7 +50,7 @@ export class TitleShimmerRenderable extends TextRenderable {
   }
 
   private get animating() {
-    return this._enabled && (this.shimmering || this.arrival !== undefined)
+    return this._enabled && (this.shimmering || this.arrival !== undefined || this.blend > 0)
   }
 
   private get shimmering() {
@@ -56,8 +60,9 @@ export class TitleShimmerRenderable extends TextRenderable {
   set rename(value: TitleShimmerOptions["rename"]) {
     if (value?.title === this._rename?.title && value?.pending === this._rename?.pending) return
     if (value?.pending && !this._rename?.pending) {
+      if (this.pendingTitle !== value.title) this.blend = 0
       this.pendingTitle = value.title
-      this.elapsed = 0
+      if (this.blend === 0) this.elapsed = 0
       this.arrival = undefined
       this.previous?.destroy()
       this.previous = undefined
@@ -65,6 +70,7 @@ export class TitleShimmerRenderable extends TextRenderable {
     // Only an automatic rename replaces the last painted title with a wipe.
     if (value?.title !== this._rename?.title) {
       this.arrival = value && this._rename?.pending && this._enabled && this.previous ? 0 : undefined
+      if (this.arrival === undefined) this.blend = 0
     }
     this._rename = value
     this.changed()
@@ -73,7 +79,10 @@ export class TitleShimmerRenderable extends TextRenderable {
   set enabled(value: boolean) {
     if (value === this._enabled) return
     this._enabled = value
-    if (!value) this.arrival = undefined
+    if (!value) {
+      this.arrival = undefined
+      this.blend = 0
+    }
     this.changed()
   }
 
@@ -91,6 +100,7 @@ export class TitleShimmerRenderable extends TextRenderable {
   }
 
   private changed() {
+    if (!this.live && this.animating) this.fresh = true
     this.live = this.animating
     if (!this.animating) {
       this.previous?.destroy()
@@ -101,16 +111,28 @@ export class TitleShimmerRenderable extends TextRenderable {
 
   override render(buffer: OptimizedBuffer, deltaTime: number) {
     if (!this.visible || this.isDestroyed || !Number.isFinite(this.width) || this.width <= 0 || this.height <= 0) return
+    if (!this.animating) return super.render(buffer, deltaTime)
+    // A newly live title must not inherit time spent idle before its fade started.
+    const delta = this.fresh ? 0 : deltaTime
+    this.fresh = false
+    this.elapsed = (this.elapsed + delta) % SHIMMER_DURATION
     if (this.arrival !== undefined) {
-      this.arrival += deltaTime
+      this.arrival += delta
       if (this.arrival >= ARRIVAL_DURATION) {
         this.arrival = undefined
-        this.previous?.destroy()
-        this.previous = undefined
-        this.live = this.animating
+        this.blend = 0
       }
     }
-    if (!this.animating) return super.render(buffer, deltaTime)
+    this.blend = Math.max(
+      0,
+      Math.min(1, this.blend + (this.shimmering || this.arrival !== undefined ? delta : -delta) / SHIMMER_FADE),
+    )
+    this.live = this.animating
+    if (!this.animating) {
+      this.previous?.destroy()
+      this.previous = undefined
+      return super.render(buffer, deltaTime)
+    }
     if (!this.scratch)
       this.scratch = OptimizedBuffer.create(this.width, this.height, this._ctx.widthMethod, { respectAlpha: true })
     if (this.scratch.width !== this.width || this.scratch.height !== this.height)
@@ -165,8 +187,13 @@ export class TitleShimmerRenderable extends TextRenderable {
         column--
       end = Math.max(end, column)
     }
-    if (this.arrival !== undefined && this.previous) {
-      const cut = Math.round(coast(this.arrival / ARRIVAL_DURATION) * Math.max(end, this.previous.width))
+    const wipeFront =
+      this.arrival !== undefined && this.previous
+        ? -WIPE_FEATHER +
+          coast(this.arrival / ARRIVAL_DURATION) * (Math.max(end, this.previous.width) + WIPE_FEATHER * 2)
+        : undefined
+    const cut = Math.max(0, Math.min(this.width, Math.round(wipeFront ?? 0)))
+    if (wipeFront !== undefined && this.previous) {
       this.scratch.clear(TRANSPARENT)
       this.scratch.pushScissorRect(0, 0, cut, this.height)
       this.scratch.drawTextBuffer(this.textBufferView, 0, 0)
@@ -185,28 +212,35 @@ export class TitleShimmerRenderable extends TextRenderable {
           right--
         if (right > left) this.scratch.drawFrameBuffer(left, row, this.previous, left, row, right - left, 1)
       }
-      this.scratch.clearScissorRects()
-      buffer.drawFrameBuffer(this.screenX, this.screenY, this.scratch)
-      this.markClean()
-      this._ctx.addToHitGrid(this.screenX, this.screenY, this.width, this.height, this.num)
-      return
     }
     this.scratch.clearScissorRects()
     if (this.mask.length !== this.width * this.height * 3) this.mask = new Float32Array(this.width * this.height * 3)
-    if (!this.previous)
-      this.previous = OptimizedBuffer.create(Math.max(1, end), this.height, this._ctx.widthMethod, {
-        respectAlpha: true,
-      })
-    if (this.previous.width !== Math.max(1, end) || this.previous.height !== this.height)
-      this.previous.resize(Math.max(1, end), this.height)
-    this.previous.clear(TRANSPARENT)
-    this.previous.drawFrameBuffer(0, 0, this.scratch)
-    this.elapsed = (this.elapsed + deltaTime) % SHIMMER_DURATION
-    const front = -4 + coast(this.elapsed / SHIMMER_DURATION) * (end + 4 + 18)
+    if (wipeFront === undefined) {
+      if (!this.previous)
+        this.previous = OptimizedBuffer.create(Math.max(1, end), this.height, this._ctx.widthMethod, {
+          respectAlpha: true,
+        })
+      if (this.previous.width !== Math.max(1, end) || this.previous.height !== this.height)
+        this.previous.resize(Math.max(1, end), this.height)
+      this.previous.clear(TRANSPARENT)
+      this.previous.drawFrameBuffer(0, 0, this.scratch)
+    }
+    const front = -4 + coast(this.elapsed / SHIMMER_DURATION) * ((this.previous?.width ?? end) + 4 + 18)
+    const level = smootherstep(this.blend)
     let strength = 0
     for (let cell = 0; cell < characters.length; cell++) {
       const column = cell % this.width
-      if ((characters[cell] & CONTINUATION) !== CONTINUATION) strength = 0.6 * (1 - intensityAt(column, front, 4, 18))
+      if ((characters[cell] & CONTINUATION) !== CONTINUATION) {
+        const old = wipeFront === undefined || column >= cut
+        let visibility = old ? 1 - 0.6 * level * (1 - intensityAt(column, front, 4, 18)) : 1
+        if (wipeFront !== undefined) {
+          let width = 1
+          while (column + width < this.width && (characters[cell + width] & CONTINUATION) === CONTINUATION) width++
+          const distance = old ? column - wipeFront : wipeFront - (column + width)
+          visibility *= smootherstep(Math.max(0, Math.min(1, distance / WIPE_FEATHER)))
+        }
+        strength = 1 - visibility
+      }
       this.mask[cell * 3] = column
       this.mask[cell * 3 + 1] = Math.floor(cell / this.width)
       this.mask[cell * 3 + 2] = strength
