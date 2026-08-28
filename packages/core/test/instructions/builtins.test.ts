@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import os from "os"
 import { Effect, Layer } from "effect"
-import * as TestClock from "effect/testing/TestClock"
+import { TestClock } from "effect/testing"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Location } from "@opencode-ai/core/location"
 import { FSUtil } from "@opencode-ai/util/fs-util"

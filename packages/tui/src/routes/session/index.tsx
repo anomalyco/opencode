@@ -845,18 +845,20 @@ export function Session(props: {
       slash: {
         name: "compact",
       },
-      run: async () => {
+      run: () => {
         const selection = local.model.current()
-        if (selection)
-          await client.api.session.switchModel({
+        void data.session
+          .compact({
             sessionID: route.sessionID,
-            model: {
-              providerID: selection.providerID,
-              id: selection.modelID,
-              variant: local.model.variant.current(),
-            },
+            model: selection
+              ? {
+                  providerID: selection.providerID,
+                  id: selection.modelID,
+                  variant: local.model.variant.current(),
+                }
+              : undefined,
           })
-        await client.api.session.compact({ sessionID: route.sessionID })
+          .catch((error) => toast.show({ message: errorMessage(error), variant: "error" }))
         dialog.clear()
       },
     },

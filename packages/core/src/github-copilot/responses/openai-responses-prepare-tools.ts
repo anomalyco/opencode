@@ -47,7 +47,7 @@ export function prepareResponsesTools({
           name: tool.name,
           description: tool.description,
           parameters: tool.inputSchema,
-          strict: strictJsonSchema,
+          strict: tool.strict ?? strictJsonSchema,
         })
         break
       case "provider": {
