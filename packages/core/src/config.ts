@@ -4,9 +4,7 @@ import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import path from "path"
 import { isDeepStrictEqual } from "node:util"
 import { type ParseError, parse } from "jsonc-parser"
-import { applyEdits, modify } from "jsonc-parser"
 import { Context, Effect, Layer, Option, PubSub, Ref, Schema, Semaphore, Stream } from "effect"
-import { produce, type Draft } from "immer"
 import {
   AgentsDirectory,
   ClaudeDirectory,
@@ -16,7 +14,6 @@ import {
   type Entry,
   Event,
 } from "@opencode-ai/schema/config"
-import { isRecord } from "@opencode-ai/ai/utils/record"
 import { Credential } from "./credential.js"
 import { Bus } from "./bus.js"
 import { Watcher } from "./filesystem/watcher.js"
@@ -36,8 +33,6 @@ export function latest<K extends keyof Info>(entries: readonly Entry[], key: K):
 export interface Interface {
   /** Returns location config documents and discovery sources from lowest to highest priority. */
   readonly entries: () => Effect.Effect<Entry[]>
-  /** Updates the first file-backed configuration document. */
-  readonly update: (update: (draft: Draft<Info>) => void) => Effect.Effect<Info, UpdateError>
   /**
    * Streams raw filesystem updates under config roots. Config owns root
    * topology and watch reconciliation; domain owners filter this feed for the
@@ -46,13 +41,11 @@ export interface Interface {
   readonly changes: () => Stream.Stream<Watcher.Update>
 }
 
-export class UpdateError extends Schema.TaggedError<UpdateError>()("Config.UpdateError", {
-  message: Schema.String,
-  cause: Schema.optional(Schema.Defect()),
-}) {}
-
 export const Options = Schema.Struct({
   project: Schema.optional(Schema.Boolean),
+  // false skips the global config dir, ~/.claude, and ~/.agents; wellknown,
+  // file, and content entries still load.
+  global: Schema.optional(Schema.Boolean),
   file: Schema.optional(Schema.String),
   content: Schema.optional(Schema.String),
 })
@@ -77,19 +70,6 @@ export const testLayer = (initial: Entry[] = []) =>
       const updates = yield* PubSub.unbounded<Watcher.Update>()
       const service = Test.of({
         entries: () => Ref.get(entries),
-        update: (update) =>
-          Effect.gen(function* () {
-            const current = yield* Ref.get(entries)
-            const index = current.findIndex((entry) => entry.type === "document" && entry.path !== undefined)
-            if (index === -1)
-              return yield* Effect.fail(new UpdateError({ message: "No editable config document found" }))
-            const entry = current[index]
-            if (!entry || entry.type !== "document")
-              return yield* Effect.fail(new UpdateError({ message: "No editable config document found" }))
-            const info = produce(entry.info, update)
-            yield* Ref.set(entries, current.with(index, new Document({ type: "document", path: entry.path, info })))
-            return info
-          }),
         changes: () => Stream.fromPubSub(updates),
         setEntries: (next) => Ref.set(entries, next),
         emitChange: (update) => PubSub.publish(updates, update).pipe(Effect.asVoid),
@@ -219,28 +199,39 @@ export const layer = (options?: Options) =>
                 })
                 .pipe(Effect.orDie)
 
+        const globalEnabled = options?.global !== false
+        // A walked path that resolves into a global root is global config
+        // however the walk reached it (home above the project, or a location
+        // beneath the global config dir), so global: false excludes it
+        // uniformly — classified once here, not per consumer below.
+        const globalRoots = [globalDirectory, globalClaudeDirectory, globalAgentsDirectory].map((item) =>
+          path.resolve(item),
+        )
+        const visible = globalEnabled
+          ? discovered
+          : discovered.filter((item) => {
+              const resolved = path.resolve(item)
+              return !globalRoots.some((root) => resolved === root || resolved.startsWith(root + path.sep))
+            })
         // We load certain files from a few other folders in the ecosystem
         const claude = [
           ...new Set([
-            ...((yield* fs.isDir(globalClaudeDirectory)) ? [globalClaudeDirectory] : []),
-            ...discovered.filter((item) => path.basename(item) === ".claude").toReversed(),
+            ...(globalEnabled && (yield* fs.isDir(globalClaudeDirectory)) ? [globalClaudeDirectory] : []),
+            ...visible.filter((item) => path.basename(item) === ".claude").toReversed(),
           ]),
         ].map((directory) => new ClaudeDirectory({ type: "claude", path: AbsolutePath.make(directory) }))
         const agents = [
           ...new Set([
-            ...((yield* fs.isDir(globalAgentsDirectory)) ? [globalAgentsDirectory] : []),
-            ...discovered.filter((item) => path.basename(item) === ".agents").toReversed(),
+            ...(globalEnabled && (yield* fs.isDir(globalAgentsDirectory)) ? [globalAgentsDirectory] : []),
+            ...visible.filter((item) => path.basename(item) === ".agents").toReversed(),
           ]),
         ].map((directory) => new AgentsDirectory({ type: "agents", path: AbsolutePath.make(directory) }))
 
-        const directories = [
-          globalDirectory,
-          ...discovered
-            .filter((item) => path.basename(item) === ".opencode")
-            .toReversed()
-            .map((directory) => AbsolutePath.make(directory)),
-        ]
-        const directPaths = discovered
+        const projectDirectories = visible
+          .filter((item) => path.basename(item) === ".opencode")
+          .toReversed()
+          .map((directory) => AbsolutePath.make(directory))
+        const directPaths = visible
           .filter((item) => ![".agents", ".claude", ".opencode"].includes(path.basename(item)))
           .toReversed()
         fileTargets.clear()
@@ -272,15 +263,21 @@ export const layer = (options?: Options) =>
               )
             : []
 
-        const supplementary = yield* Effect.forEach(directories, loadDirectory).pipe(Effect.orDie)
+        // Global entries sit below explicit and direct files; project
+        // directories rank above them.
+        const globalSupplementary = globalEnabled ? yield* loadDirectory(globalDirectory).pipe(Effect.orDie) : []
+        const projectSupplementary = yield* Effect.forEach(projectDirectories, loadDirectory).pipe(
+          Effect.orDie,
+          Effect.map((entries) => entries.flat()),
+        )
         return [
           ...(yield* loadWellknown().pipe(Effect.orDie)),
           ...claude,
           ...agents,
-          ...(supplementary[0] ?? []),
+          ...globalSupplementary,
           ...explicit,
           ...direct,
-          ...supplementary.slice(1).flat(),
+          ...projectSupplementary,
           ...content,
         ]
       })
@@ -319,16 +316,15 @@ export const layer = (options?: Options) =>
         }
       })
 
-      const reload = Effect.fn("Config.reload")(() =>
-        reloadLock.withPermit(
-          Effect.gen(function* () {
-            const next = yield* discover()
-            yield* reconcile(next)
-            if (isDeepStrictEqual(configs, next)) return
-            configs = next
-            yield* bus.publish(Event.Updated, {})
-          }),
-        ),
+      const reload = Effect.fn("Config.reload")(
+        function* () {
+          const next = yield* discover()
+          yield* reconcile(next)
+          if (isDeepStrictEqual(configs, next)) return
+          configs = next
+          yield* bus.publish(Event.Updated, {})
+        },
+        (effect) => reloadLock.withPermit(effect),
       )
 
       yield* Stream.fromPubSub(updates).pipe(
@@ -379,54 +375,10 @@ export const layer = (options?: Options) =>
       )
       yield* reconcile(initial)
 
-      const update = Effect.fn("Config.update")((mutate: (draft: Draft<Info>) => void) =>
-        reloadLock.withPermit(
-          Effect.gen(function* () {
-            // TODO: Replace entry-order selection with an explicit config scope/target model.
-            const document = configs.find((entry) => entry.type === "document" && entry.path !== undefined)
-            if (!document || document.type !== "document" || !document.path)
-              return yield* Effect.fail(new UpdateError({ message: "No editable config document found" }))
-            const next = yield* Effect.try({
-              try: () => produce(document.info, mutate),
-              catch: (cause) => new UpdateError({ message: "Config update failed", cause }),
-            })
-            const edits = changes(document.info, next)
-            if (!edits.length) return document.info
-            const text = yield* fs
-              .readFileString(document.path)
-              .pipe(
-                Effect.mapError(
-                  (cause) => new UpdateError({ message: `Failed to read config: ${document.path}`, cause }),
-                ),
-              )
-            const updated = edits.reduce(
-              (text, edit) =>
-                applyEdits(
-                  text,
-                  modify(text, edit.path, edit.value, { formattingOptions: { tabSize: 2, insertSpaces: true } }),
-                ),
-              text,
-            )
-            const info = yield* parseInfo(updated, document.path)
-            if (!info)
-              return yield* Effect.fail(new UpdateError({ message: `Invalid config update: ${document.path}` }))
-            const temporary = document.path + ".tmp"
-            yield* fs.writeFileString(temporary, updated.endsWith("\n") ? updated : updated + "\n").pipe(
-              Effect.andThen(fs.rename(temporary, document.path)),
-              Effect.mapError(
-                (cause) => new UpdateError({ message: `Failed to write config: ${document.path}`, cause }),
-              ),
-            )
-            return info
-          }),
-        ),
-      )
-
       return Service.of({
         entries: Effect.fnUntraced(function* () {
           return configs
         }),
-        update,
         changes: () => Stream.fromPubSub(updates),
       })
     }),
@@ -441,17 +393,3 @@ export function configured(options?: Options) {
 }
 
 export const node = configured()
-
-type Edit = { readonly path: (string | number)[]; readonly value: unknown }
-
-function changes(before: unknown, after: unknown, path: (string | number)[] = []): Edit[] {
-  if (Object.is(before, after)) return []
-  if (isRecord(before) && isRecord(after)) {
-    return [...new Set([...Object.keys(before), ...Object.keys(after)])].flatMap((key) => {
-      if (!(key in after)) return [{ path: [...path, key], value: undefined }]
-      if (!(key in before)) return [{ path: [...path, key], value: after[key] }]
-      return changes(before[key], after[key], [...path, key])
-    })
-  }
-  return [{ path, value: after }]
-}

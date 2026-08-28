@@ -152,7 +152,7 @@ export function SessionReviewV2(props: SessionReviewV2Props) {
   const locale = useLocale()
 
   createEffect(() => {
-    getWorkerPool(props.diffStyle)
+    getWorkerPool()
   })
 
   const fileIndex = () => {

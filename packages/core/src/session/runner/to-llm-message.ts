@@ -1,7 +1,7 @@
 import { Message, ToolCallPart, ToolResultPart, type ContentPart, type ProviderMetadata } from "@opencode-ai/ai"
+import type { Model } from "@opencode-ai/schema/model"
 import { Option, Schema } from "effect"
 import { fileURLToPath } from "url"
-import type { Model } from "../../model.js"
 import { SessionMessage } from "../message.js"
 import type { FileAttachment } from "@opencode-ai/schema/prompt"
 
