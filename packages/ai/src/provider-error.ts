@@ -58,7 +58,7 @@ export const isContextOverflowFailure = (failure: unknown) =>
     : Schema.is(ProviderErrorEvent)(failure) && failure.classification === "context-overflow"
 
 const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
-const QUOTA_CODES = new Set(["insufficient_quota", "usage_not_included", "usage_limit_reached", "billing_error"])
+const QUOTA_CODES = new Set(["insufficient_quota", "usage_not_included", "billing_error"])
 const AUTH_CODES = new Set(["authentication_error", "permission_error"])
 const SERVER_CODES = new Set([
   "api_error",
@@ -75,8 +75,7 @@ const SERVER_CODES = new Set([
 ])
 const INVALID_REQUEST_CODES = new Set(["invalid_prompt", "invalid_request_error", "validationexception"])
 const RATE_LIMIT_TEXT = /rate increased too quickly|rate[-_\s]?limit|too[_\s]?many[_\s]?requests/i
-const QUOTA_TEXT =
-  /insufficient[-_\s]?quota|quota[-_\s]?exceeded|usage[-_\s]?limit|available balance|out of budget|billing/i
+const QUOTA_TEXT = /insufficient[-_\s]?quota|quota[-_\s]?exceeded/i
 const CONTENT_POLICY_TEXT = /content[-_\s]?policy|content_filter|safety/i
 
 export interface ProviderFailure {
@@ -121,7 +120,7 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
   if (input.status === 413 || isPayloadTooLarge(text))
     return new InvalidRequestError({ ...details, classification: "payload-too-large" })
   if (CONTENT_POLICY_TEXT.test(text)) return new ContentPolicyError(details)
-  if (codes.some((code) => QUOTA_CODES.has(code)) || (clientScoped && QUOTA_TEXT.test(text)))
+  if (codes.some((code) => QUOTA_CODES.has(code)) || (input.status === 429 && QUOTA_TEXT.test(text)))
     return new QuotaExceededError(details)
   if (input.status === 401 || input.status === 403 || codes.some((code) => AUTH_CODES.has(code)))
     return new AuthenticationError(details)

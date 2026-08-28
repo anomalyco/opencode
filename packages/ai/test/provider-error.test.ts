@@ -87,23 +87,6 @@ describe("provider error classification", () => {
     ])
   })
 
-  test("classifies subscription and usage limit failures as quota exhaustion", () => {
-    expect(
-      [
-        classifyProviderFailure({ message: "Monthly usage limit reached", status: 429 }),
-        classifyProviderFailure({ message: "You are out of budget" }),
-        classifyProviderFailure({ message: '{"error":{"code":"usage_limit_reached"}}' }),
-        classifyProviderFailure({ message: "Enable available balance usage to continue", status: 429 }),
-      ].map((reason) => reason._tag),
-    ).toEqual(["QuotaExceeded", "QuotaExceeded", "QuotaExceeded", "QuotaExceeded"])
-  })
-
-  test("keeps quota wording on server failures classified as provider internal", () => {
-    expect(classifyProviderFailure({ message: "billing service unavailable", status: 503 })._tag).toBe(
-      "ProviderInternal",
-    )
-  })
-
   test("classifies any remaining 4xx status as an invalid request", () => {
     expect(
       [400, 402, 404, 418, 422, 451].map(
