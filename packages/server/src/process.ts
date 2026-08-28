@@ -17,6 +17,7 @@ import {
 } from "effect/unstable/http"
 import { createServer } from "node:http"
 import { ServerAuth } from "./auth"
+import { normalizeConnectionUrl } from "./connection-url"
 import { isAllowedCorsOrigin } from "./cors"
 import { authorizedRequest } from "./middleware/authorization"
 import { withoutParentSpan } from "./request-tracing"
@@ -100,7 +101,7 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
           const host = address.family === "IPv6" ? `[${address.address}]` : address.address
           return [
             ...new Set([
-              ...(options.additionalUrls ?? []),
+              ...(options.additionalUrls ?? []).map((url) => normalizeConnectionUrl(url)),
               ...ServerInfo.connectionURLs(`http://${host}:${address.port}`, hostname),
             ]),
           ]

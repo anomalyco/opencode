@@ -2,6 +2,7 @@ import { Global } from "@opencode-ai/util/global"
 import { OPENCODE_CHANNEL, OPENCODE_VERSION } from "../version"
 import { Hash } from "@opencode-ai/util/hash"
 import { Service } from "@opencode-ai/client/effect/service"
+import { normalizeConnectionUrl } from "@opencode-ai/server/connection-url"
 import { Effect, FileSystem, Option, Schema } from "effect"
 import { randomBytes } from "crypto"
 import path from "path"
@@ -223,7 +224,9 @@ export const addUrl = Effect.fn("cli.service-config.add-url")(function* (value: 
   const existing = yield* read()
   if (existing.urls?.includes(url)) return
   yield* Service.stop(yield* options())
-  yield* write({ ...existing, urls: [...(existing.urls ?? []), url] })
+  const current = yield* read()
+  if (current.urls?.includes(url)) return
+  yield* write({ ...current, urls: [...(current.urls ?? []), url] })
 })
 
 export const listUrls = Effect.fn("cli.service-config.list-urls")(function* () {
@@ -236,8 +239,10 @@ export const removeUrl = Effect.fn("cli.service-config.remove-url")(function* (v
   const urls = existing.urls?.filter((item) => item !== url) ?? []
   if (urls.length === (existing.urls?.length ?? 0)) return
   yield* Service.stop(yield* options())
-  const { urls: _urls, ...rest } = existing
-  yield* write(urls.length === 0 ? rest : { ...rest, urls })
+  const current = yield* read()
+  const next = current.urls?.filter((item) => item !== url) ?? []
+  const { urls: _urls, ...rest } = current
+  yield* write(next.length === 0 ? rest : { ...rest, urls: next })
 })
 
 export const unset = Effect.fn("cli.service-config.unset")(function* (key: string, name?: string) {
@@ -281,12 +286,7 @@ export const unset = Effect.fn("cli.service-config.unset")(function* (key: strin
 })
 
 export function normalizeUrl(value: string) {
-  if (!URL.canParse(value)) throw new Error(`Invalid URL: ${value}`)
-  const url = new URL(value)
-  if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error("URL must use http:// or https://")
-  if (url.username || url.password) throw new Error("URL must not include credentials")
-  if (url.pathname !== "/" || url.search || url.hash) throw new Error("URL must not include a path, query, or fragment")
-  return url.origin
+  return normalizeConnectionUrl(value)
 }
 
 export * as ServiceConfig from "./service-config"

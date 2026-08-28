@@ -2,6 +2,7 @@ import { Database } from "@opencode-ai/core/database/database"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { PersistentPty } from "@opencode-ai/core/persistent-pty"
 import { Schema } from "effect"
+import { ConnectionUrl } from "./connection-url"
 
 export const ServerOptions = Schema.Struct({
   app: Schema.optional(
@@ -13,7 +14,7 @@ export const ServerOptions = Schema.Struct({
   ),
   hostname: Schema.optional(Schema.String),
   port: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(65_535))),
-  additionalUrls: Schema.optional(Schema.Array(Schema.String)),
+  additionalUrls: Schema.optional(Schema.Array(ConnectionUrl)),
   password: Schema.optional(Schema.String),
   cors: Schema.optional(Schema.Array(Schema.String)),
   simulation: Schema.optional(Schema.Boolean),

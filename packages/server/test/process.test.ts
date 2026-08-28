@@ -138,7 +138,11 @@ it.live("reports additional URLs before automatically discovered URLs", () =>
     const server = yield* ServerProcess.start<never, never>({
       hostname: "127.0.0.1",
       port: 0,
-      additionalUrls: ["https://primary.example.com", "https://secondary.example.com"],
+      additionalUrls: [
+        "https://primary.example.com/",
+        "https://PRIMARY.example.com:443",
+        "https://secondary.example.com",
+      ],
       password: "secret",
       app: { version: "test-version" },
       database: { path: ":memory:" },

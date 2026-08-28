@@ -101,6 +101,14 @@ test("service config manages additional URLs", async () => {
   }
 })
 
+test("service config rejects invalid additional URLs", () => {
+  expect(() => ServiceConfig.normalizeUrl("ftp://example.com")).toThrow()
+  expect(() => ServiceConfig.normalizeUrl("https://user:password@example.com")).toThrow()
+  expect(() => ServiceConfig.normalizeUrl("https://example.com/path")).toThrow()
+  expect(() => ServiceConfig.normalizeUrl("https://example.com?query=true")).toThrow()
+  expect(() => ServiceConfig.normalizeUrl("https://example.com#fragment")).toThrow()
+})
+
 test("service filenames share release channels and identify preview channels", () => {
   expect(ServiceConfig.filename("latest")).toBe("service.json")
   expect(ServiceConfig.filename("dev")).toBe("service.json")

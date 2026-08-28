@@ -27,6 +27,8 @@ test("accepts additional server URLs", () => {
       decode({ additionalUrls: ["https://primary.example.com", "https://secondary.example.com"] }),
     ).additionalUrls,
   ).toEqual(["https://primary.example.com", "https://secondary.example.com"])
+  expect(Option.isNone(decode({ additionalUrls: ["ftp://example.com"] }))).toBe(true)
+  expect(Option.isNone(decode({ additionalUrls: ["https://example.com/path"] }))).toBe(true)
 })
 
 test("accepts durable event persistence configuration", () => {
