@@ -4,9 +4,7 @@ import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import path from "path"
 import { isDeepStrictEqual } from "node:util"
 import { type ParseError, parse } from "jsonc-parser"
-import { applyEdits, modify } from "jsonc-parser"
 import { Context, Effect, Layer, Option, PubSub, Ref, Schema, Semaphore, Stream } from "effect"
-import { produce, type Draft } from "immer"
 import {
   AgentsDirectory,
   ClaudeDirectory,
@@ -16,7 +14,6 @@ import {
   type Entry,
   Event,
 } from "@opencode-ai/schema/config"
-import { isRecord } from "@opencode-ai/ai/utils/record"
 import { Credential } from "./credential.js"
 import { Bus } from "./bus.js"
 import { Watcher } from "./filesystem/watcher.js"
@@ -36,8 +33,6 @@ export function latest<K extends keyof Info>(entries: readonly Entry[], key: K):
 export interface Interface {
   /** Returns location config documents and discovery sources from lowest to highest priority. */
   readonly entries: () => Effect.Effect<Entry[]>
-  /** Updates the first file-backed configuration document. */
-  readonly update: (update: (draft: Draft<Info>) => void) => Effect.Effect<Info, UpdateError>
   /**
    * Streams raw filesystem updates under config roots. Config owns root
    * topology and watch reconciliation; domain owners filter this feed for the
@@ -45,11 +40,6 @@ export interface Interface {
    */
   readonly changes: () => Stream.Stream<Watcher.Update>
 }
-
-export class UpdateError extends Schema.TaggedError<UpdateError>()("Config.UpdateError", {
-  message: Schema.String,
-  cause: Schema.optional(Schema.Defect()),
-}) {}
 
 export const Options = Schema.Struct({
   project: Schema.optional(Schema.Boolean),
@@ -80,20 +70,6 @@ export const testLayer = (initial: Entry[] = []) =>
       const updates = yield* PubSub.unbounded<Watcher.Update>()
       const service = Test.of({
         entries: () => Ref.get(entries),
-        update: (update) =>
-          Effect.gen(function* () {
-            const current = yield* Ref.get(entries)
-            const index = current.findIndex((entry) => entry.type === "document" && entry.path !== undefined)
-            const entry = current[index]
-            if (!entry || entry.type !== "document")
-              return yield* Effect.fail(new UpdateError({ message: "No editable config document found" }))
-            const info = yield* Effect.try({
-              try: () => produce(entry.info, update),
-              catch: (cause) => new UpdateError({ message: "Config update failed", cause }),
-            })
-            yield* Ref.set(entries, current.with(index, new Document({ type: "document", path: entry.path, info })))
-            return info
-          }),
         changes: () => Stream.fromPubSub(updates),
         setEntries: (next) => Ref.set(entries, next),
         emitChange: (update) => PubSub.publish(updates, update).pipe(Effect.asVoid),
@@ -400,54 +376,10 @@ export const layer = (options?: Options) =>
       )
       yield* reconcile(initial)
 
-      const update = Effect.fn("Config.update")((mutate: (draft: Draft<Info>) => void) =>
-        reloadLock.withPermit(
-          Effect.gen(function* () {
-            // TODO: Replace entry-order selection with an explicit config scope/target model.
-            const document = configs.find((entry) => entry.type === "document" && entry.path !== undefined)
-            if (!document || document.type !== "document" || !document.path)
-              return yield* Effect.fail(new UpdateError({ message: "No editable config document found" }))
-            const next = yield* Effect.try({
-              try: () => produce(document.info, mutate),
-              catch: (cause) => new UpdateError({ message: "Config update failed", cause }),
-            })
-            const edits = changes(document.info, next)
-            if (!edits.length) return document.info
-            const text = yield* fs
-              .readFileString(document.path)
-              .pipe(
-                Effect.mapError(
-                  (cause) => new UpdateError({ message: `Failed to read config: ${document.path}`, cause }),
-                ),
-              )
-            const updated = edits.reduce(
-              (text, edit) =>
-                applyEdits(
-                  text,
-                  modify(text, edit.path, edit.value, { formattingOptions: { tabSize: 2, insertSpaces: true } }),
-                ),
-              text,
-            )
-            const info = yield* parseInfo(updated, document.path)
-            if (!info)
-              return yield* Effect.fail(new UpdateError({ message: `Invalid config update: ${document.path}` }))
-            const temporary = document.path + ".tmp"
-            yield* fs.writeFileString(temporary, updated.endsWith("\n") ? updated : updated + "\n").pipe(
-              Effect.andThen(fs.rename(temporary, document.path)),
-              Effect.mapError(
-                (cause) => new UpdateError({ message: `Failed to write config: ${document.path}`, cause }),
-              ),
-            )
-            return info
-          }),
-        ),
-      )
-
       return Service.of({
         entries: Effect.fnUntraced(function* () {
           return configs
         }),
-        update,
         changes: () => Stream.fromPubSub(updates),
       })
     }),
@@ -462,17 +394,3 @@ export function configured(options?: Options) {
 }
 
 export const node = configured()
-
-type Edit = { readonly path: (string | number)[]; readonly value: unknown }
-
-function changes(before: unknown, after: unknown, path: (string | number)[] = []): Edit[] {
-  if (Object.is(before, after)) return []
-  if (isRecord(before) && isRecord(after)) {
-    return [...new Set([...Object.keys(before), ...Object.keys(after)])].flatMap((key) => {
-      if (!(key in after)) return [{ path: [...path, key], value: undefined }]
-      if (!(key in before)) return [{ path: [...path, key], value: after[key] }]
-      return changes(before[key], after[key], [...path, key])
-    })
-  }
-  return [{ path, value: after }]
-}

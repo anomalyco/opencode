@@ -7,8 +7,7 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Global } from "@opencode-ai/util/global"
 import { Repository } from "@opencode-ai/core/repository"
 import { RepositoryCache } from "@opencode-ai/core/repository-cache"
-import { branch, git, gitRemote } from "./fixture/git"
-import { tmpdir } from "./fixture/tmpdir"
+import { branch, git, read, withRemote } from "./fixture/git"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(Layer.empty)
@@ -125,21 +124,6 @@ function cacheLayer(root: string) {
   return AppNodeBuilder.build(RepositoryCache.node, [
     [Global.node, Global.layerWith({ state: path.join(root, "state"), repos: path.join(root, "repos") })],
   ])
-}
-
-function withRemote<A, E, R>(body: (fixture: Awaited<ReturnType<typeof gitRemote>>) => Effect.Effect<A, E, R>) {
-  return Effect.acquireUseRelease(
-    Effect.promise(async () => {
-      const root = await tmpdir()
-      return { root, fixture: await gitRemote(root.path) }
-    }),
-    (input) => body(input.fixture),
-    (input) => Effect.promise(() => input.root[Symbol.asyncDispose]()),
-  )
-}
-
-function read(file: string) {
-  return Effect.promise(() => fs.readFile(file, "utf8")).pipe(Effect.map((content) => content.replace(/\r\n/g, "\n")))
 }
 
 function exists(file: string) {

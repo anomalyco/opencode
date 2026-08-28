@@ -7,6 +7,7 @@ import {
   AIError,
   LLMEvent,
   LLMRequest,
+  LLMResponse,
   Message,
   LanguageModel,
   ToolCallPart,
@@ -1149,7 +1150,7 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
-  it.effect("preserves scalar reasoning after content starts", () =>
+  it.effect("preserves scalar reasoning after content starts in one lifecycle", () =>
     Effect.gen(function* () {
       const details = [{ type: "reasoning.text", text: "detail", format: "unknown", index: 0 }]
       const response = yield* LLMClient.generate(request).pipe(
@@ -1166,8 +1167,35 @@ describe("OpenAI Chat route", () => {
       )
 
       expect(response.reasoning).toBe("detailscalar")
-      expect(response.events.filter(LLMEvent.is.reasoningStart)).toHaveLength(2)
-      expect(response.events.filter(LLMEvent.is.reasoningEnd)).toHaveLength(2)
+      expect(response.events.filter(LLMEvent.is.reasoningStart)).toHaveLength(1)
+      expect(response.events.filter(LLMEvent.is.reasoningEnd)).toHaveLength(1)
+      expect(response.message.content.filter((part) => part.type === "reasoning")).toHaveLength(1)
+      expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
+        openai: { reasoningField: "reasoning", reasoningDetails: details },
+      })
+    }),
+  )
+
+  it.effect("keeps one reasoning lifecycle across many content chunks", () =>
+    Effect.gen(function* () {
+      const details = [{ type: "reasoning.text", text: "thinking", format: "anthropic-claude-v1", index: 0 }]
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { choices: [{ delta: { reasoning: "thinking", reasoning_details: details } }] },
+              ...Array.from({ length: 25 }, (_, index) => deltaChunk({ content: `chunk-${index} ` })),
+              deltaChunk({}, "stop"),
+            ),
+          ),
+        ),
+      )
+
+      expect(response.reasoning).toBe("thinking")
+      expect(response.text).toBe(Array.from({ length: 25 }, (_, index) => `chunk-${index} `).join(""))
+      expect(response.events.filter(LLMEvent.is.reasoningStart)).toHaveLength(1)
+      expect(response.events.filter(LLMEvent.is.reasoningEnd)).toHaveLength(1)
+      expect(response.message.content.filter((part) => part.type === "reasoning")).toHaveLength(1)
       expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
         openai: { reasoningField: "reasoning", reasoningDetails: details },
       })
@@ -1213,7 +1241,18 @@ describe("OpenAI Chat route", () => {
           index: 0,
         },
       ]
-      const response = yield* LLMClient.generate(request).pipe(
+      // Snapshot reasoning-end metadata as each event is published so the
+      // assertion cannot pass through later mutation of a shared array.
+      const publishedEndMetadata: unknown[] = []
+      const response = yield* LLMClient.stream(request).pipe(
+        Stream.tap((event) =>
+          Effect.sync(() => {
+            if (LLMEvent.is.reasoningEnd(event))
+              publishedEndMetadata.push(decodeJson(encodeJson(event.providerMetadata)))
+          }),
+        ),
+        Stream.runFold(LLMResponse.empty, LLMResponse.reduce),
+        Effect.map((state) => LLMResponse.complete(state)!),
         Effect.provide(
           fixedResponse(
             sseEvents(
@@ -1234,10 +1273,12 @@ describe("OpenAI Chat route", () => {
       expect(response.events.filter(LLMEvent.is.reasoningStart)).toHaveLength(1)
       expect(response.events.filter(LLMEvent.is.reasoningDelta)).toHaveLength(1)
       expect(response.events.filter(LLMEvent.is.reasoningEnd)).toHaveLength(1)
-      expect(response.events.filter(LLMEvent.is.reasoningEnd).at(-1)?.providerMetadata).toEqual({
-        openai: { reasoningField: "reasoning", reasoningDetails: merged },
-      })
-      expect(response.events.findIndex(LLMEvent.is.reasoningEnd)).toBeLessThan(
+      expect(publishedEndMetadata).toEqual([{ openai: { reasoningField: "reasoning", reasoningDetails: merged } }])
+      expect(response.events.findIndex(LLMEvent.is.reasoningStart)).toBeLessThan(
+        response.events.findIndex(LLMEvent.is.textStart),
+      )
+      // Reasoning stays open alongside text and closes once during finalization.
+      expect(response.events.findIndex(LLMEvent.is.reasoningEnd)).toBeGreaterThan(
         response.events.findIndex(LLMEvent.is.textStart),
       )
 

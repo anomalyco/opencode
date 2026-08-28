@@ -135,7 +135,7 @@ export const fffLayer = Layer.effect(
         find: () => Effect.succeed([]),
       })
     }
-    yield* Effect.addFinalizer(() => Effect.sync(() => result.value.destroy()).pipe(Effect.ignore))
+    yield* Effect.addFinalizer(() => Effect.sync(() => result.value.destroy()))
     return Service.of({
       find: (input) =>
         Effect.sync(() => {

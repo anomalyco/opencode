@@ -42,7 +42,7 @@ import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { tmpdir } from "./fixture/tmpdir"
 import { tempGlobalLayer } from "./fixture/global"
 import { testEffect } from "./lib/effect"
-import { toolDefinitions, waitForTool } from "./lib/tool"
+import { toolDefinitions } from "./lib/tool"
 import { Database } from "../src/database/database"
 import { Bus } from "../src/bus"
 import { Reference } from "../src/reference"
@@ -701,25 +701,9 @@ describe("LocationServiceMap", () => {
               yield* Reference.Service
               const catalog = yield* Catalog.Service
               yield* catalog.transform((editor) => editor.provider.update(providerID, () => {}))
+              const supervisor = yield* PluginSupervisor.Service
+              yield* supervisor.flush
               const registry = yield* Tool.Service
-              // Tool plugins register during the forked PluginSupervisor boot; wait for
-              // every expected tool rather than relying on batch ordering.
-              yield* Effect.forEach(
-                [
-                  "edit",
-                  "glob",
-                  "grep",
-                  "question",
-                  "read",
-                  "shell",
-                  "skill",
-                  "subagent",
-                  "webfetch",
-                  "websearch",
-                  "write",
-                ],
-                (name) => waitForTool(registry, name),
-              )
               return {
                 providers: yield* catalog.provider.all(),
                 tools: yield* toolDefinitions(registry),

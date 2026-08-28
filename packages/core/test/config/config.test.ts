@@ -76,57 +76,6 @@ const provider = {
 }
 
 describe("Config", () => {
-  it.live("updates the first file-backed document", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ).pipe(
-      Effect.flatMap((tmp) => {
-        const global = path.join(tmp.path, "global")
-        const project = path.join(tmp.path, "project")
-        const globalFile = path.join(global, "opencode.jsonc")
-        const projectFile = path.join(project, "opencode.json")
-        return Effect.promise(async () => {
-          await Promise.all([fs.mkdir(global, { recursive: true }), fs.mkdir(project, { recursive: true })])
-          await Promise.all([
-            fs.writeFile(globalFile, '{\n  // Keep this comment.\n  "shell": "global"\n}\n'),
-            fs.writeFile(projectFile, JSON.stringify({ shell: "project" })),
-          ])
-        }).pipe(
-          Effect.andThen(
-            Effect.gen(function* () {
-              const config = yield* Config.Service
-              const content = yield* Effect.promise(() => fs.readFile(globalFile, "utf8"))
-              const cause = new Error("Rejected config update")
-              const error = yield* config
-                .update((draft) => {
-                  draft.shell = "discarded"
-                  throw cause
-                })
-                .pipe(Effect.flip)
-
-              expect(error).toBeInstanceOf(Config.UpdateError)
-              expect(error.message).toBe("Config update failed")
-              expect(error.cause).toBe(cause)
-              expect(yield* Effect.promise(() => fs.readFile(globalFile, "utf8"))).toBe(content)
-
-              const updated = yield* config.update((draft) => {
-                draft.shell = "updated"
-              })
-
-              expect(updated.shell).toBe("updated")
-              expect(yield* Effect.promise(() => fs.readFile(globalFile, "utf8"))).toContain("// Keep this comment.")
-              expect(yield* Effect.promise(() => fs.readFile(globalFile, "utf8"))).toContain('"shell": "updated"')
-              expect(JSON.parse(yield* Effect.promise(() => fs.readFile(projectFile, "utf8")))).toEqual({
-                shell: "project",
-              })
-            }).pipe(Effect.provide(testLayer(project, global))),
-          ),
-        )
-      }),
-    ),
-  )
-
   it.live("excludes home-level claude and agents directories when global is disabled", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
@@ -203,16 +152,6 @@ describe("Config", () => {
           ),
         )
       }),
-    ),
-  )
-
-  it.effect("fails updates when no file-backed document exists", () =>
-    Effect.gen(function* () {
-      const config = yield* Config.Service
-      const error = yield* config.update((draft) => void draft).pipe(Effect.flip)
-      expect(error.message).toBe("No editable config document found")
-    }).pipe(
-      Effect.provide(Config.testLayer([new Document({ type: "document", info: new Info({ shell: "virtual" }) })])),
     ),
   )
 
@@ -427,38 +366,6 @@ describe("Config", () => {
       yield* Effect.yieldNow
       yield* test.emitChange({ type: "create", path: "/root/commands/review.md" })
       expect(Array.from(yield* Fiber.join(received))).toEqual([{ type: "create", path: "/root/commands/review.md" }])
-    }).pipe(Effect.provide(Config.testLayer())),
-  )
-
-  it.effect("keeps test config unchanged after an update callback fails", () =>
-    Effect.gen(function* () {
-      const config = yield* Config.Service
-      const test = yield* Config.Test
-      const entry = new Document({
-        type: "document",
-        path: AbsolutePath.make(path.join(import.meta.dir, "opencode.json")),
-        info: new Info({ shell: "initial" }),
-      })
-      yield* test.setEntries([entry])
-      const cause = new Error("Rejected config update")
-      const error = yield* config
-        .update((draft) => {
-          draft.shell = "discarded"
-          throw cause
-        })
-        .pipe(Effect.flip)
-
-      expect(error).toBeInstanceOf(Config.UpdateError)
-      expect(error.message).toBe("Config update failed")
-      expect(error.cause).toBe(cause)
-      expect(yield* config.entries()).toEqual([entry])
-      expect(entry.info.shell).toBe("initial")
-
-      const updated = yield* config.update((draft) => {
-        draft.shell = "recovered"
-      })
-      expect(updated.shell).toBe("recovered")
-      expect(Config.latest(yield* test.entries(), "shell")).toBe("recovered")
     }).pipe(Effect.provide(Config.testLayer())),
   )
 

@@ -44,7 +44,7 @@ import { testEffect } from "./lib/effect"
 import { imagePassthrough } from "./lib/image"
 import { location } from "./fixture/location"
 import { hostEnvironmentLayer, recordingEnvironmentLayer } from "./fixture/environment"
-import { executeTool, toolDefinitions, toolIdentity, waitForCodeModeTool, waitForTool } from "./lib/tool"
+import { executeTool, toolDefinitions, toolIdentity, waitForTool } from "./lib/tool"
 
 let assertion: Deferred.Deferred<Permission.AssertInput> | undefined
 let decision: Effect.Effect<void, Permission.Error> = Effect.void
@@ -205,7 +205,6 @@ function resourceMcpLayer(
               Config.Service,
               Config.Service.of({
                 entries: overrides.entries,
-                update: () => Effect.die("unused config update"),
                 changes: () => Stream.never,
               }),
             )
@@ -473,6 +472,37 @@ test("retains output schemas across paginated MCP discovery", async () => {
       },
     },
   ])
+})
+
+test("lists paginated prompts and invokes them through the MCP client", async () => {
+  const result = await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const connection = yield* connect(
+          "prompts",
+          new ConfigMCP.Local({
+            type: "local",
+            command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-prompts.ts")],
+          }),
+          import.meta.dir,
+        )
+        return {
+          prompts: yield* connection.prompts(),
+          result: yield* connection.prompt({ name: "first", args: { topic: "Effect" } }),
+        }
+      }),
+    ),
+  )
+
+  expect(result.prompts).toEqual([
+    {
+      name: "first",
+      description: "First prompt",
+      arguments: [{ name: "topic", description: "Topic to explain", required: true }],
+    },
+    { name: "second", description: "Second prompt", arguments: undefined },
+  ])
+  expect(result.result).toEqual({ messages: [{ role: "user", content: { type: "text", text: "Effect" } }] })
 })
 
 test("spawns local MCP servers through the location environment", async () => {
@@ -1564,7 +1594,9 @@ testEffect(Layer.empty).effect("coalesces queued MCP tool notifications after in
 it.effect("advertises MCP output schemas to Code Mode", () =>
   Effect.gen(function* () {
     const registry = yield* Tool.Service
-    const toolSet = yield* waitForCodeModeTool(registry, "demo.search")
+    const registration = yield* McpTool.Service
+    yield* registration.flush
+    const toolSet = yield* registry.snapshot()
     const execute = toolSet.definitions.find((tool) => tool.name === "execute")
 
     expect(toolSet.definitions.map((tool) => tool.name)).toEqual([
@@ -1583,7 +1615,11 @@ it.effect("returns content-only MCP results through Code Mode", () =>
     assertion = yield* Deferred.make<Permission.AssertInput>()
     decision = Effect.void
     const registry = yield* Tool.Service
-    const toolSet = yield* waitForCodeModeTool(registry, "demo.status")
+    const registration = yield* McpTool.Service
+    yield* registration.flush
+    const toolSet = yield* registry.snapshot()
+
+    expect(toolSet.codeModeCatalog?.some((tool) => tool.path === "demo.status")).toBe(true)
 
     const execution = yield* toolSet.execute({
       sessionID: Session.ID.make("ses_mcp_content_only"),
@@ -1606,7 +1642,8 @@ it.effect("returns content-only MCP results through Code Mode", () =>
 it.effect("advertises MCP tools directly when Code Mode is disabled for the server", () =>
   Effect.gen(function* () {
     const registry = yield* Tool.Service
-    yield* waitForTool(registry, "direct_lookup")
+    const registration = yield* McpTool.Service
+    yield* registration.flush
     const definitions = yield* toolDefinitions(registry)
     const execute = definitions.find((tool) => tool.name === "execute")
 
@@ -1622,7 +1659,8 @@ it.effect("fails the call when MCP reports isError", () =>
     assertion = yield* Deferred.make<Permission.AssertInput>()
     decision = Effect.void
     const registry = yield* Tool.Service
-    yield* waitForTool(registry, "direct_fail")
+    const registration = yield* McpTool.Service
+    yield* registration.flush
 
     const execution = yield* executeTool(registry, {
       sessionID: Session.ID.make("ses_mcp_is_error"),
@@ -1640,7 +1678,8 @@ it.effect("preserves MCP text and media content for the model", () =>
     assertion = yield* Deferred.make<Permission.AssertInput>()
     decision = Effect.void
     const registry = yield* Tool.Service
-    yield* waitForTool(registry, "direct_media")
+    const registration = yield* McpTool.Service
+    yield* registration.flush
 
     const execution = yield* executeTool(registry, {
       sessionID: Session.ID.make("ses_mcp_media"),
@@ -1663,7 +1702,10 @@ it.effect("waits for permission before calling an MCP tool", () =>
     const permission = yield* Deferred.make<void>()
     decision = Deferred.await(permission)
     const registry = yield* Tool.Service
-    const toolSet = yield* waitForCodeModeTool(registry, "demo.search")
+    const registration = yield* McpTool.Service
+    yield* registration.flush
+    const toolSet = yield* registry.snapshot()
+    expect(toolSet.codeModeCatalog?.some((tool) => tool.path === "demo.search")).toBe(true)
 
     const fiber = yield* toolSet
       .execute({
@@ -1704,7 +1746,10 @@ it.effect("does not call MCP when permission is blocked", () =>
     assertion = yield* Deferred.make<Permission.AssertInput>()
     decision = Effect.fail(new Permission.BlockedError({ rules: [], permission: "demo_search", resources: ["*"] }))
     const registry = yield* Tool.Service
-    const toolSet = yield* waitForCodeModeTool(registry, "demo.search")
+    const registration = yield* McpTool.Service
+    yield* registration.flush
+    const toolSet = yield* registry.snapshot()
+    expect(toolSet.codeModeCatalog?.some((tool) => tool.path === "demo.search")).toBe(true)
 
     const execution = yield* toolSet.execute({
       sessionID: Session.ID.make("ses_mcp_blocked"),

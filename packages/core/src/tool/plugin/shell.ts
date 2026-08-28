@@ -1,7 +1,7 @@
 export * as ShellTool from "./shell.js"
 
 import { ToolFailure } from "@opencode-ai/ai"
-import type { Context as PluginContext } from "@opencode-ai/plugin/effect/plugin"
+import type { Context } from "@opencode-ai/plugin/effect/plugin"
 import { Deferred, Effect, Schema, Scope } from "effect"
 import { Config } from "../../config.js"
 import { Environment } from "../../environment/index.js"
@@ -102,7 +102,7 @@ const backgroundResult = (shellID: string, file: string) => ({
 
 export const Plugin = {
   id: "opencode.tool.shell",
-  effect: Effect.fn("ShellTool.Plugin")(function* (ctx: PluginContext) {
+  effect: Effect.fn("ShellTool.Plugin")(function* (ctx: Context) {
     const runtime = yield* PluginRuntime.Service
     const scope = yield* Scope.Scope
     const environment = yield* Environment.Service

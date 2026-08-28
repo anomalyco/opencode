@@ -111,7 +111,7 @@ const layer = Layer.effect(
               for (const definition of definitions) {
                 const previous = active.get(definition.id)
                 active.delete(definition.id)
-                if (previous) yield* Scope.close(previous.scope, Exit.void).pipe(Effect.ignore)
+                if (previous) yield* Scope.close(previous.scope, Exit.void)
 
                 const loaded = yield* load(definition)
                 if (loaded.scope !== undefined) {
@@ -142,7 +142,7 @@ const layer = Layer.effect(
                 .filter(([id]) => !ids.has(id))
                 .toReversed()
               removed.forEach(([id]) => active.delete(id))
-              yield* Effect.forEach(removed, ([, entry]) => Scope.close(entry.scope, Exit.void).pipe(Effect.ignore), {
+              yield* Effect.forEach(removed, ([, entry]) => Scope.close(entry.scope, Exit.void), {
                 discard: true,
               })
               inventory = [...nextInventory, ...failures]
