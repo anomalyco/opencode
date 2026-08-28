@@ -334,6 +334,34 @@ export const SettingsGeneralV2: Component<{
         <ShellSetting controller={shell} />
 
         <SettingsRowV2
+          title="自动领航（Auto-Drive）"
+          description="在一轮执行结束后，若模型回答包含下一步计划或询问是否继续，自动发起续推指令推进任务"
+        >
+          <div data-action="settings-auto-drive">
+            <Switch
+              checked={settings.general.autoDrive()}
+              onChange={(checked) => settings.general.setAutoDrive(checked)}
+            />
+          </div>
+        </SettingsRowV2>
+
+        <Show when={settings.general.autoDrive()}>
+          <SettingsRowV2
+            title="续推提示词（Auto-Drive Prompt）"
+            description="自动接续时发送给模型的提示词内容"
+          >
+            <div class="w-72" data-action="settings-auto-drive-prompt">
+              <TextInputV2
+                value={settings.general.autoDrivePrompt()}
+                onInput={(event) => settings.general.setAutoDrivePrompt(event.currentTarget.value)}
+                placeholder="请继续执行下一步计划。"
+                appearance="base"
+              />
+            </div>
+          </SettingsRowV2>
+        </Show>
+
+        <SettingsRowV2
           title={language.t("settings.general.row.reasoningSummaries.title")}
           description={language.t("settings.general.row.reasoningSummaries.description")}
         >

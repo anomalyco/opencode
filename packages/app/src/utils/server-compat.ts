@@ -235,7 +235,7 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
           timeCreated: Date.now(),
           type: "user",
           data: { text: value.text },
-          delivery: value.delivery ?? "steer",
+          delivery: value.delivery ?? "queue",
         }
       },
       async command(value: SessionCommandInput) {
@@ -261,7 +261,7 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
           timeCreated: Date.now(),
           type: "user",
           data: { text: `/${value.command} ${value.arguments ?? ""}`.trim() },
-          delivery: value.delivery ?? "steer",
+          delivery: value.delivery ?? "queue",
         }
       },
       async shell(value: SessionShellInput & LegacyPrompt) {

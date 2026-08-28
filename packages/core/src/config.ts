@@ -102,6 +102,21 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   plugins: ConfigPlugin.Plugins.pipe(Schema.optional).annotate({
     description: "Ordered external plugin packages to load",
   }),
+  auto_drive: Schema.Union([
+    Schema.Boolean,
+    Schema.Struct({
+      enabled: Schema.Boolean.pipe(Schema.optional),
+      prompt: Schema.String.pipe(Schema.optional),
+      max_runs: Schema.Number.pipe(Schema.optional),
+      supervisor: Schema.Boolean.pipe(Schema.optional),
+      memory: Schema.Boolean.pipe(Schema.optional),
+      contextual: Schema.Boolean.pipe(Schema.optional),
+    }),
+  ])
+    .pipe(Schema.optional)
+    .annotate({
+      description: "Auto-Drive automatic continuation configuration",
+    }),
   experimental: ConfigExperimental.Experimental.pipe(Schema.optional),
   providers: Schema.Record(Schema.String, ConfigProvider.Info).pipe(Schema.optional),
 }) {}

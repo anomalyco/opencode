@@ -348,6 +348,35 @@ export const SettingsGeneral: Component = () => {
         </SettingsRow>
 
         <SettingsRow
+          title="自动领航（Auto-Drive）"
+          description="在一轮执行结束后，若模型回答包含下一步计划或询问是否继续，自动发起续推指令推进任务"
+        >
+          <div data-action="settings-auto-drive">
+            <Switch
+              checked={settings.general.autoDrive()}
+              onChange={(checked) => settings.general.setAutoDrive(checked)}
+            />
+          </div>
+        </SettingsRow>
+
+        <Show when={settings.general.autoDrive()}>
+          <SettingsRow
+            title="续推提示词（Auto-Drive Prompt）"
+            description="自动接续时发送给模型的提示词内容"
+          >
+            <div class="w-72" data-action="settings-auto-drive-prompt">
+              <TextField
+                value={settings.general.autoDrivePrompt()}
+                onChange={(value) => settings.general.setAutoDrivePrompt(value)}
+                placeholder="请继续执行下一步计划。"
+                variant="normal"
+                size="small"
+              />
+            </div>
+          </SettingsRow>
+        </Show>
+
+        <SettingsRow
           title={language.t("settings.general.row.reasoningSummaries.title")}
           description={language.t("settings.general.row.reasoningSummaries.description")}
         >
