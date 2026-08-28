@@ -1,7 +1,8 @@
 export * as McpOAuth from "./oauth.js"
 
-import { auth, type OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js"
+import { auth, extractWWWAuthenticateParams, type OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js"
 import type { OAuthClientInformationMixed, OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js"
+import { LATEST_PROTOCOL_VERSION } from "@modelcontextprotocol/sdk/types.js"
 import { Deferred, Effect } from "effect"
 import { Credential } from "@opencode-ai/schema/credential"
 import { ConfigMCP } from "@opencode-ai/schema/config/mcp"
@@ -213,8 +214,40 @@ export const authorize = (input: {
       return toCredential({ methodID: input.methodID, serverUrl: input.config.url, tokens, client })
     })
 
+    const challenge = yield* Effect.tryPromise({
+      try: async () => {
+        const response = await fetch(input.config.url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json, text/event-stream",
+            ...input.config.headers,
+          },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "initialize",
+            params: {
+              protocolVersion: LATEST_PROTOCOL_VERSION,
+              capabilities: {},
+              clientInfo: { name: "opencode", version: "unknown" },
+            },
+          }),
+        })
+        const result = extractWWWAuthenticateParams(response)
+        await response.body?.cancel()
+        return result
+      },
+      catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+    })
+
     const result = yield* Effect.tryPromise({
-      try: () => auth(oauthProvider, { serverUrl: input.config.url, scope: oauth?.scope }),
+      try: () =>
+        auth(oauthProvider, {
+          serverUrl: input.config.url,
+          resourceMetadataUrl: challenge.resourceMetadataUrl,
+          scope: oauth?.scope ?? challenge.scope,
+        }),
       catch: (error) => (error instanceof Error ? error : new Error(String(error))),
     })
 
@@ -238,7 +271,12 @@ export const authorize = (input: {
         Effect.flatMap((value) =>
           Effect.tryPromise({
             try: () =>
-              auth(oauthProvider, { serverUrl: input.config.url, authorizationCode: value, scope: oauth?.scope }),
+              auth(oauthProvider, {
+                serverUrl: input.config.url,
+                authorizationCode: value,
+                resourceMetadataUrl: challenge.resourceMetadataUrl,
+                scope: oauth?.scope ?? challenge.scope,
+              }),
             catch: (error) => (error instanceof Error ? error : new Error(String(error))),
           }),
         ),

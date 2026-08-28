@@ -73,4 +73,60 @@ describe("MCP OAuth", () => {
   test("rejects an invalid redirect URL", async () => {
     await expect(authorize("not a URL")).rejects.toThrow("cannot be parsed as a URL")
   })
+
+  test("uses protected resource metadata announced by the MCP challenge", async () => {
+    let metadataRequest = ""
+    const server = Bun.serve({
+      port: 0,
+      fetch(request) {
+        const url = new URL(request.url)
+        if (url.pathname === "/runtimes/example/invocations")
+          return new Response(null, {
+            status: 401,
+            headers: {
+              "WWW-Authenticate": `Bearer resource_metadata="${url.origin}/runtimes/example/invocations/.well-known/oauth-protected-resource?qualifier=dev"`,
+            },
+          })
+        if (url.pathname === "/runtimes/example/invocations/.well-known/oauth-protected-resource") {
+          metadataRequest = url.href
+          return Response.json({
+            resource: `${url.origin}/runtimes/example/invocations`,
+            authorization_servers: [url.origin],
+          })
+        }
+        if (url.pathname === "/.well-known/oauth-authorization-server")
+          return Response.json({
+            issuer: url.origin,
+            authorization_endpoint: `${url.origin}/authorize`,
+            token_endpoint: `${url.origin}/token`,
+            response_types_supported: ["code"],
+            code_challenge_methods_supported: ["S256"],
+          })
+        return new Response(null, { status: 404 })
+      },
+    })
+
+    try {
+      const authorization = await Effect.runPromise(
+        Effect.scoped(
+          MCPOAuth.authorize({
+            name: "aws",
+            config: new ConfigMCP.Remote({
+              type: "remote",
+              url: `${server.url}runtimes/example/invocations?qualifier=dev`,
+              oauth: { client_id: "client" },
+            }),
+            methodID: Integration.MethodID.make("oauth"),
+          }),
+        ),
+      )
+
+      expect(authorization.url).toStartWith(`${server.url}authorize?`)
+      expect(metadataRequest).toBe(
+        `${server.url}runtimes/example/invocations/.well-known/oauth-protected-resource?qualifier=dev`,
+      )
+    } finally {
+      server.stop(true)
+    }
+  })
 })
