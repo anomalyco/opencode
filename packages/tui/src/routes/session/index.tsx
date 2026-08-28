@@ -74,7 +74,8 @@ import { setPreLayoutSiblingMargin } from "../../util/layout"
 import { useTuiConfig } from "../../config"
 import { useClipboard } from "../../context/clipboard"
 import { nextThinkingMode, reasoningSummary, useThinkingMode, type ThinkingMode } from "../../context/thinking"
-import { getScrollAcceleration } from "../../util/scroll"
+import { getScrollAcceleration, scrollToMessageID } from "../../util/scroll"
+import { sessionScroll } from "../../util/session-scroll"
 import { collapseToolOutput } from "../../util/collapse-tool-output"
 import { usePluginRuntime } from "../../plugin/runtime"
 import { DialogRetryAction } from "../../component/dialog-retry-action"
@@ -343,6 +344,18 @@ export function Session() {
 
   let seeded = false
   let scroll: ScrollBoxRenderable
+  let scrollCleanup: (() => void) | undefined
+  const detachScroll = () => { scrollCleanup?.(); scrollCleanup = undefined }
+  onCleanup(detachScroll)
+  createEffect(
+    on(() => route.sessionID, (sessionID) => {
+      setTimeout(() => {
+        if (!scroll || scroll.isDestroyed) return
+        detachScroll()
+        scrollCleanup = sessionScroll.attach(sessionID, scroll)
+      }, 50)
+    }),
+  )
   let prompt: PromptRef | undefined
   const bind = (r: PromptRef | undefined) => {
     prompt = r
@@ -416,8 +429,7 @@ export function Session() {
       return
     }
 
-    const child = scroll.getChildren().find((c) => c.id === targetID)
-    if (child) scroll.scrollBy(child.y - scroll.y - 1)
+    scrollToMessageID(scroll, targetID)
     dialog.clear()
   }
 
@@ -526,10 +538,7 @@ export function Session() {
         dialog.replace(() => (
           <DialogTimeline
             onMove={(messageID) => {
-              const child = scroll.getChildren().find((child) => {
-                return child.id === messageID
-              })
-              if (child) scroll.scrollBy(child.y - scroll.y - 1)
+              scrollToMessageID(scroll, messageID)
             }}
             sessionID={route.sessionID}
             setPrompt={(promptInfo) => prompt?.set(promptInfo)}
@@ -549,10 +558,7 @@ export function Session() {
           <DialogForkFromTimeline
             onMove={(messageID) => {
               if (!messageID) return
-              const child = scroll.getChildren().find((child) => {
-                return child.id === messageID
-              })
-              if (child) scroll.scrollBy(child.y - scroll.y - 1)
+              scrollToMessageID(scroll, messageID)
             }}
             sessionID={route.sessionID}
           />
@@ -851,10 +857,7 @@ export function Session() {
           )
 
           if (hasValidTextPart) {
-            const child = scroll.getChildren().find((child) => {
-              return child.id === message.id
-            })
-            if (child) scroll.scrollBy(child.y - scroll.y - 1)
+            scrollToMessageID(scroll, message.id)
             break
           }
         }

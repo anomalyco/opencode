@@ -389,6 +389,7 @@ Mode pushes are automatically tracked by the plugin runtime. If a plugin is disa
   - `part(messageID)`
   - `lsp()`
   - `mcp()`
+  - `scrollToMessage(messageID)` — scrolls the current session viewport to the given message id, returning `false` when no target session is attached
 - `api.client` always reflects the current runtime client.
 - `api.event.on(type, handler)` subscribes to the TUI event stream and returns an unsubscribe function.
 - `api.renderer` exposes the raw `CliRenderer`.
