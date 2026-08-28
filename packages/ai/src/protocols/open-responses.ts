@@ -846,18 +846,64 @@ const onOutputTextDone = (state: ParserState, event: Event, id: string): StepRes
 export const outputItemID = (state: ParserState, event: Event) =>
   event.output_index === undefined ? event.item_id : (state.outputItems[event.output_index] ?? event.item_id)
 
+const startReasoningSummaryPart = (state: ParserState, itemID: string, index: number): StepResult => {
+  const item = state.reasoningItems[itemID]
+  if (!item || index === 0 || item.summaryParts[index] !== undefined) return [state, NO_EVENTS]
+  if (Object.values(item.summaryParts).every((status) => status === "concluded")) return [state, NO_EVENTS]
+
+  const events: LLMEvent[] = []
+  const lifecycle = Object.entries(item.summaryParts)
+    .filter((entry) => entry[1] !== "concluded")
+    .reduce(
+      (lifecycle, entry) =>
+        Lifecycle.reasoningEnd(lifecycle, events, `${itemID}:${entry[0]}`, providerMetadata(state, { itemId: itemID })),
+      state.lifecycle,
+    )
+  return [
+    {
+      ...state,
+      lifecycle: Lifecycle.reasoningStart(
+        lifecycle,
+        events,
+        `${itemID}:${index}`,
+        providerMetadata(state, { itemId: itemID, reasoningEncryptedContent: item.encryptedContent ?? null }),
+      ),
+      reasoningItems: {
+        ...state.reasoningItems,
+        [itemID]: {
+          ...item,
+          summaryParts: {
+            ...Object.fromEntries(
+              Object.entries(item.summaryParts).map((entry) =>
+                entry[1] === "concluded" ? entry : [entry[0], "concluded" as const],
+              ),
+            ),
+            [index]: "active",
+          },
+        },
+      },
+    },
+    events,
+  ]
+}
+
 export const onReasoningDelta = (state: ParserState, event: Event, itemID: string): StepResult => {
   const item = state.reasoningItems[itemID]
   if (!event.delta || !item) return [state, NO_EVENTS]
   const index = event.summary_index ?? 0
-  const events: LLMEvent[] = []
+  if (item.summaryParts[index] === "concluded") return [state, NO_EVENTS]
+  const started: StepResult =
+    item.summaryParts[index] === undefined ? startReasoningSummaryPart(state, itemID, index) : [state, NO_EVENTS]
+  const current = started[0].reasoningItems[itemID]
+  if (!current) return started
+  const events: LLMEvent[] = [...started[1]]
   return [
     {
-      ...state,
-      lifecycle: Lifecycle.reasoningDelta(state.lifecycle, events, `${itemID}:${index}`, event.delta),
+      ...started[0],
+      lifecycle: Lifecycle.reasoningDelta(started[0].lifecycle, events, `${itemID}:${index}`, event.delta),
       reasoningItems: {
-        ...state.reasoningItems,
-        [itemID]: { ...item, deltaIndexes: new Set([...item.deltaIndexes, index]) },
+        ...started[0].reasoningItems,
+        [itemID]: { ...current, deltaIndexes: new Set([...current.deltaIndexes, index]) },
       },
     },
     events,
@@ -878,18 +924,16 @@ export const onReasoningDone = (state: ParserState, event: Event, itemID: string
 const reasoningMetadata = (state: ParserState, item: StreamItem & { id: string }) =>
   providerMetadata(state, { itemId: item.id, reasoningEncryptedContent: item.encrypted_content ?? null })
 
-// Responses APIs stream reasoning items in a stable order:
+// Responses APIs normally stream reasoning items in this order:
 //   `output_item.added` (reasoning) →
 //     `reasoning_summary_part.added` (index=0) →
 //     `reasoning_summary_text.delta` →
 //     `reasoning_summary_part.done` (index=0) →
 //     (repeat for index>0) →
 //   `output_item.done` (reasoning).
-// The handlers below rely on this ordering: `onOutputItemAdded` seeds the
-// per-item entry, `onReasoningSummaryPartAdded` for `summary_index === 0`
-// short-circuits when the entry already exists, and higher-index handlers
-// fold against the same entry. Behaviour for out-of-order events is
-// best-effort, not guaranteed.
+// `onOutputItemAdded` seeds the per-item entry, while each later part start is
+// also an implicit boundary for the previous part. This keeps the common event
+// lifecycle ordered when a compatible provider omits or delays a part-done event.
 const onOutputItemAdded = (state: ParserState, event: Event): StepResult => {
   const item = event.item
   if (item?.type === "message" && item.id !== undefined) {
@@ -943,55 +987,14 @@ const onOutputItemAdded = (state: ParserState, event: Event): StepResult => {
 
 const onReasoningSummaryPartAdded = (state: ParserState, event: Event): StepResult => {
   if (event.item_id === undefined || event.summary_index === undefined) return [state, NO_EVENTS]
-  const item = state.reasoningItems[event.item_id]
-  if (!item) return [state, NO_EVENTS]
-  if (event.summary_index === 0) return [state, NO_EVENTS]
-
-  const events: LLMEvent[] = []
-  const closed = Object.entries(item.summaryParts)
-    .filter((entry) => entry[1] === "can-conclude")
-    .reduce(
-      (lifecycle, entry) =>
-        Lifecycle.reasoningEnd(
-          lifecycle,
-          events,
-          `${event.item_id}:${entry[0]}`,
-          providerMetadata(state, { itemId: event.item_id }),
-        ),
-      state.lifecycle,
-    )
-  return [
-    {
-      ...state,
-      lifecycle: Lifecycle.reasoningStart(
-        closed,
-        events,
-        `${event.item_id}:${event.summary_index}`,
-        providerMetadata(state, { itemId: event.item_id, reasoningEncryptedContent: item.encryptedContent ?? null }),
-      ),
-      reasoningItems: {
-        ...state.reasoningItems,
-        [event.item_id]: {
-          ...item,
-          summaryParts: {
-            ...Object.fromEntries(
-              Object.entries(item.summaryParts).map((entry) =>
-                entry[1] === "can-conclude" ? [entry[0], "concluded" as const] : entry,
-              ),
-            ),
-            [event.summary_index]: "active",
-          },
-        },
-      },
-    },
-    events,
-  ]
+  return startReasoningSummaryPart(state, event.item_id, event.summary_index)
 }
 
 const onReasoningSummaryPartDone = (state: ParserState, event: Event): StepResult => {
   if (event.item_id === undefined || event.summary_index === undefined) return [state, NO_EVENTS]
   const item = state.reasoningItems[event.item_id]
   if (!item) return [state, NO_EVENTS]
+  if (item.summaryParts[event.summary_index] !== "active") return [state, NO_EVENTS]
   return [
     {
       ...state,
@@ -1256,6 +1259,8 @@ export const step = (state: ParserState, input: Event) => {
   if (event.type === "response.output_item.added") {
     if (event.item?.type === "message" && event.item.id === undefined)
       return ProviderShared.eventError(state.id, `${event.type} message is missing id`)
+    if (event.item && isReasoningItem(event.item) && state.lifecycle.reasoning.size > 0)
+      return ProviderShared.eventError(state.id, `${event.type} started reasoning before the previous item ended`)
     const id = event.item?.id ?? (event.item?.type === "function_call" ? event.item.call_id : undefined)
     return Effect.succeed(
       onOutputItemAdded(

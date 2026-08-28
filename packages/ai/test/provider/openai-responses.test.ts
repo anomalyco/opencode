@@ -2750,6 +2750,93 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("concludes reasoning at implicit summary boundaries", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(
+        LLMRequest.update(request, { providerOptions: { store: false } }),
+      ).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              {
+                type: "response.output_item.added",
+                item: { type: "reasoning", id: "rs_1", encrypted_content: null },
+              },
+              { type: "response.reasoning_summary_part.added", item_id: "rs_1", summary_index: 0 },
+              { type: "response.reasoning_summary_text.delta", item_id: "rs_1", summary_index: 0, delta: "First" },
+              // The next part is enough to conclude the previous one even when
+              // its done event is delayed.
+              { type: "response.reasoning_summary_part.added", item_id: "rs_1", summary_index: 1 },
+              { type: "response.reasoning_summary_part.done", item_id: "rs_1", summary_index: 0 },
+              { type: "response.reasoning_summary_text.delta", item_id: "rs_1", summary_index: 1, delta: "Second" },
+              { type: "response.reasoning_summary_part.done", item_id: "rs_1", summary_index: 1 },
+              // Some compatible providers begin the next part with its first delta.
+              { type: "response.reasoning_summary_text.delta", item_id: "rs_1", summary_index: 2, delta: "Third" },
+              {
+                type: "response.output_item.done",
+                item: { type: "reasoning", id: "rs_1", encrypted_content: "encrypted-state" },
+              },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.reasoning).toBe("FirstSecondThird")
+      expect(response.events.filter((event) => event.type.startsWith("reasoning-"))).toEqual([
+        {
+          type: "reasoning-start",
+          id: "rs_1:0",
+          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: null } },
+        },
+        { type: "reasoning-delta", id: "rs_1:0", text: "First", providerMetadata: undefined },
+        { type: "reasoning-end", id: "rs_1:0", providerMetadata: { openai: { itemId: "rs_1" } } },
+        {
+          type: "reasoning-start",
+          id: "rs_1:1",
+          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: null } },
+        },
+        { type: "reasoning-delta", id: "rs_1:1", text: "Second", providerMetadata: undefined },
+        {
+          type: "reasoning-end",
+          id: "rs_1:1",
+          providerMetadata: { openai: { itemId: "rs_1" } },
+        },
+        {
+          type: "reasoning-start",
+          id: "rs_1:2",
+          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: null } },
+        },
+        { type: "reasoning-delta", id: "rs_1:2", text: "Third", providerMetadata: undefined },
+        {
+          type: "reasoning-end",
+          id: "rs_1:2",
+          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
+        },
+      ])
+    }),
+  )
+
+  it.effect("rejects a reasoning item that starts before the previous item ends", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "response.output_item.added", item: { type: "reasoning", id: "rs_1" } },
+              { type: "response.reasoning_summary_text.delta", item_id: "rs_1", summary_index: 0, delta: "First" },
+              { type: "response.output_item.added", item: { type: "reasoning", id: "rs_2" } },
+            ),
+          ),
+        ),
+        Effect.flip,
+      )
+
+      expect(error.reason._tag).toBe("InvalidProviderOutput")
+      expect(error.message).toContain("started reasoning before the previous item ended")
+    }),
+  )
+
   it.effect("reconciles reasoning summaries that arrive only as finals", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
