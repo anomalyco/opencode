@@ -1,12 +1,6 @@
 /// <reference types="@solidjs/start/env" />
 
-import "solid-js/web"
-
-declare module "solid-js/web" {
-  interface RequestEvent {
-    locals: App.RequestEventLocals
-  }
-}
+import "@solidjs/start"
 
 export declare module "@solidjs/start/server" {
   export type APIEvent = { request: Request }

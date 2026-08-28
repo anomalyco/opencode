@@ -1,9 +1,9 @@
+import { Database } from "@opencode-ai/core/database/database"
 import { Location } from "@opencode-ai/core/location"
 import { LocationServiceMap } from "@opencode-ai/core/location-services"
 import { Permission } from "@opencode-ai/core/permission"
 import { PermissionSaved } from "@opencode-ai/core/permission/saved"
-import { Session } from "@opencode-ai/core/session"
-import { Context, Effect, Option } from "effect"
+import { Effect, Option } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { Api } from "../api"
 import { PermissionNotFoundError, SessionNotFoundError } from "@opencode-ai/protocol/errors"
@@ -16,7 +16,7 @@ function missingRequest(id: Permission.ID) {
 export const PermissionHandler = HttpApiBuilder.group(Api, "server.permission", (handlers) =>
   Effect.gen(function* () {
     const locations = yield* LocationServiceMap.Service
-    const sessions = yield* Session.Service
+    const database = yield* Database.Service
     const requireOwnedRequest = Effect.fnUntraced(function* (
       sessionID: Permission.Request["sessionID"],
       requestID: Permission.ID,
@@ -69,10 +69,9 @@ export const PermissionHandler = HttpApiBuilder.group(Api, "server.permission", 
         Effect.fn(function* (ctx) {
           const requests = yield* withLoadedSessionServices(
             locations,
-            sessions,
+            database,
             ctx.params.sessionID,
-            (context): Effect.Effect<ReadonlyArray<Permission.Request>> =>
-              Context.get(context, Permission.Service).forSession(ctx.params.sessionID),
+            Permission.Service.use((permission) => permission.forSession(ctx.params.sessionID)),
           )
           return { data: Option.getOrElse(requests, () => []) }
         }),

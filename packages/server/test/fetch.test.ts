@@ -303,6 +303,11 @@ it.live("does not load a location when reading pending session requests", () =>
       )
       expect(response.status).toBe(200)
       expect(yield* Effect.promise(() => response.json())).toEqual({ data: [] })
+
+      const missing = yield* Effect.promise(() =>
+        handler(new Request(`http://opencode.local/api/session/ses_missing_pending/${resource}`)),
+      )
+      expect(missing.status).toBe(404)
     }
     const global = yield* Effect.promise(() =>
       handler(

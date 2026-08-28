@@ -1,4 +1,4 @@
-import { Duration, Effect, Layer, LayerMap } from "effect"
+import { Duration, Effect, Layer, LayerMap, Option, RcMap } from "effect"
 import { existsSync } from "fs"
 import path from "path"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
@@ -12,10 +12,21 @@ export { LocationServiceMap } from "./location-service-map.js"
 export type LocationServices = Instance.Services
 export type LocationError = Instance.Error
 
-export function canonicalizeLocationRef(ref: Location.Ref) {
+function canonicalize(ref: Location.Ref) {
   return Location.Ref.make({
     directory: AbsolutePath.make(process.platform === "win32" ? path.normalize(ref.directory) : ref.directory),
     workspaceID: ref.workspaceID,
+  })
+}
+
+export function contextIfLoaded(
+  locations: LayerMap.LayerMap<Location.Ref, Instance.Services, Instance.Error>,
+  ref: Location.Ref,
+) {
+  return Effect.gen(function* () {
+    const key = canonicalize(ref)
+    if (!(yield* RcMap.has(locations.rcMap, key))) return Option.none()
+    return Option.some(yield* RcMap.get(locations.rcMap, key))
   })
 }
 
@@ -37,9 +48,9 @@ export function buildLocationServiceMap(
       }),
       (inner) => ({
         ...inner,
-        get: (ref: Location.Ref) => inner.get(canonicalizeLocationRef(ref)),
-        contextEffect: (ref: Location.Ref) => inner.contextEffect(canonicalizeLocationRef(ref)),
-        invalidate: (ref: Location.Ref) => inner.invalidate(canonicalizeLocationRef(ref)),
+        get: (ref: Location.Ref) => inner.get(canonicalize(ref)),
+        contextEffect: (ref: Location.Ref) => inner.contextEffect(canonicalize(ref)),
+        invalidate: (ref: Location.Ref) => inner.invalidate(canonicalize(ref)),
       }),
     ),
   )

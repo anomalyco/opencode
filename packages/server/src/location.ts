@@ -1,10 +1,13 @@
+import { Database } from "@opencode-ai/core/database/database"
 import { Location } from "@opencode-ai/core/location"
-import { canonicalizeLocationRef, LocationServiceMap } from "@opencode-ai/core/location-services"
+import { contextIfLoaded, LocationServiceMap } from "@opencode-ai/core/location-services"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
+import { SessionTable } from "@opencode-ai/core/session/sql"
 import { Workspace } from "@opencode-ai/core/workspace"
 import { InvalidRequestError, SessionNotFoundError } from "@opencode-ai/protocol/errors"
-import { Context, Effect, Layer, Option, RcMap, Schema } from "effect"
+import { eq } from "drizzle-orm"
+import { Context, Effect, Layer, Option, Schema } from "effect"
 import { HttpServerRequest } from "effect/unstable/http"
 import { HttpApiMiddleware } from "effect/unstable/httpapi"
 
@@ -30,35 +33,47 @@ export function response<A, E, R>(data: Effect.Effect<A, E, R>) {
 
 const decodeSessionID = Schema.decodeUnknownEffect(Session.ID)
 
+export function sessionRef(database: Context.Service.Shape<typeof Database.Service>, sessionID: unknown) {
+  return Effect.gen(function* () {
+    const id = yield* decodeSessionID(sessionID).pipe(
+      Effect.mapError(() => new InvalidRequestError({ message: "Invalid session ID", field: "sessionID" })),
+    )
+    const row = yield* database.db
+      .select({ directory: SessionTable.directory, workspaceID: SessionTable.workspace_id })
+      .from(SessionTable)
+      .where(eq(SessionTable.id, id))
+      .get()
+      .pipe(Effect.orDie)
+    if (!row) return yield* new SessionNotFoundError({ sessionID: id, message: `Session not found: ${id}` })
+    return Location.Ref.make({
+      directory: AbsolutePath.make(row.directory),
+      workspaceID: row.workspaceID ? Workspace.ID.make(row.workspaceID) : undefined,
+    })
+  })
+}
+
 export function withLoadedSessionServices<A, E>(
   locations: Context.Service.Shape<typeof LocationServiceMap.Service>,
-  sessions: Context.Service.Shape<typeof Session.Service>,
+  database: Context.Service.Shape<typeof Database.Service>,
   sessionID: string,
-  use: (context: Context.Context<LocationServices>) => Effect.Effect<A, E>,
+  effect: Effect.Effect<A, E, LocationServices>,
 ) {
-  return Effect.scoped(
-    Effect.gen(function* () {
-      const id = yield* decodeSessionID(sessionID).pipe(
-        Effect.mapError(() => new InvalidRequestError({ message: "Invalid session ID", field: "sessionID" })),
-      )
-      const session = yield* sessions
-        .get(id)
-        .pipe(Effect.mapError(() => new SessionNotFoundError({ sessionID: id, message: `Session not found: ${id}` })))
-
-      return yield* withLoadedLocationServices(locations, session.location, use)
-    }),
-  )
+  return Effect.gen(function* () {
+    const ref = yield* sessionRef(database, sessionID)
+    return yield* withLoadedLocationServices(locations, ref, effect)
+  })
 }
 
 export function withLoadedLocationServices<A, E>(
   locations: Context.Service.Shape<typeof LocationServiceMap.Service>,
   ref: Location.Ref,
-  use: (context: Context.Context<LocationServices>) => Effect.Effect<A, E>,
+  effect: Effect.Effect<A, E, LocationServices>,
 ) {
   return Effect.scoped(
     Effect.gen(function* () {
-      if (!(yield* RcMap.has(locations.rcMap, canonicalizeLocationRef(ref)))) return Option.none<A>()
-      return Option.some(yield* use(yield* locations.contextEffect(ref)))
+      const context = yield* contextIfLoaded(locations, ref)
+      if (Option.isNone(context)) return Option.none<A>()
+      return Option.some(yield* effect.pipe(Effect.provide(context.value)))
     }),
   )
 }
