@@ -2599,6 +2599,7 @@ describe("OpenAI Responses route", () => {
           type: "reasoning-end",
           id: "rs_1:0",
           providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "terminal-state" } },
+          text: "Checked the diff.",
         },
       ])
       expect(response.message.content).toContainEqual({
@@ -3019,6 +3020,7 @@ describe("OpenAI Responses route", () => {
         {
           type: "reasoning-end",
           id: "rs_1:0",
+          text: "Checked the diff.",
           providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
         },
       ])
