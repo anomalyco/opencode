@@ -9,6 +9,7 @@ import { createEventStream, createFetch, directory, json } from "./fixture/tui-c
 import { tmpdir } from "./fixture/fixture"
 
 test.each([100, 44])("Ctrl-O is immediate, dismissible, and prunes cached deletions at width %s", async (width) => {
+  await using state = await tmpdir()
   const setup = await createTestRenderer({ width, height: 30, useThread: false, kittyKeyboard: true })
   setup.renderer.start()
   const ready = Promise.withResolvers<void>()
@@ -58,7 +59,7 @@ test.each([100, 44])("Ctrl-O is immediate, dismissible, and prunes cached deleti
         terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: ready.resolve }),
         args: {},
         log: () => {},
-      }).pipe(Effect.provide(AppNodeBuilder.build(Global.node)), Effect.provide(FileSystem.layerNoop({}))),
+      }).pipe(Effect.provide(Global.layerWith({ state: state.path })), Effect.provide(FileSystem.layerNoop({}))),
     )
     await ready.promise
     await setup.waitForFrame((frame) => frame.includes("commands"))
