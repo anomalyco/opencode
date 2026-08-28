@@ -21,6 +21,7 @@ import { useSessionLayout } from "@/pages/session/session-layout"
 import { getSessionContext } from "./session-context-metrics"
 import { estimateSessionContextBreakdown, type SessionContextBreakdownKey } from "./session-context-breakdown"
 import { createSessionContextFormatter } from "./session-context-format"
+import { SessionBudget } from "./session-budget"
 
 const BREAKDOWN_COLOR: Record<SessionContextBreakdownKey, string> = {
   system: "var(--syntax-info)",
@@ -313,6 +314,8 @@ export function SessionContextTab() {
             {(stat) => <Stat label={language.t(stat.label as Parameters<typeof language.t>[0])} value={stat.value()} />}
           </For>
         </div>
+
+        <SessionBudget />
 
         <Show when={breakdown().length > 0}>
           <div class="flex flex-col gap-2">

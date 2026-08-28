@@ -460,6 +460,27 @@ noLLMServer.instance(
   { config: cfg },
 )
 
+it.instance("loop stops without an LLM request when the session budget is exhausted", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({ title: "Pinned", budget: 0 })
+    const seeded = yield* seed(chat.id, { finish: "stop" })
+    yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "continue please" }],
+    })
+
+    const result = yield* prompt.loop({ sessionID: chat.id })
+
+    expect(result.info.id).toBe(seeded.assistant.id)
+    expect(yield* llm.hits).toHaveLength(0)
+  }),
+)
+
 noLLMServer.instance(
   "loop exits for a completed parent turn with nonmonotonic message IDs",
   () =>
