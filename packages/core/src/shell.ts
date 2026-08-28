@@ -1,7 +1,7 @@
 export * as Shell from "./shell.js"
 
 import path from "path"
-import { Context, Deferred, Duration, Effect, Fiber, Latch, Layer, Schema, Schedule, Stream } from "effect"
+import { Config, Context, Deferred, Duration, Effect, Fiber, Latch, Layer, Schema, Schedule, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { produce } from "immer"
 import { Shell } from "@opencode-ai/schema/shell"
@@ -18,6 +18,7 @@ import type { ShellCreateBefore } from "@opencode-ai/plugin/effect/shell"
 import { PluginHooks } from "./plugin/hooks.js"
 import { SessionEnvironment } from "./session/environment.js"
 import { SessionSchema } from "./session/schema.js"
+import { PowerShellPool } from "./shell/powershell.js"
 
 export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Shell.NotFoundError", {
   id: Shell.ID,
@@ -120,6 +121,11 @@ const layer = () =>
       const environment = yield* Environment.Service
       const hooks = yield* PluginHooks.Service
       const environments = yield* SessionEnvironment.Service
+      const runspaces = yield* Config.boolean("OPENCODE_EXPERIMENTAL_PWSH_RUNSPACES").pipe(
+        Config.withDefault(false),
+        Effect.orDie,
+      )
+      const powershell = runspaces ? yield* PowerShellPool.make(environment.spawner) : undefined
       const context = yield* Effect.context()
       const runFork = Effect.runForkWith(context)
       const sessions = new Map<string, Active>()
@@ -217,6 +223,27 @@ const layer = () =>
         }
       })
 
+      const spawn = Effect.fn("Shell.spawn")(function* (invocation: ShellCreateBefore) {
+        if (
+          powershell &&
+          process.platform === "win32" &&
+          location.workspaceID === undefined &&
+          ShellSelect.ps(invocation.shell)
+        ) {
+          return yield* powershell.spawn(invocation)
+        }
+
+        return yield* environment.spawner.spawn(
+          ChildProcess.make(invocation.shell, ShellSelect.args(invocation.shell, invocation.command), {
+            cwd: invocation.cwd,
+            env: invocation.env,
+            stdin: "ignore",
+            detached: process.platform !== "win32",
+            forceKillAfter: Duration.seconds(3),
+          }),
+        )
+      })
+
       const create = Effect.fn("Shell.create")(function* <E = never, R = never>(
         input: CreateInput,
         before?: (input: ShellCreateBefore) => Effect.Effect<void, E, R>,
@@ -241,7 +268,6 @@ const layer = () =>
         if (before) yield* before(invocation)
 
         const id = Shell.ID.ascending()
-        const args = ShellSelect.args(invocation.shell, invocation.command)
         const file = path.join(outputDir, `${id}.out`)
 
         const info: Info = {
@@ -262,19 +288,9 @@ const layer = () =>
         runFork(
           Effect.scoped(
             Effect.gen(function* () {
-              const handle = yield* environment.spawner
-                .spawn(
-                  ChildProcess.make(invocation.shell, args, {
-                    cwd: invocation.cwd,
-                    env: invocation.env,
-                    stdin: "ignore",
-                    detached: process.platform !== "win32",
-                    forceKillAfter: Duration.seconds(3),
-                  }),
-                )
-                .pipe(
-                  Effect.mapError((cause) => new AppProcess.AppProcessError({ command: invocation.command, cause })),
-                )
+              const handle = yield* spawn(invocation).pipe(
+                Effect.mapError((cause) => new AppProcess.AppProcessError({ command: invocation.command, cause })),
+              )
               const session: Active = {
                 info: produce(info, (draft) => {
                   draft.pid = handle.pid

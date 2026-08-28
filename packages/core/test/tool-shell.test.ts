@@ -1463,6 +1463,214 @@ describe("ShellTool", () => {
     ),
   )
 
+  if (isWindows && process.env.OPENCODE_EXPERIMENTAL_PWSH_RUNSPACES === "1") {
+    it.live(
+      "reuses a PowerShell worker process for sequential commands",
+      () =>
+        Effect.acquireUseRelease(
+          Effect.promise(() => tmpdir()),
+          (tmp) =>
+            withSession(tmp.path, () =>
+              Effect.gen(function* () {
+                const shell = yield* Shell.Service
+                const first = yield* shell.create({ command: "$PID", shell: "pwsh.exe", timeout: 0 })
+                yield* shell.wait(first.id)
+                const firstOutput = yield* shell.output(first.id)
+
+                const second = yield* shell.create({ command: "$PID", shell: "pwsh.exe", timeout: 0 })
+                yield* shell.wait(second.id)
+                const secondOutput = yield* shell.output(second.id)
+
+                expect(firstOutput.output.trim()).toMatch(/^\d+$/)
+                expect(secondOutput.output.trim()).toBe(firstOutput.output.trim())
+                expect(second.pid).toBe(first.pid)
+              }),
+            ),
+          (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+        ),
+      { timeout: 20_000 },
+    )
+
+    it.live(
+      "isolates PowerShell runspace variables, functions, environment, and working directory",
+      () =>
+        Effect.acquireUseRelease(
+          Effect.promise(() => tmpdir()),
+          (tmp) =>
+            Effect.gen(function* () {
+              const nested = path.join(tmp.path, "nested")
+              yield* Effect.promise(() => fs.mkdir(nested))
+              return yield* withSession(tmp.path, () =>
+                Effect.gen(function* () {
+                  const shell = yield* Shell.Service
+                  const first = yield* shell.create(
+                    {
+                      shell: "pwsh.exe",
+                      cwd: tmp.path,
+                      timeout: 0,
+                      command: [
+                        "$global:OPENCODE_POOL_VARIABLE = 'leaked'",
+                        "function global:OPENCODE_POOL_FUNCTION { 'leaked' }",
+                        "$env:OPENCODE_POOL_ENVIRONMENT = 'leaked'",
+                        `Set-Location -LiteralPath '${nested.replaceAll("'", "''")}'`,
+                        "$PID",
+                      ].join("; "),
+                    },
+                    (input) =>
+                      Effect.sync(() => {
+                        input.env.OPENCODE_POOL_ENVIRONMENT = "first"
+                      }),
+                  )
+                  yield* shell.wait(first.id)
+
+                  const second = yield* shell.create(
+                    {
+                      shell: "pwsh.exe",
+                      cwd: tmp.path,
+                      timeout: 0,
+                      command: [
+                        "@{",
+                        "pid = $PID",
+                        "variable = [bool](Get-Variable OPENCODE_POOL_VARIABLE -ErrorAction SilentlyContinue)",
+                        "function = [bool](Get-Command OPENCODE_POOL_FUNCTION -ErrorAction SilentlyContinue)",
+                        "environment = $env:OPENCODE_POOL_ENVIRONMENT",
+                        "cwd = (Get-Location).Path",
+                        "} | ConvertTo-Json -Compress",
+                      ].join("\n"),
+                    },
+                    (input) =>
+                      Effect.sync(() => {
+                        input.env.OPENCODE_POOL_ENVIRONMENT = "second"
+                      }),
+                  )
+                  yield* shell.wait(second.id)
+                  const output = yield* shell.output(second.id)
+
+                  expect(JSON.parse(output.output)).toMatchObject({
+                    pid: first.pid,
+                    variable: false,
+                    function: false,
+                    environment: "second",
+                    cwd: realpathSync(tmp.path),
+                  })
+                }),
+              )
+            }),
+          (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+        ),
+      { timeout: 20_000 },
+    )
+
+    it.live(
+      "runs concurrent PowerShell commands simultaneously in different worker processes",
+      () =>
+        Effect.acquireUseRelease(
+          Effect.promise(() => tmpdir()),
+          (tmp) =>
+            withSession(tmp.path, () =>
+              Effect.gen(function* () {
+                const shell = yield* Shell.Service
+                const commands = yield* Effect.forEach(
+                  ["first", "second"],
+                  (name) => {
+                    const marker = path.join(tmp.path, `${name}.ready`).replaceAll("'", "''")
+                    const other = path
+                      .join(tmp.path, `${name === "first" ? "second" : "first"}.ready`)
+                      .replaceAll("'", "''")
+                    return shell.create({
+                      shell: "pwsh.exe",
+                      timeout: 0,
+                      command: [
+                        `New-Item -ItemType File -Path '${marker}' -Force | Out-Null`,
+                        "$deadline = [DateTime]::UtcNow.AddSeconds(8)",
+                        `while (!(Test-Path -LiteralPath '${other}') -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 20 }`,
+                        `\"$PID|$(Test-Path -LiteralPath '${other}')\"`,
+                      ].join("; "),
+                    })
+                  },
+                  { concurrency: "unbounded" },
+                )
+                yield* Effect.forEach(commands, (command) => shell.wait(command.id), { concurrency: "unbounded" })
+                const outputs = yield* Effect.forEach(commands, (command) => shell.output(command.id))
+
+                expect(outputs.map((output) => output.output.trim())).toEqual([
+                  `${commands[0]?.pid}|True`,
+                  `${commands[1]?.pid}|True`,
+                ])
+                expect(commands[0]?.pid).not.toBe(commands[1]?.pid)
+              }),
+            ),
+          (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+        ),
+      { timeout: 20_000 },
+    )
+
+    it.live(
+      "reuses an explicitly selected Windows PowerShell worker process",
+      () =>
+        Effect.acquireUseRelease(
+          Effect.promise(() => tmpdir()),
+          (tmp) =>
+            withSession(tmp.path, () =>
+              Effect.gen(function* () {
+                const shell = yield* Shell.Service
+                const first = yield* shell.create({
+                  command: '"$($PSVersionTable.PSEdition)|$PID"',
+                  shell: "powershell.exe",
+                  timeout: 0,
+                })
+                yield* shell.wait(first.id)
+                const firstOutput = yield* shell.output(first.id)
+
+                const second = yield* shell.create({
+                  command: '"$($PSVersionTable.PSEdition)|$PID"',
+                  shell: "powershell.exe",
+                  timeout: 0,
+                })
+                yield* shell.wait(second.id)
+                const secondOutput = yield* shell.output(second.id)
+
+                expect(firstOutput.output.trim()).toEndWith(`Desktop|${first.pid}`)
+                expect(secondOutput.output.trim()).toEndWith(`Desktop|${first.pid}`)
+                expect(second.pid).toBe(first.pid)
+              }),
+            ),
+          (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+        ),
+      { timeout: 20_000 },
+    )
+
+    it.live(
+      "replaces a PowerShell worker after its process exits unexpectedly",
+      () =>
+        Effect.acquireUseRelease(
+          Effect.promise(() => tmpdir()),
+          (tmp) =>
+            withSession(tmp.path, () =>
+              Effect.gen(function* () {
+                const shell = yield* Shell.Service
+                const stopped = yield* shell.create({
+                  command: "[Environment]::Exit(17)",
+                  shell: "pwsh.exe",
+                  timeout: 0,
+                })
+                const exited = yield* shell.wait(stopped.id)
+
+                const replacement = yield* shell.create({ command: "$PID", shell: "pwsh.exe", timeout: 0 })
+                yield* shell.wait(replacement.id)
+                const output = yield* shell.output(replacement.id)
+
+                expect(exited.exit).toBe(17)
+                expect(replacement.pid).not.toBe(stopped.pid)
+                expect(output.output.trim()).toBe(String(replacement.pid))
+              }),
+            ),
+          (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+        ),
+      { timeout: 20_000 },
+    )
+  }
+
   if (!isWindows) {
     it.live("settles a shell terminated by an external signal", () =>
       Effect.acquireUseRelease(

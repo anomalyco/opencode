@@ -33,6 +33,7 @@ const result = await Bun.build({
   loader: {
     ".txt": "text",
     ".md": "text",
+    ".ps1": "text",
   },
   naming: {
     entry: "[dir]/[name].[ext]",
