@@ -10,7 +10,9 @@ story("merges follow-up patches into one stack with a distinct file count", asyn
   await first.click()
   await expect(first).toHaveAttribute("aria-expanded", "true")
   await root.getByRole("button", { name: "Start follow-up patch" }).click()
-  await expect(group.locator('[data-component="tag"]')).toHaveText("3")
+  await expect(
+    group.locator('[data-component="context-tool-group-trigger"] [data-slot="basic-tool-tool-title"]'),
+  ).toHaveText(/^3 /)
   await expect(patches).toHaveCount(1)
   await expect(patches.getByText("2 files", { exact: true })).toBeVisible()
   await root.getByRole("button", { name: "Finish follow-up patch" }).click()

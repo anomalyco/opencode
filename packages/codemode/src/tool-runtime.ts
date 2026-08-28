@@ -1,5 +1,5 @@
-import { Cause, Effect, Exit, Schema } from "effect"
-import { ToolError, toolError } from "./tool-error.js"
+import { Cause, Effect, Exit, Formatter, Schema } from "effect"
+import { toolError } from "./tool-error.js"
 import {
   decodeInput as decodeToolInput,
   decodeOutput as decodeToolOutput,
@@ -116,15 +116,6 @@ export class ToolRuntimeError extends Error {
     this.name = "ToolRuntimeError"
   }
 }
-
-const runHost = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, ToolError, R> =>
-  effect.pipe(
-    Effect.catchCause((cause) => {
-      if (Cause.hasInterruptsOnly(cause)) return Effect.interrupt
-      const error = Cause.squash(cause)
-      return Effect.fail(error instanceof ToolError ? error : toolError("Tool execution failed", error))
-    }),
-  )
 
 const blockedMemberNames = new Set(["__proto__", "constructor", "prototype"])
 
@@ -507,18 +498,11 @@ export const make = <R>(
         if (Exit.isSuccess(exit)) return onEnd({ ...call, durationMs, outcome: "success" })
         if (Cause.hasInterruptsOnly(exit.cause)) return onEnd({ ...call, durationMs, outcome: "interrupted" })
         const error = Cause.squash(exit.cause)
-        const message =
-          error instanceof ToolError || error instanceof ToolRuntimeError ? error.message : "Tool execution failed"
+        const message = error instanceof Error ? error.message : Cause.pretty(exit.cause)
         return onEnd({ ...call, durationMs, outcome: "failure", message })
       }),
     )
   }
-
-  const decodeOutput = (value: unknown, name: string) =>
-    Effect.try({
-      try: () => copyIn(value, `Result from tool '${name}'`),
-      catch: () => new ToolRuntimeError("InvalidToolOutput", `Invalid output from tool '${name}'.`),
-    })
 
   const recordCall = (call: ToolCall): void => {
     if (maxToolCalls !== undefined && calls.length >= maxToolCalls) {
@@ -548,12 +532,22 @@ export const make = <R>(
       return yield* observeEnd(
         Effect.gen(function* () {
           if (hooks?.onToolCallStart !== undefined) yield* hooks.onToolCallStart(call)
-          const raw = yield* runHost(Effect.suspend(() => tool.execute(input)))
-          const result = yield* Effect.try({
-            try: () => decodeToolOutput(tool, raw),
-            catch: () => new ToolRuntimeError("InvalidToolOutput", `Invalid output from tool '${name}'.`),
+          const raw = yield* Effect.suspend(() => tool.execute(input)).pipe(
+            Effect.catchCause((cause) => {
+              if (Cause.hasInterruptsOnly(cause)) return Effect.interrupt
+              return Effect.fail(
+                toolError(
+                  Cause.prettyErrors(cause)
+                    .map((error) => (error.cause ? Formatter.format(error) : error.message || error.name))
+                    .join("\n"),
+                ),
+              )
+            }),
+          )
+          return yield* Effect.try({
+            try: () => copyIn(decodeToolOutput(tool, raw), `Result from tool '${name}'`),
+            catch: (cause) => new ToolRuntimeError("InvalidToolOutput", `Invalid output from tool '${name}': ${cause}`),
           })
-          return yield* decodeOutput(result, name)
         }),
         call,
       )
