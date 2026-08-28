@@ -70,14 +70,18 @@ export const make = Effect.gen(function* () {
 
   const attempt = Effect.fn("SessionStep.attempt")(function* (input: Input) {
     const startSnapshot = yield* snapshots.capture()
-    const publisher = createLLMEventPublisher(bus, {
-      sessionID: input.sessionID,
-      assistantMessageID: input.assistantMessageID,
-      agent: input.agent,
-      model: input.model.ref,
-      providerMetadataKey: input.model.model.route.providerMetadataKey ?? input.model.model.provider,
-      snapshot: startSnapshot,
-    })
+    const publisher = createLLMEventPublisher(
+      bus,
+      {
+        sessionID: input.sessionID,
+        assistantMessageID: input.assistantMessageID,
+        agent: input.agent,
+        model: input.model.ref,
+        providerMetadataKey: input.model.model.route.providerMetadataKey ?? input.model.model.provider,
+        snapshot: startSnapshot,
+      },
+      yield* Effect.scope,
+    )
     const toolRuns: Array<{
       readonly call: ToolCall
       readonly fiber: Fiber.Fiber<void, Permission.DeclinedError | QuestionTool.CancelledError>

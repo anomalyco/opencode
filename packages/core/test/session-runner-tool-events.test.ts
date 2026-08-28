@@ -1,5 +1,5 @@
-import { expect, test } from "bun:test"
-import { Cause, Deferred, Effect, Exit, Fiber, Schema } from "effect"
+import { afterEach, expect, test } from "bun:test"
+import { Cause, Deferred, Effect, Exit, Fiber, Latch, Schema, Scope } from "effect"
 import { eq } from "drizzle-orm"
 import { LLMEvent } from "@opencode-ai/ai"
 import { Money } from "@opencode-ai/schema/money"
@@ -27,8 +27,20 @@ import { TestClock } from "effect/testing"
 
 const sessionID = Session.ID.make("ses_tool_event_test")
 const base64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB"
+const scopes: Scope.Closeable[] = []
+afterEach(async () => {
+  await Effect.runPromise(Effect.forEach(scopes.splice(0), (scope) => Scope.close(scope, Exit.void)))
+})
 
-const capture = (providerMetadataKey = "anthropic", options?: { readonly interruptProgress?: boolean }) => {
+const capture = (
+  providerMetadataKey = "anthropic",
+  options?: {
+    readonly interruptProgress?: boolean
+    readonly beforeDelta?: Effect.Effect<void>
+  },
+) => {
+  const scope = Scope.makeUnsafe()
+  scopes.push(scope)
   const published: Array<{ readonly type: string; readonly data: unknown }> = []
   const bus: Pick<Bus.Interface, "publish"> = {
     publish: (definition, data) => {
@@ -40,6 +52,11 @@ const capture = (providerMetadataKey = "anthropic", options?: { readonly interru
         })
         return event
       })
+      if (
+        options?.beforeDelta &&
+        (definition.type === SessionEvent.Text.Delta.type || definition.type === SessionEvent.Reasoning.Delta.type)
+      )
+        return options.beforeDelta.pipe(Effect.andThen(publish))
       return definition.type === SessionEvent.Tool.Progress.type && options?.interruptProgress
         ? publish.pipe(Effect.andThen(Effect.interrupt))
         : publish
@@ -47,16 +64,21 @@ const capture = (providerMetadataKey = "anthropic", options?: { readonly interru
   }
   return {
     published,
-    publisher: createLLMEventPublisher(bus, {
-      sessionID,
-      agent: Agent.ID.make("build"),
-      model: {
-        id: Model.ID.make("model"),
-        providerID: Provider.ID.opencode,
+    scope,
+    publisher: createLLMEventPublisher(
+      bus,
+      {
+        sessionID,
+        agent: Agent.ID.make("build"),
+        model: {
+          id: Model.ID.make("model"),
+          providerID: Provider.ID.opencode,
+        },
+        providerMetadataKey,
+        assistantMessageID: SessionMessage.ID.create(),
       },
-      providerMetadataKey,
-      assistantMessageID: SessionMessage.ID.create(),
-    }),
+      scope,
+    ),
   }
 }
 
@@ -159,6 +181,7 @@ testEffect(
         model: { id: Model.ID.make("test-model"), providerID: Provider.ID.opencode },
         providerMetadataKey: "openai",
       },
+      yield* Effect.scope,
     )
     yield* publisher.publish(LLMEvent.toolCall({ ...call, providerExecuted: true }))
     yield* Effect.acquireRelease(
@@ -323,6 +346,158 @@ test("reasoning state from start, empty delta, and end is merged", async () => {
   })
 })
 
+for (const kind of ["text", "reasoning"] as const) {
+  it.effect(`publishes a complete short ${kind} burst while the stream remains open`, () =>
+    Effect.gen(function* () {
+      const { published, publisher } = capture()
+      yield* publisher.publish({ type: `${kind}-start`, id: "burst" })
+      yield* publisher.publish({ type: `${kind}-delta`, id: "burst", text: "interrupt-me-" })
+      yield* TestClock.adjust(20)
+      yield* publisher.publish({ type: `${kind}-delta`, id: "burst", text: "now" })
+      yield* TestClock.adjust(79)
+      expect(published.filter((event) => event.type === `session.${kind}.delta`)).toHaveLength(0)
+      yield* TestClock.adjust(1)
+      expect(
+        published.filter((event) => event.type === `session.${kind}.delta`).map((event) => event.data),
+      ).toMatchObject([{ delta: "interrupt-me-now", ordinal: 0 }])
+      expect(published.some((event) => event.type === `session.${kind}.ended.1`)).toBe(false)
+
+      yield* publisher.publish({ type: `${kind}-delta`, id: "burst", text: " trailing" })
+      yield* TestClock.adjust(100)
+      expect(
+        published.filter((event) => event.type === `session.${kind}.delta`).map((event) => event.data),
+      ).toMatchObject([{ delta: "interrupt-me-now" }, { delta: " trailing" }])
+      yield* publisher.publish({ type: `${kind}-end`, id: "burst" })
+      const count = published.length
+      yield* TestClock.adjust(1_000)
+      expect(published).toHaveLength(count)
+      expect(published.at(-1)?.data).toMatchObject({ text: "interrupt-me-now trailing" })
+    }),
+  )
+
+  it.effect(`serializes ${kind} append and end with an in-flight timer publication`, () =>
+    Effect.gen(function* () {
+      const publishing = yield* Latch.make()
+      const release = yield* Latch.make()
+      const { published, publisher } = capture("anthropic", {
+        beforeDelta: publishing.open.pipe(Effect.andThen(release.await)),
+      })
+      yield* publisher.publish({ type: `${kind}-start`, id: "burst" })
+      yield* publisher.publish({ type: `${kind}-delta`, id: "burst", text: "first" })
+      yield* TestClock.adjust(100)
+      yield* publishing.await
+      const provider = yield* publisher
+        .publish({ type: `${kind}-delta`, id: "burst", text: " suffix" })
+        .pipe(
+          Effect.andThen(publisher.publish({ type: `${kind}-end`, id: "burst" })),
+          Effect.forkScoped({ startImmediately: true }),
+        )
+      expect(published.some((event) => event.type === `session.${kind}.ended.1`)).toBe(false)
+      yield* release.open
+      yield* Fiber.join(provider)
+      expect(published.slice(-3).map((event) => event.type)).toEqual([
+        `session.${kind}.delta`,
+        `session.${kind}.delta`,
+        `session.${kind}.ended.1`,
+      ])
+      expect(published.slice(-3).map((event) => event.data)).toMatchObject([
+        { delta: "first" },
+        { delta: " suffix" },
+        { text: "first suffix" },
+      ])
+      const count = published.length
+      yield* TestClock.adjust(1_000)
+      expect(published).toHaveLength(count)
+    }),
+  )
+
+  it.effect(`commits a queued ${kind} append before interruption settlement`, () =>
+    Effect.gen(function* () {
+      const publishing = yield* Latch.make()
+      const release = yield* Latch.make()
+      const { published, publisher } = capture("anthropic", {
+        beforeDelta: publishing.open.pipe(Effect.andThen(release.await)),
+      })
+      yield* publisher.publish({ type: `${kind}-start`, id: "burst" })
+      yield* publisher.publish({ type: `${kind}-delta`, id: "burst", text: "first" })
+      yield* TestClock.adjust(100)
+      yield* publishing.await
+      const provider = yield* publisher
+        .publish({ type: `${kind}-delta`, id: "burst", text: " queued" })
+        .pipe(Effect.ensuring(publisher.flush()), Effect.forkScoped({ startImmediately: true }))
+      const interrupt = yield* Fiber.interrupt(provider).pipe(Effect.forkScoped({ startImmediately: true }))
+      expect(interrupt.pollUnsafe()).toBeUndefined()
+      expect(published.some((event) => event.type === `session.${kind}.ended.1`)).toBe(false)
+      yield* release.open
+      yield* Fiber.join(interrupt)
+      yield* publisher.failAssistant({ type: "aborted", message: "Step interrupted" })
+      yield* publisher.publishStepFailure()
+      expect(published.slice(-4).map((event) => event.type)).toEqual([
+        `session.${kind}.delta`,
+        `session.${kind}.delta`,
+        `session.${kind}.ended.1`,
+        "session.step.failed.1",
+      ])
+      expect(published.slice(-4).map((event) => event.data)).toMatchObject([
+        { delta: "first" },
+        { delta: " queued" },
+        { text: "first queued" },
+        { error: { type: "aborted" } },
+      ])
+      const count = published.length
+      yield* TestClock.adjust(1_000)
+      expect(published).toHaveLength(count)
+    }),
+  )
+
+  for (const termination of ["end", "failure", "interrupt"] as const) {
+    it.effect(`flushes ${kind} exactly once on ${termination} and cancels its deadline`, () =>
+      Effect.gen(function* () {
+        const { published, publisher } = capture()
+        const ready = yield* Latch.make()
+        const provider = yield* Effect.gen(function* () {
+          yield* publisher.publish({ type: `${kind}-start`, id: "burst" })
+          yield* publisher.publish({ type: `${kind}-delta`, id: "burst", text: "pending" })
+          yield* ready.open
+          yield* Effect.never
+        }).pipe(Effect.ensuring(publisher.flush()), Effect.forkScoped)
+        yield* ready.await
+        yield* TestClock.adjust(99)
+        if (termination === "end") yield* publisher.publish({ type: `${kind}-end`, id: "burst" })
+        if (termination === "failure") yield* publisher.publish(LLMEvent.providerError({ message: "fixture failure" }))
+        yield* Fiber.interrupt(provider)
+        if (termination === "interrupt")
+          yield* publisher.failAssistant({ type: "aborted", message: "Step interrupted" })
+        yield* publisher.publishStepFailure()
+        expect(
+          published.filter((event) => event.type === `session.${kind}.delta`).map((event) => event.data),
+        ).toMatchObject([{ delta: "pending", ordinal: 0 }])
+        expect(
+          published.filter((event) => event.type === `session.${kind}.ended.1`).map((event) => event.data),
+        ).toMatchObject([{ text: "pending", ordinal: 0 }])
+        const count = published.length
+        yield* TestClock.adjust(1_000)
+        expect(published).toHaveLength(count)
+        if (termination !== "end") expect(published.at(-1)?.type).toBe("session.step.failed.1")
+      }),
+    )
+  }
+
+  it.effect(`cancels the pending ${kind} timer when its owner scope closes`, () =>
+    Effect.gen(function* () {
+      const { published, publisher, scope } = capture()
+      yield* publisher.publish({ type: `${kind}-start`, id: "burst" })
+      yield* publisher.publish({ type: `${kind}-delta`, id: "burst", text: "pending" })
+      yield* TestClock.adjust(99)
+      yield* Scope.close(scope, Exit.void)
+      const count = published.length
+      yield* TestClock.adjust(1_000)
+      expect(published).toHaveLength(count)
+      expect(published.some((event) => event.type === `session.${kind}.delta`)).toBe(false)
+    }),
+  )
+}
+
 it.effect("batches text deltas and flushes pending text before the terminal event", () =>
   Effect.gen(function* () {
     const { published, publisher } = capture()
@@ -343,13 +518,13 @@ it.effect("batches text deltas and flushes pending text before the terminal even
     yield* TestClock.adjust("1 millis")
     yield* publisher.publish(LLMEvent.textDelta({ id: "text", text: " four" }))
     expect(published.filter((event) => event.type === "session.text.delta").map((event) => event.data)).toMatchObject([
-      { delta: "one two three four" },
+      { delta: "one two three" },
     ])
 
     yield* publisher.publish(LLMEvent.textDelta({ id: "text", text: " five" }))
     yield* publisher.publish(LLMEvent.textEnd({ id: "text" }))
     expect(published.slice(-2).map((event) => event.type)).toEqual(["session.text.delta", "session.text.ended.1"])
-    expect(published.at(-2)?.data).toMatchObject({ delta: " five" })
+    expect(published.at(-2)?.data).toMatchObject({ delta: " four five" })
   }),
 )
 

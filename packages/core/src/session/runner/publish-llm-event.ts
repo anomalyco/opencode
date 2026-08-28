@@ -3,7 +3,7 @@ import type { Agent } from "@opencode-ai/schema/agent"
 import type { Model } from "@opencode-ai/schema/model"
 import type { RelativePath } from "@opencode-ai/schema/schema"
 import type { Snapshot } from "@opencode-ai/schema/snapshot"
-import { Clock, Effect, Iterable } from "effect"
+import { Effect, Fiber, Iterable, Scope, Semaphore } from "effect"
 import { isArrayNonEmpty, isReadonlyArrayNonEmpty } from "effect/Array"
 import { Bus } from "../../bus.js"
 import { SessionEvent } from "../event.js"
@@ -71,9 +71,10 @@ const hostedContent = (result: ToolResultValue): NonEmptyContent => {
  * uninterruptible through its writes so cancellation cannot strand a mark without
  * its durable event. (2) Never require a cross-source event
  * order: each publishing fiber is sequential, so per-source order holds by construction,
- * and consumers fold by id/ordinal rather than global position.
+ * and consumers fold by id/ordinal rather than global position. Fragment timers are
+ * the exception: they serialize with append/end to preserve their source's order.
  */
-export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, input: Input) => {
+export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, input: Input, scope: Scope.Scope) => {
   const deltaBatchInterval = 100
   type ToolState = {
     readonly name: string
@@ -130,10 +131,11 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
       readonly ordinal: number
       readonly values: string[]
       pending: string
-      publishedAt?: number
+      timer?: Fiber.Fiber<void>
       state?: Record<string, unknown>
     }
     const chunks = new Map<string, Fragment>()
+    const lock = Semaphore.makeUnsafe(1)
     let nextOrdinal = 0
     const start = (id: string, state?: Record<string, unknown>) =>
       Effect.suspend(() => {
@@ -143,45 +145,53 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
         chunks.set(id, { ordinal, values: [], pending: "", state })
         return Effect.succeed(ordinal)
       })
-    const publishDelta = Effect.fnUntraced(function* (id: string, force = false) {
-      if (!delta) return undefined
-      const current = chunks.get(id)
-      if (!current) return yield* Effect.die(new Error(`${name} delta before start: ${id}`))
-      if (!current.pending) return undefined
-      const now = yield* Clock.currentTimeMillis
-      if (!force && current.publishedAt === undefined) {
-        current.publishedAt = now
-        return undefined
-      }
-      if (!force && current.publishedAt !== undefined && now - current.publishedAt < deltaBatchInterval)
-        return undefined
-      yield* delta(id, current.pending, current.ordinal)
+    const publishDelta = Effect.fnUntraced(function* (id: string, current: Fragment) {
+      if (!delta || !current.pending) return
+      const value = current.pending
       current.pending = ""
-      current.publishedAt = now
-      return undefined
-    })
+      yield* delta(id, value, current.ordinal)
+    }, Effect.uninterruptible)
     const append = Effect.fnUntraced(function* (id: string, value: string, state?: Record<string, unknown>) {
       const current = chunks.get(id)
       if (!current) return yield* Effect.die(new Error(`${name} delta before start: ${id}`))
       current.values.push(value)
       if (delta) current.pending += value
       if (state !== undefined) current.state = { ...current.state, ...state }
-      yield* publishDelta(id)
+      if (current.pending && !current.timer) {
+        // A fixed deadline, not a debounce: even the last burst of an open stream is visible.
+        current.timer = yield* Effect.sleep(deltaBatchInterval).pipe(
+          Effect.andThen(
+            lock.withPermit(
+              Effect.gen(function* () {
+                current.timer = undefined
+                yield* publishDelta(id, current)
+              }),
+            ),
+          ),
+          Effect.forkIn(scope),
+        )
+      }
       return current.ordinal
-    })
-    const end = Effect.fnUntraced(function* (id: string, state?: Record<string, unknown>, value?: string) {
-      const current = chunks.get(id)
-      if (!current) return yield* Effect.die(new Error(`${name} end before start: ${id}`))
-      yield* publishDelta(id, true)
-      yield* ended(
-        id,
-        value ?? current.values.join(""),
-        current.ordinal,
-        state === undefined ? current.state : { ...current.state, ...state },
-      )
-      chunks.delete(id)
-      return undefined
-    })
+    }, Semaphore.withPermit(lock))
+    const end = Effect.fnUntraced(
+      function* (id: string, state?: Record<string, unknown>, value?: string) {
+        const current = chunks.get(id)
+        if (!current) return yield* Effect.die(new Error(`${name} end before start: ${id}`))
+        // Take the lock before cancelling: an in-flight publication must complete before Ended.
+        if (current.timer) yield* Fiber.interrupt(current.timer)
+        yield* publishDelta(id, current)
+        yield* ended(
+          id,
+          value ?? current.values.join(""),
+          current.ordinal,
+          state === undefined ? current.state : { ...current.state, ...state },
+        )
+        chunks.delete(id)
+        return undefined
+      },
+      Effect.uninterruptible,
+      Semaphore.withPermit(lock),
+    )
     const flush = Effect.fnUntraced(function* () {
       for (const id of Array.from(chunks.keys())) yield* end(id)
     })
