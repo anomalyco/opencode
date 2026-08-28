@@ -85,7 +85,10 @@ const referenceInstructions = Layer.mock(ReferenceInstructions.Service, {
 })
 const mcpInstructions = Layer.mock(McpInstructions.Service, { load: () => Effect.succeed(Instructions.empty) })
 const config = Config.testLayer()
-const pluginSupervisor = Layer.succeed(PluginSupervisor.Service, PluginSupervisor.Service.of({ flush: Effect.void }))
+const pluginSupervisor = Layer.succeed(
+  PluginSupervisor.Service,
+  PluginSupervisor.Service.of({ flush: Effect.void, check: () => Effect.succeed({ mutable: false }) }),
+)
 const promptCatalog = Layer.mock(Catalog.Service, {
   provider: {
     get: () => Effect.undefined,

@@ -17,6 +17,7 @@ const npm = Npm.Service.of({
   add: () => Effect.succeed({ directory: "", entrypoint: undefined }),
   resolve: () => Effect.succeed({ directory: "", entrypoint: undefined }),
   which: () => Effect.undefined,
+  check: () => Effect.succeed({ mutable: false }),
 })
 
 const addPlugin = Effect.fn(function* () {

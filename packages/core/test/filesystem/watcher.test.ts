@@ -31,7 +31,10 @@ const it = testEffect(AppNodeBuilder.build(LayerNode.group([FSUtil.node, Bus.nod
 const configLayer = Config.testLayer()
 const pluginNode = makeLocationNode({
   service: PluginSupervisor.Service,
-  layer: Layer.succeed(PluginSupervisor.Service, PluginSupervisor.Service.of({ flush: Effect.void })),
+  layer: Layer.succeed(
+    PluginSupervisor.Service,
+    PluginSupervisor.Service.of({ flush: Effect.void, check: () => Effect.succeed({ mutable: false }) }),
+  ),
   deps: [],
 })
 
@@ -313,7 +316,7 @@ describe("LocationWatcher subscriptions", () => {
         Effect.gen(function* () {
           const policy = yield* LocationWatcherPolicy.Service
           yield* policy.transform((draft) => draft.add([".git"]))
-          return PluginSupervisor.Service.of({ flush: Effect.void })
+          return PluginSupervisor.Service.of({ flush: Effect.void, check: () => Effect.succeed({ mutable: false }) })
         }),
       ),
       deps: [LocationWatcherPolicy.node],

@@ -85,10 +85,10 @@ export default Runtime.handler(Commands, (input) =>
       },
       packages: {
         resolve: (spec, install = true) =>
+          runPromise(install ? npm.add(spec, { subpaths: ["tui"] }) : npm.resolve(spec, { subpaths: ["tui"] })),
+        check: (spec) =>
           runPromise(
-            (install ? npm.add(spec, { subpaths: ["tui"] }) : npm.resolve(spec, { subpaths: ["tui"] })).pipe(
-              Effect.map((result) => result.entrypoint),
-            ),
+            npm.check(spec).pipe(Effect.mapError((error) => (error.cause instanceof Error ? error.cause : error))),
           ),
       },
       environment: requestedServer === undefined ? Env.session() : undefined,

@@ -1,4 +1,5 @@
 import type { PluginInfo } from "@opencode-ai/client"
+import type { PackageStatus } from "@opencode-ai/schema/plugin"
 import type { Plugin } from "@opencode-ai/plugin/tui"
 import { createMarkdownCodeBlockRenderer, type MarkdownCodeBlockRenderer, type MarkdownOptions } from "@opentui/core"
 import {
@@ -33,7 +34,8 @@ import { createSourceWatcher } from "./watch"
 import { discoverTuiPlugins, freshSpecifier, localSource } from "./discovery"
 
 export interface PackageResolver {
-  readonly resolve: (spec: string, install?: boolean) => Promise<string | undefined>
+  readonly resolve: (spec: string, install?: boolean) => Promise<{ entrypoint?: string; revision?: string }>
+  readonly check: (spec: string) => Promise<PackageStatus>
 }
 
 type State =
@@ -45,6 +47,7 @@ type RegisteredPlugin = {
   readonly id: string
   readonly source: "builtin" | "external"
   readonly active: boolean
+  readonly revision?: string
 }
 
 type Value = {
@@ -60,6 +63,7 @@ type Value = {
   readonly markdown: () => MarkdownOptions["renderNode"]
   readonly activate: (id: string) => Promise<boolean>
   readonly deactivate: (id: string) => Promise<boolean>
+  readonly check: (target: string) => Promise<PackageStatus>
 }
 
 type Registration = {
@@ -67,6 +71,7 @@ type Registration = {
   source: RegisteredPlugin["source"]
   target?: string
   version: string
+  revision?: string
   options?: Readonly<Record<string, any>>
   active: boolean
   routes: Record<string, Page>
@@ -76,10 +81,14 @@ type Registration = {
 }
 
 // One entry of the desired plugin generation produced by the resolve phase.
-type Desired = Pick<Registration, "plugin" | "source" | "target" | "version" | "options"> & { enabled: boolean }
+type Desired = Pick<Registration, "plugin" | "source" | "target" | "version" | "revision" | "options"> & {
+  enabled: boolean
+}
 
 const PluginContext = createContext<Value>()
 let sourceVersion = Date.now()
+// Re-importing the same specifier can return cached code even if its package changed on disk.
+const importedRevisions = new WeakMap<object, string | undefined>()
 
 export function combineMarkdownRenderers(
   sources: ReadonlyArray<Readonly<Record<string, MarkdownCodeBlockRenderer>>>,
@@ -334,6 +343,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
         source: "external",
         target,
         version: resolved.version,
+        revision: resolved.revision,
         options,
         enabled: true,
       })
@@ -534,6 +544,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
             id,
             source: plugin.source,
             active: plugin.active,
+            revision: plugin.revision,
           })),
         route: (id, name) => store.registrations[id]?.routes[name]?.render,
         slots: { register: registerSlot, resolved },
@@ -542,6 +553,13 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
         // toggle mid-reload cannot mix registrations across generations.
         activate: (id) => enqueue(() => activate(id)),
         deactivate: (id) => enqueue(() => deactivate(id)),
+        check: async (target) => {
+          if (!store.states.some((state) => state.target === target) || localSource(target, directory))
+            throw new Error(`Not a configured package plugin: ${target}`)
+          if (serverPlugins().some((plugin) => plugin.source.package === target))
+            return (await client.api.plugin.check({ target, location: data.location.default() })).data
+          return props.packages.check(target)
+        },
       }}
     >
       {props.children}
@@ -580,8 +598,16 @@ async function resolvePlugin(
   // Package entrypoints never change within a session, so a loaded previous
   // version needs no re-resolution (which could otherwise hit npm).
   if (!local && previous && sameOptions(previous.options, options))
-    return { status: "unchanged" as const, plugin: previous.plugin, version: previous.version }
-  const entrypoint = local ? await resolveLocal(local) : await packages.resolve(spec, install)
+    return {
+      status: "unchanged" as const,
+      plugin: previous.plugin,
+      version: previous.version,
+      revision: previous.revision,
+    }
+  const resolved = local
+    ? { entrypoint: await resolveLocal(local), revision: undefined }
+    : await packages.resolve(spec, install)
+  const entrypoint = resolved.entrypoint
   if (!entrypoint) return { status: "unsupported" as const }
   // Content remains stable across the several mtimes one save may expose to
   // filesystem watchers, while the generation keeps reverted modules fresh.
@@ -589,7 +615,7 @@ async function resolvePlugin(
   while (true) {
     const version = generation === undefined ? entrypoint : freshSpecifier(entrypoint, generation)
     if (previous && previous.version === version && sameOptions(previous.options, options))
-      return { status: "unchanged" as const, plugin: previous.plugin, version }
+      return { status: "unchanged" as const, plugin: previous.plugin, version, revision: previous.revision }
     const mod: { readonly default?: unknown } = await import(version)
     if (generation !== undefined) {
       const observed = await sourceGeneration(entrypoint)
@@ -601,7 +627,13 @@ async function resolvePlugin(
       }
     }
     if (!isPlugin(mod.default)) throw new Error(`Invalid V2 TUI plugin module: ${spec}`)
-    return { status: "loaded" as const, plugin: mod.default, version }
+    if (!local && !importedRevisions.has(mod)) importedRevisions.set(mod, resolved.revision)
+    return {
+      status: "loaded" as const,
+      plugin: mod.default,
+      version,
+      revision: local ? undefined : importedRevisions.get(mod),
+    }
   }
 }
 
@@ -611,6 +643,7 @@ function toRegistration(item: Desired): Registration {
     source: item.source,
     target: item.target,
     version: item.version,
+    revision: item.revision,
     options: snapshotOptions(item.options),
     active: false,
     routes: {},
@@ -626,6 +659,7 @@ function toDesired(item: Registration): Desired {
     source: item.source,
     target: item.target,
     version: item.version,
+    revision: item.revision,
     options: item.options,
     enabled: item.active,
   }

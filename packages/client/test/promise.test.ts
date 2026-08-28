@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { isSessionNotFoundError, isUnauthorizedError, OpenCode } from "../src/promise/index"
+import { isPluginCheckError, isSessionNotFoundError, isUnauthorizedError, OpenCode } from "../src/promise/index"
 
 test("exposes every standard HTTP API group", () => {
   const client = OpenCode.make({ baseUrl: "http://localhost:3000" })
@@ -55,6 +55,34 @@ test("exposes every standard HTTP API group", () => {
   expect(Object.keys(client.shell)).toEqual(["list", "create", "get", "timeout", "output", "remove"])
   expect(Object.keys(client.project)).toEqual(["list", "update", "current"])
   expect(Object.keys(client.worktree)).toEqual(["list", "create", "remove", "refresh"])
+  expect(Object.keys(client.plugin)).toEqual(["list", "check"])
+})
+
+test("plugin.check uses the inspection contract and retains declared errors", async () => {
+  const status = { installed: "1.0.0", available: "1.1.0", mutable: true }
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      expect(request.method).toBe("POST")
+      expect(request.url).toBe("http://localhost:3000/api/plugin/check?location%5Bdirectory%5D=%2Ftmp%2Fproject")
+      const body = await request.json()
+      expect(Object.keys(body)).toEqual(["target"])
+      if (body.target === "missing")
+        return Response.json({ _tag: "PluginCheckError", message: "Not a configured plugin source" }, { status: 400 })
+      expect(body.target).toBe("fixture-plugin@^1")
+      return Response.json({ location: { directory: "/tmp/project" }, data: status })
+    },
+  })
+  expect(
+    (await client.plugin.check({ target: "fixture-plugin@^1", location: { directory: "/tmp/project" } })).data,
+  ).toEqual(status)
+  const error = await client.plugin
+    .check({ target: "missing", location: { directory: "/tmp/project" } })
+    .catch((cause: unknown) => cause)
+  expect(isPluginCheckError(error)).toBe(true)
+  if (!isPluginCheckError(error)) throw new Error("Expected PluginCheckError")
+  expect(error.message).toBe("Not a configured plugin source")
 })
 
 test("config.get returns ordered config entries for a location", async () => {

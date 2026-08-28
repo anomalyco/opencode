@@ -15,6 +15,8 @@ import type {
   AgentGetOutput,
   PluginListInput,
   PluginListOutput,
+  PluginCheckInput,
+  PluginCheckOutput,
   SessionListInput,
   SessionListOutput,
   SessionStatsInput,
@@ -318,7 +320,17 @@ const EndpointPluginList = (raw: RawClient["server.plugin"]) => (input?: PluginL
     raw["plugin.list"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
-const adaptGroupPlugin = (raw: RawClient["server.plugin"]) => ({ list: EndpointPluginList(raw) })
+const EndpointPluginCheck = (raw: RawClient["server.plugin"]) => (input: PluginCheckInput) =>
+  preserveEffect<PluginCheckOutput>()(
+    raw["plugin.check"]({ query: { location: input["location"] }, payload: { target: input["target"] } }).pipe(
+      Effect.mapError(mapClientError),
+    ),
+  )
+
+const adaptGroupPlugin = (raw: RawClient["server.plugin"]) => ({
+  list: EndpointPluginList(raw),
+  check: EndpointPluginCheck(raw),
+})
 
 const EndpointSessionList = (raw: RawClient["server.session"]) => (input?: SessionListInput) =>
   preserveEffect<SessionListOutput>()(

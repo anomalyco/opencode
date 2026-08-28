@@ -38,6 +38,7 @@ const npmLayer = Layer.succeed(
     add: () => Effect.succeed({ directory: "", entrypoint: undefined }),
     resolve: () => Effect.succeed({ directory: "", entrypoint: undefined }),
     which: () => Effect.undefined,
+    check: () => Effect.succeed({ mutable: false }),
   }),
 )
 

@@ -25,6 +25,7 @@ function npmEntrypoint(entrypoint?: string) {
     add: () => Effect.succeed({ directory: "", entrypoint }),
     resolve: () => Effect.succeed({ directory: "", entrypoint }),
     which: () => Effect.undefined,
+    check: () => Effect.succeed({ mutable: false }),
   })
 }
 

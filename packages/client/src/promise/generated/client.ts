@@ -9,6 +9,8 @@ import type {
   AgentGetOutput,
   PluginListInput,
   PluginListOutput,
+  PluginCheckInput,
+  PluginCheckOutput,
   SessionListInput,
   SessionListOutput,
   SessionStatsInput,
@@ -458,6 +460,19 @@ export function make(options: ClientOptions) {
             query: { location: input?.["location"] },
             successStatus: 200,
             declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      check: (input: PluginCheckInput, requestOptions?: RequestOptions) =>
+        request<PluginCheckOutput>(
+          {
+            method: "POST",
+            path: `/api/plugin/check`,
+            query: { location: input["location"] },
+            body: { target: input["target"] },
+            successStatus: 200,
+            declaredStatuses: [400, 401],
             empty: false,
           },
           requestOptions,

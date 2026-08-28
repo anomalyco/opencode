@@ -38,7 +38,7 @@ const skills = Layer.mergeAll(
     get: (id) => Effect.succeed(id === info.id ? info : undefined),
     list: () => Effect.succeed([info]),
   }),
-  Layer.succeed(PluginSupervisor.Service, { flush: Effect.void }),
+  Layer.succeed(PluginSupervisor.Service, { flush: Effect.void, check: () => Effect.succeed({ mutable: false }) }),
 )
 const locations = Layer.effect(
   LocationServiceMap.Service,

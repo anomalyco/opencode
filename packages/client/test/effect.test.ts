@@ -8,6 +8,7 @@ import {
   Location,
   Model,
   OpenCode,
+  Plugin,
   Prompt,
   Session,
   SessionMessage,
@@ -25,6 +26,40 @@ test("health.get decodes the readiness response", async () => {
   }).pipe(Effect.provideService(HttpClient.HttpClient, httpClient), Effect.runPromise)
 
   expect(result).toEqual({ healthy: true, version: "old", pid: 123 })
+})
+
+test("plugin.check decodes package status and its declared error", async () => {
+  const status = { installed: "1.0.0", available: "1.1.0", mutable: true }
+  const httpClient = HttpClient.make((request) => {
+    expect(request.method).toBe("POST")
+    expect(request.url).toBe("http://localhost:3000/api/plugin/check")
+    expect(Object.fromEntries(request.urlParams.params)).toEqual({ "location[directory]": "/tmp/project" })
+    const body =
+      request.body._tag === "Uint8Array" ? JSON.parse(new TextDecoder().decode(request.body.body)) : undefined
+    expect(Object.keys(body)).toEqual(["target"])
+    return Effect.succeed(
+      HttpClientResponse.fromWeb(
+        request,
+        body.target === "missing"
+          ? Response.json({ _tag: "PluginCheckError", message: "Not a configured plugin source" }, { status: 400 })
+          : Response.json({
+              location: {
+                directory: "/tmp/project",
+                project: { id: "proj_test", directory: "/tmp/project", canonical: "/tmp/project" },
+              },
+              data: status,
+            }),
+      ),
+    )
+  })
+  await Effect.gen(function* () {
+    const client = yield* OpenCode.make({ baseUrl: "http://localhost:3000" })
+    const location = { directory: "/tmp/project" }
+    expect((yield* client.plugin.check({ target: "fixture-plugin@^1", location })).data).toEqual(status)
+    const error = yield* client.plugin.check({ target: "missing", location }).pipe(Effect.flip)
+    expect(error).toBeInstanceOf(Plugin.CheckError)
+    expect(error.message).toBe("Not a configured plugin source")
+  }).pipe(Effect.provideService(HttpClient.HttpClient, httpClient), Effect.runPromise)
 })
 
 test("session.get returns the decoded Effect projection", async () => {

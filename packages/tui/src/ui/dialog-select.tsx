@@ -17,6 +17,7 @@ export interface DialogSelectProps<T> {
   title: string
   titleView?: JSX.Element
   placeholder?: string
+  initialFilter?: string
   footer?: JSX.Element
   emptyView?: JSX.Element
   noMatchView?: JSX.Element
@@ -93,6 +94,7 @@ export function dialogSelectContentWidth(dialogWidth: number) {
 export type DialogSelectRef<T> = {
   filter: string
   filtered: DialogSelectOption<T>[]
+  selected: DialogSelectOption<T> | undefined
   moveTo(value: T): void
 }
 
@@ -111,7 +113,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
 
   const [store, setStore] = createStore({
     selected: 0,
-    filter: "",
+    filter: props.initialFilter ?? "",
     input: "keyboard" as "keyboard" | "mouse",
   })
   const [focusedAction, setFocusedAction] = createSignal<number>()
@@ -305,21 +307,25 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   })
 
   createEffect(
-    on([() => store.filter, () => props.current], ([filter, current]) => {
-      if (filter.length > 0) resetSelection = true
-      if (filter.length > 0) {
-        const option = flat()[0]
-        if (!option) return
-        moveTo(0, true, false)
-        scrollAfterLayout(true, option.value)
-        return
-      }
-      if (!current || props.focusCurrent === false) return
-      const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, current))
-      if (currentIndex < 0) return
-      moveTo(currentIndex, true)
-      scrollAfterLayout(true, current)
-    }),
+    on(
+      [() => store.filter, () => props.current],
+      ([filter, current]) => {
+        if (filter.length > 0) resetSelection = true
+        if (filter.length > 0) {
+          const option = flat()[0]
+          if (!option) return
+          moveTo(0, true, false)
+          scrollAfterLayout(true, option.value)
+          return
+        }
+        if (!current || props.focusCurrent === false) return
+        const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, current))
+        if (currentIndex < 0) return
+        moveTo(currentIndex, true)
+        scrollAfterLayout(true, current)
+      },
+      { defer: Boolean(props.initialFilter) },
+    ),
   )
 
   function move(direction: number) {
@@ -526,6 +532,9 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     get filtered() {
       return filtered()
     },
+    get selected() {
+      return selected()
+    },
     moveTo(value) {
       const index = flat().findIndex((option) => isDeepEqual(option.value, value))
       if (index >= 0) moveTo(index, true)
@@ -626,6 +635,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
         <Show when={props.renderFilter !== false}>
           <box paddingTop={1}>
             <input
+              value={props.initialFilter ?? ""}
               onInput={(e) => {
                 if (props.locked) return
                 batch(() => {

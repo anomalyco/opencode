@@ -7,6 +7,7 @@ import path from "node:path"
 import { pathToFileURL } from "node:url"
 import { createEventStream, createFetch, json } from "./fixture/tui-client"
 import { tmpdir } from "./fixture/fixture"
+import type { PackageResolver } from "../src/plugin/context"
 
 function lifecyclePluginSource(marker: string, id: string, version: string) {
   return `
@@ -57,7 +58,7 @@ async function bootApp(
   directory: string,
   options?: {
     plugins?: unknown[]
-    resolve?: (spec: string, install?: boolean) => Promise<string | undefined>
+    resolve?: PackageResolver["resolve"]
   },
 ) {
   const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
@@ -91,7 +92,7 @@ async function bootApp(
       app: { name: "test", version: "test", channel: "test" },
       server: { endpoint: { url: server.url.toString() } },
       config: { get: async () => ({}), update: async () => ({}) },
-      packages: { resolve: options?.resolve ?? (async () => undefined) },
+      packages: { resolve: options?.resolve ?? (async () => ({})), check: async () => ({ mutable: false }) },
       args: {},
       log: () => {},
     }).pipe(
@@ -128,7 +129,7 @@ test("loads an advertised package TUI entrypoint only from the local cache", asy
     ],
     resolve: async (spec, install) => {
       resolutions.push({ spec, install })
-      return pathToFileURL(entrypoint).href
+      return { entrypoint: pathToFileURL(entrypoint).href, revision: "1.0.0" }
     },
   })
 

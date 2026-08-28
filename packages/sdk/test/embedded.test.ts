@@ -47,7 +47,7 @@ for (const selection of ["explicit", "default"] as const) {
           PluginSupervisor.Service,
           Effect.gen(function* () {
             const plugins = yield* PluginSupervisor.Service
-            return { flush: release.open.pipe(Effect.andThen(plugins.flush)) }
+            return { flush: release.open.pipe(Effect.andThen(plugins.flush)), check: plugins.check }
           }),
         ).pipe(Layer.provide(PluginSupervisor.layer))
         const opencode = yield* fixture.sdk.OpenCode.create(

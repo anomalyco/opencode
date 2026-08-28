@@ -3,6 +3,7 @@ export * as PluginHost from "./host.js"
 import { Plugin } from "@opencode-ai/plugin/effect"
 import type { IntegrationMethodRegistration } from "@opencode-ai/plugin/effect/integration"
 import { EventManifest } from "@opencode-ai/schema/event-manifest"
+import { CheckError } from "@opencode-ai/schema/plugin"
 import { ServerConfig } from "@opencode-ai/schema/mcp"
 import { App } from "../app.js"
 import { Effect, Schema, Stream } from "effect"
@@ -332,6 +333,12 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
     },
     plugin: {
       list: () => response(plugin.list()),
+      check: () =>
+        Effect.fail(
+          new CheckError({
+            message: "Plugin package checks are available through an external client or the Plugins dialog.",
+          }),
+        ),
     },
     reference: {
       list: () => response(reference.list()),

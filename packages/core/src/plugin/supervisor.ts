@@ -89,6 +89,7 @@ export const layer = Layer.effect(
     const instance = yield* InstancePlugins.Service
     const sources = yield* ConfigPluginSource.Service
     const bus = yield* Bus.Service
+    const npm = yield* Npm.Service
     const ready = yield* Latch.make()
     let observed = 0
 
@@ -136,7 +137,29 @@ export const layer = Layer.effect(
       ),
       Effect.forkScoped({ startImmediately: true }),
     )
-    return Service.of({ flush: ready.await })
+    return Service.of({
+      flush: ready.await,
+      check: Effect.fn("PluginSupervisor.check")(function* (target: string) {
+        yield* ready.await
+        const inventory = yield* registry.list()
+        if (!inventory.some((plugin) => plugin.source.type === "package" && plugin.source.package === target)) {
+          return yield* new Plugin.CheckError({
+            message: `Plugin package is not in the current server inventory: ${target}`,
+          })
+        }
+        if (!(yield* Effect.promise(() => Npm.isInstallablePackage(target)))) {
+          return yield* new Plugin.CheckError({ message: `Unsupported plugin package source: ${target}` })
+        }
+        return yield* npm.check(target).pipe(
+          Effect.mapError(
+            (error) =>
+              new Plugin.CheckError({
+                message: `Failed to check plugin package ${target}: ${error.cause instanceof Error ? error.cause.message : error.message}`,
+              }),
+          ),
+        )
+      }),
+    })
   }),
 )
 

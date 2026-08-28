@@ -289,6 +289,7 @@ export function fromPromise(plugin: Plugin) {
           },
           plugin: {
             list: adaptApiMethod(PluginEndpoints["plugin.list"], host.plugin.list),
+            check: adaptApiMethod(PluginEndpoints["plugin.check"], host.plugin.check),
           },
           reference: {
             list: adaptApiMethod(ReferenceEndpoints["reference.list"], host.reference.list),

@@ -19,6 +19,23 @@ export const PluginGroup = HttpApiGroup.make("server.plugin")
         }),
       ),
   )
+  .add(
+    HttpApiEndpoint.post("plugin.check", "/api/plugin/check", {
+      query: LocationQuery,
+      payload: Schema.Struct({ target: Schema.String }),
+      success: Location.response(Plugin.PackageStatus),
+      error: Plugin.CheckError.annotate({ httpApiStatus: 400 }),
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.plugin.check",
+          summary: "Check plugin package",
+          description:
+            "Inspect installed and available revisions of an active or failed package in the current server inventory without installing it.",
+        }),
+      ),
+  )
   .annotateMerge(
     OpenApi.annotations({
       title: "plugin",

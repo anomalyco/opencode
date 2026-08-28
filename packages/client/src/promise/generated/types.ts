@@ -16,6 +16,8 @@ export type PluginSource =
   | { type: "local"; path: string }
   | { type: "sdk" }
 
+export type PluginPackageStatus = { installed?: string; available?: string; mutable: boolean }
+
 export type SessionForkBoundary = { type: "before"; messageID: string } | { type: "through"; messageID: string }
 
 export type MoneyUSD = number
@@ -441,8 +443,8 @@ export type ProviderRequest = {
 export type PermissionRule = { action: string; resource: string; effect: PermissionEffect }
 
 export type PluginInfo =
-  | { id: string; source: PluginSource; status: "active"; tui: boolean }
-  | { id?: string; source: PluginSource; status: "failed"; error: string; tui: boolean }
+  | { id: string; source: PluginSource; revision?: string; status: "active"; tui: boolean }
+  | { id?: string; source: PluginSource; revision?: string; status: "failed"; error: string; tui: boolean }
 
 export type SessionMessageLocationSwitched = {
   id: string
@@ -2338,6 +2340,10 @@ export type AgentNotFoundError = {
 export const isAgentNotFoundError = (value: unknown): value is AgentNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "AgentNotFoundError"
 
+export type PluginCheckError = { readonly _tag: "PluginCheckError"; readonly message: string }
+export const isPluginCheckError = (value: unknown): value is PluginCheckError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "PluginCheckError"
+
 export type InvalidCursorError = { readonly _tag: "InvalidCursorError"; readonly message: string }
 export const isInvalidCursorError = (value: unknown): value is InvalidCursorError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "InvalidCursorError"
@@ -2546,6 +2552,18 @@ export type PluginListInput = {
 export type PluginListOutput = {
   location: { directory: string; workspaceID?: string; project: { id: string; directory: string; canonical: string } }
   data: Array<PluginInfo>
+}
+
+export type PluginCheckInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+  readonly target: { readonly target: string }["target"]
+}
+
+export type PluginCheckOutput = {
+  location: { directory: string; workspaceID?: string; project: { id: string; directory: string; canonical: string } }
+  data: PluginPackageStatus
 }
 
 export type SessionListInput = {

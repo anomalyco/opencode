@@ -103,7 +103,7 @@ test.each([
         }),
         update: async () => ({}),
       },
-      packages: { resolve: async () => undefined },
+      packages: { resolve: async () => ({}), check: async () => ({ mutable: false }) },
       terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
       args: { sessionID: "dummy" },
       log: () => {},

@@ -390,6 +390,7 @@ const layer = Layer.unwrap(
       PluginSupervisor.Service,
       PluginSupervisor.Service.of({
         flush: Effect.suspend(() => state.pluginFlushHook),
+        check: () => Effect.succeed({ mutable: false }),
       }),
     )
     const promptCatalog = Layer.mock(Catalog.Service, {

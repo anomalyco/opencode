@@ -53,6 +53,7 @@
     "mime-types": "3.0.2",
     "minimatch": "10.2.5",
     "npm-package-arg": "13.0.2",
+    "pacote": "21.5.1",
     "resolve.exports": "catalog:"
   },
   "devDependencies": {
@@ -62,6 +63,7 @@
     "@types/node": "catalog:",
     "@types/npm-package-arg": "6.1.4",
     "@types/npmcli__arborist": "6.3.3",
+    "@types/pacote": "11.1.8",
     "@typescript/native-preview": "catalog:"
   }
 }

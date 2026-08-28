@@ -12,7 +12,10 @@ export const promptLocationLayer = Layer.effect(
     () =>
       Layer.merge(
         LayerNode.compile(PluginHooks.node),
-        Layer.succeed(PluginSupervisor.Service, { flush: Effect.void }),
+        Layer.succeed(PluginSupervisor.Service, {
+          flush: Effect.void,
+          check: () => Effect.succeed({ mutable: false }),
+        }),
       ) as Layer.Layer<LocationServices>,
   ),
 )

@@ -1,5 +1,5 @@
 export * as Plugin from "./plugin.js"
-export { Event, ID, Info, Source } from "@opencode-ai/schema/plugin"
+export { CheckError, Event, ID, Info, PackageStatus, Source } from "@opencode-ai/schema/plugin"
 
 import { Plugin } from "@opencode-ai/schema/plugin"
 import type { Plugin as PluginDefinition } from "@opencode-ai/plugin/effect/plugin"
@@ -37,6 +37,7 @@ export interface Interface {
 
 export type Versioned = PluginDefinition & {
   readonly version: string
+  readonly revision?: string
   readonly source?: Plugin.Source
 }
 
@@ -119,18 +120,22 @@ const layer = Layer.effect(
                   nextInventory.push(activeInfo(definition))
                   continue
                 }
-                nextInventory.push({
+                const failed = {
                   id: definition.id,
                   source: definition.source ?? { type: "builtin" },
+                  ...(definition.revision === undefined ? {} : { revision: definition.revision }),
                   status: "failed",
                   error: loaded.error,
                   tui: definition.tui ?? false,
-                })
+                } satisfies Plugin.Info
+                nextInventory.push(failed)
 
                 if (!previous) continue
                 const restored = yield* load(previous.plugin)
                 if (restored.scope !== undefined) {
                   active.set(definition.id, { plugin: previous.plugin, scope: restored.scope })
+                  failed.revision = previous.plugin.revision
+                  if (failed.revision === undefined) delete failed.revision
                   continue
                 }
                 yield* Effect.logError("failed to restore plugin; deactivating", {
@@ -175,6 +180,7 @@ function activeInfo(plugin: Versioned): Plugin.Info {
   return {
     id: Plugin.ID.make(plugin.id),
     source: plugin.source ?? { type: "builtin" },
+    ...(plugin.revision === undefined ? {} : { revision: plugin.revision }),
     status: "active",
     tui: plugin.tui ?? false,
   }

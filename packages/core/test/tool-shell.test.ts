@@ -127,7 +127,9 @@ const shellPluginSupervisor = makeLocationNode({
   service: PluginSupervisor.Service,
   layer: Layer.effect(
     PluginSupervisor.Service,
-    registerToolPlugin(ShellTool.Plugin).pipe(Effect.as(PluginSupervisor.Service.of({ flush: Effect.void }))),
+    registerToolPlugin(ShellTool.Plugin).pipe(
+      Effect.as(PluginSupervisor.Service.of({ flush: Effect.void, check: () => Effect.succeed({ mutable: false }) })),
+    ),
   ),
   deps: [
     Config.node,

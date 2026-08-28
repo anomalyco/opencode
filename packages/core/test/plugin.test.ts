@@ -450,19 +450,23 @@ describe("Plugin", () => {
           }),
       })
 
-      yield* plugins.activate([versioned(previous)])
-      yield* plugins.activate([versioned(replacement, "2")])
+      for (const revision of ["1.0.0", undefined]) {
+        yield* plugins.activate([{ ...versioned(previous, revision ?? "unknown"), revision }])
+        yield* plugins.activate([{ ...versioned(replacement, "2"), revision: "2.0.0" }])
 
-      expect(yield* plugins.list()).toEqual([
-        {
-          id: Plugin.ID.make("managed"),
-          source: { type: "builtin" },
-          status: "failed",
-          error: expect.stringContaining("replacement failed"),
-          tui: false,
-        },
-      ])
-      expect((yield* agents.get(Agent.ID.make("configured")))?.description).toBe("previous")
+        expect(yield* plugins.list()).toEqual([
+          {
+            id: Plugin.ID.make("managed"),
+            source: { type: "builtin" },
+            ...(revision === undefined ? {} : { revision }),
+            status: "failed",
+            error: expect.stringContaining("replacement failed"),
+            tui: false,
+          },
+        ])
+        if (revision === undefined) expect((yield* plugins.list())[0]).not.toHaveProperty("revision")
+        expect((yield* agents.get(Agent.ID.make("configured")))?.description).toBe("previous")
+      }
     }),
   )
 

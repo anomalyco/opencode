@@ -19,18 +19,33 @@ export const Info = Schema.Union([
   Schema.Struct({
     id: ID,
     source: Source,
+    revision: optional(Schema.String),
     status: Schema.Literal("active"),
     tui: Schema.Boolean,
   }),
   Schema.Struct({
     id: ID.pipe(optional),
     source: Source,
+    revision: optional(Schema.String),
     status: Schema.Literal("failed"),
     error: Schema.String,
     tui: Schema.Boolean,
   }),
 ]).annotate({ identifier: "Plugin.Info" })
 export type Info = typeof Info.Type
+
+export const PackageStatus = Schema.Struct({
+  installed: optional(Schema.String),
+  available: optional(Schema.String),
+  mutable: Schema.Boolean,
+}).annotate({ identifier: "Plugin.PackageStatus" })
+export interface PackageStatus extends Schema.Schema.Type<typeof PackageStatus> {}
+
+export class CheckError extends Schema.TaggedError<CheckError>()(
+  "PluginCheckError",
+  { message: Schema.String },
+  { identifier: "PluginCheckError" },
+) {}
 
 const Added = ephemeral({
   type: "plugin.added",

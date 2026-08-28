@@ -6,6 +6,29 @@ Plugins configured in `opencode.json(c)` that expose a TUI component are loaded 
 to build plugins, see [Building plugins](/build/plugins). You do not need to add the same package to `cli.json`. The CLI
 gets the active plugin list from the connected OpenCode server, so this also works when the server is remote.
 
+## Inspect plugins
+
+Open **/plugins**, select a row, and press **Enter** to view its runtime, status, source, and scope. **Space** still enables
+or disables a TUI plugin in the current terminal.
+
+For package plugins, select **Check for updates**, or press **Ctrl+R** on the selected row. Checks are explicit; OpenCode
+does not poll for plugin updates in the background. Details distinguish the **Loaded** revision captured when the code was
+loaded, the **Installed** revision currently on disk, and the **Available** revision allowed by the configured package spec.
+A small update marker appears after a check finds a different available revision. Unavailable revision metadata is shown
+as unknown rather than inferred from the package spec.
+
+Matching server and TUI package rows share a check on the connected server in the default Location used to discover
+server plugins. Packages configured only in the CLI are checked on the TUI machine. Checking does not install packages or replace running code.
+Exact npm versions and full Git commit hashes remain pinned; change their configured spec to select another revision.
+Built-in plugins update with OpenCode, and local files do not have package update checks.
+
+To apply a newer server package revision, use the existing [restart workflow](/plugins), then close and reopen the TUI to
+load its companion. The Plugins dialog only inspects and checks revisions; it does not apply updates.
+For a package configured only in `cli.json`, select a newer version or Git commit in its package spec, then reopen the TUI.
+Reopening the TUI alone does not refresh a cached CLI-only package.
+
+## CLI-only plugins
+
 Use `cli.json` for CLI-only plugins. These plugins run locally in the terminal and remain active when the CLI connects
 to a remote server:
 
