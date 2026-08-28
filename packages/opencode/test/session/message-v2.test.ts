@@ -398,17 +398,107 @@ describe("session.message-v2.toModelMessage", () => {
             toolCallId: "call-1",
             toolName: "bash",
             output: {
-              type: "content",
-              value: [
-                { type: "text", text: "ok" },
-                { type: "media", mediaType: "image/png", data: "Zm9v" },
-              ],
+              type: "text",
+              value: "ok",
             },
             providerOptions: { openai: { tool: "meta" } },
           },
         ],
       },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: MessageV2.SYNTHETIC_ATTACHMENT_PROMPT },
+          {
+            type: "file",
+            data: "data:image/png;base64,Zm9v",
+            mediaType: "image/png",
+            filename: "attachment.png",
+          },
+        ],
+      },
     ])
+  })
+
+  test("extracts tool-result media for anthropic models without attachment capability", async () => {
+    const noAttachmentAnthropicModel: Provider.Model = {
+      ...model,
+      id: ModelV2.ID.make("synthetic/hf:zai-org/GLM-5.2"),
+      providerID: ProviderV2.ID.make("synthetic"),
+      api: {
+        id: "hf:zai-org/GLM-5.2",
+        url: "https://api.synthetic.new/anthropic/v1",
+        npm: "@ai-sdk/anthropic",
+      },
+      capabilities: {
+        ...model.capabilities,
+        attachment: false,
+      },
+    }
+
+    const userID = "m-user"
+    const assistantID = "m-assistant"
+
+    const input: SessionV1.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u1"),
+            type: "text",
+            text: "run tool",
+          },
+        ] as SessionV1.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "text",
+            text: "done",
+          },
+          {
+            ...basePart(assistantID, "a2"),
+            type: "tool",
+            callID: "call-1",
+            tool: "bash",
+            state: {
+              status: "completed",
+              input: { cmd: "ls" },
+              output: "ok",
+              title: "Bash",
+              metadata: {},
+              time: { start: 0, end: 1 },
+              attachments: [
+                {
+                  ...basePart(assistantID, "file-1"),
+                  type: "file",
+                  mime: "image/png",
+                  filename: "attachment.png",
+                  url: "data:image/png;base64,Zm9v",
+                },
+              ],
+            },
+          },
+        ] as SessionV1.Part[],
+      },
+    ]
+
+    const result = await MessageV2.toModelMessages(input, noAttachmentAnthropicModel)
+    // Media must be extracted out of the tool result and injected as a user
+    // message (so unsupportedParts() can degrade it gracefully), not kept in
+    // the tool result where the provider would reject the whole request.
+    const toolResult = result.find((m) => m.role === "tool")
+    expect(toolResult).toBeDefined()
+    const output = (toolResult!.content as any[])[0] as any
+    expect(output.output.type).toBe("text")
+    expect(JSON.stringify(output.output)).not.toContain("image/png")
+
+    const mediaMsg = result.find(
+      (m) => m.role === "user" && Array.isArray(m.content) && m.content.some((c: any) => c.type === "file"),
+    )
+    expect(mediaMsg).toBeDefined()
   })
 
   test("preserves jpeg tool-result media for anthropic models", async () => {
