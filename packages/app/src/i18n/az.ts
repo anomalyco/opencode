@@ -715,6 +715,8 @@ export const dict = {
   "session.tab.context": "Kontekst",
   "session.tab.unknown": "Naməlum sessiya",
   "session.panel.reviewAndFiles": "İcmal və fayllar",
+  "session.attachment.openInApp": "Tətbiqdə aç",
+  "session.attachment.download": "Yüklə",
   "session.error.notFound": "Bu sessiyanı tapmaq mümkün deyil",
   "session.error.notFound.description": "Bu tab artıq bu serverdə olmayan sessiyaya işarə edir.",
   "session.error.notFound.closeTab": "Tabı bağla",

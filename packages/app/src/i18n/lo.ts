@@ -701,6 +701,8 @@ export const dict = {
   "session.tab.context": "ບໍລິບົດ",
   "session.tab.unknown": "ເຊດຊັນທີ່ບໍ່ຮູ້ຈັກ",
   "session.panel.reviewAndFiles": "ການທົບທວນຄືນແລະໄຟລ໌",
+  "session.attachment.openInApp": "ເປີດໃນແອັບ",
+  "session.attachment.download": "ດາວໂຫຼດ",
   "session.error.notFound": "ບໍ່ພົບເຊດຊັນນີ້",
   "session.error.notFound.description": "ແຖບນີ້ຊີ້ໄປຫາເຊດຊັນທີ່ບໍ່ມີຢູ່ໃນເຊີບເວີນີ້ແລ້ວ.",
   "session.error.notFound.closeTab": "ປິດແຖບ",

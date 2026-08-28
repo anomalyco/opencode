@@ -715,6 +715,8 @@ export const dict = {
   "session.tab.context": "Ngữ cảnh",
   "session.tab.unknown": "Phiên không xác định",
   "session.panel.reviewAndFiles": "Xem lại và tệp",
+  "session.attachment.openInApp": "Mở trong ứng dụng",
+  "session.attachment.download": "Tải xuống",
   "session.error.notFound": "Không thể tìm thấy phiên này",
   "session.error.notFound.description": "Tab này trỏ đến một phiên không còn tồn tại trên máy chủ này.",
   "session.error.notFound.closeTab": "Đóng tab",

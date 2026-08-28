@@ -1,13 +1,14 @@
 export * as PluginHost from "./host"
 
 import type { PluginContext as Interface } from "@opencode-ai/plugin/v2/effect"
-import { Effect, Schema } from "effect"
+import { Context, Effect, Schema } from "effect"
 import { AgentV2 } from "../agent"
 import { AISDK } from "../aisdk"
 import { Catalog } from "../catalog"
 import { CommandV2 } from "../command"
 import { Credential } from "../credential"
 import { Integration } from "../integration"
+import { PluginInvoke } from "./invoke"
 import { ModelV2 } from "../model"
 import { PluginV2 } from "../plugin"
 import { ProviderV2 } from "../provider"
@@ -17,12 +18,17 @@ import { SkillV2 } from "../skill"
 
 const mutable = <T>(value: T) => value as DeepMutable<T>
 
+export const CurrentPluginID = Context.Reference<string | undefined>("@opencode/PluginHost/CurrentPluginID", {
+  defaultValue: () => undefined,
+})
+
 export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Interface) {
   const agents = yield* AgentV2.Service
   const aisdk = yield* AISDK.Service
   const catalog = yield* Catalog.Service
   const commands = yield* CommandV2.Service
   const integration = yield* Integration.Service
+  const invoke = yield* PluginInvoke.Service
   const reference = yield* Reference.Service
   const skill = yield* SkillV2.Service
 
@@ -189,6 +195,15 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
             },
           }),
         ),
+    },
+    invoke: {
+      register: (name, handle) =>
+        Effect.gen(function* () {
+          const pluginID = yield* CurrentPluginID
+          if (pluginID === undefined)
+            return yield* Effect.die("PluginHost: ctx.invoke.register called outside a plugin load")
+          return yield* invoke.register(pluginID, name, handle)
+        }),
     },
     plugin: {
       add: (input) => plugin.add(PluginV2.ID.make(input.id), input.effect),

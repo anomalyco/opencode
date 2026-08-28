@@ -705,6 +705,8 @@ export const dict = {
   "session.tab.context": "زمینه",
   "session.tab.unknown": "جلسه ناشناخته",
   "session.panel.reviewAndFiles": "بررسی و فایل ها",
+  "session.attachment.openInApp": "در برنامه باز کردن",
+  "session.attachment.download": "دانلود",
   "session.error.notFound": "این جلسه یافت نمی شود",
   "session.error.notFound.description": "این تب به جلسه ای اشاره می کند که دیگر در این سرور وجود ندارد.",
   "session.error.notFound.closeTab": "Tab را ببندید",

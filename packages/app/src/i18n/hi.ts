@@ -715,6 +715,8 @@ export const dict = {
   "session.tab.context": "कॉन्टेक्स्ट",
   "session.tab.unknown": "अज्ञात सेशन",
   "session.panel.reviewAndFiles": "समीक्षा और फ़ाइलें",
+  "session.attachment.openInApp": "ऐप में खोलें",
+  "session.attachment.download": "डाउनलोड करें",
   "session.error.notFound": "यह सेशन नहीं मिल सका",
   "session.error.notFound.description": "यह टैब एक सेशन की ओर इशारा करता है जो अब इस सर्वर पर मौजूद नहीं है।",
   "session.error.notFound.closeTab": "टैब बंद करें",

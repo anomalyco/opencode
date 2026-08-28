@@ -13,6 +13,7 @@ import { Integration } from "@opencode-ai/core/integration"
 import { Location } from "@opencode-ai/core/location"
 import { Npm } from "@opencode-ai/core/npm"
 import { PluginV2 } from "@opencode-ai/core/plugin"
+import { PluginInvoke } from "@opencode-ai/core/plugin/invoke"
 import { Reference } from "@opencode-ai/core/reference"
 import { SkillV2 } from "@opencode-ai/core/skill"
 import { Effect, Layer } from "effect"
@@ -37,6 +38,7 @@ export const PluginTestLayer = AppNodeBuilder.build(
     EventV2.node,
     LayerNodePlatform.httpClient,
     PluginV2.node,
+    PluginInvoke.node,
     AgentV2.node,
     AISDK.node,
     Catalog.node,

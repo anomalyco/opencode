@@ -745,6 +745,8 @@ export const dict = {
   "session.tab.context": "上下文",
   "session.tab.unknown": "未知会话",
   "session.panel.reviewAndFiles": "审查和文件",
+  "session.attachment.openInApp": "在应用中打开",
+  "session.attachment.download": "下载",
   "session.error.notFound": "找不到此会话",
   "session.error.notFound.description": "此标签页指向的会话已不存在于此服务器上。",
   "session.error.notFound.closeTab": "关闭标签页",

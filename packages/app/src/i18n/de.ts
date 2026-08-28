@@ -591,6 +591,8 @@ export const dict = {
   "session.tab.context": "Kontext",
   "session.tab.unknown": "Unbekannte Sitzung",
   "session.panel.reviewAndFiles": "Überprüfung und Dateien",
+  "session.attachment.openInApp": "In der App öffnen",
+  "session.attachment.download": "Herunterladen",
   "session.error.notFound": "Diese Sitzung wurde nicht gefunden",
   "session.error.notFound.description":
     "Dieser Tab verweist auf eine Sitzung, die auf diesem Server nicht mehr existiert.",

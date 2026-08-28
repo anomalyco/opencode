@@ -715,6 +715,8 @@ export const dict = {
   "session.tab.context": "تناظر",
   "session.tab.unknown": "نامعلوم سیشن",
   "session.panel.reviewAndFiles": "جائزہ تے فائلاں",
+  "session.attachment.openInApp": "ਐਪ ਵਿੱਚ ਖੋਲ੍ਹੋ",
+  "session.attachment.download": "ਡਾਊਨਲੋਡ ਕਰੋ",
   "session.error.notFound": "ایہہ سیشن نئیں لبیا جا سکدا",
   "session.error.notFound.description": "ایہ ٹیب اک سیشن ول اشارہ کردا اے جہڑا ہن اس سرور تے موجود نئیں اے۔",
   "session.error.notFound.closeTab": "ٹیب بند کرو",

@@ -695,6 +695,8 @@ export const dict = {
   "session.tab.context": "コンテキスト",
   "session.tab.unknown": "不明なセッション",
   "session.panel.reviewAndFiles": "レビューとファイル",
+  "session.attachment.openInApp": "アプリで開く",
+  "session.attachment.download": "ダウンロード",
   "session.error.notFound": "このセッションが見つかりません",
   "session.error.notFound.description": "このタブが参照するセッションは、このサーバーには存在しません。",
   "session.error.notFound.closeTab": "タブを閉じる",

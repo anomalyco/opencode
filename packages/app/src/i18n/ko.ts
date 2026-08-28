@@ -995,6 +995,8 @@ export const dict = {
   "home.providerTip": "75개 이상의 공급자에 연결하여 Claude, GPT, Gemini 등의 다른 모델을 사용하세요",
 
   "session.tab.unknown": "알 수 없는 세션",
+  "session.attachment.openInApp": "앱에서 열기",
+  "session.attachment.download": "다운로드",
   "session.error.notFound": "이 세션을 찾을 수 없습니다",
   "session.error.notFound.description": "이 탭은 이 서버에 더 이상 존재하지 않는 세션을 가리킵니다.",
   "session.error.notFound.closeTab": "탭 닫기",

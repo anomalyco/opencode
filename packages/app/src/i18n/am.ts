@@ -693,6 +693,8 @@ export const dict = {
   "session.tab.context": "አውድ",
   "session.tab.unknown": "ያልታወቀ ክፍለ ጊዜ",
   "session.panel.reviewAndFiles": "ግምገማ እና ፋይሎች",
+  "session.attachment.openInApp": "በአፕ ይክፈቱ",
+  "session.attachment.download": "አውርድ",
   "session.error.notFound": "ይህ ክፍለ ጊዜ ሊገኝ አይችልም",
   "session.error.notFound.description": "ይህ ትር የሚያመለክተው በዚህ አገልጋይ ላይ ወደሌለው ክፍለ ጊዜ ነው።",
   "session.error.notFound.closeTab": "ትርን ዝጋ",

@@ -704,6 +704,8 @@ export const dict = {
   "session.tab.context": "Kontext",
   "session.tab.unknown": "Neznáma relácia",
   "session.panel.reviewAndFiles": "Revízia a súbory",
+  "session.attachment.openInApp": "Otvoriť v aplikácii",
+  "session.attachment.download": "Stiahnuť",
   "session.error.notFound": "Táto relácia sa nenašla",
   "session.error.notFound.description": "Táto karta odkazuje na reláciu, ktorá už na tomto serveri neexistuje.",
   "session.error.notFound.closeTab": "Zavrieť kartu",

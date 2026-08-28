@@ -706,6 +706,8 @@ export const dict = {
   "session.tab.context": "Samanhangur",
   "session.tab.unknown": "Ókend seta",
   "session.panel.reviewAndFiles": "Ummæli og skráir",
+  "session.attachment.openInApp": "Opna í appini",
+  "session.attachment.download": "Niðurtøka",
   "session.error.notFound": "Henda setan er ikki at finna",
   "session.error.notFound.description": "Hesin flipin vísir á eina setu, sum ikki longur er til á hesum ambætaranum.",
   "session.error.notFound.closeTab": "Lat flipan aftur",

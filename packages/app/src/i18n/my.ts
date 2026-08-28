@@ -713,6 +713,8 @@ export const dict = {
   "session.tab.context": "ဆက်စပ်အကြောင်းအရာ",
   "session.tab.unknown": "အမည်မသိ ဆက်ရှင်",
   "session.panel.reviewAndFiles": "ပြန်လည်သုံးသပ်ခြင်းနှင့် ဖိုင်များ",
+  "session.attachment.openInApp": "အပ်အက်ထဲတွင် ဖွင့်ရန်",
+  "session.attachment.download": "ဒေါင်းလုဒ်",
   "session.error.notFound": "ဤစက်ရှင်ကို ရှာမတွေ့ပါ။",
   "session.error.notFound.description": "ဤတဘ်သည် ဤဆာဗာတွင်မရှိတော့သော စက်ရှင်တစ်ခုကို ညွှန်ပြသည်။",
   "session.error.notFound.closeTab": "တဘ်ကို ပိတ်ပါ။",

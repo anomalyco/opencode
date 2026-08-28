@@ -705,6 +705,8 @@ export const dict = {
   "session.tab.context": "Kontekst",
   "session.tab.unknown": "Näbelli sessiýa",
   "session.panel.reviewAndFiles": "Gözden geçiriň we faýllary",
+  "session.attachment.openInApp": "Ulagda aç",
+  "session.attachment.download": "Ýüklen",
   "session.error.notFound": "Bu sessiýany tapyp bolmaýar",
   "session.error.notFound.description": "Bu goýma, bu serwerde ýok bolan sessiýany görkezýär.",
   "session.error.notFound.closeTab": "Tab ýapyň",

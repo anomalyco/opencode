@@ -744,6 +744,8 @@ export const dict = {
   "session.tab.context": "บริบท",
   "session.tab.unknown": "เซสชันที่ไม่รู้จัก",
   "session.panel.reviewAndFiles": "ตรวจสอบและไฟล์",
+  "session.attachment.openInApp": "เปิดในแอป",
+  "session.attachment.download": "ดาวน์โหลด",
   "session.error.notFound": "ไม่พบเซสชันนี้",
   "session.error.notFound.description": "แท็บนี้อ้างถึงเซสชันที่ไม่มีอยู่บนเซิร์ฟเวอร์นี้แล้ว",
   "session.error.notFound.closeTab": "ปิดแท็บ",

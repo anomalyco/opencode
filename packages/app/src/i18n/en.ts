@@ -670,6 +670,8 @@ export const dict = {
   "session.tab.context": "Context",
   "session.tab.unknown": "Unknown Session",
   "session.panel.reviewAndFiles": "Review and files",
+  "session.attachment.openInApp": "Open in app",
+  "session.attachment.download": "Download",
   "session.error.notFound": "This session cannot be found",
   "session.error.notFound.description": "This tab points to a session that no longer exists on this server.",
   "session.error.notFound.closeTab": "Close Tab",

@@ -1,7 +1,14 @@
 export const ACCEPTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"]
 
+export const OFFICE_FILE_TYPES = [
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+]
+
 export const ACCEPTED_FILE_TYPES = [
   ...ACCEPTED_IMAGE_TYPES,
+  ...OFFICE_FILE_TYPES,
   "application/pdf",
   "text/*",
   "application/json",
@@ -68,6 +75,9 @@ const MIME_EXT = new Map([
   ["application/x-yaml", "yaml"],
   ["application/xml", "xml"],
   ["application/yaml", "yaml"],
+  ["application/vnd.openxmlformats-officedocument.wordprocessingml.document", "docx"],
+  ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "xlsx"],
+  ["application/vnd.openxmlformats-officedocument.presentationml.presentation", "pptx"],
 ])
 
 const TEXT_EXT = ["txt", "text", "md", "markdown", "log", "csv"]

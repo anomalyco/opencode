@@ -708,6 +708,8 @@ export const dict = {
   "session.tab.context": "Konteksti",
   "session.tab.unknown": "Sesion i panjohur",
   "session.panel.reviewAndFiles": "Rishikimi dhe dosjet",
+  "session.attachment.openInApp": "Hape në aplikacion",
+  "session.attachment.download": "Shkarko",
   "session.error.notFound": "Ky sesion nuk mund të gjendet",
   "session.error.notFound.description": "Kjo skedë tregon për një sesion që nuk ekziston më në këtë server.",
   "session.error.notFound.closeTab": "Mbyll skedën",

@@ -710,6 +710,8 @@ export const dict = {
   "session.tab.context": "Համատեքստ",
   "session.tab.unknown": "Անհայտ նիստ",
   "session.panel.reviewAndFiles": "Վերանայել և ֆայլեր",
+  "session.attachment.openInApp": "Բացել հավելվածում",
+  "session.attachment.download": "Ներբեռնել",
   "session.error.notFound": "Այս նիստը հնարավոր չէ գտնել",
   "session.error.notFound.description": "Այս ներդիրը ցույց է տալիս նիստ, որն այլևս գոյություն չունի այս սերվերում։",
   "session.error.notFound.closeTab": "Փակել ներդիրը",

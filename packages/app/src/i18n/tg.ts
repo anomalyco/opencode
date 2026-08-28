@@ -708,6 +708,8 @@ export const dict = {
   "session.tab.context": "Контекст",
   "session.tab.unknown": "Сеанси номаълум",
   "session.panel.reviewAndFiles": "Барраси ва файлҳо",
+  "session.attachment.openInApp": "Дар барнома кушодан",
+  "session.attachment.download": "Боркунӣ",
   "session.error.notFound": "Ин сессияро ёфтан мумкин нест",
   "session.error.notFound.description": "Ин ҷадвал ба сессияе ишора мекунад, ки дигар дар ин сервер вуҷуд надорад.",
   "session.error.notFound.closeTab": "Варақаро пӯшед",

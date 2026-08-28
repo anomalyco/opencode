@@ -112,6 +112,9 @@ import type {
   ProjectCopiesRemoveOutput,
   ProjectCopiesRefreshInput,
   ProjectCopiesRefreshOutput,
+  PluginsListOutput,
+  PluginsInvokeInput,
+  PluginsInvokeOutput,
 } from "./types"
 import { ClientError } from "./client-error"
 
@@ -983,6 +986,25 @@ export function make(options: ClientOptions) {
             successStatus: 204,
             declaredStatuses: [400, 401],
             empty: true,
+          },
+          requestOptions,
+        ),
+    },
+    plugins: {
+      list: (requestOptions?: RequestOptions) =>
+        request<{ readonly data: PluginsListOutput }>(
+          { method: "GET", path: `/api/plugin`, successStatus: 200, declaredStatuses: [401, 400], empty: false },
+          requestOptions,
+        ).then((value) => value.data),
+      invoke: (input: PluginsInvokeInput, requestOptions?: RequestOptions) =>
+        request<PluginsInvokeOutput>(
+          {
+            method: "POST",
+            path: `/api/plugin/${encodeURIComponent(input.pluginID)}/invoke`,
+            body: { name: input["name"], input: input["input"] },
+            successStatus: 200,
+            declaredStatuses: [404, 500, 400, 401],
+            empty: false,
           },
           requestOptions,
         ),

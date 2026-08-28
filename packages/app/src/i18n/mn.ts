@@ -711,6 +711,8 @@ export const dict = {
   "session.tab.context": "Контекст",
   "session.tab.unknown": "Үл мэдэгдэх сесс",
   "session.panel.reviewAndFiles": "Хяналт ба файлууд",
+  "session.attachment.openInApp": "Апп дотор нээх",
+  "session.attachment.download": "Татах",
   "session.error.notFound": "Энэ сесс олдохгүй байна",
   "session.error.notFound.description": "Энэ таб нь энэ сервер дээр байхгүй сессийг заадаг.",
   "session.error.notFound.closeTab": "Табыг хаах",

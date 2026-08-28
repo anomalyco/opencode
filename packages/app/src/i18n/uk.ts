@@ -775,6 +775,8 @@ export const dict = {
   "session.tab.context": "Контекст",
   "session.tab.unknown": "Невідома сесія",
   "session.panel.reviewAndFiles": "Огляд і файли",
+  "session.attachment.openInApp": "Відкрити в застосунку",
+  "session.attachment.download": "Завантажити",
   "session.error.notFound": "Цю сесію не знайдено",
   "session.error.notFound.description": "Ця вкладка посилається на сесію, якої більше немає на цьому сервері.",
   "session.error.notFound.closeTab": "Закрити вкладку",

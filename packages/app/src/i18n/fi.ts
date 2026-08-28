@@ -603,6 +603,8 @@ export const dict = {
   "session.tab.context": "Konteksti",
   "session.tab.unknown": "Tuntematon istunto",
   "session.panel.reviewAndFiles": "Tarkistus ja tiedostot",
+  "session.attachment.openInApp": "Avaa sovelluksessa",
+  "session.attachment.download": "Lataa",
   "session.error.notFound": "Tätä istuntoa ei löydy",
   "session.error.notFound.description": "Tämä välilehti osoittaa istuntoon, jota ei enää ole tällä palvelimella.",
   "session.error.notFound.closeTab": "Sulje välilehti",

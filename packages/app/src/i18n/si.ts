@@ -703,6 +703,8 @@ export const dict: Record<string, string> = {
   "session.tab.context": "සන්දර්භය",
   "session.tab.unknown": "නොදන්නා සැසිය",
   "session.panel.reviewAndFiles": "සමාලෝචනය සහ ගොනු",
+  "session.attachment.openInApp": " යාදිතය තුළ විවෘත",
+  "session.attachment.download": "පාහ",
   "session.error.notFound": "මෙම සැසිය සොයාගත නොහැක",
   "session.error.notFound.description": "මෙම පටිත්ත මෙම සේවාදායකයේ තවදුරටත් නොපවතින සැසියක් වෙත යොමු කරයි.",
   "session.error.notFound.closeTab": "ටැබය වසන්න",

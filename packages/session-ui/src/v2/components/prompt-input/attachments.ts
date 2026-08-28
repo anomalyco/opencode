@@ -2,12 +2,15 @@ import { onMount } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import type { PromptInputV2Attachment, PromptInputV2Prompt } from "./types"
 
-const accepted = [
+export const accepted = [
   "image/png",
   "image/jpeg",
   "image/gif",
   "image/webp",
   "application/pdf",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
   "text/*",
   "application/json",
   "application/ld+json",
@@ -243,13 +246,20 @@ const textMimes = new Set([
   "application/xml",
   "application/yaml",
 ])
+const officeMimes = new Set(accepted.filter((mime) => mime.includes("openxmlformats-officedocument")))
+const officeExtensions = new Map([
+  ["docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
+  ["xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"],
+  ["pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"],
+])
 
 async function attachmentMime(file: File) {
   const type = file.type.split(";", 1)[0]?.trim().toLowerCase() ?? ""
-  if (imageMimes.has(type) || type === "application/pdf") return type
+  if (imageMimes.has(type) || type === "application/pdf" || officeMimes.has(type)) return type
   const index = file.name.lastIndexOf(".")
   const suffix = index === -1 ? "" : file.name.slice(index + 1).toLowerCase()
-  const fallback = imageExtensions.get(suffix) ?? (suffix === "pdf" ? "application/pdf" : undefined)
+  const fallback =
+    imageExtensions.get(suffix) ?? officeExtensions.get(suffix) ?? (suffix === "pdf" ? "application/pdf" : undefined)
   if ((!type || type === "application/octet-stream") && fallback) return fallback
   if (type.startsWith("text/") || textMimes.has(type) || type.endsWith("+json") || type.endsWith("+xml")) {
     return "text/plain"

@@ -712,6 +712,8 @@ export const dict = {
   "session.tab.context": "Πλαίσιο",
   "session.tab.unknown": "Άγνωστη συνεδρία",
   "session.panel.reviewAndFiles": "Επισκόπηση και αρχεία",
+  "session.attachment.openInApp": "Άνοιγμα στην εφαρμογή",
+  "session.attachment.download": "Λήψη",
   "session.error.notFound": "Δεν μπορεί να βρεθεί αυτή η συνεδρία",
   "session.error.notFound.description":
     "Αυτή η καρτέλα δείχνει μια περίοδο λειτουργίας που δεν υπάρχει πλέον σε αυτόν τον διακομιστή.",

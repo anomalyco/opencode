@@ -711,6 +711,8 @@ export const dict = {
   "session.tab.context": "Контекст",
   "session.tab.unknown": "Неизвестна сесия",
   "session.panel.reviewAndFiles": "Преглед и файлове",
+  "session.attachment.openInApp": "Отвори в приложението",
+  "session.attachment.download": "Свали",
   "session.error.notFound": "Тази сесия не може да бъде намерена",
   "session.error.notFound.description": "Този раздел сочи към сесия, която вече не съществува на този сървър.",
   "session.error.notFound.closeTab": "Затваряне на раздела",

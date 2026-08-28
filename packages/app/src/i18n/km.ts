@@ -703,6 +703,8 @@ export const dict = {
   "session.tab.context": "បរិបទ",
   "session.tab.unknown": "សម័យមិនស្គាល់",
   "session.panel.reviewAndFiles": "ពិនិត្យ និងឯកសារ",
+  "session.attachment.openInApp": "បើកក្នុង អាប់",
+  "session.attachment.download": "ទាញយក",
   "session.error.notFound": "សម័យនេះមិនអាចរកឃើញទេ។",
   "session.error.notFound.description": "ផ្ទាំងនេះចង្អុលទៅសម័យដែលលែងមាននៅលើម៉ាស៊ីនមេនេះ។",
   "session.error.notFound.closeTab": "បិទផ្ទាំង",

@@ -58,6 +58,7 @@ import { EventV2 } from "@opencode-ai/core/event"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { Npm } from "@opencode-ai/core/npm"
 import { PermissionSaved } from "@opencode-ai/core/permission/saved"
+import { PluginInvoke } from "@opencode-ai/core/plugin/invoke"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { ProjectCopy } from "@opencode-ai/core/project/copy"
 import { PtyTicket } from "@opencode-ai/core/pty/ticket"
@@ -222,6 +223,7 @@ const app = LayerNode.group([
   Storage.node,
   Snapshot.node,
   Plugin.node,
+  PluginInvoke.node,
   ModelsDev.node,
   Provider.node,
   ProviderAuth.node,

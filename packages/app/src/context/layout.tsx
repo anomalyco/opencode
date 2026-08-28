@@ -121,9 +121,10 @@ const normalizeSessionTabList = (path: ReturnType<typeof createPathHelpers> | un
 
 const normalizeStoredSessionTabs = (key: string, tabs: SessionTabs) => {
   const path = sessionPath(key)
+  const active = tabs.active && !tabs.active.startsWith("preview:") ? normalizeSessionTab(path, tabs.active) : undefined
   return {
-    all: normalizeSessionTabList(path, tabs.all),
-    active: tabs.active ? normalizeSessionTab(path, tabs.active) : tabs.active,
+    all: normalizeSessionTabList(path, tabs.all).filter((tab) => !tab.startsWith("preview:")),
+    active,
   }
 }
 

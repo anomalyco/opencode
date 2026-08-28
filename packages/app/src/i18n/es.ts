@@ -755,6 +755,8 @@ export const dict = {
   "session.tab.context": "Contexto",
   "session.tab.unknown": "Sesión desconocida",
   "session.panel.reviewAndFiles": "Revisión y archivos",
+  "session.attachment.openInApp": "Abrir en la aplicación",
+  "session.attachment.download": "Descargar",
   "session.error.notFound": "No se encuentra esta sesión",
   "session.error.notFound.description": "Esta pestaña apunta a una sesión que ya no existe en este servidor.",
   "session.error.notFound.closeTab": "Cerrar pestaña",

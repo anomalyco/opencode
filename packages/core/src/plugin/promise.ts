@@ -70,6 +70,10 @@ export function fromPromise(plugin: Plugin) {
               resolve: (connection) => Effect.runPromiseWith(context)(host.integration.connection.resolve(connection)),
             },
           },
+          invoke: {
+            register: (name, handle) =>
+              register(host.invoke.register(name, (input) => Effect.promise(() => Promise.resolve(handle(input))))),
+          },
           plugin: {
             add: (input) => {
               const child = fromPromise(input)

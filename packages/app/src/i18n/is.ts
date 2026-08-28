@@ -708,6 +708,8 @@ export const dict = {
   "session.tab.context": "Samhengi",
   "session.tab.unknown": "Óþekkt lota",
   "session.panel.reviewAndFiles": "Yfirferð og skrár",
+  "session.attachment.openInApp": "Opna í forritinu",
+  "session.attachment.download": "Halda niður",
   "session.error.notFound": "Þessi lota finnst ekki",
   "session.error.notFound.description": "Þessi flipi bendir á lotu sem er ekki lengur til á þessum netþjóni.",
   "session.error.notFound.closeTab": "Lokaðu Tab",

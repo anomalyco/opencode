@@ -1208,6 +1208,8 @@ export const dict = {
     "Koble til over 75 leverandører for å bruke andre modeller, inkludert Claude, GPT, Gemini og flere",
 
   "session.tab.unknown": "Ukjent sesjon",
+  "session.attachment.openInApp": "Åpne i appen",
+  "session.attachment.download": "Last ned",
   "session.error.notFound": "Denne sesjonen finnes ikke",
   "session.error.notFound.description": "Denne fanen peker til en sesjon som ikke lenger finnes på denne serveren.",
   "session.error.notFound.closeTab": "Lukk fane",

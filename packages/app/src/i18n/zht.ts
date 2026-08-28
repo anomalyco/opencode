@@ -740,6 +740,8 @@ export const dict = {
   "session.tab.context": "上下文",
   "session.tab.unknown": "未知的工作階段",
   "session.panel.reviewAndFiles": "檢閱與檔案",
+  "session.attachment.openInApp": "在應用程式中開啟",
+  "session.attachment.download": "下載",
   "session.error.notFound": "找不到此工作階段",
   "session.error.notFound.description": "此分頁指向的工作階段已不存在於此伺服器。",
   "session.error.notFound.closeTab": "關閉分頁",

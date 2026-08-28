@@ -707,6 +707,8 @@ export const dict = {
   "session.tab.context": "Контекст",
   "session.tab.unknown": "Непозната сесија",
   "session.panel.reviewAndFiles": "Преглед и датотеке",
+  "session.attachment.openInApp": "Otvori u aplikaciji",
+  "session.attachment.download": "Preuzmi",
   "session.error.notFound": "Ова сесија није пронађена",
   "session.error.notFound.description": "Ова картица указује на сесију која више не постоји на овом серверу.",
   "session.error.notFound.closeTab": "Затвори картицу",

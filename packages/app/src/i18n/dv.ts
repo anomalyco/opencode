@@ -717,6 +717,8 @@ export const dict = {
   "session.tab.context": "ކޮންޓެކްސްޓް",
   "session.tab.unknown": "ނޭނގޭ ސެޝަނެއް",
   "session.panel.reviewAndFiles": "ރިވިއުކޮށް ފައިލްކުރުން",
+  "session.attachment.openInApp": "އެޕް ތަކުން ހުޅުއްޙާ",
+  "session.attachment.download": "ދަޅުމެޑުލް",
   "session.error.notFound": "މި ސެޝަން ހޯދިފައެއް ނުވެއެވެ",
   "session.error.notFound.description": "މި ޓެބުން އިޝާރާތް ކުރަނީ މި ސަރވަރގައި މިހާރު ނެތް ސެޝަނަކަށެވެ.",
   "session.error.notFound.closeTab": "Tab ބަންދުކުރުން",

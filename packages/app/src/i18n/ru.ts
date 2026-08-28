@@ -752,6 +752,8 @@ export const dict = {
   "session.tab.context": "Контекст",
   "session.tab.unknown": "Неизвестная сессия",
   "session.panel.reviewAndFiles": "Обзор и файлы",
+  "session.attachment.openInApp": "Открыть в приложении",
+  "session.attachment.download": "Скачать",
   "session.error.notFound": "Эта сессия не найдена",
   "session.error.notFound.description": "Эта вкладка указывает на сессию, которой больше нет на этом сервере.",
   "session.error.notFound.closeTab": "Закрыть вкладку",

@@ -756,6 +756,8 @@ export const dict = {
   "session.tab.context": "Bağlam",
   "session.tab.unknown": "Bilinmeyen Oturum",
   "session.panel.reviewAndFiles": "İnceleme ve dosyalar",
+  "session.attachment.openInApp": "Uygulamada aç",
+  "session.attachment.download": "İndir",
   "session.error.notFound": "Bu oturum bulunamıyor",
   "session.error.notFound.description": "Bu sekme, artık bu sunucuda bulunmayan bir oturuma yönlendiriyor.",
   "session.error.notFound.closeTab": "Sekmeyi kapat",

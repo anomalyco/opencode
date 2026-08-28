@@ -701,6 +701,8 @@ export const dict = {
   "session.tab.context": "Kontekst",
   "session.tab.unknown": "Tundmatu seanss",
   "session.panel.reviewAndFiles": "Ülevaatus ja failid",
+  "session.attachment.openInApp": "Ava rakenduses",
+  "session.attachment.download": "Laadi alla",
   "session.error.notFound": "Seda seanssi ei leitud",
   "session.error.notFound.description": "See vahekaart osutab seansile, mida selles serveris enam ei eksisteeri.",
   "session.error.notFound.closeTab": "Sule vahekaart",

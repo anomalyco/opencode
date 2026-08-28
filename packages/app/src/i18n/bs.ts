@@ -752,6 +752,8 @@ export const dict = {
   "session.tab.context": "Kontekst",
   "session.tab.unknown": "Nepoznata sesija",
   "session.panel.reviewAndFiles": "Pregled i datoteke",
+  "session.attachment.openInApp": "Otvori u aplikaciji",
+  "session.attachment.download": "Preuzmi",
   "session.error.notFound": "Ova sesija nije pronađena",
   "session.error.notFound.description": "Ova kartica upućuje na sesiju koja više ne postoji na ovom serveru.",
   "session.error.notFound.closeTab": "Zatvori karticu",

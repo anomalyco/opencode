@@ -713,6 +713,8 @@ export const dict = {
   "session.tab.context": "Context",
   "session.tab.unknown": "Onbekende sessie",
   "session.panel.reviewAndFiles": "Beoordeling en bestanden",
+  "session.attachment.openInApp": "In de app openen",
+  "session.attachment.download": "Downloaden",
   "session.error.notFound": "Deze sessie kan niet worden gevonden",
   "session.error.notFound.description": "Dit tabblad verwijst naar een sessie die niet meer bestaat op deze server.",
   "session.error.notFound.closeTab": "Tabblad sluiten",

@@ -704,6 +704,8 @@ export const dict = {
   "session.tab.context": "Konteks",
   "session.tab.unknown": "Sesi Tidak Diketahui",
   "session.panel.reviewAndFiles": "Semak dan fail",
+  "session.attachment.openInApp": "Buka dalam aplikasi",
+  "session.attachment.download": "Muat turun",
   "session.error.notFound": "Sesi ini tidak dapat ditemui",
   "session.error.notFound.description": "Tab ini merujuk kepada sesi yang tidak lagi wujud pada pelayan ini.",
   "session.error.notFound.closeTab": "Tutup Tab",

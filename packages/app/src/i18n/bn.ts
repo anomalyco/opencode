@@ -705,6 +705,8 @@ export const dict: Record<string, string> = {
   "session.tab.context": "প্রসঙ্গ",
   "session.tab.unknown": "অজানা সেশন",
   "session.panel.reviewAndFiles": "পর্যালোচনা এবং ফাইল",
+  "session.attachment.openInApp": "অ্যাপে খুলুন",
+  "session.attachment.download": "ডাউনলোড",
   "session.error.notFound": "এই সেশন খুঁজে পাওয়া যাবে না",
   "session.error.notFound.description": "এই ট্যাবটি এমন একটি সেশনের দিকে নির্দেশ করে যা এই সার্ভারে আর বিদ্যমান নেই।",
   "session.error.notFound.closeTab": "ট্যাব বন্ধ করুন",

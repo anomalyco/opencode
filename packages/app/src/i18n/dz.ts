@@ -717,6 +717,8 @@ export const dict: Record<string, string> = {
   "session.tab.context": "སྐབས་དོན།",
   "session.tab.unknown": "མ་ཤེས་པའི་ལཱ་ཡུན།",
   "session.panel.reviewAndFiles": "བསྐྱར་ཞིབ་དང་ཡིག་སྣོད།",
+  "session.attachment.openInApp": "ཨཱཕ་ནང་ཕྱེ་བ",
+  "session.attachment.download": "ཉར་ཚགས",
   "session.error.notFound": "ལཱ་ཡུན་འདི་འཚོལ་མ་ཐོབ།",
   "session.error.notFound.description": "མཆོང་ལྡེ་འདི་གིས་ སར་བར་འདི་གུ་ད་ལས་ཕར་མེད་པའི་ལཱ་ཡུན་ཅིག་ལུ་དཔག་འབདཝ་ཨིན།",
   "session.error.notFound.closeTab": "མཆོང་ལྡེ་ཁ་བསྡམས།",

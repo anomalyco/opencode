@@ -706,6 +706,8 @@ export const dict = {
   "session.tab.context": "კონტექსტი",
   "session.tab.unknown": "უცნობი სესია",
   "session.panel.reviewAndFiles": "მიმოხილვა და ფაილები",
+  "session.attachment.openInApp": "გახსნა აპში",
+  "session.attachment.download": "ჩამოტვირთვა",
   "session.error.notFound": "ეს სესია ვერ მოიძებნა",
   "session.error.notFound.description": "ეს ჩანართი მიუთითებს სესიაზე, რომელიც აღარ არსებობს ამ სერვერზე.",
   "session.error.notFound.closeTab": "ჩანართის დახურვა",

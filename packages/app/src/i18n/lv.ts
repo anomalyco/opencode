@@ -707,6 +707,8 @@ export const dict = {
   "session.tab.context": "Konteksts",
   "session.tab.unknown": "Nezināma sesija",
   "session.panel.reviewAndFiles": "Pārskats un faili",
+  "session.attachment.openInApp": "Atvērt lietotnē",
+  "session.attachment.download": "Lejupielādēt",
   "session.error.notFound": "Šī sesija nav atrodama",
   "session.error.notFound.description": "Šī cilne norāda uz sesiju, kas vairs neeksistē šajā serverī.",
   "session.error.notFound.closeTab": "Aizvērt cilni",

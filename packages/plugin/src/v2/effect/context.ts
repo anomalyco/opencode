@@ -4,6 +4,7 @@ import type { AISDKHooks } from "./aisdk.js"
 import type { CatalogHooks } from "./catalog.js"
 import type { CommandHooks } from "./command.js"
 import type { IntegrationHooks } from "./integration.js"
+import type { InvokeHooks } from "./invoke.js"
 import type { PluginDomain } from "./plugin.js"
 import type { ReferenceHooks } from "./reference.js"
 import type { SkillHooks } from "./skill.js"
@@ -16,6 +17,7 @@ export interface PluginContext {
   readonly catalog: CatalogHooks & Reload
   readonly command: CommandHooks & Reload
   readonly integration: IntegrationHooks & Reload
+  readonly invoke: InvokeHooks
   readonly plugin: PluginDomain
   readonly reference: ReferenceHooks & Reload
   readonly skill: SkillHooks & Reload

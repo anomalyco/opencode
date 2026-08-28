@@ -706,6 +706,8 @@ export const dict = {
   "session.tab.context": "Kontekst",
   "session.tab.unknown": "Neznana seja",
   "session.panel.reviewAndFiles": "Pregled in datoteke",
+  "session.attachment.openInApp": "Odpri v aplikaciji",
+  "session.attachment.download": "Prenesi",
   "session.error.notFound": "Te seje ni mogoče najti",
   "session.error.notFound.description": "Ta zavihek kaže na sejo, ki ne obstaja več na tem strežniku.",
   "session.error.notFound.closeTab": "Zapri zavihek",

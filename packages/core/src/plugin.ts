@@ -11,7 +11,8 @@ import { CommandV2 } from "./command"
 import { EventV2 } from "./event"
 import { Integration } from "./integration"
 import { KeyedMutex } from "./effect/keyed-mutex"
-import { PluginHost } from "./plugin/host"
+import { CurrentPluginID, PluginHost } from "./plugin/host"
+import { PluginInvoke } from "./plugin/invoke"
 import { Reference } from "./reference"
 import { SkillV2 } from "./skill"
 import { State } from "./state"
@@ -57,6 +58,7 @@ const layer = Layer.effect(
 
                 const child = yield* Scope.fork(scope)
                 yield* effect(host).pipe(
+                  Effect.provideService(CurrentPluginID, id),
                   Scope.provide(child),
                   Effect.withSpan("Plugin.load", { attributes: { "plugin.id": id } }),
                   Effect.onExit((exit) => (Exit.isFailure(exit) ? Scope.close(child, exit) : Effect.void)),
@@ -163,5 +165,6 @@ export const node = makeLocationNode({
     Integration.node,
     Reference.node,
     SkillV2.node,
+    PluginInvoke.node,
   ],
 })

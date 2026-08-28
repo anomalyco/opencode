@@ -706,6 +706,8 @@ export const dict = {
   "session.tab.context": "Kontext",
   "session.tab.unknown": "Neznámá relace",
   "session.panel.reviewAndFiles": "Recenze a soubory",
+  "session.attachment.openInApp": "Otevřít v aplikaci",
+  "session.attachment.download": "Stáhnout",
   "session.error.notFound": "Tuto relaci nelze najít",
   "session.error.notFound.description": "Tato karta ukazuje na relaci, která již na tomto serveru neexistuje.",
   "session.error.notFound.closeTab": "Zavřít kartu",

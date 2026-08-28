@@ -712,6 +712,8 @@ export const dict = {
   "session.tab.context": "Kontekstas",
   "session.tab.unknown": "Nežinomas seansas",
   "session.panel.reviewAndFiles": "Apžvalga ir failai",
+  "session.attachment.openInApp": "Atverti programėlėje",
+  "session.attachment.download": "Atsisiųsti",
   "session.error.notFound": "Šios sesijos rasti nepavyko",
   "session.error.notFound.description": "Šis skirtukas nurodo seansą, kurio šiame serveryje nebėra.",
   "session.error.notFound.closeTab": "Uždarykite Tab",

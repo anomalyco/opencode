@@ -716,6 +716,8 @@ export const dict = {
   "session.tab.context": "سیاق و سباق",
   "session.tab.unknown": "نامعلوم سیشن",
   "session.panel.reviewAndFiles": "جائزہ اور فائلیں۔",
+  "session.attachment.openInApp": "ایپ میں کھولیں",
+  "session.attachment.download": "ڈاؤن لوڈ",
   "session.error.notFound": "یہ سیشن نہیں مل سکتا",
   "session.error.notFound.description": "یہ ٹیب ایک سیشن کی طرف اشارہ کرتا ہے جو اس سرور پر اب موجود نہیں ہے۔",
   "session.error.notFound.closeTab": "ٹیب بند کریں",

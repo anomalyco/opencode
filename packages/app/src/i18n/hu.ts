@@ -711,6 +711,8 @@ export const dict = {
   "session.tab.context": "Kontextus",
   "session.tab.unknown": "Ismeretlen munkamenet",
   "session.panel.reviewAndFiles": "Áttekintés és fájlok",
+  "session.attachment.openInApp": "Megnyitás az alkalmazásban",
+  "session.attachment.download": "Letöltés",
   "session.error.notFound": "Ez a munkamenet nem található",
   "session.error.notFound.description": "Ez a lap olyan munkamenetre mutat, amely már nem létezik ezen a kiszolgálón.",
   "session.error.notFound.closeTab": "Zárja be a Tab-t",

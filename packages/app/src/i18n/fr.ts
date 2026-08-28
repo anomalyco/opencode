@@ -709,6 +709,8 @@ export const dict = {
   "session.tab.context": "Contexte",
   "session.tab.unknown": "Session inconnue",
   "session.panel.reviewAndFiles": "Revue et fichiers",
+  "session.attachment.openInApp": "Ouvrir dans l'appli",
+  "session.attachment.download": "Télécharger",
   "session.error.notFound": "Cette session est introuvable",
   "session.error.notFound.description": "Cet onglet pointe vers une session qui n'existe plus sur ce serveur.",
   "session.error.notFound.closeTab": "Fermer l'onglet",

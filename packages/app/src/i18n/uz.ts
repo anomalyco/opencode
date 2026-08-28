@@ -709,6 +709,8 @@ export const dict = {
   "session.tab.context": "Kontekst",
   "session.tab.unknown": "Noma'lum sessiya",
   "session.panel.reviewAndFiles": "Ko'rib chiqish va fayllar",
+  "session.attachment.openInApp": "Ilova ochish",
+  "session.attachment.download": "Yuklab olish",
   "session.error.notFound": "Bu sessiya topilmadi",
   "session.error.notFound.description": "Ushbu yorliq endi ushbu serverda mavjud bo'lmagan seansga ishora qiladi.",
   "session.error.notFound.closeTab": "Tab ni yoping",

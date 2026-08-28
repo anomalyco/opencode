@@ -692,6 +692,8 @@ export const dict = {
   "session.tab.context": "سياق",
   "session.tab.unknown": "جلسة غير معروفة",
   "session.panel.reviewAndFiles": "المراجعة والملفات",
+  "session.attachment.openInApp": "فتح في التطبيق",
+  "session.attachment.download": "تنزيل",
   "session.error.notFound": "لا يمكن العثور على هذه الجلسة",
   "session.error.notFound.description": "يشير هذا التبويب إلى جلسة لم تعد موجودة على هذا الخادم.",
   "session.error.notFound.closeTab": "إغلاق علامة التبويب",

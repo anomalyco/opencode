@@ -101,6 +101,19 @@ export type ProjectCopyError = {
 export const isProjectCopyError = (value: unknown): value is ProjectCopyError =>
   typeof value === "object" && value !== null && "name" in value && value["name"] === "ProjectCopyError"
 
+export type PluginNotFoundError = { readonly _tag: "PluginNotFoundError"; readonly message: string }
+export const isPluginNotFoundError = (value: unknown): value is PluginNotFoundError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "PluginNotFoundError"
+
+export type PluginInvokeNotFoundError = {
+  readonly _tag: "PluginInvokeNotFoundError"
+  readonly pluginID: string
+  readonly name: string
+  readonly message: string
+}
+export const isPluginInvokeNotFoundError = (value: unknown): value is PluginInvokeNotFoundError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "PluginInvokeNotFoundError"
+
 export type HealthGetOutput = { readonly healthy: true }
 
 export type LocationGetInput = {
@@ -2805,3 +2818,15 @@ export type ProjectCopiesRefreshInput = {
 }
 
 export type ProjectCopiesRefreshOutput = void
+
+export type PluginsListOutput = {
+  readonly data: ReadonlyArray<{ readonly id: string; readonly invokes: ReadonlyArray<string> }>
+}["data"]
+
+export type PluginsInvokeInput = {
+  readonly pluginID: { readonly pluginID: string }["pluginID"]
+  readonly name: { readonly name: string; readonly input: unknown }["name"]
+  readonly input: { readonly name: string; readonly input: unknown }["input"]
+}
+
+export type PluginsInvokeOutput = { readonly result: unknown }

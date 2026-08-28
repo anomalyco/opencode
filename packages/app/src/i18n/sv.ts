@@ -710,6 +710,8 @@ export const dict = {
   "session.tab.context": "Kontext",
   "session.tab.unknown": "Okänd session",
   "session.panel.reviewAndFiles": "Granskning och filer",
+  "session.attachment.openInApp": "Öppna i appen",
+  "session.attachment.download": "Ladda ner",
   "session.error.notFound": "Denna session kan inte hittas",
   "session.error.notFound.description": "Den här fliken pekar på en session som inte längre finns på den här servern.",
   "session.error.notFound.closeTab": "Stäng flik",

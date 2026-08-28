@@ -632,6 +632,8 @@ export const dict = {
   "session.tab.context": "Kontekst",
   "session.tab.unknown": "Ukendt session",
   "session.panel.reviewAndFiles": "Gennemgang og filer",
+  "session.attachment.openInApp": "Åbn i appen",
+  "session.attachment.download": "Download",
   "session.error.notFound": "Denne session kan ikke findes",
   "session.error.notFound.description": "Denne fane henviser til en session, der ikke længere findes på denne server.",
   "session.error.notFound.closeTab": "Luk fane",

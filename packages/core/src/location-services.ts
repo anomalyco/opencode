@@ -18,6 +18,7 @@ import { LocationServiceMap } from "./location-service-map"
 import { PermissionV2 } from "./permission"
 import { PluginV2 } from "./plugin"
 import { PluginInternal } from "./plugin/internal"
+import { PluginInvoke } from "./plugin/invoke"
 import { Policy } from "./policy"
 import { ProjectCopy } from "./project/copy"
 import { Pty } from "./pty"
@@ -51,6 +52,7 @@ export const locationServices = LayerNode.group([
   AISDK.node,
   PluginV2.node,
   PluginInternal.node,
+  PluginInvoke.node,
   ProjectCopy.node,
   ProjectCopy.refreshNode,
   FileSystemSearch.node,
