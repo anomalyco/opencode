@@ -4,6 +4,7 @@ import { useTheme } from "../../context/theme"
 import { useConfig } from "../../config"
 import { Slot } from "../../plugin/render"
 import { withTimestampedFallback } from "@opencode-ai/util/session-title-fallback"
+import { TextAttributes } from "@opentui/core"
 
 import { getScrollAcceleration } from "../../util/scroll"
 import { SESSION_SIDEBAR_WIDTH } from "../../ui/layout"
@@ -45,8 +46,11 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
         >
           <box flexShrink={0} gap={1} paddingRight={1}>
             <box paddingRight={1}>
-              <text fg={theme.text.default}>
-                <b>{withTimestampedFallback(session()!)}</b>
+              <text
+                fg={theme.text.default}
+                attributes={data.session.title.pending(props.sessionID) ? TextAttributes.DIM : TextAttributes.BOLD}
+              >
+                {withTimestampedFallback(session()!)}
               </text>
               <Show when={session()!.location.workspaceID}>
                 <text fg={theme.text.subdued}>{session()!.location.workspaceID}</text>

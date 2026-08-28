@@ -96,6 +96,7 @@ export const EMPTY_SESSION_TAB_STATUS: SessionTabsStatus = {
   promptPulse: 0,
   attention: false,
   busy: false,
+  renaming: false,
 }
 export type SessionTabsController = Pick<ContextController, "tabs" | "current" | "select" | "close" | "move"> & {
   newTab?: () => boolean
@@ -913,7 +914,7 @@ function VerticalSessionTabs(props: {
                         wrapMode="none"
                         selectable={false}
                         attributes={
-                          (selected() ? TextAttributes.BOLD : 0) |
+                          (status().renaming ? TextAttributes.DIM : selected() ? TextAttributes.BOLD : 0) |
                             (tabs.isPreview?.(tab.sessionID) ? TextAttributes.ITALIC : 0) || undefined
                         }
                       >
@@ -1498,7 +1499,8 @@ function HorizontalSessionTabs(props: {
                   wrapMode="none"
                   selectable={false}
                   attributes={
-                    (bold() ?? 0) | (tabs.isPreview?.(tab.sessionID) ? TextAttributes.ITALIC : 0) || undefined
+                    (status().renaming ? TextAttributes.DIM : (bold() ?? 0)) |
+                      (tabs.isPreview?.(tab.sessionID) ? TextAttributes.ITALIC : 0) || undefined
                   }
                 >
                   <Show when={scrolling() || glows() || titleFades()} fallback={visibleTitle()}>

@@ -801,9 +801,12 @@ export function Session(props: {
       slash: { name: "rename", arguments: true as const },
       run: (input?: string) => {
         if (input === undefined) return DialogSessionRename.show(dialog, route.sessionID, session()?.title)
-        void client.api.session
-          .rename({ sessionID: route.sessionID, title: input.trim() })
-          .catch((error) => toast.error(error))
+        const title = input.trim()
+        void (
+          title
+            ? client.api.session.rename({ sessionID: route.sessionID, title })
+            : data.session.title.generate(route.sessionID)
+        ).catch((error) => toast.error(error))
       },
     },
     {

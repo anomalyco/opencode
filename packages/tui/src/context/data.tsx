@@ -1,5 +1,6 @@
 import { createData } from "@opencode-ai/client/solid"
 import type { Plugin } from "@opencode-ai/plugin/tui"
+import { createStore } from "solid-js/store"
 import { createSimpleContext } from "./helper"
 import { useClient } from "./client"
 
@@ -17,6 +18,22 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       directory: props.directory,
     })
     data satisfies Plugin.Context["data"]
-    return data
+    const [generatingTitles, setGeneratingTitles] = createStore<Record<string, boolean | undefined>>({})
+    return {
+      ...data,
+      session: {
+        ...data.session,
+        title: {
+          pending: (sessionID: string) => generatingTitles[sessionID] === true,
+          async generate(sessionID: string) {
+            if (generatingTitles[sessionID]) return
+            setGeneratingTitles(sessionID, true)
+            await client.api.session
+              .rename({ sessionID, title: "" })
+              .finally(() => setGeneratingTitles(sessionID, undefined))
+          },
+        },
+      },
+    }
   },
 })

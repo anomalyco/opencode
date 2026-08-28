@@ -383,6 +383,24 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
         },
       })),
       {
+        bind: "n",
+        title: "Regenerate selected title",
+        group: "Storybook",
+        run() {
+          const current = active()
+          if (!current) return
+          const renaming = !controller.status(current).renaming
+          batch(() => {
+            setStatuses((statuses) => ({
+              ...statuses,
+              [current]: { ...(statuses[current] ?? EMPTY_SESSION_TAB_STATUS), renaming },
+            }))
+            if (!renaming) setTabStore("items", number(current) - 1, "title", "Regenerated session title")
+          })
+          setLastEvent(`tab ${number(current)} ${renaming ? "regenerating title; press n to finish" : "renamed"}`)
+        },
+      },
+      {
         bind: "c",
         title: "Cycle spinner shape",
         group: "Storybook",
@@ -454,6 +472,7 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
           { shortcut: "a", label: "permission" },
           { shortcut: "i", label: "idle" },
           { shortcut: "f/x", label: "complete/fail" },
+          { shortcut: "n", label: "rename/finish" },
           { shortcut: "t/d", label: "add/close" },
           { shortcut: "c", label: "spinner" },
           { shortcut: "u", label: "unread marker" },
