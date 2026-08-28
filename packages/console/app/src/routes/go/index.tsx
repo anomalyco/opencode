@@ -152,7 +152,7 @@ function LimitsGraph(props: { href: string }) {
           <g data-slot="bars">
             <For each={graph}>
               {(m, i) => (
-                <g style={{ "--d": m.d } as any}>
+                <g data-model={m.id} style={{ "--d": m.d } as any}>
                   <rect
                     x={left}
                     y={gy(i()) - bh / 2}
