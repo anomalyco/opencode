@@ -1,5 +1,5 @@
 import { createMemo, createResource, createSignal, onCleanup, Show } from "solid-js"
-import type { SessionInfo } from "@opencode-ai/client"
+import type { OpenCodeEvent, SessionInfo } from "@opencode-ai/client"
 import { useTerminalDimensions } from "@opentui/solid"
 import type { RGBA } from "@opentui/core"
 import { dialogWidth, useDialog } from "../ui/dialog"
@@ -44,15 +44,31 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
   onCleanup(() => {
     closed = true
   })
-  const [recent] = createResource(() =>
-    client.api.session
+  const [recent] = createResource(() => {
+    // A late read must not overwrite deletion or placement facts observed in flight.
+    const changed = new Map<string, Extract<OpenCodeEvent, { type: "session.deleted" | "session.moved" }>>()
+    const unsubscribe = client.event.listen((message) => {
+      const event = message.details
+      if (event.type === "session.deleted" || event.type === "session.moved") changed.set(event.data.sessionID, event)
+    })
+    onCleanup(unsubscribe)
+    return client.api.session
       .list({ limit: 50, order: "desc", parentID: null })
       .then((response) => {
-        if (!closed) props.onLoad(response.data)
+        if (!closed)
+          props.onLoad(
+            response.data.flatMap((session) => {
+              const event = changed.get(session.id)
+              if (!event) return [session]
+              if (event.type === "session.deleted") return []
+              return [moveOpenSession(props.sessions.find((entry) => entry.id === session.id) ?? session, event)]
+            }),
+          )
         return true
       })
-      .catch(() => false),
-  )
+      .catch(() => false)
+      .finally(unsubscribe)
+  })
   const [projects] = createResource(() =>
     data.project.sync().then(
       () => true,
@@ -205,6 +221,16 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
       }}
     />
   )
+}
+
+export function moveOpenSession(session: SessionInfo, event: Extract<OpenCodeEvent, { type: "session.moved" }>) {
+  return {
+    ...session,
+    location: event.data.location,
+    projectID: event.data.projectID ?? session.projectID,
+    subpath: event.data.subpath,
+    time: { ...session.time, updated: Math.max(session.time.updated, event.created) },
+  }
 }
 
 function timeAgo(timestamp: number) {

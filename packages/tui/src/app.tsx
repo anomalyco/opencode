@@ -68,7 +68,7 @@ import { DialogThemeList } from "./component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
 import { DialogAgent } from "./component/dialog-agent"
 import { DialogSessionList } from "./component/dialog-session-list"
-import { DialogOpen, DialogOpenKey } from "./component/dialog-open"
+import { DialogOpen, DialogOpenKey, moveOpenSession } from "./component/dialog-open"
 import { SessionTabs } from "./component/session-tabs"
 import { clampSessionTabsWidth, sessionTabsFitVertically, SESSION_SIDEBAR_WIDTH } from "./ui/layout"
 import { createPaneResize } from "./ui/pane-resize"
@@ -1209,6 +1209,12 @@ function App(props: { pair?: DialogPairCredentials }) {
       type: "session",
       sessionID: evt.data.sessionID,
     })
+  })
+
+  event.on("session.moved", (evt) => {
+    setOpenSessions((sessions) =>
+      sessions.map((session) => (session.id !== evt.data.sessionID ? session : moveOpenSession(session, evt))),
+    )
   })
 
   event.on("session.deleted", (evt) => {

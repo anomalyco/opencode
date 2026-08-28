@@ -33,7 +33,8 @@ test.each([100, 44])("Ctrl-O is immediate, dismissible, and prunes cached deleti
       requests++
       requested.resolve()
       if (requests === 1) return response.promise
-      if (requests === 2 || requests > 3) return refresh.promise.then((response) => response.clone())
+      if (requests === 2 || requests === 4) return refresh.promise.then((response) => response.clone())
+      if (requests > 4) return new Response("Unavailable", { status: 503 })
       return json({ data: [cachedSession], cursor: {} })
     }
     if (url.pathname === "/api/project") return projects.promise
@@ -86,6 +87,10 @@ test.each([100, 44])("Ctrl-O is immediate, dismissible, and prunes cached deleti
     await setup.waitForFrame((frame) => !frame.includes("Fixture project"))
     setup.mockInput.pressKey("o", { ctrl: true })
     await setup.waitForFrame((frame) => frame.includes("Cached"))
+    setup.mockInput.pressEscape()
+    await setup.waitForFrame((frame) => !frame.includes("Fixture project"))
+    setup.mockInput.pressKey("o", { ctrl: true })
+    await setup.waitForFrame((frame) => frame.includes("Cached") && frame.includes("Refreshing"))
     events.emit({
       id: "evt_deleted",
       created: 1,
@@ -94,10 +99,13 @@ test.each([100, 44])("Ctrl-O is immediate, dismissible, and prunes cached deleti
       data: { sessionID: "ses_cached" },
     })
     await setup.waitForFrame((frame) => !frame.includes("Cached"))
+    refresh.resolve(json({ data: [cachedSession], cursor: {} }))
+    await setup.waitForFrame((frame) => frame.includes("Fixture project") && !frame.includes("Refreshing"))
+    expect(setup.captureCharFrame()).not.toContain("Cached")
     setup.mockInput.pressEscape()
     await setup.waitForFrame((frame) => !frame.includes("Fixture project"))
     setup.mockInput.pressKey("o", { ctrl: true })
-    await setup.waitForFrame((frame) => frame.includes("Refreshing"))
+    await setup.waitForFrame((frame) => frame.includes("Could not refresh sessions"))
     expect(setup.captureCharFrame()).not.toContain("Cached")
     setup.renderer.destroy()
     await task
@@ -109,6 +117,131 @@ test.each([100, 44])("Ctrl-O is immediate, dismissible, and prunes cached deleti
     await server.stop()
   }
 })
+
+test.each(["dismissed", "refreshing"])(
+  "Ctrl-O retains committed movement of a cached-only session while %s",
+  async (phase) => {
+    await using state = await tmpdir()
+    const setup = await createTestRenderer({ width: 100, height: 30, useThread: false, kittyKeyboard: true })
+    setup.renderer.start()
+    const ready = Promise.withResolvers<void>()
+    const refresh = Promise.withResolvers<Response>()
+    const metadata = Promise.withResolvers<Response>()
+    const destinationRequested = Promise.withResolvers<void>()
+    const events = createEventStream()
+    const cached = {
+      id: "ses_cached_move",
+      title: "Cached movement",
+      projectID: "proj_old",
+      location: { directory: "/fixture/old" },
+      cost: 0,
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      time: { created: 1, updated: 2 },
+    }
+    let requests = 0
+    const locations: string[] = []
+    const calls = createFetch((url) => {
+      if (url.pathname === "/api/session") {
+        if (url.searchParams.has("parentID")) {
+          const parent = url.searchParams.get("parentID")
+          if (parent && parent !== "null") return json({ data: [], cursor: {} })
+        }
+        return requests++ === 0
+          ? json({ data: [cached], cursor: {} })
+          : refresh.promise.then((response) => response.clone())
+      }
+      if (url.pathname === `/api/session/${cached.id}`) return metadata.promise
+      if (url.pathname === `/api/session/${cached.id}/message`) return json({ data: [], cursor: {} })
+      if (url.pathname === `/api/session/${cached.id}/inbox` || url.pathname === `/api/session/${cached.id}/permission`)
+        return json({ data: [] })
+      if (url.pathname === "/api/project")
+        return json(
+          ["old", "new"].map((name) => ({
+            id: `proj_${name}`,
+            canonical: `/fixture/${name}`,
+            name: name === "old" ? "Old" : "New",
+            time: { created: 1, updated: 2 },
+            sandboxes: [],
+          })),
+        )
+      if (url.pathname === "/api/location") {
+        const query = url.searchParams.get("location[directory]") ?? ""
+        locations.push(query)
+        if (query.includes("/fixture/new")) {
+          destinationRequested.resolve()
+          return json({
+            directory: "/fixture/new",
+            project: { id: "proj_new", directory: "/fixture/new", canonical: "/fixture/new" },
+          })
+        }
+      }
+      return undefined
+    }, events)
+    const server = Bun.serve({ port: 0, fetch: (request) => calls.fetch(request) })
+    const { run } = await import("../src/app")
+    const task = Effect.runPromise(
+      run({
+        app: { name: "test", version: "test", channel: "test" },
+        server: { endpoint: { url: server.url.toString() } },
+        config: { get: async () => ({ animations: false, tabs: { enabled: false } }), update: async () => ({}) },
+        packages: { resolve: async () => undefined },
+        terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: ready.resolve }),
+        args: {},
+        log: () => {},
+      }).pipe(Effect.provide(Global.layerWith({ state: state.path })), Effect.provide(FileSystem.layerNoop({}))),
+    )
+    try {
+      await ready.promise
+      await setup.waitForFrame((frame) => frame.includes("commands"))
+      setup.mockInput.pressKey("o", { ctrl: true })
+      await setup.waitForFrame((frame) => frame.includes(cached.title) && !frame.includes("Refreshing"))
+      setup.mockInput.pressEscape()
+      await setup.waitForFrame((frame) => !frame.includes("Search sessions"))
+      if (phase === "refreshing") {
+        setup.mockInput.pressKey("o", { ctrl: true })
+        await setup.waitForFrame((frame) => frame.includes(cached.title) && frame.includes("Refreshing"))
+      }
+      events.emit({
+        id: "evt_cached_moved",
+        created: 3,
+        type: "session.moved",
+        durable: { aggregateID: cached.id, seq: 1, version: 1 },
+        data: { sessionID: cached.id, location: { directory: "/fixture/new" }, projectID: "proj_new" },
+      })
+      if (phase === "dismissed") {
+        setup.mockInput.pressKey("o", { ctrl: true })
+        refresh.resolve(new Response("Unavailable", { status: 503 }))
+        await setup.waitForFrame((frame) => frame.includes("Could not refresh sessions"))
+      }
+      if (phase === "refreshing") {
+        await setup.waitForFrame((frame) =>
+          frame.split("\n").some((line) => line.includes(cached.title) && line.includes("New")),
+        )
+        refresh.resolve(json({ data: [cached], cursor: {} }))
+        await setup.waitForFrame((frame) => frame.includes(cached.title) && !frame.includes("Refreshing"))
+      }
+      await setup.waitForFrame((frame) =>
+        frame.split("\n").some((line) => line.includes(cached.title) && line.includes("New")),
+      )
+      expect(
+        setup
+          .captureCharFrame()
+          .split("\n")
+          .find((line) => line.includes(cached.title)),
+      ).toContain("New")
+      locations.length = 0
+      setup.mockInput.pressEnter()
+      await destinationRequested.promise
+      expect(locations.some((query) => query.includes("/fixture/old"))).toBe(false)
+    } finally {
+      refresh.resolve(json({ data: [], cursor: {} }))
+      metadata.resolve(json({ data: { ...cached, projectID: "proj_new", location: { directory: "/fixture/new" } } }))
+      setup.renderer.destroy()
+      await task
+      await server.stop()
+    }
+  },
+)
 
 test("SIGHUP clears title and disposes scoped resources once", async () => {
   const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })

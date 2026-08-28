@@ -1,5 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
+import { once } from "node:events"
+import { CliRenderEvents, TextAttributes } from "@opentui/core"
 import { testRender } from "@opentui/solid"
 import { createSignal, onMount } from "solid-js"
 import type { SessionInfo } from "@opencode-ai/client"
@@ -86,7 +88,7 @@ test("finds and opens an exact session ID outside the recent list", async () => 
     expect(fixture.route.data).toEqual({ type: "session", sessionID })
     expect(fixture.location.ref).toEqual(remote)
   } finally {
-    fixture.dispose()
+    await fixture.dispose()
   }
 })
 
@@ -188,6 +190,80 @@ test("shows projects while sessions refresh and preserves the selected project",
   }
 })
 
+test.each([false, true])("keeps a filtered selection visible after refresh with query reset %s", async (reset) => {
+  const sessions = Promise.withResolvers<Response>()
+  const fixture = await renderOpen((url) => {
+    if (url.pathname === "/api/session") return sessions.promise
+    if (url.pathname === "/api/project")
+      return json([
+        {
+          id: "proj_first",
+          canonical: "/tmp/opencode/first",
+          name: "First shared project",
+          time: { created: 1, updated: 2 },
+          sandboxes: [],
+        },
+        {
+          id: "proj_second",
+          canonical: "/tmp/opencode/second",
+          name: "Second shared project",
+          time: { created: 1, updated: 1 },
+          sandboxes: [],
+        },
+      ])
+    return undefined
+  })
+  const selectedTitle = () =>
+    fixture.app
+      .captureSpans()
+      .lines.flatMap((line) => line.spans)
+      .filter((span) => span.attributes & TextAttributes.BOLD)
+      .map((span) => span.text)
+      .join("")
+  try {
+    await fixture.app.waitForFrame((frame) => frame.includes("Second shared project") && frame.includes("Refreshing"))
+    await fixture.app.mockInput.typeText("shared")
+    await fixture.app.waitForFrame(() => selectedTitle().includes("First shared project"))
+    fixture.app.mockInput.pressArrow("down")
+    await fixture.app.waitForFrame(() => selectedTitle().includes("Second shared project"))
+
+    sessions.resolve(
+      json({
+        data: Array.from({ length: 12 }, (_, index) => ({
+          ...recentSession,
+          id: `ses_shared_${index}`,
+          title: "shared",
+          time: { created: 1, updated: index + 3 },
+        })),
+        cursor: {},
+      }),
+    )
+    await fixture.app.waitForFrame((frame) => frame.includes("Open") && !frame.includes("Refreshing"))
+    // Selection reveal runs on FRAME; the following paint must show the selected row.
+    const frame = once(fixture.app.renderer, CliRenderEvents.FRAME)
+    fixture.app.renderer.requestRender()
+    await frame
+    expect(fixture.app.captureCharFrame()).toContain("Second shared project")
+    expect(selectedTitle()).toContain("Second shared project")
+
+    if (reset) {
+      await fixture.app.mockInput.typeText(" project")
+      await fixture.app.waitForFrame(() => selectedTitle().includes("First shared project"))
+      expect(fixture.app.captureCharFrame()).toContain("Second shared project")
+      expect(selectedTitle()).not.toContain("Second shared project")
+    }
+    fixture.app.mockInput.pressEnter()
+    await fixture.app.waitFor(() => fixture.route.data.type === "home")
+    expect(fixture.route.data).toEqual({
+      type: "home",
+      location: { directory: `/tmp/opencode/${reset ? "first" : "second"}` },
+    })
+  } finally {
+    sessions.resolve(json({ data: [], cursor: {} }))
+    await fixture.dispose()
+  }
+})
+
 const recentSession = {
   id: "ses_recent",
   projectID: "proj_recent",
@@ -235,6 +311,48 @@ test("shows hydrated sessions immediately without waiting for either read", asyn
   } finally {
     sessions.resolve(json({ data: [], cursor: {} }))
     projects.resolve(json([]))
+    await fixture.dispose()
+  }
+})
+
+test("keeps an uncached moved session in the first successful refresh", async () => {
+  const response = Promise.withResolvers<Response>()
+  const destination = { directory: "/fixture/destination" }
+  const fixture = await renderOpen((url) => (url.pathname === "/api/session" ? response.promise : undefined))
+  try {
+    await fixture.app.waitForFrame((frame) => frame.includes("Refreshing"))
+    fixture.emit({
+      id: "evt_uncached_move",
+      created: 3,
+      type: "session.moved",
+      durable: { aggregateID: recentSession.id, seq: 1, version: 1 },
+      data: { sessionID: recentSession.id, location: destination, projectID: "proj_destination" },
+    })
+    // The following event supplies an ordered-stream receipt barrier without hydrating metadata.
+    fixture.emit({
+      id: "evt_move_received",
+      created: 4,
+      type: "session.execution.started",
+      durable: { aggregateID: recentSession.id, seq: 2, version: 1 },
+      data: { sessionID: recentSession.id },
+    })
+    await fixture.app.waitFor(() => fixture.data.session.status(recentSession.id) === "running")
+    expect(fixture.data.session.get(recentSession.id)).toBeUndefined()
+    response.resolve(
+      json({
+        data: [
+          { ...recentSession, location: destination, projectID: "proj_destination", time: { created: 1, updated: 3 } },
+        ],
+        cursor: {},
+      }),
+    )
+    await fixture.app.waitForFrame((frame) => frame.includes(recentSession.title) && !frame.includes("Refreshing"))
+    fixture.app.mockInput.pressEnter()
+    await fixture.app.waitFor(() => fixture.route.data.type === "session")
+    expect(fixture.route.data).toEqual({ type: "session", sessionID: recentSession.id })
+    expect(fixture.location.ref).toEqual(destination)
+  } finally {
+    response.resolve(json({ data: [], cursor: {} }))
     await fixture.dispose()
   }
 })
@@ -463,6 +581,7 @@ async function renderOpen(
 
   return {
     app,
+    emit: events.emit,
     open: () => open(),
     get route() {
       return route
