@@ -48,7 +48,12 @@ const refreshNpm = makeGlobalNode({
       return Npm.Service.of({
         add: (_pkg, options) =>
           options?.refresh
-            ? Effect.promise(() => Bun.write(path.join(directory, "refresh-requested"), "")).pipe(Effect.as(installed))
+            ? Effect.gen(function* () {
+                yield* Effect.promise(() => Bun.write(path.join(directory, "refresh-requested"), ""))
+                yield* waitForFile(path.join(directory, "refresh-release")).pipe(Effect.orDie)
+                yield* Effect.promise(() => Bun.write(path.join(directory, "refresh-finished"), ""))
+                return installed
+              })
             : Effect.succeed(installed),
         resolve: () => Effect.succeed(installed),
         which: () => Effect.succeed(undefined),
@@ -472,13 +477,15 @@ describe("PluginSupervisor config", () => {
     }),
   )
 
-  refreshIt.live("unblocks flush before refreshing an active package plugin", () =>
+  refreshIt.live("refreshes active package plugins after setup without blocking flush", () =>
     Effect.gen(function* () {
       const global = yield* Global.Service
       const directory = path.join(global.tmp, "background-refresh-plugin")
       const activated = path.join(directory, "activated")
       const release = path.join(directory, "release")
       const refreshed = path.join(directory, "refresh-requested")
+      const refreshRelease = path.join(directory, "refresh-release")
+      const refreshFinished = path.join(directory, "refresh-finished")
       yield* Effect.promise(async () => {
         await fs.mkdir(directory, { recursive: true })
         await fs.writeFile(
@@ -500,8 +507,10 @@ describe("PluginSupervisor config", () => {
           yield* Effect.sleep("100 millis")
           expect(yield* Effect.promise(() => Bun.file(refreshed).exists())).toBeFalse()
           yield* Effect.promise(() => Bun.write(release, ""))
-          yield* ready().pipe(Effect.timeout("2 seconds"))
           yield* waitForFile(refreshed)
+          yield* ready().pipe(Effect.timeout("2 seconds"))
+          yield* Effect.promise(() => Bun.write(refreshRelease, ""))
+          yield* waitForFile(refreshFinished)
           const plugins = yield* Plugin.Service
           expect((yield* plugins.list()).map((plugin) => String(plugin.id))).toContain("background-refresh-plugin")
         }),
