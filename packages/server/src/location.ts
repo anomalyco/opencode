@@ -1,8 +1,10 @@
 import { Location } from "@opencode-ai/core/location"
 import { LocationServiceMap } from "@opencode-ai/core/location-services"
 import { AbsolutePath } from "@opencode-ai/core/schema"
+import { Session } from "@opencode-ai/core/session"
 import { Workspace } from "@opencode-ai/core/workspace"
-import { Effect, Layer } from "effect"
+import { InvalidRequestError, SessionNotFoundError } from "@opencode-ai/protocol/errors"
+import { Context, Effect, Layer, Option, RcMap, Schema } from "effect"
 import { HttpServerRequest } from "effect/unstable/http"
 import { HttpApiMiddleware } from "effect/unstable/httpapi"
 
@@ -24,6 +26,29 @@ export function response<A, E, R>(data: Effect.Effect<A, E, R>) {
       data: yield* data,
     }
   })
+}
+
+const decodeSessionID = Schema.decodeUnknownEffect(Session.ID)
+
+export function withLoadedSessionServices<A, E>(
+  locations: Context.Service.Shape<typeof LocationServiceMap.Service>,
+  sessions: Context.Service.Shape<typeof Session.Service>,
+  sessionID: string,
+  use: (context: Context.Context<LocationServices>) => Effect.Effect<A, E>,
+) {
+  return Effect.scoped(
+    Effect.gen(function* () {
+      const id = yield* decodeSessionID(sessionID).pipe(
+        Effect.mapError(() => new InvalidRequestError({ message: "Invalid session ID", field: "sessionID" })),
+      )
+      const session = yield* sessions
+        .get(id)
+        .pipe(Effect.mapError(() => new SessionNotFoundError({ sessionID: id, message: `Session not found: ${id}` })))
+
+      if (!(yield* RcMap.has(locations.rcMap, session.location))) return Option.none<A>()
+      return Option.some(yield* use(yield* locations.contextEffect(session.location)))
+    }),
+  )
 }
 
 export function requestRef(request: HttpServerRequest.HttpServerRequest): Location.Ref {

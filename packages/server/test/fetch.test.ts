@@ -276,6 +276,58 @@ it.live("serves the session view operation and missing-session error", () =>
   }),
 )
 
+it.live("does not load a location when reading pending session requests", () =>
+  Effect.gen(function* () {
+    const handler = yield* ServerFetch.make({ ...options, config: { content: "{}" } })
+    const created = (yield* Effect.promise(() =>
+      handler(
+        new Request("http://opencode.local/api/session", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: "{}",
+        }),
+      ).then((response) => response.json()),
+    )) as { data: { id: string } }
+
+    const loaded = () =>
+      Effect.promise(() =>
+        handler(new Request("http://opencode.local/api/debug/location")).then(
+          (response) => response.json() as Promise<unknown[]>,
+        ),
+      )
+
+    expect(yield* loaded()).toEqual([])
+    for (const resource of ["permission", "form"]) {
+      const response = yield* Effect.promise(() =>
+        handler(new Request(`http://opencode.local/api/session/${created.data.id}/${resource}`)),
+      )
+      expect(response.status).toBe(200)
+      expect(yield* Effect.promise(() => response.json())).toEqual({ data: [] })
+    }
+    expect(yield* loaded()).toEqual([])
+
+    const createdForm = yield* Effect.promise(() =>
+      handler(
+        new Request(`http://opencode.local/api/session/${created.data.id}/form`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ title: "Test form", fields: [{ key: "answer", type: "string" }] }),
+        }),
+      ),
+    )
+    expect(createdForm.status).toBe(200)
+
+    const forms = yield* Effect.promise(() =>
+      handler(new Request(`http://opencode.local/api/session/${created.data.id}/form`)),
+    )
+    expect(forms.status).toBe(200)
+    expect(yield* Effect.promise(() => forms.json())).toMatchObject({
+      data: [{ title: "Test form" }],
+    })
+    expect(yield* loaded()).toHaveLength(1)
+  }),
+)
+
 // Pins the eager-boot guarantee: the application layer is built before the handler returns, so
 // an aborted first request cannot interrupt layer construction and wedge every later request
 // (the Effect-TS/effect#6319 failure class that lazy first-request builds are prone to).
