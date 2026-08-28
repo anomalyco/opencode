@@ -7,6 +7,7 @@
   "license": "MIT",
   "scripts": {
     "test": "bun test --timeout 30000 --only-failures",
+    "bench:diff": "bun run --conditions=browser script/bench-diff.tsx",
     "typecheck": "tsgo -b"
   },
   "exports": {

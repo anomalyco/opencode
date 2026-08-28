@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 import { DiffRenderable, LineNumberRenderable, type ColorInput } from "@opentui/core"
 import type { JSX } from "@opentui/solid"
-import { createMemo, For, Show, splitProps } from "solid-js"
+import { createMemo, For, onCleanup, Show, splitProps } from "solid-js"
 import { splitPatchHunks } from "../util/diff"
 import { stringWidth } from "../util/string-width"
 
@@ -20,6 +20,10 @@ export function PatchDiff(props: Props) {
   const [local, diffProps] = splitProps(props, ["diff", "hunkFg", "lineNumberBg", "ref"])
   const hunks = createMemo(() => splitPatchHunks(local.diff))
   const nodes = new Map<number, DiffRenderable>()
+  let gutterFrame: number | undefined
+  onCleanup(() => {
+    if (gutterFrame !== undefined) cancelAnimationFrame(gutterFrame)
+  })
   local.ref?.({
     hunks: () =>
       [...nodes.entries()]
@@ -28,28 +32,31 @@ export function PatchDiff(props: Props) {
         .filter((node) => !node.isDestroyed),
   })
   const syncGutters = (attempt = 0) => {
-    requestAnimationFrame(() => {
+    // Registrations share one whole-file pass instead of repeating it for every hunk.
+    if (gutterFrame !== undefined) return
+    gutterFrame = requestAnimationFrame(() => {
+      gutterFrame = undefined
       const sides = [...nodes.values()]
         .filter((item) => !item.isDestroyed)
         .flatMap((item) => item.getChildren().filter((side) => side instanceof LineNumberRenderable))
-      const lineNumbers = sides.map((side) => new Map([...side.getLineNumbers()].filter(([line]) => line >= 0)))
-      const digits = lineNumbers.map((numbers) => Math.max(0, ...numbers.values()).toString().length)
-      const after = sides.map((side) =>
-        Math.max(
-          0,
-          ...[...side.getLineSigns()].filter(([line]) => line >= 0).map(([, sign]) => stringWidth(sign.after ?? "")),
-        ),
+      const widths = sides.map((side) => {
+        const width = { line: 0, sign: 0 }
+        side.getLineNumbers().forEach((number, line) => {
+          if (line >= 0) width.line = Math.max(width.line, number)
+        })
+        side.getLineSigns().forEach((sign, line) => {
+          if (line >= 0) width.sign = Math.max(width.sign, stringWidth(sign.after ?? ""))
+        })
+        return { digits: width.line.toString().length, after: width.sign }
+      })
+      const max = widths.reduce(
+        (max, width) => ({ digits: Math.max(max.digits, width.digits), after: Math.max(max.after, width.after) }),
+        { digits: 0, after: 0 },
       )
-      const maxDigits = Math.max(...digits)
-      const maxAfter = Math.max(...after)
-      if (!maxDigits && attempt < 2) return syncGutters(attempt + 1)
-      if (!maxDigits) return
-      sides.forEach((side) => {
-        const index = sides.indexOf(side)
-        const signs = new Map([...side.getLineSigns()].filter(([line]) => line >= 0))
-        signs.set(-1, { after: " ".repeat(maxAfter + maxDigits - digits[index]) })
-        side.setLineNumbers(lineNumbers[index])
-        side.setLineSigns(signs)
+      if (!max.digits && attempt < 2) return syncGutters(attempt + 1)
+      if (!max.digits) return
+      sides.forEach((side, index) => {
+        side.setLineSign(-1, { after: " ".repeat(max.after + max.digits - widths[index].digits) })
       })
     })
   }

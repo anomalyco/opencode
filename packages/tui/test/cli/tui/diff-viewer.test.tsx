@@ -2,6 +2,7 @@
 import { expect, test } from "bun:test"
 import {
   BoxRenderable,
+  CodeRenderable,
   DiffRenderable,
   ImageRenderable,
   MouseButton,
@@ -32,6 +33,7 @@ import { createDialogApi } from "../../../src/plugin/api"
 import { ToastProvider } from "../../../src/ui/toast"
 import { createSignal, Show } from "solid-js"
 import { diffImageFixture } from "../../fixture/diff-image"
+import { largeDiffFixture } from "../../fixture/large-diff"
 
 test("closing the diff viewer returns to the route it opened from", async () => {
   const viewer = await renderDiffViewer([])
@@ -75,6 +77,154 @@ test("shows an error instead of an empty diff when loading fails", async () => {
   try {
     await viewer.app.waitForFrame((frame) => frame.includes("Could not load diff"))
     expect(viewer.app.captureCharFrame()).not.toContain("No changes to show")
+  } finally {
+    viewer.app.renderer.destroy()
+  }
+})
+
+test.each([80, 160])(
+  "large diffs render automatically and expose their complete content at %i columns",
+  async (width) => {
+    const file = largeDiffFixture("lines", 20000)
+    const viewer = await renderDiffViewer([file], { width, height: 30 })
+    try {
+      await viewer.app.waitForFrame((frame) => frame.includes('"column_0"'))
+      expect(findDiffs(viewer.app.renderer.root)).toHaveLength(1)
+      expect(viewer.commands.has("diff.load_patch")).toBe(false)
+      expect(viewer.app.captureCharFrame()).not.toContain("Large diff hidden")
+      viewer.app.mockInput.pressKey("G")
+      await viewer.app.waitForFrame((frame) => frame.includes(file.tail))
+      expect(
+        viewer.app
+          .captureCharFrame()
+          .split("\n")
+          .find((line) => line.includes(file.tail)),
+      ).toMatch(/20000\s+/)
+      viewer.app.mockInput.pressKey("g")
+      viewer.app.mockInput.pressKey("g")
+      await viewer.app.waitForFrame((frame) => frame.includes('"column_0"'))
+      expect(findScrollBox(viewer.app.renderer.root)!.scrollTop).toBe(0)
+      viewer.app.mockInput.pressKey("c", { ctrl: true })
+      await viewer.app.waitFor(() => viewer.current().type !== "plugin")
+      expect(viewer.current()).toEqual(startRoute)
+    } finally {
+      viewer.app.renderer.destroy()
+    }
+  },
+)
+
+test("all original hunks stay available for forward, reverse, and end navigation", async () => {
+  const file = largeDiffFixture("hunks", 1000)
+  const viewer = await renderDiffViewer([file], { width: 160, height: 30 })
+  try {
+    await viewer.app.waitForFrame((frame) => frame.includes('"column_1"'))
+    await viewer.app.flush()
+    const hunks = findDiffs(viewer.app.renderer.root)
+    expect(hunks).toHaveLength(1000)
+    const scroll = findScrollBox(viewer.app.renderer.root)!
+    viewer.app.mockInput.pressKey("]")
+    await viewer.app.flush()
+    expect(hunks[1].y).toBeGreaterThanOrEqual(scroll.viewport.y + 2)
+    expect(hunks[1].y).toBeLessThanOrEqual(scroll.viewport.y + 3)
+    viewer.app.mockInput.pressKey("[")
+    await viewer.app.flush()
+    expect(scroll.scrollTop).toBe(0)
+    viewer.app.mockInput.pressKey("G")
+    await viewer.app.waitForFrame((frame) => frame.includes(file.tail))
+    expect(
+      viewer.app
+        .captureCharFrame()
+        .split("\n")
+        .find((line) => line.includes(file.tail)),
+    ).toMatch(/39985\s+/)
+    viewer.app.mockInput.pressKey("g")
+    viewer.app.mockInput.pressKey("g")
+    await viewer.app.waitForFrame((frame) => frame.includes('"column_1"'))
+    expect(findDiffs(viewer.app.renderer.root)[0]).toBe(hunks[0])
+    expect(findDiffs(viewer.app.renderer.root).at(-1)).toBe(hunks.at(-1))
+  } finally {
+    viewer.app.renderer.destroy()
+  }
+})
+
+test("long wrapped lines retain their tails through narrow and wide resizing", async () => {
+  const file = largeDiffFixture("long", 20000)
+  const viewer = await renderDiffViewer([file], { width: 160, height: 30 })
+  try {
+    await viewer.app.waitForFrame((frame) => frame.includes("xxxx"))
+    await viewer.app.flush()
+    viewer.app.mockInput.pressKey("G")
+    await viewer.app.waitForFrame((frame) => frame.includes(file.tail))
+    viewer.app.resize(80, 24)
+    await viewer.app.flush()
+    expect(findDiffs(viewer.app.renderer.root)[0].view).toBe("unified")
+    viewer.app.mockInput.pressKey("G")
+    await viewer.app.waitForFrame((frame) => frame.includes(file.tail))
+    viewer.app.resize(160, 30)
+    await viewer.app.flush()
+    expect(findDiffs(viewer.app.renderer.root)[0].view).toBe("split")
+    viewer.app.mockInput.pressKey("G")
+    await viewer.app.waitForFrame((frame) => frame.includes(file.tail))
+    viewer.app.mockInput.pressKey("g")
+    viewer.app.mockInput.pressKey("g")
+    await viewer.app.waitForFrame((frame) => frame.includes("xxxx"))
+  } finally {
+    viewer.app.renderer.destroy()
+  }
+})
+
+test("large file review and source replacement keep the full patch usable", async () => {
+  const file = largeDiffFixture("lines", 20000)
+  const viewer = await renderDiffViewer([file], { width: 160, height: 30 })
+  try {
+    await viewer.app.waitForFrame((frame) => frame.includes('"column_0"'))
+    viewer.app.mockInput.pressKey("m")
+    await viewer.app.flush()
+    expect(findDiffs(viewer.app.renderer.root)).toHaveLength(0)
+    viewer.app.mockInput.pressKey("m")
+    await viewer.app.waitForFrame((frame) => frame.includes('"column_0"'))
+    const previous = findDiffs(viewer.app.renderer.root)[0]
+    viewer.app.mockInput.pressKey("d")
+    await viewer.app.waitForFrame((frame) => frame.includes("Switch source"))
+    viewer.app.mockInput.pressArrow("down")
+    viewer.app.mockInput.pressEnter()
+    await viewer.app.waitForFrame((frame) => frame.includes("Main branch") && frame.includes('"column_0"'))
+    expect(previous.isDestroyed).toBe(true)
+    viewer.app.mockInput.pressKey("G")
+    await viewer.app.waitForFrame((frame) => frame.includes(file.tail))
+  } finally {
+    viewer.app.renderer.destroy()
+  }
+})
+
+test("large diff selection survives offscreen scrolling and same-view resizing", async () => {
+  const viewer = await renderDiffViewer([largeDiffFixture("lines", 20000)], { width: 160, height: 30 })
+  try {
+    await viewer.app.waitForFrame((frame) => frame.includes('"column_0"'))
+    await viewer.app.flush()
+    const code = findDiffs(viewer.app.renderer.root)[0]
+      .getChildren()
+      .flatMap((side) => side.getChildren())
+      .find((node) => node instanceof CodeRenderable)
+    if (!code) throw new Error("Missing diff text owner")
+    const first = code.content.split("\n")[0]
+    await viewer.app.mockMouse.drag(code.x + 2, code.y, code.x + first.length - 1, code.y)
+    const selection = viewer.app.renderer.getSelection()
+    expect(selection?.getSelectedText()).toBe(first.slice(2))
+    const scroll = findScrollBox(viewer.app.renderer.root)!
+    scroll.scrollTo(15000)
+    await viewer.app.flush()
+    expect(viewer.app.renderer.getSelection()).toBe(selection)
+    expect(selection?.getSelectedText()).toBe(first.slice(2))
+    viewer.app.resize(180, 30)
+    await viewer.app.flush()
+    expect(selection?.getSelectedText()).toBe(first.slice(2))
+    scroll.scrollTo(0)
+    await viewer.app.flush()
+    expect(selection?.getSelectedText()).toBe(first.slice(2))
+    expect(code.isDestroyed).toBe(false)
+    viewer.app.renderer.clearSelection()
+    expect(viewer.app.renderer.getSelection()).toBeNull()
   } finally {
     viewer.app.renderer.destroy()
   }
