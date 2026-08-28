@@ -3,12 +3,13 @@ export * as SessionCompaction from "./compaction.js"
 import { LLMClient, AIError, LLMEvent, Message, type LLMRequest } from "@opencode-ai/ai"
 import type { StreamOptions } from "@opencode-ai/ai/route"
 import { SessionError } from "@opencode-ai/schema/session-error"
-import { Context, Effect, Layer, Stream } from "effect"
+import { Cause, Context, Effect, Exit, Layer, Stream } from "effect"
 import { Bus } from "../bus.js"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { llmClient } from "../effect/app-node-platform.js"
 import { SessionEvent } from "./event.js"
 import type { SessionContext } from "./context.js"
+import type { MessageDecodeError } from "./error.js"
 import type { SessionMessage } from "./message.js"
 import type { SessionModelRequest } from "./model-request.js"
 import type { SessionRunnerModel } from "./runner/model.js"
@@ -83,9 +84,9 @@ type RequiredInput = Pick<AutoInput, "messages" | "resolved">
 
 export type ManualInput = {
   readonly session: SessionSchema.Info
-  readonly messages: readonly SessionMessage.Info[]
+  readonly messages: Effect.Effect<readonly SessionMessage.Info[], MessageDecodeError>
   readonly inputID: SessionMessage.ID
-  readonly started?: boolean
+  readonly restore: <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
   /** Invoked after content planning, not when the caller captures the operation. */
   readonly resolveModel: SessionContext.Interface["resolveModel"]
   readonly prepare: SessionModelRequest.Interface["prepare"]
@@ -98,7 +99,6 @@ type Plan = {
   readonly prompt: string
   readonly recent: string
   readonly inputID?: SessionMessage.ID
-  readonly started?: boolean
   readonly prepare: SessionModelRequest.Interface["prepare"]
 }
 
@@ -110,7 +110,8 @@ export interface Interface extends State.Transformable<Draft> {
   readonly enabled: () => boolean
   readonly required: (input: RequiredInput) => boolean
   readonly compact: (input: AutoInput) => Effect.Effect<Outcome>
-  readonly compactManual: (input: ManualInput) => Effect.Effect<Outcome>
+  /** Runs an already-started control under its caller's interruption mask. */
+  readonly compactManual: (input: ManualInput) => Effect.Effect<Outcome, MessageDecodeError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionCompaction") {}
@@ -262,7 +263,7 @@ const make = (dependencies: Dependencies) => {
     return { status: "failed" as const, error: input.error }
   })
   const execute = Effect.fn("SessionCompaction.execute")(function* (plan: Plan) {
-    if (!plan.started)
+    if (plan.reason === "auto")
       yield* dependencies.bus.publish(SessionEvent.Compaction.Started, {
         sessionID: plan.session.id,
         reason: plan.reason,
@@ -384,34 +385,50 @@ const make = (dependencies: Dependencies) => {
     return used >= promptCeiling
   }
   const compactManual = Effect.fn("SessionCompaction.compactManual")(function* (input: ManualInput) {
-    const content = planContent(input.messages, state.get().tokens)
-    if (!content)
-      return yield* failed({
-        sessionID: input.session.id,
-        reason: "manual",
-        error: { type: "compaction.unavailable", message: "Nothing to compact yet" },
-        inputID: input.inputID,
-      })
-    const resolved = yield* input.resolveModel(input.session).pipe(
-      Effect.catch((cause) =>
-        failed({
-          sessionID: input.session.id,
-          reason: "manual",
-          error: toSessionError(cause),
-          inputID: input.inputID,
+    // Install settlement before restoring work; a nested mask would not restore interruptibility.
+    const compacted = yield* input
+      .restore(
+        Effect.gen(function* () {
+          const content = planContent(yield* input.messages, state.get().tokens)
+          if (!content)
+            return yield* failed({
+              sessionID: input.session.id,
+              reason: "manual",
+              error: { type: "compaction.unavailable", message: "Nothing to compact yet" },
+              inputID: input.inputID,
+            })
+          const resolved = yield* input.resolveModel(input.session).pipe(
+            Effect.catch((cause) =>
+              failed({
+                sessionID: input.session.id,
+                reason: "manual",
+                error: toSessionError(cause),
+                inputID: input.inputID,
+              }),
+            ),
+          )
+          if ("status" in resolved) return resolved
+          return yield* execute({
+            session: input.session,
+            resolved,
+            prepare: input.prepare,
+            reason: "manual",
+            inputID: input.inputID,
+            ...content,
+          })
         }),
-      ),
-    )
-    if ("status" in resolved) return resolved
-    return yield* execute({
-      session: input.session,
-      resolved,
-      prepare: input.prepare,
+      )
+      .pipe(Effect.exit)
+    if (Exit.isSuccess(compacted)) return compacted.value
+    yield* failed({
+      sessionID: input.session.id,
       reason: "manual",
+      error: Cause.hasInterruptsOnly(compacted.cause)
+        ? { type: "aborted", message: "Compaction cancelled" }
+        : { type: "compaction.failed", message: Cause.pretty(compacted.cause) },
       inputID: input.inputID,
-      started: input.started,
-      ...content,
     })
+    return yield* Effect.failCause(compacted.cause)
   })
   return Service.of({
     transform: state.transform,

@@ -2273,6 +2273,87 @@ describe("SessionRunnerLLM", () => {
     })
   })
 
+  scenario("settles manual compaction interrupted after delivery before summary entry", function* (s) {
+    yield* s.llm.push(TestLLM.text("Earlier answer", "text-manual-entry-history"))
+    yield* s.runPrompt("Earlier question")
+    s.requests.length = 0
+    s.modelResolveHook = Effect.die("summary resolution must not start")
+
+    const delivered = yield* Deferred.make<void>()
+    const release = yield* Effect.acquireRelease(Deferred.make<void>(), (deferred) =>
+      Deferred.succeed(deferred, undefined),
+    )
+    yield* s.bus.listen((event) =>
+      event.type === SessionEvent.Compaction.Started.type
+        ? Deferred.succeed(delivered, undefined).pipe(Effect.andThen(Deferred.await(release)))
+        : Effect.void,
+    )
+    const compaction = yield* SessionInbox.admitCompaction(s.db, s.bus, {
+      id: SessionMessage.ID.create(),
+      sessionID,
+      delivery: "steer",
+    })
+    const runner = yield* SessionRunner.Service
+    const run = yield* runner.drain({ sessionID, force: false }).pipe(Effect.forkChild)
+    yield* Deferred.await(delivered)
+    const interruption = yield* Fiber.interrupt(run).pipe(Effect.forkChild({ startImmediately: true }))
+    yield* Deferred.succeed(release, undefined)
+    yield* Fiber.join(interruption)
+
+    const exit = yield* Fiber.await(run)
+    expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBe(true)
+    expect(s.requests).toHaveLength(0)
+    expect(yield* SessionInbox.find(s.db, compaction.id)).toBeUndefined()
+    expect((yield* s.messages).find((message) => message.id === compaction.id)).toMatchObject({
+      type: "compaction",
+      status: "failed",
+      error: { type: "aborted", message: "Compaction cancelled" },
+    })
+    expect((yield* recordedEventTypes(sessionID)).slice(-3)).toEqual([
+      Bus.versionedType(SessionEvent.InboxDelivered.type, 1),
+      Bus.versionedType(SessionEvent.Compaction.Started.type, 1),
+      Bus.versionedType(SessionEvent.Compaction.Failed.type, 1),
+    ])
+  })
+
+  scenario("allows inbox cancellation while manual compaction is streaming", function* (s) {
+    yield* s.llm.push(TestLLM.text("Earlier answer", "text-manual-unlocked-history"))
+    yield* s.runPrompt("Earlier question")
+    s.requests.length = 0
+
+    yield* s.llm.push(TestLLM.text("Manual summary", "text-manual-unlocked-summary"))
+    const summary = yield* s.llm.gate
+    const compaction = yield* SessionInbox.admitCompaction(s.db, s.bus, {
+      id: SessionMessage.ID.create(),
+      sessionID,
+      delivery: "steer",
+    })
+    const queued = yield* s.session.prompt({ sessionID, text: "Cancel this", delivery: "queue", resume: false })
+    const run = yield* s.resume.pipe(Effect.forkChild)
+    yield* summary.started
+    yield* Effect.gen(function* () {
+      const cancellation = yield* s.session
+        .cancelInbox({ sessionID, inboxID: queued.id })
+        .pipe(Effect.forkChild({ startImmediately: true }))
+      const completion = yield* Fiber.await(cancellation).pipe(Effect.timeout("1 second"), Effect.forkChild)
+      yield* TestClock.adjust("1 second")
+      expect(yield* Fiber.join(completion)).toMatchObject({ _tag: "Success" })
+      expect(yield* SessionInbox.find(s.db, queued.id)).toBeUndefined()
+      expect((yield* s.messages).find((message) => message.id === compaction.id)).toMatchObject({
+        type: "compaction",
+        status: "running",
+      })
+    }).pipe(Effect.ensuring(summary.release))
+    yield* Fiber.join(run)
+
+    expect(s.requests).toHaveLength(1)
+    expect((yield* s.messages).find((message) => message.id === compaction.id)).toMatchObject({
+      type: "compaction",
+      status: "completed",
+      summary: "Manual summary",
+    })
+  })
+
   scenario("settles an admitted manual compaction when pre-start resolution throws", function* (s) {
     yield* s.llm.push(TestLLM.text("Earlier answer", "text-manual-resolution-history"))
     yield* s.runPrompt("Earlier question")
