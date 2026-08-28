@@ -1572,6 +1572,50 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("rejects unknown finish reasons without finalizing streamed tool calls", () =>
+    Effect.gen(function* () {
+      const body = sseEvents(
+        deltaChunk({
+          tool_calls: [{ index: 0, id: "call_1", function: { name: "lookup", arguments: '{"query":"weather"' } }],
+        }),
+        deltaChunk({}, "future_reason"),
+      )
+      const events = yield* Ref.make<ReadonlyArray<LLMEvent>>([])
+      const error = yield* LLMClient.stream(
+        LLMRequest.update(request, {
+          tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
+        }),
+      ).pipe(
+        Stream.tap((event) => Ref.update(events, (current) => [...current, event])),
+        Stream.runDrain,
+        Effect.provide(fixedResponse(body)),
+        Effect.flip,
+      )
+
+      expect(error).toMatchObject({
+        reason: { _tag: "UnknownProvider" },
+        message: "Provider finish_reason: future_reason",
+      })
+      expect(yield* Ref.get(events)).toEqual([
+        { type: "step-start", index: 0 },
+        {
+          type: "tool-input-start",
+          id: "call_1",
+          name: "lookup",
+          providerExecuted: undefined,
+          providerMetadata: undefined,
+        },
+        {
+          type: "tool-input-delta",
+          id: "call_1",
+          name: "lookup",
+          text: '{"query":"weather"',
+          input: { query: "weather" },
+        },
+      ])
+    }),
+  )
+
   it.effect("ignores empty identity fields on later tool call deltas", () =>
     Effect.gen(function* () {
       const body = sseEvents(
