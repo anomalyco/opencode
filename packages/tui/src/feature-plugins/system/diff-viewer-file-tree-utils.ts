@@ -118,7 +118,6 @@ export function fileTreeFileSelection(tree: FileTree, fileIndex: number) {
   const node = tree.nodes.find((item) => item.kind === "file" && item.fileIndex === fileIndex)
   if (!node) return undefined
   return {
-    highlightedNode: node.id,
     expandedNodes: fileTreeParentDirectories(tree, node.id),
   }
 }

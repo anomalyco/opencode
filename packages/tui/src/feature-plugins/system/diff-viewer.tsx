@@ -171,13 +171,10 @@ export function DiffViewerContent(props: {
   )
   const patchPaneWidth = createMemo(() => dimensions().width - (showFileTree() ? fileTreeWidth() : 0) - 4)
   const splitAvailable = createMemo(() => patchPaneWidth() >= MIN_SPLIT_WIDTH)
-  const defaultView = createMemo(() => {
-    if (props.preferences?.view === "unified") return "unified"
-    if (props.preferences?.view === "split") return "split"
-    return splitAvailable() ? "split" : "unified"
-  })
   const [viewOverride, setViewOverride] = createSignal<DiffView | undefined>(storedView(props.preferences?.view))
-  const view = createMemo(() => (splitAvailable() ? (viewOverride() ?? defaultView()) : "unified"))
+  const view = createMemo(() =>
+    splitAvailable() ? (viewOverride() ?? storedView(props.preferences?.view) ?? "split") : "unified",
+  )
   const fileTree = createMemo(() => buildFileTree(files()))
   const [expandedFileNodes, setExpandedFileNodes] = createSignal<ReadonlySet<number>>(new Set())
   const [selectedFileIndex, setSelectedFileIndex] = createSignal<number | undefined>()
@@ -224,6 +221,7 @@ export function DiffViewerContent(props: {
     const selection = fileTreeFileSelection(fileTree(), fileIndex)
     if (!selection) return
     setExpandedFileNodes((expanded) => {
+      if ([...selection.expandedNodes].every((node) => expanded.has(node))) return expanded
       const next = new Set(expanded)
       selection.expandedNodes.forEach((node) => next.add(node))
       return next
@@ -751,10 +749,7 @@ export function DiffViewerContent(props: {
                         (image() ? 6 : String(entry.file.additions).length + String(entry.file.deletions).length + 5) +
                         (reviewed() ? 2 : 0)
                       return (
-                        <box
-                          ref={(element: BoxRenderable) => registerPatchNode(entry.fileIndex, element)}
-                          onSizeChange={() => renderer.requestRender()}
-                        >
+                        <box ref={(element: BoxRenderable) => registerPatchNode(entry.fileIndex, element)}>
                           <Show when={index() > 0}>
                             <box
                               height={1}
@@ -846,29 +841,30 @@ export function DiffViewerContent(props: {
                                 </Match>
                                 <Match when={entry.file.patch}>
                                   {(patch) => (
-                                    <box>
-                                      <PatchDiff
-                                        ref={(component) => patchDiffByFileIndex.set(entry.fileIndex, component)}
-                                        diff={patch()}
-                                        hunkFg={theme.diff.text.hunkHeader}
-                                        view={entry.file.status === "modified" ? view() : "unified"}
-                                        filetype={filetype(entry.file.file)}
-                                        syntaxStyle={currentSyntax()}
-                                        showLineNumbers={true}
-                                        width="100%"
-                                        wrapMode="char"
-                                        fg={theme.text.default}
-                                        addedBg={theme.diff.background.added}
-                                        removedBg={theme.diff.background.removed}
-                                        contextBg={theme.diff.background.context}
-                                        addedSignColor={theme.diff.highlight.added}
-                                        removedSignColor={theme.diff.highlight.removed}
-                                        lineNumberFg={theme.diff.lineNumber.text}
-                                        lineNumberBg={theme.diff.background.context}
-                                        addedLineNumberBg={theme.diff.lineNumber.background.added}
-                                        removedLineNumberBg={theme.diff.lineNumber.background.removed}
-                                      />
-                                    </box>
+                                    <PatchDiff
+                                      ref={(component) => {
+                                        patchDiffByFileIndex.set(entry.fileIndex, component)
+                                        onCleanup(() => patchDiffByFileIndex.delete(entry.fileIndex))
+                                      }}
+                                      diff={patch()}
+                                      hunkFg={theme.diff.text.hunkHeader}
+                                      view={entry.file.status === "modified" ? view() : "unified"}
+                                      filetype={filetype(entry.file.file)}
+                                      syntaxStyle={currentSyntax()}
+                                      showLineNumbers={true}
+                                      width="100%"
+                                      wrapMode="char"
+                                      fg={theme.text.default}
+                                      addedBg={theme.diff.background.added}
+                                      removedBg={theme.diff.background.removed}
+                                      contextBg={theme.diff.background.context}
+                                      addedSignColor={theme.diff.highlight.added}
+                                      removedSignColor={theme.diff.highlight.removed}
+                                      lineNumberFg={theme.diff.lineNumber.text}
+                                      lineNumberBg={theme.diff.background.context}
+                                      addedLineNumberBg={theme.diff.lineNumber.background.added}
+                                      removedLineNumberBg={theme.diff.lineNumber.background.removed}
+                                    />
                                   )}
                                 </Match>
                               </Switch>

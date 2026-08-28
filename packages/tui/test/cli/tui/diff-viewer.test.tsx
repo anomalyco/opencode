@@ -12,7 +12,6 @@ import { testRender } from "@opentui/solid"
 import type {
   Context,
   Destination,
-  DialogOptions,
   KeymapCommand,
   KeymapLayer,
   Page,
@@ -29,8 +28,9 @@ import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 import { TestTuiContexts } from "../../fixture/tui-environment"
 import { createApi, createEventStream, createFetch, json } from "../../fixture/tui-client"
 import { DialogProvider, useDialog } from "../../../src/ui/dialog"
+import { createDialogApi } from "../../../src/plugin/api"
 import { ToastProvider } from "../../../src/ui/toast"
-import { createSignal, Show, type JSX } from "solid-js"
+import { createSignal, Show } from "solid-js"
 import { diffImageFixture } from "../../fixture/diff-image"
 
 test("closing the diff viewer returns to the route it opened from", async () => {
@@ -566,6 +566,11 @@ test.each(["patch", "image", "fallback"] as const)(
       expect(header.parent!.height).toBeGreaterThan(header.height)
       expect(viewer.app.captureCharFrame().split("\n")[header.y + 1].trim()).toBe("")
       expect(viewer.app.captureCharFrame()).not.toContain("✓")
+      if (kind === "patch") {
+        viewer.app.mockInput.pressKey("]")
+        await viewer.app.flush()
+        expect(scroll.scrollTop).toBeGreaterThan(0)
+      }
     } finally {
       viewer.app.renderer.destroy()
     }
@@ -769,35 +774,6 @@ test("single-file menu actions advance only when completing the current file", a
   }
 })
 
-test("completing and reopening an earlier file from its menu preserves the reading position", async () => {
-  const viewer = await renderDiffViewer(manyDiffs.slice(0, 4), { width: 160, height: 24, kittyKeyboard: true })
-  try {
-    await viewer.app.waitForFrame((frame) => frame.includes("const first"))
-    viewer.app.mockInput.pressKey("n")
-    await viewer.app.flush()
-    const scroll = findScrollBox(viewer.app.renderer.root)!
-    scroll.scrollBy(4)
-    await viewer.app.flush()
-    const patchFrame = () =>
-      viewer.app
-        .captureCharFrame()
-        .split("\n")
-        .map((line) => line.slice(scroll.x))
-        .join("\n")
-    const before = patchFrame()
-    const row = viewer.app.renderer.root.findDescendantById("diff-file-row-0")!
-    for (const label of ["Mark complete", "Mark incomplete"]) {
-      await viewer.app.mockMouse.click(row.x + 4, row.y, MouseButton.RIGHT)
-      await viewer.app.waitForFrame((frame) => frame.includes(label))
-      viewer.app.mockInput.pressEnter()
-      await viewer.app.flush()
-      expect(patchFrame()).toBe(before)
-    }
-  } finally {
-    viewer.app.renderer.destroy()
-  }
-})
-
 test("image previews use the diff session's filesystem location", async () => {
   const viewer = await renderDiffViewer([
     { file: "assets/mock image.png", status: "modified", additions: 0, deletions: 0 },
@@ -879,70 +855,68 @@ test("reviewing a mouse-scrolled past selection keeps the visible file in place"
   }
 })
 
-test("a reopened image reserves its height while loading above the file being read", async () => {
-  const pending = Promise.withResolvers<Uint8Array>()
-  let reads = 0
-  const viewer = await renderDiffViewer(
-    [{ file: "a.png", status: "modified", additions: 0, deletions: 0 }, ...manyDiffs.slice(0, 4)],
-    {
-      width: 160,
-      height: 24,
-      kittyKeyboard: true,
-      readImage: () => (++reads === 1 ? Promise.resolve(diffImageFixture) : pending.promise),
-    },
-  )
-  try {
-    await viewer.app.waitForFrame((frame) => frame.includes("96 x 48"))
-    viewer.app.mockInput.pressKey("n")
-    await viewer.app.flush()
-    const scroll = findScrollBox(viewer.app.renderer.root)!
-    scroll.scrollBy(4)
-    await viewer.app.flush()
-    const patchFrame = () =>
-      viewer.app
-        .captureCharFrame()
-        .split("\n")
-        .map((line) => line.slice(scroll.x))
-        .join("\n")
-    const before = patchFrame()
-    const row = viewer.app.renderer.root.findDescendantById("diff-file-row-0")!
-    for (const label of ["Mark complete", "Mark incomplete"]) {
-      await viewer.app.mockMouse.click(row.x + 4, row.y, MouseButton.RIGHT)
-      await viewer.app.waitForFrame((frame) => frame.includes(label))
-      viewer.app.mockInput.pressEnter()
+test.each(["patch", "image"] as const)(
+  "completing and reopening an earlier %s preserves the reading position",
+  async (kind) => {
+    const pending = Promise.withResolvers<Uint8Array>()
+    let reads = 0
+    const viewer = await renderDiffViewer(
+      [
+        ...(kind === "image" ? [{ file: "a.png", status: "modified", additions: 0, deletions: 0 }] : []),
+        ...manyDiffs.slice(0, 4),
+      ],
+      {
+        width: 160,
+        height: 24,
+        kittyKeyboard: true,
+        readImage: () => (++reads === 1 ? Promise.resolve(diffImageFixture) : pending.promise),
+      },
+    )
+    try {
+      await viewer.app.waitForFrame((frame) => frame.includes(kind === "image" ? "96 x 48" : "const first"))
+      viewer.app.mockInput.pressKey("n")
+      await viewer.app.flush()
+      const scroll = findScrollBox(viewer.app.renderer.root)!
+      scroll.scrollBy(4)
+      await viewer.app.flush()
+      const patchFrame = () =>
+        viewer.app
+          .captureCharFrame()
+          .split("\n")
+          .map((line) => line.slice(scroll.x))
+          .join("\n")
+      const before = patchFrame()
+      const row = viewer.app.renderer.root.findDescendantById("diff-file-row-0")!
+      for (const label of ["Mark complete", "Mark incomplete"]) {
+        await viewer.app.mockMouse.click(row.x + 4, row.y, MouseButton.RIGHT)
+        await viewer.app.waitForFrame((frame) => frame.includes(label))
+        viewer.app.mockInput.pressEnter()
+        await viewer.app.flush()
+        expect(patchFrame()).toBe(before)
+      }
+      if (kind === "patch") return
+      pending.resolve(diffImageFixture)
+      await viewer.app.waitFor(() => {
+        const image = viewer.app.renderer.root.findDescendantById("diff-image-a.png")
+        return image instanceof ImageRenderable && image.image?.width === 96
+      })
       await viewer.app.flush()
       expect(patchFrame()).toBe(before)
+    } finally {
+      pending.resolve(diffImageFixture)
+      viewer.app.renderer.destroy()
     }
-    pending.resolve(diffImageFixture)
-    await viewer.app.waitFor(() => {
-      const image = viewer.app.renderer.root.findDescendantById("diff-image-a.png")
-      return image instanceof ImageRenderable && image.image?.width === 96
-    })
-    await viewer.app.flush()
-    expect(patchFrame()).toBe(before)
-  } finally {
-    pending.resolve(diffImageFixture)
-    viewer.app.renderer.destroy()
-  }
-})
-
-test("deleted images do not attempt to preview a working tree file", async () => {
-  const viewer = await renderDiffViewer([{ file: "assets/old.png", status: "deleted", additions: 0, deletions: 0 }])
-  try {
-    await viewer.app.waitForFrame((frame) => frame.includes("Deleted image."))
-    expect(viewer.imageReadInput()).toBeUndefined()
-  } finally {
-    viewer.app.renderer.destroy()
-  }
-})
+  },
+)
 
 test.each([
   { file: "bun.lock", status: "modified" as const, message: "No patch available for this file." },
   { file: "assets/old.png", status: "deleted" as const, message: "Deleted image." },
-])("pads $file fallback messages inside the card", async (input) => {
+])("pads $file fallback messages inside the card without reading images", async (input) => {
   const viewer = await renderDiffViewer([{ file: input.file, status: input.status, additions: 0, deletions: 0 }])
   try {
     await viewer.app.waitForFrame((frame) => frame.includes(input.message))
+    expect(viewer.imageReadInput()).toBeUndefined()
     const header = viewer.app.renderer.root.findDescendantById("diff-file-header-0")
     if (!(header instanceof BoxRenderable)) throw new Error("Missing file title")
     const lines = viewer.app.captureCharFrame().split("\n")
@@ -1078,12 +1052,15 @@ test("n/p jump between files and gg/G always navigate the diff", async () => {
     await viewer.app.waitForFrame((frame) => frame.includes("const first"))
     await viewer.app.flush()
     const scroll = findScrollBox(viewer.app.renderer.root)!
+    const row = viewer.app.renderer.root.findDescendantById("diff-file-row-0")!
     viewer.app.mockInput.pressKey("n")
     await viewer.app.flush()
+    expect(viewer.app.renderer.root.findDescendantById("diff-file-row-0")).toBe(row)
     expect(scroll.scrollTop).toBeGreaterThan(0)
     expect(viewer.app.captureCharFrame()).toContain("file01.txt")
     viewer.app.mockInput.pressKey("p")
     await viewer.app.flush()
+    expect(viewer.app.renderer.root.findDescendantById("diff-file-row-0")).toBe(row)
     expect(scroll.scrollTop).toBe(0)
     viewer.app.mockInput.pressKey("G")
     await viewer.app.renderOnce()
@@ -1196,16 +1173,7 @@ async function renderDiffViewer(
           mode: keymap.mode,
         },
         ui: {
-          dialog: {
-            show(render: () => JSX.Element, onClose?: () => void) {
-              dialog.replace(render, onClose)
-            },
-            set(options: DialogOptions) {
-              if (options.size) dialog.setSize(options.size)
-              if (options.centered !== undefined) dialog.setCentered(options.centered)
-            },
-            clear: dialog.clear,
-          },
+          dialog: createDialogApi(dialog, (render) => render()),
           router: {
             register(page: Page) {
               if (page.name === "diff") renderDiff = page.render
@@ -1259,13 +1227,9 @@ async function renderDiffViewer(
     height: options.height ?? 20,
     kittyKeyboard: options.kittyKeyboard,
   })
-  for (let attempt = 0; attempt < 100; attempt++) {
-    await app.renderOnce()
-    if (current().type !== "plugin") commands.get("diff.open")?.run()
-    if (commands.has("diff.close")) break
-    await Bun.sleep(25)
-  }
-  await app.waitFor(() => commands.has("diff.close"), { maxPasses: 1 })
+  await app.waitFor(() => commands.has("diff.open"))
+  if (current().type !== "plugin") commands.get("diff.open")!.run()
+  await app.waitFor(() => commands.has("diff.close"))
   await app.waitFor(() => vcsDiffInput !== undefined)
   return {
     app,

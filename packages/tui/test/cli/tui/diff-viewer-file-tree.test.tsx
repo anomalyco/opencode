@@ -2,7 +2,6 @@
 import { describe, expect, test } from "bun:test"
 import { testRender } from "@opentui/solid"
 import type { JSX } from "solid-js"
-import { onMount, type ParentProps } from "solid-js"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 import { emptyThemeSource } from "../../fixture/fixture"
 import { ThemeProvider } from "../../../src/context/theme"
@@ -230,33 +229,23 @@ describe("DiffViewerFileTree", () => {
 })
 
 async function renderFrame(component: () => JSX.Element, mode: "dark" | "light" = "dark") {
-  const mounted = Promise.withResolvers<void>()
-  const app = await testRender(() => withTheme(component, mounted.resolve, mode), { width: 40, height: 20 })
+  const app = await testRender(
+    () => (
+      <TestTuiContexts>
+        <ConfigProvider config={createTuiResolvedConfig()}>
+          <ThemeProvider mode={mode} source={emptyThemeSource}>
+            {component()}
+          </ThemeProvider>
+        </ConfigProvider>
+      </TestTuiContexts>
+    ),
+    { width: 40, height: 20 },
+  )
   try {
-    await mounted.promise
-    await app.renderOnce()
-    await app.renderOnce()
-    return app.captureCharFrame()
+    return await app.waitForFrame((frame) => frame.includes("Files"))
   } finally {
     app.renderer.destroy()
   }
-}
-
-function withTheme(component: () => JSX.Element, onReady = () => {}, mode: "dark" | "light" = "dark") {
-  return (
-    <TestTuiContexts>
-      <ConfigProvider config={createTuiResolvedConfig()}>
-        <ThemeProvider mode={mode} source={emptyThemeSource}>
-          <Ready onReady={onReady}>{component()}</Ready>
-        </ThemeProvider>
-      </ConfigProvider>
-    </TestTuiContexts>
-  )
-}
-
-function Ready(props: ParentProps<{ onReady: () => void }>) {
-  onMount(props.onReady)
-  return props.children
 }
 
 function visibleLines(frame: string) {
