@@ -31,7 +31,7 @@ import { Plugin } from "@opencode-ai/core/plugin"
 import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
 import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { Model } from "@opencode-ai/core/model"
-import { MCP } from "@opencode-ai/core/mcp/index"
+import { Mcp } from "@opencode-ai/core/mcp/index"
 import { Project } from "@opencode-ai/core/project"
 import { Provider } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -998,7 +998,7 @@ describe("LocationServiceMap", () => {
 
           yield* Effect.gen(function* () {
             const supervisor = yield* PluginSupervisor.Service
-            const mcp = yield* MCP.Service
+            const mcp = yield* Mcp.Service
             yield* supervisor.flush
             expect(observed.example).toBe(false)
             yield* mcp.add("dynamic", {
