@@ -26,12 +26,16 @@ export function isRetryable(error: AIError) {
       return error.reason.delivery === undefined || error.reason.delivery === "not-sent"
     case "InvalidProviderOutput":
       return error.reason.classification === "incomplete-stream"
+    // Unrecognized failures retry: classification records affirmative
+    // deterministic evidence, and transient failures are exactly the ones
+    // that arrive in shapes no classifier anticipates.
+    case "UnknownProvider":
+      return true
     case "Authentication":
     case "QuotaExceeded":
     case "ContentPolicy":
     case "InvalidRequest":
     case "NoRoute":
-    case "UnknownProvider":
       return false
     default: {
       const exhaustive: never = error.reason
@@ -40,9 +44,14 @@ export function isRetryable(error: AIError) {
   }
 }
 
+/** Bound provider-requested delays so a hostile or buggy retry-after cannot stall a session for hours. */
+const RETRY_AFTER_MAX = Duration.toMillis("15 minutes")
+
 const retryAfter = (input: Input) => {
   if (input.cause.reason._tag === "RateLimit" || input.cause.reason._tag === "ProviderInternal")
-    return input.cause.reason.retryAfterMs
+    return input.cause.reason.retryAfterMs === undefined
+      ? undefined
+      : Math.min(input.cause.reason.retryAfterMs, RETRY_AFTER_MAX)
   return undefined
 }
 
