@@ -15,7 +15,7 @@ import {
   User,
   UserPayload,
 } from "@opencode-ai/schema/session-inbox"
-import type { Database } from "../database/database.js"
+import { Database } from "../database/database.js"
 import { Bus } from "../bus.js"
 import { KeyedMutex } from "../effect/keyed-mutex.js"
 import { SessionEvent } from "./event.js"
@@ -141,87 +141,120 @@ const promotedFromMessage = Effect.fn("SessionInbox.promotedFromMessage")(functi
   return yield* new LifecycleConflict({ id })
 })
 
-/** First admission wins for matching Session and type, without preparing a new payload. */
-export const reconcile = Effect.fn("SessionInbox.reconcile")(function* <Type extends Item["type"]>(
-  db: DatabaseService,
-  request: {
+export const make = Effect.fn("SessionInbox.make")(function* () {
+  const database = yield* Database.Service
+  const db = database.db
+  const bus = yield* Bus.Service
+
+  /** First admission wins for matching Session and type, without preparing a new payload. */
+  const reconcile = Effect.fn("SessionInbox.reconcile")(function* <Type extends Item["type"]>(request: {
     readonly id: SessionMessage.ID
     readonly sessionID: SessionSchema.ID
     readonly type: Type
     readonly delivery: Delivery
-  },
-) {
-  const existing =
-    (yield* find(db, request.id)) ?? (yield* promotedFromMessage(db, request.sessionID, request.id, request.delivery))
-  if (existing === undefined) return undefined
-  if (existing.type === "compaction" || !matches(existing, request))
-    return yield* new LifecycleConflict({ id: request.id })
-  return existing
-})
+  }) {
+    const existing =
+      (yield* find(db, request.id)) ?? (yield* promotedFromMessage(db, request.sessionID, request.id, request.delivery))
+    if (existing === undefined) return undefined
+    if (existing.type === "compaction" || !matches(existing, request))
+      return yield* new LifecycleConflict({ id: request.id })
+    return existing
+  })
 
-export const admit = Effect.fn("SessionInbox.admit")(function* <Type extends Item["type"]>(
-  db: DatabaseService,
-  bus: Bus.Interface,
-  request: {
+  const admit = Effect.fn("SessionInbox.admit")(function* <Type extends Item["type"]>(request: {
     readonly id: SessionMessage.ID
     readonly sessionID: SessionSchema.ID
     readonly item: Item & { readonly type: Type }
-  },
-) {
-  const existing = yield* reconcile(db, { ...request, type: request.item.type, delivery: request.item.delivery })
-  if (existing !== undefined) return existing
-  const admitted = yield* bus
-    .publish(SessionEvent.InboxEnqueued, {
-      inboxID: request.id,
-      sessionID: request.sessionID,
-      item: request.item,
-    })
-    .pipe(
-      Effect.map((event) =>
-        Info.make({
-          id: request.id,
-          sessionID: request.sessionID,
-          timeCreated: DateTime.makeUnsafe(event.created),
-          ...request.item,
-        }),
-      ),
-      Effect.catchDefect((defect) =>
-        defect instanceof LifecycleConflict
-          ? find(db, request.id).pipe(
-              Effect.flatMap((stored) => (stored === undefined ? Effect.fail(defect) : Effect.succeed(stored))),
-            )
-          : Effect.die(defect),
-      ),
-    )
-  if (!matches(admitted, { ...request, type: request.item.type }))
-    return yield* new LifecycleConflict({ id: request.id })
-  return admitted
-})
-
-export const admitCompaction = Effect.fn("SessionInbox.admitCompaction")(function* (
-  db: DatabaseService,
-  bus: Bus.Interface,
-  input: { readonly id: SessionMessage.ID; readonly sessionID: SessionSchema.ID; readonly delivery: Delivery },
-) {
-  return yield* serialized(
-    input.sessionID,
-    Effect.gen(function* () {
-      const exact = yield* find(db, input.id)
-      if (exact) {
-        if (exact.type === "compaction" && exact.sessionID === input.sessionID) return exact
-        return yield* new LifecycleConflict({ id: input.id })
-      }
-      if (yield* promotedFromMessage(db, input.sessionID, input.id, input.delivery))
-        return yield* new LifecycleConflict({ id: input.id })
-      const pending = (yield* list(db, input.sessionID)).find((item) => item.type === "compaction")
-      if (pending) return pending
-      return yield* admit(db, bus, {
-        id: input.id,
-        sessionID: input.sessionID,
-        item: { type: "compaction", payload: {}, delivery: Delivery.make(input.delivery) },
+  }) {
+    const existing = yield* reconcile({ ...request, type: request.item.type, delivery: request.item.delivery })
+    if (existing !== undefined) return existing
+    const admitted = yield* bus
+      .publish(SessionEvent.InboxEnqueued, {
+        inboxID: request.id,
+        sessionID: request.sessionID,
+        item: request.item,
       })
-    }),
+      .pipe(
+        Effect.map((event) =>
+          Info.make({
+            id: request.id,
+            sessionID: request.sessionID,
+            timeCreated: DateTime.makeUnsafe(event.created),
+            ...request.item,
+          }),
+        ),
+        Effect.catchDefect((defect) =>
+          defect instanceof LifecycleConflict
+            ? find(db, request.id).pipe(
+                Effect.flatMap((stored) => (stored === undefined ? Effect.fail(defect) : Effect.succeed(stored))),
+              )
+            : Effect.die(defect),
+        ),
+      )
+    if (!matches(admitted, { ...request, type: request.item.type }))
+      return yield* new LifecycleConflict({ id: request.id })
+    return admitted
+  })
+
+  const admitCompaction = Effect.fn("SessionInbox.admitCompaction")(function* (input: {
+    readonly id: SessionMessage.ID
+    readonly sessionID: SessionSchema.ID
+    readonly delivery: Delivery
+  }) {
+    return yield* serialized(
+      input.sessionID,
+      Effect.gen(function* () {
+        const exact = yield* find(db, input.id)
+        if (exact) {
+          if (exact.type === "compaction" && exact.sessionID === input.sessionID) return exact
+          return yield* new LifecycleConflict({ id: input.id })
+        }
+        if (yield* promotedFromMessage(db, input.sessionID, input.id, input.delivery))
+          return yield* new LifecycleConflict({ id: input.id })
+        const pending = (yield* list(db, input.sessionID)).find((item) => item.type === "compaction")
+        if (pending) return pending
+        return yield* admit({
+          id: input.id,
+          sessionID: input.sessionID,
+          item: { type: "compaction", payload: {}, delivery: Delivery.make(input.delivery) },
+        })
+      }),
+    )
+  })
+
+  const cancel = Effect.fn("SessionInbox.cancel")((input: PendingRef) =>
+    publishMutation(
+      input,
+      bus.publish(SessionEvent.InboxCancelled, {
+        sessionID: input.sessionID,
+        inboxID: input.id,
+      }),
+    ),
   )
+
+  const steer = Effect.fn("SessionInbox.steer")((input: PendingRef) =>
+    publishMutation(
+      input,
+      bus.publish(SessionEvent.InboxDeliveryChanged, {
+        sessionID: input.sessionID,
+        inboxID: input.id,
+        delivery: "steer",
+      }),
+    ),
+  )
+
+  const queue = Effect.fn("SessionInbox.queue")((input: PendingRef) =>
+    publishMutation(
+      input,
+      bus.publish(SessionEvent.InboxDeliveryChanged, {
+        sessionID: input.sessionID,
+        inboxID: input.id,
+        delivery: "queue",
+      }),
+    ),
+  )
+
+  return { reconcile, admit, admitCompaction, cancel, steer, queue }
 })
 
 export const projectAdmitted = Effect.fn("SessionInbox.projectAdmitted")(function* (
@@ -406,38 +439,6 @@ const publishMutation = <A, E, R>(input: PendingRef, effect: Effect.Effect<A, E,
     // Bus projectors abort their transaction through the defect channel.
     Effect.catchDefect((defect) => (defect instanceof LifecycleConflict ? Effect.fail(defect) : Effect.die(defect))),
   )
-
-export const cancel = Effect.fn("SessionInbox.cancel")((bus: Bus.Interface, input: PendingRef) =>
-  publishMutation(
-    input,
-    bus.publish(SessionEvent.InboxCancelled, {
-      sessionID: input.sessionID,
-      inboxID: input.id,
-    }),
-  ),
-)
-
-export const steer = Effect.fn("SessionInbox.steer")((bus: Bus.Interface, input: PendingRef) =>
-  publishMutation(
-    input,
-    bus.publish(SessionEvent.InboxDeliveryChanged, {
-      sessionID: input.sessionID,
-      inboxID: input.id,
-      delivery: "steer",
-    }),
-  ),
-)
-
-export const queue = Effect.fn("SessionInbox.queue")((bus: Bus.Interface, input: PendingRef) =>
-  publishMutation(
-    input,
-    bus.publish(SessionEvent.InboxDeliveryChanged, {
-      sessionID: input.sessionID,
-      inboxID: input.id,
-      delivery: "queue",
-    }),
-  ),
-)
 
 const publish = Effect.fn("SessionInbox.publish")(function* (
   db: DatabaseService,

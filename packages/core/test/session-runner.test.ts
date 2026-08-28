@@ -515,6 +515,7 @@ const insertSession = (id: Session.ID) =>
 const setup = Effect.gen(function* () {
   const { db } = yield* Database.Service
   const bus = yield* Bus.Service
+  const sessionInbox = yield* SessionInbox.make()
   const agents = yield* Agent.Service
   const catalog = yield* Catalog.Service
   const hooks = yield* PluginHooks.Service
@@ -546,6 +547,7 @@ const setup = Effect.gen(function* () {
   return Object.assign(state, {
     db,
     bus,
+    sessionInbox,
     session,
     llm,
     requests: llm.requests,
@@ -1373,12 +1375,12 @@ describe("SessionRunnerLLM", () => {
     s.systemLoadHook = Effect.sync(() => {
       reads++
     })
-    const compaction = yield* SessionInbox.admitCompaction(s.db, s.bus, {
+    const compaction = yield* s.sessionInbox.admitCompaction({
       id: SessionMessage.ID.create(),
       sessionID,
       delivery: "queue",
     })
-    yield* SessionInbox.admit(s.db, s.bus, {
+    yield* s.sessionInbox.admit({
       id: SessionMessage.ID.create(),
       sessionID,
       item: {
@@ -1406,7 +1408,7 @@ describe("SessionRunnerLLM", () => {
 
   scenario("delivers a queued move atomically at the idle boundary", function* (s) {
     const inboxID = SessionMessage.ID.create()
-    yield* SessionInbox.admit(s.db, s.bus, {
+    yield* s.sessionInbox.admit({
       id: inboxID,
       sessionID,
       item: {
@@ -1442,7 +1444,7 @@ describe("SessionRunnerLLM", () => {
     const tools = yield* s.blockTools()
     const run = yield* s.resume.pipe(Effect.forkChild)
     yield* tools.started
-    yield* SessionInbox.admit(s.db, s.bus, {
+    yield* s.sessionInbox.admit({
       id: SessionMessage.ID.create(),
       sessionID,
       item: {
@@ -1474,7 +1476,7 @@ describe("SessionRunnerLLM", () => {
     const run = yield* s.resume.pipe(Effect.forkChild)
     yield* tools.started
     yield* s.session.prompt({ sessionID, text: "Queued for later", delivery: "queue", resume: false })
-    yield* SessionInbox.admit(s.db, s.bus, {
+    yield* s.sessionInbox.admit({
       id: SessionMessage.ID.create(),
       sessionID,
       item: {
@@ -1507,12 +1509,12 @@ describe("SessionRunnerLLM", () => {
     const stream = yield* s.llm.gate
     const run = yield* runner.drain({ sessionID, force: false }).pipe(Effect.forkChild)
     yield* stream.started
-    const compaction = yield* SessionInbox.admitCompaction(s.db, s.bus, {
+    const compaction = yield* s.sessionInbox.admitCompaction({
       id: SessionMessage.ID.create(),
       sessionID,
       delivery: "queue",
     })
-    yield* SessionInbox.admit(s.db, s.bus, {
+    yield* s.sessionInbox.admit({
       id: SessionMessage.ID.create(),
       sessionID,
       item: {
@@ -3208,7 +3210,7 @@ describe("SessionRunnerLLM", () => {
     const run = yield* runner.drain({ sessionID, force: false }).pipe(Effect.forkChild)
     yield* stream.started
 
-    yield* SessionInbox.admit(s.db, s.bus, {
+    yield* s.sessionInbox.admit({
       id: SessionMessage.ID.create(),
       sessionID,
       item: {
@@ -3320,7 +3322,7 @@ describe("SessionRunnerLLM", () => {
 
   scenario("a steer-scoped drain runs a queued manual compaction next in line", function* (s) {
     // Admit without waking so the steer-scoped drain below is the first consumer.
-    const compaction = yield* SessionInbox.admitCompaction(s.db, s.bus, {
+    const compaction = yield* s.sessionInbox.admitCompaction({
       id: SessionMessage.ID.create(),
       sessionID,
       delivery: "queue",
@@ -3341,7 +3343,7 @@ describe("SessionRunnerLLM", () => {
 
   scenario("a steer-scoped drain leaves a compaction parked behind a queued prompt", function* (s) {
     yield* s.session.prompt({ sessionID, text: "Queue for later", delivery: "queue", resume: false })
-    const compaction = yield* SessionInbox.admitCompaction(s.db, s.bus, {
+    const compaction = yield* s.sessionInbox.admitCompaction({
       id: SessionMessage.ID.create(),
       sessionID,
       delivery: "queue",

@@ -307,6 +307,7 @@ const layer = Layer.effect(
     const environments = yield* SessionEnvironment.Service
     const scope = yield* Scope.Scope
     const sessions = yield* Session.make((ref) => locations.get(ref))
+    const admission = yield* SessionInbox.make()
     const closeTransport = Effect.fn("Session.closeTransport")(function* (session: SessionSchema.Info) {
       const location = Location.Ref.make({
         directory: session.location.directory,
@@ -695,11 +696,13 @@ const layer = Layer.effect(
               if (!first) return yield* bus.publish(...moved).pipe(Effect.asVoid)
               return yield* bus.publishAll([first, ...cancellations.slice(1), moved])
             }
-            yield* SessionInbox.admit(db, bus, {
-              id: SessionMessage.ID.create(),
-              sessionID: input.sessionID,
-              item,
-            }).pipe(Effect.orDie)
+            yield* admission
+              .admit({
+                id: SessionMessage.ID.create(),
+                sessionID: input.sessionID,
+                item,
+              })
+              .pipe(Effect.orDie)
           }),
         )
         yield* execution.wake(input.sessionID)

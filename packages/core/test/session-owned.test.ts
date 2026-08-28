@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { and, eq } from "drizzle-orm"
-import { Cause, Deferred, Effect, Exit, Fiber, Layer } from "effect"
+import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer } from "effect"
 import { Event } from "@opencode-ai/schema/event"
 import { Location } from "@opencode-ai/schema/location"
 import { Project } from "@opencode-ai/schema/project"
@@ -573,32 +573,72 @@ describe("SessionRevert construction", () => {
 })
 
 describe("SessionInbox command contracts", () => {
+  it.live("captures the host dependencies for detached commands", () =>
+    Effect.gen(function* () {
+      const fixture = yield* setup()
+      const { admit, reconcile, admitCompaction, cancel, steer, queue } = yield* SessionInbox.make()
+      const other = yield* SessionInbox.make()
+      expect(yield* SessionInbox.list(fixture.db, sessionID)).toEqual([])
+
+      yield* Effect.gen(function* () {
+        const user = yield* admit({
+          id: SessionMessage.ID.create(),
+          sessionID,
+          item: { type: "user", payload: { text: "Captured services" }, delivery: "queue" },
+        })
+        expect(yield* reconcile({ id: user.id, sessionID, type: "user", delivery: "queue" })).toEqual(user)
+        yield* steer({ id: user.id, sessionID })
+        yield* queue({ id: user.id, sessionID })
+        yield* cancel({ id: user.id, sessionID })
+        const [compaction, duplicate] = yield* Effect.all(
+          [
+            admitCompaction({ id: SessionMessage.ID.create(), sessionID, delivery: "queue" }),
+            other.admitCompaction({ id: SessionMessage.ID.create(), sessionID, delivery: "queue" }),
+          ],
+          { concurrency: "unbounded" },
+        )
+        expect(compaction).toEqual(duplicate)
+        yield* cancel({ id: compaction.id, sessionID })
+      }).pipe(Effect.satisfiesServicesType<never>(), Effect.setContext(Context.empty()))
+
+      expect(yield* SessionInbox.list(fixture.db, sessionID)).toEqual([])
+      expect(fixture.wakes).toEqual([])
+    }),
+  )
+
   it.live("returns checked user and synthetic admissions and typed pending or delivered conflicts", () =>
     Effect.gen(function* () {
       const fixture = yield* setup()
-      const user = yield* SessionInbox.admit(fixture.db, fixture.bus, {
-        id: SessionMessage.ID.create(),
-        sessionID,
-        item: { type: "user", payload: { text: "Keep user input" }, delivery: "steer" },
-      }).pipe(
-        Effect.satisfiesSuccessType<SessionInbox.User>(),
-        Effect.satisfiesErrorType<SessionInbox.LifecycleConflict>(),
-      )
-      const synthetic = yield* SessionInbox.admit(fixture.db, fixture.bus, {
-        id: SessionMessage.ID.create(),
-        sessionID,
-        item: { type: "synthetic", payload: { text: "Keep synthetic input" }, delivery: "steer" },
-      }).pipe(Effect.satisfiesSuccessType<SessionInbox.Synthetic>())
+      const admission = yield* SessionInbox.make()
+      const user = yield* admission
+        .admit({
+          id: SessionMessage.ID.create(),
+          sessionID,
+          item: { type: "user", payload: { text: "Keep user input" }, delivery: "steer" },
+        })
+        .pipe(
+          Effect.satisfiesSuccessType<SessionInbox.User>(),
+          Effect.satisfiesErrorType<SessionInbox.LifecycleConflict>(),
+        )
+      const synthetic = yield* admission
+        .admit({
+          id: SessionMessage.ID.create(),
+          sessionID,
+          item: { type: "synthetic", payload: { text: "Keep synthetic input" }, delivery: "steer" },
+        })
+        .pipe(Effect.satisfiesSuccessType<SessionInbox.Synthetic>())
 
       yield* Effect.forEach([false, true], (delivered) =>
         Effect.gen(function* () {
           if (delivered) yield* SessionInbox.promote(fixture.db, fixture.bus, sessionID, "steer")
-          const reconciled = yield* SessionInbox.reconcile(fixture.db, {
-            id: user.id,
-            sessionID,
-            type: "user",
-            delivery: "steer",
-          }).pipe(Effect.satisfiesSuccessType<SessionInbox.User | undefined>())
+          const reconciled = yield* admission
+            .reconcile({
+              id: user.id,
+              sessionID,
+              type: "user",
+              delivery: "steer",
+            })
+            .pipe(Effect.satisfiesSuccessType<SessionInbox.User | undefined>())
           expect(reconciled).toMatchObject({
             id: user.id,
             sessionID,
@@ -611,7 +651,7 @@ describe("SessionInbox command contracts", () => {
           yield* Effect.forEach([user, synthetic], (original) =>
             Effect.gen(function* () {
               expect(
-                yield* SessionInbox.admit(fixture.db, fixture.bus, {
+                yield* admission.admit({
                   id: original.id,
                   sessionID,
                   item: { type: original.type, payload: { text: "Ignored retry" }, delivery: "queue" },
@@ -625,18 +665,22 @@ describe("SessionInbox command contracts", () => {
                 (conflict) =>
                   Effect.gen(function* () {
                     expect(
-                      yield* SessionInbox.reconcile(fixture.db, {
-                        ...conflict,
-                        id: original.id,
-                        delivery: "steer",
-                      }).pipe(Effect.flip),
+                      yield* admission
+                        .reconcile({
+                          ...conflict,
+                          id: original.id,
+                          delivery: "steer",
+                        })
+                        .pipe(Effect.flip),
                     ).toBeInstanceOf(SessionInbox.LifecycleConflict)
                     expect(
-                      yield* SessionInbox.admit(fixture.db, fixture.bus, {
-                        id: original.id,
-                        sessionID: conflict.sessionID,
-                        item: { type: conflict.type, payload: { text: "Conflicting input" }, delivery: "steer" },
-                      }).pipe(Effect.flip),
+                      yield* admission
+                        .admit({
+                          id: original.id,
+                          sessionID: conflict.sessionID,
+                          item: { type: conflict.type, payload: { text: "Conflicting input" }, delivery: "steer" },
+                        })
+                        .pipe(Effect.flip),
                     ).toMatchObject({ _tag: "SessionInbox.LifecycleConflict", id: original.id })
                   }),
               )
@@ -652,6 +696,8 @@ describe("SessionInbox command contracts", () => {
   it.live("checks the winner of concurrent admissions before returning it", () =>
     Effect.gen(function* () {
       const fixture = yield* setup()
+      const admission = yield* SessionInbox.make()
+      const other = yield* SessionInbox.make()
       const id = SessionMessage.ID.create()
       const requests = [
         { sessionID, item: { type: "user", payload: { text: "First" }, delivery: "steer" } },
@@ -661,7 +707,7 @@ describe("SessionInbox command contracts", () => {
       ] satisfies Array<{ sessionID: SessionSchema.ID; item: SessionInbox.Item }>
       const results = yield* Effect.forEach(
         requests,
-        (request) => SessionInbox.admit(fixture.db, fixture.bus, { id, ...request }).pipe(Effect.exit),
+        (request, index) => (index % 2 === 0 ? admission : other).admit({ id, ...request }).pipe(Effect.exit),
         { concurrency: "unbounded" },
       )
       const stored = yield* SessionInbox.find(fixture.db, id)
@@ -687,32 +733,27 @@ describe("SessionInbox command contracts", () => {
   it.live("exposes failed pending transitions as typed conflicts and rolls back their events", () =>
     Effect.gen(function* () {
       const fixture = yield* setup()
-      const pending = yield* SessionInbox.admit(fixture.db, fixture.bus, {
+      const admission = yield* SessionInbox.make()
+      const pending = yield* admission.admit({
         id: SessionMessage.ID.create(),
         sessionID,
         item: { type: "user", payload: { text: "Pending" }, delivery: "queue" },
       })
       const input = { id: pending.id, sessionID }
-      yield* Effect.forEach([SessionInbox.cancel, SessionInbox.steer, SessionInbox.queue], (mutation) =>
+      yield* Effect.forEach([admission.cancel, admission.steer, admission.queue], (mutation) =>
         Effect.gen(function* () {
-          expect(yield* mutation(fixture.bus, { ...input, sessionID: otherID }).pipe(Effect.flip)).toMatchObject({
+          expect(yield* mutation({ ...input, sessionID: otherID }).pipe(Effect.flip)).toMatchObject({
             _tag: "SessionInbox.LifecycleConflict",
             id: pending.id,
           })
         }),
       )
-      yield* SessionInbox.steer(fixture.bus, input)
-      expect(yield* SessionInbox.steer(fixture.bus, input).pipe(Effect.flip)).toBeInstanceOf(
-        SessionInbox.LifecycleConflict,
-      )
-      yield* SessionInbox.queue(fixture.bus, input)
-      expect(yield* SessionInbox.queue(fixture.bus, input).pipe(Effect.flip)).toBeInstanceOf(
-        SessionInbox.LifecycleConflict,
-      )
-      yield* SessionInbox.cancel(fixture.bus, input)
-      expect(yield* SessionInbox.cancel(fixture.bus, input).pipe(Effect.flip)).toBeInstanceOf(
-        SessionInbox.LifecycleConflict,
-      )
+      yield* admission.steer(input)
+      expect(yield* admission.steer(input).pipe(Effect.flip)).toBeInstanceOf(SessionInbox.LifecycleConflict)
+      yield* admission.queue(input)
+      expect(yield* admission.queue(input).pipe(Effect.flip)).toBeInstanceOf(SessionInbox.LifecycleConflict)
+      yield* admission.cancel(input)
+      expect(yield* admission.cancel(input).pipe(Effect.flip)).toBeInstanceOf(SessionInbox.LifecycleConflict)
       expect(yield* SessionInbox.list(fixture.db, sessionID)).toEqual([])
       expect(
         (yield* fixture.db
@@ -736,7 +777,8 @@ describe("SessionInbox command contracts", () => {
   it.live("does not turn unrelated projector defects into conflicts", () =>
     Effect.gen(function* () {
       const fixture = yield* setup()
-      const pending = yield* SessionInbox.admit(fixture.db, fixture.bus, {
+      const admission = yield* SessionInbox.make()
+      const pending = yield* admission.admit({
         id: SessionMessage.ID.create(),
         sessionID,
         item: { type: "user", payload: { text: "Pending" }, delivery: "queue" },
@@ -745,15 +787,17 @@ describe("SessionInbox command contracts", () => {
       yield* fixture.bus.project(SessionEvent.InboxEnqueued, () => Effect.die(defect))
       yield* fixture.bus.project(SessionEvent.InboxCancelled, () => Effect.die(defect))
       expect(
-        yield* SessionInbox.admit(fixture.db, fixture.bus, {
-          id: SessionMessage.ID.create(),
-          sessionID,
-          item: { type: "user", payload: { text: "Rolled back" }, delivery: "steer" },
-        }).pipe(Effect.catchDefect(Effect.succeed)),
+        yield* admission
+          .admit({
+            id: SessionMessage.ID.create(),
+            sessionID,
+            item: { type: "user", payload: { text: "Rolled back" }, delivery: "steer" },
+          })
+          .pipe(Effect.catchDefect(Effect.succeed)),
       ).toBe(defect)
-      expect(
-        yield* SessionInbox.cancel(fixture.bus, { id: pending.id, sessionID }).pipe(Effect.catchDefect(Effect.succeed)),
-      ).toBe(defect)
+      expect(yield* admission.cancel({ id: pending.id, sessionID }).pipe(Effect.catchDefect(Effect.succeed))).toBe(
+        defect,
+      )
       expect(yield* SessionInbox.list(fixture.db, sessionID)).toEqual([pending])
     }),
   )

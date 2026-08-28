@@ -42,6 +42,8 @@ Location services are acquired only when an operation needs them. In particular,
 
 `servicesFor` selects instance services from the saved placement. Prompt preparation retains the host filesystem utility. Each instance constructs its `SessionRevert.Service` through `SessionRevert.make`, capturing Database, Bus, PluginSupervisor, and Snapshot. Stage and clear check plugin readiness on each invocation and require no service provisioning inside their implementations. Session methods select the current instance for each operation, so an ID-bound Session does not retain a previous instance's snapshots after movement. Commit uses only the host's captured Bus and does not acquire an instance.
 
+`SessionInbox.make` captures Database and Bus and returns admission and pending-input commands that take only domain inputs. Its command implementations share the existing inbox serialization lock; constructing another command object does not create another lock or execution owner. Queries, projectors, and runner delivery retain their explicit database/Bus inputs. The layer compiler is unchanged.
+
 Inbox commands own identity and type checks and return typed `SessionInbox.LifecycleConflict` errors. Session operations translate these into their public operation-specific errors and decide whether to wake execution. The Bus/projector boundary still uses defects to abort invalid projections; Inbox translates only lifecycle conflicts, not unrelated defects. Pending-input mutation does not schedule execution itself: steering wakes after a successful mutation, while queueing and cancellation do not.
 
 ## Execution Is Process-Local

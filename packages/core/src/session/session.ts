@@ -66,6 +66,7 @@ export const make = Effect.fn("Session.make")(function* (servicesFor: (ref: Loca
   const store = yield* SessionStore.Service
   const execution = yield* SessionExecution.Service
   const fs = yield* FSUtil.Service
+  const admission = yield* SessionInbox.make()
   const manualShellSessions = new Set<SessionSchema.ID>()
   const shellLocks = KeyedMutex.makeUnsafe<SessionSchema.ID>()
 
@@ -77,12 +78,12 @@ export const make = Effect.fn("Session.make")(function* (servicesFor: (ref: Loca
   const mutatePending = (
     sessionID: SessionSchema.ID,
     inboxID: SessionMessage.ID,
-    mutation: (
-      bus: Bus.Interface,
-      input: { readonly id: SessionMessage.ID; readonly sessionID: SessionSchema.ID },
-    ) => Effect.Effect<void, SessionInbox.LifecycleConflict>,
+    mutation: (input: {
+      readonly id: SessionMessage.ID
+      readonly sessionID: SessionSchema.ID
+    }) => Effect.Effect<void, SessionInbox.LifecycleConflict>,
   ) =>
-    mutation(bus, { sessionID, id: inboxID }).pipe(
+    mutation({ sessionID, id: inboxID }).pipe(
       Effect.catchTag("SessionInbox.LifecycleConflict", () =>
         Effect.gen(function* () {
           yield* get(sessionID)
@@ -96,18 +97,18 @@ export const make = Effect.fn("Session.make")(function* (servicesFor: (ref: Loca
     return yield* SessionInbox.list(db, sessionID)
   })
   const cancelInbox = Effect.fn("Session.cancelInbox")(
-    (sessionID: SessionSchema.ID, inboxID: SessionMessage.ID) => mutatePending(sessionID, inboxID, SessionInbox.cancel),
+    (sessionID: SessionSchema.ID, inboxID: SessionMessage.ID) => mutatePending(sessionID, inboxID, admission.cancel),
     Effect.uninterruptible,
   )
   const steerInbox = Effect.fn("Session.steerInbox")(function* (
     sessionID: SessionSchema.ID,
     inboxID: SessionMessage.ID,
   ) {
-    yield* mutatePending(sessionID, inboxID, SessionInbox.steer)
+    yield* mutatePending(sessionID, inboxID, admission.steer)
     yield* execution.wake(sessionID)
   }, Effect.uninterruptible)
   const queueInbox = Effect.fn("Session.queueInbox")(
-    (sessionID: SessionSchema.ID, inboxID: SessionMessage.ID) => mutatePending(sessionID, inboxID, SessionInbox.queue),
+    (sessionID: SessionSchema.ID, inboxID: SessionMessage.ID) => mutatePending(sessionID, inboxID, admission.queue),
     Effect.uninterruptible,
   )
   const prompt = Effect.fn("Session.prompt")((sessionID: SessionSchema.ID, input: PromptRequest) =>
@@ -116,7 +117,7 @@ export const make = Effect.fn("Session.make")(function* (servicesFor: (ref: Loca
         const session = yield* get(sessionID)
         const messageID = input.id ?? SessionMessage.ID.create()
         const admitted = yield* Effect.gen(function* () {
-          const existing = yield* SessionInbox.reconcile(db, {
+          const existing = yield* admission.reconcile({
             id: messageID,
             sessionID: session.id,
             type: "user",
@@ -128,7 +129,7 @@ export const make = Effect.fn("Session.make")(function* (servicesFor: (ref: Loca
           )
           // Commit a staged revert only after preparation succeeds, before admitting new work.
           if (session.revert) yield* SessionRevert.commit(bus, session)
-          return yield* SessionInbox.admit(db, bus, {
+          return yield* admission.admit({
             id: messageID,
             sessionID: session.id,
             item,
@@ -207,13 +208,15 @@ export const make = Effect.fn("Session.make")(function* (servicesFor: (ref: Loca
   ) {
     yield* get(sessionID)
     const inputID = input.id ?? SessionMessage.ID.create()
-    const admitted = yield* SessionInbox.admitCompaction(db, bus, {
-      id: inputID,
-      sessionID,
-      delivery: input.delivery ?? "steer",
-    }).pipe(
-      Effect.catchTag("SessionInbox.LifecycleConflict", () => new CompactionConflictError({ sessionID, inputID })),
-    )
+    const admitted = yield* admission
+      .admitCompaction({
+        id: inputID,
+        sessionID,
+        delivery: input.delivery ?? "steer",
+      })
+      .pipe(
+        Effect.catchTag("SessionInbox.LifecycleConflict", () => new CompactionConflictError({ sessionID, inputID })),
+      )
     yield* execution.wake(sessionID)
     return admitted
   })
@@ -250,13 +253,18 @@ export const make = Effect.fn("Session.make")(function* (servicesFor: (ref: Loca
             }),
             delivery: SessionInbox.Delivery.make(input.delivery ?? "steer"),
           } satisfies SessionInbox.Item
-          const admitted = yield* SessionInbox.admit(db, bus, {
-            id: inputID,
-            sessionID,
-            item: admittedInput,
-          }).pipe(
-            Effect.catchTag("SessionInbox.LifecycleConflict", () => new SyntheticConflictError({ sessionID, inputID })),
-          )
+          const admitted = yield* admission
+            .admit({
+              id: inputID,
+              sessionID,
+              item: admittedInput,
+            })
+            .pipe(
+              Effect.catchTag(
+                "SessionInbox.LifecycleConflict",
+                () => new SyntheticConflictError({ sessionID, inputID }),
+              ),
+            )
           if (input.resume !== false && !(yield* get(sessionID)).revert) yield* execution.wake(sessionID)
           return admitted
         }),

@@ -87,8 +87,9 @@ describe("SessionProjector", () => {
     Effect.gen(function* () {
       const db = yield* seedSession()
       const bus = yield* Bus.Service
+      const inbox = yield* SessionInbox.make()
       const inputID = SessionMessage.ID.make("msg_manual_compaction")
-      yield* SessionInbox.admitCompaction(db, bus, { id: inputID, sessionID, delivery: "queue" })
+      yield* inbox.admitCompaction({ id: inputID, sessionID, delivery: "queue" })
 
       yield* bus.publish(SessionEvent.Compaction.Failed, {
         sessionID,
@@ -290,8 +291,9 @@ describe("SessionProjector", () => {
     Effect.gen(function* () {
       const db = yield* seedSession()
       const bus = yield* Bus.Service
+      const inbox = yield* SessionInbox.make()
       const id = SessionMessage.ID.make("msg_admitted")
-      const admitted = yield* SessionInbox.admit(db, bus, {
+      const admitted = yield* inbox.admit({
         id,
         sessionID,
         item: { type: "user", payload: { text: "promote me" }, delivery: "steer" },
