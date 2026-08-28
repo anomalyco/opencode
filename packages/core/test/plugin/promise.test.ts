@@ -3,6 +3,8 @@ import { Message, SystemPart } from "@opencode-ai/ai"
 import { DateTime, Effect, Schema } from "effect"
 import { Agent } from "@opencode-ai/core/agent"
 import { Catalog } from "@opencode-ai/core/catalog"
+import { Credential } from "@opencode-ai/core/credential"
+import { Integration } from "@opencode-ai/core/integration"
 import { Model } from "@opencode-ai/core/model"
 import { Location } from "@opencode-ai/core/location"
 import { Plugin } from "@opencode-ai/core/plugin"
@@ -107,6 +109,59 @@ describe("fromPromise", () => {
           },
         }),
       ).effect(host)
+    }),
+  )
+
+  it.live("refreshes its own stored OAuth connection during plugin activation", () =>
+    Effect.gen(function* () {
+      const plugins = yield* Plugin.Service
+      const credentials = yield* Credential.Service
+      const integrationID = Integration.ID.make("acme")
+      const methodID = Integration.MethodID.make("browser")
+      const expired = Credential.OAuth.make({
+        type: "oauth",
+        methodID,
+        access: "expired",
+        refresh: "dummy",
+        expires: 0,
+      })
+      const fresh = Credential.OAuth.make({ ...expired, access: "fresh", expires: Number.MAX_SAFE_INTEGER })
+      const stored = yield* credentials.create({ integrationID, label: "Fixture", value: expired })
+      const resolved: string[] = []
+      const refreshed: string[] = []
+      const adapted = PluginPromise.fromPromise(
+        define({
+          id: "promise-oauth-refresh",
+          setup: async (ctx) => {
+            await ctx.integration.transform((editor) =>
+              editor.method.update({
+                integrationID,
+                method: { id: methodID, type: "oauth", label: "Browser" },
+                authorize: async () => {
+                  throw new Error("unexpected authorization")
+                },
+                refresh: async (value) => {
+                  refreshed.push(value.access)
+                  return fresh
+                },
+              }),
+            )
+            const connection = await ctx.integration.connection.active(integrationID)
+            if (!connection) throw new Error("stored connection missing")
+            const value = await ctx.integration.connection.resolve(connection)
+            resolved.push(value?.type === "oauth" ? value.access : "missing")
+          },
+        }),
+      )
+
+      yield* plugins.activate([{ ...adapted, version: "1" }])
+
+      expect(resolved).toEqual(["fresh"])
+      expect(refreshed).toEqual(["expired"])
+      expect((yield* credentials.get(stored.id))?.value).toEqual(fresh)
+      expect(yield* plugins.list()).toEqual([
+        { id: Plugin.ID.make("promise-oauth-refresh"), source: { type: "builtin" }, status: "active", tui: false },
+      ])
     }),
   )
 

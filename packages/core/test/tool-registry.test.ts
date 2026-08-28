@@ -311,7 +311,7 @@ describe("Tool", () => {
     }),
   )
 
-  it.effect("replays empty sources on reload and keeps advertised snapshots", () =>
+  it.effect("reads refreshed sources before notifications and keeps advertised snapshots", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service
       let source: Info[] = []
@@ -321,24 +321,24 @@ describe("Tool", () => {
       const tool = { ...constant("first"), name: "echo", options: { codemode: false } }
       source = [tool]
       const first = yield* service.reload().pipe(Effect.forkChild({ startImmediately: true }))
-      yield* TestClock.adjust("500 millis")
-      yield* Fiber.join(first)
       const advertised = yield* service.snapshot()
       expect((yield* advertised.execute(call("echo"))).output).toEqual({ text: "first" })
+      yield* TestClock.adjust("500 millis")
+      yield* Fiber.join(first)
 
       tool.execute = constant("second").execute
       expect((yield* advertised.execute(call("echo"))).output).toEqual({ text: "first" })
       const second = yield* service.reload().pipe(Effect.forkChild({ startImmediately: true }))
+      expect((yield* executeTool(service, call("echo"))).output).toEqual({ text: "second" })
       yield* TestClock.adjust("500 millis")
       yield* Fiber.join(second)
-      expect((yield* executeTool(service, call("echo"))).output).toEqual({ text: "second" })
       expect((yield* advertised.execute(call("echo"))).output).toEqual({ text: "first" })
 
       source = []
       const removed = yield* service.reload().pipe(Effect.forkChild({ startImmediately: true }))
+      expect((yield* service.snapshot()).definitions.map((tool) => tool.name)).toEqual(["execute"])
       yield* TestClock.adjust("500 millis")
       yield* Fiber.join(removed)
-      expect((yield* service.snapshot()).definitions.map((tool) => tool.name)).toEqual(["execute"])
       expect((yield* advertised.execute(call("echo"))).output).toEqual({ text: "first" })
     }),
   )
@@ -370,7 +370,7 @@ describe("Tool", () => {
     }),
   )
 
-  it.effect("batches tool publication and suppresses terminal teardown replay", () =>
+  it.effect("batches tool notifications with fresh snapshots and suppresses terminal teardown replay", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service
       const runs: string[] = []
@@ -386,7 +386,8 @@ describe("Tool", () => {
             draft.add({ ...constant("overlay"), name: "echo", options: { codemode: false } })
           })
           expect(runs).toEqual([])
-          expect((yield* service.snapshot()).definitions.map((tool) => tool.name)).toEqual(["execute"])
+          expect((yield* service.snapshot()).definitions.map((tool) => tool.name)).toEqual(["echo", "execute"])
+          expect(runs).toEqual(["base", "overlay"])
         }).pipe(Scope.provide(scope)),
       )
 
@@ -545,23 +546,32 @@ describe("Tool", () => {
     }),
   )
 
-  it.effect("logs invalid tool definitions without dropping healthy tools", () => {
+  it.effect("compiles healthy tools before notifying invalid definition diagnostics", () => {
     const output: unknown[] = []
     const logger = Logger.map(Logger.formatStructured, (entry) => {
       output.push(entry.message)
     })
     return Effect.gen(function* () {
       const service = yield* Tool.Service
-      yield* service.transform((draft) => {
-        draft.add({ ...make(), name: "healthy", options: { codemode: false } })
-        draft.add({
-          name: "phone_type",
-          input: Schema.Struct({}),
-          execute: () => Effect.succeed({ content: "ok" }),
-          options: { codemode: false },
-        } as unknown as Info)
-        draft.add({ ...make(), name: "codemode" })
-      })
+      const snapshot = yield* State.batch(
+        Effect.gen(function* () {
+          yield* service.transform((draft) => {
+            draft.add({ ...make(), name: "healthy", options: { codemode: false } })
+            draft.add({
+              name: "phone_type",
+              input: Schema.Struct({}),
+              execute: () => Effect.succeed({ content: "ok" }),
+              options: { codemode: false },
+            } as unknown as Info)
+            draft.add({ ...make(), name: "codemode" })
+          })
+          const snapshot = yield* service.snapshot()
+          expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["healthy", "execute"])
+          expect(snapshot.codeModeCatalog?.map((tool) => tool.path)).toEqual(["codemode"])
+          expect(output).toEqual([])
+          return snapshot
+        }),
+      )
 
       expect(output).toEqual([
         [
@@ -573,9 +583,6 @@ describe("Tool", () => {
           },
         ],
       ])
-      const snapshot = yield* service.snapshot()
-      expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["healthy", "execute"])
-      expect(snapshot.codeModeCatalog?.map((tool) => tool.path)).toEqual(["codemode"])
       expect((yield* snapshot.execute(call("phone_type")).pipe(Effect.flip)).message).toBe("Unknown tool: phone_type")
     }).pipe(Effect.provide(Logger.layer([logger])))
   })

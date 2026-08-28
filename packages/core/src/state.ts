@@ -1,9 +1,9 @@
 export * as State from "./state.js"
 
-import { Clock, Context, Deferred, Effect, Scope, Semaphore } from "effect"
+import { Clock, Context, Deferred, Effect, Exit, Scope } from "effect"
 
 /**
- * A replayable transform applied to a draft during reload.
+ * A replayable transform applied to a draft while deriving state.
  *
  * Domain drafts expose readable and writable state while preserving concise
  * plugin/config code. Transforms synchronously rebuild derived state.
@@ -16,13 +16,14 @@ export interface Registration {
 }
 
 /**
- * Registers and applies a scoped transform. Closing the owning Scope removes
- * the transform and reloads the materialized state.
+ * Registers a scoped transform and invalidates the derived state. Closing the
+ * owning Scope removes the transform. Reads synchronously replay pending changes.
  */
 export type Transform<DraftApi> = (
   transform: TransformCallback<DraftApi>,
 ) => Effect.Effect<Registration, never, Scope.Scope>
 
+/** Invalidates the snapshot after captured inputs change and coalesces notifications. */
 export type Reload = () => Effect.Effect<void>
 
 export interface Transformable<DraftApi> {
@@ -33,7 +34,7 @@ export interface Transformable<DraftApi> {
 type Batch = {
   active: boolean
   readonly flush: boolean
-  readonly reloads: Set<Reload>
+  readonly notifications: Set<Reload>
 }
 
 const CurrentBatch = Context.Reference<Batch | undefined>("@opencode/State/CurrentBatch", {
@@ -41,17 +42,24 @@ const CurrentBatch = Context.Reference<Batch | undefined>("@opencode/State/Curre
 })
 const reloadDebounce = 500
 
-/** flush: false is terminal teardown: states whose transforms are removed stop rebuilding, including pending reloads. */
+/** Batches notifications, not read visibility. flush: false is terminal teardown. */
 export function batch<A, E, R>(effect: Effect.Effect<A, E, R>, options: { readonly flush?: boolean } = {}) {
-  return Effect.gen(function* () {
-    const current = yield* CurrentBatch
-    if (current?.active && options.flush !== false) return yield* effect
-    const batch: Batch = { active: true, flush: options.flush !== false, reloads: new Set() }
-    const exit = yield* effect.pipe(Effect.provideService(CurrentBatch, batch), Effect.exit)
-    batch.active = false
-    if (batch.flush) yield* Effect.forEach(batch.reloads, (reload) => reload(), { discard: true })
-    return yield* exit
-  })
+  return Effect.uninterruptibleMask((restore) =>
+    Effect.gen(function* () {
+      const current = yield* CurrentBatch
+      if (current?.active && options.flush !== false) return yield* restore(effect)
+      const batch: Batch = { active: true, flush: options.flush !== false, notifications: new Set() }
+      const exit = yield* restore(effect.pipe(Effect.provideService(CurrentBatch, batch))).pipe(Effect.exit)
+      batch.active = false
+      const notifications = batch.flush
+        ? yield* Effect.forEach(batch.notifications, (notify) => restore(notify()).pipe(Effect.exit))
+        : []
+      // Accepted writes are not rolled back: one failed observer must not hide
+      // the other states' changes, or replace the batch body's failure.
+      yield* Exit.asVoidAll([exit, ...notifications])
+      return yield* exit
+    }),
+  )
 }
 
 export const inherit = Effect.fnUntraced(function* () {
@@ -65,124 +73,110 @@ export interface Options<State, DraftApi> {
   readonly initial: () => State
   /** Wraps mutable state in a domain-specific draft API. */
   readonly draft: MakeDraft<State, DraftApi>
+  /** Synchronously completes derived data after ordered transform replay. */
+  readonly prepare?: (state: State) => void
   /**
-   * Runs after the rebuilt state becomes visible. Update events published here
-   * act as read barriers: subscribers refetching on the event observe the
-   * committed state.
+   * Observes accepted changes outside the read path. Batched writes notify at
+   * batch completion; reloads debounce notifications. Reads never run this hook.
+   * Resource reconciliation owns its execution scope and coordination.
    */
-  readonly finalize?: (draft: DraftApi) => Effect.Effect<void>
+  readonly notify?: () => Effect.Effect<void>
 }
 
 export interface Interface<State, DraftApi> extends Transformable<DraftApi> {
+  /** Returns the latest accepted state, replaying stale inputs synchronously. */
   readonly get: () => State
 }
 
 export function create<State, DraftApi>(options: Options<State, DraftApi>): Interface<State, DraftApi> {
   let state = options.initial()
-  let transforms: { run: TransformCallback<DraftApi> }[] = []
-  let generation = 0
+  const transforms = new Set<{ run: TransformCallback<DraftApi> }>()
+  let dirty = false
   let requestedAt = 0
-  let running = false
   let closed = false
-  let waiters: { generation: number; done: Deferred.Deferred<void> }[] = []
-  const semaphore = Semaphore.makeUnsafe(1)
+  let pending: Deferred.Deferred<void> | undefined
 
-  const commit = Effect.fn("State.commit")(function* (next: State) {
-    state = next
-    if (options.finalize) yield* options.finalize(options.draft(next))
-  })
-
-  const materialize = Effect.fnUntraced(function* () {
-    if (closed) return
+  const get = () => {
+    if (!dirty || closed) return state
     const next = options.initial()
     const api = options.draft(next)
-    for (const transform of transforms) {
-      yield* Effect.sync(() => {
-        transform.run(api)
-      })
-    }
-    yield* commit(next)
+    transforms.forEach((transform) => transform.run(api))
+    options.prepare?.(next)
+    state = next
+    dirty = false
+    return state
+  }
+
+  const notify = Effect.fn("State.notify")(function* () {
+    if (closed) return
+    get()
+    if (options.notify) yield* options.notify()
   })
 
-  const materializeReload = () => semaphore.withPermit(materialize())
-
-  const rebuild = (): Effect.Effect<void> =>
+  const publish = (done: Deferred.Deferred<void>): Effect.Effect<void> =>
     Effect.gen(function* () {
       const clock = yield* Clock.Clock
       const remaining = requestedAt + reloadDebounce - clock.currentTimeMillisUnsafe()
       if (remaining > 0) yield* Effect.sleep(remaining)
-      if (clock.currentTimeMillisUnsafe() < requestedAt + reloadDebounce) return yield* rebuild()
+      if (clock.currentTimeMillisUnsafe() < requestedAt + reloadDebounce) return yield* publish(done)
 
-      const target = generation
-      const exit = yield* materializeReload().pipe(Effect.exit)
-      const completed = waiters.filter((waiter) => waiter.generation <= target)
-      waiters = waiters.filter((waiter) => waiter.generation > target)
-      yield* Effect.forEach(completed, (waiter) => Deferred.done(waiter.done, exit), {
-        concurrency: "unbounded",
-        discard: true,
-      })
-      if (generation > target) return yield* rebuild()
-      running = false
+      // Release scheduling ownership before observers run: an observer may
+      // request and await another reload without joining this notification.
+      pending = undefined
+      yield* notify().pipe(Deferred.into(done))
     })
 
-  const reload = Effect.fnUntraced(function* () {
-    if (closed) return
-    const done = Deferred.makeUnsafe<void>()
-    const clock = yield* Clock.Clock
-    generation++
-    requestedAt = clock.currentTimeMillisUnsafe()
-    waiters.push({ generation, done })
-    if (!running) {
-      running = true
-      yield* rebuild().pipe(Effect.forkDetach)
-    }
-    yield* Deferred.await(done)
-  })
+  const changed = (debounce: boolean) =>
+    Effect.uninterruptibleMask((restore) =>
+      Effect.gen(function* () {
+        if (closed) return
+        if (debounce) dirty = true
+        const batch = yield* CurrentBatch
+        if (batch?.active) {
+          if (!batch.flush) {
+            closed = true
+            return
+          }
+          batch.notifications.add(notify)
+          return
+        }
+        if (!debounce) return yield* restore(notify())
+
+        const clock = yield* Clock.Clock
+        requestedAt = clock.currentTimeMillisUnsafe()
+        // No yields between choosing the burst's completion and claiming it.
+        const done = pending ?? Deferred.makeUnsafe<void>()
+        if (!pending) {
+          pending = done
+          yield* publish(done).pipe(Effect.forkDetach)
+        }
+        yield* restore(Deferred.await(done))
+      }),
+    )
 
   return {
-    get: () => state,
+    get,
     transform: Effect.fn("State.transform")(function* (update) {
       yield* Effect.annotateCurrentSpan("state", options.name ?? "anonymous")
       const scope = yield* Scope.Scope
       return yield* Effect.uninterruptible(
         Effect.gen(function* () {
           const transform = { run: update }
-          let active = true
           const dispose = Effect.uninterruptible(
-            semaphore.withPermit(
-              Effect.suspend(() => {
-                if (!active) return Effect.void
-                active = false
-                transforms = transforms.filter((item) => item !== transform)
-                return Effect.gen(function* () {
-                  const batch = yield* CurrentBatch
-                  if (batch?.active) {
-                    // Detached debounced reloads must also stay quiet after teardown.
-                    if (!batch.flush) {
-                      closed = true
-                      return
-                    }
-                    batch.reloads.add(materializeReload)
-                    return
-                  }
-                  yield* materialize()
-                })
-              }),
-            ),
-          )
-          yield* semaphore.withPermit(
-            Effect.sync(() => {
-              transforms = [...transforms, transform]
+            Effect.suspend(() => {
+              if (!transforms.delete(transform)) return Effect.void
+              dirty = true
+              return changed(false)
             }),
           )
+          transforms.add(transform)
+          dirty = true
           yield* Scope.addFinalizer(scope, dispose)
-          const batch = yield* CurrentBatch
-          if (batch?.active) batch.reloads.add(materializeReload)
-          else yield* materializeReload()
+          yield* changed(false)
           return { dispose }
         }),
       )
     }),
-    reload,
+    reload: () => changed(true),
   }
 }

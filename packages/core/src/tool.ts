@@ -185,7 +185,7 @@ const layer = Layer.effect(
           draft.tools.delete(id)
         },
       }),
-      finalize: () =>
+      notify: () =>
         Effect.forEach(
           state.get().errors,
           ({ tool, error }) =>

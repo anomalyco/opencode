@@ -7,6 +7,7 @@ import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Bus } from "@opencode-ai/core/bus"
 import { Integration } from "@opencode-ai/core/integration"
+import { State } from "@opencode-ai/core/state"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(AppNodeBuilder.build(LayerNode.group([Integration.node, Credential.node, Bus.node])))
@@ -259,6 +260,102 @@ describe("Integration", () => {
           value: Credential.Key.make({ type: "key", key: "secret" }),
         }),
       ])
+    }),
+  )
+
+  it.effect("resolves stored OAuth with refresh registrations made inside a batch", () =>
+    Effect.gen(function* () {
+      const integrations = yield* Integration.Service
+      const credentials = yield* Credential.Service
+      const integrationID = Integration.ID.make("acme")
+      const method = Integration.OAuthMethod.make({
+        id: Integration.MethodID.make("browser"),
+        type: "oauth",
+        label: "Browser",
+      })
+      const expired = Credential.OAuth.make({
+        type: "oauth",
+        methodID: method.id,
+        access: "expired",
+        refresh: "refresh",
+        expires: 0,
+      })
+      const fresh = Credential.OAuth.make({
+        ...expired,
+        access: "fresh",
+        refresh: "fresh-refresh",
+        expires: (yield* Clock.currentTimeMillis) + Duration.toMillis(Duration.hours(1)),
+      })
+      const stored = yield* credentials.create({ integrationID, label: "Personal", value: expired })
+      const connection = { type: "credential" as const, id: stored.id, label: stored.label }
+      const calls: string[] = []
+      const implementation = {
+        integrationID,
+        method,
+        authorize: () => Effect.die("unexpected authorization"),
+        refresh: (value: Credential.OAuth) =>
+          Effect.sync(() => {
+            expect(value).toEqual(expired)
+            calls.push("original")
+            return fresh
+          }),
+      }
+
+      yield* State.batch(
+        Effect.gen(function* () {
+          yield* integrations.transform((editor) => editor.method.update(implementation))
+          expect(yield* integrations.connection.resolve(connection)).toEqual(fresh)
+          expect((yield* credentials.get(stored.id))?.value).toEqual(fresh)
+          expect(calls).toEqual(["original"])
+
+          expect(yield* integrations.connection.resolve(connection)).toEqual(fresh)
+          expect(calls).toEqual(["original"])
+
+          yield* credentials.update(stored.id, { value: expired })
+          const overridden = Credential.OAuth.make({ ...fresh, access: "override" })
+          const override = yield* integrations.transform((editor) =>
+            editor.method.update({
+              ...implementation,
+              refresh: (value) =>
+                Effect.sync(() => {
+                  expect(value).toEqual(expired)
+                  calls.push("override")
+                  return overridden
+                }),
+            }),
+          )
+          expect(yield* integrations.connection.resolve(connection)).toEqual(overridden)
+          expect((yield* credentials.get(stored.id))?.value).toEqual(overridden)
+
+          yield* override.dispose
+          yield* credentials.update(stored.id, { value: expired })
+          expect(yield* integrations.connection.resolve(connection)).toEqual(fresh)
+          expect(calls).toEqual(["original", "override", "original"])
+
+          yield* credentials.update(stored.id, { value: expired })
+          const removal = yield* integrations.transform((editor) => editor.method.remove(integrationID, method))
+          expect(yield* integrations.connection.resolve(connection)).toEqual(expired)
+          expect((yield* credentials.get(stored.id))?.value).toEqual(expired)
+          expect(calls).toEqual(["original", "override", "original"])
+
+          yield* removal.dispose
+          expect(yield* integrations.connection.resolve(connection)).toEqual(fresh)
+          yield* credentials.update(stored.id, { value: expired })
+          yield* integrations.transform((editor) => editor.method.update({ ...implementation, refresh: undefined }))
+          expect(yield* integrations.connection.resolve(connection)).toEqual(expired)
+          expect((yield* credentials.get(stored.id))?.value).toEqual(expired)
+          expect(calls).toEqual(["original", "override", "original", "original"])
+
+          const failure = new Error("refresh failed")
+          yield* integrations.transform((editor) =>
+            editor.method.update({ ...implementation, refresh: () => Effect.fail(failure) }),
+          )
+          expect(yield* integrations.connection.resolve(connection).pipe(Effect.flip)).toEqual(
+            new Integration.AuthorizationError({ cause: failure }),
+          )
+          expect((yield* credentials.get(stored.id))?.value).toEqual(expired)
+        }),
+      )
     }),
   )
 

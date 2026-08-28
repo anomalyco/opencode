@@ -11,6 +11,7 @@ import { Location } from "@opencode-ai/core/location"
 import { Model } from "@opencode-ai/core/model"
 import { Provider } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
+import { State } from "@opencode-ai/core/state"
 import { location } from "./fixture/location"
 import { testEffect } from "./lib/effect"
 
@@ -30,6 +31,57 @@ const catalogLayer = AppNodeBuilder.build(
 const it = testEffect(catalogLayer)
 
 describe("Catalog", () => {
+  it.effect("reads available and default models inside a batch before publishing", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const bus = yield* Bus.Service
+      const observed: string[] = []
+      const unsubscribe = yield* bus.listen((event) =>
+        event.type === Catalog.Event.Updated.type
+          ? catalog.model.default().pipe(
+              Effect.map((model) => {
+                observed.push(model?.id ?? "none")
+              }),
+            )
+          : Effect.void,
+      )
+      yield* Effect.addFinalizer(() => unsubscribe)
+      const providerID = Provider.ID.make("test")
+      const old = Model.ID.make("old")
+      const newest = Model.ID.make("new")
+
+      yield* State.batch(
+        Effect.gen(function* () {
+          yield* catalog.transform((draft) => {
+            draft.provider.update(providerID, () => {})
+            draft.model.update(providerID, old, (model) => {
+              model.time.released = 1000
+            })
+            draft.model.update(providerID, newest, (model) => {
+              model.time.released = 2000
+            })
+            draft.model.default.set(providerID, old)
+          })
+          expect((yield* catalog.model.available()).map((model) => model.id)).toEqual([newest, old])
+          expect((yield* catalog.model.default())?.id).toBe(old)
+
+          const overlay = yield* catalog.transform((draft) =>
+            draft.model.update(providerID, old, (model) => {
+              model.enabled = false
+            }),
+          )
+          expect((yield* catalog.model.available()).map((model) => model.id)).toEqual([newest])
+          expect((yield* catalog.model.default())?.id).toBe(newest)
+          yield* overlay.dispose
+          expect((yield* catalog.model.default())?.id).toBe(old)
+          expect(observed).toEqual([])
+        }),
+      )
+
+      expect(observed).toEqual([old])
+    }),
+  )
+
   it.effect("publishes an updated event after catalog changes", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
@@ -294,6 +346,7 @@ describe("Catalog", () => {
 
       configured = false
       const reload = yield* catalog.reload().pipe(Effect.forkChild({ startImmediately: true }))
+      expect((yield* catalog.model.default())?.id).toBe(newest)
       yield* TestClock.adjust("500 millis")
       yield* Fiber.join(reload)
       expect((yield* catalog.model.default())?.id).toBe(newest)

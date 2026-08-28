@@ -1,10 +1,12 @@
 import { describe, expect } from "bun:test"
 import { ToolFailure } from "@opencode-ai/ai"
-import { Context, Effect, Exit, Fiber, Schema, Stream } from "effect"
+import { Clock, Context, Duration, Effect, Exit, Fiber, Schema, Stream } from "effect"
 import { Plugin as EffectPlugin } from "@opencode-ai/plugin/effect"
 import { Config as ConfigSchema } from "@opencode-ai/schema/config"
 import { Agent } from "@opencode-ai/core/agent"
 import { Bus } from "@opencode-ai/core/bus"
+import { Credential } from "@opencode-ai/core/credential"
+import { Integration } from "@opencode-ai/core/integration"
 import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { PluginRuntime } from "@opencode-ai/core/plugin/runtime"
@@ -99,6 +101,64 @@ describe("Plugin", () => {
           workspaceID: location.workspaceID,
           project: location.project,
         }),
+      ])
+    }),
+  )
+
+  it.live("refreshes its own stored OAuth connection during plugin activation", () =>
+    Effect.gen(function* () {
+      const plugins = yield* Plugin.Service
+      const credentials = yield* Credential.Service
+      const integrationID = Integration.ID.make("acme")
+      const methodID = Integration.MethodID.make("browser")
+      const expired = Credential.OAuth.make({
+        type: "oauth",
+        methodID,
+        access: "expired",
+        refresh: "refresh",
+        expires: 0,
+      })
+      const fresh = Credential.OAuth.make({
+        ...expired,
+        access: "fresh",
+        refresh: "fresh-refresh",
+        expires: (yield* Clock.currentTimeMillis) + Duration.toMillis(Duration.hours(1)),
+      })
+      const stored = yield* credentials.create({ integrationID, label: "Personal", value: expired })
+      const resolved: (Credential.Value | undefined)[] = []
+      const refreshed: Credential.OAuth[] = []
+
+      yield* plugins.activate([
+        versioned(
+          EffectPlugin.define({
+            id: "oauth-refresh",
+            effect: (ctx) =>
+              Effect.gen(function* () {
+                yield* ctx.integration.transform((editor) =>
+                  editor.method.update({
+                    integrationID,
+                    method: { id: methodID, type: "oauth", label: "Browser" },
+                    authorize: () => Effect.die("unexpected authorization"),
+                    refresh: (value) =>
+                      Effect.sync(() => {
+                        refreshed.push(value)
+                        return fresh
+                      }),
+                  }),
+                )
+                const connection = yield* ctx.integration.connection.active(integrationID)
+                if (!connection) return yield* Effect.die("stored connection missing")
+                resolved.push(yield* ctx.integration.connection.resolve(connection).pipe(Effect.orDie))
+              }),
+          }),
+        ),
+      ])
+
+      expect(resolved).toEqual([fresh])
+      expect(refreshed).toEqual([expired])
+      expect((yield* credentials.get(stored.id))?.value).toEqual(fresh)
+      expect(yield* plugins.list()).toEqual([
+        { id: Plugin.ID.make("oauth-refresh"), source: { type: "builtin" }, status: "active", tui: false },
       ])
     }),
   )

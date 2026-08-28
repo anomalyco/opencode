@@ -74,7 +74,7 @@ export const layer = (options?: Options) =>
             draft.available = false
           },
         }),
-        finalize: () => bus.publish(Event.Updated, {}).pipe(Effect.asVoid),
+        notify: () => bus.publish(Event.Updated, {}).pipe(Effect.asVoid),
       })
 
       const source = (value: ReadonlyArray<File> | Instructions.Unavailable | Instructions.Removed) =>

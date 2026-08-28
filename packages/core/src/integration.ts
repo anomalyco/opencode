@@ -328,7 +328,7 @@ const layer = Layer.effect(
           },
         },
       }),
-      finalize: () => bus.publish(Integration.Event.Updated, {}).pipe(Effect.asVoid),
+      notify: () => bus.publish(Integration.Event.Updated, {}).pipe(Effect.asVoid),
     })
 
     const createCredential = Effect.fnUntraced(function* (input: Parameters<Credential.Interface["create"]>[0]) {
@@ -400,11 +400,13 @@ const layer = Layer.effect(
       }
 
       yield* Effect.gen(function* () {
-        const implementation = state
-          .get()
-          .integrations.get(attempt.integrationID)
-          ?.implementations.get(attempt.methodID)
-        const persistence = yield* Effect.sync(() => attempt.label ?? implementation?.label?.(exit.value)).pipe(
+        const persistence = yield* Effect.sync(() => {
+          const implementation = state
+            .get()
+            .integrations.get(attempt.integrationID)
+            ?.implementations.get(attempt.methodID)
+          return attempt.label ?? implementation?.label?.(exit.value)
+        }).pipe(
           Effect.flatMap((label) =>
             createCredential({
               integrationID: attempt.integrationID,

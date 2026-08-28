@@ -95,10 +95,10 @@ Pass plugin options with the object form in `opencode.json(c)`.
     {
       "package": "./plugins/company.ts",
       "options": {
-        "strict": true
-      }
-    }
-  ]
+        "strict": true,
+      },
+    },
+  ],
 }
 ```
 
@@ -119,6 +119,10 @@ export default Plugin.define({
 
 Transforms are a central pattern in the plugin API and modify how OpenCode works. Plugins register
 transforms and each builds on the changes made before it.
+
+Transform callbacks are synchronous and should only edit their draft. Load external data before registering or
+reloading a transform. Registry reads replay pending changes when needed, so definitions registered earlier in
+setup are readable without waiting for all plugins to finish setup. Update notifications are batched separately.
 
 Say we have a plugin that adds one model to the catalog.
 
@@ -159,8 +163,7 @@ export default Plugin.define({
 })
 ```
 
-Now say the first plugin dynamically fetches can fetch its model list from a
-dynamic source. It can call `reload` when that list changes.
+Now say the first plugin fetches its model list from a dynamic source. It can call `reload` when that list changes.
 
 ```ts title="plugins/models.ts"
 import { Plugin } from "@opencode-ai/plugin"
@@ -190,7 +193,12 @@ export default Plugin.define({
 })
 ```
 
-`reload` replays every catalog transform in order, so the output-price policy still filters the refreshed models.
+`reload` invalidates the catalog without changing transform order, so the output-price policy still filters the
+refreshed models. Reads replay those changes immediately rather than waiting for the update notification's
+500 ms debounce. If nothing reads the catalog, it is rebuilt before the notification instead.
+
+Reading definitions does not start or await background resource work. MCP connections, Git reference checkouts,
+and cached VCS information retain their own lifecycle and readiness behavior.
 
 ## API
 
@@ -468,14 +476,23 @@ interface IntegrationContext {
     key(input: IntegrationConnectKeyInput, requestOptions?: RequestOptions): Promise<void>
   }
   oauth: {
-    connect(input: IntegrationOauthConnectInput, requestOptions?: RequestOptions): Promise<IntegrationOauthConnectOutput>
+    connect(
+      input: IntegrationOauthConnectInput,
+      requestOptions?: RequestOptions,
+    ): Promise<IntegrationOauthConnectOutput>
     status(input: IntegrationOauthStatusInput, requestOptions?: RequestOptions): Promise<IntegrationOauthStatusOutput>
     complete(input: IntegrationOauthCompleteInput, requestOptions?: RequestOptions): Promise<void>
     cancel(input: IntegrationOauthCancelInput, requestOptions?: RequestOptions): Promise<void>
   }
   command: {
-    connect(input: IntegrationCommandConnectInput, requestOptions?: RequestOptions): Promise<IntegrationCommandConnectOutput>
-    status(input: IntegrationCommandStatusInput, requestOptions?: RequestOptions): Promise<IntegrationCommandStatusOutput>
+    connect(
+      input: IntegrationCommandConnectInput,
+      requestOptions?: RequestOptions,
+    ): Promise<IntegrationCommandConnectOutput>
+    status(
+      input: IntegrationCommandStatusInput,
+      requestOptions?: RequestOptions,
+    ): Promise<IntegrationCommandStatusOutput>
     cancel(input: IntegrationCommandCancelInput, requestOptions?: RequestOptions): Promise<void>
   }
   transform(callback: (draft: IntegrationDraft) => void): Promise<Registration>
@@ -1237,10 +1254,7 @@ await ctx.shell.hook("create.before", (event) => {
 
 ```ts
 interface ShellHookContext {
-  hook(
-    name: "create.before",
-    callback: (event: ShellCreateBefore) => Promise<void> | void,
-  ): Promise<Registration>
+  hook(name: "create.before", callback: (event: ShellCreateBefore) => Promise<void> | void): Promise<Registration>
 }
 
 interface ShellCreateBefore {

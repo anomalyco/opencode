@@ -14,6 +14,10 @@ export function location(ref: Location.Ref, input: { projectDirectory?: Absolute
   } satisfies Location.Interface
 }
 
+export function locationLayer(ref: Location.Ref, input: { projectDirectory?: AbsolutePath; vcs?: Project.Vcs } = {}) {
+  return Layer.succeed(Location.Service, Location.Service.of(location(ref, input)))
+}
+
 export const tempLocationLayer = Layer.unwrap(
   Effect.acquireRelease(
     Effect.promise(() => tmpdir()),
@@ -21,7 +25,7 @@ export const tempLocationLayer = Layer.unwrap(
   ).pipe(
     Effect.map((tmp) => {
       const ref = Location.Ref.make({ directory: AbsolutePath.make(tmp.path) })
-      return Layer.succeed(Location.Service, Location.Service.of(location(ref)))
+      return locationLayer(ref)
     }),
   ),
 )
