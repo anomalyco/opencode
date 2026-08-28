@@ -36,6 +36,7 @@ const models = [
   { name: "MiMo-V2.5-Pro", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "MiMo-V2.5", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Qwen3.8 Max", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
+  { name: "Qwen3.8 Flash", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Qwen3.7 Max", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Qwen3.7 Plus", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Qwen3.6 Plus", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
@@ -44,6 +45,7 @@ const models = [
   { name: "Muse Spark 1.2 Contributor", training: "go.faq.a5.used", retention: "go.faq.a5.notZdr" },
   { name: "DeepSeek V4 Pro", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "DeepSeek V4 Flash", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
+  { name: "Hy4 preview", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Hy3", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
 ] as const
 
@@ -71,12 +73,13 @@ function LimitsGraph(props: { href: string }) {
   const baseline = 100
   const graph = [
     { id: "kimi-k3", name: "Kimi K3", req: 110, d: "50ms" },
-    { id: "qwen3.8-max", name: "Qwen3.8 Max", req: 160, d: "90ms" },
     { id: "grok-4.6", name: "Grok 4.6", req: 169, d: "75ms" },
+    { id: "hy4-preview", name: "Hy4 preview", req: 1350, d: "90ms" },
     { id: "gpt-5.6-luna", name: "GPT 5.6 Luna", req: 2050, d: "290ms" },
     { id: "glm-5.3-flash", name: "GLM-5.3-Flash", req: 3160, baseReq: 1580, bonus: "2x usage", d: "100ms" },
     { id: "minimax-m3", name: "MiniMax M3", req: 3200, d: "210ms" },
     { id: "qwen3.7-plus", name: "Qwen3.7 Plus", req: 4300, d: "300ms" },
+    { id: "qwen3.8-flash", name: "Qwen3.8 Flash", req: 5400, d: "315ms" },
     { id: "deepseek-v4-flash", name: "DeepSeek V4 Flash", req: 7600, d: "330ms" },
     { id: "longcat-2.0", name: "LongCat-2.0", req: 11400, d: "335ms" },
     { id: "mimo-v2.5", name: "MiMo-V2.5", req: 30100, d: "340ms" },
@@ -152,7 +155,7 @@ function LimitsGraph(props: { href: string }) {
           <g data-slot="bars">
             <For each={graph}>
               {(m, i) => (
-                <g style={{ "--d": m.d } as any}>
+                <g data-model={m.id} style={{ "--d": m.d } as any}>
                   <rect
                     x={left}
                     y={gy(i()) - bh / 2}
