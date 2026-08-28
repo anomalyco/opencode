@@ -208,42 +208,58 @@ const layer = Layer.effect(
       let recoverOverflow = true
       let recoverContinuation = true
       while (true) {
-        // Reuse boundary preparation once; retries refresh context without delivering more input.
-        const loaded = initial ?? (yield* prepareContext(sessionID).pipe(Effect.flatMap(context.load)))
-        initial = undefined
-        const compactionInput = {
-          session: loaded.session,
-          messages: loaded.messages,
-          resolved: loaded.model,
-          prepare: context.prepare,
-        }
-        if (compaction.required(compactionInput)) {
-          const compacted = yield* compaction.compact(compactionInput)
-          if (compacted.status !== "completed") return yield* new StepFailedError({ error: compacted.error })
-          assistantMessageID = SessionMessage.ID.create()
+        // Wrap pre-stream setup so failures before publisher (e.g., ModelUnavailableError)
+        // become durable Step.Failed events instead of silent log-only drain failures.
+        const preStream = yield* Effect.gen(function* () {
+          const loaded = initial ?? (yield* prepareContext(sessionID).pipe(Effect.flatMap(context.load)))
+          const compactionInput = {
+            session: loaded.session,
+            messages: loaded.messages,
+            resolved: loaded.model,
+            prepare: context.prepare,
+          }
+          if (compaction.required(compactionInput)) {
+            const compacted = yield* compaction.compact(compactionInput)
+            if (compacted.status !== "completed") return yield* new StepFailedError({ error: compacted.error })
+            assistantMessageID = SessionMessage.ID.create()
+            return { tag: "continue" as const }
+          }
+          const stepLimitReached = loaded.agent.info.steps !== undefined && step >= loaded.agent.info.steps
+          const transcript = SessionModelRequest.baseTranscript({
+            agent: loaded.agent.info,
+            model: loaded.model,
+            tools: loaded.tools,
+            initial: loaded.initial,
+            messages: loaded.messages,
+          })
+          const prepared = yield* context.prepare({
+            scope: { session: loaded.session, agentID: loaded.agent.id, model: loaded.model, tools: loaded.tools },
+            transcript: {
+              system: transcript.system,
+              messages: stepLimitReached
+                ? [...transcript.messages, Message.assistant(MAX_STEPS_PROMPT)]
+                : transcript.messages,
+            },
+            toolChoice: stepLimitReached ? "none" : undefined,
+            webSocket: "session",
+          })
+          yield* diagnosePromptCache(sessionID, prepared.request)
+          return { tag: "ready" as const, loaded, prepared, stepLimitReached, compactionInput }
+        }).pipe(
+          Effect.catchAll((cause) =>
+            Effect.gen(function* () {
+              const message = cause instanceof Error ? cause.message : String((cause as any)?.message ?? cause)
+              const error = { type: "unknown" as const, message } as any
+              yield* bus.publish(SessionEvent.Step.Failed, { sessionID, assistantMessageID, error }).pipe(Effect.ignore)
+              return yield* Effect.fail(cause)
+            }),
+          ),
+        )
+        if (preStream.tag === "continue") {
           continue
         }
-        const stepLimitReached = loaded.agent.info.steps !== undefined && step >= loaded.agent.info.steps
-        const transcript = SessionModelRequest.baseTranscript({
-          agent: loaded.agent.info,
-          model: loaded.model,
-          tools: loaded.tools,
-          initial: loaded.initial,
-          messages: loaded.messages,
-        })
-        const prepared = yield* context.prepare({
-          scope: { session: loaded.session, agentID: loaded.agent.id, model: loaded.model, tools: loaded.tools },
-          transcript: {
-            system: transcript.system,
-            messages: stepLimitReached
-              ? [...transcript.messages, Message.assistant(MAX_STEPS_PROMPT)]
-              : transcript.messages,
-          },
-          // Keep tool definitions on the final Step to preserve the provider's cached prefix.
-          toolChoice: stepLimitReached ? "none" : undefined,
-          webSocket: "session",
-        })
-        yield* diagnosePromptCache(sessionID, prepared.request)
+        const { loaded, prepared, stepLimitReached, compactionInput } = preStream
+        initial = undefined
         const outcome = yield* steps.attempt({
           sessionID,
           assistantMessageID,
