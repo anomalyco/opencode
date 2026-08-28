@@ -4357,9 +4357,14 @@ describe("SessionRunnerLLM", () => {
     yield* s.admit("Retry transport")
     yield* s.llm.push(Stream.fail(providerUnavailable()))
     yield* s.llm.push(TestLLM.text("Recovered", "retry-success"))
+    const scheduled = yield* s.bus.subscribe(SessionEvent.RetryScheduled).pipe(
+      Stream.filter((event) => event.data.sessionID === sessionID),
+      Stream.runHead,
+      Effect.forkScoped({ startImmediately: true }),
+    )
 
     const run = yield* s.resume.pipe(Effect.forkChild)
-    yield* s.llm.wait(1)
+    yield* Fiber.join(scheduled)
     yield* TestClock.adjust("1599 millis")
     expect(s.requests).toHaveLength(1)
     yield* TestClock.adjust("801 millis")
@@ -4395,7 +4400,7 @@ describe("SessionRunnerLLM", () => {
       agent: "build",
       model: { providerID: "fake", id: "fake-model" },
       error: { type: "provider.transport", message: "Provider unavailable" },
-      attempt: 1,
+      attempt: 2,
       decision: { retry: false },
     })
     expect(yield* recordedEventTypes(sessionID)).not.toContain("session.retry.scheduled.1")
@@ -4415,9 +4420,14 @@ describe("SessionRunnerLLM", () => {
     )
     yield* s.admit("Use custom retry delay")
     yield* s.llm.push(Stream.fail(providerUnavailable()), TestLLM.text("Recovered", "hook-delay-success"))
+    const scheduled = yield* s.bus.subscribe(SessionEvent.RetryScheduled).pipe(
+      Stream.filter((event) => event.data.sessionID === sessionID),
+      Stream.runHead,
+      Effect.forkScoped({ startImmediately: true }),
+    )
 
     const run = yield* s.resume.pipe(Effect.forkChild)
-    yield* s.llm.wait(1)
+    yield* Fiber.join(scheduled)
     yield* TestClock.adjust("4999 millis")
     expect(s.requests).toHaveLength(1)
     yield* TestClock.adjust("1 millis")

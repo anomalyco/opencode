@@ -103,7 +103,7 @@ await ctx.session.hook("context", (event) => {
 })
 
 await ctx.session.hook("retry", (event) => {
-  if (event.attempt >= 2) event.decision = { retry: false }
+  if (event.attempt >= 3) event.decision = { retry: false }
 })
 ```
 

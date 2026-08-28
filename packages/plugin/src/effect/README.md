@@ -102,7 +102,7 @@ yield *
 yield *
   ctx.session.hook("retry", (event) =>
     Effect.sync(() => {
-      if (event.attempt >= 2) event.decision = { retry: false }
+      if (event.attempt >= 3) event.decision = { retry: false }
     }),
   )
 ```

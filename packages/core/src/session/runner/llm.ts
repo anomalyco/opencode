@@ -24,7 +24,6 @@ import { SessionRunnerRetry } from "./retry.js"
 import { SessionStep } from "./step.js"
 import { ToolOutput } from "../../tool-output.js"
 import { PluginSupervisor } from "../../plugin/supervisor.js"
-import { PluginHooks } from "../../plugin/hooks.js"
 import { MAX_STEPS_PROMPT } from "./max-steps.js"
 
 const CONTINUE_AFTER_INCOMPLETE_STREAM =
@@ -40,7 +39,6 @@ const layer = Layer.effect(
     const db = (yield* Database.Service).db
     const compaction = yield* SessionCompaction.Service
     const plugins = yield* PluginSupervisor.Service
-    const hooks = yield* PluginHooks.Service
     const title = yield* SessionTitle.Service
     const steps = yield* SessionStep.make
     // Title generation starts once input is visible and must not delay model execution.
@@ -178,7 +176,7 @@ const layer = Layer.effect(
     const runStep = Effect.fn("SessionRunner.runStep")(function* (first: SessionContext.Loaded, step: number) {
       const sessionID = first.session.id
       let assistantMessageID = SessionMessage.ID.create()
-      const retry = yield* SessionRunnerRetry.make(bus, hooks, sessionID)
+      const retry = yield* SessionRunnerRetry.make(bus, sessionID)
       let initial: SessionContext.Loaded | undefined = first
       let recoverOverflow = true
       let recoverContinuation = true
@@ -240,6 +238,7 @@ const layer = Layer.effect(
               assistantMessageID,
               agent: loaded.agent.id,
               model: loaded.model.ref,
+              hook: prepared.retry,
             }).pipe(
               Pull.catchDone(() =>
                 bus
@@ -255,6 +254,7 @@ const layer = Layer.effect(
               assistantMessageID,
               agent: loaded.agent.id,
               model: loaded.model.ref,
+              hook: prepared.retry,
             }).pipe(Pull.catchDone(() => outcome.cause))
             yield* bus.publish(SessionEvent.Synthetic, { sessionID, text: CONTINUE_AFTER_INCOMPLETE_STREAM })
             assistantMessageID = SessionMessage.ID.create()
@@ -311,7 +311,6 @@ export const node = makeLocationNode({
     SessionStore.node,
     SessionCompaction.node,
     PluginSupervisor.node,
-    PluginHooks.node,
     SessionTitle.node,
     Snapshot.node,
     ToolOutput.node,

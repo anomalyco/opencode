@@ -6,7 +6,7 @@ import { Model } from "@opencode-ai/schema/model"
 import { SessionError } from "@opencode-ai/schema/session-error"
 import { Cause, Clock, Duration, Effect, Schedule } from "effect"
 import { Bus } from "../../bus.js"
-import { PluginHooks } from "../../plugin/hooks.js"
+import type { PluginHooks } from "../../plugin/hooks.js"
 import { SessionEvent } from "../event.js"
 import { SessionMessage } from "../message.js"
 import { SessionSchema } from "../schema.js"
@@ -17,6 +17,7 @@ export interface Input {
   readonly assistantMessageID: SessionMessage.ID
   readonly agent: Agent.ID
   readonly model: Model.Ref
+  readonly hook: (event: PluginHooks.Domains["session"]["retry"]) => Effect.Effect<void>
 }
 
 export function isRetryable(error: AIError) {
@@ -70,10 +71,10 @@ const schedule = Schedule.max([Schedule.exponential("2 seconds"), Schedule.recur
   }),
 )
 
-export const make = (bus: Bus.Interface, hooks: PluginHooks.Interface, sessionID: SessionSchema.ID) =>
+export const make = (bus: Bus.Interface, sessionID: SessionSchema.ID) =>
   Effect.gen(function* () {
     const step = yield* Schedule.toStep(schedule)
-    let attempt = 0
+    let attempt = 1
     return (input: Input) =>
       Effect.gen(function* () {
         const now = yield* Clock.currentTimeMillis
@@ -88,7 +89,7 @@ export const make = (bus: Bus.Interface, hooks: PluginHooks.Interface, sessionID
           attempt,
           decision: { retry: true, delay },
         }
-        yield* hooks.trigger("session", "retry", event)
+        yield* input.hook(event)
         if (!event.decision.retry) return yield* Cause.done()
         const normalized =
           Number.isFinite(event.decision.delay) && event.decision.delay >= 0 ? Math.ceil(event.decision.delay) : delay
@@ -100,6 +101,7 @@ export const make = (bus: Bus.Interface, hooks: PluginHooks.Interface, sessionID
           at: scheduled + normalized,
           error: input.error,
         })
-        yield* Effect.sleep(Duration.millis(normalized))
+        const remaining = Math.max(0, scheduled + normalized - (yield* Clock.currentTimeMillis))
+        yield* Effect.sleep(Duration.millis(remaining))
       })
   })

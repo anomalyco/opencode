@@ -1141,7 +1141,7 @@ effect: (ctx) =>
           event.decision = { retry: true, delay: 10_000 }
           return
         }
-        if (event.attempt >= 2) event.decision = { retry: false }
+        if (event.attempt >= 3) event.decision = { retry: false }
       }),
     )
   }),
@@ -1149,8 +1149,8 @@ effect: (ctx) =>
 
 The hook runs only for retries proposed by OpenCode; it cannot make a normally terminal failure retryable. Multiple hooks
 run in registration order and later hooks see the current `decision`. The built-in maximum attempt count remains a hard
-limit. `attempt` is the proposed retry number, starting at `1`. Invalid delays (`NaN`, infinity, or negative values) fall
-back to the computed delay.
+limit. `attempt` is the physical attempt being proposed; the initial request is attempt `1`, so the first retry is attempt
+`2`. Invalid delays (`NaN`, infinity, or negative values) fall back to the computed delay.
 
 #### Reference
 
