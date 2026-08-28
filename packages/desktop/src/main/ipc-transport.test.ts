@@ -131,6 +131,7 @@ function clientProtocol(port: MessagePort) {
           Effect.forkScoped,
         )
         return {
+          codecFor: serialization.codecFor,
           send: (_clientId: number, request: RpcMessage.FromClientEncoded) =>
             Effect.sync(() => {
               const encoded = parser.encode(request)

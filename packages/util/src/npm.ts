@@ -193,6 +193,7 @@ const layer = Layer.effect(
       }
 
       const tree = yield* reify({ dir, add: [pkg] })
+      if (isMutable(parsed)) refreshed.add(pkg)
       const first = tree.edgesOut.values().next().value?.to
       if (!first) {
         const installed = yield* installedName(pkg, dir, parsedName)

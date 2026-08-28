@@ -8,6 +8,7 @@ import { Integration } from "@opencode-ai/schema/integration"
 import { Location } from "@opencode-ai/schema/location"
 import { Mcp } from "@opencode-ai/schema/mcp"
 import { Model } from "@opencode-ai/schema/model"
+import { PersistentPty } from "@opencode-ai/schema/persistent-pty"
 import { Provider } from "@opencode-ai/schema/provider"
 import { Reference } from "@opencode-ai/schema/reference"
 import { Skill } from "@opencode-ai/schema/skill"
@@ -30,6 +31,7 @@ test.each([
   expect(entrypoint.Location).toBe(Location)
   expect(entrypoint.Mcp).toBe(Mcp)
   expect(entrypoint.Model).toBe(Model)
+  expect(entrypoint.PersistentPty).toBe(PersistentPty)
   expect(entrypoint.Provider).toBe(Provider)
   expect(entrypoint.Reference).toBe(Reference)
   expect(entrypoint.Skill).toBe(Skill)
@@ -44,6 +46,7 @@ test.each([
     "Location",
     "Mcp",
     "Model",
+    "PersistentPty",
     "Plugin",
     "Provider",
     "Reference",

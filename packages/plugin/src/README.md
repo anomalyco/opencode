@@ -5,7 +5,9 @@ The Promise plugin API at `@opencode-ai/plugin` is the async/await equivalent of
 - `hook` installs behavior at an OpenCode extension point.
 - `reload` reruns every transform hook for a stateful domain.
 
-The only difference from the Effect API is the async boundary: hook callbacks, hook registration, `reload`, and `Registration.dispose` use Promises instead of Effects.
+The Promise API uses Promises instead of Effects for setup, runtime hook
+callbacks, hook registration, `reload`, and `Registration.dispose`. Transform
+draft callbacks remain synchronous.
 
 ## Defining A Plugin
 
@@ -46,12 +48,15 @@ await registration.dispose()
 
 ## Transform Hooks
 
-Transform hooks contribute to stateful domains. The draft editor is synchronous; the callback may be `async` when it needs to await other work:
+Transform hooks contribute to stateful domains. The draft editor is synchronous,
+so load asynchronous data before registering a transform or reloading its domain:
 
 ```ts
+const description = await loadReviewerDescription()
+
 await ctx.agent.transform((agent) => {
   agent.update("reviewer", (item) => {
-    item.description = "Reviews code for regressions"
+    item.description = description
     item.mode = "subagent"
   })
 })
@@ -64,8 +69,12 @@ ctx.agent.transform
 ctx.catalog.transform
 ctx.command.transform
 ctx.integration.transform
+ctx.mcp.transform
 ctx.reference.transform
 ctx.skill.transform
+ctx.tool.transform
+ctx.vcs.transform
+ctx.websearch.transform
 ```
 
 ## Runtime Hooks
@@ -81,7 +90,7 @@ await ctx.aisdk.hook("sdk", async (event) => {
 
 await ctx.aisdk.hook("language", (event) => {
   if (event.model.providerID !== "xai") return
-  event.language = event.sdk.responses(event.model.api.id)
+  event.language = event.sdk.responses(event.model.modelID)
 })
 ```
 
@@ -92,16 +101,21 @@ await ctx.session.hook("context", (event) => {
   event.tools.read.description = "Read a file using narrow line ranges."
   delete event.tools.write
 })
+
+await ctx.session.hook("retry", (event) => {
+  if (event.attempt >= 3) event.decision = { retry: false }
+})
 ```
 
-Promise tools use executable tool values with async executors. Registration
-supplies the tool's name and options separately:
+Promise tools use complete executable tool values with async executors:
 
 ```ts
 import { Schema } from "effect"
 
 await ctx.tool.transform((tools) => {
-  tools.add("echo", {
+  tools.add({
+    name: "echo",
+    options: { codemode: false },
     description: "Echo text",
     input: Schema.Struct({ text: Schema.String }),
     output: Schema.Struct({ text: Schema.String }),
@@ -132,6 +146,10 @@ ctx.agent.reload()
 ctx.catalog.reload()
 ctx.command.reload()
 ctx.integration.reload()
+ctx.mcp.reload()
 ctx.reference.reload()
 ctx.skill.reload()
+ctx.tool.reload()
+ctx.vcs.reload()
+ctx.websearch.reload()
 ```

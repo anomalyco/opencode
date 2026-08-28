@@ -54,10 +54,7 @@ const decode = Schema.decodeUnknownSync(Info)
 
 describe("ConfigCommandPlugin.Plugin", () => {
   it.live("loads inline and file-based commands in config order", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ).pipe(
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
           yield* Effect.promise(async () => {
@@ -166,10 +163,7 @@ Review files`,
 
   for (const testCase of sourceCases()) {
     it.effect(`rebuilds commands when a source file is ${testCase.name}`, () =>
-      Effect.acquireRelease(
-        Effect.promise(() => tmpdir()),
-        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-      ).pipe(
+      Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
         Effect.flatMap((tmp) =>
           Effect.gen(function* () {
             const directory = path.join(tmp.path, "commands")
@@ -212,10 +206,7 @@ Review files`,
   }
 
   it.effect("coalesces updates inside the debounce window into one rebuild", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ).pipe(
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
           const directory = path.join(tmp.path, "commands")
@@ -254,10 +245,7 @@ Review files`,
   )
 
   it.effect("ignores updates outside command source directories", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ).pipe(
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
           const directory = path.join(tmp.path, "commands")

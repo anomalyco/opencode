@@ -1,5 +1,6 @@
 import { createData } from "@opencode-ai/client/solid"
 import type { Plugin } from "@opencode-ai/plugin/tui"
+import { createStore } from "solid-js/store"
 import { createSimpleContext } from "./helper"
 import { useClient } from "./client"
 
@@ -17,6 +18,27 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       directory: props.directory,
     })
     data satisfies Plugin.Context["data"]
-    return data
+    const [generatingTitles, setGeneratingTitles] = createStore<Record<string, boolean | undefined>>({})
+    return {
+      ...data,
+      session: {
+        ...data.session,
+        title: {
+          pending: (sessionID: string) => generatingTitles[sessionID] === true,
+          async generate(sessionID: string) {
+            if (generatingTitles[sessionID]) return
+            setGeneratingTitles(sessionID, true)
+            await client.api.session
+              .rename({ sessionID, title: "" })
+              .then(() => {
+                // The HTTP response can beat the renamed event. Keep pending until the new title is projected locally.
+                data.session.invalidate(sessionID)
+                return data.session.sync(sessionID)
+              })
+              .finally(() => setGeneratingTitles(sessionID, undefined))
+          },
+        },
+      },
+    }
   },
 })

@@ -177,7 +177,7 @@ const layer = Layer.effect(
       if (!dotgit) return undefined
 
       const cwd = path.dirname(dotgit)
-      const result = yield* run(cwd, proc)(["rev-parse", "--git-dir", "--git-common-dir", "--show-toplevel"])
+      const result = yield* run(cwd, proc, ["rev-parse", "--git-dir", "--git-common-dir", "--show-toplevel"])
       const [gitDir, commonDir, topLevel] = result.text.split(/\r?\n/)
       if (!gitDir || !commonDir) return undefined
 
@@ -189,13 +189,13 @@ const layer = Layer.effect(
     })
 
     const remote = Effect.fn("Git.remote.get")(function* (repository: Repository, name = "origin") {
-      const result = yield* run(repository.worktree, proc)(["remote", "get-url", name])
+      const result = yield* run(repository.worktree, proc, ["remote", "get-url", name])
       if (result.exitCode !== 0) return undefined
       return result.text.trim() || undefined
     })
 
     const roots = Effect.fn("Git.history.rootCommits")(function* (repository: Repository) {
-      const result = yield* run(repository.worktree, proc)(["rev-list", "--max-parents=0", "HEAD"])
+      const result = yield* run(repository.worktree, proc, ["rev-list", "--max-parents=0", "HEAD"])
       if (result.exitCode !== 0) return []
       return result.text
         .split("\n")
@@ -205,13 +205,13 @@ const layer = Layer.effect(
     })
 
     const head = Effect.fn("Git.history.head")(function* (repository: Repository) {
-      const result = yield* run(repository.worktree, proc)(["rev-parse", "HEAD"])
+      const result = yield* run(repository.worktree, proc, ["rev-parse", "HEAD"])
       if (result.exitCode !== 0) return undefined
       return result.text.trim() || undefined
     })
 
     const branch = Effect.fn("Git.history.branch")(function* (repository: Repository) {
-      const result = yield* run(repository.worktree, proc)(["symbolic-ref", "--quiet", "--short", "HEAD"])
+      const result = yield* run(repository.worktree, proc, ["symbolic-ref", "--quiet", "--short", "HEAD"])
       if (result.exitCode !== 0) return undefined
       return result.text.trim() || undefined
     })
@@ -220,7 +220,7 @@ const layer = Layer.effect(
       repository: Repository,
       remoteName = "origin",
     ) {
-      const result = yield* run(repository.worktree, proc)(["symbolic-ref", `refs/remotes/${remoteName}/HEAD`])
+      const result = yield* run(repository.worktree, proc, ["symbolic-ref", `refs/remotes/${remoteName}/HEAD`])
       if (result.exitCode !== 0) return undefined
       return result.text.trim().replace(new RegExp(`^refs/remotes/${remoteName}/`), "") || undefined
     })
@@ -230,10 +230,7 @@ const layer = Layer.effect(
       directory: AbsolutePath,
       args: string[],
     ) {
-      const result = yield* execute(
-        directory,
-        proc,
-      )(args).pipe(
+      const result = yield* execute(directory, proc, args).pipe(
         Effect.mapError((cause) => new OperationError({ operation, directory, message: cause.message, cause })),
       )
       if (result.exitCode === 0) return
@@ -711,31 +708,29 @@ interface Result {
   readonly stderr: string
 }
 
-function run(cwd: string, proc: AppProcess.Interface) {
-  return (args: string[]) =>
-    execute(cwd, proc)(args).pipe(Effect.orElseSucceed(() => ({ exitCode: 1, text: "", stderr: "" })))
+function run(cwd: string, proc: AppProcess.Interface, args: string[]) {
+  return execute(cwd, proc, args).pipe(Effect.orElseSucceed(() => ({ exitCode: 1, text: "", stderr: "" })))
 }
 
-function execute(cwd: string, proc: AppProcess.Interface) {
-  return (args: string[]) =>
-    proc
-      .run(
-        ChildProcess.make("git", args, {
-          cwd,
-          extendEnv: true,
-          stdin: "ignore",
-        }),
-      )
-      .pipe(
-        Effect.map(
-          (result) =>
-            ({
-              exitCode: result.exitCode,
-              text: result.stdout.toString("utf8"),
-              stderr: result.stderr.toString("utf8"),
-            }) satisfies Result,
-        ),
-      )
+function execute(cwd: string, proc: AppProcess.Interface, args: string[]) {
+  return proc
+    .run(
+      ChildProcess.make("git", args, {
+        cwd,
+        extendEnv: true,
+        stdin: "ignore",
+      }),
+    )
+    .pipe(
+      Effect.map(
+        (result) =>
+          ({
+            exitCode: result.exitCode,
+            text: result.stdout.toString("utf8"),
+            stderr: result.stderr.toString("utf8"),
+          }) satisfies Result,
+      ),
+    )
 }
 
 function resolvePath(cwd: string, value: string) {

@@ -80,8 +80,8 @@ export function createSessionRequestModel() {
         if (message.type !== "synthetic") return []
         if (message.metadata?.source === "subagent" && typeof message.metadata.childID === "string")
           return [message.metadata.childID]
-        if (message.metadata?.source === "shell" && typeof message.metadata.jobID === "string")
-          return [message.metadata.jobID]
+        if (message.metadata?.source === "shell")
+          return [message.metadata.shellID, message.metadata.jobID].filter((id): id is string => typeof id === "string")
         return []
       }),
     )
@@ -121,6 +121,7 @@ export function createSessionRequestModel() {
         if (part.type !== "tool" || part.name !== "shell" || completed.has(part.id)) return []
         if (part.state.status !== "completed" || part.state.metadata?.status !== "running") return []
         const shellID = part.state.metadata.shellID
+        if (typeof shellID === "string" && completed.has(shellID)) return []
         const command = part.state.input.command
         return [
           {
