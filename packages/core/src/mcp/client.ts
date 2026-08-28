@@ -1,4 +1,4 @@
-export * as MCPClient from "./client.js"
+export * as McpClient from "./client.js"
 
 import path from "node:path"
 import { pathToFileURL } from "node:url"
@@ -29,7 +29,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js"
 import { Cause, Effect, Exit, Schema } from "effect"
 import { ConfigMCP } from "@opencode-ai/schema/config/mcp"
-import { MCPStdio } from "./stdio.js"
+import { McpStdio } from "./stdio.js"
 
 const DEFAULT_STARTUP_TIMEOUT = 30_000
 const DEFAULT_CATALOG_TIMEOUT = 30_000
@@ -222,7 +222,7 @@ export const connect = Effect.fnUntraced(function* (
   const exit = yield* Effect.gen(function* () {
     if (config.type === "local") {
       const [command, ...args] = config.command
-      const transport = yield* MCPStdio.make({
+      const transport = yield* McpStdio.make({
         server,
         command,
         args,

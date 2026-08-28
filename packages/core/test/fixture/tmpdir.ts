@@ -1,6 +1,7 @@
 import fs from "fs/promises"
 import { tmpdir as osTmpdir } from "os"
 import path from "path"
+import { Effect } from "effect"
 
 export const tmpdir = async (prefix = "opencode-core-test-") => {
   const dir = await fs.realpath(await fs.mkdtemp(path.join(osTmpdir(), prefix)))
@@ -11,6 +12,13 @@ export const tmpdir = async (prefix = "opencode-core-test-") => {
     },
   }
 }
+
+export const withTempDir = <A, E, R>(body: (tmp: Awaited<ReturnType<typeof tmpdir>>) => Effect.Effect<A, E, R>) =>
+  Effect.acquireUseRelease(
+    Effect.promise(() => tmpdir()),
+    body,
+    (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+  )
 
 async function remove(dir: string, retries = 30): Promise<void> {
   try {

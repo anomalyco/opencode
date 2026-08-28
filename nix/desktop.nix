@@ -4,7 +4,7 @@
   bun,
   nodejs,
   darwin,
-  electron_41,
+  callPackage,
   makeWrapper,
   writableTmpDirAsHomeHook,
   autoPatchelfHook,
@@ -13,7 +13,7 @@
   opencode,
 }:
 let
-  electron = electron_41;
+  electron = callPackage ./electron.nix { };
 in
 stdenv.mkDerivation (finalAttrs: {
   pname = "opencode-desktop";
@@ -48,7 +48,7 @@ stdenv.mkDerivation (finalAttrs: {
     desktopName = "OpenCode";
     exec = "opencode-desktop %U";
     icon = "ai.opencode.desktop";
-    # Electron 41 derives X11 WM_CLASS from app.name.
+    # Electron derives X11 WM_CLASS from app.name.
     startupWMClass = "OpenCode";
     categories = [ "Development" ];
   });
@@ -67,12 +67,10 @@ stdenv.mkDerivation (finalAttrs: {
     # https://github.com/electron/electron/issues/31121
     # mac builds use a .app bundle which doesnt have this issue
     + lib.optionalString stdenv.isLinux ''
-      BASE_PATH=packages/desktop
-      FILES=(src/main/windows.ts)
-      for file in "''${FILES[@]}"; do
-        substituteInPlace $BASE_PATH/$file \
-          --replace-fail "process.resourcesPath" "'$out/opt/opencode-desktop/resources'"
-      done
+      substituteInPlace \
+        packages/desktop/src/main/windows/appearance.ts \
+        packages/desktop/src/main/service/desktop-cli.ts \
+        --replace-fail "process.resourcesPath" "'$out/opt/opencode-desktop/resources'"
     '';
 
   preBuild = ''

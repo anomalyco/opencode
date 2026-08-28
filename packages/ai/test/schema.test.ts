@@ -26,6 +26,7 @@ import {
   Usage,
 } from "../src/schema/index.js"
 import { ProviderShared } from "../src/protocols/shared.js"
+import { it } from "./lib/effect.js"
 
 const model = new LanguageModel({
   id: ModelID.make("fake-model"),
@@ -101,49 +102,48 @@ describe("AI.Usage", () => {
     expect(ProviderShared.sumTokens()).toBeUndefined()
   })
 
-  test("sseFraming maps decoder failures to AI errors", async () => {
-    const error = await Effect.runPromise(
-      ProviderShared.sseFraming(Stream.make(new TextEncoder().encode(`data: ${"x".repeat(10 * 1024 * 1024)}`))).pipe(
-        Stream.runCollect,
-        Effect.flip,
-      ),
-    )
+  it.effect("sseFraming maps decoder failures to AI errors", () =>
+    Effect.gen(function* () {
+      const error = yield* ProviderShared.sseFraming(
+        Stream.make(new TextEncoder().encode(`data: ${"x".repeat(10 * 1024 * 1024)}`)),
+      ).pipe(Stream.runCollect, Effect.flip)
 
-    expect(error).toBeInstanceOf(AIError)
-    expect(error.reason._tag).toBe("InvalidProviderOutput")
-  })
+      expect(error).toBeInstanceOf(AIError)
+      expect(error.reason._tag).toBe("InvalidProviderOutput")
+    }),
+  )
 
-  test("sseFraming ignores retry directives without ending the stream", async () => {
-    const encoder = new TextEncoder()
-    const frames = await Effect.runPromise(
-      ProviderShared.sseFraming(
+  it.effect("sseFraming ignores retry directives without ending the stream", () =>
+    Effect.gen(function* () {
+      const encoder = new TextEncoder()
+      const frames = yield* ProviderShared.sseFraming(
         Stream.make(
           encoder.encode("retry: 1000\n\n"),
           encoder.encode('data: {"first":true}\n\n'),
           encoder.encode("retry: 2000\n\n"),
           encoder.encode('data: {"second":true}\n\n'),
         ).pipe(Stream.rechunk(1)),
-      ).pipe(Stream.runCollect),
-    )
+      ).pipe(Stream.runCollect)
 
-    expect(Array.from(frames)).toEqual(['{"first":true}', '{"second":true}'])
-  })
+      expect(Array.from(frames)).toEqual(['{"first":true}', '{"second":true}'])
+    }),
+  )
 
-  test("sseFraming preserves event data around retry directives", async () => {
-    const encoder = new TextEncoder()
-    const frames = await Effect.runPromise(
-      ProviderShared.sseFraming(
+  it.effect("sseFraming preserves event data around retry directives", () =>
+    Effect.gen(function* () {
+      const encoder = new TextEncoder()
+      const frames = yield* ProviderShared.sseFraming(
         Stream.make(
           encoder.encode("event: update\ndata: first\n"),
           encoder.encode("retry: 1000\n"),
           encoder.encode("data: second\n\n"),
         ).pipe(Stream.rechunk(1)),
         new Set(["update"]),
-      ).pipe(Stream.runCollect),
-    )
+      ).pipe(Stream.runCollect)
 
-    expect(Array.from(frames)).toEqual(["first\nsecond"])
-  })
+      expect(Array.from(frames)).toEqual(["first\nsecond"])
+    }),
+  )
 
   test("visibleOutputTokens clamps reasoning > output to zero", () => {
     expect(new Usage({ outputTokens: 10, reasoningTokens: 4 }).visibleOutputTokens).toBe(6)
@@ -153,18 +153,18 @@ describe("AI.Usage", () => {
   })
 })
 
-test("AI errors expose the shared runtime tag", async () => {
-  const error = new AIError({
-    reason: new InvalidRequestError({ message: "invalid" }),
-  })
-  expect(error._tag).toBe("AI.Error")
-  expect(error.message).toBe("invalid")
-  expect(error.cause).toBe(error.reason)
-  expect(error.reason.cause).toBeUndefined()
-  expect(
-    await Effect.runPromise(Effect.fail(error).pipe(Effect.catchTag("AI.Error", () => Effect.succeed("caught")))),
-  ).toBe("caught")
-})
+it.effect("AI errors expose the shared runtime tag", () =>
+  Effect.gen(function* () {
+    const error = new AIError({
+      reason: new InvalidRequestError({ message: "invalid" }),
+    })
+    expect(error._tag).toBe("AI.Error")
+    expect(error.message).toBe("invalid")
+    expect(error.cause).toBe(error.reason)
+    expect(error.reason.cause).toBeUndefined()
+    expect(yield* Effect.fail(error).pipe(Effect.catchTag("AI.Error", () => Effect.succeed("caught")))).toBe("caught")
+  }),
+)
 
 test("transport errors serialize execution facts", () => {
   const reason = new TransportError({

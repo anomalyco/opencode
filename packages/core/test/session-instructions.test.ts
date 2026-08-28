@@ -69,7 +69,6 @@ const testLayer = AppNodeBuilder.build(
     ReadToolFileSystem.node,
     readToolNode,
     Tool.node,
-    Tool.node,
     PluginHooks.node,
     SessionInstructions.node,
     Global.node,
@@ -120,7 +119,7 @@ const seedSynthetic = (sessionID: Session.ID, paths: string[]) =>
   })
 
 describe("SessionInstructions", () => {
-  it.effect("injects AGENTS.md files above a read, excludes the Location root, and dedups across reads", () =>
+  it.live("injects AGENTS.md files above a read, excludes the Location root, and dedups across reads", () =>
     Effect.gen(function* () {
       const location = yield* Location.Service
       const dir = location.directory
@@ -170,7 +169,7 @@ describe("SessionInstructions", () => {
     }),
   )
 
-  it.effect("does not re-inject paths already recorded in durable session history", () =>
+  it.live("does not re-inject paths already recorded in durable session history", () =>
     Effect.gen(function* () {
       const location = yield* Location.Service
       const dir = location.directory
@@ -197,7 +196,7 @@ describe("SessionInstructions", () => {
     }),
   )
 
-  it.effect(
+  it.live(
     "discovers AGENTS.md on a directory listing, including the listed directory's own, and dedups with a later file read",
     () =>
       Effect.gen(function* () {
@@ -233,7 +232,7 @@ describe("SessionInstructions", () => {
       }),
   )
 
-  it.effect("re-injects nested instructions dropped from history by compaction", () =>
+  it.live("re-injects nested instructions dropped from history by compaction", () =>
     Effect.gen(function* () {
       const location = yield* Location.Service
       const dir = location.directory
@@ -264,7 +263,7 @@ describe("SessionInstructions", () => {
     }),
   )
 
-  it.effect("listing the Location root directory injects no instructions", () =>
+  it.live("listing the Location root directory injects no instructions", () =>
     Effect.gen(function* () {
       const location = yield* Location.Service
       const dir = location.directory
@@ -286,7 +285,7 @@ describe("SessionInstructions", () => {
     }),
   )
 
-  it.effect("loads instructions directly without a read", () =>
+  it.live("loads instructions directly without a read", () =>
     Effect.gen(function* () {
       const location = yield* Location.Service
       const dir = location.directory

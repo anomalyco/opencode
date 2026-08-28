@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { type Renderable, ScrollBoxRenderable } from "@opentui/core"
+import { EmbeddedTerminalRenderable, type Renderable, ScrollBoxRenderable } from "@opentui/core"
 import { createTestRenderer } from "@opentui/core/testing"
 import { Effect, FileSystem } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -851,3 +851,144 @@ test("ctrl+c dismisses autocomplete and shell mode before exiting", async () => 
     await server.stop()
   }
 })
+
+test.each(["manual", "select"] as const)(
+  "selection copy and dismissal respect %s mode in the prompt and terminal pane",
+  async (copy) => {
+    const setup = await createTestRenderer({ width: 100, height: 30, useThread: false, kittyKeyboard: true })
+    setup.renderer.start()
+    const ready = Promise.withResolvers<void>()
+    const session = {
+      id: "dummy",
+      title: "Selection fixture",
+      projectID: "project",
+      location: { directory },
+      cost: 0,
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      time: { created: 0, updated: 0 },
+    }
+    const pty = {
+      id: "pty_fixture",
+      sessionID: session.id,
+      title: "Terminal",
+      command: "/bin/sh",
+      args: [],
+      cwd: directory,
+      status: "running",
+      pid: 1,
+      foregroundProcess: null,
+      size: { cols: 48, rows: 24 },
+      output: { head: 0, tail: 0 },
+    }
+    const input: string[] = []
+    const calls = createFetch((url, request) => {
+      if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
+      if (url.pathname === "/api/session/dummy") return json({ data: session })
+      if (url.pathname === "/api/session/dummy/message") return json({ data: [], cursor: {} })
+      if (url.pathname === "/api/session/dummy/inbox") return json({ data: [] })
+      if (url.pathname === "/api/session/dummy/permission") return json({ data: [] })
+      if (url.pathname === "/api/experimental/session/dummy/terminal")
+        return json({ data: request.method === "POST" ? pty : [pty] })
+      if (url.pathname === "/api/experimental/persistent-pty/pty_fixture/snapshot")
+        return json({
+          data: {
+            info: pty,
+            text: "alpha beta gamma",
+            checkpoint: Buffer.from("alpha beta gamma").toString("base64"),
+            cursor: { x: 16, y: 0 },
+          },
+        })
+      if (url.pathname === "/api/experimental/persistent-pty/pty_fixture/connect-token")
+        return json({ data: { ticket: "fixture" } })
+      return undefined
+    }, createEventStream())
+    const server = Bun.serve({
+      port: 0,
+      fetch(request, server) {
+        if (new URL(request.url).pathname.endsWith("/connect") && server.upgrade(request)) return undefined
+        return calls.fetch(request)
+      },
+      websocket: {
+        open(socket) {
+          socket.send(JSON.stringify({ type: "attached", inputProtocol: 1, role: "controller", info: pty }))
+          socket.send(JSON.stringify({ type: "replay_complete" }))
+        },
+        message(_socket, message) {
+          const data = Buffer.from(message)
+          if (data[0] === 1) input.push(data.subarray(5).toString())
+        },
+      },
+    })
+
+    try {
+      const { run } = await import("../src/app")
+      const task = Effect.runPromise(
+        run({
+          app: { name: "test", version: "test", channel: "test" },
+          server: { endpoint: { url: server.url.toString() } },
+          config: {
+            get: async () => ({
+              animations: false,
+              terminal: { copy },
+              session: { terminal: true },
+            }),
+            update: async () => ({}),
+          },
+          packages: { resolve: async () => undefined },
+          args: { sessionID: session.id },
+          terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: ready.resolve }),
+          log: () => {},
+        }).pipe(Effect.provide(AppNodeBuilder.build(Global.node)), Effect.provide(FileSystem.layerNoop({}))),
+      )
+
+      await ready.promise
+      await setup.waitForFrame((frame) => frame.includes("commands"))
+      await setup.mockInput.typeText("selection audit draft")
+      setup.mockInput.pressKey("a", { ctrl: true, shift: true })
+      expect(setup.renderer.getSelection()?.getSelectedText()).toBe("selection audit draft")
+
+      setup.mockInput.pressEscape()
+      expect(setup.renderer.hasSelection).toBeFalse()
+      expect(setup.renderer.currentFocusedEditor?.plainText).toBe("selection audit draft")
+
+      setup.mockInput.pressKey("c", { ctrl: true })
+      await setup.waitForFrame((frame) => !frame.includes("selection audit draft"))
+      expect(setup.renderer.currentFocusedEditor?.plainText).toBe("")
+      expect(setup.renderer.hasSelection).toBeFalse()
+      expect(setup.renderer.isDestroyed).toBeFalse()
+
+      await setup.mockInput.typeText("/terminal")
+      await setup.waitForFrame((frame) => frame.includes("New terminal"))
+      setup.mockInput.pressEnter()
+      await setup.waitForFrame((frame) => frame.includes("alpha beta gamma"))
+      setup.mockInput.pressKey("x", { ctrl: true })
+      setup.mockInput.pressArrow("right")
+      const terminal = setup.renderer.currentFocusedRenderable
+      if (!(terminal instanceof EmbeddedTerminalRenderable)) throw new Error("Terminal was not focused")
+      setup.renderer.startSelection(terminal, terminal.x + 6, terminal.y)
+      setup.renderer.updateSelection(terminal, terminal.x + 9, terminal.y, { finishDragging: true })
+      expect(setup.renderer.getSelection()?.getSelectedText()).toBe("beta")
+
+      setup.mockInput.pressEscape()
+      expect(setup.renderer.hasSelection).toBeFalse()
+      expect(terminal.hasSelection()).toBeFalse()
+
+      await setup.mockMouse.click(terminal.x + 6, terminal.y)
+      if (copy === "select") {
+        setup.renderer.updateSelection(terminal, terminal.x + 9, terminal.y, { finishDragging: true })
+        expect(setup.renderer.getSelection()?.getSelectedText()).toBe("beta")
+      }
+      setup.mockInput.pressKey("c", { ctrl: true })
+      await setup.waitFor(() => input.length > 0)
+      expect(input).toEqual(["\x03"])
+      expect(setup.renderer.hasSelection).toBeFalse()
+      expect(setup.renderer.isDestroyed).toBeFalse()
+
+      setup.renderer.destroy()
+      await task
+    } finally {
+      if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+      await server.stop()
+    }
+  },
+)
