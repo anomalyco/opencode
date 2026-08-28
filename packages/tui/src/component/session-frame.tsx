@@ -24,12 +24,12 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
   const renderer = useRenderer()
   const dimensions = useTerminalDimensions()
   const availableWidth = () => Math.max(0, dimensions().width - props.verticalTabsWidth)
-  const defaultTerminalWidth = () => Math.max(1, Math.floor(availableWidth() / 2))
+  const defaultTerminalWidth = () => Math.max(1, Math.floor(dimensions().width / 2))
   const [layout, updateLayout] = useStorage().store<{ terminalWidth?: number }>("layout", { initial: {} })
   const terminalResize = createPaneResize({
     value: () => layout.terminalWidth ?? defaultTerminalWidth(),
     defaultValue: defaultTerminalWidth,
-    clamp: (width) => Math.min(Math.floor(dimensions().width * 0.3), clampTerminalPaneWidth(width, availableWidth())),
+    clamp: (width) => clampTerminalPaneWidth(width, availableWidth()),
     fromMouse: (event) => dimensions().width - event.x - 1,
     contains: (event, width) => event.x >= dimensions().width - width - 1 && event.x <= dimensions().width - width,
     onCommit: (width) => {
