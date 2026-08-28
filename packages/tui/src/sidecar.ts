@@ -15,7 +15,7 @@ export async function toggleSidecar(input: {
 }) {
   const { route, navigate, sync, local, sdk, toast } = input
   if (route.type !== "session" || !route.sessionID) {
-    toast.show({ message: "Start a conversation first, then tab to a sidecar agent", variant: "info" })
+    local.agent.move(1)
     return
   }
   const current = sync.session.get(route.sessionID)
