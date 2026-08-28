@@ -55,9 +55,24 @@ const getBase = (appId: string): Configuration => ({
   extraMetadata: {
     desktopName: `${appId}.desktop`,
   },
-  files: ["out/**/*", "resources/**/*", "!resources/opencode-cli*"],
-  extraResources: [
-    ...(channel !== "prod"
+  files: [
+    "out/**/*",
+    "resources/**/*",
+    "!resources/opencode-cli*",
+    // Log export imports Zip.js as ESM. Keep index.js and lib, including its inline worker.
+    "!**/node_modules/@zip.js/zip.js/dist{,/**/*}",
+    "!**/node_modules/@zip.js/zip.js/{index.cjs,index.min.js,index-fflate.js,deno.json,eslint.config.mjs}",
+    // These packages execute compiled JavaScript, not their sources or source maps.
+    "!**/node_modules/{electron-updater,builder-util-runtime,lazy-val}/out/**/*.js.map",
+    "!**/node_modules/ajv/lib{,/**/*}",
+    "!**/node_modules/ajv-formats/src{,/**/*}",
+    "!**/node_modules/{ajv,ajv-formats}/dist/**/*.js.map",
+    // Keep js-yaml's CommonJS sources and dist/js-yaml.mjs ESM entry, not browser bundles or its CLI.
+    "!**/node_modules/js-yaml/dist/{js-yaml.js,js-yaml.min.js,*.map}",
+    "!**/node_modules/js-yaml/bin{,/**/*}",
+  ],
+  extraResources:
+    channel !== "prod"
       ? [
           {
             from: "resources/",
@@ -65,13 +80,7 @@ const getBase = (appId: string): Configuration => ({
             filter: ["opencode-cli*"],
           },
         ]
-      : []),
-    {
-      from: "native/",
-      to: "native/",
-      filter: ["index.js", "index.d.ts", "build/Release/mac_window.node", "swift-build/**"],
-    },
-  ],
+      : [],
   mac: {
     category: "public.app-category.developer-tools",
     icon: `resources/icons/icon.icns`,

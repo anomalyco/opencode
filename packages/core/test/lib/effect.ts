@@ -1,8 +1,6 @@
 import { test, type TestOptions } from "bun:test"
-import { Cause, Effect, Exit, Layer } from "effect"
-import type * as Scope from "effect/Scope"
-import * as TestClock from "effect/testing/TestClock"
-import * as TestConsole from "effect/testing/TestConsole"
+import { Cause, Effect, Exit, Layer, type Scope } from "effect"
+import { TestClock, TestConsole } from "effect/testing"
 
 type Body<A, E, R> = Effect.Effect<A, E, R> | (() => Effect.Effect<A, E, R>)
 
