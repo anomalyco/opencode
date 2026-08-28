@@ -269,7 +269,8 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
             }
 
             if (permission === "bash") {
-              const command = typeof data.command === "string" ? data.command : ""
+              const raw = props.request.metadata?.commandDisplay
+              const command = (typeof raw === "string" ? raw : "") || (typeof data.command === "string" ? data.command : "")
               return {
                 icon: "#",
                 title: "Shell command",

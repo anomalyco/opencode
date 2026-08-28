@@ -263,6 +263,68 @@ describe("tool.shell permissions", () => {
     }),
   )
 
+  each("exposes commandDisplay split across lines for chained commands", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      yield* runIn(
+        tmp,
+        Effect.gen(function* () {
+          const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+          yield* run(
+            {
+              command: "echo foo && echo bar && echo baz",
+            },
+            capture(requests),
+          )
+          const bashReq = requests.find((r) => r.permission === "bash")
+          expect(bashReq).toBeDefined()
+          expect(bashReq!.metadata.commandDisplay).toBe("echo foo \\\n&& echo bar \\\n&& echo baz")
+        }),
+      )
+    }),
+  )
+
+  each("leaves single command commandDisplay unchanged", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      yield* runIn(
+        tmp,
+        Effect.gen(function* () {
+          const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+          yield* run(
+            {
+              command: "echo hello",
+            },
+            capture(requests),
+          )
+          const bashReq = requests.find((r) => r.permission === "bash")
+          expect(bashReq).toBeDefined()
+          expect(bashReq!.metadata.commandDisplay).toBe("echo hello")
+        }),
+      )
+    }),
+  )
+
+  if (process.platform !== "win32") {
+    it.live("does not split && inside quotes in commandDisplay", () =>
+      runIn(
+        projectRoot,
+        Effect.gen(function* () {
+          const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+          yield* run(
+            {
+              command: 'echo "a && b" && echo c',
+            },
+            capture(requests),
+          )
+          const bashReq = requests.find((r) => r.permission === "bash")
+          expect(bashReq).toBeDefined()
+          expect(bashReq!.metadata.commandDisplay).toBe('echo "a && b" \\\n&& echo c')
+        }),
+      ),
+    )
+  }
+
   for (const item of ps) {
     it.live(`parses PowerShell conditionals for permission prompts [${item.label}]`, () =>
       withShell(
