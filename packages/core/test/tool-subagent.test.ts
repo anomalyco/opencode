@@ -266,7 +266,9 @@ describe("SubagentTool", () => {
 
           const locations = yield* LocationServiceMap.Service
           const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
-          expect((yield* registry.snapshot()).definitions.map((tool) => tool.name)).toContain(SubagentTool.name)
+          const definition = (yield* registry.snapshot()).definitions.find((tool) => tool.name === SubagentTool.name)
+          expect(definition?.inputSchema.required).not.toContain("sessionID")
+          expect(definition?.description).toContain("To start a new child, omit sessionID")
           expect(
             yield* executeTool(registry, {
               sessionID: parent.id,

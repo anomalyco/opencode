@@ -30,7 +30,7 @@ export const Input = Schema.Struct({
   prompt: Schema.String.annotate({ description: "The task for the subagent to perform" }),
   sessionID: Schema.optionalKey(SessionSchema.ID).annotate({
     description:
-      "Continue a specific previous subagent conversation by passing its sessionID. Calls without a sessionID start a new conversation.",
+      "Optional. To continue a previous child, pass the sessionID returned by its earlier subagent call. To start a new child, omit this field. Never pass the current session ID or invent an ID.",
   }),
   background: Schema.optionalKey(Schema.Boolean).annotate({
     description:
@@ -45,7 +45,8 @@ export const Output = Schema.Struct({
 })
 export const description = [
   "Spawns an agent in a child session to work on the specified task.",
-  "The output includes a sessionID you can pass back later to continue that specific conversation with the subagent.",
+  "To start a new child, omit sessionID. To continue a previous child, pass the sessionID returned by its earlier subagent call.",
+  "Never pass the current session ID or invent an ID.",
   "New child sessions start with fresh context, so include all relevant context and instructions when you don't pass a sessionID.",
   "Foreground (default) runs the subagent to completion and returns its final response.",
   "Background mode (background=true) launches it asynchronously and returns immediately; you are notified when it finishes.",
