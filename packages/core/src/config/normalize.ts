@@ -1,6 +1,7 @@
 export * as ConfigNormalize from "./normalize.js"
 
 import { isDeepStrictEqual } from "node:util"
+import { isRecord } from "@opencode-ai/ai/utils/record"
 import { Option, Schema } from "effect"
 import { Info } from "@opencode-ai/schema/config"
 import { ConfigAgent } from "@opencode-ai/schema/config/agent"
@@ -780,10 +781,6 @@ function isDirectLegacyMcp(value: unknown) {
 
 function isEnabledOnlyMcp(value: unknown) {
   return isRecord(value) && !own(value, "type") && typeof value.enabled === "boolean"
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
