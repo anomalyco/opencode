@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Plugin } from "@opencode-ai/core/plugin"
@@ -18,9 +18,9 @@ const addPlugin = Effect.fn(function* () {
 })
 
 describe("NvidiaPlugin", () => {
-  it.effect("is registered so legacy referer headers can be applied", () =>
-    Effect.sync(() => expect(ProviderPlugins.map((item) => item.id)).toContain("opencode.provider.nvidia")),
-  )
+  test("is registered so legacy referer headers can be applied", () => {
+    expect(ProviderPlugins.map((item) => item.id)).toContain("opencode.provider.nvidia")
+  })
 
   it.effect("applies NVIDIA tracking headers only to nvidia", () =>
     Effect.gen(function* () {

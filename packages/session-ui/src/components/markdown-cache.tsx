@@ -1,6 +1,7 @@
 import { checksum } from "@opencode-ai/util/encode"
 import DOMPurify from "dompurify"
 import { parseMarkdown } from "./markdown-worker"
+import { localImagePath } from "./markdown-image"
 
 export type MarkdownCacheEntry = {
   raw: string
@@ -10,6 +11,8 @@ export type MarkdownCacheEntry = {
 
 const max = 200
 const cache = new Map<string, MarkdownCacheEntry>()
+// Mermaid registers hooks on the shared instance that overwrite link attributes.
+const purifier = typeof window !== "undefined" ? DOMPurify(window) : DOMPurify
 const config = {
   USE_PROFILES: { html: true, mathMl: true },
   SANITIZE_NAMED_PROPS: true,
@@ -19,8 +22,18 @@ const config = {
   ADD_ATTR: ["d", "viewBox", "preserveAspectRatio", "xmlns", "target"],
 }
 
-if (typeof window !== "undefined" && DOMPurify.isSupported) {
-  DOMPurify.addHook("afterSanitizeAttributes", (node: Element) => {
+if (typeof window !== "undefined" && purifier.isSupported) {
+  purifier.addHook("beforeSanitizeAttributes", (node) => {
+    if (!(node instanceof HTMLImageElement)) return
+    // Local paths are not browser URLs. Keep them inert until the host reads them.
+    node.removeAttribute("data-local-image")
+    const path = localImagePath(node.getAttribute("src") ?? "")
+    if (!path) return
+    node.setAttribute("data-local-image", path)
+    node.removeAttribute("src")
+    node.removeAttribute("srcset")
+  })
+  purifier.addHook("afterSanitizeAttributes", (node: Element) => {
     if (!(node instanceof HTMLAnchorElement)) return
     if (node.target !== "_blank") return
 
@@ -33,8 +46,8 @@ if (typeof window !== "undefined" && DOMPurify.isSupported) {
 }
 
 export function sanitizeMarkdown(html: string) {
-  if (!DOMPurify.isSupported) return ""
-  return DOMPurify.sanitize(html, config)
+  if (!purifier.isSupported) return ""
+  return purifier.sanitize(html, config)
 }
 
 export function getCachedMarkdown(key: string) {

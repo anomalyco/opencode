@@ -214,22 +214,40 @@ the requests sent by code under test:
 import { Effect } from "effect"
 import { TestLLM } from "@opencode-ai/ai/testing"
 
-const testLLM = TestLLM.layer({
-  fallback: TestLLM.text("Hello from the test model", "text-1"),
-})
-
-// TestLLM.clientLayer provides LLMClient.Service and consumes TestLLM.Service.
 const programWithTestClient = Effect.gen(function* () {
+  const test = yield* TestLLM.Test
+  yield* test.push(TestLLM.text("Hello from the test model", "text-1"))
   const result = yield* program
-  const test = yield* TestLLM.Service
-  console.log(test.requests)
+  console.log(yield* test.requests())
   return result
-}).pipe(Effect.provide(TestLLM.clientLayer), Effect.provide(testLLM))
+}).pipe(Effect.provide(TestLLM.testLayer()))
 ```
 
-`TestLLM.push(...)` scripts one-shot responses, `TestLLM.always(...)` changes the fallback, and
-`TestLLM.wait(...)` lets concurrent tests wait until a request has arrived. Every received canonical request is
-available on the yielded `TestLLM.Service`.
+`testLayer()` provides the same object under `LLMClient.Service` and `TestLLM.Test`. Production consumes the
+normal client; tests use the additional controls. Each layer build has fresh state.
+
+- `test.push(...)` queues one-shot responses in execution order. Each argument is one response.
+- `test.always(response)` installs a repeatable fallback. The layer's `fallback` option sets its initial value.
+- `test.serve(request => response)` installs a request-dependent fallback. `always` and `serve` replace each
+  other without changing queued replies; queued replies take precedence.
+- `test.requests()` returns an array snapshot. `transformRequest` changes only the recorded observation;
+  `serve` receives the original canonical request.
+- `test.wait(count)` waits for request arrivals, not output or completion, and supports concurrent waiters.
+- `test.gate()` returns a scoped gate with countable `started` notifications and a `release` Effect. Release
+  unblocks all requests captured by that gate; closing its scope also releases it. Effect-aware test runners
+  already provide Scope.
+
+Constructing `stream()` or `generate()` does not record a request, invoke a responder, or consume a script.
+Each execution does. An exhausted queue without a fallback defects immediately rather than waiting for a
+future reply.
+
+Responses remain canonical event arrays or arbitrary `Stream<LLMEvent, AIError>` values. The client consumes
+supplied streams directly, preserving failure identity, finalizers, incomplete output, and post-finish tails;
+it does not repair or truncate them.
+
+The published legacy `Service`, `layer`, `clientLayer`, and module-level controls remain available as adapters
+over the same implementation, including the legacy live `requests` array. New tests should use `Test` and
+`testLayer`.
 
 ## Caching
 
