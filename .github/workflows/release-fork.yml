@@ -155,17 +155,17 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          mapfile -d '' files < <(find /tmp/desktop -type f \( \
-            -name '*.AppImage' -o \
-            -name '*.blockmap' -o \
-            -name '*.deb' -o \
-            -name '*.dmg' -o \
-            -name '*.exe' -o \
-            -name '*.json' -o \
-            -name '*.rpm' -o \
-            -name '*.tar.gz' -o \
-            -name '*.yml' -o \
-            -name '*.zip' \
+          mapfile -d '' files < <(find /tmp/desktop -mindepth 1 -maxdepth 1 -type f \( \
+            -name 'opencode-desktop-*.AppImage' -o \
+            -name 'opencode-desktop-*.blockmap' -o \
+            -name 'opencode-desktop-*.deb' -o \
+            -name 'opencode-desktop-*.dmg' -o \
+            -name 'opencode-desktop-*.exe' -o \
+            -name 'opencode-desktop-*.rpm' -o \
+            -name 'opencode-desktop-*.tar.gz' -o \
+            -name 'opencode-desktop-*.zip' -o \
+            -name 'latest.json' -o \
+            -name 'latest*.yml' \
           \) -print0)
           if (( ${#files[@]} == 0 )); then
             echo "No desktop release assets found"

@@ -1,0 +1,70 @@
+name: publish-fork-release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version without the v prefix
+        required: true
+        default: 1.18.23
+      source_run_id:
+        description: Actions run ID containing the completed desktop artifacts
+        required: true
+        default: "33138463284"
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    env:
+      OPENCODE_VERSION: ${{ inputs.version }}
+      SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: desktop-*
+          path: /tmp/desktop
+          merge-multiple: true
+          run-id: ${{ inputs.source_run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Upload desktop installers and publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$SOURCE_RUN_ID" =~ ^[0-9]+$ ]]; then
+            echo "source_run_id must be numeric"
+            exit 1
+          fi
+          if [[ "$(gh release view "v${OPENCODE_VERSION}" --json isDraft --jq .isDraft --repo "${GITHUB_REPOSITORY}")" != "true" ]]; then
+            echo "Release v${OPENCODE_VERSION} is missing or already published"
+            exit 1
+          fi
+          mapfile -d '' files < <(find /tmp/desktop -mindepth 1 -maxdepth 1 -type f \( \
+            -name 'opencode-desktop-*.AppImage' -o \
+            -name 'opencode-desktop-*.blockmap' -o \
+            -name 'opencode-desktop-*.deb' -o \
+            -name 'opencode-desktop-*.dmg' -o \
+            -name 'opencode-desktop-*.exe' -o \
+            -name 'opencode-desktop-*.rpm' -o \
+            -name 'opencode-desktop-*.tar.gz' -o \
+            -name 'opencode-desktop-*.zip' -o \
+            -name 'latest.json' -o \
+            -name 'latest*.yml' \
+          \) -print0)
+          if (( ${#files[@]} == 0 )); then
+            echo "No desktop release assets found"
+            exit 1
+          fi
+          printf 'Uploading %s\n' "${files[@]}"
+          gh release upload "v${OPENCODE_VERSION}" "${files[@]}" \
+            --clobber \
+            --repo "${GITHUB_REPOSITORY}"
+          gh release edit "v${OPENCODE_VERSION}" \
+            --draft=false \
+            --latest \
+            --repo "${GITHUB_REPOSITORY}"
