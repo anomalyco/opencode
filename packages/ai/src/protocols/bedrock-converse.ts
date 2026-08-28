@@ -496,6 +496,7 @@ const mapUsage = (usage: BedrockUsageSchema | undefined, providerMetadataKey: st
 interface ParserState {
   readonly providerMetadataKey: string
   readonly tools: ToolStream.State<number>
+  readonly finishedTools: ReadonlySet<number>
   // Bedrock splits the finish into `messageStop` (carries `stopReason`) and
   // `metadata` (carries usage). Hold the terminal event in state so `onHalt`
   // can emit exactly one finish after both chunks have had a chance to arrive.
@@ -574,6 +575,7 @@ const step = (state: ParserState, event: BedrockEvent) =>
 
     if (event.contentBlockDelta?.delta?.toolUse) {
       const index = event.contentBlockDelta.contentBlockIndex
+      if (state.finishedTools.has(index)) return [state, []] as const
       const result = ToolStream.appendExisting(
         ADAPTER,
         state.tools,
@@ -612,6 +614,7 @@ const step = (state: ParserState, event: BedrockEvent) =>
             state.hasToolCalls,
           lifecycle,
           tools: result.tools,
+          finishedTools: resultEvents.length > 0 ? new Set([...state.finishedTools, index]) : state.finishedTools,
           reasoningSignatures: Object.fromEntries(
             Object.entries(state.reasoningSignatures).filter(([key]) => key !== String(index)),
           ),
@@ -703,6 +706,7 @@ export const protocol = Protocol.make({
     initial: (request) => ({
       providerMetadataKey: request.model.route.providerMetadataKey ?? String(request.model.provider),
       tools: ToolStream.empty<number>(),
+      finishedTools: new Set<number>(),
       pendingFinish: undefined,
       hasToolCalls: false,
       lifecycle: Lifecycle.initial(),
