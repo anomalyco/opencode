@@ -58,14 +58,12 @@ export const Plugin = define({
           description: prompt.description,
           execute: (input) =>
             Effect.gen(function* () {
+              const args = parseArguments(input.prompt.text)
               const result = yield* mcp.prompt({
                 server: prompt.server,
                 name: prompt.name,
                 args: Object.fromEntries(
-                  (prompt.arguments ?? []).map((argument, index) => [
-                    argument.name,
-                    parseArguments(input.prompt.text)[index] ?? "",
-                  ]),
+                  (prompt.arguments ?? []).map((argument, index) => [argument.name, args[index] ?? ""]),
                 ),
               })
               if (!result) return yield* Effect.fail(new Error(`MCP prompt not found: ${prompt.server}:${prompt.name}`))
@@ -86,7 +84,9 @@ export const Plugin = define({
 })
 
 function append(template: string, input: string) {
-  return [template, input.trim()].filter(Boolean).join("\n\n")
+  const value = input.trim()
+  if (template.includes("$ARGUMENTS")) return template.replaceAll("$ARGUMENTS", () => value)
+  return [template, value].filter(Boolean).join("\n\n")
 }
 
 function parseArguments(input: string) {

@@ -16,7 +16,7 @@ import { SessionEnvironment } from "@opencode-ai/core/session/environment"
 import { LocationServiceMap } from "@opencode-ai/core/location-services"
 import { testEffect } from "./lib/effect"
 import { globalProjectLayer } from "./lib/project"
-import { tmpdir } from "./fixture/tmpdir"
+import { tmpdirScoped } from "./fixture/tmpdir"
 
 const closed: Session.ID[] = []
 const transport = Layer.succeed(
@@ -49,10 +49,7 @@ const it = testEffect(
 describe("Session.remove", () => {
   it.effect("removes a session and its children", () =>
     Effect.gen(function* () {
-      const temporary = yield* Effect.acquireRelease(
-        Effect.promise(() => tmpdir()),
-        (directory) => Effect.promise(() => directory[Symbol.asyncDispose]()),
-      )
+      const temporary = yield* tmpdirScoped()
       const location = Location.Ref.make({ directory: AbsolutePath.make(temporary.path) })
       const session = yield* Session.Service
       const parent = yield* session.create({ location })

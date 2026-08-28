@@ -76,11 +76,13 @@ to every project for that user. Project configuration can live in any directory
 as `opencode.json(c)` or `.opencode/opencode.json(c)`, including nested packages
 in a monorepo.
 
-When OpenCode starts, it searches from the current directory up to the project
-root. It merges direct `opencode.json(c)` files from root to current directory,
+During ordinary project discovery, OpenCode searches the current Location
+directory and every ancestor through the filesystem root, including directories
+above the detected project or repository root. It merges direct
+`opencode.json(c)` files from the farthest ancestor to the current directory,
 then does the same for `.opencode/opencode.json(c)` files. This means every
-`.opencode` config overrides every direct config. Global configuration has the
-lowest precedence.
+discovered `.opencode` config overrides every discovered direct config. Global
+filesystem configuration has lower precedence than these discovered documents.
 
 Common configuration fields include `model`, `default_agent`, `permissions`,
 `agents`, `commands`, `plugins`, `providers`, `mcp`, `skills`, `instructions`,

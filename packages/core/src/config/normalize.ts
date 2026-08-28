@@ -1,6 +1,7 @@
 export * as ConfigNormalize from "./normalize.js"
 
 import { isDeepStrictEqual } from "node:util"
+import { isRecord } from "@opencode-ai/ai/utils/record"
 import { Option, Schema } from "effect"
 import { Info } from "@opencode-ai/schema/config"
 import { ConfigAgent } from "@opencode-ai/schema/config/agent"
@@ -291,18 +292,13 @@ function normalizeMcpTimeout(
     invalid(path, diagnostics)
     return
   }
-  const recognized = ["startup", "catalog", "execution"].filter((key) => own(value, key))
+  const recognized = Object.entries(ConfigMCP.Timeout.fields).filter(([key]) => own(value, key))
   if (Object.keys(value).length && !recognized.length) {
     invalid(path, diagnostics)
     return
   }
-  recognized.forEach((key) => {
-    const leaf = decodeEncoded(
-      ConfigMCP.Timeout.fields[key as keyof typeof ConfigMCP.Timeout.fields],
-      value[key],
-      [...path, key],
-      diagnostics,
-    )
+  recognized.forEach(([key, field]) => {
+    const leaf = decodeEncoded(field, value[key], [...path, key], diagnostics)
     if (leaf === undefined) return
     overlay(timeout, key, leaf, [...path, key], diagnostics)
   })
@@ -780,10 +776,6 @@ function isDirectLegacyMcp(value: unknown) {
 
 function isEnabledOnlyMcp(value: unknown) {
   return isRecord(value) && !own(value, "type") && typeof value.enabled === "boolean"
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
