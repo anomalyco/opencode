@@ -66,3 +66,20 @@ describe("Patch", () => {
     )
   })
 })
+
+describe("Patch.derive CRLF preservation", () => {
+  test("keeps CRLF endings on replaced lines in a CRLF file (#45926)", () => {
+    const update = Patch.derive("f", [{ oldLines: ["foo"], newLines: ["FOO"] }], "foo\r\nbar\r\n")
+    expect(update.content).toBe("FOO\r\nbar\r\n")
+  })
+
+  test("keeps CRLF endings on inserted lines after a CRLF line", () => {
+    const update = Patch.derive("f", [{ oldLines: [], newLines: ["inserted"] }], "foo\r\nbar\r\n")
+    expect(update.content).toBe("foo\r\nbar\r\ninserted\r\n")
+  })
+
+  test("leaves LF files untouched by the CRLF logic", () => {
+    const update = Patch.derive("f", [{ oldLines: ["foo"], newLines: ["FOO"] }], "foo\nbar\n")
+    expect(update.content).toBe("FOO\nbar\n")
+  })
+})

@@ -74,7 +74,15 @@ export function derive(path: string, chunks: ReadonlyArray<UpdateFileChunk>, ori
   if (lines.at(-1) === "") lines.pop()
   const replacements = computeReplacements(lines, path, chunks)
   const updated = [...lines]
-  for (const [start, remove, insert] of replacements.toReversed()) updated.splice(start, remove, ...insert)
+  for (const [start, remove, insert] of replacements.toReversed()) {
+    // read shows the model LF-only text, so its new lines carry LF endings.
+    // When the splice point is CRLF, keep those endings on the new lines —
+    // splicing LF lines into a CRLF file turns it into mixed endings (#45926).
+    const region = remove > 0 ? lines.slice(start, start + remove) : lines.slice(Math.max(0, start - 1), start + 1)
+    const crlfRegion = region.length > 0 && region.every((line) => line.endsWith("\r"))
+    const expanded = crlfRegion ? insert.map((line) => (line.endsWith("\r") ? line : line + "\r")) : insert
+    updated.splice(start, remove, ...expanded)
+  }
   if (updated.at(-1) !== "") updated.push("")
   const next = splitBom(updated.join("\n"))
   return { content: next.text, bom: source.bom || next.bom }
