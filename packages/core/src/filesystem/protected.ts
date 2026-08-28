@@ -7,6 +7,11 @@ export function isHome(directory: string) {
   return path.resolve(directory) === path.resolve(home)
 }
 
+export function containsHome(directory: string) {
+  const relative = path.relative(directory, home)
+  return relative === "" || (relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative))
+}
+
 const DARWIN_HOME = [
   "Music",
   "Pictures",
