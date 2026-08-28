@@ -1,5 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import { testRender } from "@opentui/solid"
+import { MouseButton } from "@opentui/core"
 import { expect, test } from "bun:test"
 import { batch, createSignal } from "solid-js"
 import { ConfigProvider, useConfig, type Info } from "../../src/config"
@@ -13,23 +14,27 @@ import { SPINNER_FRAMES } from "../../src/component/spinner-frames"
 import { ClientProvider } from "../../src/context/client"
 import { DataProvider } from "../../src/context/data"
 import { LocationProvider } from "../../src/context/location"
+import { Keymap } from "../../src/context/keymap"
 import { RouteProvider } from "../../src/context/route"
 import { TuiAppProvider } from "../../src/context/runtime"
 import { SessionTabsProvider } from "../../src/context/session-tabs"
 import { StorageProvider } from "../../src/context/storage"
 import { ThemeProvider, useTheme } from "../../src/context/theme"
+import { DialogProvider } from "../../src/ui/dialog"
+import { ToastProvider } from "../../src/ui/toast"
 import { emptyThemeSource, tmpdir } from "../fixture/fixture"
 import { createApi, createEventStream, createFetch } from "../fixture/tui-client"
 import { TestTuiContexts } from "../fixture/tui-environment"
 import { createTuiResolvedConfig } from "../fixture/tui-runtime"
 
 for (const orientation of ["horizontal", "vertical"] as const) {
-  test(`${orientation} tabs replace ordinals with status without moving titles`, async () => {
+  test(`${orientation} tabs replace ordinals with status without moving titles and keep context menu actions`, async () => {
     await using temporary = await tmpdir()
     const [status, setStatus] = createSignal<SessionTabsStatus>(EMPTY_SESSION_TAB_STATUS)
     const [active, setActive] = createSignal("second")
     const [animations, setAnimations] = createSignal(false)
     const [newTab, setNewTab] = createSignal(false)
+    const [preview, setPreview] = createSignal(false)
     const settings: Info = { tabs: { enabled: true } }
     let config!: ReturnType<typeof useConfig>
     let theme!: ReturnType<typeof useTheme>
@@ -53,6 +58,10 @@ for (const orientation of ["horizontal", "vertical"] as const) {
       },
       close() {},
       move() {},
+      isPreview: (sessionID: string) => sessionID === "first" && preview(),
+      promote(sessionID: string) {
+        if (sessionID === "first") setPreview(false)
+      },
       detail: () => "project",
       status: (sessionID: string) => (sessionID === "first" ? status() : EMPTY_SESSION_TAB_STATUS),
     } satisfies SessionTabsController
@@ -78,7 +87,19 @@ for (const orientation of ["horizontal", "vertical"] as const) {
                         <SessionTabsProvider>
                           <ThemeProvider mode="dark" source={emptyThemeSource}>
                             <Colors />
-                            <SessionTabs controller={controller} orientation={orientation} animations={animations()} />
+                            <Keymap.Provider>
+                              <ToastProvider>
+                                <DialogProvider>
+                                  <box width="100%" height="100%">
+                                    <SessionTabs
+                                      controller={controller}
+                                      orientation={orientation}
+                                      animations={animations()}
+                                    />
+                                  </box>
+                                </DialogProvider>
+                              </ToastProvider>
+                            </Keymap.Provider>
                           </ThemeProvider>
                         </SessionTabsProvider>
                       </LocationProvider>
@@ -226,6 +247,46 @@ for (const orientation of ["horizontal", "vertical"] as const) {
         draft.tabs.indicators = "status"
       })
       await app.waitForFrame((frame) => SPINNER_FRAMES.some((glyph) => frame.includes(`${glyph} First`)))
+
+      setAnimations(false)
+      setStatus(EMPTY_SESSION_TAB_STATUS)
+      setActive("second")
+      await app.renderOnce()
+      const rows = app.captureCharFrame().split("\n")
+      const row = rows.findIndex((line) => line.includes("First"))
+      const column = rows[row]!.indexOf("First")
+      await app.mockMouse.click(column, row, MouseButton.RIGHT)
+      await app.waitForFrame((frame) => frame.includes("Rename"))
+      expect(app.captureCharFrame().split("\n")[row + 1]!.indexOf("Rename")).toBe(column + 1)
+      expect(app.captureCharFrame()).toContain("Close")
+      expect(app.captureCharFrame()).not.toContain("Keep open")
+      expect(active()).toBe("second")
+      app.mockInput.pressKey("c", { ctrl: true })
+      await app.waitForFrame((frame) => !frame.includes("Rename"))
+
+      setPreview(true)
+      await app.mockMouse.click(column, row, MouseButton.RIGHT)
+      await app.waitForFrame((frame) => frame.includes("Keep open"))
+      expect(app.captureCharFrame()).toContain("Rename")
+      expect(app.captureCharFrame()).toContain("Close")
+      expect(active()).toBe("second")
+      for (const size of [
+        { width: 18, height: 4, row: 1, column: 3 },
+        { width: 60, height: 10, row: row + 1, column: column + 1 },
+      ]) {
+        app.resize(size.width, size.height)
+        await app.waitForFrame((frame) => frame.split("\n")[0]?.length === size.width && frame.includes("Keep open"))
+        const rows = app.captureCharFrame().split("\n")
+        expect(rows[size.row]?.indexOf("Keep open")).toBe(size.column)
+        expect(rows[size.row + 1]?.indexOf("Rename")).toBe(size.column)
+        expect(rows[size.row + 2]?.indexOf("Close")).toBe(size.column)
+      }
+      const menu = app.captureCharFrame().split("\n")
+      const keepOpen = menu.findIndex((line) => line.includes("Keep open"))
+      await app.mockMouse.click(menu[keepOpen]!.indexOf("Keep open"), keepOpen)
+      await app.waitForFrame((frame) => !frame.includes("Rename"))
+      expect(preview()).toBe(false)
+      expect(active()).toBe("second")
 
       setNewTab(true)
       await app.waitForFrame((frame) => frame.includes("+ New session"))
