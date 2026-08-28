@@ -58,23 +58,26 @@ export const isContextOverflowFailure = (failure: unknown) =>
     : Schema.is(ProviderErrorEvent)(failure) && failure.classification === "context-overflow"
 
 const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
-const QUOTA_CODES = new Set(["insufficient_quota", "usage_not_included", "billing_error"])
+const QUOTA_CODES = new Set(["insufficient_quota", "usage_not_included", "usage_limit_reached", "billing_error"])
+const AUTH_CODES = new Set(["authentication_error", "permission_error"])
 const SERVER_CODES = new Set([
   "api_error",
   "internal_error",
   "internalserverexception",
   "modelstreamerrorexception",
   "overloaded_error",
+  "resource_exhausted",
   "server_error",
   "server_is_overloaded",
-  "slow_down",
+  "service_unavailable",
   "serviceunavailableexception",
+  "slow_down",
 ])
 const INVALID_REQUEST_CODES = new Set(["invalid_prompt", "invalid_request_error", "validationexception"])
 const RATE_LIMIT_TEXT = /rate increased too quickly|rate[-_\s]?limit|too[_\s]?many[_\s]?requests/i
-const QUOTA_TEXT = /insufficient[-_\s]?quota|quota[-_\s]?exceeded/i
+const QUOTA_TEXT =
+  /insufficient[-_\s]?quota|quota[-_\s]?exceeded|usage[-_\s]?limit|available balance|out of budget|billing/i
 const CONTENT_POLICY_TEXT = /content[-_\s]?policy|content_filter|safety/i
-const NETWORK_ERROR_TEXT = /network[-_\s]error/i
 
 export interface ProviderFailure {
   readonly message: string
@@ -90,8 +93,12 @@ export interface ProviderFailure {
   readonly rateLimit?: HttpRateLimitDetails | undefined
 }
 
-// Keep HTTP failures and provider-reported stream failures on one typed path so
-// session retry policy never needs provider-specific string matching.
+// Classification records affirmative evidence about a failure. Deterministic
+// failures need positive identification (a 4xx status, quota/auth/policy
+// signals); anything unrecognized stays UnknownProvider, which the session
+// retry policy treats as retry-eligible because transient failures arrive in
+// unpredictable shapes while deterministic rejections almost always carry a
+// status or known code.
 export function classifyProviderFailure(input: ProviderFailure): AIError["reason"] {
   const details = { message: input.message, body: input.rawBody, http: input.http, cause: input.cause }
   const body = input.rawBody ?? ""
@@ -114,48 +121,35 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
   if (input.status === 413 || isPayloadTooLarge(text))
     return new InvalidRequestError({ ...details, classification: "payload-too-large" })
   if (CONTENT_POLICY_TEXT.test(text)) return new ContentPolicyError(details)
-  if (codes.some((code) => QUOTA_CODES.has(code)) || (input.status === 429 && QUOTA_TEXT.test(text)))
+  if (codes.some((code) => QUOTA_CODES.has(code)) || (clientScoped && QUOTA_TEXT.test(text)))
     return new QuotaExceededError(details)
-  if (input.status === 401) return new AuthenticationError({ ...details, kind: "invalid" })
-  if (input.status === 403) return new AuthenticationError({ ...details, kind: "insufficient-permissions" })
-  if (codes.includes("authentication_error")) return new AuthenticationError({ ...details, kind: "invalid" })
-  if (codes.includes("permission_error"))
-    return new AuthenticationError({ ...details, kind: "insufficient-permissions" })
+  if (input.status === 401 || input.status === 403 || codes.some((code) => AUTH_CODES.has(code)))
+    return new AuthenticationError(details)
   if (
-    codes.some((code) => code.includes("rate_limit") || code === "too_many_requests" || code === "throttlingexception")
+    input.status === 429 ||
+    codes.some(
+      (code) => code.includes("rate_limit") || code === "too_many_requests" || code === "throttlingexception",
+    ) ||
+    RATE_LIMIT_TEXT.test(text)
   )
     return new RateLimitError({
       ...details,
       retryAfterMs: input.retryAfterMs,
       rateLimit: input.rateLimit,
     })
-  if (RATE_LIMIT_TEXT.test(text))
-    return new RateLimitError({
-      ...details,
-      retryAfterMs: input.retryAfterMs,
-      rateLimit: input.rateLimit,
-    })
-  if (NETWORK_ERROR_TEXT.test(text)) return new ProviderInternalError(details)
-  if (codes.some((code) => SERVER_CODES.has(code) || code.includes("exhausted") || code.includes("unavailable")))
-    return new ProviderInternalError({
-      ...details,
-      retryAfterMs: input.retryAfterMs,
-    })
-  if (input.status === 429) {
-    return new RateLimitError({
-      ...details,
-      retryAfterMs: input.retryAfterMs,
-      rateLimit: input.rateLimit,
-    })
-  }
-  if (input.status === 408 || input.status === 409 || (input.status !== undefined && input.status >= 500))
+  if (
+    input.status === 408 ||
+    input.status === 409 ||
+    (input.status !== undefined && input.status >= 500) ||
+    codes.some((code) => SERVER_CODES.has(code))
+  )
     return new ProviderInternalError({
       ...details,
       retryAfterMs: input.retryAfterMs,
     })
   if (codes.some((code) => INVALID_REQUEST_CODES.has(code))) return new InvalidRequestError(details)
-  if (input.status === 400 || input.status === 404 || input.status === 413 || input.status === 422)
-    return new InvalidRequestError(details)
+  // Any remaining 4xx is a deterministic rejection of this request.
+  if (input.status !== undefined && input.status >= 400 && input.status < 500) return new InvalidRequestError(details)
   return new UnknownProviderError(details)
 }
 

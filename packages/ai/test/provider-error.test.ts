@@ -87,10 +87,29 @@ describe("provider error classification", () => {
     ])
   })
 
-  test("classifies network error text as provider internal", () => {
+  test("classifies subscription and usage limit failures as quota exhaustion", () => {
     expect(
-      ["network error", "network-error", "network_error"].map((message) => classifyProviderFailure({ message })._tag),
-    ).toEqual(["ProviderInternal", "ProviderInternal", "ProviderInternal"])
+      [
+        classifyProviderFailure({ message: "Monthly usage limit reached", status: 429 }),
+        classifyProviderFailure({ message: "You are out of budget" }),
+        classifyProviderFailure({ message: '{"error":{"code":"usage_limit_reached"}}' }),
+        classifyProviderFailure({ message: "Enable available balance usage to continue", status: 429 }),
+      ].map((reason) => reason._tag),
+    ).toEqual(["QuotaExceeded", "QuotaExceeded", "QuotaExceeded", "QuotaExceeded"])
+  })
+
+  test("keeps quota wording on server failures classified as provider internal", () => {
+    expect(classifyProviderFailure({ message: "billing service unavailable", status: 503 })._tag).toBe(
+      "ProviderInternal",
+    )
+  })
+
+  test("classifies any remaining 4xx status as an invalid request", () => {
+    expect(
+      [400, 402, 404, 418, 422, 451].map(
+        (status) => classifyProviderFailure({ message: `HTTP ${status}`, status })._tag,
+      ),
+    ).toEqual(Array(6).fill("InvalidRequest"))
   })
 
   test("classifies nested provider codes when a top-level code is also present", () => {
@@ -103,10 +122,12 @@ describe("provider error classification", () => {
     ).toEqual(["QuotaExceeded", "ProviderInternal", "InvalidRequest"])
   })
 
-  test("keeps unknown and malformed provider payloads non-retryable", () => {
+  test("leaves unrecognized failures unclassified for the retry default", () => {
     expect(classifyProviderFailure({ message: '{"error":{"message":"no_kv_space"}}' })._tag).toBe("UnknownProvider")
     expect(classifyProviderFailure({ message: '{"type":"error","error":{"code":123}}' })._tag).toBe("UnknownProvider")
     expect(classifyProviderFailure({ message: "not-json" })._tag).toBe("UnknownProvider")
+    expect(classifyProviderFailure({ message: "network error" })._tag).toBe("UnknownProvider")
+    expect(classifyProviderFailure({ message: "Provider returned error" })._tag).toBe("UnknownProvider")
   })
 })
 

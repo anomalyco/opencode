@@ -757,7 +757,7 @@ it.effect("classifies data-only AI SDK authentication errors", () =>
         data: { error: { code: "authentication_error" } },
       }),
     )
-    expect(error.reason).toMatchObject({ _tag: "Authentication", kind: "invalid" })
+    expect(error.reason).toMatchObject({ _tag: "Authentication" })
     expect(SessionRunnerRetry.isRetryable(error)).toBeFalse()
   }),
 )
@@ -776,7 +776,7 @@ Object.entries({
         responseBody,
       })
       const error = yield* streamFailure(cause)
-      expect(error.reason).toMatchObject({ _tag: "Authentication", kind: "invalid" })
+      expect(error.reason).toMatchObject({ _tag: "Authentication" })
       expect(SessionRunnerRetry.isRetryable(error)).toBeFalse()
       expect(error.reason.body).toBe(responseBody)
       expect(error.reason.cause).toBe(cause)

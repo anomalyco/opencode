@@ -250,7 +250,7 @@ test("AI error reasons are tagged Errors with required messages", () => {
       provider: model.provider,
       model: model.id,
     }),
-    new AuthenticationError({ message: "Missing credentials", kind: "missing" }),
+    new AuthenticationError({ message: "Missing credentials" }),
     new RateLimitError({ message: "Rate limited" }),
     new QuotaExceededError({ message: "Quota exceeded" }),
     new ContentPolicyError({ message: "Content blocked" }),

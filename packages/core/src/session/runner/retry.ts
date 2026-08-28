@@ -26,12 +26,16 @@ export function isRetryable(error: AIError) {
       return error.reason.delivery === undefined || error.reason.delivery === "not-sent"
     case "InvalidProviderOutput":
       return error.reason.classification === "incomplete-stream"
+    // Unrecognized failures retry: classification records affirmative
+    // deterministic evidence, and transient failures are exactly the ones
+    // that arrive in shapes no classifier anticipates.
+    case "UnknownProvider":
+      return true
     case "Authentication":
     case "QuotaExceeded":
     case "ContentPolicy":
     case "InvalidRequest":
     case "NoRoute":
-    case "UnknownProvider":
       return false
     default: {
       const exhaustive: never = error.reason
