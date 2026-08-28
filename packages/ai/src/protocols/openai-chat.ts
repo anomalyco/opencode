@@ -3,6 +3,7 @@ import { Tool } from "@opencode-ai/schema/tool"
 import { Route } from "../route/client.js"
 import { Auth } from "../route/auth.js"
 import { Endpoint } from "../route/endpoint.js"
+import { Framing } from "../route/framing.js"
 import { HttpTransport } from "../route/transport/index.js"
 import { Protocol } from "../route/protocol.js"
 import {
@@ -245,6 +246,8 @@ export const OpenAIChatEvent = Schema.StructWithRest(
   [Schema.Record(Schema.String, Schema.Unknown)],
 )
 export type OpenAIChatEvent = Schema.Schema.Type<typeof OpenAIChatEvent>
+const DONE = "[DONE]" as const
+const OpenAIChatStreamEvent = Schema.Union([Schema.Literal(DONE), Protocol.jsonEvent(OpenAIChatEvent)])
 type OpenAIChatRequestMessage = LLMRequest["messages"][number]
 
 interface PendingToolDelta {
@@ -1166,7 +1169,7 @@ export const protocol = Protocol.make({
     from: fromRequest,
   },
   stream: {
-    event: Protocol.jsonEvent(OpenAIChatEvent),
+    event: OpenAIChatStreamEvent,
     initial: (request) => ({
       providerMetadataKey: request.model.route.providerMetadataKey ?? String(request.model.provider),
       tools: ToolStream.empty<number>(),
@@ -1180,12 +1183,14 @@ export const protocol = Protocol.make({
       nextToolIndex: 0,
       requireFinishReason: request.model.compatibility?.requireFinishReason ?? true,
     }),
-    step,
+    step: (state: ParserState, event) => (event === DONE ? Effect.succeed([state, []] as const) : step(state, event)),
+    terminal: (event) => event === DONE,
     onHalt: finishEvents,
   },
 })
 
-export const httpTransport = HttpTransport.sseJson.with<OpenAIChatBody>()
+export const framing = Framing.sseWithDone
+export const httpTransport = HttpTransport.sseJson.with<OpenAIChatBody>().with({ framing })
 
 export const route = Route.make({
   id: ADAPTER,

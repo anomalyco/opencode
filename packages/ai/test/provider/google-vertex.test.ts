@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
 import { LLM, Message, ToolCallPart } from "../../src/index.js"
@@ -376,11 +376,9 @@ describe("Google Vertex providers", () => {
     }),
   )
 
-  it.effect("rejects tuned Gemini models in express mode", () =>
-    Effect.sync(() => {
-      expect(() => GoogleVertex.configure({ apiKey: "fixture" }).model("endpoints/1234567890")).toThrow(
-        "Google Vertex tuned models do not support Express Mode API keys",
-      )
-    }),
-  )
+  test("rejects tuned Gemini models in express mode", () => {
+    expect(() => GoogleVertex.configure({ apiKey: "fixture" }).model("endpoints/1234567890")).toThrow(
+      "Google Vertex tuned models do not support Express Mode API keys",
+    )
+  })
 })
