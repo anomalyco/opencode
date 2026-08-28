@@ -17,7 +17,7 @@ env:
 jobs:
   native:
     name: native callback (${{ matrix.os }})
-    timeout-minutes: 5
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -38,3 +38,12 @@ jobs:
       - name: Probe native loopback cancellation
         shell: bash
         run: bun script/probe-callback-port.ts
+      - name: Install dependencies for actual auth-flow trace
+        uses: ./.github/actions/setup-bun
+      - name: Trace actual stale callback cancellation
+        working-directory: packages/server
+        shell: bash
+        env:
+          GITHUB_ACTIONS: "false"
+          OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: ${{ matrix.os == 'windows' && 'true' || 'false' }}
+        run: bun run test --test-name-pattern 'cancels a stale OpenAI OAuth callback server'

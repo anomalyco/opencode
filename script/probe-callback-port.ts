@@ -9,6 +9,7 @@ import timers from "node:timers/promises"
 const modes = [
   "no-connection",
   "force-first",
+  "fixed-force-first",
   "response-connection-close",
   "socket-reset-after-flush",
   "socket-destroy-after-flush",
@@ -162,7 +163,7 @@ async function probe(mode: (typeof modes)[number]) {
       variation: mode,
       baseline: "force-first; fetch body unread; both literal families; same target server reused",
     })
-    const first = await bind(servers[0].server, 0, "127.0.0.1", deadline.signal)
+    const first = await bind(servers[0].server, mode === "fixed-force-first" ? 1455 : 0, "127.0.0.1", deadline.signal)
     if (!first.ok) throw new Error(`IPv4 setup failed: ${JSON.stringify(first.error)}`)
     const address = servers[0].server.address()
     if (!address || typeof address === "string") throw new Error("Missing ephemeral TCP address")
