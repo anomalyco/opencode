@@ -286,7 +286,8 @@ export function createData(config: CreateDataInput) {
   // Inbox IDs of optimistic admissions awaiting acknowledgement, so rejection
   // only rolls back unacknowledged rows and a pending re-fetch cannot wipe a
   // row the server does not know about yet. Prompts clear on their durable
-  // echo or rollback; compactions also reconcile the POST's canonical ID.
+  // echo, positive pending read, or rollback; compactions also reconcile the
+  // POST's canonical ID.
   const outbox = new Set<string>()
 
   // Session IDs of optimistic create admissions still awaiting acknowledgement
@@ -305,6 +306,11 @@ export function createData(config: CreateDataInput) {
   // failure does not block the next.
   const sending = new Map<string, Promise<unknown>>()
   const compacting = new Map<string, Promise<SessionInboxCompaction>>()
+  const compactionListeners = new Set<() => void>()
+  onCleanup(() => {
+    compactionListeners.forEach((unsubscribe) => unsubscribe())
+    compactionListeners.clear()
+  })
 
   // Register `promise` under `key` until it settles. A later registration
   // replaces an earlier one; settlement only clears its own entry.
@@ -1254,6 +1260,13 @@ export function createData(config: CreateDataInput) {
         sync(sessionID: string) {
           return sync.run(`session.pending:${sessionID}`, async () => {
             const pending = await api().session.inbox.list({ sessionID })
+            // A positive read acknowledges admission even when its SSE echo is delayed.
+            pending.forEach((item) => outbox.delete(item.id))
+            // Compactions also coalesce by Session, not just by the proposed ID.
+            if (pending.some((item) => item.type === "compaction"))
+              store.session.pending[sessionID]
+                ?.filter((item) => item.type === "compaction")
+                .forEach((item) => outbox.delete(item.id))
             // Keep optimistic rows still awaiting their echo: this fetch may
             // have raced ahead of an in-flight admission the server does not
             // know about yet.
@@ -1337,7 +1350,9 @@ export function createData(config: CreateDataInput) {
         const active = compacting.get(input.sessionID)
         if (active) return active
         const pending = store.session.pending[input.sessionID]?.find((item) => item.type === "compaction")
-        const id = pending?.id ?? SessionMessage.ID.create()
+        // A known pending control ID may be consumed while setup waits. Propose
+        // a fresh ID and let the server coalesce, without duplicating its row.
+        const id = SessionMessage.ID.create()
         if (!pending) {
           outbox.add(id)
           admitLocal({
@@ -1371,9 +1386,11 @@ export function createData(config: CreateDataInput) {
             observed.add(event.data.inputID)
           }
         })
+        compactionListeners.add(unsubscribe)
         const previous = sending.get(input.sessionID)
+        const created = creating.get(input.sessionID)
         const request = Promise.resolve()
-          .then(() => Promise.all([creating.get(input.sessionID), previous]))
+          .then(() => Promise.all([created, previous]))
           .then(() => input.model && api().session.switchModel({ sessionID: input.sessionID, model: input.model }))
           .then(() => api().session.compact({ sessionID: input.sessionID, id }))
           .then((item) => {
@@ -1388,7 +1405,9 @@ export function createData(config: CreateDataInput) {
             if (!pending && outbox.delete(id)) removePending(input.sessionID, id)
             throw error
           })
-          .finally(unsubscribe)
+          .finally(() => {
+            if (compactionListeners.delete(unsubscribe)) unsubscribe()
+          })
         track(compacting, input.sessionID, request)
         track(
           sending,
@@ -1402,8 +1421,8 @@ export function createData(config: CreateDataInput) {
       // upsert that same ID with the server's payload. Server admission is
       // idempotent per ID, so retrying with the identical payload cannot
       // double-admit.
-      prompt(input: SessionPromptInput & { gate?: Promise<unknown> }) {
-        const { gate, ...request } = input
+      prompt(input: SessionPromptInput & { gate?: Promise<unknown>; prepare?: () => Promise<unknown> }) {
+        const { gate, prepare, ...request } = input
         const id = request.id ?? SessionMessage.ID.create()
         // A retry may reuse an ID that is already rendered — and possibly
         // already durable. Admit optimistically only for new IDs so a failed
@@ -1435,8 +1454,11 @@ export function createData(config: CreateDataInput) {
         // admission's POST: the row renders now, the send happens once the
         // session exists server-side and earlier inputs are admitted.
         const previous = sending.get(request.sessionID)
+        const created = creating.get(request.sessionID)
         const send = Promise.resolve()
-          .then(() => Promise.all([gate, creating.get(request.sessionID), previous]))
+          .then(() => Promise.all([gate, created, previous]))
+          // Model preparation must not run ahead of earlier admissions.
+          .then(() => prepare?.())
           .then(() => api().session.prompt({ ...request, id }))
         track(
           sending,
@@ -1447,7 +1469,7 @@ export function createData(config: CreateDataInput) {
           ),
         )
         return send.catch((error) => {
-          // Roll back only rows this call admitted and the echo has not
+          // Roll back only rows this call admitted and the server has not
           // acknowledged: anything else is server state.
           if (fresh && outbox.delete(id)) retractLocal(request.sessionID, id)
           throw error

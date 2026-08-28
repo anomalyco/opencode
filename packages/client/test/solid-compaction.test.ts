@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { createRoot } from "solid-js"
 import { createData, type CreateDataInput } from "../src/solid"
-import { OpenCode, type OpenCodeEvent, type SessionInboxCompaction } from "../src/promise"
+import { OpenCode, type OpenCodeEvent, type SessionInboxCompaction, type SessionInboxInfo } from "../src/promise"
 
 test("admits compaction before model setup and serializes the following prompt", async () => {
   using fixture = setup()
@@ -38,6 +38,8 @@ test("coalesces duplicate gestures until the admission request settles", async (
   expect(next).not.toBe(first)
   await next
   expect(fixture.calls).toEqual(["compact", "compact"])
+  expect(new Set(fixture.proposals).size).toBe(2)
+  expect(fixture.proposals).not.toContain("msg_canonical")
 })
 
 test("substitutes the canonical response ID and reconciles its later echo", async () => {
@@ -141,6 +143,147 @@ test.each(["proposed", "canonical", "existing"])(
   },
 )
 
+test("uses a fresh control ID when the known pending compaction starts during model setup", async () => {
+  const proposed = Promise.withResolvers<string>()
+  using fixture = setup(async (request) => {
+    if (!request.url.endsWith("/compact")) return undefined
+    const body = await request.json()
+    proposed.resolve(body.id)
+    if (body.id === "msg_existing") return Response.json({ message: "Control ID already consumed" }, { status: 409 })
+    return Response.json({ data: item(body.id) })
+  })
+  fixture.enqueue("msg_existing")
+  const request = fixture.data.session.compact({ sessionID, model: { providerID: "demo", id: "model" } })
+  const result = request.catch((error: unknown) => error)
+  expect(fixture.data.session.pending.list(sessionID)).toEqual([item("msg_existing")])
+  await wait(() => fixture.calls.includes("model"))
+  fixture.emit({
+    ...event,
+    type: "session.compaction.started",
+    data: { sessionID, inputID: "msg_existing", reason: "manual" },
+  })
+  fixture.model.resolve()
+  expect(await proposed.promise).not.toBe("msg_existing")
+  expect(await result).toEqual(item(await proposed.promise))
+  expect(fixture.data.session.pending.list(sessionID)).toEqual([item(await proposed.promise)])
+  expect(fixture.data.session.message.list(sessionID)).toMatchObject([
+    { id: "msg_existing", type: "compaction", status: "running" },
+  ])
+})
+
+test.each(["compaction", "canonical compaction", "user"])(
+  "preserves a fetched durable %s when SSE is delayed and HTTP fails",
+  async (type) => {
+    using fixture = setup(async (request) => {
+      if (request.url.endsWith("/prompt")) return fixture.response.promise
+      return undefined
+    })
+    const request =
+      type === "user"
+        ? fixture.data.session.prompt({ sessionID, text: "Follow up" })
+        : fixture.data.session.compact({ sessionID })
+    const result = request.catch((error: unknown) => error)
+    const id = type === "canonical compaction" ? "msg_canonical" : fixture.data.session.pending.list(sessionID)[0].id
+    const durable: SessionInboxInfo =
+      type === "user" ? { ...item(id, 20), type: "user", payload: { text: "Follow up" } } : item(id, 20)
+    fixture.pending.push(durable)
+    await fixture.data.session.pending.sync(sessionID)
+    expect(fixture.data.session.pending.list(sessionID)).toEqual([durable])
+    fixture.response.resolve(new Response("Lost response", { status: 500 }))
+    expect(await result).toBeInstanceOf(Error)
+    expect(fixture.data.session.pending.list(sessionID)).toEqual([durable])
+    if (type === "user")
+      expect(fixture.data.session.message.list(sessionID)).toMatchObject([{ id, type: "user", text: "Follow up" }])
+  },
+)
+
+test("removes the compaction listener when the data owner is disposed during a gate", async () => {
+  using fixture = setup()
+  const gate = Promise.withResolvers<void>()
+  const first = fixture.data.session.prompt({ sessionID, text: "First", gate: gate.promise })
+  const compact = fixture.data.session.compact({ sessionID })
+  expect(fixture.listeners.size).toBe(2)
+  fixture.dispose()
+  expect(fixture.listeners.size).toBe(0)
+  gate.resolve()
+  fixture.response.resolve(Response.json({ data: item("msg_canonical") }))
+  await Promise.all([first, compact])
+  expect(fixture.listeners.size).toBe(0)
+})
+
+test.each(["gate", "prepare"])(
+  "a preceding prompt's failed %s does not block compaction or following model preparation",
+  async (kind) => {
+    using fixture = setup()
+    const gate = Promise.withResolvers<void>()
+    const prepared: string[] = []
+    const first = fixture.data.session
+      .prompt({
+        sessionID,
+        id: "msg_first",
+        text: "First",
+        gate: kind === "gate" ? gate.promise : undefined,
+        prepare: () => {
+          prepared.push("first")
+          return gate.promise
+        },
+      })
+      .catch((error: unknown) => error)
+    const compact = fixture.data.session.compact({ sessionID, model: { providerID: "demo", id: "first" } })
+    const following = fixture.data.session.prompt({
+      sessionID,
+      text: "Follow up",
+      prepare: () => {
+        prepared.push("following")
+        return fixture.api.session.switchModel({ sessionID, model: { providerID: "demo", id: "second" } })
+      },
+    })
+    if (kind === "prepare") await wait(() => prepared.includes("first"))
+    gate.reject(new Error("Preparation failed"))
+    expect(await first).toBeInstanceOf(Error)
+    await wait(() => fixture.calls.includes("model"))
+    expect(prepared).toEqual(kind === "prepare" ? ["first"] : [])
+    fixture.model.resolve()
+    fixture.response.resolve(Response.json({ data: item("msg_canonical") }))
+    await Promise.all([compact, following])
+    expect(fixture.calls).toEqual(["model", "compact", "model", "prompt"])
+    expect(prepared.at(-1)).toBe("following")
+    expect(fixture.data.session.message.list(sessionID)).toMatchObject([{ type: "user", text: "Follow up" }])
+  },
+)
+
+test("creation failure rejects gated prompt, compaction, and following preparation without sending their RPCs", async () => {
+  const creation = Promise.withResolvers<Response>()
+  const requested = Promise.withResolvers<void>()
+  using fixture = setup(async (request) => {
+    if (!request.url.endsWith("/api/session")) return undefined
+    requested.resolve()
+    return creation.promise
+  })
+  const gate = Promise.withResolvers<void>()
+  const prepared: string[] = []
+  const created = fixture.data.session.create({ id: sessionID })
+  const first = fixture.data.session.prompt({ sessionID, text: "First", gate: gate.promise })
+  const compact = fixture.data.session.compact({ sessionID, model: { providerID: "demo", id: "model" } })
+  const following = fixture.data.session.prompt({
+    sessionID,
+    text: "Follow up",
+    prepare: async () => {
+      prepared.push("following")
+    },
+  })
+  const results = Promise.allSettled([created.request, first, compact, following])
+  await requested.promise
+  creation.resolve(new Response("Creation failed", { status: 500 }))
+  expect((await results).map((result) => result.status)).toEqual(["rejected", "rejected", "rejected", "rejected"])
+  expect(fixture.calls).toEqual([])
+  expect(prepared).toEqual([])
+  expect(fixture.data.session.get(sessionID)).toBeUndefined()
+  expect(fixture.data.session.pending.list(sessionID)).toEqual([])
+  expect(fixture.listeners.size).toBe(1)
+  gate.resolve()
+})
+
 const sessionID = "ses_compact"
 const event = { id: "evt_compact", created: 10, durable: { aggregateID: sessionID, seq: 1, version: 1 } }
 const item = (id: string, timeCreated = 10): SessionInboxCompaction => ({
@@ -152,18 +295,21 @@ const item = (id: string, timeCreated = 10): SessionInboxCompaction => ({
   payload: {},
 })
 
-function setup() {
+function setup(override?: (request: Request) => Promise<Response | undefined>) {
   const model = Promise.withResolvers<void>()
   const response = Promise.withResolvers<Response>()
   const calls: string[] = []
   const proposals: string[] = []
+  const pending: SessionInboxInfo[] = []
   const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
   const api = OpenCode.make({
     baseUrl: "http://opencode.local",
     fetch: async (input, init) => {
       const request = input instanceof Request ? input : new Request(input, init)
+      const overridden = await override?.(request)
+      if (overridden) return overridden
       const rpc = new URL(request.url).pathname.split("/").at(-1)
-      if (rpc === "inbox") return Response.json({ data: [] })
+      if (rpc === "inbox") return Response.json({ data: pending })
       if (rpc === "model") {
         calls.push(rpc)
         await model.promise
@@ -200,11 +346,14 @@ function setup() {
   const emit = (details: OpenCodeEvent) => listeners.forEach((listener) => listener({ name: details.type, details }))
   return {
     data: root.data,
+    api,
+    dispose: root.dispose,
     [Symbol.dispose]: root.dispose,
     model,
     response,
     calls,
     proposals,
+    pending,
     listeners,
     emit,
     enqueue(id: string, created = 10) {
