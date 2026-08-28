@@ -1453,13 +1453,34 @@ export function createData(config: CreateDataInput) {
         loading(sessionID: string) {
           return store.session.messageLoading[sessionID] ?? false
         },
-        async loadMore(sessionID: string, options?: { all?: boolean; signal?: AbortSignal }) {
+        async loadMore(
+          sessionID: string,
+          options?: {
+            all?: boolean
+            signal?: AbortSignal
+            /** Runs synchronously inside the store-publication batch. */
+            beforePublish?: () => void
+          },
+        ) {
+          const signal = options?.signal
+          if (signal?.aborted) return
           while (messageLoads.has(sessionID)) {
-            const published = await messageLoads.get(sessionID)
-            if ((!options?.all && published) || options?.signal?.aborted) return
+            const published = await (() => {
+              const pending = messageLoads.get(sessionID)
+              if (!signal) return pending
+              const aborted = Promise.withResolvers<void>()
+              const cancel = () => aborted.resolve()
+              signal.addEventListener("abort", cancel, { once: true })
+              return Promise.race([pending, aborted.promise])
+                .catch((error) => {
+                  if (!signal.aborted) throw error
+                })
+                .finally(() => signal.removeEventListener("abort", cancel))
+            })()
+            if ((!options?.all && published) || signal?.aborted) return
           }
           const cursor = store.session.messageCursor[sessionID]
-          if (!cursor || options?.signal?.aborted) return
+          if (!cursor || signal?.aborted) return
           setStore("session", "messageLoading", sessionID, true)
           const request = (async () => {
             const fetched: SessionMessageInfo[] = []
@@ -1471,9 +1492,9 @@ export function createData(config: CreateDataInput) {
                   limit: options?.all ? 200 : messagePageLimit,
                   cursor: next,
                 },
-                { signal: options?.signal },
+                { signal },
               )
-              if (options?.signal?.aborted) return
+              if (signal?.aborted) return
               fetched.push(...response.data)
               next = response.cursor.next ?? undefined
               if (!options?.all) break
@@ -1482,15 +1503,16 @@ export function createData(config: CreateDataInput) {
             const existing = store.session.message[sessionID] ?? []
             const ids = new Set(existing.map((item) => item.id))
             const messages = [...fetched.reverse().filter((item) => !ids.has(item.id)), ...existing]
-            messageIndex.set(sessionID, new Map(messages.map((item, position) => [item.id, position])))
             batch(() => {
+              options?.beforePublish?.()
+              messageIndex.set(sessionID, new Map(messages.map((item, position) => [item.id, position])))
               setStore("session", "message", sessionID, reconcile(messages))
               setStore("session", "messageCursor", sessionID, next)
             })
             return true
           })()
             .catch((error) => {
-              if (!options?.signal?.aborted) throw error
+              if (!signal?.aborted) throw error
             })
             .finally(() => setStore("session", "messageLoading", sessionID, false))
           track(messageLoads, sessionID, request)

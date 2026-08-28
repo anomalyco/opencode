@@ -302,6 +302,7 @@ export function Session(props: {
 
   const clearMessageNavigation = () => {
     ensureAllRowsPending?.splice(0)
+    prependHistory.cancel()
     firstJump()?.()
     setFirstJump(undefined)
     setNavigationSlack(0)
@@ -374,6 +375,7 @@ export function Session(props: {
   let awayTimer: ReturnType<typeof setTimeout> | undefined
   onCleanup(() => {
     if (awayTimer) clearTimeout(awayTimer)
+    prependHistory.cancel()
     firstJump()?.()
     if (!scroll || scroll.isDestroyed) return
     scroll.verticalScrollBar.off("change", updateAwayFromBottom)
@@ -770,43 +772,62 @@ export function Session(props: {
         if (firstJump()) return
         clearMessageNavigation()
         const request = new AbortController()
-        const previous = { start: hiddenRows(), end: visibleRowsEnd() }
-        const cancel = () => {
-          request.abort()
-          batch(() => {
-            setHiddenRows(previous.start)
-            setVisibleRowsEnd(previous.end)
-          })
-        }
-        // Pin both ends so publishing older history cannot briefly mount the whole transcript.
-        batch(() => {
-          setFirstJump(() => cancel)
-          setHiddenRows(hidden())
-          setVisibleRowsEnd(visibleEnd())
-        })
-        void data.session.message.loadMore(route.sessionID, { all: true, signal: request.signal }).then(
-          () => {
-            if (firstJump() !== cancel || scroll.isDestroyed) return
+        const cancel = () => request.abort()
+        setFirstJump(() => cancel)
+        const start = () => {
+          if (firstJump() !== cancel || scroll.isDestroyed) return
+          if (revealingOlderRows || revealingNewerRows || ensureAllRowsPending) return afterLayout(start)
+          const previous = { start: hiddenRows(), end: visibleRowsEnd() }
+          const restore = () => {
+            cancel()
+            batch(() => {
+              setHiddenRows(previous.start)
+              setVisibleRowsEnd(previous.end)
+            })
+          }
+          const commit = () => {
+            if (firstJump() !== restore || scroll.isDestroyed) return
             scroll.stickyScroll = false
             batch(() => {
               setHiddenRows(0)
-              setVisibleRowsEnd(rows.length > TRANSCRIPT_BACKFILL_CHUNK ? TRANSCRIPT_BACKFILL_CHUNK : undefined)
-              scroll.scrollTo(0)
+              setVisibleRowsEnd(TRANSCRIPT_BACKFILL_CHUNK)
+              setFirstJump(() => cancel)
             })
-            afterLayout(() => {
-              if (firstJump() !== cancel) return
-              scroll.scrollTo(0)
-              setFirstJump(undefined)
-              updateAwayFromBottom()
+          }
+          // Pin both ends until the head budget commits in the same batch as history.
+          batch(() => {
+            setFirstJump(() => restore)
+            setHiddenRows(hidden())
+            setVisibleRowsEnd(visibleEnd())
+          })
+          void data.session.message
+            .loadMore(route.sessionID, {
+              all: true,
+              signal: request.signal,
+              beforePublish: commit,
             })
-          },
-          (error) => {
-            if (firstJump() !== cancel || scroll.isDestroyed) return
-            clearMessageNavigation()
-            toast.error(error)
-            updateAwayFromBottom()
-          },
-        )
+            .then(
+              () => {
+                commit()
+                if (firstJump() !== cancel || scroll.isDestroyed) return
+                if (rows.length <= TRANSCRIPT_BACKFILL_CHUNK) setVisibleRowsEnd(undefined)
+                scroll.scrollTo(0)
+                afterLayout(() => {
+                  if (firstJump() !== cancel) return
+                  scroll.scrollTo(0)
+                  setFirstJump(undefined)
+                  updateAwayFromBottom()
+                })
+              },
+              (error) => {
+                if (firstJump() !== restore || scroll.isDestroyed) return
+                clearMessageNavigation()
+                toast.error(error)
+                updateAwayFromBottom()
+              },
+            )
+        }
+        prependHistory.after(start)
         dialog.clear()
       },
     },
