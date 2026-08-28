@@ -205,7 +205,6 @@ function resourceMcpLayer(
               Config.Service,
               Config.Service.of({
                 entries: overrides.entries,
-                update: () => Effect.die("unused config update"),
                 changes: () => Stream.never,
               }),
             )
