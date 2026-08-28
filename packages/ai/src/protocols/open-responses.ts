@@ -346,7 +346,6 @@ export const Event = Schema.StructWithRest(
     item_id: Schema.optional(Schema.String),
     output_index: Schema.optional(Schema.Number),
     summary_index: Schema.optional(Schema.Number),
-    content_index: Schema.optional(Schema.Number),
     // OutputItemAdded/Done permit a null item in the Open Responses OpenAPI schema.
     item: optionalNull(StreamItem),
     response: Schema.optional(
@@ -397,13 +396,7 @@ export interface ParserState {
   readonly hasFunctionCall: boolean
   readonly lifecycle: Lifecycle.State
   readonly outputItems: Readonly<Record<number, string>>
-  readonly message:
-    | {
-        readonly id: string
-        readonly phase: MessagePhase | null | undefined
-        readonly parts: Readonly<Record<number, { readonly text: string; readonly done: boolean }>>
-      }
-    | undefined
+  readonly message: { readonly id: string; readonly phase: MessagePhase | null | undefined } | undefined
   readonly reasoningItems: Readonly<Record<string, ReasoningStreamItem>>
 }
 
@@ -420,7 +413,6 @@ interface ReasoningStreamItem {
   // is started eagerly when the item opens, so block existence cannot tell
   // whether a `.done` final would duplicate streamed text.
   readonly deltaIndexes: ReadonlySet<number>
-  readonly finalTexts: Readonly<Record<number, string>>
 }
 
 // =============================================================================
@@ -837,63 +829,30 @@ export const terminal = (event: Event) => TERMINAL_TYPES.has(event.type)
 
 const onOutputTextDelta = (state: ParserState, event: Event, id: string): StepResult => {
   if (!event.delta || state.message?.id !== id) return [state, NO_EVENTS]
-  const index = event.content_index ?? 0
-  const part = state.message.parts[index]
-  if (part?.done) return [state, NO_EVENTS]
   const events: LLMEvent[] = []
   const phase = state.message.phase
   const metadata = providerMetadata(state, { itemId: id, ...(phase === undefined ? {} : { phase }) })
   const lifecycle = Lifecycle.textStart(state.lifecycle, events, id, metadata)
-  return [
-    {
-      ...state,
-      lifecycle: Lifecycle.textDelta(lifecycle, events, id, event.delta),
-      message: {
-        ...state.message,
-        parts: { ...state.message.parts, [index]: { text: (part?.text ?? "") + event.delta, done: false } },
-      },
-    },
-    events,
-  ]
+  return [{ ...state, lifecycle: Lifecycle.textDelta(lifecycle, events, id, event.delta) }, events]
 }
 
 const onOutputTextDone = (state: ParserState, event: Event, id: string): StepResult => {
   if (state.message?.id === id) {
-    const index = event.content_index ?? 0
-    if (event.text === undefined || (state.message.parts[index]?.done && event.type !== "response.content_part.done"))
-      return [state, NO_EVENTS]
-    const [current, emitted] = state.message.parts[index]
-      ? [state, NO_EVENTS]
-      : onOutputTextDelta(state, { ...event, delta: event.text }, id)
-    return [
-      {
-        ...current,
-        message: {
-          ...state.message,
-          parts: { ...state.message.parts, [index]: { text: event.text, done: true } },
-        },
-      },
-      emitted,
-    ]
+    if (state.lifecycle.text.has(id) || event.text === undefined) return [state, NO_EVENTS]
+    return onOutputTextDelta(state, { ...event, delta: event.text }, id)
   }
   const events: LLMEvent[] = []
   return [{ ...state, lifecycle: Lifecycle.textEnd(state.lifecycle, events, id) }, events]
 }
 
-const messageFinalText = (message: ParserState["message"]) => {
-  const parts = Object.values(message?.parts ?? {})
-  return parts.some((part) => part.done) ? parts.map((part) => part.text).join("") : undefined
-}
-
 const decodeMessagePart = Schema.decodeUnknownOption(
-  Schema.Union([
-    Schema.Struct({ type: Schema.tag("output_text"), text: Schema.String }),
-    Schema.Struct({ type: Schema.tag("refusal"), refusal: Schema.String }),
-  ]),
+  Schema.Union([OpenResponsesOutputText, Schema.Struct({ type: Schema.tag("refusal"), refusal: Schema.String })]),
 )
 
-const decodeSummaryPart = Schema.decodeUnknownOption(
-  Schema.Struct({ type: Schema.tag("summary_text"), text: Schema.String }),
+const decodeSummaryPart = Schema.decodeUnknownOption(OpenResponsesReasoningSummaryText)
+
+const decodeReasoningPart = Schema.decodeUnknownOption(
+  Schema.Struct({ type: Schema.tag("reasoning_text"), text: Schema.String }),
 )
 
 export const outputItemID = (state: ParserState, event: Event) =>
@@ -908,13 +867,7 @@ const startReasoningSummaryPart = (state: ParserState, itemID: string, index: nu
     .filter((entry) => entry[1] !== "concluded")
     .reduce(
       (lifecycle, entry) =>
-        Lifecycle.reasoningEnd(
-          lifecycle,
-          events,
-          `${itemID}:${entry[0]}`,
-          providerMetadata(state, { itemId: itemID }),
-          item.finalTexts[Number(entry[0])],
-        ),
+        Lifecycle.reasoningEnd(lifecycle, events, `${itemID}:${entry[0]}`, providerMetadata(state, { itemId: itemID })),
       state.lifecycle,
     )
   return [
@@ -967,39 +920,15 @@ export const onReasoningDelta = (state: ParserState, event: Event, itemID: strin
   ]
 }
 
-// Keep the final until the existing boundary closes the fragment, so encrypted
-// item metadata can still be attached to its single reasoning-end event.
-export const onReasoningDone = (
-  state: ParserState,
-  itemID: string,
-  index: number,
-  text: string | undefined,
-): StepResult => {
+// Some compatible gateways emit a reasoning final without streaming any
+// deltas, mirroring `response.output_text.done`. Reconcile the complete text
+// as a single delta unless that summary index already streamed one.
+export const onReasoningDone = (state: ParserState, event: Event, itemID: string): StepResult => {
   const item = state.reasoningItems[itemID]
-  if (!item?.open || text === undefined) return [state, NO_EVENTS]
-  if (item.summaryParts[index] === "concluded") return [state, NO_EVENTS]
-  const [started, emitted] = startReasoningSummaryPart(state, itemID, index)
-  const current = started.reasoningItems[itemID]
-  if (!current) return [started, emitted]
-  const events = [...emitted]
-  const append = text.length > 0 && !current.deltaIndexes.has(index)
-  return [
-    {
-      ...started,
-      lifecycle: append
-        ? Lifecycle.reasoningDelta(started.lifecycle, events, `${itemID}:${index}`, text)
-        : started.lifecycle,
-      reasoningItems: {
-        ...started.reasoningItems,
-        [itemID]: {
-          ...current,
-          deltaIndexes: append ? new Set([...current.deltaIndexes, index]) : current.deltaIndexes,
-          finalTexts: { ...current.finalTexts, [index]: text },
-        },
-      },
-    },
-    events,
-  ]
+  if (!item?.open || typeof event.text !== "string") return [state, NO_EVENTS]
+  const index = event.summary_index ?? 0
+  if (item.deltaIndexes.has(index)) return [state, NO_EVENTS]
+  return onReasoningDelta(state, { ...event, delta: event.text }, itemID)
 }
 
 const reasoningMetadata = (state: ParserState, item: StreamItem & { id: string }) =>
@@ -1031,7 +960,6 @@ const onOutputItemAdded = (state: ParserState, event: Event): StepResult => {
           events,
           id,
           providerMetadata(state, { itemId: id, ...(openPhase === undefined ? {} : { phase: openPhase }) }),
-          messageFinalText(state.message),
         )
       }, state.lifecycle)
     return [
@@ -1041,7 +969,6 @@ const onOutputItemAdded = (state: ParserState, event: Event): StepResult => {
         message: {
           id: itemID,
           phase: phase === undefined && state.message?.id === itemID ? state.message.phase : phase,
-          parts: state.message?.id === itemID ? state.message.parts : {},
         },
       },
       events,
@@ -1061,7 +988,6 @@ const onOutputItemAdded = (state: ParserState, event: Event): StepResult => {
             encryptedContent: item.encrypted_content,
             summaryParts: { 0: "active" },
             deltaIndexes: new Set(),
-            finalTexts: {},
           },
         },
       },
@@ -1097,18 +1023,14 @@ const onReasoningSummaryPartAdded = (state: ParserState, event: Event): StepResu
 
 const onReasoningSummaryPartDone = (state: ParserState, event: Event): StepResult => {
   if (event.item_id === undefined || event.summary_index === undefined) return [state, NO_EVENTS]
-  const part = Option.getOrUndefined(decodeSummaryPart(event.part))
-  const [current, events] = part
-    ? onReasoningDone(state, event.item_id, event.summary_index, part.text)
-    : [state, NO_EVENTS]
-  const item = current.reasoningItems[event.item_id]
+  const item = state.reasoningItems[event.item_id]
   if (!item?.open) return [state, NO_EVENTS]
-  if (item.summaryParts[event.summary_index] !== "active") return [current, events]
+  if (item.summaryParts[event.summary_index] !== "active") return [state, NO_EVENTS]
   return [
     {
-      ...current,
+      ...state,
       reasoningItems: {
-        ...current.reasoningItems,
+        ...state.reasoningItems,
         [event.item_id]: {
           ...item,
           summaryParts: {
@@ -1118,7 +1040,7 @@ const onReasoningSummaryPartDone = (state: ParserState, event: Event): StepResul
         },
       },
     },
-    events,
+    NO_EVENTS,
   ]
 }
 
@@ -1169,7 +1091,7 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
           return decoded ? [decoded.type === "output_text" ? decoded.text : decoded.refusal] : []
         })
       : []
-    const text = content.length > 0 ? content.join("") : messageFinalText(message)
+    const text = content.length > 0 ? content.join("") : undefined
     const metadata = providerMetadata(state, { itemId: item.id, ...(phase === undefined ? {} : { phase }) })
     const events: LLMEvent[] = []
     const lifecycle =
@@ -1235,40 +1157,42 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
   if (isReasoningItem(item)) {
     if (state.reasoningItems[item.id]?.open === false) return [state, NO_EVENTS] satisfies StepResult
     const metadata = reasoningMetadata(state, item)
-    const parts: ReadonlyArray<unknown> = Array.isArray(item.summary) ? item.summary : []
-    const summary: string[] = []
+    const summary = Array.isArray(item.summary)
+      ? item.summary.map((part: unknown) => Option.getOrUndefined(decodeSummaryPart(part))?.text)
+      : []
+    const content = Array.isArray(item.content)
+      ? item.content.flatMap((part: unknown) => {
+          const decoded = Option.getOrUndefined(decodeReasoningPart(part))
+          return decoded ? [decoded.text] : []
+        })
+      : []
+    const text = summary.some(Boolean)
+      ? summary.filter((part) => part !== undefined).join("\n\n")
+      : content.some(Boolean)
+        ? content.join("\n\n")
+        : undefined
     const events: LLMEvent[] = []
-    let current = state
-    const lastIndex = Math.max(-1, ...Object.keys(state.reasoningItems[item.id]?.summaryParts ?? {}).map(Number))
-    for (const [index, part] of parts.entries()) {
-      const decoded = Option.getOrUndefined(decodeSummaryPart(part))
-      if (!decoded) continue
-      summary.push(decoded.text)
-      // Backfilling an earlier gap would close the current fragment before its final arrives.
-      if (index < lastIndex) continue
-      const [next, emitted] = onReasoningDone(current, item.id, index, decoded.text)
-      current = next
-      events.push(...emitted)
-    }
-    const reasoningItem = current.reasoningItems[item.id]
+    const reasoningItem = state.reasoningItems[item.id]
     if (reasoningItem) {
-      let lifecycle = current.lifecycle
-      for (const [index, status] of Object.entries(reasoningItem.summaryParts)) {
+      const parts = Object.entries(reasoningItem.summaryParts)
+      let lifecycle = state.lifecycle
+      // Once earlier summaries have closed, the whole item cannot replace the remaining fragment.
+      for (const [index, status] of parts) {
         if (status === "concluded") continue
         lifecycle = Lifecycle.reasoningEnd(
           lifecycle,
           events,
           `${item.id}:${index}`,
           metadata,
-          reasoningItem.finalTexts[Number(index)],
+          parts.length === 1 ? text : summary[Number(index)] || undefined,
         )
       }
       return [
         {
-          ...current,
+          ...state,
           lifecycle,
           reasoningItems: {
-            ...current.reasoningItems,
+            ...state.reasoningItems,
             [item.id]: {
               ...reasoningItem,
               open: false,
@@ -1286,7 +1210,7 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
         LLMEvent.reasoningEnd({
           id: item.id,
           providerMetadata: metadata,
-          text: summary.length > 0 ? summary.join("\n\n") : undefined,
+          text,
         }),
       )
       return [
@@ -1300,7 +1224,6 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
               encryptedContent: item.encrypted_content,
               summaryParts: { 0: "concluded" },
               deltaIndexes: new Set(),
-              finalTexts: {},
             },
           },
         },
@@ -1325,7 +1248,6 @@ const onResponseFinish = Effect.fn("OpenResponses.onResponseFinish")(function* (
       if (id === undefined) continue
       const tracked =
         (item.type === "function_call" && current.tools[id]) ||
-        (item.type === "message" && current.message?.id === id) ||
         (item.type === "reasoning" && current.reasoningItems[id]?.open)
       if (!tracked) continue
       const [next, emitted] = yield* onOutputItemDone(current, item)
@@ -1342,23 +1264,7 @@ const onResponseFinish = Effect.fn("OpenResponses.onResponseFinish")(function* (
   const hasFunctionCall =
     pending.events.some((event) => LLMEvent.is.toolCall(event) || LLMEvent.is.toolInputError(event)) ||
     current.hasFunctionCall
-  // Generic terminal closure must also carry finals received before a missing item boundary.
-  let lifecycle = current.lifecycle
-  for (const [id, item] of Object.entries(current.reasoningItems)) {
-    for (const index of Object.keys(item.summaryParts)) {
-      lifecycle = Lifecycle.reasoningEnd(lifecycle, events, `${id}:${index}`, undefined, item.finalTexts[Number(index)])
-    }
-  }
-  for (const id of lifecycle.text) {
-    lifecycle = Lifecycle.textEnd(
-      lifecycle,
-      events,
-      id,
-      undefined,
-      current.message?.id === id ? messageFinalText(current.message) : undefined,
-    )
-  }
-  lifecycle = Lifecycle.finish(lifecycle, events, {
+  const lifecycle = Lifecycle.finish(current.lifecycle, events, {
     reason: {
       normalized: mapFinishReason(event, hasFunctionCall),
       raw: event.response?.incomplete_details?.reason,
@@ -1433,18 +1339,6 @@ export const step = (state: ParserState, input: Event) => {
         : onOutputTextDone(state, { ...event, text: value }, event.item_id),
     )
   }
-  if (event.type === "response.content_part.done" && event.item_id !== undefined) {
-    const part = Option.getOrUndefined(decodeMessagePart(event.part))
-    return Effect.succeed<StepResult>(
-      part
-        ? onOutputTextDone(
-            state,
-            { ...event, text: part.type === "output_text" ? part.text : part.refusal },
-            event.item_id,
-          )
-        : [state, NO_EVENTS],
-    )
-  }
   if (event.type === "response.reasoning.delta" || event.type === "response.reasoning_summary_text.delta") {
     if (event.item_id === undefined) return ProviderShared.eventError(state.id, `${event.type} is missing item_id`)
     return Effect.succeed(onReasoningDelta(state, event, event.item_id))
@@ -1455,7 +1349,7 @@ export const step = (state: ParserState, input: Event) => {
     event.type === "response.reasoning_text.done"
   ) {
     if (event.item_id === undefined) return ProviderShared.eventError(state.id, `${event.type} is missing item_id`)
-    return Effect.succeed(onReasoningDone(state, event.item_id, event.summary_index ?? 0, event.text))
+    return Effect.succeed(onReasoningDone(state, event, event.item_id))
   }
   if (event.type === "response.reasoning_summary_part.added")
     return event.item_id !== undefined

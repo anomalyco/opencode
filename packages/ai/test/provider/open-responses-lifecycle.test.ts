@@ -113,12 +113,7 @@ describe("Open Responses basic-item lifecycles", () => {
           providerMetadata: { "openai-compatible": { itemId: "rs_1", reasoningEncryptedContent: null } },
         },
         { type: "reasoning-delta", id: "rs_1:1", text: "Second" },
-        {
-          type: "reasoning-end",
-          id: "rs_1:1",
-          text: "Second",
-          providerMetadata: { "openai-compatible": { itemId: "rs_1" } },
-        },
+        { type: "reasoning-end", id: "rs_1:1", providerMetadata: { "openai-compatible": { itemId: "rs_1" } } },
         {
           type: "reasoning-start",
           id: "rs_1:2",
@@ -198,7 +193,6 @@ describe("Open Responses basic-item lifecycles", () => {
         {
           type: "text-end",
           id: "msg_1",
-          text: "Checking",
           providerMetadata: { "openai-compatible": { itemId: "msg_1", phase: "commentary" } },
         },
         {
@@ -210,7 +204,6 @@ describe("Open Responses basic-item lifecycles", () => {
         {
           type: "text-end",
           id: "msg_2",
-          text: "Cannot help.",
           providerMetadata: { "openai-compatible": { itemId: "msg_2", phase: "final_answer" } },
         },
         {
@@ -219,12 +212,7 @@ describe("Open Responses basic-item lifecycles", () => {
           providerMetadata: { "openai-compatible": { itemId: "msg_3", phase: null } },
         },
         { type: "text-delta", id: "msg_3", text: "Done-only refusal." },
-        {
-          type: "text-end",
-          id: "msg_3",
-          text: "Done-only refusal.",
-          providerMetadata: { "openai-compatible": { itemId: "msg_3", phase: null } },
-        },
+        { type: "text-end", id: "msg_3", providerMetadata: { "openai-compatible": { itemId: "msg_3", phase: null } } },
       ])
     }),
   )
