@@ -17,6 +17,13 @@ test("bundles the Promise and Effect clients with the in-memory host", async () 
   }
 })
 
+test("bundles direct Effect Sessions without the embedded host or HTTP client", async () => {
+  const inputs = await bundleInputs("@opencode-ai/sdk/direct/effect")
+  expect(within(inputs, core).length).toBeGreaterThan(0)
+  expect(within(inputs, client)).toEqual([])
+  expect(within(inputs, server)).toEqual([])
+})
+
 async function bundleInputs(specifier: string) {
   const temporary = await mkdtemp(join(import.meta.dir, ".import-boundary-"))
   const entrypoint = join(temporary, "index.ts")

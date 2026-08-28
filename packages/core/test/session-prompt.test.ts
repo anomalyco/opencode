@@ -56,6 +56,7 @@ const execution = Layer.succeed(
         wakeCalls.push(sessionID)
       }),
     awaitIdle: () => Effect.void,
+    shutdown: () => Effect.void,
   }),
 )
 const locations = Layer.effect(

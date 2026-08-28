@@ -142,7 +142,7 @@ const cleanupLayer = Layer.effectDiscard(
   }),
 )
 
-const cleanupNode = makeGlobalNode({
+export const cleanupNode = makeGlobalNode({
   name: "tool-output-cleanup",
   layer: cleanupLayer,
   deps: [FSUtil.node, Global.node],

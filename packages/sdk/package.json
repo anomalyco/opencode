@@ -18,6 +18,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./effect": "./src/effect/index.ts",
+    "./direct/effect": "./src/direct/effect.ts",
     "./workerd": "./src/workerd.ts",
     "./workerd/effect": "./src/effect/workerd.ts"
   },

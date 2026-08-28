@@ -42,6 +42,7 @@ const it = testEffect(
             wake: () => Effect.void,
             interrupt: () => Effect.succeed(false),
             awaitIdle: () => Effect.void,
+            shutdown: () => Effect.void,
           }),
         ),
       ],

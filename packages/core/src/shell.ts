@@ -103,7 +103,7 @@ const cleanupLayer = Layer.effectDiscard(
   cleanup().pipe(Effect.repeat(Schedule.spaced(Duration.hours(1))), Effect.forkScoped),
 )
 
-const cleanupNode = makeGlobalNode({
+export const cleanupNode = makeGlobalNode({
   name: "shell-output-cleanup",
   layer: cleanupLayer,
   deps: [FSUtil.node, Global.node],

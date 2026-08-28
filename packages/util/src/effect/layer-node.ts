@@ -113,6 +113,26 @@ export function group<const Items extends readonly AnyNode[]>(
 
 export type Replacement = readonly [source: AnyNode, replacement: AnyNode | Layer.Any]
 export type Replacements = readonly Replacement[]
+export type ReplacementError<Items extends Replacements> = Items[number][1] extends infer Item
+  ? Item extends Layer.Any
+    ? Layer.Error<Item>
+    : Error<Item>
+  : never
+export type ReplacementServices<Items extends Replacements> = Items[number][1] extends infer Item
+  ? Item extends Layer.Any
+    ? Layer.Services<Item>
+    : never
+  : never
+
+// Open composition can retain new errors and requirements, but replacements
+// must still provide the original output and preserve node placement tags.
+export type ComposableReplacements<Items extends Replacements> = Items & {
+  readonly [K in keyof Items]: Items[K] extends readonly [Node<infer A, unknown, infer T>, infer Replacement]
+    ? Replacement extends Node<NoInfer<A>, unknown, T> | Layer.Layer<NoInfer<A>, unknown, unknown>
+      ? unknown
+      : { readonly "Invalid replacement": Replacement }
+    : { readonly "Invalid replacement": Items[K] }
+}
 
 type CheckReplacementErrors<SourceError, ReplacementError> = [Exclude<ReplacementError, SourceError>] extends [never]
   ? unknown

@@ -49,16 +49,19 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Pl
 
 export interface Cell {
   runtime?: Interface
+  readonly ready?: Effect.Effect<void>
 }
 
-export const makeCell = (): Cell => ({})
+export const makeCell = (ready?: Effect.Effect<void>): Cell => ({ ready })
 
 const require = <A, E, R>(cell: Cell, f: (runtime: Interface) => Effect.Effect<A, E, R>) =>
-  Effect.suspend(() => {
-    const runtime = cell.runtime
-    if (runtime === undefined) return Effect.die(new Error("Plugin runtime is unavailable"))
-    return f(runtime)
-  })
+  (cell.ready ?? Effect.void).pipe(
+    Effect.andThen(() => {
+      const runtime = cell.runtime
+      if (runtime === undefined) return Effect.die(new Error("Plugin runtime is unavailable"))
+      return f(runtime)
+    }),
+  )
 
 const defaultCell = makeCell()
 

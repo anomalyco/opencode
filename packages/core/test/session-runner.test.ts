@@ -450,6 +450,10 @@ const layer = Layer.unwrap(
           wake: coordinator.wake,
           interrupt: (sessionID) => coordinator.interrupt(sessionID),
           awaitIdle: coordinator.awaitIdle,
+          shutdown: (sessionIDs) =>
+            coordinator
+              .interruptAll(sessionIDs)
+              .pipe(Effect.andThen(Effect.forEach(sessionIDs, coordinator.awaitIdle, { discard: true }))),
         })
       }),
     ).pipe(Layer.provide(runnerLayer))

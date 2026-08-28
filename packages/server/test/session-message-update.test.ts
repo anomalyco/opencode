@@ -47,6 +47,7 @@ it.live("updates completed assistant message content through the session HTTP AP
             }),
           interrupt: () => Effect.succeed(false),
           awaitIdle: () => Effect.void,
+          shutdown: () => Effect.void,
         })
       }),
     )

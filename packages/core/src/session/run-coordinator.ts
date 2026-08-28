@@ -18,6 +18,8 @@ export interface Coordinator<Key, E, Reason = never> {
    * interrupted. Compose with `awaitIdle` for settlement.
    */
   readonly interrupt: (key: Key, reason?: Reason) => Effect.Effect<boolean>
+  /** Marks the whole ownership chain before signaling any of its fibers. */
+  readonly interruptAll: (keys: Iterable<Key>, reason?: Reason) => Effect.Effect<void>
   /** Resolves once no execution is active for the key. Returns immediately when already idle and never starts work. */
   readonly awaitIdle: (key: Key) => Effect.Effect<void>
 }
@@ -135,26 +137,40 @@ export const make = <Key, E, Reason = never>(options: {
         start(key, false, scope)
       })
 
+    const stop = (key: Key, reason?: Reason) => {
+      const execution = executions.get(key)
+      if (execution === undefined || execution.stopping) return undefined
+      if (execution.owner === undefined) {
+        // Settlement window: the owner exited but the settled hook has not finished. The
+        // terminal outcome is already decided, so no reason attaches — but the interrupt
+        // still claims the recorded wakes so settle does not start a dead-intent successor.
+        execution.pendingWake = undefined
+        return undefined
+      }
+      execution.stopping = true
+      // Wakes recorded so far belong to the interrupted intent; the interrupt claims them.
+      // Wakes arriving during cleanup are new admissions and restart normally at settle.
+      execution.pendingWake = undefined
+      execution.interruptionReason = reason
+      return execution.owner
+    }
+
     const interrupt = (key: Key, reason?: Reason): Effect.Effect<boolean> =>
       Effect.sync(() => {
-        const execution = executions.get(key)
-        if (execution === undefined || execution.stopping) return false
-        if (execution.owner === undefined) {
-          // Settlement window: the owner exited but the settled hook has not finished. The
-          // terminal outcome is already decided, so no reason attaches — but the interrupt
-          // still claims the recorded wakes so settle does not start a dead-intent successor.
-          execution.pendingWake = undefined
-          return false
-        }
-        execution.stopping = true
-        // Wakes recorded so far belong to the interrupted intent; the interrupt claims them.
-        // Wakes arriving during cleanup are new admissions and restart normally at settle.
-        execution.pendingWake = undefined
-        execution.interruptionReason = reason
+        const owner = stop(key, reason)
+        if (owner === undefined) return false
         // Fire and forget: nobody benefits from waiting out cleanup here, and callers like
         // the interrupt endpoint must acknowledge immediately even when finalizers are slow.
-        fork(Fiber.interrupt(execution.owner))
+        fork(Fiber.interrupt(owner))
         return true
+      })
+
+    const interruptAll = (keys: Iterable<Key>, reason?: Reason) =>
+      Effect.sync(() => {
+        Array.from(keys)
+          .map((key) => stop(key, reason))
+          .filter((owner) => owner !== undefined)
+          .forEach((owner) => fork(Fiber.interrupt(owner)))
       })
 
     // One execution's `done` already spans coalesced continuations; re-check after it
@@ -166,5 +182,5 @@ export const make = <Key, E, Reason = never>(options: {
         return Deferred.await(execution.done).pipe(Effect.ignoreCause, Effect.andThen(awaitIdle(key)))
       })
 
-    return { active: Effect.sync(() => new Set(executions.keys())), run, wake, interrupt, awaitIdle }
+    return { active: Effect.sync(() => new Set(executions.keys())), run, wake, interrupt, interruptAll, awaitIdle }
   })

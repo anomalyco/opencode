@@ -17,6 +17,7 @@ import { SessionRestart } from "@opencode-ai/core/session/execution/restart"
 import { UserInterruptedError } from "@opencode-ai/core/session/error"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionInbox } from "@opencode-ai/core/session/inbox"
+import { SessionInstance } from "@opencode-ai/core/session/instance"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionRunner } from "@opencode-ai/core/session/runner/index"
 import { SessionInboxTable, SessionTable } from "@opencode-ai/core/session/sql"
@@ -1307,7 +1308,8 @@ function buildExecution(
     return yield* Layer.buildWithScope(
       SessionRestart.layer(options).pipe(
         Layer.provideMerge(sessionLayer),
-        Layer.provideMerge(Layer.fresh(SessionExecution.layer)),
+        // Capture the fixture's Location map instead of Session.node's memoized adapter.
+        Layer.provideMerge(Layer.fresh(SessionExecution.layer.pipe(Layer.provide(SessionInstance.layer)))),
         Layer.provide(Layer.succeed(Database.Service, database)),
         Layer.provide(Layer.succeed(Bus.Service, bus)),
         Layer.provide(Layer.succeed(SessionStore.Service, store)),

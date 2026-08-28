@@ -1,6 +1,6 @@
 export * as Bus from "./bus.js"
 
-import { Cause, Clock, Context, Effect, Layer, Option, PubSub, Schema, Stream } from "effect"
+import { Cause, Clock, Context, Effect, Layer, Option, PubSub, Schema, type Scope, Stream } from "effect"
 import { Event } from "@opencode-ai/schema/event"
 import type { EventLog } from "@opencode-ai/schema/event-log"
 import { and, asc, eq, gt, lte, sql } from "drizzle-orm"
@@ -125,6 +125,8 @@ export interface Subscribe {
    * With an ambient Location, delivery is restricted to that Location and global
    * events. Unlocated Session events use the Session's owner at publication time.
    * Session moves reach both the old and new Location, without changing the event.
+   * Captured instance views restrict instance-local ephemerals to their private
+   * owner, unless published with `global: true`.
    */
   (): Stream.Stream<Event.Payload>
   <D extends Event.Definition>(definition: D): Stream.Stream<Event.Payload<D>>
@@ -146,6 +148,8 @@ export interface Interface {
     events: I,
   ) => Effect.Effect<PublishResult<I>>
   readonly subscribe: Subscribe
+  /** Acquire a live Session subscription immediately, retained until the caller's Scope closes. */
+  readonly observe: (sessionID: SessionID) => Effect.Effect<Stream.Stream<SessionEvent.Event>, never, Scope.Scope>
   /**
    * Durable, ordered per-aggregate log read. Forked aggregates may reserve an
    * inherited prefix before their first child-authored event. `follow: false`
@@ -170,6 +174,33 @@ export interface Interface {
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Bus") {}
+
+export const PrivateOwner = Context.Reference<symbol | undefined>("@opencode/Bus/PrivateOwner", {
+  defaultValue: () => undefined,
+})
+
+/** Bind instance-local ephemeral audiences without replacing the shared durable authority. */
+export function capture(bus: Interface, owner: symbol): Interface {
+  function subscribe(): Stream.Stream<Event.Payload>
+  function subscribe<D extends Event.Definition>(definition: D): Stream.Stream<Event.Payload<D>>
+  function subscribe<const D extends readonly [Event.Definition, ...Event.Definition[]]>(
+    definitions: D,
+  ): Stream.Stream<SubscribePayload<D>>
+  function subscribe(
+    input?: Event.Definition | readonly [Event.Definition, ...Event.Definition[]],
+  ): Stream.Stream<Event.Payload> {
+    const stream =
+      input === undefined ? bus.subscribe() : isDefinition(input) ? bus.subscribe(input) : bus.subscribe(input)
+    return stream.pipe(Stream.provideService(PrivateOwner, owner))
+  }
+
+  return {
+    ...bus,
+    publish: (definition, data, options) =>
+      bus.publish(definition, data, options).pipe(Effect.provideService(PrivateOwner, owner)),
+    subscribe,
+  }
+}
 
 interface Options {
   readonly beforeAggregateRead?: (aggregateID: string) => Effect.Effect<void>
@@ -205,6 +236,36 @@ export function configured(options?: Options) {
         // Keep routing separate from the public event, and retain its snapshot
         // while a slow subscriber drains events queued before a move or deletion.
         const routes = new WeakMap<Event.Payload, readonly Location.Ref[]>()
+        const audiences = new WeakMap<Event.Payload, symbol | null>()
+        const localTypes = new Set([
+          "mcp.tools.changed",
+          "mcp.prompts.changed",
+          "mcp.resources.changed",
+          "mcp.status.changed",
+          "plugin.added",
+          "plugin.updated",
+          "config.updated",
+          "agent.updated",
+          "catalog.updated",
+          "integration.updated",
+          "command.updated",
+          "reference.updated",
+          "skill.updated",
+          "websearch.updated",
+          "instruction-discovery.updated",
+          "permission.asked",
+          "permission.replied",
+          "form.created",
+          "form.replied",
+          "form.cancelled",
+          "pty.created",
+          "pty.updated",
+          "pty.exited",
+          "pty.deleted",
+          "shell.created",
+          "shell.exited",
+          "shell.deleted",
+        ])
 
         const isSessionEvent = (event: Event.Payload): event is SessionEvent.Event =>
           Object.hasOwn(SessionEvent.All.cases, event.type)
@@ -489,7 +550,7 @@ export function configured(options?: Options) {
           })
         }
 
-        const observe = (event: Event.Payload, observer: (event: Event.Payload) => Effect.Effect<void>) =>
+        const observeListener = (event: Event.Payload, observer: (event: Event.Payload) => Effect.Effect<void>) =>
           Effect.suspend(() => observer(event)).pipe(
             Effect.catchCauseIf(
               (cause) => !Cause.hasInterrupts(cause),
@@ -501,7 +562,7 @@ export function configured(options?: Options) {
           return Effect.gen(function* () {
             yield* Effect.forEach(
               listeners,
-              (listener) => (isolateListeners ? observe(event, listener) : listener(event)),
+              (listener) => (isolateListeners ? observeListener(event, listener) : listener(event)),
               { discard: true },
             )
             const typed = pubsub.typed.get(event.type)
@@ -519,18 +580,19 @@ export function configured(options?: Options) {
                 (serviceLocation
                   ? { directory: serviceLocation.directory, workspaceID: serviceLocation.workspaceID }
                   : undefined))
-            return yield* publishEvent(
-              definition,
-              {
-                id: options?.id ?? Event.ID.create(),
-                created: yield* Clock.currentTimeMillis,
-                ...(options?.metadata ? { metadata: options.metadata } : {}),
-                type: definition.type,
-                ...(location ? { location } : {}),
-                data,
-              } as Event.Payload<D>,
-              options?.commit,
-            )
+            const event = {
+              id: options?.id ?? Event.ID.create(),
+              created: yield* Clock.currentTimeMillis,
+              ...(options?.metadata ? { metadata: options.metadata } : {}),
+              type: definition.type,
+              ...(location ? { location } : {}),
+              data,
+            } as Event.Payload<D>
+            if (!definition.durable && localTypes.has(definition.type)) {
+              const owner = options?.global ? null : yield* PrivateOwner
+              if (owner !== undefined) audiences.set(event as Event.Payload, owner)
+            }
+            return yield* publishEvent(definition, event, options?.commit)
           })
         }
 
@@ -731,24 +793,24 @@ export function configured(options?: Options) {
 
         const local = <A extends Event.Payload>(stream: Stream.Stream<A>) =>
           Stream.unwrap(
-            Effect.serviceOption(Location.Service).pipe(
-              Effect.map((location) =>
-                Option.match(location, {
-                  onNone: () => stream,
-                  onSome: (location) => {
-                    const matches = (ref: Location.Ref) =>
-                      ref.directory === location.directory && ref.workspaceID === location.workspaceID
-                    return stream.pipe(
-                      Stream.filter((event) => {
-                        const refs = routes.get(event)
-                        if (refs) return refs.some(matches)
-                        return !event.location || matches(event.location)
-                      }),
-                    )
-                  },
+            Effect.gen(function* () {
+              const owner = yield* PrivateOwner
+              const location = Option.getOrUndefined(yield* Effect.serviceOption(Location.Service))
+              const matches = (ref: Location.Ref) =>
+                ref.directory === location?.directory && ref.workspaceID === location?.workspaceID
+              return stream.pipe(
+                Stream.filter((event) => {
+                  if (!event.durable && localTypes.has(event.type)) {
+                    const audience = audiences.get(event)
+                    if (audience !== null && audience !== owner) return false
+                  }
+                  if (!location) return true
+                  const refs = routes.get(event)
+                  if (refs) return refs.some(matches)
+                  return !event.location || matches(event.location)
                 }),
-              ),
-            ),
+              )
+            }),
           )
 
         function subscribe(): Stream.Stream<Event.Payload>
@@ -766,6 +828,14 @@ export function configured(options?: Options) {
         }
 
         const streamLive = (): Stream.Stream<Event.Payload> => local(Stream.fromPubSub(pubsub.live))
+
+        const observe = Effect.fn("Bus.observe")(function* (sessionID: SessionID) {
+          const subscription = yield* PubSub.subscribe(pubsub.live)
+          return Stream.fromSubscription(subscription).pipe(
+            Stream.filter(isSessionEvent),
+            Stream.filter((event) => event.data.sessionID === sessionID),
+          )
+        })
 
         const readAfter = (
           aggregateID: string,
@@ -903,6 +973,7 @@ export function configured(options?: Options) {
           publish,
           publishAll,
           subscribe,
+          observe,
           log,
           listen,
           project,

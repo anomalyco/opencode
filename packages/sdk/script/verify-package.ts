@@ -88,6 +88,57 @@ try {
   )
   await Promise.all([
     Bun.write(
+      join(consumer, "direct.mjs"),
+      `import { AbsolutePath, Location, Session, Shared } from "@opencode-ai/sdk/direct/effect"
+import { ModelsDev } from "@opencode-ai/core/models-dev"
+import { Watcher } from "@opencode-ai/core/filesystem/watcher"
+import { Global } from "@opencode-ai/util/global"
+import { Deferred, Effect } from "effect"
+import { mkdtemp, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+
+const directory = await mkdtemp(join(tmpdir(), "opencode-packed-direct-"))
+try {
+  await Effect.runPromise(Effect.gen(function* () {
+    const location = Location.Ref.make({ directory: AbsolutePath.make(directory) })
+    const first = yield* Session.create({ location, title: "Packed direct Session" })
+    const second = yield* Session.create({ location })
+    if (first.id === second.id) throw new Error("Private Sessions unexpectedly reused an ID")
+    const observed = yield* Deferred.make()
+    yield* first.events.subscribe((event) => event.type === "session.inbox.enqueued"
+      ? Deferred.succeed(observed, event.data.sessionID).pipe(Effect.asVoid)
+      : Effect.void)
+    const admitted = yield* first.prompt({ text: "Admit without model execution", resume: false })
+    if (admitted.sessionID !== first.id) throw new Error("Direct admission used the wrong Session")
+    const id = yield* Deferred.await(observed).pipe(Effect.timeout("5 seconds"))
+    if (id !== first.id) throw new Error("Direct observation used the wrong Session")
+    yield* first.wait()
+  }).pipe(Effect.provide(Shared.layer({
+    database: { path: join(directory, "direct.sqlite") },
+    replacements: [
+      [Global.node, Global.layerWith({
+        home: directory,
+        config: join(directory, "config"),
+        data: join(directory, "data"),
+        cache: join(directory, "cache"),
+        state: join(directory, "state"),
+        tmp: join(directory, "tmp"),
+        bin: join(directory, "bin"),
+        log: join(directory, "log"),
+        repos: join(directory, "repos"),
+      })],
+      [ModelsDev.node, ModelsDev.configured({ fetch: false })],
+      [Watcher.node, Watcher.configured({ enabled: false })],
+    ],
+  })), Effect.scoped))
+  console.log("packed direct Sessions OK")
+} finally {
+  await rm(directory, { recursive: true, force: true })
+}
+`,
+    ),
+    Bun.write(
       join(consumer, "wrangler.jsonc"),
       JSON.stringify({
         name: "opencode-sdk-packed-consumer",
@@ -178,6 +229,7 @@ for (const module of modules) {
     throw new Error(`Packed SDK consumer resolved multiple Effect runtimes:\n${runtimes.join("\n")}`)
   }
   await $`bun imports.mjs`.cwd(consumer)
+  await $`bun direct.mjs`.cwd(consumer)
   await $`bun --conditions=workerd imports.mjs`.cwd(consumer)
   await $`node_modules/.bin/wrangler deploy --dry-run --config wrangler.jsonc --outdir dist`.cwd(consumer)
 

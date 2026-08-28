@@ -4,7 +4,7 @@ import { Cause, Context, Effect, Exit, Layer } from "effect"
 import { Bus } from "../bus.js"
 import { Database } from "../database/database.js"
 import { Job } from "../job.js"
-import { LocationServiceMap } from "../location-service-map.js"
+import { SessionInstance } from "./instance.js"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { SessionEvent } from "./event.js"
 import { SessionRunCoordinator } from "./run-coordinator.js"
@@ -31,9 +31,11 @@ export interface Interface {
   readonly interrupt: (sessionID: SessionSchema.ID, options?: { readonly continue?: boolean }) => Effect.Effect<boolean>
   /** Resolves once this process owns no active execution for the Session. Returns immediately when idle and never starts work. */
   readonly awaitIdle: (sessionID: SessionSchema.ID) => Effect.Effect<void>
+  /** Settles a scoped instance's work without releasing its restart claim. */
+  readonly shutdown: (sessionIDs: readonly SessionSchema.ID[]) => Effect.Effect<void>
 }
 
-/** Routes execution from a Session ID to the runner owned by that Session's Location. */
+/** Routes execution from a Session ID to its host-selected instance's runner. */
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionExecution") {}
 
 type InterruptReason = "user" | "shutdown"
@@ -46,12 +48,12 @@ export function terminal(exit: Exit.Exit<void, SessionRunner.RunError>, reason?:
   return { type: "failed" as const, error: toSessionError(failure) }
 }
 
-/** Process-local execution: drains run in this process, routed through the Session's Location graph. */
+/** One process-local coordinator; instance selection is separate from its drain policy. */
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const store = yield* SessionStore.Service
-    const locations = yield* LocationServiceMap.Service
+    const instances = yield* SessionInstance.Service
     const bus = yield* Bus.Service
     const jobs = yield* Job.Service
     const db = (yield* Database.Service).db
@@ -88,7 +90,7 @@ export const layer = Layer.effect(
       const result = yield* SessionRunner.Service.use((runner) =>
         runner.drain({ sessionID, force, continuation, promotable }),
       ).pipe(
-        Effect.provide(locations.get(session.location)),
+        Effect.provide(instances.get(session)),
         Effect.tapCause((cause) =>
           Cause.hasInterruptsOnly(cause)
             ? Effect.void
@@ -160,9 +162,17 @@ export const layer = Layer.effect(
             yield* coordinator.wake(sessionID, "steer")
           return interrupted
         }),
-      resume: coordinator.run,
-      wake: coordinator.wake,
+      resume: (sessionID) => instances.check(sessionID).pipe(Effect.andThen(coordinator.run(sessionID))),
+      wake: (sessionID) => instances.check(sessionID).pipe(Effect.andThen(coordinator.wake(sessionID))),
       awaitIdle: coordinator.awaitIdle,
+      shutdown: (sessionIDs) =>
+        coordinator
+          .interruptAll(sessionIDs, "shutdown")
+          .pipe(
+            Effect.andThen(
+              Effect.forEach(sessionIDs, coordinator.awaitIdle, { concurrency: "unbounded", discard: true }),
+            ),
+          ),
     })
   }),
 )
@@ -170,7 +180,7 @@ export const layer = Layer.effect(
 export const node = makeGlobalNode({
   service: Service,
   layer,
-  deps: [SessionStore.node, LocationServiceMap.node, Bus.node, Database.node, Job.node],
+  deps: [SessionStore.node, SessionInstance.node, Bus.node, Database.node, Job.node],
 })
 
 /** Low-level compatibility layer for callers that only need durable Session recording. */
@@ -182,5 +192,6 @@ export const noopLayer = Layer.succeed(
     wake: () => Effect.void,
     interrupt: () => Effect.succeed(false),
     awaitIdle: () => Effect.void,
+    shutdown: () => Effect.void,
   }),
 )
