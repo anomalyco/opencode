@@ -91,16 +91,11 @@ const layer = Layer.effect(
 
       yield* lock.withPermit(
         Effect.gen(function* () {
-          const next = definitions.map((definition) => ({ id: definition.id, version: definition.version }))
-          const current = Array.from(active.values(), (entry) => ({
-            id: entry.plugin.id,
-            version: entry.plugin.version,
-          }))
           if (
-            current.length === next.length &&
-            current.every((definition, index) => {
-              const candidate = next[index]
-              return definition.id === candidate?.id && definition.version === candidate.version
+            active.size === definitions.length &&
+            Array.from(active.values()).every((entry, index) => {
+              const definition = definitions[index]
+              return entry.plugin.id === definition?.id && entry.plugin.version === definition.version
             })
           ) {
             const nextInventory = [...Array.from(active.values(), (entry) => activeInfo(entry.plugin)), ...failures]
@@ -116,7 +111,7 @@ const layer = Layer.effect(
               for (const definition of definitions) {
                 const previous = active.get(definition.id)
                 active.delete(definition.id)
-                if (previous) yield* Scope.close(previous.scope, Exit.void).pipe(Effect.ignore)
+                if (previous) yield* Scope.close(previous.scope, Exit.void)
 
                 const loaded = yield* load(definition)
                 if (loaded.scope !== undefined) {
@@ -147,7 +142,7 @@ const layer = Layer.effect(
                 .filter(([id]) => !ids.has(id))
                 .toReversed()
               removed.forEach(([id]) => active.delete(id))
-              yield* Effect.forEach(removed, ([, entry]) => Scope.close(entry.scope, Exit.void).pipe(Effect.ignore), {
+              yield* Effect.forEach(removed, ([, entry]) => Scope.close(entry.scope, Exit.void), {
                 discard: true,
               })
               inventory = [...nextInventory, ...failures]

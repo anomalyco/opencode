@@ -52,7 +52,7 @@ describe("provider error retention", () => {
           Effect.flip,
         )
         expect(error.message).toContain("Slow down")
-        expect(error.reason._tag).toBe(entry.name === "Gemini" ? "ProviderInternal" : "RateLimit")
+        expect(error.reason._tag).toBe("RateLimit")
         expect(error.reason.body).toBe(body)
         expect(error.reason.http).toMatchObject({ status: 200, headers: { "x-provider-trace": "trace-1" } })
         expect(error.reason.http?.url).toStartWith("https://provider.test/")

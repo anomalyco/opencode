@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { AIError } from "../src/schema/index.js"
 import { ToolStream } from "../src/protocols/utils/tool-stream.js"
@@ -38,44 +38,40 @@ describe("ToolStream", () => {
     }),
   )
 
-  it.effect("exposes cumulative partial string values", () =>
-    Effect.gen(function* () {
-      const result = ToolStream.appendOrStart(
-        ADAPTER,
-        ToolStream.empty<number>(),
-        0,
-        { id: "call_1", name: "lookup", text: '{"query":"wea' },
-        "missing tool",
-      )
-      if (ToolStream.isError(result)) return yield* result
+  test("exposes cumulative partial string values", () => {
+    const result = ToolStream.appendOrStart(
+      ADAPTER,
+      ToolStream.empty<number>(),
+      0,
+      { id: "call_1", name: "lookup", text: '{"query":"wea' },
+      "missing tool",
+    )
+    if (ToolStream.isError(result)) throw result
 
-      expect(result.events.at(-1)).toEqual({
-        type: "tool-input-delta",
-        id: "call_1",
-        name: "lookup",
-        text: '{"query":"wea',
-        input: { query: "wea" },
-      })
-    }),
-  )
+    expect(result.events.at(-1)).toEqual({
+      type: "tool-input-delta",
+      id: "call_1",
+      name: "lookup",
+      text: '{"query":"wea',
+      input: { query: "wea" },
+    })
+  })
 
-  it.effect("defaults partial input to an empty object when the accumulated value cannot be parsed", () =>
-    Effect.gen(function* () {
-      const result = ToolStream.appendOrStart(
-        ADAPTER,
-        ToolStream.empty<number>(),
-        0,
-        { id: "call_1", name: "lookup", text: "x" },
-        "missing tool",
-      )
-      if (ToolStream.isError(result)) return yield* result
+  test("defaults partial input to an empty object when the accumulated value cannot be parsed", () => {
+    const result = ToolStream.appendOrStart(
+      ADAPTER,
+      ToolStream.empty<number>(),
+      0,
+      { id: "call_1", name: "lookup", text: "x" },
+      "missing tool",
+    )
+    if (ToolStream.isError(result)) throw result
 
-      expect(result.events).toEqual([
-        { type: "tool-input-start", id: "call_1", name: "lookup" },
-        { type: "tool-input-delta", id: "call_1", name: "lookup", text: "x", input: {} },
-      ])
-    }),
-  )
+    expect(result.events).toEqual([
+      { type: "tool-input-start", id: "call_1", name: "lookup" },
+      { type: "tool-input-delta", id: "call_1", name: "lookup", text: "x", input: {} },
+    ])
+  })
 
   it.effect("keeps accumulated identity when later deltas contain empty strings", () =>
     Effect.gen(function* () {
@@ -104,14 +100,12 @@ describe("ToolStream", () => {
     }),
   )
 
-  it.effect("fails appendExisting when the provider skipped the tool start", () =>
-    Effect.gen(function* () {
-      const error = ToolStream.appendExisting(ADAPTER, ToolStream.empty<number>(), 0, "{}", "missing tool")
+  test("fails appendExisting when the provider skipped the tool start", () => {
+    const error = ToolStream.appendExisting(ADAPTER, ToolStream.empty<number>(), 0, "{}", "missing tool")
 
-      expect(error).toBeInstanceOf(AIError)
-      if (ToolStream.isError(error)) expect(error.message).toBe("missing tool")
-    }),
-  )
+    expect(error).toBeInstanceOf(AIError)
+    if (ToolStream.isError(error)) expect(error.message).toBe("missing tool")
+  })
 
   it.effect("uses final input override without losing accumulated deltas", () =>
     Effect.gen(function* () {

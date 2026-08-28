@@ -20,14 +20,13 @@ export const Plugin = define({
     const global = yield* Global.Service
     const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.reference.reload())
     yield* ctx.reference.transform((draft) => {
-      const entries = new Map<string, Reference.Source>()
       for (const doc of loaded.entries.filter((entry): entry is Document => entry.type === "document")) {
         const directory = doc.path ? path.dirname(doc.path) : location.directory
         for (const [name, entry] of Object.entries(doc.info.references ?? {})) {
           if (!validAlias(name)) continue
           const description = typeof entry === "string" ? undefined : entry.description
           const hidden = typeof entry === "string" ? undefined : entry.hidden
-          entries.set(
+          draft.add(
             name,
             local(entry)
               ? Reference.LocalSource.make({
@@ -48,7 +47,6 @@ export const Plugin = define({
           )
         }
       }
-      for (const [name, source] of entries) draft.add(name, source)
     })
   }),
 })
