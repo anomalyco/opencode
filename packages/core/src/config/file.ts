@@ -4,7 +4,15 @@ import { isDeepStrictEqual } from "node:util"
 import { isRecord } from "@opencode-ai/ai/utils/record"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Effect, Schema, Semaphore } from "effect"
-import { applyEdits, createScanner, findNodeAtLocation, modify, parse, parseTree, type ParseError } from "jsonc-parser"
+import {
+  applyEdits,
+  createScanner,
+  findNodeAtLocation,
+  modify,
+  parseTree,
+  type Node,
+  type ParseError,
+} from "jsonc-parser"
 
 export class UpdateError extends Schema.TaggedError<UpdateError>()("ConfigFile.UpdateError", {
   message: Schema.String,
@@ -32,7 +40,7 @@ export const update = Effect.fn("ConfigFile.update")(
       .readFileString(filepath)
       .pipe(Effect.mapError((cause) => new UpdateError({ message: `Failed to read config: ${filepath}`, cause })))
     const errors: ParseError[] = []
-    const current: unknown = parse(text, errors, { allowTrailingComma: true })
+    const current = parseSource(text, errors)
     if (errors.length || !isDocument(current))
       return yield* Effect.fail(new UpdateError({ message: `Invalid config file: ${filepath}` }))
 
@@ -54,7 +62,7 @@ export const update = Effect.fn("ConfigFile.update")(
       catch: (cause) => new UpdateError({ message: `Failed to patch config: ${filepath}`, cause }),
     })
     // Duplicate keys can make parse choose the last value while modify edits the first.
-    const written: unknown = parse(updated, errors, { allowTrailingComma: true })
+    const written = parseSource(updated, errors)
     if (errors.length || !isDeepStrictEqual(written, next))
       return yield* Effect.fail(
         new UpdateError({ message: `Config patch does not match the requested update: ${filepath}` }),
@@ -70,6 +78,25 @@ export const update = Effect.fn("ConfigFile.update")(
 )
 
 type Edit = { readonly path: (string | number)[]; readonly value: unknown }
+
+function parseSource(text: string, errors: ParseError[]) {
+  const root = parseTree(text, errors, { allowTrailingComma: true })
+  if (!root || errors.length) return
+  // parse() assigns onto {}, invoking the __proto__ setter instead of retaining
+  // an own JSON key. Construct object entries from the AST without those setters.
+  const value = (node: Node): unknown => {
+    if (node.type === "array") return (node.children ?? []).map(value)
+    if (node.type === "object")
+      return Object.fromEntries(
+        (node.children ?? []).map((property) => {
+          const child = property.children?.[1]
+          return [property.children?.[0]?.value, child && value(child)]
+        }),
+      )
+    return node.value
+  }
+  return value(root)
+}
 
 function patch(text: string, edit: Edit) {
   if (edit.value !== undefined)

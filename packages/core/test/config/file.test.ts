@@ -173,15 +173,38 @@ describe("ConfigFile", () => {
       Effect.gen(function* () {
         const fs = yield* FSUtil.Service
         const target = path.join(tmp.path, "opencode.json")
-        yield* fs.writeFileString(target, '{ "constructor": "remove", "toString": "remove", "shell": "keep" }')
+        yield* fs.writeFileString(
+          target,
+          '{ "\\u005f_proto__": "remove", "constructor": "remove", "toString": "remove", "shell": "keep" }',
+        )
         const updated = yield* ConfigFile.update(target, (draft) => {
-          ;["constructor", "toString"].forEach((key) => {
+          ;["__proto__", "constructor", "toString"].forEach((key) => {
             delete draft[key]
           })
         })
 
         expect(updated).toEqual({ shell: "keep" })
         expect(yield* fs.readJson(target)).toEqual(updated)
+      }),
+    ),
+  )
+
+  it.live("preserves and edits object-valued __proto__ source keys", () =>
+    withTempDir((tmp) =>
+      Effect.gen(function* () {
+        const fs = yield* FSUtil.Service
+        const target = path.join(tmp.path, "opencode.json")
+        yield* fs.writeFileString(target, '{ "__proto__": { "value": "before" }, "shell": "keep" }')
+        const updated = yield* ConfigFile.update(target, (draft) => {
+          expect(Object.hasOwn(draft, "__proto__")).toBe(true)
+          const entry: unknown = draft["__proto__"]
+          if (!isRecord(entry)) throw new Error("Missing fixture entry")
+          entry.value = "after"
+        })
+
+        expect(updated).toEqual({ ["__proto__"]: { value: "after" }, shell: "keep" })
+        expect(yield* fs.readJson(target)).toEqual(updated)
+        expect(Object.getPrototypeOf(updated)).toBe(Object.prototype)
       }),
     ),
   )
