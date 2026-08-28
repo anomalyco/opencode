@@ -698,6 +698,7 @@ describe("ReadTool", () => {
           input: { path: "src", offset: 0, limit: 1 },
         },
       })
+      expect(result.status).toBe("completed")
       if (result.status !== "completed") return
       expect(result.content).toEqual([
         {
