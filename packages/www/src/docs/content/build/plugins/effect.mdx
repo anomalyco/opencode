@@ -1128,6 +1128,35 @@ effect: (ctx) =>
   }),
 ```
 
+Override the retry decision for a provider failure or replace its delay in milliseconds. The hook runs after OpenCode
+classifies the failure and proposes its policy, but before any retry is scheduled. It does not expose how OpenCode
+internally performs the next attempt.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    yield* ctx.session.hook("retry", (event) =>
+      Effect.sync(() => {
+        if (event.error.status === 429) {
+          event.decision = { retry: true, delay: 10_000 }
+          return
+        }
+        if (event.error.type === "provider.invalid-request" && event.attempt === 2) {
+          event.decision = { retry: true, delay: 0 }
+          return
+        }
+        if (event.attempt >= 3) event.decision = { retry: false }
+      }),
+    )
+  }),
+```
+
+The initial `decision` is OpenCode's policy, so hooks may make a normally terminal provider failure retryable or veto a
+proposed retry. Multiple hooks run in registration order and later hooks see the current decision. The built-in maximum
+attempt count remains a hard limit. `attempt` is the physical attempt being proposed; the initial request is attempt `1`,
+so the first retry is attempt `2`. Invalid delays (`NaN`, infinity, or negative values) fall back to the computed delay.
+Context-overflow recovery remains separate because it compacts the conversation instead of retrying the same request.
+
 #### Reference
 
 ```ts
@@ -1136,6 +1165,18 @@ interface SessionHooks {
   readonly "model.request": SessionModelRequest
   readonly "http.request": SessionHttpRequest
   readonly "http.response": SessionHttpResponse
+  readonly retry: SessionRetry
+}
+
+type RetryDecision = { retry: false } | { retry: true; delay: number }
+
+interface SessionRetry {
+  readonly sessionID: string
+  readonly agent: string
+  readonly model: { providerID: string; id: string; variant?: string }
+  readonly error: { type: string; message: string; status?: number }
+  readonly attempt: number
+  decision: RetryDecision
 }
 
 interface SessionHookDomain {

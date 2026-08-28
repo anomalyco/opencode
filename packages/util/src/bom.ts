@@ -1,7 +1,7 @@
 export * as Bom from "./bom.js"
 
 import { Effect } from "effect"
-import { FSUtil } from "./fs-util.js"
+import type { FSUtil } from "./fs-util.js"
 
 const code = 0xfeff
 const value = String.fromCharCode(code)

@@ -669,8 +669,8 @@ describe("HttpApiCodegen.generate", () => {
     )
     const types = output.files.find((file) => file.path === "types.ts")?.content
 
-    expect(types).toContain('readonly "first": ({ readonly "value": string })')
-    expect(types).toContain('readonly "second": ({ readonly "value": string })')
+    expect(types).toContain('readonly "first": { readonly "value": string }')
+    expect(types).toContain('readonly "second": { readonly "value": string }')
     expect(types).not.toContain("export type Objects")
   })
 

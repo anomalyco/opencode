@@ -5,6 +5,7 @@ import { Tool } from "@opencode-ai/schema/tool"
 import { Skill } from "@opencode-ai/schema/skill"
 import { eq } from "drizzle-orm"
 import { Context, DateTime, Effect, Layer, Schema } from "effect"
+import { map } from "effect/Array"
 import path from "path"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { App } from "../app.js"
@@ -100,6 +101,7 @@ const layer = Layer.effect(
               title: input.data.info.title,
               agent: input.data.info.agent,
               model: input.data.info.model,
+              metadata: input.data.info.metadata,
             },
             {
               location: input.location,
@@ -178,6 +180,10 @@ function sanitize(data: Data): Data {
     info: {
       ...data.info,
       title: data.info.title === undefined ? undefined : redact("session-title", data.info.id, data.info.title),
+      metadata:
+        data.info.metadata && Object.keys(data.info.metadata).length > 0
+          ? { redacted: `session-metadata:${data.info.id}` }
+          : data.info.metadata,
       location: {
         ...data.info.location,
         directory: AbsolutePath.make(`/${redact("session-directory", data.info.id, data.info.location.directory)}`),
@@ -304,21 +310,13 @@ function sanitizeToolState(id: string, state: SessionMessage.ToolState): Session
     return {
       ...state,
       input: { redacted: `tool-input:${id}` },
-      content: [
-        sanitizeToolContent(id, state.content[0]),
-        ...state.content.slice(1).map((item) => sanitizeToolContent(id, item)),
-      ],
+      content: map(state.content, (item) => sanitizeToolContent(id, item)),
       metadata: meta,
     }
   return {
     ...state,
     input: { redacted: `tool-input:${id}` },
-    content: state.content
-      ? [
-          sanitizeToolContent(id, state.content[0]),
-          ...state.content.slice(1).map((item) => sanitizeToolContent(id, item)),
-        ]
-      : undefined,
+    content: state.content ? map(state.content, (item) => sanitizeToolContent(id, item)) : undefined,
     metadata: meta,
   }
 }

@@ -2,7 +2,7 @@ export * as VariantPlugin from "./variant.js"
 
 import { Effect } from "effect"
 import { define } from "@opencode-ai/plugin/effect/plugin"
-import { Model } from "../model.js"
+import { Model } from "@opencode-ai/schema/model"
 import { Provider } from "../provider.js"
 
 export const Plugin = define({

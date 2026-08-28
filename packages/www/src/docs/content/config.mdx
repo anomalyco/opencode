@@ -40,13 +40,15 @@ Project-specific configuration can use either form:
 /home/user/projects/my-app/.opencode/opencode.json(c)
 ```
 
-When OpenCode starts, it searches for configuration files from the current
-directory upward to the project root. It merges direct `opencode.json(c)` files
-from the project root toward the current directory, then does the same for
-files inside `.opencode` directories. A `.opencode` config therefore overrides
-every direct config, even when the direct config is closer to the current
-directory. Avoid mixing the two forms across one project hierarchy unless this
-precedence is intentional.
+During ordinary project discovery, OpenCode searches for configuration files
+from the current Location directory through every ancestor to the filesystem
+root, including directories above the detected project or repository root. It
+merges direct `opencode.json(c)` files from the farthest ancestor toward the
+current directory, then does the same for files inside `.opencode` directories.
+A discovered `.opencode` config therefore overrides every discovered direct
+config, even when the direct config is closer to the current directory. Avoid
+mixing the two forms across one directory hierarchy unless this precedence is
+intentional.
 
 For example, consider a monorepo with OpenCode started from
 `/home/user/projects/acme/packages/web`:

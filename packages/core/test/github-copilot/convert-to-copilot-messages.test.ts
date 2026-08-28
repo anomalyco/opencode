@@ -1,9 +1,9 @@
-import { convertToOpenAICompatibleChatMessages as convertToCopilotMessages } from "@opencode-ai/core/github-copilot/chat/convert-to-openai-compatible-chat-messages"
+import { convertToOpenAICompatibleChatMessages } from "@opencode-ai/core/github-copilot/chat/convert-to-openai-compatible-chat-messages"
 import { describe, test, expect } from "bun:test"
 
 describe("system messages", () => {
   test("should convert system message content to string", () => {
-    const result = convertToCopilotMessages([
+    const result = convertToOpenAICompatibleChatMessages([
       {
         role: "system",
         content: "You are a helpful assistant with AGENTS.md instructions.",
@@ -21,7 +21,7 @@ describe("system messages", () => {
 
 describe("user messages", () => {
   test("should convert messages with only a text part to a string content", () => {
-    const result = convertToCopilotMessages([
+    const result = convertToOpenAICompatibleChatMessages([
       {
         role: "user",
         content: [{ type: "text", text: "Hello" }],
@@ -32,7 +32,7 @@ describe("user messages", () => {
   })
 
   test("should convert messages with image parts", () => {
-    const result = convertToCopilotMessages([
+    const result = convertToOpenAICompatibleChatMessages([
       {
         role: "user",
         content: [
@@ -61,7 +61,7 @@ describe("user messages", () => {
   })
 
   test("should convert messages with image parts from Uint8Array", () => {
-    const result = convertToCopilotMessages([
+    const result = convertToOpenAICompatibleChatMessages([
       {
         role: "user",
         content: [
@@ -90,7 +90,7 @@ describe("user messages", () => {
   })
 
   test("should handle URL-based images", () => {
-    const result = convertToCopilotMessages([
+    const result = convertToOpenAICompatibleChatMessages([
       {
         role: "user",
         content: [
@@ -117,7 +117,7 @@ describe("user messages", () => {
   })
 
   test("should handle multiple text parts without flattening", () => {
-    const result = convertToCopilotMessages([
+    const result = convertToOpenAICompatibleChatMessages([
       {
         role: "user",
         content: [
@@ -141,7 +141,7 @@ describe("user messages", () => {
 
 describe("assistant messages", () => {
   test("should convert assistant text messages", () => {
-    const result = convertToCopilotMessages([
+    const result = convertToOpenAICompatibleChatMessages([
       {
         role: "assistant",
         content: [{ type: "text", text: "Hello back!" }],
@@ -160,7 +160,7 @@ describe("assistant messages", () => {
   })
 
   test("should handle assistant message with null content when only tool calls", () => {
-    const result = convertToCopilotMessages([
+    const result = convertToOpenAICompatibleChatMessages([
       {
         role: "assistant",
         content: [
@@ -195,7 +195,7 @@ describe("assistant messages", () => {
   })
 
   test("should concatenate multiple text parts", () => {
-    const result = convertToCopilotMessages([
+    const result = convertToOpenAICompatibleChatMessages([
       {
         role: "assistant",
         content: [
@@ -211,7 +211,7 @@ describe("assistant messages", () => {
 
 describe("tool calls", () => {
   test("should stringify arguments to tool calls", () => {
-    const result = convertToCopilotMessages([
+    const result = convertToOpenAICompatibleChatMessages([
       {
         role: "assistant",
         content: [
@@ -262,7 +262,7 @@ describe("tool calls", () => {
   })
 
   test("should handle text output type in tool results", () => {
-    const result = convertToCopilotMessages([
+    const result = convertToOpenAICompatibleChatMessages([
       {
         role: "tool",
         content: [
@@ -286,7 +286,7 @@ describe("tool calls", () => {
   })
 
   test("should handle multiple tool results as separate messages", () => {
-    const result = convertToCopilotMessages([
+    const result = convertToOpenAICompatibleChatMessages([
       {
         role: "tool",
         content: [
@@ -320,7 +320,7 @@ describe("tool calls", () => {
   })
 
   test("should handle text plus multiple tool calls", () => {
-    const result = convertToCopilotMessages([
+    const result = convertToOpenAICompatibleChatMessages([
       {
         role: "assistant",
         content: [
@@ -373,7 +373,7 @@ describe("tool calls", () => {
 
 describe("reasoning (copilot-specific)", () => {
   test("should omit reasoning_text without reasoning_opaque", () => {
-    const result = convertToCopilotMessages([
+    const result = convertToOpenAICompatibleChatMessages([
       {
         role: "assistant",
         content: [
@@ -395,7 +395,7 @@ describe("reasoning (copilot-specific)", () => {
   })
 
   test("should include reasoning_opaque from providerOptions", () => {
-    const result = convertToCopilotMessages([
+    const result = convertToOpenAICompatibleChatMessages([
       {
         role: "assistant",
         content: [
@@ -423,7 +423,7 @@ describe("reasoning (copilot-specific)", () => {
   })
 
   test("should include reasoning_opaque from text part providerOptions", () => {
-    const result = convertToCopilotMessages([
+    const result = convertToOpenAICompatibleChatMessages([
       {
         role: "assistant",
         content: [
@@ -450,7 +450,7 @@ describe("reasoning (copilot-specific)", () => {
   })
 
   test("should handle reasoning-only assistant message", () => {
-    const result = convertToCopilotMessages([
+    const result = convertToOpenAICompatibleChatMessages([
       {
         role: "assistant",
         content: [
@@ -479,7 +479,7 @@ describe("reasoning (copilot-specific)", () => {
 
 describe("full conversation", () => {
   test("should convert a multi-turn conversation with reasoning", () => {
-    const result = convertToCopilotMessages([
+    const result = convertToOpenAICompatibleChatMessages([
       {
         role: "system",
         content: "You are a helpful assistant.",

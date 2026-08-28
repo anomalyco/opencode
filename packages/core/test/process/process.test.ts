@@ -1,5 +1,6 @@
 import { describe, expect } from "bun:test"
 import fs from "fs/promises"
+import { randomUUID } from "node:crypto"
 import { realpathSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
@@ -12,6 +13,7 @@ import { testEffect } from "../lib/effect"
 const it = testEffect(LayerNode.compile(AppProcess.node))
 
 const NODE = process.execPath
+const MISSING_CWD = path.join(tmpdir(), `opencode-missing-cwd-${randomUUID()}`)
 const cmd = (...args: string[]) => ChildProcess.make(NODE, args)
 
 const waitForFile = (file: string) =>
@@ -38,6 +40,17 @@ describe("AppProcess", () => {
         expect(result.stdout.toString("utf8")).toBe("hi\n")
         expect(result.stdoutTruncated).toBe(false)
         expect(result.stderrTruncated).toBe(false)
+      }),
+    )
+
+    it.live(
+      "maps command setup failures to AppProcessError",
+      Effect.gen(function* () {
+        const svc = yield* AppProcess.Service
+        const error = yield* svc.run(ChildProcess.make(NODE, [], { cwd: MISSING_CWD })).pipe(Effect.flip)
+
+        expect(error).toBeInstanceOf(AppProcess.AppProcessError)
+        expect(error.command).toBe(NODE)
       }),
     )
 
@@ -70,20 +83,12 @@ describe("AppProcess", () => {
       "requireSuccess fails on non-zero exit",
       Effect.gen(function* () {
         const svc = yield* AppProcess.Service
-        const exit = yield* Effect.exit(
-          svc.run(cmd("-e", "process.exit(1)")).pipe(Effect.flatMap(AppProcess.requireSuccess)),
-        )
-        expect(Exit.isFailure(exit)).toBe(true)
-        if (Exit.isFailure(exit)) {
-          const reason = exit.cause.reasons[0]
-          if (reason && reason._tag === "Fail") {
-            expect(reason.error).toBeInstanceOf(AppProcess.AppProcessError)
-            expect((reason.error as AppProcess.AppProcessError).exitCode).toBe(1)
-            expect((reason.error as AppProcess.AppProcessError).message).toContain("Command failed (exit 1)")
-          } else {
-            throw new Error("expected fail reason")
-          }
-        }
+        const error = yield* svc
+          .run(cmd("-e", "process.exit(1)"))
+          .pipe(Effect.flatMap(AppProcess.requireSuccess), Effect.flip)
+        expect(error).toBeInstanceOf(AppProcess.AppProcessError)
+        expect(error.exitCode).toBe(1)
+        expect(error.message).toContain("Command failed (exit 1)")
       }),
     )
 
@@ -105,15 +110,9 @@ describe("AppProcess", () => {
         expect(okZero.exitCode).toBe(0)
         const okOne = yield* svc.run(cmd("-e", "process.exit(1)")).pipe(Effect.flatMap(requireZeroOrOne))
         expect(okOne.exitCode).toBe(1)
-        const exit = yield* Effect.exit(svc.run(cmd("-e", "process.exit(2)")).pipe(Effect.flatMap(requireZeroOrOne)))
-        expect(Exit.isFailure(exit)).toBe(true)
-        if (Exit.isFailure(exit)) {
-          const reason = exit.cause.reasons[0]
-          if (reason && reason._tag === "Fail") {
-            expect(reason.error).toBeInstanceOf(AppProcess.AppProcessError)
-            expect((reason.error as AppProcess.AppProcessError).exitCode).toBe(2)
-          }
-        }
+        const error = yield* svc.run(cmd("-e", "process.exit(2)")).pipe(Effect.flatMap(requireZeroOrOne), Effect.flip)
+        expect(error).toBeInstanceOf(AppProcess.AppProcessError)
+        expect(error.exitCode).toBe(2)
       }),
     )
 
@@ -295,6 +294,19 @@ describe("AppProcess", () => {
 
   describe("runStream", () => {
     it.live(
+      "maps streaming command setup failures to AppProcessError",
+      Effect.gen(function* () {
+        const svc = yield* AppProcess.Service
+        const error = yield* svc
+          .runStream(ChildProcess.make(NODE, [], { cwd: MISSING_CWD }))
+          .pipe(Stream.runCollect, Effect.flip)
+
+        expect(error).toBeInstanceOf(AppProcess.AppProcessError)
+        expect(error.command).toBe(NODE)
+      }),
+    )
+
+    it.live(
       "emits lines incrementally and ends cleanly on exit 0",
       Effect.gen(function* () {
         const svc = yield* AppProcess.Service
@@ -313,18 +325,38 @@ describe("AppProcess", () => {
           .runStream(cmd("-e", "console.log('only'); process.exit(1)"), { okExitCodes: [0, 1] })
           .pipe(Stream.runCollect)
         expect(Array.from(allowed)).toEqual(["only"])
+        const error = yield* svc
+          .runStream(cmd("-e", "console.log('a'); process.exit(2)"), { okExitCodes: [0, 1] })
+          .pipe(Stream.runCollect, Effect.flip)
+        expect(error).toBeInstanceOf(AppProcess.AppProcessError)
+      }),
+    )
+
+    it.live(
+      "includes stderr in output while retaining capped failure diagnostics",
+      Effect.gen(function* () {
+        const svc = yield* AppProcess.Service
+        const lines: string[] = []
         const exit = yield* Effect.exit(
           svc
-            .runStream(cmd("-e", "console.log('a'); process.exit(2)"), { okExitCodes: [0, 1] })
-            .pipe(Stream.runCollect),
+            .runStream(
+              cmd(
+                "-e",
+                "console.log('stdout-line'); console.error('stderr-line'); console.error('diagnostic-tail'); process.exit(2)",
+              ),
+              { includeStderr: true, maxErrorBytes: 20, okExitCodes: [0] },
+            )
+            .pipe(Stream.runForEach((line) => Effect.sync(() => lines.push(line)))),
         )
+
+        expect(lines.toSorted()).toEqual(["diagnostic-tail", "stderr-line", "stdout-line"])
         expect(Exit.isFailure(exit)).toBe(true)
-        if (Exit.isFailure(exit)) {
-          const reason = exit.cause.reasons[0]
-          if (reason && reason._tag === "Fail") {
-            expect(reason.error).toBeInstanceOf(AppProcess.AppProcessError)
-          }
-        }
+        if (!Exit.isFailure(exit)) return
+        const reason = exit.cause.reasons[0]
+        expect(reason?._tag).toBe("Fail")
+        if (!reason || reason._tag !== "Fail") return
+        expect(reason.error).toBeInstanceOf(AppProcess.AppProcessError)
+        expect(reason.error.stderr).toBe("stderr-line\ndiagnost")
       }),
     )
 

@@ -7,7 +7,7 @@
 - Plugin authors get schema-derived input types at the `ToolDraft.add` boundary through `Tool`.
 - The heterogeneous Core registry deliberately erases registered definitions to `Tool.Info`. Use `any` at this internal boundary; do not replace it with `unknown`, JSON-value plumbing, casts, or compiled wrapper types solely to preserve type safety after registration.
 - Executors return model content and metadata alongside declared machine output. Shipped built-ins and plugin tools use the same runtime shape after registration.
-- `src/tool.ts` stores canonical Location registrations, derives LLM definitions, executes tools, and applies generic output bounding.
+- `src/tool.ts` stores canonical Location registrations, derives LLM definitions, executes tools, and normalizes model content and images.
 - Built-in tool plugins live in `tool/plugin`.
 
 Do not add a second executable entry type, registry-owned executor, authorization callback, output-path callback, or legacy normalization path.
@@ -53,9 +53,9 @@ Tool filtering is catalog visibility, not execution authorization. A call still 
 
 ## Output
 
-Built-ins return complete tool responses. `Tool.Snapshot.execute` is the local execution boundary.
+Built-ins return complete tool responses. `Tool.Snapshot.execute` is the local execution boundary. Generic output bounding is applied by the Session runner after execution.
 
-Producer capture limits remain local to producers. For example, Bash keeps `AppProcess.maxOutputBytes` and accurately reports stdout/stderr capture loss.
+Producer capture remains local to producers. Shell stores combined process output in its backing file and returns a bounded tail with the full-output path when truncated.
 
 ## Current Gaps
 
