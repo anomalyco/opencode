@@ -15,6 +15,7 @@ test.each([100, 44])("Ctrl-O is immediate, dismissible, and prunes cached deleti
   const ready = Promise.withResolvers<void>()
   const requested = Promise.withResolvers<void>()
   const response = Promise.withResolvers<Response>()
+  const projects = Promise.withResolvers<Response>()
   const refresh = Promise.withResolvers<Response>()
   const events = createEventStream()
   const cachedSession = {
@@ -35,16 +36,7 @@ test.each([100, 44])("Ctrl-O is immediate, dismissible, and prunes cached deleti
       if (requests === 2 || requests > 3) return refresh.promise.then((response) => response.clone())
       return json({ data: [cachedSession], cursor: {} })
     }
-    if (url.pathname === "/api/project")
-      return json([
-        {
-          id: "proj_fixture",
-          canonical: "/fixture",
-          name: "Fixture project",
-          time: { created: 1, updated: 2 },
-          sandboxes: [],
-        },
-      ])
+    if (url.pathname === "/api/project") return projects.promise
     return undefined
   }, events)
   const server = Bun.serve({ port: 0, fetch: (request) => calls.fetch(request) })
@@ -66,8 +58,20 @@ test.each([100, 44])("Ctrl-O is immediate, dismissible, and prunes cached deleti
     setup.mockInput.pressKey("o", { ctrl: true })
     await requested.promise
     await setup.renderOnce()
-    expect(setup.captureCharFrame()).toContain("Fixture project")
+    expect(setup.captureCharFrame()).toContain("Search sessions")
     expect(setup.captureCharFrame()).toContain("Refreshing")
+    projects.resolve(
+      json([
+        {
+          id: "proj_fixture",
+          canonical: "/fixture",
+          name: "Fixture project",
+          time: { created: 1, updated: 2 },
+          sandboxes: [],
+        },
+      ]),
+    )
+    await setup.waitForFrame((frame) => frame.includes("Fixture project"))
     setup.mockInput.pressKey("o", { ctrl: true })
     expect(requests).toBe(1)
     setup.mockInput.pressEscape()
@@ -99,6 +103,7 @@ test.each([100, 44])("Ctrl-O is immediate, dismissible, and prunes cached deleti
     await task
   } finally {
     response.resolve(json({ data: [], cursor: {} }))
+    projects.resolve(json([]))
     refresh.resolve(json({ data: [], cursor: {} }))
     if (!setup.renderer.isDestroyed) setup.renderer.destroy()
     await server.stop()
