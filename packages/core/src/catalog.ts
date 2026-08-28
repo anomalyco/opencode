@@ -144,11 +144,11 @@ const layer = Layer.effect(
 
       provider: {
         get: Effect.fn("Catalog.provider.get")(function* (providerID) {
-          return state.get().providers.get(providerID)?.provider
+          return (yield* state.read()).providers.get(providerID)?.provider
         }),
 
         all: Effect.fn("Catalog.provider.all")(function* () {
-          return Array.fromIterable(state.get().providers.values()).map((record) => record.provider)
+          return Array.fromIterable((yield* state.read()).providers.values()).map((record) => record.provider)
         }),
 
         available: Effect.fn("Catalog.provider.available")(function* () {
@@ -161,15 +161,16 @@ const layer = Layer.effect(
 
       model: {
         get: Effect.fn("Catalog.model.get")(function* (providerID, modelID) {
-          const record = state.get().providers.get(providerID)
+          const record = (yield* state.read()).providers.get(providerID)
           if (!record) return
           const model = record.models.get(modelID)
           return model && projectModel(model, record.provider)
         }),
 
         all: Effect.fn("Catalog.model.all")(function* () {
+          const data = yield* state.read()
           return pipe(
-            Array.fromIterable(state.get().providers.values()),
+            Array.fromIterable(data.providers.values()),
             Array.flatMap((record) => {
               return Array.fromIterable(record.models.values()).map((model) => projectModel(model, record.provider))
             }),
@@ -178,10 +179,18 @@ const layer = Layer.effect(
         }),
 
         available: Effect.fn("Catalog.model.available")(function* () {
-          const providers = new Set((yield* result.provider.available()).map((provider) => provider.id))
+          const active = new Map((yield* integrations.list()).map((integration) => [integration.id, integration]))
+          const data = yield* state.read()
           const models: Model.Info[] = []
-          for (const record of state.get().providers.values()) {
-            if (!providers.has(record.provider.id)) continue
+          for (const record of data.providers.values()) {
+            if (
+              !available(
+                record.provider,
+                active.get(record.provider.integrationID ?? Integration.ID.make(record.provider.id)),
+              )
+            ) {
+              continue
+            }
             for (const model of record.models.values()) {
               if (!model.enabled) continue
               models.push(projectModel(model, record.provider))
@@ -194,12 +203,16 @@ const layer = Layer.effect(
         }),
 
         default: Effect.fn("Catalog.model.default")(function* () {
-          const defaultModel = state.get().defaultModel
+          const data = yield* state.read()
+          const defaultModel = data.defaultModel
           if (defaultModel) {
-            const provider = yield* result.provider.get(defaultModel.providerID)
-            if (provider && (yield* result.provider.available()).some((item) => item.id === provider.id)) {
-              const model = yield* result.model.get(defaultModel.providerID, defaultModel.modelID)
-              if (model?.enabled) return model
+            const record = data.providers.get(defaultModel.providerID)
+            const model = record?.models.get(defaultModel.modelID)
+            if (record && model?.enabled) {
+              const integration = yield* integrations.get(
+                record.provider.integrationID ?? Integration.ID.make(record.provider.id),
+              )
+              if (available(record.provider, integration)) return projectModel(model, record.provider)
             }
           }
 
@@ -207,7 +220,7 @@ const layer = Layer.effect(
         }),
 
         small: Effect.fn("Catalog.model.small")(function* (providerID) {
-          const record = state.get().providers.get(providerID)
+          const record = (yield* state.read()).providers.get(providerID)
           if (!record) return
           const models = pipe(
             Array.fromIterable(record.models.values()),

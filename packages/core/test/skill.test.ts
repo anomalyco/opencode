@@ -56,6 +56,46 @@ describe("Skill", () => {
     }),
   )
 
+  it.effect("exposes reloaded skills to synchronous update listeners", () =>
+    Effect.gen(function* () {
+      const skill = yield* Skill.Service
+      const bus = yield* Bus.Service
+      let description = "Initial"
+      yield* skill.transform((draft) => draft.add(info("review", description)))
+
+      const observed: Skill.Info[][] = []
+      const unsubscribe = yield* bus.listen((event) =>
+        event.type === Skill.Event.Updated.type
+          ? skill.list().pipe(
+              Effect.map((skills) => observed.push(skills)),
+              Effect.asVoid,
+            )
+          : Effect.void,
+      )
+      yield* Effect.addFinalizer(() => unsubscribe)
+      description = "Updated"
+      const reload = yield* skill.reload().pipe(Effect.forkChild({ startImmediately: true }))
+
+      expect(yield* skill.list()).toEqual([info("review", "Updated")])
+      yield* Fiber.join(reload)
+      expect(observed).toEqual([[info("review", "Updated")]])
+    }),
+  )
+
+  it.effect("reloads skills before a direct lookup", () =>
+    Effect.gen(function* () {
+      const skill = yield* Skill.Service
+      let description = "Initial"
+      yield* skill.transform((draft) => draft.add(info("review", description)))
+
+      description = "Updated"
+      const reload = yield* skill.reload().pipe(Effect.forkChild({ startImmediately: true }))
+
+      expect(yield* skill.get(Skill.ID.make("review"))).toEqual(info("review", "Updated"))
+      yield* Fiber.join(reload)
+    }),
+  )
+
   it.effect("restores earlier values when an updating transform is disposed", () =>
     Effect.gen(function* () {
       const skill = yield* Skill.Service

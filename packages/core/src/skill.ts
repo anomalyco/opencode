@@ -116,10 +116,10 @@ const layer = Layer.effect(
       transform: state.transform,
       reload: state.reload,
       get: Effect.fn("Skill.get")(function* (id) {
-        return state.get().skills.get(id)
+        return (yield* state.read()).skills.get(id)
       }),
       list: Effect.fn("Skill.list")(function* () {
-        return Array.from(state.get().skills.values())
+        return Array.from((yield* state.read()).skills.values())
       }),
     })
   }),

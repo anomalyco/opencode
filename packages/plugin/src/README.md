@@ -125,6 +125,10 @@ data = await loadCatalog()
 await ctx.catalog.reload()
 ```
 
+`reload()` immediately marks the domain stale and schedules a debounced reload that replays every active transform in
+order. A concurrent domain read immediately performs the pending reload; otherwise, it runs in the background after the
+debounce window. In either case, `reload()` resolves after the actual reload completes.
+
 Available reload operations are:
 
 ```ts

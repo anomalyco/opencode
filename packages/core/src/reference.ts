@@ -111,6 +111,7 @@ const layer = Layer.effect(
       transform: state.transform,
       reload: state.reload,
       list: Effect.fn("Reference.list")(function* () {
+        yield* state.read()
         return Array.from(materialized.values())
       }),
     })

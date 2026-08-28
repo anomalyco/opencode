@@ -209,7 +209,9 @@ effect: (ctx) =>
   }),
 ```
 
-Call `reload` when external state used by a transform changes. Reload replays every transform in order.
+Call `reload` when external state used by a transform changes. It immediately marks the domain stale and schedules a
+debounced reload that replays every transform in order. A concurrent domain read immediately performs the pending reload;
+otherwise, it runs in the background after the debounce window. In either case, `reload` resolves after the actual reload.
 
 ```ts title="plugins/models-effect.ts"
 effect: (ctx) =>

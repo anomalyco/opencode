@@ -190,7 +190,10 @@ export default Plugin.define({
 })
 ```
 
-`reload` replays every catalog transform in order, so the output-price policy still filters the refreshed models.
+`reload` immediately marks the catalog stale and schedules a debounced reload that replays every transform in order,
+so the output-price policy still filters the refreshed models. A concurrent catalog read immediately performs the pending
+reload; otherwise, it runs in the background after the debounce window. In either case, `reload` resolves after the
+actual reload.
 
 ## API
 

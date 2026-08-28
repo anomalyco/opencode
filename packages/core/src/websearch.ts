@@ -97,7 +97,7 @@ const layer = Layer.effect(
     }
 
     const defaultProvider = Effect.fn("WebSearch.default")(function* () {
-      const data = state.get()
+      const data = yield* state.read()
       const stored = data.selection === undefined ? yield* kv.get(ProviderKey) : undefined
       const decoded = Schema.decodeUnknownOption(Selection)(stored)
       if (stored !== undefined && Option.isNone(decoded)) yield* kv.remove(ProviderKey)
@@ -111,8 +111,9 @@ const layer = Layer.effect(
     })
 
     const resolve = Effect.fn("WebSearch.resolve")(function* (input: Input) {
-      const providers = state.get().providers
-      if (input.providerID) return yield* requireProvider(providers, input.providerID)
+      if (input.providerID) {
+        return yield* requireProvider((yield* state.read()).providers, input.providerID)
+      }
       const provider = yield* defaultProvider()
       if (!provider) return yield* new ProviderRequiredError()
       return provider
@@ -122,7 +123,7 @@ const layer = Layer.effect(
       transform: state.transform,
       reload: state.reload,
       providers: Effect.fn("WebSearch.providers")(function* () {
-        return Array.from(state.get().providers.values(), (provider) => ({
+        return Array.from((yield* state.read()).providers.values(), (provider) => ({
           id: provider.id,
           name: provider.name,
         })).toSorted((a, b) => a.name.localeCompare(b.name))

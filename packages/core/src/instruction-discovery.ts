@@ -90,7 +90,7 @@ export const layer = (options?: Options) =>
         })
 
       const list = Effect.fn("InstructionDiscovery.list")(function* () {
-        const current = state.get()
+        const current = yield* state.read()
         if (!current.available) return Instructions.unavailable
         return Array.from(current.files.values())
       })

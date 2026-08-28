@@ -76,6 +76,249 @@ describe("State", () => {
     }),
   )
 
+  it.effect("reloads immediately on read", () =>
+    Effect.gen(function* () {
+      let value = "first"
+      let finalized = 0
+      const state = State.create({
+        initial: () => ({ values: [] as string[] }),
+        draft: (draft) => ({ add: (item: string) => draft.values.push(item) }),
+        finalize: () => Effect.sync(() => finalized++),
+      })
+      yield* state.transform((editor) => {
+        editor.add(value)
+      })
+      finalized = 0
+
+      value = "second"
+      const reload = yield* state.reload().pipe(Effect.forkChild({ startImmediately: true }))
+      expect(state.get().values).toEqual(["first"])
+      expect(finalized).toBe(0)
+
+      expect((yield* state.read()).values).toEqual(["second"])
+      yield* Fiber.join(reload)
+      expect(finalized).toBe(1)
+
+      yield* TestClock.adjust("500 millis")
+      expect(finalized).toBe(1)
+    }),
+  )
+
+  it.effect("single-flights concurrent reads", () =>
+    Effect.gen(function* () {
+      const rebuilding = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      let block = false
+      let finalized = 0
+      const state = State.create({
+        initial: () => ({ values: [] as string[] }),
+        draft: (draft) => ({ add: (item: string) => draft.values.push(item) }),
+        finalize: () =>
+          Effect.gen(function* () {
+            finalized++
+            if (!block) return
+            yield* Deferred.succeed(rebuilding, undefined)
+            yield* Deferred.await(release)
+          }),
+      })
+      yield* state.transform((editor) => editor.add("value"))
+      finalized = 0
+      block = true
+      const reload = yield* state.reload().pipe(Effect.forkChild({ startImmediately: true }))
+
+      const first = yield* state.read().pipe(Effect.forkChild({ startImmediately: true }))
+      yield* Deferred.await(rebuilding)
+      const second = yield* state.read().pipe(Effect.forkChild({ startImmediately: true }))
+      yield* Deferred.succeed(release, undefined)
+      yield* Fiber.join(first)
+      yield* Fiber.join(second)
+      yield* Fiber.join(reload)
+
+      expect(finalized).toBe(1)
+    }),
+  )
+
+  it.effect("includes reloads requested during a read", () =>
+    Effect.gen(function* () {
+      const rebuilding = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      let value = "first"
+      let block = false
+      let finalized = 0
+      const state = State.create({
+        initial: () => ({ values: [] as string[] }),
+        draft: (draft) => ({ add: (item: string) => draft.values.push(item) }),
+        finalize: () =>
+          Effect.gen(function* () {
+            finalized++
+            if (!block) return
+            block = false
+            yield* Deferred.succeed(rebuilding, undefined)
+            yield* Deferred.await(release)
+          }),
+      })
+      yield* state.transform((editor) => editor.add(value))
+      finalized = 0
+      block = true
+
+      value = "second"
+      const first = yield* state.reload().pipe(Effect.forkChild({ startImmediately: true }))
+      const read = yield* state.read().pipe(Effect.forkChild({ startImmediately: true }))
+      yield* Deferred.await(rebuilding)
+      value = "third"
+      const second = yield* state.reload().pipe(Effect.forkChild({ startImmediately: true }))
+      yield* Deferred.succeed(release, undefined)
+
+      expect((yield* Fiber.join(read)).values).toEqual(["third"])
+      yield* Fiber.join(first)
+      yield* Fiber.join(second)
+      expect(finalized).toBe(2)
+    }),
+  )
+
+  it.effect("shares a failed reload between concurrent reads", () =>
+    Effect.gen(function* () {
+      const rebuilding = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      let fail = false
+      let finalized = 0
+      const state = State.create({
+        initial: () => ({ values: [] as string[] }),
+        draft: (draft) => ({ add: (item: string) => draft.values.push(item) }),
+        finalize: () =>
+          Effect.gen(function* () {
+            finalized++
+            if (!fail) return
+            yield* Deferred.succeed(rebuilding, undefined)
+            yield* Deferred.await(release)
+            return yield* Effect.die("failed")
+          }),
+      })
+      yield* state.transform((editor) => editor.add("value"))
+      finalized = 0
+      fail = true
+      const reload = yield* state.reload().pipe(Effect.exit, Effect.forkChild({ startImmediately: true }))
+
+      const first = yield* state.read().pipe(Effect.exit, Effect.forkChild({ startImmediately: true }))
+      yield* Deferred.await(rebuilding)
+      const second = yield* state.read().pipe(Effect.exit, Effect.forkChild({ startImmediately: true }))
+      yield* Deferred.succeed(release, undefined)
+
+      expect(Exit.isFailure(yield* Fiber.join(first))).toBeTrue()
+      expect(Exit.isFailure(yield* Fiber.join(second))).toBeTrue()
+      expect(Exit.isFailure(yield* Fiber.join(reload))).toBeTrue()
+      expect(finalized).toBe(1)
+
+      fail = false
+      yield* state.read()
+      expect(finalized).toBe(2)
+    }),
+  )
+
+  it.effect("allows nested finalizers to read their committed states", () =>
+    Effect.gen(function* () {
+      let observe = false
+      const first: State.Interface<{ values: string[] }, { add: (item: string) => void }> = State.create({
+        initial: () => ({ values: [] as string[] }),
+        draft: (draft) => ({ add: (item: string) => draft.values.push(item) }),
+        finalize: () => (observe ? second.read().pipe(Effect.asVoid) : Effect.void),
+      })
+      const second: State.Interface<{ values: string[] }, { add: (item: string) => void }> = State.create({
+        initial: () => ({ values: [] as string[] }),
+        draft: (draft) => ({ add: (item: string) => draft.values.push(item) }),
+        finalize: () => (observe ? first.read().pipe(Effect.asVoid) : Effect.void),
+      })
+      yield* first.transform((draft) => draft.add("first"))
+      yield* second.transform((draft) => draft.add("second"))
+      observe = true
+      const firstReload = yield* first.reload().pipe(Effect.forkChild({ startImmediately: true }))
+      const secondReload = yield* second.reload().pipe(Effect.forkChild({ startImmediately: true }))
+
+      expect((yield* first.read()).values).toEqual(["first"])
+      yield* Fiber.join(firstReload)
+      yield* Fiber.join(secondReload)
+    }),
+  )
+
+  it.effect("allows concurrent finalizers to read committed states", () =>
+    Effect.gen(function* () {
+      const firstEntered = yield* Deferred.make<void>()
+      const secondEntered = yield* Deferred.make<void>()
+      let observe = false
+      const first: State.Interface<{ values: string[] }, { add: (item: string) => void }> = State.create({
+        initial: () => ({ values: [] as string[] }),
+        draft: (draft) => ({ add: (item: string) => draft.values.push(item) }),
+        finalize: () =>
+          observe
+            ? Deferred.succeed(firstEntered, undefined).pipe(
+                Effect.andThen(Deferred.await(secondEntered)),
+                Effect.andThen(second.read()),
+                Effect.asVoid,
+              )
+            : Effect.void,
+      })
+      const second: State.Interface<{ values: string[] }, { add: (item: string) => void }> = State.create({
+        initial: () => ({ values: [] as string[] }),
+        draft: (draft) => ({ add: (item: string) => draft.values.push(item) }),
+        finalize: () =>
+          observe
+            ? Deferred.succeed(secondEntered, undefined).pipe(
+                Effect.andThen(Deferred.await(firstEntered)),
+                Effect.andThen(first.read()),
+                Effect.asVoid,
+              )
+            : Effect.void,
+      })
+      yield* first.transform((draft) => draft.add("first"))
+      yield* second.transform((draft) => draft.add("second"))
+      observe = true
+      const firstReload = yield* first.reload().pipe(Effect.forkChild({ startImmediately: true }))
+      const secondReload = yield* second.reload().pipe(Effect.forkChild({ startImmediately: true }))
+      const firstRead = yield* first.read().pipe(Effect.forkChild({ startImmediately: true }))
+      const secondRead = yield* second.read().pipe(Effect.forkChild({ startImmediately: true }))
+
+      expect((yield* Fiber.join(firstRead)).values).toEqual(["first"])
+      expect((yield* Fiber.join(secondRead)).values).toEqual(["second"])
+      yield* Fiber.join(firstReload)
+      yield* Fiber.join(secondReload)
+    }),
+  )
+
+  it.effect("expires finalizer read access before later reloads", () =>
+    Effect.gen(function* () {
+      const release = yield* Deferred.make<void>()
+      const observed = yield* Deferred.make<string>()
+      let value = "first"
+      let observe = false
+      const state: State.Interface<{ values: string[] }, { add: (item: string) => void }> = State.create({
+        initial: () => ({ values: [] as string[] }),
+        draft: (draft) => ({ add: (item: string) => draft.values.push(item) }),
+        finalize: () =>
+          observe
+            ? Deferred.await(release).pipe(
+                Effect.andThen(state.read()),
+                Effect.flatMap((current) => Deferred.succeed(observed, current.values[0] ?? "")),
+                Effect.forkDetach,
+                Effect.asVoid,
+              )
+            : Effect.void,
+      })
+      yield* state.transform((draft) => draft.add(value))
+      observe = true
+      const first = yield* state.reload().pipe(Effect.forkChild({ startImmediately: true }))
+      yield* state.read()
+      yield* Fiber.join(first)
+
+      observe = false
+      value = "second"
+      const second = yield* state.reload().pipe(Effect.forkChild({ startImmediately: true }))
+      yield* Deferred.succeed(release, undefined)
+
+      expect(yield* Deferred.await(observed)).toBe("second")
+      yield* Fiber.join(second)
+    }),
+  )
+
   it.effect("disposes a transform once and rebuilds remaining state", () =>
     Effect.gen(function* () {
       const state = State.create({
@@ -188,6 +431,94 @@ describe("State", () => {
         }),
       )
       expect(finalized).toEqual(["live"])
+    }),
+  )
+
+  it.effect("does not publish pending reloads inside an active batch", () =>
+    Effect.gen(function* () {
+      let finalized = 0
+      const state = State.create({
+        initial: () => ({ values: [] as string[] }),
+        draft: (draft) => ({ add: (item: string) => draft.values.push(item) }),
+        finalize: () => Effect.sync(() => finalized++),
+      })
+      const reload = yield* state.reload().pipe(Effect.forkChild({ startImmediately: true }))
+      const observe = yield* Deferred.make<void>()
+      const reader = yield* Deferred.await(observe).pipe(
+        Effect.andThen(state.read()),
+        Effect.forkChild({ startImmediately: true }),
+      )
+
+      yield* State.batch(
+        Effect.gen(function* () {
+          yield* state.transform((draft) => draft.add("first"))
+          expect((yield* state.read()).values).toEqual([])
+          yield* Deferred.succeed(observe, undefined)
+          yield* Effect.yieldNow
+          expect(finalized).toBe(0)
+          yield* state.transform((draft) => draft.add("second"))
+        }),
+      )
+      yield* Fiber.join(reload)
+
+      expect((yield* Fiber.join(reader)).values).toEqual(["first", "second"])
+      expect(finalized).toBe(1)
+    }),
+  )
+
+  it.effect("releases pending reads when a batch is interrupted", () =>
+    Effect.gen(function* () {
+      const started = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      const state = State.create({
+        initial: () => ({ values: [] as string[] }),
+        draft: (draft) => ({ add: (item: string) => draft.values.push(item) }),
+      })
+      const reload = yield* state.reload().pipe(Effect.forkChild({ startImmediately: true }))
+      const batch = yield* State.batch(
+        Effect.gen(function* () {
+          yield* state.transform((draft) => draft.add("value"))
+          yield* Deferred.succeed(started, undefined)
+          yield* Deferred.await(release)
+        }),
+      ).pipe(Effect.forkChild({ startImmediately: true }))
+      yield* Deferred.await(started)
+      const reader = yield* state.read().pipe(Effect.forkChild({ startImmediately: true }))
+
+      yield* Fiber.interrupt(batch)
+
+      expect((yield* Fiber.join(reader)).values).toEqual(["value"])
+      yield* Fiber.join(reload)
+    }),
+  )
+
+  it.effect("flushes remaining domains after a batched reload fails", () =>
+    Effect.gen(function* () {
+      let failing = true
+      const first = State.create({
+        initial: () => ({ values: [] as string[] }),
+        draft: (draft) => ({ add: (item: string) => draft.values.push(item) }),
+        finalize: () => (failing ? Effect.die("failed") : Effect.void),
+      })
+      const second = State.create({
+        initial: () => ({ values: [] as string[] }),
+        draft: (draft) => ({ add: (item: string) => draft.values.push(item) }),
+      })
+      const firstReload = yield* first.reload().pipe(Effect.exit, Effect.forkChild({ startImmediately: true }))
+      const secondReload = yield* second.reload().pipe(Effect.forkChild({ startImmediately: true }))
+
+      const result = yield* State.batch(
+        Effect.gen(function* () {
+          yield* first.transform((draft) => draft.add("first"))
+          yield* second.transform((draft) => draft.add("second"))
+        }),
+      ).pipe(Effect.exit)
+
+      expect(Exit.isFailure(result)).toBeTrue()
+      expect(Exit.isFailure(yield* Fiber.join(firstReload))).toBeTrue()
+      yield* Fiber.join(secondReload)
+      expect((yield* second.read()).values).toEqual(["second"])
+      failing = false
     }),
   )
 
