@@ -139,7 +139,9 @@ function computeReplacements(lines: ReadonlyArray<string>, path: string, chunks:
       lineIndex = context + 1
     }
     if (chunk.oldLines.length === 0) {
-      replacements.push([lines.length, 0, chunk.newLines])
+      // A pure insertion with a located @@ anchor goes right after the anchor
+      // line; without one it still appends at the end of the file.
+      replacements.push([chunk.changeContext ? lineIndex : lines.length, 0, chunk.newLines])
       continue
     }
     let oldLines = chunk.oldLines

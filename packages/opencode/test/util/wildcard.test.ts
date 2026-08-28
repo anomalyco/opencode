@@ -27,6 +27,15 @@ test("match with trailing space+wildcard matches command with or without args", 
   expect(Wildcard.match("git commit -m foo", "git *")).toBe(true)
 })
 
+test("match escapes literal glob characters", () => {
+  expect(Wildcard.match("config?.json", "config\\?.json")).toBe(true)
+  expect(Wildcard.match("configX.json", "config\\?.json")).toBe(false)
+  expect(Wildcard.match("*", "\\*")).toBe(true)
+  expect(Wildcard.match("anything.ts", "\\*")).toBe(false)
+  expect(Wildcard.match("a\\b", "a\\\\b")).toBe(true)
+  expect(Wildcard.match("aXb", "a\\\\b")).toBe(false)
+})
+
 test("all picks the most specific pattern", () => {
   const rules = {
     "*": "deny",
@@ -76,13 +85,13 @@ test("allStructured handles sed flags", () => {
 
 test("match normalizes slashes for cross-platform globbing", () => {
   expect(Wildcard.match("C:\\Windows\\System32\\*", "C:/Windows/System32/*")).toBe(true)
-  expect(Wildcard.match("C:/Windows/System32/drivers", "C:\\Windows\\System32\\*")).toBe(true)
+  expect(Wildcard.match("C:/Windows/System32/drivers", "C:/Windows/System32/*")).toBe(true)
 })
 
 test("match handles case-insensitivity on Windows", () => {
   if (process.platform === "win32") {
     expect(Wildcard.match("C:\\windows\\system32\\hosts", "C:/Windows/System32/*")).toBe(true)
-    expect(Wildcard.match("c:/windows/system32/hosts", "C:\\Windows\\System32\\*")).toBe(true)
+    expect(Wildcard.match("c:/windows/system32/hosts", "C:/Windows/System32/*")).toBe(true)
   } else {
     // Unix paths are case-sensitive
     expect(Wildcard.match("/users/test/file", "/Users/test/*")).toBe(false)
