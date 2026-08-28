@@ -1,7 +1,7 @@
 export * as SessionRunnerLLM from "./llm.js"
 
 import { Message } from "@opencode-ai/ai"
-import { Cause, Effect, Exit, FiberMap, Layer, Pull } from "effect"
+import { Cause, Effect, Exit, FiberMap, Layer } from "effect"
 import { Database } from "../../database/database.js"
 import { Bus } from "../../bus.js"
 import { InstructionState } from "../instruction-state.js"
@@ -222,6 +222,15 @@ const layer = Layer.effect(
           agent: loaded.agent.id,
           model: loaded.model,
           prepared,
+          retry: (cause, error, proposed) =>
+            retry.decide({
+              cause,
+              error,
+              agent: loaded.agent.id,
+              model: loaded.model.ref,
+              hook: prepared.retry,
+              retry: proposed,
+            }),
           recoverContinuation,
           recoverOverflow: Effect.suspend(() =>
             recoverOverflow && compaction.enabled()
@@ -232,30 +241,17 @@ const layer = Layer.effect(
         const completed = yield* SessionStep.Outcome.$match(outcome, {
           Completed: (outcome) => Effect.succeed(outcome.needsContinuation),
           Retry: (outcome) =>
-            retry({
-              cause: outcome.cause,
+            retry.wait({
+              decision: outcome.decision,
               error: outcome.error,
               assistantMessageID,
-              agent: loaded.agent.id,
-              model: loaded.model.ref,
-              hook: prepared.retry,
-            }).pipe(
-              Pull.catchDone(() =>
-                bus
-                  .publish(SessionEvent.Step.Failed, { sessionID, assistantMessageID, error: outcome.error })
-                  .pipe(Effect.andThen(outcome.cause)),
-              ),
-              Effect.asVoid,
-            ),
+            }),
           Continue: Effect.fnUntraced(function* (outcome) {
-            yield* retry({
-              cause: outcome.cause,
+            yield* retry.wait({
+              decision: outcome.decision,
               error: outcome.error,
               assistantMessageID,
-              agent: loaded.agent.id,
-              model: loaded.model.ref,
-              hook: prepared.retry,
-            }).pipe(Pull.catchDone(() => outcome.cause))
+            })
             yield* bus.publish(SessionEvent.Synthetic, { sessionID, text: CONTINUE_AFTER_INCOMPLETE_STREAM })
             assistantMessageID = SessionMessage.ID.create()
           }),

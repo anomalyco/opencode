@@ -4406,6 +4406,25 @@ describe("SessionRunnerLLM", () => {
     expect(yield* recordedEventTypes(sessionID)).not.toContain("session.retry.scheduled.1")
   })
 
+  scenario("allows session retry hooks to retry a terminal provider failure", function* (s) {
+    yield* s.hooks.register("session", "retry", (event) =>
+      Effect.sync(() => {
+        expect(event.decision).toEqual({ retry: false })
+        event.decision = { retry: true, delay: 0 }
+      }),
+    )
+    yield* s.admit("Retry invalid request")
+    yield* s.llm.push(Stream.fail(invalidRequest()), TestLLM.text("Recovered", "forced-retry-success"))
+
+    yield* s.resume
+
+    expect(s.requests).toHaveLength(2)
+    expect(yield* s.context).toMatchObject([
+      Expected.user("Retry invalid request"),
+      Expected.assistant({ finish: "stop" }, [Expected.text("Recovered")]),
+    ])
+  })
+
   scenario("uses the final session retry hook delay", function* (s) {
     yield* s.hooks.register("session", "retry", (event) =>
       Effect.sync(() => {

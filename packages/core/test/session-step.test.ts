@@ -114,6 +114,8 @@ for (const fixture of [
                 return { content: "Completed tool" }
               }),
           },
+          retry: (_cause, _error, retry) =>
+            Effect.succeed(retry ? { retry: true, attempt: 2, delay: 0 } : { retry: false }),
           recoverContinuation: true,
           recoverOverflow: Effect.succeed(false),
         })

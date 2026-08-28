@@ -4,20 +4,26 @@ import { AIError } from "@opencode-ai/ai"
 import { Agent } from "@opencode-ai/schema/agent"
 import { Model } from "@opencode-ai/schema/model"
 import { SessionError } from "@opencode-ai/schema/session-error"
-import { Cause, Clock, Duration, Effect, Schedule } from "effect"
+import { Clock, Duration, Effect, Pull, Schedule } from "effect"
 import { Bus } from "../../bus.js"
 import type { PluginHooks } from "../../plugin/hooks.js"
 import { SessionEvent } from "../event.js"
 import { SessionMessage } from "../message.js"
 import { SessionSchema } from "../schema.js"
 
-export interface Input {
+interface Input {
   readonly cause: AIError
   readonly error: SessionError.Error
-  readonly assistantMessageID: SessionMessage.ID
   readonly agent: Agent.ID
   readonly model: Model.Ref
   readonly hook: (event: PluginHooks.Domains["session"]["retry"]) => Effect.Effect<void>
+  readonly retry: boolean
+}
+
+export interface Decision {
+  readonly retry: true
+  readonly attempt: number
+  readonly delay: number
 }
 
 export function isRetryable(error: AIError) {
@@ -75,10 +81,12 @@ export const make = (bus: Bus.Interface, sessionID: SessionSchema.ID) =>
   Effect.gen(function* () {
     const step = yield* Schedule.toStep(schedule)
     let attempt = 1
-    return (input: Input) =>
+    const decide = (input: Input) =>
       Effect.gen(function* () {
         const now = yield* Clock.currentTimeMillis
-        const [, duration] = yield* step(now, input)
+        const next = yield* step(now, input).pipe(Pull.catchDone(() => Effect.succeed(undefined)))
+        if (!next) return { retry: false as const }
+        const [, duration] = next
         attempt++
         const delay = Math.ceil(Duration.toMillis(duration))
         const event: PluginHooks.Domains["session"]["retry"] = {
@@ -87,21 +95,30 @@ export const make = (bus: Bus.Interface, sessionID: SessionSchema.ID) =>
           model: input.model,
           error: input.error,
           attempt,
-          decision: { retry: true, delay },
+          decision: input.retry ? { retry: true, delay } : { retry: false },
         }
         yield* input.hook(event)
-        if (!event.decision.retry) return yield* Cause.done()
+        if (!event.decision.retry) return event.decision
         const normalized =
           Number.isFinite(event.decision.delay) && event.decision.delay >= 0 ? Math.ceil(event.decision.delay) : delay
+        return { retry: true as const, attempt, delay: normalized }
+      })
+    const wait = (input: {
+      readonly decision: Decision
+      readonly assistantMessageID: SessionMessage.ID
+      readonly error: SessionError.Error
+    }) =>
+      Effect.gen(function* () {
         const scheduled = yield* Clock.currentTimeMillis
         yield* bus.publish(SessionEvent.RetryScheduled, {
           sessionID,
           assistantMessageID: input.assistantMessageID,
-          attempt,
-          at: scheduled + normalized,
+          attempt: input.decision.attempt,
+          at: scheduled + input.decision.delay,
           error: input.error,
         })
-        const remaining = Math.max(0, scheduled + normalized - (yield* Clock.currentTimeMillis))
+        const remaining = Math.max(0, scheduled + input.decision.delay - (yield* Clock.currentTimeMillis))
         yield* Effect.sleep(Duration.millis(remaining))
       })
+    return { decide, wait }
   })
