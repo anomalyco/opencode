@@ -18,7 +18,6 @@ import { PluginHooks } from "../plugin/hooks.js"
 import { PluginSupervisor } from "../plugin/supervisor-service.js"
 import { Shell } from "../shell.js"
 import { Skill } from "../skill.js"
-import { Snapshot } from "../snapshot.js"
 import {
   AttachmentError,
   BusyError,
@@ -42,7 +41,7 @@ export type Services =
   | PluginHooks.Service
   | Image.Service
   | Skill.Service
-  | Snapshot.Service
+  | SessionRevert.Service
   | Shell.Service
 
 type PromptRequest = {
@@ -67,7 +66,6 @@ export const make = Effect.fn("Session.make")(function* (servicesFor: (ref: Loca
   const store = yield* SessionStore.Service
   const execution = yield* SessionExecution.Service
   const fs = yield* FSUtil.Service
-  const revertOperations = yield* SessionRevert.make()
   const manualShellSessions = new Set<SessionSchema.ID>()
   const shellLocks = KeyedMutex.makeUnsafe<SessionSchema.ID>()
 
@@ -129,7 +127,7 @@ export const make = Effect.fn("Session.make")(function* (servicesFor: (ref: Loca
             preparePrompt({ ...input, sessionID }, messageID).pipe(Effect.provide(servicesFor(session.location))),
           )
           // Commit a staged revert only after preparation succeeds, before admitting new work.
-          if (session.revert) yield* revertOperations.commit(session)
+          if (session.revert) yield* SessionRevert.commit(bus, session)
           return yield* SessionInbox.admit(db, bus, {
             id: messageID,
             sessionID: session.id,
@@ -271,32 +269,25 @@ export const make = Effect.fn("Session.make")(function* (servicesFor: (ref: Loca
   const stage = Effect.fn("Session.revert.stage")(function* (
     sessionID: SessionSchema.ID,
     input: { messageID: SessionMessage.ID; files?: boolean },
-  ): Effect.fn.Return<
-    SessionSchema.Revert,
-    NotFoundError | SessionRevert.MessageNotFoundError | BusyError | Snapshot.Error
-  > {
+  ) {
     const session = yield* get(sessionID)
     if ((yield* execution.active).has(sessionID)) return yield* new BusyError({ sessionID })
-    return yield* Effect.gen(function* () {
-      const plugins = yield* PluginSupervisor.Service
-      yield* plugins.flush
-      return yield* revertOperations.stage({ session, messageID: input.messageID, files: input.files })
-    }).pipe(Effect.provide(servicesFor(session.location)))
+    return yield* SessionRevert.Service.use((revert) =>
+      revert.stage({ session, messageID: input.messageID, files: input.files }),
+    ).pipe(Effect.provide(servicesFor(session.location)))
   })
   const clear = Effect.fn("Session.revert.clear")(function* (sessionID: SessionSchema.ID) {
     const session = yield* get(sessionID)
     if ((yield* execution.active).has(sessionID)) return yield* new BusyError({ sessionID })
-    yield* Effect.gen(function* () {
-      const plugins = yield* PluginSupervisor.Service
-      yield* plugins.flush
-      yield* revertOperations.clear(session)
-    }).pipe(Effect.provide(servicesFor(session.location)))
+    yield* SessionRevert.Service.use((revert) => revert.clear(session)).pipe(
+      Effect.provide(servicesFor(session.location)),
+    )
     return yield* execution.wake(sessionID)
   })
   const commit = Effect.fn("Session.revert.commit")(function* (sessionID: SessionSchema.ID) {
     const session = yield* get(sessionID)
     if ((yield* execution.active).has(sessionID)) return yield* new BusyError({ sessionID })
-    return yield* revertOperations.commit(session)
+    return yield* SessionRevert.commit(bus, session)
   })
   const revert = { stage, clear, commit }
   const operations = {

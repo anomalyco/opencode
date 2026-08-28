@@ -22,6 +22,7 @@ import { SessionExecution } from "../src/session/execution.js"
 import { SessionInbox } from "../src/session/inbox.js"
 import { SessionMessage } from "../src/session/message.js"
 import { SessionProjector } from "../src/session/projector.js"
+import { SessionRevert } from "../src/session/revert.js"
 import { SessionRunCoordinator } from "../src/session/run-coordinator.js"
 import { SessionSchema } from "../src/session/schema.js"
 import { Session } from "../src/session/session.js"
@@ -45,7 +46,7 @@ const source = Location.Ref.make({ directory: AbsolutePath.make("/project") })
 const setup = Effect.fnUntraced(function* (options?: {
   execution?: SessionExecution.Interface
   shell?: Layer.Layer<Shell.Service>
-  snapshot?: Layer.Layer<Snapshot.Service>
+  snapshot?: (ref: Location.Ref) => Layer.Layer<Snapshot.Service>
 }) {
   const database = yield* Database.Service
   const bus = yield* Bus.Service
@@ -95,18 +96,24 @@ const setup = Effect.fnUntraced(function* (options?: {
     Layer.succeed(PluginHooks.Service, hooks),
     Layer.mock(Image.Service, {}),
     Layer.mock(Skill.Service, {}),
-    options?.snapshot ?? Layer.mock(Snapshot.Service, {}),
     options?.shell ?? Layer.mock(Shell.Service, {}),
   )
   const servicesFor = (ref: Location.Ref): Layer.Layer<Session.Services> => {
     locations.push(ref)
-    return Layer.merge(
-      services,
-      Layer.succeed(PluginSupervisor.Service, {
-        flush: Effect.sync(() => {
-          flushes.push(ref)
-        }),
-      }),
+    return SessionRevert.layer.pipe(
+      Layer.provideMerge(
+        Layer.mergeAll(
+          services,
+          options?.snapshot?.(ref) ?? Layer.mock(Snapshot.Service, {}),
+          Layer.succeed(PluginSupervisor.Service, {
+            flush: Effect.sync(() => {
+              flushes.push(ref)
+            }),
+          }),
+        ),
+      ),
+      Layer.provide(Layer.merge(Layer.succeed(Database.Service, database), Layer.succeed(Bus.Service, bus))),
+      Layer.fresh,
     )
   }
   const sessions = yield* Session.make(servicesFor).pipe(
@@ -440,7 +447,9 @@ describe("Session-owned handles", () => {
 
   it.live("keeps preparation interruptible without admitting input or committing a staged revert", () =>
     Effect.gen(function* () {
-      const fixture = yield* setup({ snapshot: Layer.mock(Snapshot.Service, { capture: () => Effect.undefined }) })
+      const fixture = yield* setup({
+        snapshot: () => Layer.mock(Snapshot.Service, { capture: () => Effect.undefined }),
+      })
       const handle = fixture.sessions.forSession(sessionID)
       const boundary = yield* handle.synthetic({ text: "Revert boundary", resume: false })
       yield* SessionInbox.promote(fixture.db, fixture.bus, sessionID, "steer")
@@ -470,6 +479,95 @@ describe("Session-owned handles", () => {
       expect((yield* handle.get()).revert).toBeUndefined()
       expect(yield* fixture.store.context(sessionID)).toEqual([])
       expect(fixture.locations).toHaveLength(acquisitions)
+    }),
+  )
+
+  it.live("selects the destination's constructed revert operations after a move", () =>
+    Effect.gen(function* () {
+      const captures: Location.Ref[] = []
+      const fixture = yield* setup({
+        snapshot: (ref) =>
+          Layer.mock(Snapshot.Service, {
+            capture: () =>
+              Effect.sync(() => {
+                captures.push(ref)
+                return undefined
+              }),
+          }),
+      })
+      const handle = fixture.sessions.forSession(sessionID)
+      const boundary = yield* handle.synthetic({ text: "Revert boundary", resume: false })
+      yield* SessionInbox.promote(fixture.db, fixture.bus, sessionID, "steer")
+      yield* handle.revert.stage({ messageID: boundary.id, files: false })
+      const destination = Location.Ref.make({ directory: AbsolutePath.make("/project/moved") })
+      yield* fixture.bus.publish(SessionEvent.Moved, {
+        sessionID,
+        location: destination,
+        projectID: Project.ID.global,
+        subpath: RelativePath.make("moved"),
+      })
+
+      yield* handle.revert.stage({ messageID: boundary.id, files: false })
+      yield* handle.revert.clear()
+
+      expect(captures).toEqual([source, destination])
+      expect(fixture.locations).toEqual([source, destination, destination])
+      expect(fixture.flushes).toEqual([source, destination, destination])
+      expect((yield* handle.get()).revert).toBeUndefined()
+    }),
+  )
+})
+
+describe("SessionRevert construction", () => {
+  it.live("captures dependencies without work, then checks readiness on every stage and clear", () =>
+    Effect.gen(function* () {
+      const fixture = yield* setup()
+      const handle = fixture.sessions.forSession(sessionID)
+      const boundary = yield* handle.synthetic({ text: "Revert boundary", resume: false })
+      yield* SessionInbox.promote(fixture.db, fixture.bus, sessionID, "steer")
+      const calls: string[] = []
+      const revert = yield* SessionRevert.make().pipe(
+        Effect.provide(
+          Layer.merge(
+            Layer.succeed(PluginSupervisor.Service, {
+              flush: Effect.sync(() => {
+                calls.push("flush")
+              }),
+            }),
+            Layer.mock(Snapshot.Service, {
+              capture: () =>
+                Effect.sync(() => {
+                  calls.push("capture")
+                  return Snapshot.ID.make("captured-tree")
+                }),
+              diff: () =>
+                Effect.sync(() => {
+                  calls.push("diff")
+                  return []
+                }),
+              restore: () =>
+                Effect.sync(() => {
+                  calls.push("restore")
+                }),
+            }),
+          ),
+        ),
+      )
+      expect(calls).toEqual([])
+      const unrelated = Layer.merge(Layer.mock(PluginSupervisor.Service, {}), Layer.mock(Snapshot.Service, {}))
+      const session = yield* handle.get()
+      yield* revert
+        .stage({ session, messageID: boundary.id, files: false })
+        .pipe(Effect.satisfiesServicesType<never>(), Effect.provide(unrelated))
+      expect(calls).toEqual(["flush", "capture", "capture", "diff"])
+
+      const staged = yield* handle.get()
+      expect(staged.revert?.snapshot).toBe(Snapshot.ID.make("captured-tree"))
+      yield* revert.clear(staged).pipe(Effect.satisfiesServicesType<never>(), Effect.provide(unrelated))
+      const cleared = yield* handle.get()
+      expect(cleared.revert).toBeUndefined()
+      yield* revert.clear(cleared).pipe(Effect.satisfiesServicesType<never>(), Effect.provide(unrelated))
+      expect(calls).toEqual(["flush", "capture", "capture", "diff", "flush", "restore", "flush"])
     }),
   )
 })

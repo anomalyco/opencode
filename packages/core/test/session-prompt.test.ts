@@ -9,8 +9,10 @@ import { Database } from "@opencode-ai/core/database/database"
 import { Agent } from "@opencode-ai/core/agent"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { Bus } from "@opencode-ai/core/bus"
 import { EventTable } from "@opencode-ai/core/event/sql"
+import { Location } from "@opencode-ai/schema/location"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { Model } from "@opencode-ai/core/model"
 import { Provider } from "@opencode-ai/core/provider"
@@ -20,6 +22,7 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
+import { SessionRevert } from "@opencode-ai/core/session/revert"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionInbox } from "@opencode-ai/core/session/inbox"
 import { SessionInboxTable, SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
@@ -58,37 +61,53 @@ const execution = Layer.succeed(
     awaitIdle: () => Effect.void,
   }),
 )
-const locations = Layer.effect(
-  LocationServiceMap.Service,
-  LayerMap.make(
-    () =>
-      // These operations resolve Location services lazily and must wait for plugin-projected state.
-      // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
-      Layer.unwrap(
-        Effect.sync(() => {
-          let ready = false
-          return Layer.mergeAll(
-            LayerNode.compile(PluginHooks.node),
-            Layer.mock(Image.Service, {
-              normalize: (_resource, content) =>
-                ready
-                  ? Effect.succeed(content.content.length > 5 * 1024 * 1024 ? { ...content, content: "AA==" } : content)
-                  : Effect.die(new Error("Image service used before plugins were ready")),
-            }),
-            Layer.mock(Snapshot.Service, {
-              capture: () =>
-                ready ? Effect.undefined : Effect.die(new Error("Snapshot used before plugins were ready")),
-              restore: () => (ready ? Effect.void : Effect.die(new Error("Snapshot used before plugins were ready"))),
-            }),
-            Layer.succeed(
-              PluginSupervisor.Service,
-              PluginSupervisor.Service.of({ flush: Effect.sync(() => (ready = true)) }),
-            ),
-          )
-        }),
-      ) as unknown as Layer.Layer<LocationServices>,
+const locations = makeGlobalNode({
+  service: LocationServiceMap.Service,
+  layer: Layer.effect(
+    LocationServiceMap.Service,
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+      const shared = Layer.merge(Layer.succeed(Database.Service, database), Layer.succeed(Bus.Service, bus))
+      return yield* LayerMap.make(
+        (_ref: Location.Ref) =>
+          // These operations resolve Location services lazily and must wait for plugin-projected state.
+          // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
+          Layer.suspend(() => {
+            let ready = false
+            return SessionRevert.layer.pipe(
+              Layer.provideMerge(
+                Layer.mergeAll(
+                  LayerNode.compile(PluginHooks.node),
+                  Layer.mock(Image.Service, {
+                    normalize: (_resource, content) =>
+                      ready
+                        ? Effect.succeed(
+                            content.content.length > 5 * 1024 * 1024 ? { ...content, content: "AA==" } : content,
+                          )
+                        : Effect.die(new Error("Image service used before plugins were ready")),
+                  }),
+                  Layer.mock(Snapshot.Service, {
+                    capture: () =>
+                      ready ? Effect.undefined : Effect.die(new Error("Snapshot used before plugins were ready")),
+                    restore: () =>
+                      ready ? Effect.void : Effect.die(new Error("Snapshot used before plugins were ready")),
+                  }),
+                  Layer.succeed(
+                    PluginSupervisor.Service,
+                    PluginSupervisor.Service.of({ flush: Effect.sync(() => (ready = true)) }),
+                  ),
+                ),
+              ),
+              Layer.provide(shared),
+              Layer.fresh,
+            )
+          }) as unknown as Layer.Layer<LocationServices>,
+      )
+    }),
   ),
-)
+  deps: [Database.node, Bus.node],
+})
 const it = testEffect(
   AppNodeBuilder.build(
     LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionStore.node, Session.node]),
