@@ -77,6 +77,41 @@ grep 'role=server' ~/.local/share/opencode/log/opencode.log
 grep 'run=8fc3b1d5' ~/.local/share/opencode/log/opencode.log
 ```
 
+## Capture CPU and memory profiles
+
+On macOS and Linux, you can signal a running OpenCode process to capture diagnostic data. Get the background server PID
+from the health endpoint:
+
+```bash
+opencode2 api get /api/health
+```
+
+Use the `pid` from the response with one of these signals:
+
+- `SIGPROF` captures a ten-second CPU profile:
+
+  ```bash
+  kill -SIGPROF <pid>
+  ```
+
+  The result is written to the log directory as `cpu-<pid>-<timestamp>.cpuprofile`.
+
+- `SIGUSR1` captures a memory (heap) snapshot:
+
+  ```bash
+  kill -SIGUSR1 <pid>
+  ```
+
+  The result is written to the log directory as `heap-<pid>-<timestamp>.heapsnapshot`.
+
+Wait for `CPU profile written` or `heap snapshot written` in `opencode.log` before opening the file. The corresponding
+log entry includes its complete path. You can inspect both file types in Chrome DevTools.
+
+<Callout type="note">
+  Signal-triggered profiles are not available on Windows. Writing a heap snapshot can pause the process and temporarily
+  increase its memory usage.
+</Callout>
+
 ## Service files
 
 The shared server registers itself at:

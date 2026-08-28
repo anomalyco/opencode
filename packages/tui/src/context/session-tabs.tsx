@@ -173,6 +173,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
             ? ("question" as const)
             : (false as const),
         busy: members.some((id) => data.session.status(id) === "running" || data.session.pending.list(id).length > 0),
+        renaming: data.session.title.pending(session),
       }
     }
 

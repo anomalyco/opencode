@@ -329,8 +329,8 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
         },
       },
       {
-        // Random runs stay off the selected tab, so this is the way to watch the edge flash
-        // and running sweep under the cursor.
+        // Random runs may select any eligible tab; this command guarantees the edge flash
+        // and running sweep can be watched under the cursor.
         bind: "s",
         title: "Run selected tab",
         group: "Storybook",
@@ -448,10 +448,13 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
         message={lastEvent()}
         controls={[
           { shortcut: "s", label: "work" },
+          { shortcut: "space/e", label: "random work" },
+          { shortcut: "p", label: "prompt" },
           { shortcut: "q", label: "question" },
           { shortcut: "a", label: "permission" },
           { shortcut: "i", label: "idle" },
           { shortcut: "f/x", label: "complete/fail" },
+          { shortcut: "t/d", label: "add/close" },
           { shortcut: "c", label: "spinner" },
           { shortcut: "u", label: "unread marker" },
           { shortcut: "m", label: "motion" },
