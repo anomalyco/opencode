@@ -305,7 +305,7 @@ const layer = () =>
                       }),
                   )
                   yield* outputDone.open
-                }).pipe(Effect.catch(() => outputDone.open)),
+                }),
               )
               yield* Effect.promise(
                 () =>
@@ -356,7 +356,6 @@ const layer = () =>
                       Effect.flatMap(() =>
                         finish("timeout", undefined, handle.kill().pipe(Effect.catch(() => Effect.void))),
                       ),
-                      Effect.catch(() => Effect.void),
                     ),
                   )
                 })

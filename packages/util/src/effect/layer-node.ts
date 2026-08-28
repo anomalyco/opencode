@@ -164,7 +164,6 @@ function isNode(input: Layer.Any | AnyNode): input is AnyNode {
 type Visit<Result> = (node: AnyNode, context: VisitContext<Result>) => Result
 
 type VisitContext<Result> = {
-  readonly cache: Map<AnyNode, Result>
   readonly visit: (node: AnyNode) => Result
 }
 
@@ -174,7 +173,6 @@ function walk<Result>(
   options: {
     readonly cache?: Map<AnyNode, Result>
     readonly resolve?: (node: AnyNode) => AnyNode
-    readonly detectCycles?: boolean
   } = {},
 ) {
   const cache = options.cache ?? new Map<AnyNode, Result>()
@@ -186,7 +184,7 @@ function walk<Result>(
     const cached = cache.get(target)
     if (cached !== undefined || cache.has(target)) return cached!
 
-    if (options.detectCycles !== false && visiting.has(target)) {
+    if (visiting.has(target)) {
       const start = stack.indexOf(target)
       throw new Error(
         `Cycle detected in layer tree: ${[...stack.slice(start), target].map((item) => item.name).join(" -> ")}`,
@@ -196,7 +194,7 @@ function walk<Result>(
     visiting.add(target)
     stack.push(target)
     try {
-      const result = visit(target, { cache, visit: recur })
+      const result = visit(target, { visit: recur })
       if (!cache.has(target)) cache.set(target, result)
       return result
     } finally {

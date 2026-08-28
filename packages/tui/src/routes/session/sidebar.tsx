@@ -4,6 +4,8 @@ import { useTheme } from "../../context/theme"
 import { useConfig } from "../../config"
 import { Slot } from "../../plugin/render"
 import { withTimestampedFallback } from "@opencode-ai/util/session-title-fallback"
+import { TextAttributes } from "@opentui/core"
+import "../../component/title-shimmer"
 
 import { getScrollAcceleration } from "../../util/scroll"
 import { SESSION_SIDEBAR_WIDTH } from "../../ui/layout"
@@ -45,11 +47,24 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
         >
           <box flexShrink={0} gap={1} paddingRight={1}>
             <box paddingRight={1}>
-              <text fg={theme.text.default}>
-                <b>{withTimestampedFallback(session()!)}</b>
-              </text>
-              <Show when={session()!.location.workspaceID}>
-                <text fg={theme.text.subdued}>{session()!.location.workspaceID}</text>
+              <title_shimmer
+                fg={theme.text.default}
+                rename={{
+                  pending: data.session.title.pending(props.sessionID),
+                  title: withTimestampedFallback(session()),
+                }}
+                enabled={config.animations ?? true}
+                backdrop={theme.background.default}
+                attributes={
+                  data.session.title.pending(props.sessionID) && config.animations === false
+                    ? TextAttributes.DIM
+                    : TextAttributes.BOLD
+                }
+              >
+                {withTimestampedFallback(session())}
+              </title_shimmer>
+              <Show when={session().location.workspaceID}>
+                <text fg={theme.text.subdued}>{session().location.workspaceID}</text>
               </Show>
             </box>
             <Slot path="sidebar.content" input={{ sessionID: props.sessionID }} />
