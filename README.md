@@ -1,3 +1,5 @@
+> **Note:** This repository (`blogtheristo/opencode-all`) is an independent project and is **not** built by the OpenCode team and is **not** affiliated with [opencode.ai](https://opencode.ai) or [anomalyco/opencode](https://github.com/anomalyco/opencode) in any way.
+
 <p align="center">
   <a href="https://opencode.ai">
     <picture>
