@@ -401,7 +401,11 @@ export function createTimelineVirtualizer(input: Input) {
     }
 
     return (
-      <div class="relative w-full h-full min-w-0" data-workspace-session={props.workspaceSession() ? "" : undefined}>
+      <div
+        class="relative w-full h-full min-w-0"
+        data-workspace-session={props.workspaceSession() ? "" : undefined}
+        data-local-session={!props.workspaceSession() ? "" : undefined}
+      >
         <div
           class="absolute left-1/2 -translate-x-1/2 z-[60] pointer-events-none transition-all duration-200 ease-out"
           classList={{

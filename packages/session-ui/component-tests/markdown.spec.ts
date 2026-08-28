@@ -1,4 +1,5 @@
 import { fileURLToPath } from "node:url"
+import type { Page } from "@playwright/test"
 import { expect, story } from "../../storybook/playwright/story"
 
 const png = Buffer.from(
@@ -108,6 +109,14 @@ story("mounts cached completed Markdown with sanitized HTML and decorations", as
   await expect(markdown.getByRole("heading")).toHaveText("Completed response")
   await expect(markdown.locator("script, [onerror], [href^='javascript:']")).toHaveCount(0)
   await expect(markdown.locator('code[data-inline-code-kind="path"]')).toHaveText("src/file.ts")
+  await expect(markdown.locator('code[data-inline-code-kind="path"]')).toHaveCSS(
+    "color",
+    await resolvedColor(page, "--v2-text-text-code-path"),
+  )
+  await expect(markdown.locator('code[data-inline-code-kind="path"]')).toHaveCSS(
+    "background-color",
+    await resolvedColor(page, "--v2-background-bg-code-path"),
+  )
   await expect(markdown.getByRole("link", { name: "https://example.com/docs" })).toHaveAttribute("target", "_blank")
   await expect(markdown.getByRole("link", { name: "https://example.com/docs" })).toHaveAttribute(
     "rel",
@@ -131,6 +140,17 @@ story("mounts cached completed Markdown with sanitized HTML and decorations", as
   await expect(markdown).toBeEmpty()
   await expect(markdown).toHaveAttribute("data-markdown-ready", "")
 })
+
+async function resolvedColor(page: Page, token: string) {
+  return page.evaluate((token) => {
+    const probe = document.createElement("span")
+    probe.style.color = `var(${token})`
+    document.body.append(probe)
+    const color = getComputedStyle(probe).color
+    probe.remove()
+    return color
+  }, token)
+}
 
 story("renders cached Mermaid blocks and falls back to code for invalid diagrams", async ({ page }) => {
   await page.evaluate(async (fixture) => {
