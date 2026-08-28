@@ -290,8 +290,7 @@ function makeGit(proc: AppProcess.Interface) {
     const remotes = yield* Effect.forEach(yield* lines(["remote"], { cwd }), (name) =>
       Effect.gen(function* () {
         const fetch = repository((yield* text(["remote", "get-url", name], { cwd })).trim())
-        const push = repository((yield* text(["remote", "get-url", "--push", name], { cwd })).trim())
-        return { name, fetch, push }
+        return { name, fetch }
       }),
     )
     const remote =
@@ -299,7 +298,8 @@ function makeGit(proc: AppProcess.Interface) {
       (yield* text(["config", "remote.pushDefault"], { cwd })).trim() ||
       (yield* text(["config", `branch.${current}.remote`], { cwd })).trim() ||
       (yield* primary(cwd))
-    const head = remotes.find((item) => item.name === remote)?.push
+    if (!remote || !remotes.some((item) => item.name === remote)) return
+    const head = repository((yield* text(["remote", "get-url", "--push", remote], { cwd })).trim())
     if (!head) return
     const result = yield* proc
       .run(

@@ -1,5 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import type { FileDiffInfo } from "@opencode-ai/client"
+import type { Vcs } from "@opencode-ai/schema/vcs"
 import { Plugin } from "@opencode-ai/plugin/tui"
 import type { KeymapCommand, Route } from "@opencode-ai/plugin/tui/context"
 import {
@@ -19,6 +20,7 @@ import { EmptyBorder } from "../../ui/border"
 import { FilePath } from "../../ui/file-path"
 import { getScrollAcceleration } from "../../util/scroll"
 import { useConfig } from "../../config"
+import { locationKey } from "../../context/data"
 import { useThemes } from "../../context/theme"
 import { PatchDiff, type PatchDiffRef } from "../../component/patch-diff"
 import {
@@ -40,7 +42,7 @@ const FILE_TREE_MIN_WIDTH = 30
 const FILE_TREE_MAX_WIDTH = 40
 const FILE_HEADER_HEIGHT = 2
 const VCS_DIFF_CONTEXT_LINES = 12
-type DiffMode = "branch" | "committed" | "working"
+type DiffMode = Vcs.Mode
 type DiffView = "split" | "unified"
 type SelectedHunk = { readonly fileIndex: number; readonly hunkIndex: number; readonly scrollTop: number }
 type FileMenuState = { readonly fileIndex: number; readonly x: number; readonly y: number }
@@ -75,7 +77,6 @@ function diffSourceLabel(mode: DiffMode) {
 function DiffViewer(props: { context: Plugin.Context }) {
   const dimensions = useTerminalDimensions()
   const config = useConfig()
-  const dialog = props.context.ui.dialog
   const params = () => {
     const route = props.context.ui.router.current()
     return (route.type === "plugin" ? route.data : undefined) as
@@ -101,12 +102,14 @@ function DiffViewer(props: { context: Plugin.Context }) {
   const bases = new Map<string, ReturnType<Plugin.Context["client"]["vcs"]["base"]>>()
   const diffInput = createMemo(() => ({ mode: mode(), location: location() }))
   const [diff] = createResource(diffInput, async (input) => {
-    const key = JSON.stringify(input.location)
+    const key = locationKey(input.location)
     if (input.mode !== "working" && !bases.has(key)) {
       bases.set(key, props.context.client.vcs.base({ location: input.location }))
     }
     const base = input.mode === "working" ? undefined : await bases.get(key)
-    if (input.mode === "committed" && !base?.data) return { input, base: null, files: [] }
+    if (input !== diffInput() || (input.mode === "committed" && !base?.data)) {
+      return { input, base: null, files: [] }
+    }
     const result = await props.context.client.vcs.diff({
       location: input.location,
       mode: input.mode,
@@ -145,10 +148,7 @@ function DiffViewer(props: { context: Plugin.Context }) {
             .catch(() => {})
         }}
         onClose={() => props.context.ui.router.navigate(params()?.returnRoute ?? { type: "home" })}
-        onSwitchSource={(mode) => {
-          dialog.clear()
-          setMode(mode)
-        }}
+        onSwitchSource={setMode}
       />
     </box>
   )

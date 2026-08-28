@@ -322,6 +322,8 @@ test("switching to uncommitted does not wait for or display a late base result",
     await viewer.app.flush()
     expect(viewer.app.captureCharFrame()).toContain("vs HEAD")
     expect(viewer.app.captureCharFrame()).not.toContain("vs v2")
+    expect(viewer.diffRequests).toHaveLength(1)
+    expect(viewer.vcsDiffInput()).toMatchObject({ mode: "working" })
   } finally {
     pending.resolve(json({ location: session.location, data: baseFixture }))
     viewer.app.renderer.destroy()

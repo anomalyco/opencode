@@ -1,6 +1,7 @@
 export * as Config from "."
 
 import { createBindingLookup } from "@opentui/keymap/extras"
+import { Vcs } from "@opencode-ai/schema/vcs"
 import { Schema } from "effect"
 import { createContext, onCleanup, type JSX, useContext } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
@@ -90,7 +91,7 @@ export const Info = Schema.Struct({
   ).annotate({ description: "System notification and sound settings" }),
   diffs: Schema.optional(
     Schema.Struct({
-      source: Schema.optional(Schema.Literals(["branch", "committed", "working"])).annotate({
+      source: Schema.optional(Vcs.Mode).annotate({
         description: "Default diff source; 'branch' includes branch and uncommitted changes",
       }),
       wrap: Schema.optional(Schema.Literals(["word", "none"])).annotate({
