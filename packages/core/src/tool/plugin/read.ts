@@ -1,6 +1,6 @@
 export * as ReadTool from "./read.js"
 
-import type { Context as PluginContext } from "@opencode-ai/plugin/effect/plugin"
+import type { Context } from "@opencode-ai/plugin/effect/plugin"
 import { basename, dirname, join } from "path"
 import { ToolFailure } from "@opencode-ai/ai"
 import { Effect, Schema } from "effect"
@@ -29,7 +29,7 @@ const Output = Schema.Union([ReadToolFileSystem.FileContent, ReadToolFileSystem.
 
 export const Plugin = {
   id: "opencode.tool.read",
-  effect: Effect.fn("ReadTool.Plugin")(function* (ctx: PluginContext) {
+  effect: Effect.fn("ReadTool.Plugin")(function* (ctx: Context) {
     const reader = yield* ReadToolFileSystem.Service
     const mutation = yield* LocationMutation.Service
     const permission = yield* Permission.Service

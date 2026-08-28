@@ -45,7 +45,9 @@ describe("Skill", () => {
           value.description = "Updated"
           value.id = Skill.ID.make("ignored")
         })
-        draft.update("missing", () => Effect.die("unreachable"))
+        draft.update("missing", () => {
+          throw new Error("unreachable")
+        })
         draft.add(info("deploy", "Deploy"))
         draft.remove("deploy")
       })
