@@ -790,6 +790,16 @@
                         "type": "null"
                       }
                     ]
+                  },
+                  "metadata": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Session.Metadata"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
                 "additionalProperties": false
@@ -977,6 +987,16 @@
               }
             }
           },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                }
+              }
+            }
+          },
           "409": {
             "description": "ConflictError",
             "content": {
@@ -988,7 +1008,7 @@
             }
           }
         },
-        "description": "Import a projected session transcript at the requested location.",
+        "description": "Import a projected session transcript at the requested location. If parentID is supplied, the parent session must already exist; import parents before children.",
         "summary": "Import session",
         "requestBody": {
           "content": {
@@ -10074,6 +10094,70 @@
         }
       }
     },
+    "/api/experimental/persistent-pty/handoff": {
+      "post": {
+        "tags": ["persistentPty"],
+        "operationId": "server.experimental.persistentPty.handoff",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "handoff": {
+                      "anyOf": [
+                        {
+                          "$ref": "#/components/schemas/PersistentPty.Handoff"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": ["handoff"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/experimental/persistent-pty/{ptyID}": {
       "get": {
         "tags": ["persistentPty"],
@@ -15914,7 +15998,34 @@
             "additionalProperties": false
           }
         },
-        "required": ["command", "args", "cwd", "title", "env"],
+        "required": ["args", "title", "env"],
+        "additionalProperties": false
+      },
+      "PersistentPty.Handoff": {
+        "type": "object",
+        "properties": {
+          "directory": {
+            "type": "string"
+          },
+          "instanceID": {
+            "type": "string"
+          },
+          "ticket": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ]
+          }
+        },
+        "required": ["directory", "instanceID", "ticket", "expiresAt"],
         "additionalProperties": false
       },
       "PersistentPty.Info": {
@@ -16266,7 +16377,7 @@
       },
       "Project.Vcs": {
         "type": "string",
-        "enum": ["git", "hg"]
+        "pattern": "^[a-z][a-z0-9._-]*$"
       },
       "ProjectNotFoundErrorEncoded": {
         "type": "object",
@@ -16752,6 +16863,9 @@
             "$ref": "#/components/schemas/session.step.started"
           },
           {
+            "$ref": "#/components/schemas/session.step.streamed"
+          },
+          {
             "$ref": "#/components/schemas/session.step.ended"
           },
           {
@@ -16804,6 +16918,9 @@
           },
           {
             "$ref": "#/components/schemas/session.revert.committed"
+          },
+          {
+            "$ref": "#/components/schemas/session.message.content.updated"
           },
           {
             "$ref": "#/components/schemas/session.usage.recorded"
@@ -17226,6 +17343,9 @@
           "subpath": {
             "type": "string"
           },
+          "metadata": {
+            "$ref": "#/components/schemas/Session.Metadata"
+          },
           "revert": {
             "$ref": "#/components/schemas/Session.Revert"
           }
@@ -17281,6 +17401,9 @@
             "type": "object",
             "properties": {
               "created": {
+                "type": "number"
+              },
+              "streamed": {
                 "type": "number"
               },
               "completed": {
@@ -17390,6 +17513,36 @@
         "required": ["type", "text"],
         "additionalProperties": false
       },
+      "Session.Message.Assistant.Reasoning_1": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["reasoning"]
+          },
+          "text": {
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/Session.Message.ProviderState_14"
+          },
+          "time": {
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "number"
+              },
+              "completed": {
+                "type": "number"
+              }
+            },
+            "required": ["created"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["type", "text"],
+        "additionalProperties": false
+      },
       "Session.Message.Assistant.Retry": {
         "type": "object",
         "properties": {
@@ -17419,6 +17572,23 @@
           },
           "state": {
             "$ref": "#/components/schemas/Session.Message.ProviderState"
+          }
+        },
+        "required": ["type", "text"],
+        "additionalProperties": false
+      },
+      "Session.Message.Assistant.Text_1": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["text"]
+          },
+          "text": {
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/Session.Message.ProviderState_13"
           }
         },
         "required": ["type", "text"],
@@ -17481,6 +17651,77 @@
         },
         "required": ["type", "id", "name", "state", "time"],
         "additionalProperties": false
+      },
+      "Session.Message.Assistant.Tool_1": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["tool"]
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "executed": {
+            "type": "boolean"
+          },
+          "providerState": {
+            "$ref": "#/components/schemas/Session.Message.ProviderState_15"
+          },
+          "providerResultState": {
+            "$ref": "#/components/schemas/Session.Message.ProviderState_16"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Session.Message.ToolState.Streaming"
+              },
+              {
+                "$ref": "#/components/schemas/Session.Message.ToolState.Running_1"
+              },
+              {
+                "$ref": "#/components/schemas/Session.Message.ToolState.Completed_1"
+              },
+              {
+                "$ref": "#/components/schemas/Session.Message.ToolState.Error_1"
+              }
+            ]
+          },
+          "time": {
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "number"
+              },
+              "ran": {
+                "type": "number"
+              },
+              "completed": {
+                "type": "number"
+              }
+            },
+            "required": ["created"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["type", "id", "name", "state", "time"],
+        "additionalProperties": false
+      },
+      "Session.Message.AssistantContent.Encoded": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/Session.Message.Assistant.Text_1"
+          },
+          {
+            "$ref": "#/components/schemas/Session.Message.Assistant.Reasoning_1"
+          },
+          {
+            "$ref": "#/components/schemas/Session.Message.Assistant.Tool_1"
+          }
+        ]
       },
       "Session.Message.Compaction": {
         "anyOf": [
@@ -17754,6 +17995,18 @@
       "Session.Message.ProviderState_12": {
         "type": "object"
       },
+      "Session.Message.ProviderState_13": {
+        "type": "object"
+      },
+      "Session.Message.ProviderState_14": {
+        "type": "object"
+      },
+      "Session.Message.ProviderState_15": {
+        "type": "object"
+      },
+      "Session.Message.ProviderState_16": {
+        "type": "object"
+      },
       "Session.Message.ProviderState_2": {
         "type": "object"
       },
@@ -17986,6 +18239,35 @@
         "required": ["status", "input", "content"],
         "additionalProperties": false
       },
+      "Session.Message.ToolState.Completed_1": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["completed"]
+          },
+          "input": {
+            "type": "object"
+          },
+          "content": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "$ref": "#/components/schemas/Tool.Content"
+              }
+            ],
+            "minItems": 1,
+            "items": {
+              "$ref": "#/components/schemas/Tool.Content"
+            }
+          },
+          "metadata": {
+            "type": "object"
+          }
+        },
+        "required": ["status", "input", "content"],
+        "additionalProperties": false
+      },
       "Session.Message.ToolState.Error": {
         "type": "object",
         "properties": {
@@ -18018,7 +18300,56 @@
         "required": ["status", "input", "error"],
         "additionalProperties": false
       },
+      "Session.Message.ToolState.Error_1": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["error"]
+          },
+          "input": {
+            "type": "object"
+          },
+          "error": {
+            "$ref": "#/components/schemas/Session.StructuredError_1"
+          },
+          "content": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "$ref": "#/components/schemas/Tool.Content"
+              }
+            ],
+            "minItems": 1,
+            "items": {
+              "$ref": "#/components/schemas/Tool.Content"
+            }
+          },
+          "metadata": {
+            "type": "object"
+          }
+        },
+        "required": ["status", "input", "error"],
+        "additionalProperties": false
+      },
       "Session.Message.ToolState.Running": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["running"]
+          },
+          "input": {
+            "type": "object"
+          },
+          "metadata": {
+            "type": "object"
+          }
+        },
+        "required": ["status", "input", "metadata"],
+        "additionalProperties": false
+      },
+      "Session.Message.ToolState.Running_1": {
         "type": "object",
         "properties": {
           "status": {
@@ -18098,6 +18429,9 @@
         "required": ["id", "time", "text", "type"],
         "additionalProperties": false
       },
+      "Session.Metadata": {
+        "type": "object"
+      },
       "Session.Revert": {
         "type": "object",
         "properties": {
@@ -18122,6 +18456,24 @@
         "additionalProperties": false
       },
       "Session.StructuredError": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer",
+            "minimum": 100,
+            "maximum": 599
+          }
+        },
+        "required": ["type", "message"],
+        "additionalProperties": false
+      },
+      "Session.StructuredError_1": {
         "type": "object",
         "properties": {
           "type": {
@@ -18967,6 +19319,9 @@
             "$ref": "#/components/schemas/session.step.started"
           },
           {
+            "$ref": "#/components/schemas/session.step.streamed"
+          },
+          {
             "$ref": "#/components/schemas/session.step.ended"
           },
           {
@@ -19034,6 +19389,9 @@
           },
           {
             "$ref": "#/components/schemas/session.revert.committed"
+          },
+          {
+            "$ref": "#/components/schemas/session.message.content.updated"
           },
           {
             "$ref": "#/components/schemas/filesystem.changed"
@@ -20791,6 +21149,9 @@
               "model": {
                 "$ref": "#/components/schemas/Model.Ref"
               },
+              "metadata": {
+                "$ref": "#/components/schemas/Session.Metadata"
+              },
               "version": {
                 "type": "string"
               }
@@ -21480,6 +21841,69 @@
               }
             },
             "required": ["sessionID", "delta"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "created", "type", "durable", "data"],
+        "additionalProperties": false
+      },
+      "session.message.content.updated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "created": {
+            "type": "number"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.message.content.updated"]
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "version": {
+                "type": "number",
+                "enum": [1]
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/Location.Ref"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
+              "content": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Session.Message.AssistantContent.Encoded"
+                }
+              }
+            },
+            "required": ["sessionID", "messageID", "content"],
             "additionalProperties": false
           }
         },
@@ -22500,6 +22924,63 @@
               }
             },
             "required": ["sessionID", "assistantMessageID", "agent", "model"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "created", "type", "durable", "data"],
+        "additionalProperties": false
+      },
+      "session.step.streamed": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "created": {
+            "type": "number"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.step.streamed"]
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "version": {
+                "type": "number",
+                "enum": [1]
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/Location.Ref"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "assistantMessageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              }
+            },
+            "required": ["sessionID", "assistantMessageID"],
             "additionalProperties": false
           }
         },
