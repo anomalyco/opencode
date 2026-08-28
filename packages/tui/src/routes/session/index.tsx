@@ -141,7 +141,6 @@ const sessionBindingCommands = [
   "session.parent",
   "session.child.next",
   "session.child.previous",
-  "session.sidecar.toggle",
 ] as const
 
 const sessionGlobalBindingCommands = [
@@ -462,71 +461,6 @@ export function Session() {
       if (!session()?.parentID || dialog.stack.length > 0) return
       func()
     }
-  }
-
-  async function toggleSidecar() {
-    const current = session()
-    if (!current) return
-    const meta = current.metadata ?? {}
-
-    const originID = typeof meta.sidecarOf === "string" ? meta.sidecarOf : undefined
-    if (originID) {
-      const origin = sync.session.get(originID)
-      if (!origin) {
-        toast.show({ message: "Sidecar origin session not found", variant: "error" })
-        return
-      }
-      if (origin.agent) local.agent.set(origin.agent)
-      navigate({ type: "session", sessionID: originID })
-      return
-    }
-
-    const linkedID = typeof meta.sidecarID === "string" ? meta.sidecarID : undefined
-    const linked = linkedID ? sync.session.get(linkedID) : undefined
-    const sidecar =
-      linked ?? sync.data.session.find((s) => (s.metadata as Record<string, unknown> | undefined)?.sidecarOf === current.id)
-    if (sidecar) {
-      if (sidecar.agent) local.agent.set(sidecar.agent)
-      navigate({ type: "session", sessionID: sidecar.id })
-      return
-    }
-
-    const currentAgentName = local.agent.current()?.name
-    const target = local.agent.list().find((a) => a.name !== currentAgentName)
-    if (!target || !currentAgentName) {
-      toast.show({ message: "No other agent available for a sidecar conversation", variant: "warning" })
-      return
-    }
-    const note = [
-      "<sidecar-orientation>",
-      `This session was forked from the user's main conversation. The history above was transplanted verbatim from that session — every assistant reply in it was written by the main agent "${currentAgentName}", not by you.`,
-      `You are now speaking directly with the user as sidecar agent "${target.name}". Treat the history above as reference material about the earlier conversation with ${currentAgentName}.`,
-      "</sidecar-orientation>",
-    ].join("\n")
-    const res = await sdk.client.session
-      .fork({
-        sessionID: route.sessionID,
-        agent: target.name,
-        metadata: { sidecarOf: route.sessionID },
-        note,
-      })
-      .catch((error) => {
-        toast.show({
-          message: error instanceof Error ? error.message : "Failed to start sidecar conversation",
-          variant: "error",
-        })
-      })
-    const forked = res?.data
-    if (!forked) return
-    await sdk.client.session
-      .update({
-        sessionID: route.sessionID,
-        metadata: { ...meta, sidecarID: forked.id },
-      })
-      .catch(() => {})
-    toast.show({ message: `Sidecar conversation started with @${target.name}`, variant: "info" })
-    local.agent.set(target.name)
-    navigate({ type: "session", sessionID: forked.id })
   }
 
   const sessionCommandList = createMemo(() => [
@@ -1147,20 +1081,6 @@ export function Session() {
         dialog.clear()
         moveChild(-1)
       }),
-    },
-    {
-      title: "Toggle sidecar conversation",
-      description:
-        "Fork this conversation into an isolated sidecar session with another agent, and toggle back and forth with tab",
-      value: "session.sidecar.toggle",
-      category: "Session",
-      slash: {
-        name: "sidecar",
-      },
-      run: () => {
-        dialog.clear()
-        void toggleSidecar()
-      },
     },
   ])
 

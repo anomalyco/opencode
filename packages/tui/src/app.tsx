@@ -53,6 +53,7 @@ import { DialogConsoleOrg } from "./component/dialog-console-org"
 import { ThemeProvider, useTheme } from "./context/theme"
 import { Home } from "./routes/home"
 import { Session } from "./routes/session"
+import { toggleSidecar } from "./sidecar"
 import { PromptHistoryProvider } from "./component/prompt/history"
 import { FrecencyProvider } from "./component/prompt/frecency"
 import { PromptStashProvider } from "./component/prompt/stash"
@@ -114,6 +115,7 @@ const appBindingCommands = [
   "mcp.list",
   "agent.cycle",
   "agent.cycle.reverse",
+  "session.sidecar.toggle",
   "variant.cycle",
   "variant.list",
   "provider.connect",
@@ -733,6 +735,23 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         hidden: true,
         run: () => {
           local.agent.move(-1)
+        },
+      },
+      {
+        name: "session.sidecar.toggle",
+        title: "Toggle sidecar conversation",
+        category: "Agent",
+        slashName: "sidecar",
+        run: () => {
+          dialog.clear()
+          void toggleSidecar({
+            route: route.data,
+            navigate: route.navigate,
+            sync,
+            local,
+            sdk,
+            toast,
+          })
         },
       },
       {
