@@ -93,6 +93,7 @@ export function dialogSelectContentWidth(dialogWidth: number) {
 export type DialogSelectRef<T> = {
   filter: string
   filtered: DialogSelectOption<T>[]
+  clearFilter(): void
   moveTo(value: T): void
 }
 
@@ -525,6 +526,13 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     },
     get filtered() {
       return filtered()
+    },
+    clearFilter() {
+      input.value = ""
+      batch(() => {
+        setStore("filter", "")
+        props.onFilter?.("")
+      })
     },
     moveTo(value) {
       const index = flat().findIndex((option) => isDeepEqual(option.value, value))
