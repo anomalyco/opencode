@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { DateTime, Schema } from "effect"
 import { Agent } from "../src/agent.js"
+import { ConfigAgent } from "../src/config/agent.js"
 import { FileSystem } from "../src/filesystem.js"
 import { Form } from "../src/form.js"
 import { Mcp } from "../src/mcp.js"
@@ -23,7 +24,7 @@ import { AbsolutePath, optional } from "../src/schema.js"
 
 describe("contract hygiene", () => {
   test("restricts agent colors to six-digit hex values", () => {
-    const decode = Schema.decodeUnknownSync(Agent.Color)
+    const decode = Schema.decodeUnknownSync(ConfigAgent.Color)
     expect(decode("#ff6b6b")).toBe("#ff6b6b")
     expect(() => decode("warning")).toThrow()
   })

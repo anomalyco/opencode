@@ -807,6 +807,28 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("finishes at the done sentinel without waiting for response EOF", () =>
+    Effect.gen(function* () {
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(
+            new TextEncoder().encode(sseEvents(deltaChunk({ content: "Hello" }), deltaChunk({}, "stop"))),
+          )
+        },
+      })
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(stream, {
+            headers: { "content-type": "text/event-stream" },
+          }),
+        ),
+      )
+
+      expect(response.text).toBe("Hello")
+      expect(response.events.at(-1)?.type).toBe("finish")
+    }),
+  )
+
   it.effect("preserves streamed refusals as ordinary assistant text", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(request).pipe(
