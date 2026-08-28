@@ -1,0 +1,323 @@
+---
+title: Команди
+description: Створюйте власні команди для повторюваних завдань.
+---
+
+Власні команди дозволяють вказати промпт, який ви хочете запустити, коли ця команда виконується в TUI.
+
+```bash frame="none"
+/my-command
+```
+
+Власні команди додаються до вбудованих команд, таких як `/init`, `/undo`, `/redo`, `/share`, `/help`. [Дізнатися більше](/docs/tui#commands).
+
+---
+
+## Створення файлів команд
+
+Створюйте markdown файли в директорії `commands/`, щоб визначити власні команди.
+
+Створіть `.opencode/commands/test.md`:
+
+```md title=".opencode/commands/test.md"
+---
+description: Run tests with coverage
+agent: build
+model: anthropic/claude-3-5-sonnet-20241022
+---
+
+Run the full test suite with coverage report and show any failures.
+Focus on the failing tests and suggest fixes.
+```
+
+Фронтматер визначає властивості команди. Вміст стає шаблоном.
+
+Використовуйте команду, ввівши `/`, а потім ім'я команди.
+
+```bash frame="none"
+"/test"
+```
+
+---
+
+## Налаштування
+
+Ви можете додавати власні команди через конфігурацію OpenCode або створюючи markdown файли в директорії `commands/`.
+
+---
+
+### JSON
+
+Використовуйте опцію `command` у вашому [конфігу](/docs/config) OpenCode:
+
+```json title="opencode.jsonc" {4-12}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "command": {
+    // Це стає назвою команди
+    "test": {
+      // Це промпт, який буде надіслано LLM
+      "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
+      // Це показується як опис в TUI
+      "description": "Run tests with coverage",
+      "agent": "build",
+      "model": "anthropic/claude-3-5-sonnet-20241022"
+    }
+  }
+}
+```
+
+Тепер ви можете запустити цю команду в TUI:
+
+```bash frame="none"
+/test
+```
+
+---
+
+### Markdown
+
+Ви також можете визначати команди за допомогою markdown файлів. Розмістіть їх у:
+
+- Глобально: `~/.config/opencode/commands/`
+- На проєкт: `.opencode/commands/`
+
+```markdown title="~/.config/opencode/commands/test.md"
+---
+description: Run tests with coverage
+agent: build
+model: anthropic/claude-3-5-sonnet-20241022
+---
+
+Run the full test suite with coverage report and show any failures.
+Focus on the failing tests and suggest fixes.
+```
+
+Ім'я markdown файлу стає назвою команди. Наприклад, `test.md` дозволяє
+вам запустити:
+
+```bash frame="none"
+/test
+```
+
+---
+
+## Конфігурація промпту
+
+Промпти для власних команд підтримують кілька спеціальних плейсхолдерів та синтаксис.
+
+---
+
+### Аргументи
+
+Передавайте аргументи командам за допомогою плейсхолдера `$ARGUMENTS`.
+
+```md title=".opencode/commands/component.md"
+---
+description: Create a new component
+---
+
+Create a new React component named $ARGUMENTS with TypeScript support.
+Include proper typing and basic structure.
+```
+
+Запустіть команду з аргументами:
+
+```bash frame="none"
+/component Button
+```
+
+І `$ARGUMENTS` буде замінено на `Button`.
+
+Ви також можете отримати доступ до окремих аргументів за допомогою позиційних параметрів:
+
+- `$1` — Перший аргумент
+- `$2` — Другий аргумент
+- `$3` — Третій аргумент
+- І так далі...
+
+Наприклад:
+
+```md title=".opencode/commands/create-file.md"
+---
+description: Create a new file with content
+---
+
+Create a file named $1 in the directory $2
+with the following content: $3
+```
+
+Запустіть команду:
+
+```bash frame="none"
+/create-file config.json src "{ \"key\": \"value\" }"
+```
+
+Це замінює:
+
+- `$1` на `config.json`
+- `$2` на `src`
+- `$3` на `{ "key": "value" }`
+
+---
+
+### Вивід оболонки
+
+Використовуйте _!`command`_, щоб вставити вивід [bash команди](/docs/tui#bash-commands) у ваш промпт.
+
+Наприклад, щоб створити власну команду для аналізу покриття тестами:
+
+```md title=".opencode/commands/analyze-coverage.md"
+---
+description: Analyze test coverage
+---
+
+Here are the current test results:
+!`npm test`
+
+Based on these results, suggest improvements to increase coverage.
+```
+
+Або для перегляду останніх змін:
+
+```md title=".opencode/commands/review-changes.md"
+---
+description: Review recent changes
+---
+
+Recent git commits:
+!`git log --oneline -10`
+
+Review these changes and suggest any improvements.
+```
+
+Команди виконуються в кореневій директорії вашого проєкту, і їхній вивід стає частиною промпту.
+
+---
+
+### Посилання на файли
+
+Включайте файли у вашу команду за допомогою `@` з наступним ім'ям файлу.
+
+```md title=".opencode/commands/review-component.md"
+---
+description: Review component
+---
+
+Review the component in @src/components/Button.tsx.
+Check for performance issues and suggest improvements.
+```
+
+Вміст файлу включається в промпт автоматично.
+
+---
+
+## Опції
+
+Розглянемо опції конфігурації детально.
+
+---
+
+### Template
+
+Опція `template` визначає промпт, який буде надіслано LLM при виконанні команди.
+
+```json title="opencode.json"
+{
+  "command": {
+    "test": {
+      "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes."
+    }
+  }
+}
+```
+
+Це **обов'язкова** опція конфігурації.
+
+---
+
+### Description
+
+Використовуйте опцію `description`, щоб надати короткий опис того, що робить команда.
+
+```json title="opencode.json"
+{
+  "command": {
+    "test": {
+      "description": "Run tests with coverage"
+    }
+  }
+}
+```
+
+Це показується як опис в TUI, коли ви вводите команду.
+
+---
+
+### Agent
+
+Використовуйте конфігурацію `agent`, щоб опціонально вказати, який [агент](/docs/agents) має виконувати цю команду.
+Якщо це [сабагент](/docs/agents/#subagents), команда за замовчуванням викличе сабагента.
+Щоб вимкнути цю поведінку, встановіть `subtask` у `false`.
+
+```json title="opencode.json"
+{
+  "command": {
+    "review": {
+      "agent": "plan"
+    }
+  }
+}
+```
+
+Це **опціональна** опція конфігурації. Якщо не вказано, за замовчуванням використовується ваш поточний агент.
+
+---
+
+### Subtask
+
+Використовуйте булеве значення `subtask`, щоб примусово викликати [сабагента](/docs/agents/#subagents).
+Це корисно, якщо ви хочете, щоб команда не засмічувала ваш первинний контекст, і **примусово** змусить агента діяти як сабагент,
+навіть якщо `mode` встановлено на `primary` у конфігурації [агента](/docs/agents).
+
+```json title="opencode.json"
+{
+  "command": {
+    "analyze": {
+      "subtask": true
+    }
+  }
+}
+```
+
+Це **опціональна** опція конфігурації.
+
+---
+
+### Model
+
+Використовуйте конфігурацію `model`, щоб перевизначити модель за замовчуванням для цієї команди.
+
+```json title="opencode.json"
+{
+  "command": {
+    "analyze": {
+      "model": "anthropic/claude-3-5-sonnet-20241022"
+    }
+  }
+}
+```
+
+Це **опціональна** опція конфігурації.
+
+---
+
+## Вбудовані
+
+opencode включає кілька вбудованих команд, таких як `/init`, `/undo`, `/redo`, `/share`, `/help`; [дізнатися більше](/docs/tui#commands).
+
+:::note
+Власні команди можуть перевизначати вбудовані команди.
+:::
+
+Якщо ви визначите власну команду з такою ж назвою, вона перевизначить вбудовану команду.

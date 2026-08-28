@@ -1,0 +1,196 @@
+---
+title: Користувацькі інструменти
+description: Створення інструментів, які LLM може викликати в opencode.
+---
+
+Користувацькі інструменти — це функції, які ви створюєте, що LLM може викликати під час розмов. Вони працюють разом із [вбудованими інструментами](/docs/tools) opencode, такими як `read`, `write` та `bash`.
+
+---
+
+## Створення інструменту
+
+Інструменти визначаються як файли **TypeScript** або **JavaScript**. Однак визначення інструменту може викликати скрипти, написані **будь-якою мовою** — TypeScript або JavaScript використовується лише для самого визначення інструменту.
+
+---
+
+### Розташування
+
+Їх можна визначити:
+
+- Локально, розмістивши в теці `.opencode/tools/` вашого проєкту.
+- Або глобально, розмістивши в теці `~/.config/opencode/tools/`.
+
+---
+
+### Структура
+
+Найпростіший спосіб створити інструменти — використати допоміжну функцію `tool()`, яка забезпечує типобезпеку та валідацію.
+
+```ts title=".opencode/tools/database.ts" {1}
+import { tool } from "@opencode-ai/plugin"
+
+export default tool({
+  description: "Виконати запит до бази даних проєкту",
+  args: {
+    query: tool.schema.string().describe("SQL-запит для виконання"),
+  },
+  async execute(args) {
+    // Ваша логіка роботи з базою даних
+    return `Виконано запит: ${args.query}`
+  },
+})
+```
+
+**Назва файлу** стає **назвою інструменту**. Наведений вище приклад створює інструмент `database`.
+
+---
+
+#### Кілька інструментів у одному файлі
+
+Ви також можете експортувати кілька інструментів з одного файлу. Кожен експорт стає **окремим інструментом** з назвою **`<filename>_<exportname>`**:
+
+```ts title=".opencode/tools/math.ts"
+import { tool } from "@opencode-ai/plugin"
+
+export const add = tool({
+  description: "Додати два числа",
+  args: {
+    a: tool.schema.number().describe("Перше число"),
+    b: tool.schema.number().describe("Друге число"),
+  },
+  async execute(args) {
+    return (args.a + args.b).toString()
+  },
+})
+
+export const multiply = tool({
+  description: "Помножити два числа",
+  args: {
+    a: tool.schema.number().describe("Перше число"),
+    b: tool.schema.number().describe("Друге число"),
+  },
+  async execute(args) {
+    return (args.a * args.b).toString()
+  },
+})
+```
+
+Це створює два інструменти: `math_add` та `math_multiply`.
+
+---
+
+#### Конфлікти назв із вбудованими інструментами
+
+Користувацькі інструменти ключуються за назвою інструменту. Якщо користувацький інструмент використовує ту саму назву, що й вбудований, користувацький інструмент має пріоритет.
+
+Наприклад, цей файл замінює вбудований інструмент `bash`:
+
+```ts title=".opencode/tools/bash.ts"
+import { tool } from "@opencode-ai/plugin"
+
+export default tool({
+  description: "Обмежена оболонка bash",
+  args: {
+    command: tool.schema.string(),
+  },
+  async execute(args) {
+    return `заблоковано: ${args.command}`
+  },
+})
+```
+
+:::note
+Надавайте перевагу унікальним назвам, якщо ви навмисно не хочете замінити вбудований інструмент. Якщо ви хочете вимкнути вбудований інструмент, але не перевизначати його, використовуйте [дозволи](/docs/permissions).
+:::
+
+---
+
+### Аргументи
+
+Ви можете використовувати `tool.schema`, який є просто [Zod](https://zod.dev), для визначення типів аргументів.
+
+```ts "tool.schema"
+args: {
+  query: tool.schema.string().describe("SQL-запит для виконання")
+}
+```
+
+Ви також можете імпортувати [Zod](https://zod.dev) безпосередньо та повернути звичайний об'єкт:
+
+```ts {6}
+import { z } from "zod"
+
+export default {
+  description: "Опис інструменту",
+  args: {
+    param: z.string().describe("Опис параметра"),
+  },
+  async execute(args, context) {
+    // Реалізація інструменту
+    return "результат"
+  },
+}
+```
+
+---
+
+### Контекст
+
+Інструменти отримують контекст поточної сесії:
+
+```ts title=".opencode/tools/project.ts" {8}
+import { tool } from "@opencode-ai/plugin"
+
+export default tool({
+  description: "Отримати інформацію про проєкт",
+  args: {},
+  async execute(args, context) {
+    // Доступ до інформації контексту
+    const { agent, sessionID, messageID, directory, worktree } = context
+    return `Агент: ${agent}, Сесія: ${sessionID}, Повідомлення: ${messageID}, Директорія: ${directory}, Робоче дерево: ${worktree}`
+  },
+})
+```
+
+Використовуйте `context.directory` для робочого каталогу сесії.
+Використовуйте `context.worktree` для кореня git-робочого дерева.
+
+---
+
+## Приклади
+
+### Написання інструменту на Python
+
+Ви можете писати свої інструменти будь-якою мовою. Ось приклад додавання двох чисел за допомогою Python.
+
+Спочатку створіть інструмент як скрипт Python:
+
+```python title=".opencode/tools/add.py"
+import sys
+
+a = int(sys.argv[1])
+b = int(sys.argv[2])
+print(a + b)
+```
+
+Потім створіть визначення інструменту, яке його викликає:
+
+```ts title=".opencode/tools/python-add.ts" {10}
+import { tool } from "@opencode-ai/plugin"
+import path from "path"
+
+export default tool({
+  description: "Додати два числа за допомогою Python",
+  args: {
+    a: tool.schema.number().describe("Перше число"),
+    b: tool.schema.number().describe("Друге число"),
+  },
+  async execute(args, context) {
+    const script = path.join(context.worktree, ".opencode/tools/add.py")
+    const result = await Bun.$`python3 ${script} ${args.a} ${args.b}`.text()
+    return result.trim()
+  },
+})
+```
+
+Тут ми використовуємо утиліту [`Bun.$`](https://bun.com/docs/runtime/shell) для запуску скрипта Python.

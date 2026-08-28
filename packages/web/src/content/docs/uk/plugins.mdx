@@ -1,0 +1,389 @@
+---
+title: Плагіни
+description: Написання власних плагінів для розширення OpenCode.
+---
+
+Плагіни дозволяють розширювати OpenCode шляхом підключення до різних подій та налаштування поведінки. Ви можете створювати плагіни для додавання нових функцій, інтеграції із зовнішніми сервісами або зміни стандартної поведінки OpenCode.
+
+Приклади дивіться у [плагінах](/docs/ecosystem#plugins), створених спільнотою.
+
+---
+
+## Використання плагіна
+
+Є два способи завантаження плагінів.
+
+---
+
+### З локальних файлів
+
+Розмістіть файли JavaScript або TypeScript у теці плагінів.
+
+- `.opencode/plugins/` — Плагіни рівня проєкту
+- `~/.config/opencode/plugins/` — Глобальні плагіни
+
+Файли в цих теках автоматично завантажуються при запуску.
+
+---
+
+### З npm
+
+Вкажіть npm-пакети у вашому файлі конфігурації.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["opencode-helicone-session", "opencode-wakatime", "@my-org/custom-plugin"]
+}
+```
+
+Підтримуються як звичайні, так і scoped npm-пакети.
+
+Перегляньте доступні плагіни в [екосистемі](/docs/ecosystem#plugins).
+
+---
+
+### Як встановлюються плагіни
+
+**npm-плагіни** встановлюються автоматично за допомогою Bun при запуску. Пакети та їхні залежності кешуються в `~/.cache/opencode/node_modules/`.
+
+**Локальні плагіни** завантажуються безпосередньо з теки плагінів. Щоб використовувати зовнішні пакети, ви повинні створити `package.json` у вашій теці конфігурації (див. [Залежності](#dependencies)) або опублікувати плагін у npm та [додати його до конфігурації](/docs/config#plugins).
+
+---
+
+### Порядок завантаження
+
+Плагіни завантажуються з усіх джерел, і всі хуки виконуються послідовно. Порядок завантаження:
+
+1. Глобальна конфігурація (`~/.config/opencode/opencode.json`)
+2. Конфігурація проєкту (`opencode.json`)
+3. Глобальна тека плагінів (`~/.config/opencode/plugins/`)
+4. Тека плагінів проєкту (`.opencode/plugins/`)
+
+Дублікати npm-пакетів з однаковою назвою та версією завантажуються один раз. Однак локальний плагін і npm-плагін зі схожими назвами завантажуються окремо.
+
+---
+
+## Створення плагіна
+
+Плагін — це **модуль JavaScript/TypeScript**, який експортує одну або кілька функцій
+плагіна. Кожна функція отримує об'єкт контексту та повертає об'єкт хунків.
+
+---
+
+### Залежності
+
+Локальні плагіни та користувацькі інструменти можуть використовувати зовнішні npm-пакети. Додайте `package.json` до вашої теки конфігурації з необхідними залежностями.
+
+```json title=".opencode/package.json"
+{
+  "dependencies": {
+    "shescape": "^2.1.0"
+  }
+}
+```
+
+OpenCode запускає `bun install` при запуску для їх встановлення. Потім ваші плагіни та інструменти можуть їх імпортувати.
+
+```ts title=".opencode/plugins/my-plugin.ts"
+import { escape } from "shescape"
+
+export const MyPlugin = async (ctx) => {
+  return {
+    "tool.execute.before": async (input, output) => {
+      if (input.tool === "bash") {
+        output.args.command = escape(output.args.command)
+      }
+    },
+  }
+}
+```
+
+---
+
+### Базова структура
+
+```js title=".opencode/plugins/example.js"
+export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
+  console.log("Плагін ініціалізовано!")
+
+  return {
+    // Реалізації хунків розміщуються тут
+  }
+}
+```
+
+Функція плагіна отримує:
+
+- `project`: Інформація про поточний проєкт.
+- `directory`: Поточний робочий каталог.
+- `worktree`: Шлях до git-робочого дерева.
+- `client`: Клієнт SDK opencode для взаємодії з AI.
+- `$`: [Shell API](https://bun.com/docs/runtime/shell) від Bun для виконання команд.
+
+---
+
+### Підтримка TypeScript
+
+Для TypeScript-плагінів ви можете імпортувати типи з пакета плагіна:
+
+```ts title="my-plugin.ts" {1}
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree }) => {
+  return {
+    // Типобезпечні реалізації хунків
+  }
+}
+```
+
+---
+
+### Події
+
+Плагіни можуть підписуватися на події, як показано нижче в розділі Прикладів. Ось список доступних подій.
+
+#### Події команд
+
+- `command.executed`
+
+#### Події файлів
+
+- `file.edited`
+- `file.watcher.updated`
+
+#### Події встановлення
+
+- `installation.updated`
+
+#### Події LSP
+
+- `lsp.client.diagnostics`
+- `lsp.updated`
+
+#### Події повідомлень
+
+- `message.part.removed`
+- `message.part.updated`
+- `message.removed`
+- `message.updated`
+
+#### Події дозволів
+
+- `permission.asked`
+- `permission.replied`
+
+#### Події сервера
+
+- `server.connected`
+
+#### Події сесій
+
+- `session.created`
+- `session.compacted`
+- `session.deleted`
+- `session.diff`
+- `session.error`
+- `session.idle`
+- `session.status`
+- `session.updated`
+
+#### Події завдань
+
+- `todo.updated`
+
+#### Події оболонки
+
+- `shell.env`
+
+#### Події інструментів
+
+- `tool.execute.after`
+- `tool.execute.before`
+
+#### Події TUI
+
+- `tui.prompt.append`
+- `tui.command.execute`
+- `tui.toast.show`
+
+---
+
+## Приклади
+
+Ось кілька прикладів плагінів, які ви можете використовувати для розширення opencode.
+
+---
+
+### Надсилання сповіщень
+
+Надсилайте сповіщення при певних подіях:
+
+```js title=".opencode/plugins/notification.js"
+export const NotificationPlugin = async ({ project, client, $, directory, worktree }) => {
+  return {
+    event: async ({ event }) => {
+      // Надіслати сповіщення при завершенні сесії
+      if (event.type === "session.idle") {
+        await $`osascript -e 'display notification "Сесію завершено!" with title "opencode"'`
+      }
+    },
+  }
+}
+```
+
+Ми використовуємо `osascript` для запуску AppleScript на macOS. Тут ми використовуємо його для надсилання сповіщень.
+
+:::note
+Якщо ви використовуєте настільний додаток OpenCode, він може автоматично надсилати системні сповіщення, коли відповідь готова або коли в сесії сталася помилка.
+:::
+
+---
+
+### Захист .env
+
+Запобігайте читанню файлів `.env` opencode:
+
+```javascript title=".opencode/plugins/env-protection.js"
+export const EnvProtection = async ({ project, client, $, directory, worktree }) => {
+  return {
+    "tool.execute.before": async (input, output) => {
+      if (input.tool === "read" && output.args.filePath.includes(".env")) {
+        throw new Error("Не читати .env файли")
+      }
+    },
+  }
+}
+```
+
+---
+
+### Впровадження змінних середовища
+
+Впроваджуйте змінні середовища у всі виконання команд оболонки (інструменти AI та термінали користувача):
+
+```javascript title=".opencode/plugins/inject-env.js"
+export const InjectEnvPlugin = async () => {
+  return {
+    "shell.env": async (input, output) => {
+      output.env.MY_API_KEY = "secret"
+      output.env.PROJECT_ROOT = input.cwd
+    },
+  }
+}
+```
+
+---
+
+### Користувацькі інструменти
+
+Плагіни також можуть додавати користувацькі інструменти до opencode:
+
+```ts title=".opencode/plugins/custom-tools.ts"
+import { type Plugin, tool } from "@opencode-ai/plugin"
+
+export const CustomToolsPlugin: Plugin = async (ctx) => {
+  return {
+    tool: {
+      mytool: tool({
+        description: "Це користувацький інструмент",
+        args: {
+          foo: tool.schema.string(),
+        },
+        async execute(args, context) {
+          const { directory, worktree } = context
+          return `Привіт ${args.foo} з ${directory} (робоче дерево: ${worktree})`
+        },
+      }),
+    },
+  }
+}
+```
+
+Допоміжна функція `tool` створює користувацький інструмент, який може викликати opencode. Вона приймає функцію схеми Zod і повертає визначення інструменту з:
+
+- `description`: Що робить інструмент
+- `args`: Схема Zod для аргументів інструменту
+- `execute`: Функція, яка виконується при виклику інструменту
+
+Ваші користувацькі інструменти будуть доступні для opencode разом із вбудованими інструментами.
+
+:::note
+Якщо інструмент плагіна використовує ту саму назву, що й вбудований інструмент, інструмент плагіна має пріоритет.
+:::
+
+---
+
+### Логування
+
+Використовуйте `client.app.log()` замість `console.log` для структурованого логування:
+
+```ts title=".opencode/plugins/my-plugin.ts"
+export const MyPlugin = async ({ client }) => {
+  await client.app.log({
+    body: {
+      service: "my-plugin",
+      level: "info",
+      message: "Плагін ініціалізовано",
+      extra: { foo: "bar" },
+    },
+  })
+}
+```
+
+Рівні: `debug`, `info`, `warn`, `error`. Детальніше в [документації SDK](https://opencode.ai/docs/sdk).
+
+---
+
+### Хуки компактації
+
+Налаштовуйте контекст, що включається при компактації сесії:
+
+```ts title=".opencode/plugins/compaction.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const CompactionPlugin: Plugin = async (ctx) => {
+  return {
+    "experimental.session.compacting": async (input, output) => {
+      // Впровадити додатковий контекст у запит компактації
+      output.context.push(`
+## Користувацький контекст
+
+Включіть будь-який стан, який має зберігатися після компактації:
+- Поточний статус завдання
+- Важливі прийняті рішення
+- Файли, над якими активно ведеться робота
+`)
+    },
+  }
+}
+```
+
+Хук `experimental.session.compacting` спрацьовує перед тим, як LLM генерує підсумок продовження. Використовуйте його для впровадження доменно-специфічного контексту, який стандартний запит компактації міг би пропустити.
+
+Ви також можете повністю замінити запит компактації, встановивши `output.prompt`:
+
+```ts title=".opencode/plugins/custom-compaction.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const CustomCompactionPlugin: Plugin = async (ctx) => {
+  return {
+    "experimental.session.compacting": async (input, output) => {
+      // Замінити весь запит компактації
+      output.prompt = `
+Ви генеруєте запит продовження для багатоагентної сесії рою.
+
+Підсумуйте:
+1. Поточне завдання та його статус
+2. Які файли змінюються і ким
+3. Будь-які блокери або залежності між агентами
+4. Наступні кроки для завершення роботи
+
+Форматуйте як структурований запит, який новий агент може використати для відновлення роботи.
+`
+    },
+  }
+}
+```
+
+Коли встановлено `output.prompt`, він повністю замінює стандартний запит компактації. У цьому випадку масив `output.context` ігнорується.
