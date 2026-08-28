@@ -25,15 +25,20 @@ function occupy(port: number, cancel = false) {
       server: createServer((request, response) => {
         requests.push(request.url ?? "")
         response.end(cancel ? "cancelled" : "still running", () => {
-          if (cancel) servers.forEach((item) => item.server.close())
+          if (cancel)
+            servers.forEach((item) => {
+              // Bun clears its native handle in close(), so force-close connections first.
+              item.server.closeAllConnections()
+              item.server.close()
+            })
         })
       }),
     }))
     yield* Effect.addFinalizer(() =>
       Effect.forEach(servers, (item) =>
         Effect.callback<void>((resume) => {
-          item.server.close(() => resume(Effect.void))
           item.server.closeAllConnections()
+          item.server.close(() => resume(Effect.void))
         }),
       ),
     )
