@@ -42,7 +42,7 @@ describe("fromPromise", () => {
         foregroundProcess: "bun",
         screen: { text: "one\ntwo\nthree", cols: 80, rows: 2, cursor: { x: 3, y: 1 } },
       })
-      const host = testHost({
+      const context = host({
         experimental: {
           terminal: {
             read: (input) => {
@@ -72,7 +72,7 @@ describe("fromPromise", () => {
             await ctx.experimental.terminal.read({ sessionID: "ses_terminal", lines: 65535 })
           },
         }),
-      ).effect(host)
+      ).effect(context)
 
       expect(seen).toEqual([
         { sessionID: Session.ID.make("ses_terminal") },
@@ -85,7 +85,7 @@ describe("fromPromise", () => {
 
   it.effect("preserves null terminal reads and rejects daemon failures", () =>
     Effect.gen(function* () {
-      const host = testHost({
+      const context = host({
         experimental: {
           terminal: {
             read: (input) =>
@@ -106,7 +106,7 @@ describe("fromPromise", () => {
             )
           },
         }),
-      ).effect(host)
+      ).effect(context)
     }),
   )
 
