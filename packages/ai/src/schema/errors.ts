@@ -44,10 +44,7 @@ export class NoRouteError extends Schema.TaggedError<NoRouteError>("AI.Error.NoR
 
 export class AuthenticationError extends Schema.TaggedError<AuthenticationError>("AI.Error.Authentication")(
   "Authentication",
-  {
-    ...ReasonFields,
-    kind: Schema.Literals(["missing", "invalid", "expired", "insufficient-permissions", "unknown"]),
-  },
+  ReasonFields,
 ) {}
 
 export class RateLimitError extends Schema.TaggedError<RateLimitError>("AI.Error.RateLimit")("RateLimit", {

@@ -209,6 +209,29 @@ test("appearance experimental setting switches tab orientation", async ({ page }
   await page.setViewportSize({ width: 390, height: 360 })
   await version.scrollIntoViewIfNeeded()
   await expect(version).toBeInViewport()
+
+  // Reload the UI-selected preference without seeding settings storage.
+  await page.reload()
+  const href = `/server/${base64Encode(server)}/session/${sessionA.id}`
+  await expect(
+    page
+      .locator('[data-slot="titlebar-tabs"]')
+      .locator(`[data-titlebar-tab-link][href="${href}"]`)
+      .getByText(sessionA.title, { exact: true }),
+  ).toBeVisible()
+  await expect(page.locator('[data-slot="vertical-tabs-sidebar"]')).toHaveCount(0)
+
+  await page.setViewportSize({ width: 1280, height: 720 })
+  await expect(
+    page
+      .locator('[data-slot="vertical-tabs-sidebar"]')
+      .locator(`[data-titlebar-tab-link][href="${href}"]`)
+      .getByText(sessionA.title, { exact: true }),
+  ).toBeVisible()
+  await expect(page.locator('[data-slot="titlebar-tabs"]')).toHaveCount(0)
+  await page.keyboard.press("Control+,")
+  await settings.getByRole("tab", { name: "Appearance" }).click()
+  await expect(layout).toContainText("Vertical")
 })
 
 test("vertical tab preference falls back to horizontal on mobile", async ({ page }) => {

@@ -44,7 +44,6 @@ interface Input {
   readonly agent: Agent.ID
   readonly model: SessionRunnerModel.Resolved
   readonly prepared: SessionModelRequest.Prepared
-  readonly toolsDisabled: boolean
   readonly recoverContinuation: boolean
   /** The runner owns compaction policy; the attempt invokes it only before durable output. */
   readonly recoverOverflow: Effect.Effect<boolean>
@@ -73,11 +72,12 @@ export const make = Effect.gen(function* () {
     })
     const toolRuns: Array<{
       readonly call: ToolCall
-      readonly fiber: Fiber.Fiber<void, SessionModelRequest.ExecuteError>
+      readonly fiber: Fiber.Fiber<void, Permission.DeclinedError | QuestionTool.CancelledError>
     }> = []
     const interruptTools = Effect.suspend(() => Fiber.interruptAll(toolRuns.map((run) => run.fiber)))
     const executeTool = (call: ToolCall) => {
-      if (input.toolsDisabled) return new Tool.Error({ message: "Tools are disabled after the maximum agent steps" })
+      if (input.prepared.request.toolChoice?.type === "none")
+        return new Tool.Error({ message: "Tools are disabled after the maximum agent steps" })
       return input.prepared.executeTool({
         sessionID: input.sessionID,
         agent: input.agent,
@@ -132,10 +132,7 @@ export const make = Effect.gen(function* () {
         if (streamInterrupted) yield* interruptTools
         const joined = yield* restore(Fiber.awaitAll(toolRuns.map((run) => run.fiber))).pipe(Effect.exit)
         if (Exit.isFailure(joined)) yield* interruptTools
-        const tools = classifyToolExits(
-          joined,
-          toolRuns.map((run) => run.call),
-        )
+        const tools = classifyToolExits(joined, toolRuns)
 
         if (
           !publisher.record().outputStarted &&
@@ -240,7 +237,7 @@ export const make = Effect.gen(function* () {
         if (tools.interrupted && Exit.isFailure(joined)) return yield* Effect.failCause(joined.cause)
         if (record.failure) return yield* new StepFailedError({ error: record.failure })
         return Outcome.Completed({
-          needsContinuation: !input.toolsDisabled && record.needsContinuation,
+          needsContinuation: input.prepared.request.toolChoice?.type !== "none" && record.needsContinuation,
         })
       }),
     )
@@ -249,27 +246,22 @@ export const make = Effect.gen(function* () {
   return { attempt }
 })
 
-const isDecline = (
-  error: SessionModelRequest.ExecuteError,
-): error is Permission.DeclinedError | QuestionTool.CancelledError =>
-  error._tag === "Permission.DeclinedError" || error._tag === "QuestionTool.CancelledError"
-
 const isInterruptedStream = (failure: AIError) => {
   if (failure.reason._tag === "InvalidProviderOutput") return failure.reason.classification === "incomplete-stream"
   if (failure.reason._tag === "Transport") return failure.reason.operation === "read"
   return false
 }
 
-/** Keep every joined exit associated with its call; a decline is not an infrastructure failure. */
+/** Tool.Error settles in each fiber; only user declines remain in the typed error channel. */
 const classifyToolExits = (
-  settled: Exit.Exit<Array<Exit.Exit<void, SessionModelRequest.ExecuteError>>>,
-  calls: ReadonlyArray<ToolCall>,
+  settled: Exit.Exit<Array<Exit.Exit<void, Permission.DeclinedError | QuestionTool.CancelledError>>>,
+  runs: ReadonlyArray<{ readonly call: ToolCall }>,
 ) => {
   const exits = Exit.isSuccess(settled) ? settled.value : []
   const declines = exits.flatMap((exit, index) =>
     Exit.isFailure(exit)
       ? exit.cause.reasons.flatMap((reason) =>
-          Cause.isFailReason(reason) && isDecline(reason.error) ? [{ call: calls[index], reason: reason.error }] : [],
+          Cause.isFailReason(reason) ? [{ call: runs[index].call, reason: reason.error }] : [],
         )
       : [],
   )
@@ -279,11 +271,8 @@ const classifyToolExits = (
   const failure = causes
     .flatMap((cause) => {
       if (Cause.hasInterrupts(cause)) return []
-      const reasons = cause.reasons.flatMap(
-        (reason): Array<Cause.Reason<never>> =>
-          Cause.isFailReason(reason) ? (isDecline(reason.error) ? [] : [Cause.makeDieReason(reason.error)]) : [reason],
-      )
-      return reasons.length > 0 ? [Cause.fromReasons(reasons)] : []
+      const reasons = cause.reasons.filter(Cause.isDieReason)
+      return reasons.length > 0 ? [Cause.fromReasons<never>(reasons)] : []
     })
     .at(0)
   return { interrupted: causes.some(Cause.hasInterrupts), declines, failure }
