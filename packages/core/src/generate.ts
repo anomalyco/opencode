@@ -37,20 +37,19 @@ export const layer = Layer.effect(
 
     const runText = Effect.fn("Generate.text")(function* (input: TextInput) {
       const resolved = yield* resolver.resolve(input.model).pipe(
-        Effect.catchTags({
-          "SessionRunnerModel.VariantUnavailableError": (error) =>
-            input.model
+        Effect.catchTag(
+          [
+            "SessionRunnerModel.VariantUnavailableError",
+            "SessionRunnerModel.UnsupportedPackageError",
+            "SessionRunnerModel.UnresolvedProviderVariablesError",
+          ],
+          (error) => {
+            const mapped: Error = input.model
               ? new ModelSelectionError({ message: error.message })
-              : new UnavailableError({ message: error.message, service: error.providerID }),
-          "SessionRunnerModel.UnsupportedPackageError": (error) =>
-            input.model
-              ? new ModelSelectionError({ message: error.message })
-              : new UnavailableError({ message: error.message, service: error.providerID }),
-          "SessionRunnerModel.UnresolvedProviderVariablesError": (error) =>
-            input.model
-              ? new ModelSelectionError({ message: error.message })
-              : new UnavailableError({ message: error.message, service: error.providerID }),
-        }),
+              : new UnavailableError({ message: error.message, service: error.providerID })
+            return Effect.fail(mapped)
+          },
+        ),
       )
       if (!resolved)
         return yield* new ModelSelectionError({

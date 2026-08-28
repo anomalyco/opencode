@@ -1,7 +1,7 @@
 export * as SessionRunnerLLM from "./llm.js"
 
 import { Message } from "@opencode-ai/ai"
-import { Cause, Config, Effect, Exit, FiberMap, Layer, Pull, Schedule } from "effect"
+import { Cause, Effect, Exit, FiberMap, Layer, Pull, Schedule } from "effect"
 import { Database } from "../../database/database.js"
 import { Bus } from "../../bus.js"
 import { InstructionState } from "../instruction-state.js"
@@ -15,7 +15,7 @@ import { SessionMessage } from "../message.js"
 import { SessionSchema } from "../schema.js"
 import { SessionStore } from "../store.js"
 import { SessionTitle } from "../title.js"
-import { DrainResult, Service, type Continuation } from "./index.js"
+import { DrainResult, Service, type Interface } from "./index.js"
 import { Snapshot } from "../../snapshot.js"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { llmClient } from "../../effect/app-node-platform.js"
@@ -24,7 +24,6 @@ import { SessionRunnerRetry } from "./retry.js"
 import { SessionStep } from "./step.js"
 import { ToolOutput } from "../../tool-output.js"
 import { PluginSupervisor } from "../../plugin/supervisor.js"
-import { PromptCacheDiagnostics } from "../prompt-cache-diagnostics.js"
 import { MAX_STEPS_PROMPT } from "./max-steps.js"
 
 const CONTINUE_AFTER_INCOMPLETE_STREAM =
@@ -42,41 +41,10 @@ const layer = Layer.effect(
     const plugins = yield* PluginSupervisor.Service
     const title = yield* SessionTitle.Service
     const steps = yield* SessionStep.make
-    const diagnostics = yield* Config.boolean("OPENCODE_PROMPT_CACHE_DIAGNOSTICS").pipe(
-      Config.withDefault(false),
-      Effect.orDie,
-    )
-    const promptCacheSnapshots = diagnostics ? new Map<string, PromptCacheDiagnostics.Snapshot>() : undefined
-    const diagnosePromptCache = Effect.fn("SessionRunner.diagnosePromptCache")(function* (
-      sessionID: SessionSchema.ID,
-      request: Parameters<typeof PromptCacheDiagnostics.snapshot>[0],
-    ) {
-      if (!promptCacheSnapshots) return
-      const current = PromptCacheDiagnostics.snapshot(request)
-      const comparison = PromptCacheDiagnostics.compare(promptCacheSnapshots.get(sessionID), current)
-      promptCacheSnapshots.delete(sessionID)
-      promptCacheSnapshots.set(sessionID, current)
-      const oldest = promptCacheSnapshots.keys().next().value
-      if (promptCacheSnapshots.size > 100 && oldest !== undefined) promptCacheSnapshots.delete(oldest)
-      yield* Effect.logInfo("prompt cache prefix").pipe(
-        Effect.annotateLogs({
-          sessionID,
-          toolCount: current.tools.length,
-          systemParts: current.system.length,
-          messageCount: current.messages.length,
-          ...comparison,
-        }),
-      )
-    })
     // Title generation starts once input is visible and must not delay model execution.
     const titles = yield* FiberMap.make<SessionSchema.ID, void, never>()
 
-    const drain = Effect.fn("SessionRunner.drain")(function* (input: {
-      readonly sessionID: SessionSchema.ID
-      readonly force: boolean
-      readonly continuation?: Continuation
-      readonly promotable?: SessionInbox.Promotable
-    }) {
+    const drain = Effect.fn("SessionRunner.drain")(function* (input: Parameters<Interface["drain"]>[0]) {
       const sessionID = input.sessionID
       let force = input.force
       let continuing = input.continuation !== undefined
@@ -170,7 +138,7 @@ const layer = Layer.effect(
                     entering && !continuing ? promotable : "steer",
                   )
                   if (promoted > 0 && !selected.session.parentID && SessionTitle.isUntitled(selected.session))
-                    yield* FiberMap.run(titles, sessionID, title.generate(sessionID).pipe(Effect.ignore), {
+                    yield* FiberMap.run(titles, sessionID, title.generate(sessionID), {
                       onlyIfMissing: true,
                     })
                   if (promoted > 0) step = 1
@@ -243,14 +211,12 @@ const layer = Layer.effect(
           toolChoice: stepLimitReached ? "none" : undefined,
           webSocket: "session",
         })
-        yield* diagnosePromptCache(sessionID, prepared.request)
         const outcome = yield* steps.attempt({
           sessionID,
           assistantMessageID,
           agent: loaded.agent.id,
           model: loaded.model,
           prepared,
-          toolsDisabled: stepLimitReached,
           recoverContinuation,
           recoverOverflow: Effect.suspend(() =>
             recoverOverflow && compaction.enabled()

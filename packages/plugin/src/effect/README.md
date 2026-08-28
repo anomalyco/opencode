@@ -31,7 +31,9 @@ Registrations are owned by the plugin scope. Closing the scope removes them auto
 
 ## Transform Hooks
 
-Transform hooks contribute to stateful domains:
+Transform hooks contribute to stateful domains. Their draft callbacks are
+synchronous, so load effectful data before registering a transform or reloading
+its domain:
 
 ```ts
 yield *
@@ -52,8 +54,12 @@ ctx.agent.transform
 ctx.catalog.transform
 ctx.command.transform
 ctx.integration.transform
+ctx.mcp.transform
 ctx.reference.transform
 ctx.skill.transform
+ctx.tool.transform
+ctx.vcs.transform
+ctx.websearch.transform
 ```
 
 ## Runtime Hooks
@@ -72,10 +78,12 @@ yield *
   )
 
 yield *
-  ctx.aisdk.hook("language", (event) => {
-    if (event.model.providerID !== "xai") return
-    event.language = event.sdk.responses(event.model.api.id)
-  })
+  ctx.aisdk.hook("language", (event) =>
+    Effect.sync(() => {
+      if (event.model.providerID !== "xai") return
+      event.language = event.sdk.responses(event.model.modelID)
+    }),
+  )
 ```
 
 Hooks run sequentially in registration order. Later hooks observe mutations made by earlier hooks.
@@ -117,6 +125,10 @@ ctx.agent.reload()
 ctx.catalog.reload()
 ctx.command.reload()
 ctx.integration.reload()
+ctx.mcp.reload()
 ctx.reference.reload()
 ctx.skill.reload()
+ctx.tool.reload()
+ctx.vcs.reload()
+ctx.websearch.reload()
 ```

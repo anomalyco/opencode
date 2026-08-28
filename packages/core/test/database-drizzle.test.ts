@@ -7,7 +7,7 @@ import { SqliteClient } from "@effect/sql-sqlite-bun"
 import { eq, sql } from "drizzle-orm"
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core"
 import { Effect, Tracer } from "effect"
-import type { SqlClient as SqlClientService } from "effect/unstable/sql/SqlClient"
+import type { SqlClient } from "effect/unstable/sql/SqlClient"
 import { isSqlError } from "effect/unstable/sql/SqlError"
 import { EffectDrizzleSqlite } from "@opencode-ai/core/database/drizzle"
 
@@ -15,8 +15,16 @@ const users = sqliteTable("users", {
   id: integer().primaryKey({ autoIncrement: true }),
   name: text().notNull(),
 })
+const teams = sqliteTable("teams", {
+  id: integer().primaryKey(),
+  name: text().notNull(),
+})
+const memberships = sqliteTable("memberships", {
+  user_id: integer().notNull(),
+  team_id: integer().notNull(),
+})
 
-const run = <A, E>(effect: Effect.Effect<A, E, SqlClientService>) =>
+const run = <A, E>(effect: Effect.Effect<A, E, SqlClient>) =>
   Effect.runPromise(
     effect.pipe(Effect.provide(SqliteClient.layer({ filename: ":memory:", disableWAL: true })), Effect.scoped),
   )
@@ -160,6 +168,44 @@ test("supports returning and rejects empty update sets", async () => {
       expect(deleted).toEqual([{ id: 1 }])
 
       expect(() => db.update(users).set({ name: undefined })).toThrow("No values to set")
+    }),
+  )
+})
+
+test("supports function-valued update joins with runtime table columns", async () => {
+  await run(
+    Effect.gen(function* () {
+      const db = yield* makeDb
+      const query = db
+        .update(users)
+        .set({ name: "Grace" })
+        .from(teams)
+        .innerJoin(memberships, (update) => eq(update.id, memberships.user_id))
+        .where(eq(teams.name, "Core"))
+
+      expect(query.toSQL()).toEqual({
+        sql: 'update "users" set "name" = ? from "teams" inner join "memberships" on "users"."id" = "memberships"."user_id" where "teams"."name" = ?',
+        params: ["Grace", "Core"],
+      })
+    }),
+  )
+})
+
+test("supports SQL-valued update joins", async () => {
+  await run(
+    Effect.gen(function* () {
+      const db = yield* makeDb
+      const query = db
+        .update(users)
+        .set({ name: "Lin" })
+        .from(teams)
+        .innerJoin(memberships, eq(users.id, memberships.user_id))
+        .where(eq(teams.name, "Core"))
+
+      expect(query.toSQL()).toEqual({
+        sql: 'update "users" set "name" = ? from "teams" inner join "memberships" on "users"."id" = "memberships"."user_id" where "teams"."name" = ?',
+        params: ["Lin", "Core"],
+      })
     }),
   )
 })

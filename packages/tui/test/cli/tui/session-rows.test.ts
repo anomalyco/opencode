@@ -169,7 +169,13 @@ test("assigns stable IDs to tool rows for direct navigation", () => {
 test("finds background tool launch rows for completion navigation", () => {
   const messages: SessionMessageInfo[] = [
     assistant("assistant-1", [
-      { type: "tool", id: "shell-1", name: "shell", state: pending(), time: { created: 1 } },
+      {
+        type: "tool",
+        id: "shell-1",
+        name: "shell",
+        state: completed({ shellID: "sh_first", status: "running" }),
+        time: { created: 1 },
+      },
     ]),
     assistant("assistant-2", [
       {
@@ -214,6 +220,7 @@ test("finds background tool launch rows for completion navigation", () => {
   const rows = reduceSessionRows(messages)
 
   expect(backgroundToolRowIndex(rows, messages, { source: "shell", id: "shell-1" }, "completion-2")).toBe(0)
+  expect(backgroundToolRowIndex(rows, messages, { source: "shell", id: "sh_first" }, "completion-2")).toBe(0)
   expect(backgroundToolRowIndex(rows, messages, { source: "subagent", id: "child-1" }, "completion-1")).toBe(1)
   expect(backgroundToolRowIndex(rows, messages, { source: "subagent", id: "child-1" }, "completion-2")).toBe(3)
 })

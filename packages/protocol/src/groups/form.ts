@@ -55,15 +55,13 @@ export const makeFormGroup = <
         params: { sessionID: Schema.String },
         success: Schema.Struct({ data: Schema.Array(Form.Info) }),
         error: SessionNotFoundError,
-      })
-        .middleware(formLocationMiddleware)
-        .annotateMerge(
-          OpenApi.annotations({
-            identifier: "v2.session.form.list",
-            summary: "List session forms",
-            description: "Retrieve pending forms for a session.",
-          }),
-        ),
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.session.form.list",
+          summary: "List session forms",
+          description: "Retrieve pending forms for a session.",
+        }),
+      ),
     )
     .add(
       HttpApiEndpoint.post("session.form.create", "/api/session/:sessionID/form", {
