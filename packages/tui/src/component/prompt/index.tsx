@@ -1318,24 +1318,7 @@ export function Prompt(props: PromptProps) {
         restoreEntry()
         return true
       }
-      if (
-        session?.model?.providerID !== selection.providerID ||
-        session.model.id !== selection.modelID ||
-        (session.model.variant ?? "default") !== (variant ?? "default")
-      ) {
-        const model = { providerID: selection.providerID, id: selection.modelID, variant }
-        const cancelCommit = local.model.trackSessionCommit(target, model)
-        const switchError = await client.api.session.switchModel({ sessionID: target, model }).then(
-          () => undefined,
-          (error) => error,
-        )
-        if (switchError) {
-          cancelCommit()
-          toast.show({ title: "Failed to switch model", message: errorMessage(switchError), variant: "error" })
-          restoreEntry()
-          return true
-        }
-      }
+      const model = { providerID: selection.providerID, id: selection.modelID, variant }
       if (session?.revert) {
         const error = await client.api.session.revert.commit({ sessionID: target }).then(
           () => undefined,
@@ -1384,6 +1367,16 @@ export function Prompt(props: PromptProps) {
           skills: entry.skills?.length ? entry.skills : undefined,
           delivery,
           gate: newSession?.gate,
+          prepare: () => {
+            // Commit the captured selection after earlier admissions, including
+            // compaction setup. Cached state may still precede their SSE echoes;
+            // the server makes an unchanged selection a no-op.
+            const cancelCommit = local.model.trackSessionCommit(target, model)
+            return client.api.session.switchModel({ sessionID: target, model }).catch((error) => {
+              cancelCommit()
+              throw new Error(`Failed to switch model: ${errorMessage(error)}`, { cause: error })
+            })
+          },
         })
         .catch((error) => {
           if (newSession) return newSession.recover(error)

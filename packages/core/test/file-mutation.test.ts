@@ -22,7 +22,7 @@ function provide(directory: string, transformFiles: EnvironmentFilesTransform = 
   return Effect.provide(
     AppNodeBuilder.build(LayerNode.group([LocationMutation.node, FileMutation.node]), [
       [Location.node, activeLocation],
-      [Environment.node, transformEnvironmentFiles(activeLocation, transformFiles)],
+      [Environment.node, transformEnvironmentFiles(transformFiles)],
     ]),
   )
 }

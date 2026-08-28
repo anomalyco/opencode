@@ -51,7 +51,8 @@ describe("FileSystem", () => {
       Effect.gen(function* () {
         yield* Effect.promise(() => fs.mkdir(path.join(directory, "src")))
         yield* Effect.promise(() => fs.writeFile(path.join(directory, "README.md"), "# Test"))
-        const entries = yield* (yield* FileSystem.Service).list()
+        const filesystem = yield* FileSystem.Service
+        const entries = yield* filesystem.list()
         expect(entries.map((entry) => ({ path: entry.path, type: entry.type }))).toEqual([
           { path: RelativePath.make("src" + path.sep), type: "directory" },
           { path: RelativePath.make("README.md"), type: "file" },
@@ -103,9 +104,8 @@ describe("FileSystem", () => {
   it.live("rejects lexical escapes", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
-        const result = yield* (yield* FileSystem.Service)
-          .read({ path: RelativePath.make("../outside.txt") })
-          .pipe(Effect.exit)
+        const filesystem = yield* FileSystem.Service
+        const result = yield* filesystem.read({ path: RelativePath.make("../outside.txt") }).pipe(Effect.exit)
         expect(Exit.isFailure(result)).toBe(true)
       }).pipe(provide(directory)),
     ),
