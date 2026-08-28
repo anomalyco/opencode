@@ -592,3 +592,50 @@ test("reaches the complete transcript in order after a release", async () => {
     setup.dispose()
   }
 })
+
+test("drops an in-flight older page when its cursor was replaced by a release", async () => {
+  const total = 120
+  const pageLimit = 20
+  const messages = Array.from({ length: total }, (_, index) => ({
+    id: `msg_${String(index).padStart(4, "0")}`,
+    type: "user" as const,
+    text: `message ${index}`,
+    time: { created: index },
+  }))
+  let releaseGate!: () => void
+  const gated = new Promise<void>((resolve) => (releaseGate = resolve))
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      const url = new URL(request.url)
+      if (url.pathname !== "/api/session/ses_scroll/message") throw new Error(`Unexpected request: ${request.url}`)
+      const k = Number(url.searchParams.get("cursor") ?? 0)
+      if (k > 0) await gated
+      const slice = messages.slice(Math.max(0, total - (k + 1) * pageLimit), total - k * pageLimit)
+      const next = (k + 1) * pageLimit < total ? String(k + 1) : undefined
+      return Response.json({ data: slice.toReversed(), cursor: { next } })
+    },
+  })
+  const event: CreateDataInput["event"] = {
+    on: () => () => {},
+    listen: () => () => {},
+  }
+  const setup = createRoot((dispose) => ({
+    data: createData({ api: () => api, directory: "/project", event, connection: { status: () => "connected" } }),
+    dispose,
+  }))
+
+  try {
+    await setup.data.session.message.sync("ses_scroll")
+    const pending = setup.data.session.message.loadMore("ses_scroll")
+    await Bun.sleep(20)
+    setup.data.session.message.release("ses_scroll")
+    releaseGate()
+    await pending
+    expect(setup.data.session.message.list("ses_scroll")).toEqual([])
+    expect(setup.data.session.message.more("ses_scroll")).toBe(false)
+  } finally {
+    setup.dispose()
+  }
+})

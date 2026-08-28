@@ -1464,6 +1464,9 @@ export function createData(config: CreateDataInput) {
           const response = await api()
             .message.list({ sessionID, limit: messagePageLimit, cursor })
             .finally(() => setStore("session", "messageLoading", sessionID, false))
+          // A release or re-sync while this page was in flight replaced the cursor we started
+          // from; applying the response would splice a stale page into the fresh window.
+          if (store.session.messageCursor[sessionID] !== cursor) return
           const older = response.data.toReversed()
           const existing = store.session.message[sessionID] ?? []
           const ids = new Set(existing.map((item) => item.id))
