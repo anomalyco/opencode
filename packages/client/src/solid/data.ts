@@ -306,6 +306,7 @@ export function createData(config: CreateDataInput) {
   // for the previous prompt's POST (settled, so one failure does not block
   // the next) before sending its own.
   const sending = new Map<string, Promise<unknown>>()
+  const messageLoads = new Map<string, Promise<unknown>>()
 
   // Register `promise` under `key` until it settles. A later registration
   // replaces an earlier one; settlement only clears its own entry.
@@ -1452,20 +1453,39 @@ export function createData(config: CreateDataInput) {
         loading(sessionID: string) {
           return store.session.messageLoading[sessionID] ?? false
         },
-        async loadMore(sessionID: string) {
+        async loadMore(sessionID: string, options?: { all?: boolean }) {
+          while (messageLoads.has(sessionID)) {
+            await messageLoads.get(sessionID)
+            if (!options?.all) return
+          }
           const cursor = store.session.messageCursor[sessionID]
-          if (!cursor || store.session.messageLoading[sessionID]) return
+          if (!cursor) return
           setStore("session", "messageLoading", sessionID, true)
-          const response = await api()
-            .message.list({ sessionID, limit: messagePageLimit, cursor })
-            .finally(() => setStore("session", "messageLoading", sessionID, false))
-          const older = response.data.toReversed()
-          const existing = store.session.message[sessionID] ?? []
-          const ids = new Set(existing.map((item) => item.id))
-          const messages = [...older.filter((item) => !ids.has(item.id)), ...existing]
-          messageIndex.set(sessionID, new Map(messages.map((item, position) => [item.id, position])))
-          setStore("session", "message", sessionID, reconcile(messages))
-          setStore("session", "messageCursor", sessionID, response.cursor.next ?? undefined)
+          const request = (async () => {
+            const fetched: SessionMessageInfo[] = []
+            let next: string | undefined = cursor
+            do {
+              const response = await api().message.list({
+                sessionID,
+                limit: options?.all ? 200 : messagePageLimit,
+                cursor: next,
+              })
+              fetched.push(...response.data)
+              next = response.cursor.next ?? undefined
+              if (!options?.all) break
+            } while (next)
+            // A jump through history publishes once, not once per page of offscreen messages.
+            const existing = store.session.message[sessionID] ?? []
+            const ids = new Set(existing.map((item) => item.id))
+            const messages = [...fetched.toReversed().filter((item) => !ids.has(item.id)), ...existing]
+            messageIndex.set(sessionID, new Map(messages.map((item, position) => [item.id, position])))
+            batch(() => {
+              setStore("session", "message", sessionID, reconcile(messages))
+              setStore("session", "messageCursor", sessionID, next)
+            })
+          })().finally(() => setStore("session", "messageLoading", sessionID, false))
+          track(messageLoads, sessionID, request)
+          return request
         },
         invalidate(sessionID: string) {
           sync.invalidate(`session.message:${sessionID}`)

@@ -414,6 +414,65 @@ test("loads bounded message pages", async () => {
   }
 })
 
+test.each([false, true])("loads all older messages with one publication (failure: %s)", async (failure) => {
+  const messages = [1, 2, 3].map((index) => ({
+    id: `msg_${index}`,
+    type: "user",
+    text: `Message ${index}`,
+    time: { created: index },
+  }))
+  const release = Promise.withResolvers<void>()
+  const requests: URL[] = []
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async (input) => {
+      const url = new URL(input instanceof Request ? input.url : String(input))
+      requests.push(url)
+      const cursor = url.searchParams.get("cursor")
+      if (!cursor) return Response.json({ data: [messages[2]], cursor: { next: "recent" } })
+      if (cursor === "recent") return Response.json({ data: [messages[2], messages[1]], cursor: { next: "oldest" } })
+      if (cursor === "oldest") return Response.json({ data: [messages[0]], cursor: { next: "empty" } })
+      await release.promise
+      if (failure) return Response.json({ message: "offline" }, { status: 503 })
+      return Response.json({ data: [], cursor: {} })
+    },
+  })
+  const setup = createRoot((dispose) => {
+    const data = createData({
+      api: () => api,
+      directory: "/project",
+      event: { on: () => () => {}, listen: () => () => {} },
+    })
+    return { data, dispose }
+  })
+
+  try {
+    await setup.data.session.message.sync("ses_refresh")
+    const newest = setup.data.session.message.get("ses_refresh", "msg_3")
+    const load = setup.data.session.message.loadMore("ses_refresh", { all: true })
+    const joined = setup.data.session.message.loadMore("ses_refresh", { all: true })
+    const settled = Promise.allSettled([load, joined])
+    await wait(() => requests.length === 4)
+    expect(setup.data.session.message.loading("ses_refresh")).toBe(true)
+    expect(setup.data.session.message.list("ses_refresh").map((message) => message.id)).toEqual(["msg_3"])
+    expect(requests.slice(1).map((url) => url.searchParams.get("limit"))).toEqual(["200", "200", "200"])
+    release.resolve()
+    expect((await settled).map((result) => result.status)).toEqual(
+      failure ? ["rejected", "rejected"] : ["fulfilled", "fulfilled"],
+    )
+    expect(setup.data.session.message.loading("ses_refresh")).toBe(false)
+    expect(setup.data.session.message.more("ses_refresh")).toBe(failure)
+    expect(setup.data.session.message.list("ses_refresh").map((message) => message.id)).toEqual(
+      failure ? ["msg_3"] : ["msg_1", "msg_2", "msg_3"],
+    )
+    expect(setup.data.session.message.get("ses_refresh", "msg_3")).toBe(newest)
+    expect(requests).toHaveLength(4)
+  } finally {
+    release.resolve()
+    setup.dispose()
+  }
+})
+
 test("preserves assistant content replacement events across an active message read", async () => {
   const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
   const release = Promise.withResolvers<void>()

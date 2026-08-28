@@ -1,4 +1,5 @@
 import {
+  batch,
   createContext,
   createEffect,
   createMemo,
@@ -288,6 +289,7 @@ export function Session(props: {
   const boundaryIDs = createMemo(() => new Set(boundaries().filter((id) => id !== undefined)))
   const [navigationMessage, setNavigationMessage] = createSignal<string>()
   const [navigationSlack, setNavigationSlack] = createSignal(0)
+  const [firstJump, setFirstJump] = createSignal<() => void>()
   const [synced, setSynced] = createSignal(false)
   const sessionTabs = useSessionTabs()
   const terminals = useSessionTerminals()
@@ -300,6 +302,8 @@ export function Session(props: {
 
   const clearMessageNavigation = () => {
     ensureAllRowsPending?.splice(0)
+    if (firstJump()) setVisibleRowsEnd(undefined)
+    setFirstJump(undefined)
     setNavigationSlack(0)
     setNavigationMessage(undefined)
   }
@@ -469,12 +473,13 @@ export function Session(props: {
   }
 
   function isAwayFromBottom() {
-    if (revealingOlderRows || revealingNewerRows || ensureAllRowsPending || navigationMessage()) return true
+    if (revealingOlderRows || revealingNewerRows || ensureAllRowsPending || navigationMessage() || firstJump())
+      return true
     if (visibleEnd() < rows.length) return true
     return scroll.scrollTop < Math.max(0, scroll.scrollHeight - scroll.viewport.height)
   }
   function updateAwayFromBottom() {
-    const preserveWindow = revealingOlderRows || revealingNewerRows || !!ensureAllRowsPending
+    const preserveWindow = revealingOlderRows || revealingNewerRows || !!ensureAllRowsPending || !!firstJump()
     if (isAwayFromBottom()) setHiddenRows((current) => current ?? hidden())
     if (awayTimer) clearTimeout(awayTimer)
     awayTimer = setTimeout(() => {
@@ -759,17 +764,35 @@ export function Session(props: {
       group: "Session",
       palette: undefined,
       run: () => {
+        if (firstJump()) return
         clearMessageNavigation()
         const first = () => {
-          if (data.session.message.more(route.sessionID)) {
-            prependHistory(0, first)
-            return
-          }
-          ensureAllRows(() => {
+          if (firstJump() !== first || scroll.isDestroyed) return
+          scroll.stickyScroll = false
+          batch(() => {
+            setHiddenRows(0)
+            setVisibleRowsEnd(rows.length > TRANSCRIPT_BACKFILL_CHUNK ? TRANSCRIPT_BACKFILL_CHUNK : undefined)
             scroll.scrollTo(0)
           })
+          afterLayout(() => {
+            if (firstJump() !== first) return
+            scroll.scrollTo(0)
+            setFirstJump(undefined)
+            updateAwayFromBottom()
+          })
         }
-        first()
+        // Pin both ends so publishing older history cannot briefly mount the whole transcript.
+        batch(() => {
+          setFirstJump(() => first)
+          setHiddenRows(hidden())
+          setVisibleRowsEnd(visibleEnd())
+        })
+        void data.session.message.loadMore(route.sessionID, { all: true }).then(first, (error) => {
+          if (firstJump() !== first || scroll.isDestroyed) return
+          setFirstJump(undefined)
+          toast.error(error)
+          updateAwayFromBottom()
+        })
         dialog.clear()
       },
     },
@@ -1350,7 +1373,10 @@ export function Session(props: {
               </scrollbox>
             </box>
             <box height={1} flexShrink={0} flexDirection="row" justifyContent="flex-end">
-              <Show when={awayFromBottom()}>
+              <Show when={firstJump()}>
+                <text fg={theme.text.feedback.info.default}>Loading session history...</text>
+              </Show>
+              <Show when={!firstJump() && awayFromBottom()}>
                 <box
                   id="session-jump-to-latest"
                   paddingLeft={1}
