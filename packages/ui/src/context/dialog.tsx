@@ -86,12 +86,13 @@ function init() {
         dispose = d
         const [closing, setClosingSignal] = createSignal(false)
         setClosing = setClosingSignal
+        const isTop = () => stack().at(-1)?.id === id
         return (
           <Kobalte
-            modal={stack().at(-1)?.id === id}
+            modal={isTop()}
             open={!closing()}
             onOpenChange={(open: boolean) => {
-              if (open || stack().at(-1)?.id !== id) return
+              if (open || !isTop()) return
               close(id)
             }}
           >
@@ -103,6 +104,7 @@ function init() {
               />
               <div
                 data-dialog-layer={layer}
+                inert={!isTop()}
                 style={{
                   position: "fixed",
                   inset: "0",
