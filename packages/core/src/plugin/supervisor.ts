@@ -9,6 +9,7 @@ import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Bus } from "../bus.js"
 import { Npm } from "@opencode-ai/util/npm"
 import { Plugin } from "../plugin.js"
+import { InstancePlugins } from "./instance.js"
 import { PluginInternal } from "./internal.js"
 import { PluginModule } from "./module.js"
 import { SdkPlugins } from "./sdk.js"
@@ -77,6 +78,9 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
       ...post.filter((plugin) => enabled.has(plugin.id)),
     ],
     failures: [...failures.values()],
+    refreshes: [...packages.entries()].flatMap(([target, plugin]) =>
+      !path.isAbsolute(target) && enabled.has(plugin.id) ? [target] : [],
+    ),
   }
 })
 
@@ -85,18 +89,23 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const registry = yield* Plugin.Service
     const sdk = yield* SdkPlugins.Service
+    const instance = yield* InstancePlugins.Service
     const sources = yield* ConfigPluginSource.Service
     const bus = yield* Bus.Service
+    const npm = yield* Npm.Service
     const ready = yield* Latch.make()
     let observed = 0
 
     const activate = Effect.fn("PluginSupervisor.activate")(function* () {
       // Resolve OpenCode's internal plugins with their privileged Location services.
       const internal = yield* PluginInternal.list()
-      // Combine internal plugins with host-contributed SDK plugins in boot order.
+      // Combine internal plugins with host-contributed plugins in boot order.
+      // Instance-bound plugins come last: later activation can override earlier
+      // container writes, so the instance's explicit choices win over globals.
       const pre = [
         ...internal.pre.map((plugin) => ({ ...plugin, version: "internal", source: { type: "builtin" as const } })),
         ...sdk.all(),
+        ...instance.all(),
       ]
       const post = internal.post.map((plugin) => ({
         ...plugin,
@@ -108,6 +117,18 @@ export const layer = Layer.effect(
       const resolved = yield* resolve(pre, post, operations)
       // Replace the active generation in one scoped, batched activation.
       yield* registry.activate(resolved.plugins, resolved.failures)
+      if (resolved.refreshes.length) {
+        yield* Effect.forEach(
+          resolved.refreshes,
+          (target) =>
+            npm
+              .add(target, { subpaths: ["server", ""], refresh: true })
+              .pipe(
+                Effect.catchCause((cause) => Effect.logWarning("failed to refresh package plugin", { target, cause })),
+              ),
+          { concurrency: "unbounded", discard: true },
+        ).pipe(Effect.forkDetach)
+      }
     })
     const updates = Stream.merge(sources.changes(), bus.subscribe([Event.Updated, SdkPlugins.Updated])).pipe(
       // Make accepted work visible to flush before coalescing the burst.
@@ -125,9 +146,9 @@ export const layer = Layer.effect(
       Stream.debounce("100 millis"),
       Stream.runForEach((target) =>
         Effect.gen(function* () {
-          yield* activate()
+          yield* activate().pipe(Effect.catchCause((cause) => Effect.logError("failed to reload plugins", { cause })))
           if (observed === target) yield* ready.open
-        }).pipe(Effect.catchCause((cause) => Effect.logError("failed to reload plugins", { cause }))),
+        }),
       ),
       Effect.forkScoped({ startImmediately: true }),
     )
@@ -138,6 +159,7 @@ export const layer = Layer.effect(
 const nodeDeps = [
   Plugin.node,
   SdkPlugins.node,
+  InstancePlugins.node,
   ConfigPluginSource.node,
   Bus.node,
   Npm.node,

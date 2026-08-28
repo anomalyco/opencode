@@ -1,7 +1,7 @@
 import fs from "fs/promises"
 import path from "path"
 import { expect } from "bun:test"
-import { LanguageModel, LLMClient, LLMResponse, type LLMRequest } from "@opencode-ai/ai"
+import { LanguageModel, LLMClient } from "@opencode-ai/ai"
 import { OpenAIChat } from "@opencode-ai/ai/protocols"
 import { TestLLM } from "@opencode-ai/ai/testing"
 import { llmClient } from "@opencode-ai/core/effect/app-node-platform"
@@ -40,8 +40,8 @@ for (const selection of ["explicit", "default"] as const) {
     withEmbedded("opencode-embedded-generate-", (fixture) =>
       Effect.gen(function* () {
         const release = yield* Latch.make()
-        const llm = yield* TestLLM.Service.pipe(
-          Effect.provide(TestLLM.layer({ fallback: TestLLM.text("ready", "answer") })),
+        const llm = yield* TestLLM.Test.pipe(
+          Effect.provide(TestLLM.testLayer({ fallback: TestLLM.text("ready", "answer") })),
         )
         const supervisor = Layer.effect(
           PluginSupervisor.Service,
@@ -71,7 +71,7 @@ for (const selection of ["explicit", "default"] as const) {
           },
           {
             overrides: [
-              [llmClient, Layer.succeed(LLMClient.Service, llm.client)],
+              [llmClient, Layer.succeed(LLMClient.Service, llm)],
               [PluginSupervisor.node, { ...PluginSupervisor.node, implementation: supervisor }],
             ],
           },
@@ -92,8 +92,9 @@ for (const selection of ["explicit", "default"] as const) {
         })
 
         expect(result.text).toBe("ready")
-        expect(llm.requests).toHaveLength(1)
-        expect(llm.requests[0]?.model).toMatchObject({ provider: "custom", id: "fictional-chat" })
+        const requests = yield* llm.requests()
+        expect(requests).toHaveLength(1)
+        expect(requests[0]?.model).toMatchObject({ provider: "custom", id: "fictional-chat" })
       }),
     ),
   )
@@ -644,17 +645,13 @@ const workspaceModelScenario = (fixture: Fixture, policy: "eager" | "lazy") =>
     const modelStarted = yield* Deferred.make<void>()
     yield* Effect.addFinalizer(() => Deferred.succeed(createRelease, undefined).pipe(Effect.asVoid))
     const model = LanguageModel.make({ id: "workspace-test", provider: "test", route: OpenAIChat.route })
-    const client = TestLLM.clientLayer.pipe(
-      Layer.provide(
-        TestLLM.layer({
-          fallback: TestLLM.text("ready", "answer"),
-          transformRequest: (request) => {
-            Deferred.doneUnsafe(modelStarted, Effect.void)
-            return request
-          },
-        }),
-      ),
-    )
+    const client = TestLLM.testLayer({
+      fallback: TestLLM.text("ready", "answer"),
+      transformRequest: (request) => {
+        Deferred.doneUnsafe(modelStarted, Effect.void)
+        return request
+      },
+    })
     const models = Layer.mock(SessionRunnerModel.Service, {
       resolve: () =>
         Effect.succeed(
@@ -752,27 +749,13 @@ it.live(
         // The first tool-advertising request selects the shell tool; everything else
         // (including title generation, which carries no tools) answers with text.
         let toolIssued = false
-        const respond = (request: LLMRequest) => {
+        const llm = yield* TestLLM.Test.pipe(Effect.provide(TestLLM.testLayer()))
+        yield* llm.serve((request) => {
           const wantsTool = !toolIssued && request.tools.some((tool) => tool.name === "shell")
           if (!wantsTool) return TestLLM.text("done", "answer")
           toolIssued = true
           return TestLLM.tool("call-shell", "shell", { command: "echo hi" })
-        }
-        const client = Layer.succeed(
-          LLMClient.Service,
-          LLMClient.Service.of({
-            stream: (request) => Stream.fromIterable(respond(request)),
-            generate: (request) =>
-              Stream.fromIterable(respond(request)).pipe(
-                Stream.runFold(LLMResponse.empty, LLMResponse.reduce),
-                Effect.flatMap((state) => {
-                  const response = LLMResponse.complete(state)
-                  if (response) return Effect.succeed(response)
-                  return Effect.die("test response ended without a terminal finish event")
-                }),
-              ),
-          }),
-        )
+        })
         const models = Layer.mock(SessionRunnerModel.Service, {
           resolve: () =>
             Effect.succeed(
@@ -807,7 +790,7 @@ it.live(
           },
           {
             overrides: [
-              [llmClient, client],
+              [llmClient, Layer.succeed(LLMClient.Service, llm)],
               [SessionRunnerModel.node, models],
             ],
           },

@@ -30,7 +30,7 @@ type TabPulseOptions = RenderableOptions<TabPulseRenderable> & {
 }
 
 const clamp = (value: number) => Math.max(0, Math.min(1, value))
-const smootherstep = (value: number) => value * value * value * (value * (value * 6 - 15) + 10)
+export const smootherstep = (value: number) => value * value * value * (value * (value * 6 - 15) + 10)
 const RUN_DURATION = 2_800
 const RUN_ATTACK = 450
 const RUN_HEAD = 4
@@ -53,11 +53,11 @@ const GLOW_RELEASE_PEAK = 1.25
 const GLOW_TAIL = 12
 const GLOW_OPACITY = 0.16
 const DEFAULT_FOREGROUND = RGBA.defaultForeground()
-const intensityAt = (index: number, front: number, head: number, tail: number) => {
+export const intensityAt = (index: number, front: number, head: number, tail: number) => {
   const distance = front - index
   return distance < 0 ? smootherstep(clamp(1 + distance / head)) : smootherstep(clamp(1 - distance / tail))
 }
-const coast = (value: number) => {
+export const coast = (value: number) => {
   const ramp = 0.2
   if (value < ramp) return (value * value) / (2 * ramp * (1 - ramp))
   if (value > 1 - ramp) return 1 - ((1 - value) * (1 - value)) / (2 * ramp * (1 - ramp))

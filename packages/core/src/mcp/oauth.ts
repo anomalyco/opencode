@@ -213,20 +213,11 @@ export const authorize = (input: {
       return toCredential({ methodID: input.methodID, serverUrl: input.config.url, tokens, client })
     })
 
-    const result = yield* Effect.tryPromise({
+    yield* Effect.tryPromise({
       try: () => auth(oauthProvider, { serverUrl: input.config.url, scope: oauth?.scope }),
       catch: (error) => (error instanceof Error ? error : new Error(String(error))),
     })
 
-    // The provider may already hold valid tokens (e.g. a re-auth), in which case there is no browser step.
-    if (result === "AUTHORIZED") {
-      return {
-        url: input.config.url,
-        instructions: `Connected to ${input.name}.`,
-        mode: "auto" as const,
-        callback: finalize,
-      }
-    }
     if (!authorizationUrl)
       return yield* Effect.fail(new Error(`MCP server "${input.name}" did not provide an authorization URL`))
 

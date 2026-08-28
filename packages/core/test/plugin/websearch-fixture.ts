@@ -1,4 +1,4 @@
-import { Effect, Layer, Stream } from "effect"
+import { Effect, Layer } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/unstable/http"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"

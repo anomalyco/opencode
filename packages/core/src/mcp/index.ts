@@ -3,6 +3,7 @@ export * as Mcp from "./index.js"
 import { Mcp } from "@opencode-ai/schema/mcp"
 import { McpEvent } from "@opencode-ai/schema/mcp-event"
 import { ephemeral } from "@opencode-ai/schema/event"
+import type { Session } from "@opencode-ai/schema/session"
 import { createHash } from "node:crypto"
 import { isDeepStrictEqual } from "node:util"
 import { Cause, Context, Effect, Exit, FiberSet, Latch, Layer, Schema, Scope, Stream, Types } from "effect"
@@ -153,6 +154,7 @@ export interface Interface extends State.Transformable<Draft> {
     readonly server: ServerName | string
     readonly name: string
     readonly args?: Record<string, unknown>
+    readonly sessionID?: Session.ID
   }) => Effect.Effect<ToolResult, NotFoundError | ToolCallError>
   readonly instructions: () => Effect.Effect<ServerInstructions[]>
   readonly prompts: () => Effect.Effect<Prompt[]>
@@ -273,14 +275,12 @@ export const layer = (options?: Options) =>
           return McpOAuth.provider({ ...base, store: McpOAuth.memoryStore() })
         const credentialID = found.id
         const methodID = found.value.methodID
-        const integrationID = entry.integrationID
         // Tracks the refresh token this provider last presented, so invalidate can tell whether the SDK
         // rejected the currently-stored credential or a snapshot another connection has already rotated past.
         let presented = found.value.refresh
         const readOAuthCredential = async () => {
-          const stored = await Effect.runPromise(credentials.list(integrationID))
-          const match = stored.find((credential) => credential.id === credentialID)
-          return match && match.value.type === "oauth" ? match.value : undefined
+          const stored = await Effect.runPromise(credentials.get(credentialID))
+          return stored?.value.type === "oauth" ? stored.value : undefined
         }
         return McpOAuth.provider({
           ...base,
@@ -475,11 +475,11 @@ export const layer = (options?: Options) =>
             Effect.gen(function* () {
               entry.status = { status: "failed", error: "Connection closed" }
               yield* stopServer(name, entry)
-              yield* bus.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore)
+              yield* bus.publish(McpEvent.StatusChanged, { server: name })
             }),
           ),
         )
-        connection.onLog((message) => fork(serverLog(name, message).pipe(Effect.ignore)))
+        connection.onLog((message) => fork(serverLog(name, message)))
         connection.onToolsChanged(() =>
           live(
             refreshTools(name, entry, connection).pipe(
@@ -514,7 +514,7 @@ export const layer = (options?: Options) =>
           // Announce the handshake so connect() and credential reconnects don't show a stale
           // disabled/failed status for the duration of the connection attempt.
           entry.status = { status: "pending" }
-          yield* bus.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore)
+          yield* bus.publish(McpEvent.StatusChanged, { server: name })
           const scope = yield* Scope.fork(root)
           entry.scope = scope
           const authProvider = yield* connectProvider(entry)
@@ -545,9 +545,9 @@ export const layer = (options?: Options) =>
             // Announce the new tool set so the tool registry registers it. A server that finishes connecting
             // after the initial registration sweep and emits no list-changed notification would otherwise
             // stay invisible to the model.
-            yield* bus.publish(McpEvent.ToolsChanged, { server: name }).pipe(Effect.ignore)
-            yield* bus.publish(McpEvent.ResourcesChanged, { server: name }).pipe(Effect.ignore)
-            yield* bus.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore)
+            yield* bus.publish(McpEvent.ToolsChanged, { server: name })
+            yield* bus.publish(McpEvent.ResourcesChanged, { server: name })
+            yield* bus.publish(McpEvent.StatusChanged, { server: name })
             whenLive(name, entry, result.value.connection)(refreshPrompts(name, entry, result.value.connection))
             return
           }
@@ -559,7 +559,7 @@ export const layer = (options?: Options) =>
               ? { status: "needs_auth" }
               : { status: "failed", error: error instanceof Error ? error.message : String(error) }
           yield* Effect.logWarning("mcp connect failed", { server: name, status: entry.status })
-          yield* bus.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore)
+          yield* bus.publish(McpEvent.StatusChanged, { server: name })
         }).pipe(Effect.ensuring(entry.startup.open))
 
       const stopServer = Effect.fnUntraced(function* (name: ServerName, entry: ServerEntry) {
@@ -570,9 +570,9 @@ export const layer = (options?: Options) =>
         entry.tools = undefined
         entry.prompts = undefined
         yield* Scope.close(scope, Exit.void)
-        yield* bus.publish(McpEvent.ToolsChanged, { server: name }).pipe(Effect.ignore)
-        yield* bus.publish(McpEvent.ResourcesChanged, { server: name }).pipe(Effect.ignore)
-        yield* bus.publish(PromptsChanged, { server: name }).pipe(Effect.ignore)
+        yield* bus.publish(McpEvent.ToolsChanged, { server: name })
+        yield* bus.publish(McpEvent.ResourcesChanged, { server: name })
+        yield* bus.publish(PromptsChanged, { server: name })
       })
 
       const disposeServer = Effect.fnUntraced(function* (name: ServerName, entry: ServerEntry) {
@@ -594,7 +594,7 @@ export const layer = (options?: Options) =>
           yield* register(name, entry)
           if (serverConfig.disabled) {
             entry.status = { status: "disabled" }
-            yield* bus.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore)
+            yield* bus.publish(McpEvent.StatusChanged, { server: name })
             return
           }
           yield* startServer(name, entry)
@@ -610,7 +610,7 @@ export const layer = (options?: Options) =>
         yield* disposeServer(name, entry)
         // Credentials are keyed by name + URL and intentionally survive removal for a later re-add.
         entries.delete(name)
-        yield* bus.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore)
+        yield* bus.publish(McpEvent.StatusChanged, { server: name })
       })
 
       let applied: Map<ServerName, Mcp.ServerConfig> | undefined
@@ -633,7 +633,7 @@ export const layer = (options?: Options) =>
             if (entry.config.disabled) {
               entry.status = { status: "disabled" }
               entry.startup.openUnsafe()
-              yield* bus.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore)
+              yield* bus.publish(McpEvent.StatusChanged, { server: name })
               continue
             }
             fork(startServer(name, entry).pipe(locks.withLock(name)))
@@ -675,7 +675,6 @@ export const layer = (options?: Options) =>
         bus.subscribe(Credential.Event.Switched).pipe(
           Stream.filter((event) => owned.has(event.data.integrationID)),
           Stream.runForEach((event) => Effect.sync(() => fork(reconnect(event.data.integrationID)))),
-          Effect.ignore,
         ),
       )
       const state = State.create<Data, Draft>({
@@ -740,7 +739,7 @@ export const layer = (options?: Options) =>
             const target = yield* requireServer(name)
             yield* stopServer(name, target.entry)
             target.entry.status = { status: "disabled" }
-            yield* bus.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore)
+            yield* bus.publish(McpEvent.StatusChanged, { server: name })
           }).pipe(locks.withLock(name))
         }),
         remove: Effect.fn("MCP.remove")(function* (server) {
@@ -765,7 +764,7 @@ export const layer = (options?: Options) =>
               message: "MCP server is not connected",
             })
           const result = yield* target.entry.client
-            .callTool({ name: input.name, args: input.args })
+            .callTool({ name: input.name, args: input.args, sessionID: input.sessionID })
             .pipe(
               Effect.mapError(
                 (error) => new ToolCallError({ server: target.name, tool: input.name, message: error.message }),
