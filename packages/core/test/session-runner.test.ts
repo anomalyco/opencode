@@ -45,7 +45,6 @@ import { SessionRunCoordinator } from "@opencode-ai/core/session/run-coordinator
 import { SessionRunner } from "@opencode-ai/core/session/runner/index"
 import * as SessionRunnerLLM from "@opencode-ai/core/session/runner/llm"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
-import { PromptCacheDiagnostics } from "@opencode-ai/core/session/prompt-cache-diagnostics"
 import { SessionUsage } from "@opencode-ai/core/session/usage"
 import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
@@ -1642,12 +1641,19 @@ describe("SessionRunnerLLM", () => {
     s.systemBaseline = "Changed context"
     yield* s.runPrompt("Second")
 
-    expect(
-      PromptCacheDiagnostics.compare(
-        PromptCacheDiagnostics.snapshot(s.requests[0]),
-        PromptCacheDiagnostics.snapshot(s.requests[1]),
-      ),
-    ).toEqual({ status: "append-only", previousMessages: 1, currentMessages: 3 })
+    for (const field of [
+      "model",
+      "generation",
+      "providerOptions",
+      "http",
+      "toolChoice",
+      "cache",
+      "tools",
+      "system",
+    ] as const)
+      expect(s.requests[1][field]).toEqual(s.requests[0][field])
+    expect(s.requests[0].messages).toHaveLength(1)
+    expect(s.requests[1].messages.slice(0, 1)).toEqual([...s.requests[0].messages])
     expect(s.requests.map((request) => request.system.map((part) => part.text))).toEqual([
       [defaultSystem, "Initial context"],
       [defaultSystem, "Initial context"],
