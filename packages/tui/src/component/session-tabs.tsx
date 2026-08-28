@@ -41,6 +41,7 @@ import { DialogSessionRename } from "./dialog-session-rename"
 import { Keymap } from "../context/keymap"
 import { registerOpencodeSpinner } from "./register-spinner"
 import { SPINNER_FRAMES } from "./spinner-frames"
+import "./title-shimmer"
 
 registerOpencodeSpinner()
 
@@ -649,7 +650,7 @@ function VerticalSessionTabs(props: {
               const restingTitleWidth = () => Math.max(1, width() - numberWidth() - 2)
               const hoveredTitleWidth = () => Math.max(1, restingTitleWidth() - 1)
               const titleWidth = () => (hovered() === tab.sessionID ? hoveredTitleWidth() : restingTitleWidth())
-              const title = () => tab.title ?? "Untitled session"
+              const title = () => (props.controller ? undefined : session()?.title) ?? tab.title ?? "Untitled session"
               const scrolling = () => marquee.active() === tab.sessionID
               const visibleTitleParts = createMemo(() =>
                 scrolling()
@@ -908,14 +909,21 @@ function VerticalSessionTabs(props: {
                         unreadMarker={props.unreadMarker}
                         attributes={selected() ? TextAttributes.BOLD : undefined}
                       />
-                      <text
+                      <title_shimmer
                         width={titleWidth()}
+                        height={1}
                         fg={foreground()}
+                        rename={{ pending: status().renaming, title: title() }}
+                        enabled={animations()}
+                        backdrop={pulseBackground()}
                         wrapMode="none"
                         selectable={false}
                         attributes={
-                          (status().renaming ? TextAttributes.DIM : selected() ? TextAttributes.BOLD : 0) |
-                            (tabs.isPreview?.(tab.sessionID) ? TextAttributes.ITALIC : 0) || undefined
+                          (status().renaming && !animations()
+                            ? TextAttributes.DIM
+                            : selected()
+                              ? TextAttributes.BOLD
+                              : 0) | (tabs.isPreview?.(tab.sessionID) ? TextAttributes.ITALIC : 0) || undefined
                         }
                       >
                         <Show
@@ -928,7 +936,7 @@ function VerticalSessionTabs(props: {
                             )}
                           </Index>
                         </Show>
-                      </text>
+                      </title_shimmer>
                       <text
                         position="absolute"
                         right={1}
@@ -1076,6 +1084,7 @@ function HorizontalSessionTabs(props: {
   numbers: boolean
 }) {
   const tabs = props.controller ?? useSessionTabs()
+  const data = props.controller ? undefined : useData()
   const dimensions = useTerminalDimensions()
   const theme = useTheme()
   const config = useConfig().data
@@ -1365,7 +1374,7 @@ function HorizontalSessionTabs(props: {
           const glowColor = createMemo(() => tint(background(), feedbackColor() ?? unreadColor(), glowLevel()))
           const glows = () =>
             Boolean(status().attention || (!selected() && !status().busy && status().unread !== undefined))
-          const title = () => tab.title ?? "Untitled session"
+          const title = () => data?.session.get(tab.sessionID)?.title ?? tab.title ?? "Untitled session"
           const tabNumber = createMemo(() => items().findIndex((item) => item.sessionID === tab.sessionID) + 1)
           const numberWidth = () => Math.max(2, String(items().length).length)
           // Hovering reveals the close mark, so the title's right bound shifts left of it.
@@ -1493,13 +1502,17 @@ function HorizontalSessionTabs(props: {
                   unreadMarker={props.unreadMarker}
                   attributes={bold()}
                 />
-                <text
+                <title_shimmer
                   width={availableTitleWidth()}
+                  height={1}
                   fg={foreground()}
+                  rename={{ pending: status().renaming, title: title() }}
+                  enabled={animations()}
+                  backdrop={background()}
                   wrapMode="none"
                   selectable={false}
                   attributes={
-                    (status().renaming ? TextAttributes.DIM : (bold() ?? 0)) |
+                    (status().renaming && !animations() ? TextAttributes.DIM : (bold() ?? 0)) |
                       (tabs.isPreview?.(tab.sessionID) ? TextAttributes.ITALIC : 0) || undefined
                   }
                 >
@@ -1510,7 +1523,7 @@ function HorizontalSessionTabs(props: {
                       )}
                     </Index>
                   </Show>
-                </text>
+                </title_shimmer>
                 <text
                   position="absolute"
                   right={1}

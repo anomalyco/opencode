@@ -223,135 +223,175 @@ test("session title generated while an untitled session is loading remains visib
   }
 })
 
-test.each(["horizontal", "vertical", "sidebar"] as const)(
-  "auto rename dims the %s title until the request settles",
-  async (layout) => {
-    await using state = await tmpdir()
-    const setup = await createTestRenderer({ width: 160, height: 30, useThread: false, kittyKeyboard: true })
-    setup.renderer.start()
-    const events = createEventStream()
-    const responses = Array.from({ length: 4 }, () => Promise.withResolvers<Response>())
-    const bodies: unknown[] = []
-    const location = { directory, project: { id: "project", directory, canonical: directory } }
-    const session = {
-      id: "ses_rename",
-      title: "Demo session",
-      projectID: "project",
-      location: { directory },
-      agent: "build",
-      model: { providerID: "provider", id: "model" },
-      cost: 0,
-      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-      time: { created: 0, updated: 0 },
+test.each(
+  (["horizontal", "vertical", "sidebar"] as const).flatMap((layout) =>
+    [undefined, false, true].map((animations) => ({ layout, animations })),
+  ),
+)("auto rename feedback follows request and title updates (%j)", async ({ layout, animations }) => {
+  const animated = animations !== false
+  await using state = await tmpdir()
+  const setup = await createTestRenderer({ width: 160, height: 30, useThread: false, kittyKeyboard: true })
+  setup.renderer.start()
+  const events = createEventStream()
+  const responses = Array.from({ length: 4 }, () => Promise.withResolvers<Response>())
+  const refresh = Promise.withResolvers<Response>()
+  const refreshRequested = Promise.withResolvers<void>()
+  let holdRefresh = false
+  const bodies: unknown[] = []
+  const location = { directory, project: { id: "project", directory, canonical: directory } }
+  const session = {
+    id: "ses_rename",
+    title: "Demo session",
+    projectID: "project",
+    location: { directory },
+    agent: "build",
+    model: { providerID: "provider", id: "model" },
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    time: { created: 0, updated: 0 },
+  }
+  const calls = createFetch(async (url, request) => {
+    if (url.pathname === "/api/location") return json(location)
+    if (url.pathname === "/api/agent")
+      return json({ location, data: [{ id: "build", mode: "primary", hidden: false, permissions: [] }] })
+    if (url.pathname === "/api/model")
+      return json({ location, data: [{ id: "model", providerID: "provider", name: "Model", variants: [] }] })
+    if (url.pathname === "/api/provider") return json({ location, data: [{ id: "provider", name: "Provider" }] })
+    if (url.pathname === "/api/session") return json({ data: [], cursor: {} })
+    if (url.pathname === "/api/session/ses_rename") {
+      if (!holdRefresh) return json({ data: session })
+      refreshRequested.resolve()
+      return refresh.promise
     }
-    const calls = createFetch(async (url, request) => {
-      if (url.pathname === "/api/location") return json(location)
-      if (url.pathname === "/api/agent")
-        return json({ location, data: [{ id: "build", mode: "primary", hidden: false, permissions: [] }] })
-      if (url.pathname === "/api/model")
-        return json({ location, data: [{ id: "model", providerID: "provider", name: "Model", variants: [] }] })
-      if (url.pathname === "/api/provider") return json({ location, data: [{ id: "provider", name: "Provider" }] })
-      if (url.pathname === "/api/session") return json({ data: [], cursor: {} })
-      if (url.pathname === "/api/session/ses_rename") return json({ data: session })
-      if (/^\/api\/session\/ses_rename\/(message|inbox|permission)$/.test(url.pathname))
-        return json({ data: [], cursor: {} })
-      if (url.pathname === "/api/session/ses_rename/rename") {
-        const response = responses[bodies.length]
-        bodies.push(await request.json())
-        return response.promise
-      }
-      return undefined
-    }, events)
-    const server = Bun.serve({ port: 0, fetch: (request) => calls.fetch(request) })
-    const titleSpans = () =>
-      setup
-        .captureSpans()
-        .lines.flatMap((line) => line.spans)
-        .filter((span) => span.text.includes(session.title))
+    if (/^\/api\/session\/ses_rename\/(message|inbox|permission)$/.test(url.pathname))
+      return json({ data: [], cursor: {} })
+    if (url.pathname === "/api/session/ses_rename/rename") {
+      const response = responses[bodies.length]
+      bodies.push(await request.json())
+      return response.promise
+    }
+    return undefined
+  }, events)
+  const server = Bun.serve({ port: 0, fetch: (request) => calls.fetch(request) })
+  const titleSpans = () =>
+    setup.captureSpans().lines.flatMap((line) => {
+      const column = line.spans
+        .map((span) => span.text)
+        .join("")
+        .indexOf(session.title)
+      if (column === -1) return []
+      return line.spans
+        .flatMap((span) => Array.from({ length: span.width }, () => span))
+        .slice(column, column + session.title.length)
+    })
 
-    try {
-      const { run } = await import("../src/app")
-      const task = Effect.runPromise(
-        run({
-          app: { name: "test", version: "test", channel: "test" },
-          server: { endpoint: { url: server.url.toString() } },
-          config: {
-            get: async () => ({
-              animations: false,
-              tabs: { enabled: layout !== "sidebar", layout: layout === "sidebar" ? "horizontal" : layout },
-              session: { sidebar: layout === "sidebar" ? "auto" : "hide" },
-            }),
-            update: async () => ({}),
-          },
-          packages: { resolve: async () => undefined },
-          terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
-          args: { sessionID: session.id },
-          log: () => {},
-        }).pipe(Effect.provide(Global.layerWith({ state: state.path })), Effect.provide(FileSystem.layerNoop({}))),
+  try {
+    const { run } = await import("../src/app")
+    const task = Effect.runPromise(
+      run({
+        app: { name: "test", version: "test", channel: "test" },
+        server: { endpoint: { url: server.url.toString() } },
+        config: {
+          get: async () => ({
+            animations,
+            tabs: { enabled: layout !== "sidebar", layout: layout === "sidebar" ? "horizontal" : layout },
+            session: { sidebar: layout === "sidebar" ? "auto" : "hide" },
+          }),
+          update: async () => ({}),
+        },
+        packages: { resolve: async () => undefined },
+        terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
+        args: { sessionID: session.id },
+        log: () => {},
+      }).pipe(Effect.provide(Global.layerWith({ state: state.path })), Effect.provide(FileSystem.layerNoop({}))),
+    )
+
+    await setup.waitForFrame((frame) => frame.includes(session.title) && frame.includes("Build · Model Provider"))
+    expect(titleSpans().every((span) => (span.attributes & TextAttributes.BOLD) !== 0)).toBe(true)
+    const foreground = titleSpans()[0].fg
+
+    for (const [index, status] of [204, 204, 503].entries()) {
+      await setup.mockInput.typeText("/rename")
+      setup.mockInput.pressEscape()
+      setup.mockInput.pressEnter()
+      await setup.waitFor(() => bodies.length === index + 1)
+      expect(bodies[index]).toEqual({ title: "" })
+      await setup.waitForFrame(
+        () =>
+          titleSpans().length > 0 &&
+          (animated
+            ? titleSpans().some((span) => !span.fg.equals(foreground))
+            : titleSpans().every((span) => (span.attributes & TextAttributes.DIM) !== 0)),
       )
+      expect(titleSpans().every((span) => Boolean(span.attributes & TextAttributes.BOLD) === animated)).toBe(true)
 
-      await setup.waitForFrame((frame) => frame.includes(session.title) && frame.includes("Build · Model Provider"))
-      expect(titleSpans().every((span) => (span.attributes & TextAttributes.BOLD) !== 0)).toBe(true)
-
-      for (const [index, status] of [204, 204, 503].entries()) {
+      if (index === 0) {
         await setup.mockInput.typeText("/rename")
         setup.mockInput.pressEscape()
         setup.mockInput.pressEnter()
-        await setup.waitFor(() => bodies.length === index + 1)
-        expect(bodies[index]).toEqual({ title: "" })
-        await setup.waitForFrame(
-          () => titleSpans().length > 0 && titleSpans().every((span) => (span.attributes & TextAttributes.DIM) !== 0),
-        )
-        expect(titleSpans().every((span) => (span.attributes & TextAttributes.BOLD) === 0)).toBe(true)
-
-        if (index === 0) {
-          await setup.mockInput.typeText("/rename")
-          setup.mockInput.pressEscape()
-          setup.mockInput.pressEnter()
+        await setup.renderOnce()
+        expect(bodies).toHaveLength(1)
+        if (animated) {
+          // A successful response can precede the event/read that supplies the new title.
+          holdRefresh = true
+          responses[index].resolve(new Response(null, { status }))
+          await refreshRequested.promise
           await setup.renderOnce()
-          expect(bodies).toHaveLength(1)
-          session.title = "Generated session"
-          events.emit({
-            id: "evt_renamed",
-            created: 1,
-            type: "session.renamed",
-            durable: { aggregateID: session.id, seq: 1, version: 1 },
-            data: { sessionID: session.id, title: session.title },
-          })
-          await setup.waitForFrame((frame) => frame.includes(session.title))
+          expect(setup.captureCharFrame()).toContain(session.title)
+          expect(titleSpans().some((span) => !span.fg.equals(foreground))).toBe(true)
         }
-        // No rename event is emitted for the unchanged-title and failed requests.
-        responses[index].resolve(new Response(null, { status }))
-        if (status === 503) {
-          const rows = (await setup.waitForFrame((frame) => frame.includes("UnexpectedStatus"))).split("\n")
-          const row = rows.findIndex((line) => line.includes("UnexpectedStatus"))
-          await setup.mockMouse.click(rows[row].indexOf("UnexpectedStatus"), row)
+        session.title = "Generated session"
+        events.emit({
+          id: "evt_renamed",
+          created: 1,
+          type: "session.renamed",
+          durable: { aggregateID: session.id, seq: 1, version: 1 },
+          data: { sessionID: session.id, title: session.title },
+        })
+        holdRefresh = false
+        refresh.resolve(json({ data: session }))
+        await setup.waitForFrame((frame) => frame.includes(session.title))
+        if (animated) {
+          expect(titleSpans().some((span) => !span.fg.equals(foreground))).toBe(true)
+          expect(setup.renderer.root.liveCount).toBeGreaterThan(0)
         }
-        await setup.waitForFrame(
-          () =>
-            titleSpans().length > 0 &&
-            titleSpans().every(
-              (span) => (span.attributes & TextAttributes.DIM) === 0 && (span.attributes & TextAttributes.BOLD) !== 0,
-            ),
-        )
       }
-
-      await setup.mockInput.typeText("/rename Hand picked")
-      setup.mockInput.pressEscape()
-      setup.mockInput.pressEnter()
-      await setup.waitFor(() => bodies.length === 4)
-      expect(bodies[3]).toEqual({ title: "Hand picked" })
-      expect(titleSpans().every((span) => (span.attributes & TextAttributes.DIM) === 0)).toBe(true)
-      responses[3].resolve(new Response(null, { status: 204 }))
-      setup.renderer.destroy()
-      await task
-    } finally {
-      responses.forEach((response) => response.resolve(new Response(null, { status: 204 })))
-      if (!setup.renderer.isDestroyed) setup.renderer.destroy()
-      await server.stop()
+      // No rename event is emitted for the unchanged-title and failed requests.
+      responses[index].resolve(new Response(null, { status }))
+      if (status === 503) {
+        const rows = (await setup.waitForFrame((frame) => frame.includes("UnexpectedStatus"))).split("\n")
+        const row = rows.findIndex((line) => line.includes("UnexpectedStatus"))
+        await setup.mockMouse.click(rows[row].indexOf("UnexpectedStatus"), row)
+      }
+      await setup.waitForFrame(
+        () =>
+          titleSpans().length > 0 &&
+          titleSpans().every(
+            (span) =>
+              (span.attributes & TextAttributes.DIM) === 0 &&
+              (span.attributes & TextAttributes.BOLD) !== 0 &&
+              span.fg.equals(foreground),
+          ),
+        { maxPasses: 60 },
+      )
     }
-  },
-)
+
+    await setup.mockInput.typeText("/rename Hand picked")
+    setup.mockInput.pressEscape()
+    setup.mockInput.pressEnter()
+    await setup.waitFor(() => bodies.length === 4)
+    expect(bodies[3]).toEqual({ title: "Hand picked" })
+    expect(titleSpans().every((span) => (span.attributes & TextAttributes.DIM) === 0)).toBe(true)
+    responses[3].resolve(new Response(null, { status: 204 }))
+    setup.renderer.destroy()
+    await task
+  } finally {
+    responses.forEach((response) => response.resolve(new Response(null, { status: 204 })))
+    refresh.resolve(json({ data: session }))
+    if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+    await server.stop()
+  }
+})
 
 test("session startup prompt is submitted exactly once", async () => {
   const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
