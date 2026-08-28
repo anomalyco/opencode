@@ -215,7 +215,8 @@ const withSession = <A, E, R>(directory: string, body: (registry: Tool.Interface
     const locations = yield* LocationServiceMap.Service
     const locationLayer = locations.get(location)
     return yield* Effect.gen(function* () {
-      yield* (yield* PluginSupervisor.Service).flush
+      const plugins = yield* PluginSupervisor.Service
+      yield* plugins.flush
       const registry = yield* Tool.Service
       return yield* body(registry)
     }).pipe(Effect.provide(locationLayer), Effect.ensuring(locations.invalidate(location)))
@@ -701,6 +702,42 @@ describe("ShellTool ordinary shell syntax", () => {
 })
 
 describe("ShellTool", () => {
+  it.live("returns both parallel CodeMode shell results", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        return withSession(tmp.path, (registry) =>
+          Effect.gen(function* () {
+            yield* registry.transform((draft) =>
+              draft.update("shell", (tool) => {
+                tool.options = { ...tool.options, codemode: true }
+              }),
+            )
+            const command = isWindows ? helloCommand : `${helloCommand}; sleep 0.1`
+            const inputs = ["one", "two"].map((text) => JSON.stringify({ command: command.replace("hello", text) }))
+            const result = yield* executeTool(registry, {
+              sessionID,
+              ...toolIdentity,
+              call: {
+                type: "tool-call",
+                id: "call-parallel-shells",
+                name: "execute",
+                input: { code: `return await Promise.all([tools.shell(${inputs[0]}), tools.shell(${inputs[1]})])` },
+              },
+            }).pipe(Effect.timeout("3 seconds"))
+            expect(result.status).toBe("completed")
+            expect(JSON.parse(result.output.output)).toEqual([
+              { output: "one", exit: 0, truncated: false, status: "completed" },
+              { output: "two", exit: 0, truncated: false, status: "completed" },
+            ])
+          }),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+    ),
+  )
+
   productionIt.live(
     "registers and returns real successful output from the active Location",
     () =>
@@ -1294,7 +1331,7 @@ describe("ShellTool", () => {
               },
               {
                 type: "text",
-                text: "You will be notified automatically when the command finishes. Avoid sleep commands or polling for completion; if you need the output before then, read the file directly.",
+                text: "You will be notified automatically when the command finishes. The notification will include the command's output. DO NOT run sleep commands or poll the output file to check for completion. You can read from the file when its current output would be useful, such as when inspecting logs from a background server. Otherwise, continue with other work or end your response.",
               },
             ])
             expect((yield* shell.list()).map((info) => info.id)).toContain(id)
@@ -1341,7 +1378,7 @@ describe("ShellTool", () => {
               description: bodyExitCommand,
               metadata: {
                 source: "shell",
-                jobID: "call-background-nonzero",
+                jobID: shellID,
                 shellID,
                 state: "completed",
                 exit: 7,
@@ -1374,7 +1411,7 @@ describe("ShellTool", () => {
                   )
                 : Effect.void,
             )
-            yield* executeTool(registry, {
+            const settled = yield* executeTool(registry, {
               ...call({ command: "exit 7", background: true }, "call-background-silent-nonzero"),
               // The command can finish while its initial progress update is being published.
               progress: (update) =>
@@ -1385,7 +1422,7 @@ describe("ShellTool", () => {
 
             expect(yield* Deferred.await(persisted)).toMatchObject([
               {
-                id: "call-background-silent-nonzero",
+                id: settled.metadata?.shellID,
                 status: "completed",
                 output: "(no output)\n\nCommand exited with code 7.",
               },
@@ -1518,9 +1555,10 @@ describe("ShellTool", () => {
                 yield* Effect.promise(() => Bun.sleep(1))
                 return yield* backgroundWhenReady(remaining - 1)
               })
-            expect(yield* backgroundWhenReady()).toMatchObject([{ id: "call-background-signal", type: "shell" }])
+            const backgrounded = yield* backgroundWhenReady()
             const settled = yield* Fiber.join(waiting)
             const shellID = typeof settled.metadata?.shellID === "string" ? settled.metadata.shellID : undefined
+            expect(backgrounded).toMatchObject([{ id: shellID, type: "shell" }])
             expect(settled.metadata).toMatchObject({ truncated: false })
             expect(shellID).toStartWith("sh_")
 
@@ -1534,7 +1572,7 @@ describe("ShellTool", () => {
             })
             expect(settled.content?.[1]).toEqual({
               type: "text",
-              text: "You will be notified automatically when the command finishes. Avoid sleep commands or polling for completion; if you need the output before then, read the file directly.",
+              text: "You will be notified automatically when the command finishes. The notification will include the command's output. DO NOT run sleep commands or poll the output file to check for completion. You can read from the file when its current output would be useful, such as when inspecting logs from a background server. Otherwise, continue with other work or end your response.",
             })
             yield* Effect.sleep(Duration.millis(100))
             expect((yield* shell.get(id)).status).toBe("running")

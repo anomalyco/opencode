@@ -22,7 +22,10 @@ export interface Match {
 }
 
 export interface Interface {
-  readonly discover: (directory: AbsolutePath) => Effect.Effect<Match | undefined>
+  readonly discover: (
+    directory: AbsolutePath,
+    options?: { readonly discovery?: boolean },
+  ) => Effect.Effect<Match | undefined>
   readonly targets: () => readonly string[]
 }
 
@@ -38,7 +41,10 @@ const layer = Layer.effect(
     const known = new Set([".git", ".hg"])
     const loaded = new Map<string, Versioned | undefined>()
 
-    const discover = Effect.fn("ProjectMarkers.discover")(function* (directory: AbsolutePath) {
+    // The filesystem half of discovery: walk up for config, scan plugin
+    // directories, and read configured plugin operations. This is the part a
+    // no-discovery caller must skip — it imports plugin modules.
+    const scanOperations = Effect.fnUntraced(function* (directory: AbsolutePath) {
       const found = yield* fs
         .up({ targets: [".opencode", "opencode.json", "opencode.jsonc"], start: directory })
         .pipe(Effect.orElseSucceed(() => []))
@@ -54,7 +60,7 @@ const layer = Layer.effect(
       const configured = yield* Effect.forEach([...new Set(files)], (file) => read(fs, file)).pipe(
         Effect.map((entries) => entries.flat()),
       )
-      const operations = yield* Effect.forEach(
+      return yield* Effect.forEach(
         [
           ...automatic.map((target): ConfigPluginSource.Operation => ({ type: "add", target, options: {} })),
           ...configured,
@@ -70,6 +76,15 @@ const layer = Layer.effect(
           )
         },
       )
+    })
+
+    const discover = Effect.fn("ProjectMarkers.discover")(function* (
+      directory: AbsolutePath,
+      options?: { readonly discovery?: boolean },
+    ) {
+      // discovery: false skips the config scan and its plugin module loading;
+      // sdk-declared vcs markers are host-explicit, not ambient, so they stay.
+      const operations = options?.discovery === false ? [] : yield* scanOperations(directory)
       const declarations = new Map<string, { readonly id: string; readonly markers: readonly string[] }>()
 
       for (const plugin of sdk.all()) {
