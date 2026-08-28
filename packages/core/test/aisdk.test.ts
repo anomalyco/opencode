@@ -823,6 +823,55 @@ it.effect("retries status-less AI SDK transport failures", () =>
   }),
 )
 
+it.effect("classifies native fetch failures as request transport errors", () =>
+  Effect.gen(function* () {
+    const cause = Object.assign(new TypeError("fetch failed"), {
+      cause: Object.assign(new Error("connect ECONNREFUSED 127.0.0.1:443"), { code: "ECONNREFUSED" }),
+    })
+    const error = yield* streamFailure(cause)
+    expect(error.reason).toMatchObject({
+      _tag: "Transport",
+      transport: "http",
+      operation: "request",
+      code: "ECONNREFUSED",
+    })
+    expect(error.message).toBe("connect ECONNREFUSED 127.0.0.1:443")
+    expect(error.reason.cause).toBe(cause)
+    expect(SessionRunnerRetry.isRetryable(error)).toBeTrue()
+  }),
+)
+
+it.effect("classifies mid-stream socket drops as read transport errors", () =>
+  Effect.gen(function* () {
+    const cause = Object.assign(new Error("terminated"), {
+      cause: Object.assign(new Error("other side closed"), { code: "UND_ERR_SOCKET" }),
+    })
+    const error = yield* streamFailure(cause, true)
+    expect(error.reason).toMatchObject({
+      _tag: "Transport",
+      transport: "http",
+      operation: "read",
+      code: "UND_ERR_SOCKET",
+    })
+    expect(SessionRunnerRetry.isRetryable(error)).toBeTrue()
+  }),
+)
+
+it.effect("classifies the SSE chunk timeout as a read transport error", () =>
+  Effect.gen(function* () {
+    const error = yield* streamFailure(new Error("SSE read timed out"), true)
+    expect(error.reason).toMatchObject({ _tag: "Transport", transport: "http", operation: "read" })
+    expect(SessionRunnerRetry.isRetryable(error)).toBeTrue()
+  }),
+)
+
+it.effect("keeps unrecognized error codes on the unknown provider path", () =>
+  Effect.gen(function* () {
+    const error = yield* streamFailure(Object.assign(new Error("kaput"), { code: "E_SOMETHING_ELSE" }), true)
+    expect(error.reason).toBeInstanceOf(UnknownProviderError)
+  }),
+)
+
 it.effect("prefers a structured provider message over the code fallback", () =>
   Effect.gen(function* () {
     const error = yield* streamFailure(
