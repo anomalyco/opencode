@@ -24,41 +24,17 @@ function occupy(port: number, cancel = false) {
     const servers = ["127.0.0.1", "::1"].map((host) => ({
       host,
       server: createServer((request, response) => {
-        console.error("[DEBUG-ci-callback] fixture-request", {
-          host,
-          port,
-          cancel,
-          path: request.url,
-          localAddress: request.socket.localAddress,
-          remoteAddress: request.socket.remoteAddress,
-        })
         requests.push(request.url ?? "")
         response.end(cancel ? "cancelled" : "still running", () => {
           if (cancel)
             servers.forEach((item) => {
-              console.error("[DEBUG-ci-callback] fixture-stopping", {
-                host: item.host,
-                port,
-                listening: item.server.listening,
-              })
               // Bun clears its native handle in close(), so force-close connections first.
               item.server.closeAllConnections()
               item.server.close()
-              console.error("[DEBUG-ci-callback] fixture-stopped", {
-                host: item.host,
-                port,
-                listening: item.server.listening,
-              })
             })
-          if (cancel) traceTcp(port)
         })
       }),
     }))
-    servers.forEach((item) =>
-      item.server.on("close", () =>
-        console.error("[DEBUG-ci-callback] fixture-close-event", { host: item.host, port }),
-      ),
-    )
     yield* Effect.addFinalizer(() =>
       Effect.forEach(servers, (item) =>
         Effect.callback<void>((resume) => {
@@ -78,22 +54,6 @@ function occupy(port: number, cancel = false) {
       }),
     )
     return requests
-  })
-}
-
-function traceTcp(port: number) {
-  if (process.platform !== "win32") return
-  const child = Bun.spawn(["netstat", "-ano"], { stdout: "pipe", stderr: "ignore" })
-  void Promise.all([new Response(child.stdout).text(), child.exited]).then(([output, exitCode]) => {
-    const rows = output.split(/\r?\n/).flatMap((line) => {
-      const fields = line.trim().split(/\s+/)
-      if (fields[0] !== "TCP" || fields.length < 5) return []
-      const safe = /^(127\.0\.0\.1|\[::1\]|0\.0\.0\.0|\[::\]):\d+$/
-      if (!safe.test(fields[1]) || !safe.test(fields[2])) return []
-      if (!fields[1].endsWith(`:${port}`) && !fields[2].endsWith(`:${port}`)) return []
-      return [{ local: fields[1], peer: fields[2], state: fields[3], thisProcess: fields[4] === String(process.pid) }]
-    })
-    console.error("[DEBUG-ci-callback] fixture-tcp-after-stop", { port, exitCode, rows })
   })
 }
 

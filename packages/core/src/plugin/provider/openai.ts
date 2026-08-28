@@ -142,18 +142,9 @@ function bindWithRetry(server: Server, port: number, attempts: number): Effect.E
 
 function bind(server: Server, port: number) {
   return Effect.callback<void, Error>((resume) => {
-    console.error("[DEBUG-ci-callback] production-bind", { port, listening: server.listening })
-    const onError = (error: Error) => {
-      console.error("[DEBUG-ci-callback] production-bind-error", {
-        port,
-        listening: server.listening,
-        code: "code" in error ? error.code : undefined,
-      })
-      resume(Effect.fail(error))
-    }
+    const onError = (error: Error) => resume(Effect.fail(error))
     server.once("error", onError)
     server.listen(port, "localhost", () => {
-      console.error("[DEBUG-ci-callback] production-listening", { port, address: server.address() })
       server.off("error", onError)
       resume(Effect.void)
     })
@@ -162,20 +153,10 @@ function bind(server: Server, port: number) {
 
 function cancel(port: number) {
   return Effect.tryPromise({
-    try: (signal) => {
-      console.error("[DEBUG-ci-callback] production-cancel", { port })
-      return fetch(`http://localhost:${port}/cancel`, {
+    try: (signal) =>
+      fetch(`http://localhost:${port}/cancel`, {
         signal: AbortSignal.any([signal, AbortSignal.timeout(2000)]),
-      }).then((response) => {
-        console.error("[DEBUG-ci-callback] production-cancel-response", {
-          port,
-          status: response.status,
-          connection: response.headers.get("connection"),
-          bodyUsed: response.bodyUsed,
-        })
-        return response
-      })
-    },
+      }),
     catch: (cause) => cause,
   })
 }
