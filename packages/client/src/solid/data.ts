@@ -29,6 +29,7 @@ import type {
   SessionMessageAssistantTool,
   SessionInfo,
   SessionInboxInfo,
+  SessionInboxCompaction,
   ShellInfo,
   SkillInfo,
   VcsInfo,
@@ -282,12 +283,10 @@ export function createData(config: CreateDataInput) {
     setStore("session", "pending", sessionID, index, { ...item, delivery })
   }
 
-  // Inbox IDs of optimistic prompt admissions still awaiting their durable
-  // echo. This is the one deliberate piece of in-flight bookkeeping in this
-  // layer: it exists so a rejection only rolls back rows the server never
-  // acknowledged, and so a concurrent pending re-fetch cannot wipe a row the
-  // server does not know about yet. Entries clear on the enqueued echo or on
-  // rollback — not on POST success, which typically precedes the echo.
+  // Inbox IDs of optimistic admissions awaiting acknowledgement, so rejection
+  // only rolls back unacknowledged rows and a pending re-fetch cannot wipe a
+  // row the server does not know about yet. Prompts clear on their durable
+  // echo or rollback; compactions also reconcile the POST's canonical ID.
   const outbox = new Set<string>()
 
   // Session IDs of optimistic create admissions still awaiting acknowledgement
@@ -301,15 +300,15 @@ export function createData(config: CreateDataInput) {
   // to exist server-side instead of failing with "not found".
   const creating = new Map<string, Promise<unknown>>()
 
-  // Per-session send chain: prompts must be admitted in submission order,
-  // and HTTP gives no ordering across concurrent POSTs. Each prompt waits
-  // for the previous prompt's POST (settled, so one failure does not block
-  // the next) before sending its own.
+  // Per-session send chain: prompts and compactions must be admitted in
+  // submission order. Each waits for the previous POST to settle, so one
+  // failure does not block the next.
   const sending = new Map<string, Promise<unknown>>()
+  const compacting = new Map<string, Promise<SessionInboxCompaction>>()
 
   // Register `promise` under `key` until it settles. A later registration
   // replaces an earlier one; settlement only clears its own entry.
-  function track(map: Map<string, Promise<unknown>>, key: string, promise: Promise<unknown>) {
+  function track<Value>(map: Map<string, Promise<Value>>, key: string, promise: Promise<Value>) {
     map.set(key, promise)
     const settle = () => {
       if (map.get(key) === promise) map.delete(key)
@@ -319,7 +318,7 @@ export function createData(config: CreateDataInput) {
 
   // Upsert an admitted inbox item into pending, input, and (for user and
   // synthetic items) the visible transcript. Used by the inbox.enqueued
-  // handler and by optimistic prompt admission; the upsert is what reconciles
+  // handler and by optimistic admission; the upsert is what reconciles
   // the durable echo with an optimistic placeholder — the durable payload and
   // times replace the client's guess.
   function admitLocal(item: SessionInboxInfo) {
@@ -332,6 +331,7 @@ export function createData(config: CreateDataInput) {
         item.sessionID,
         at < 0 ? [...pending, item] : pending.map((entry, index) => (index === at ? item : entry)),
       )
+      if (item.type === "compaction") return
       const input = store.session.input[item.sessionID] ?? []
       if (!input.includes(item.id)) setStore("session", "input", item.sessionID, [...input, item.id])
       materializeInboxMessage(item)
@@ -1333,6 +1333,70 @@ export function createData(config: CreateDataInput) {
         if (fresh) track(creating, id, request)
         return { id, request }
       },
+      compact(input: { sessionID: string; model?: ModelRef }) {
+        const active = compacting.get(input.sessionID)
+        if (active) return active
+        const pending = store.session.pending[input.sessionID]?.find((item) => item.type === "compaction")
+        const id = pending?.id ?? SessionMessage.ID.create()
+        if (!pending) {
+          outbox.add(id)
+          admitLocal({
+            id,
+            sessionID: input.sessionID,
+            timeCreated: Date.now(),
+            type: "compaction",
+            delivery: "steer",
+            payload: {},
+          })
+        }
+        // Compaction admission can coalesce onto a different ID. Retire the
+        // speculative row on an echo, and remember consumed IDs until the POST
+        // settles so its older response cannot resurrect a queued row.
+        const observed = new Set<string>()
+        const unsubscribe = config.event.listen((message) => {
+          const event = message.details
+          if (event.type === "session.inbox.enqueued") {
+            if (event.data.sessionID !== input.sessionID || event.data.item.type !== "compaction") return
+            observed.add(event.data.inboxID)
+            if (event.data.inboxID !== id && outbox.delete(id)) removePending(input.sessionID, id)
+            return
+          }
+          if (event.type === "session.inbox.delivered" || event.type === "session.inbox.cancelled") {
+            if (event.data.sessionID !== input.sessionID) return
+            observed.add(event.data.inboxID)
+            return
+          }
+          if (event.type === "session.compaction.started" || event.type === "session.compaction.failed") {
+            if (event.data.sessionID !== input.sessionID || !event.data.inputID) return
+            observed.add(event.data.inputID)
+          }
+        })
+        const previous = sending.get(input.sessionID)
+        const request = Promise.resolve()
+          .then(() => Promise.all([creating.get(input.sessionID), previous]))
+          .then(() => input.model && api().session.switchModel({ sessionID: input.sessionID, model: input.model }))
+          .then(() => api().session.compact({ sessionID: input.sessionID, id }))
+          .then((item) => {
+            batch(() => {
+              outbox.delete(id)
+              if (item.id !== id && !pending) removePending(input.sessionID, id)
+              if (!observed.has(item.id) && !messageIndex.get(input.sessionID)?.has(item.id)) admitLocal(item)
+            })
+            return item
+          })
+          .catch((error) => {
+            if (!pending && outbox.delete(id)) removePending(input.sessionID, id)
+            throw error
+          })
+          .finally(unsubscribe)
+        track(compacting, input.sessionID, request)
+        track(
+          sending,
+          input.sessionID,
+          request.catch(() => undefined),
+        )
+        return request
+      },
       // Optimistic prompt admission: render the prompt immediately under a
       // client-minted ID, send it, and let the durable inbox.enqueued echo
       // upsert that same ID with the server's payload. Server admission is
@@ -1368,8 +1432,8 @@ export function createData(config: CreateDataInput) {
         // Wrapped so even a synchronous client failure reaches the rollback.
         // The POST additionally waits for the caller's gate, for any
         // in-flight optimistic create of this session, and for the previous
-        // prompt's POST: the row renders now, the send happens once the
-        // session exists server-side and earlier prompts are admitted.
+        // admission's POST: the row renders now, the send happens once the
+        // session exists server-side and earlier inputs are admitted.
         const previous = sending.get(request.sessionID)
         const send = Promise.resolve()
           .then(() => Promise.all([gate, creating.get(request.sessionID), previous]))
