@@ -149,6 +149,17 @@ function bind(hostname: string, port: number) {
     const parentScope = yield* Scope.Scope
     const serverScope = yield* Scope.fork(parentScope)
     const server = createServer()
+    // Bun 1.3.14 does not emit ServerResponse.close on SSE client disconnect (only IncomingMessage.aborted),
+    // while @effect/platform-node waits for close to interrupt the request fiber. Without this bridge,
+    // the server-side EventV2 stream remains subscribed and spins in native write.
+    // See oven-sh/bun#14697, #32600, #33506.
+    if ((process as any).versions?.bun) {
+      server.on("request", (request: any, response: any) => {
+        request.once("aborted", () => {
+          if (!response.writableEnded && !response.destroyed) response.destroy()
+        })
+      })
+    }
     return yield* Effect.gen(function* () {
       const http = yield* NodeHttpServer.make(() => server, { port, host: hostname })
       yield* Effect.addFinalizer(() => Effect.sync(() => server.closeAllConnections()))
