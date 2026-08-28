@@ -68,7 +68,7 @@ export const dict: Record<string, string> = {
   "ui.sessionTurn.error.addCredits": "Lisää krediittejä",
   "dialog.usageExceeded.freeTier.title": "Ilmainen raja saavutettu",
   "dialog.usageExceeded.freeTier.description":
-    "Tilaa OpenCode Go saadaksesi luotettavan pääsyn parhaisiin avoimen lähdekoodin malleihin alkaen 5 dollarista kuukaudessa.",
+    "Tilaa OpenCode Go 10 dollarilla kuukaudessa saadaksesi luotettavan pääsyn parhaisiin avoimen lähdekoodin malleihin.",
   "dialog.usageExceeded.freeTier.actionLabel": "Tilaa",
   "dialog.usageExceeded.accountRateLimit.title": "Go-raja saavutettu",
   "dialog.usageExceeded.accountRateLimit.description":
