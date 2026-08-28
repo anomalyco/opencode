@@ -456,8 +456,17 @@ export const layer = Layer.effect(
           deps.push(dep)
 
           result.command = mergeDeep(result.command ?? {}, yield* Effect.promise(() => ConfigCommand.load(dir)))
-          result.agent = mergeDeep(result.agent ?? {}, yield* Effect.promise(() => ConfigAgent.load(dir)))
-          result.agent = mergeDeep(result.agent ?? {}, yield* Effect.promise(() => ConfigAgent.loadMode(dir)))
+          const { agents: loadedAgents, errors: agentErrors } = yield* Effect.promise(() => ConfigAgent.load(dir))
+          for (const error of agentErrors) {
+            yield* Effect.logWarning("failed to load agent file", error)
+          }
+          result.agent = mergeDeep(result.agent ?? {}, loadedAgents)
+
+          const { agents: loadedModes, errors: modeErrors } = yield* Effect.promise(() => ConfigAgent.loadMode(dir))
+          for (const error of modeErrors) {
+            yield* Effect.logWarning("failed to load agent mode file", error)
+          }
+          result.agent = mergeDeep(result.agent ?? {}, loadedModes)
           // Auto-discovered plugins under `.opencode/plugin(s)` are already local files, so ConfigPlugin.load
           // returns normalized Specs and we only need to attach origin metadata here.
           const list = yield* Effect.promise(() => ConfigPlugin.load(dir))

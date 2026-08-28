@@ -1,22 +1,37 @@
 export * as ConfigAgent from "./agent"
 
 import path from "path"
-import { Exit, Schema } from "effect"
+import { Cause, Exit, Schema } from "effect"
 import { Glob } from "@opencode-ai/core/util/glob"
 import { ConfigAgentV1 } from "@opencode-ai/core/v1/config/agent"
 import { configEntryNameFromPath } from "./entry-name"
 import * as ConfigMarkdown from "./markdown"
-import { ConfigParse } from "./parse"
 
-export async function load(dir: string) {
-  const result: Record<string, ConfigAgentV1.Info> = {}
+export interface LoadError {
+  readonly path: string
+  readonly message: string
+}
+
+export interface LoadResult {
+  readonly agents: Record<string, ConfigAgentV1.Info>
+  readonly errors: ReadonlyArray<LoadError>
+}
+
+const decodeInfo = Schema.decodeUnknownExit(ConfigAgentV1.Info)
+
+export async function load(dir: string): Promise<LoadResult> {
+  const agents: Record<string, ConfigAgentV1.Info> = {}
+  const errors: Array<LoadError> = []
   for (const item of await Glob.scan("{agent,agents}/**/*.md", {
     cwd: dir,
     absolute: true,
     dot: true,
     symlink: true,
   })) {
-    const md = await ConfigMarkdown.parse(item).catch(() => undefined)
+    const md = await ConfigMarkdown.parse(item).catch((err) => {
+      errors.push({ path: item, message: `Failed to parse frontmatter: ${String(err)}` })
+      return undefined
+    })
     if (!md) continue
 
     const name = configEntryNameFromPath(path.relative(dir, item), ["agent/", "agents/"])
@@ -26,20 +41,29 @@ export async function load(dir: string) {
       ...md.data,
       prompt: md.content.trim(),
     }
-    result[config.name] = ConfigParse.schema(ConfigAgentV1.Info, config, item)
+    const parsed = decodeInfo(config, { errors: "all", propertyOrder: "original" })
+    if (Exit.isSuccess(parsed)) {
+      agents[config.name] = parsed.value
+      continue
+    }
+    errors.push({ path: item, message: Cause.pretty(parsed.cause) })
   }
-  return result
+  return { agents, errors }
 }
 
-export async function loadMode(dir: string) {
-  const result: Record<string, ConfigAgentV1.Info> = {}
+export async function loadMode(dir: string): Promise<LoadResult> {
+  const agents: Record<string, ConfigAgentV1.Info> = {}
+  const errors: Array<LoadError> = []
   for (const item of await Glob.scan("{mode,modes}/*.md", {
     cwd: dir,
     absolute: true,
     dot: true,
     symlink: true,
   })) {
-    const md = await ConfigMarkdown.parse(item).catch(() => undefined)
+    const md = await ConfigMarkdown.parse(item).catch((err) => {
+      errors.push({ path: item, message: `Failed to parse frontmatter: ${String(err)}` })
+      return undefined
+    })
     if (!md) continue
 
     const config = {
@@ -47,13 +71,15 @@ export async function loadMode(dir: string) {
       ...md.data,
       prompt: md.content.trim(),
     }
-    const parsed = Schema.decodeUnknownExit(ConfigAgentV1.Info)(config, { errors: "all", propertyOrder: "original" })
+    const parsed = decodeInfo(config, { errors: "all", propertyOrder: "original" })
     if (Exit.isSuccess(parsed)) {
-      result[config.name] = {
+      agents[config.name] = {
         ...parsed.value,
         mode: "primary" as const,
       }
+      continue
     }
+    errors.push({ path: item, message: Cause.pretty(parsed.cause) })
   }
-  return result
+  return { agents, errors }
 }
