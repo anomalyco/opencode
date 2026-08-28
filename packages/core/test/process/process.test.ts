@@ -1,5 +1,6 @@
 import { describe, expect } from "bun:test"
 import fs from "fs/promises"
+import { randomUUID } from "node:crypto"
 import { realpathSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
@@ -12,6 +13,7 @@ import { testEffect } from "../lib/effect"
 const it = testEffect(LayerNode.compile(AppProcess.node))
 
 const NODE = process.execPath
+const MISSING_CWD = path.join(tmpdir(), `opencode-missing-cwd-${randomUUID()}`)
 const cmd = (...args: string[]) => ChildProcess.make(NODE, args)
 
 const waitForFile = (file: string) =>
@@ -38,6 +40,17 @@ describe("AppProcess", () => {
         expect(result.stdout.toString("utf8")).toBe("hi\n")
         expect(result.stdoutTruncated).toBe(false)
         expect(result.stderrTruncated).toBe(false)
+      }),
+    )
+
+    it.live(
+      "maps command setup failures to AppProcessError",
+      Effect.gen(function* () {
+        const svc = yield* AppProcess.Service
+        const error = yield* svc.run(ChildProcess.make(NODE, [], { cwd: MISSING_CWD })).pipe(Effect.flip)
+
+        expect(error).toBeInstanceOf(AppProcess.AppProcessError)
+        expect(error.command).toBe(NODE)
       }),
     )
 
@@ -280,6 +293,19 @@ describe("AppProcess", () => {
   })
 
   describe("runStream", () => {
+    it.live(
+      "maps streaming command setup failures to AppProcessError",
+      Effect.gen(function* () {
+        const svc = yield* AppProcess.Service
+        const error = yield* svc
+          .runStream(ChildProcess.make(NODE, [], { cwd: MISSING_CWD }))
+          .pipe(Stream.runCollect, Effect.flip)
+
+        expect(error).toBeInstanceOf(AppProcess.AppProcessError)
+        expect(error.command).toBe(NODE)
+      }),
+    )
+
     it.live(
       "emits lines incrementally and ends cleanly on exit 0",
       Effect.gen(function* () {

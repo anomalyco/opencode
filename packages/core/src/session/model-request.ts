@@ -48,6 +48,7 @@ const declineDefect = (cause: Cause.Cause<Tool.Error>) => {
 export interface Prepared {
   readonly request: LLMRequest
   readonly options: StreamOptions
+  readonly retry: (event: PluginHooks.Domains["session"]["retry"]) => Effect.Effect<void>
   /**
    * One request-scoped execution operation. Unknown and hook-removed calls
    * fail individually through the same seam.
@@ -364,9 +365,11 @@ export const layer = Layer.effect(
         tools
           .execute({ ...input, definitions: hooked })
           .pipe(Effect.catchCauseFilter(declineDefect, (decline) => Effect.fail(decline)))
+      const retry: Prepared["retry"] = (event) => hooks.trigger("session", "retry", event).pipe(Effect.asVoid)
       return {
         request,
         options,
+        retry,
         executeTool,
       }
     })

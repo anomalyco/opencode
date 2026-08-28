@@ -1,5 +1,6 @@
 import { type LLMEvent, type ProviderMetadata, type ToolResultValue } from "@opencode-ai/ai"
 import { Clock, Effect, Iterable } from "effect"
+import { isArrayNonEmpty, isReadonlyArrayNonEmpty } from "effect/Array"
 import { Bus } from "../../bus.js"
 import { Model } from "../../model.js"
 import { SessionEvent } from "../event.js"
@@ -45,9 +46,6 @@ export interface StepRecord {
 /** Derives canonical model content from a provider-hosted tool result. */
 type NonEmptyContent = readonly [Tool.Content, ...Tool.Content[]]
 
-const nonEmpty = (content: ReadonlyArray<Tool.Content>): NonEmptyContent | undefined =>
-  content.length > 0 ? (content as NonEmptyContent) : undefined
-
 const stringify = (value: unknown) => {
   if (typeof value === "string") return value
   try {
@@ -58,10 +56,7 @@ const stringify = (value: unknown) => {
 }
 
 const hostedContent = (result: ToolResultValue): NonEmptyContent => {
-  if (result.type === "content") {
-    const content = nonEmpty(result.value)
-    if (content !== undefined) return content
-  }
+  if (result.type === "content" && isReadonlyArrayNonEmpty(result.value)) return result.value
   return [{ type: "text", text: stringify(result.value) }]
 }
 
@@ -563,12 +558,12 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
         : result.content === undefined
           ? []
           : [...result.content]
-    if (content.length === 0) return yield* Effect.die(new Error(`Tool execution has no content: ${id}`))
+    if (!isArrayNonEmpty(content)) return yield* Effect.die(new Error(`Tool execution has no content: ${id}`))
     yield* bus.publish(SessionEvent.Tool.Success, {
       sessionID: input.sessionID,
       assistantMessageID,
       id,
-      content: [content[0], ...content.slice(1)],
+      content,
       ...(result.metadata === undefined ? {} : { metadata: result.metadata }),
       executed: tool.providerExecuted,
     })

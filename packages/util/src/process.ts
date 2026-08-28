@@ -193,7 +193,7 @@ const layer = Layer.effect(
             ),
           )
         : timed
-      return aborted.pipe(Effect.catch((cause) => Effect.fail(wrapError(description, cause))))
+      return aborted.pipe(Effect.mapError((cause) => wrapError(description, cause)))
     }
 
     const run = Effect.fn("AppProcess.run")(function* (command: ChildProcess.Command, options?: RunOptions) {
@@ -253,9 +253,7 @@ const layer = Layer.effect(
           return Stream.concat(lines, tail) as Stream.Stream<string, AppProcessError | PlatformError>
         }),
       )
-      const mapped = built.pipe(
-        Stream.catch((cause): Stream.Stream<string, AppProcessError> => Stream.fail(wrapError(description, cause))),
-      )
+      const mapped = built.pipe(Stream.mapError((cause) => wrapError(description, cause)))
       if (!options?.signal) return mapped
       const signal = options.signal
       return mapped.pipe(

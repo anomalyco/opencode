@@ -1,4 +1,4 @@
-import type { NonEmptyReadonlyArray } from "effect/Array"
+import { isArrayNonEmpty } from "effect/Array"
 import * as NodeSink from "@effect/platform-node/NodeSink"
 import * as NodeStream from "@effect/platform-node/NodeStream"
 import { Deferred, Effect, Exit, FileSystem, Layer, Path, PlatformError, Predicate, Sink, Stream } from "effect"
@@ -60,10 +60,9 @@ const flatten = (command: ChildProcess.Command) => {
   }
 
   walk(command)
-  if (commands.length === 0) throw new Error("flatten produced empty commands array")
-  const [head, ...tail] = commands
+  if (!isArrayNonEmpty(commands)) throw new Error("flatten produced empty commands array")
   return {
-    commands: [head, ...tail] as NonEmptyReadonlyArray<ChildProcess.StandardCommand>,
+    commands,
     opts,
   }
 }

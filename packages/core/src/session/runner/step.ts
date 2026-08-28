@@ -31,8 +31,11 @@ import { SessionRunnerRetry } from "./retry.js"
 
 export type Outcome = Data.TaggedEnum<{
   Completed: { readonly needsContinuation: boolean }
-  Retry: { readonly cause: AIError; readonly error: SessionError.Error }
-  Continue: { readonly cause: AIError; readonly error: SessionError.Error }
+  Retry: { readonly error: SessionError.Error; readonly decision: SessionRunnerRetry.Decision }
+  Continue: {
+    readonly error: SessionError.Error
+    readonly decision: SessionRunnerRetry.Decision
+  }
   RecoverFull: {}
   Compacted: {}
 }>
@@ -44,6 +47,11 @@ interface Input {
   readonly agent: Agent.ID
   readonly model: SessionRunnerModel.Resolved
   readonly prepared: SessionModelRequest.Prepared
+  readonly retry: (
+    cause: AIError,
+    error: SessionError.Error,
+    retry: boolean,
+  ) => Effect.Effect<{ readonly retry: false } | SessionRunnerRetry.Decision>
   readonly recoverContinuation: boolean
   /** The runner owns compaction policy; the attempt invokes it only before durable output. */
   readonly recoverOverflow: Effect.Effect<boolean>
@@ -161,10 +169,21 @@ export const make = Effect.gen(function* () {
           !recorded.outputStarted
         )
           return Outcome.RecoverFull()
-        if (llmFailure && llmError && SessionRunnerRetry.isRetryable(llmFailure) && !recorded.outputStarted) {
+        const retry =
+          llmFailure && llmError && !isContextOverflowFailure(llmFailure)
+            ? yield* restore(
+                input.retry(
+                  llmFailure,
+                  llmError,
+                  SessionRunnerRetry.isRetryable(llmFailure) ||
+                    (recorded.outputStarted && isInterruptedStream(llmFailure)),
+                ),
+              )
+            : undefined
+        if (llmFailure && llmError && retry?.retry && !recorded.outputStarted) {
           // Retry state projects onto the existing assistant, even before it has produced output.
           yield* publisher.startAssistant()
-          return Outcome.Retry({ cause: llmFailure, error: llmError })
+          return Outcome.Retry({ error: llmError, decision: retry })
         }
         if (llmError) yield* publisher.failAssistant(llmError)
 
@@ -221,20 +240,15 @@ export const make = Effect.gen(function* () {
             })
         }
 
-        // After durable output, recovery continues instead of replaying: the
-        // partial assistant message is already persisted history. Any failure
-        // the pre-output gate would retry is continued here, plus interrupted
-        // streams, whose read failures may carry delivery states the retry
-        // policy rejects for full resends.
         if (
           llmFailure &&
           llmError &&
-          (isInterruptedStream(llmFailure) || SessionRunnerRetry.isRetryable(llmFailure)) &&
+          retry?.retry &&
           record.outputStarted &&
           tools.declines.length === 0 &&
           !tools.interrupted
         )
-          return Outcome.Continue({ cause: llmFailure, error: llmError })
+          return Outcome.Continue({ error: llmError, decision: retry })
 
         if (Exit.isFailure(stream)) return yield* Effect.failCause(stream.cause)
         if (tools.declines.length > 0) return yield* Effect.interrupt

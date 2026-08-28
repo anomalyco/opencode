@@ -552,6 +552,7 @@ const setup = Effect.gen(function* () {
     admit,
     resume,
     context: session.context(sessionID),
+    hooks,
     messages: session.messages({ sessionID }),
     inbox: session.inbox(sessionID),
     runPrompt: Effect.fnUntraced(function* (text: string) {
@@ -4387,6 +4388,77 @@ describe("SessionRunnerLLM", () => {
     ])
     yield* replaySessionProjection(sessionID)
     expect((yield* s.context).filter((message) => message.type === "assistant")).toHaveLength(1)
+  })
+
+  scenario("allows session retry hooks to veto a proposed retry", function* (s) {
+    const failure = providerUnavailable()
+    let observed: PluginHooks.Domains["session"]["retry"] | undefined
+    yield* s.hooks.register("session", "retry", (event) =>
+      Effect.sync(() => {
+        observed = event
+        event.decision = { retry: false }
+      }),
+    )
+    yield* s.llm.push(Stream.fail(failure))
+
+    expect(yield* s.runPrompt("Do not retry transport").pipe(Effect.flip)).toBe(failure)
+    expect(s.requests).toHaveLength(1)
+    expect(observed).toMatchObject({
+      sessionID,
+      agent: "build",
+      model: { providerID: "fake", id: "fake-model" },
+      error: { type: "provider.transport", message: "Provider unavailable" },
+      attempt: 2,
+      decision: { retry: false },
+    })
+    expect(yield* recordedEventTypes(sessionID)).not.toContain("session.retry.scheduled.1")
+  })
+
+  scenario("allows session retry hooks to retry a terminal provider failure", function* (s) {
+    yield* s.hooks.register("session", "retry", (event) =>
+      Effect.sync(() => {
+        expect(event.decision).toEqual({ retry: false })
+        event.decision = { retry: true, delay: 0 }
+      }),
+    )
+    yield* s.admit("Retry invalid request")
+    yield* s.llm.push(Stream.fail(invalidRequest()), TestLLM.text("Recovered", "forced-retry-success"))
+
+    yield* s.resume
+
+    expect(s.requests).toHaveLength(2)
+    expect(yield* s.context).toMatchObject([
+      Expected.user("Retry invalid request"),
+      Expected.assistant({ finish: "stop" }, [Expected.text("Recovered")]),
+    ])
+  })
+
+  scenario("uses the final session retry hook delay", function* (s) {
+    yield* s.hooks.register("session", "retry", (event) =>
+      Effect.sync(() => {
+        event.decision = { retry: true, delay: 10_000 }
+      }),
+    )
+    yield* s.hooks.register("session", "retry", (event) =>
+      Effect.sync(() => {
+        expect(event.decision).toEqual({ retry: true, delay: 10_000 })
+        event.decision = { retry: true, delay: 5_000 }
+      }),
+    )
+    yield* s.admit("Use custom retry delay")
+    yield* s.llm.push(Stream.fail(providerUnavailable()), TestLLM.text("Recovered", "hook-delay-success"))
+    const scheduled = yield* subscribeRetries(s)
+
+    const run = yield* s.resume.pipe(Effect.forkChild)
+    yield* Queue.take(scheduled)
+    yield* TestClock.adjust("4999 millis")
+    expect(s.requests).toHaveLength(1)
+    yield* TestClock.adjust("1 millis")
+    yield* Fiber.join(run)
+
+    expect(s.requests).toHaveLength(2)
+    const assistant = requireAssistant(yield* s.context)
+    expect(assistant.retry).toBeUndefined()
   })
 
   scenario("does not start another physical attempt after interruption during retry backoff", function* (s) {
