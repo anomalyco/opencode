@@ -67,6 +67,17 @@ const liveIt = testEffect(
     ],
   ),
 )
+const projectIt = testEffect(
+  AppNodeBuilder.build(
+    LayerNode.group([Database.node, Bus.node, Project.node, SessionProjector.node, SessionStore.node, Session.node]),
+    [
+      [Bus.node, Bus.configured({ persist: true })],
+      // Project adoption needs plain-prompt admission, not live plugin/provider startup.
+      [LocationServiceMap.node, promptLocationLayer],
+      [SessionExecution.node, SessionExecution.noopLayer],
+    ],
+  ),
+)
 const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
 const id = Session.ID.create()
 
@@ -119,7 +130,7 @@ describe("Session.create", () => {
     ),
   )
 
-  liveIt.live("follows the directory's project identity established after creation", () =>
+  projectIt.live("follows the directory's project identity established after creation", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
         const session = yield* Session.Service
