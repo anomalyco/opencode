@@ -1637,6 +1637,23 @@ export interface PtyApi<E = never> {
   readonly connect: { readonly token: PtyConnectTokenOperation<E> }
 }
 
+export type ExperimentalTerminalReadInput = { readonly sessionID: Session.ID; readonly lines?: number | undefined }
+export type ExperimentalTerminalReadOutput = {
+  readonly ptyID: Pty.ID
+  readonly title: string
+  readonly cwd: string
+  readonly foregroundProcess: string | null
+  readonly screen: {
+    readonly text: string
+    readonly cols: number
+    readonly rows: number
+    readonly cursor: { readonly x: number; readonly y: number }
+  }
+} | null
+export type ExperimentalTerminalReadOperation<E = never> = (
+  input: ExperimentalTerminalReadInput,
+) => Effect.Effect<ExperimentalTerminalReadOutput, E>
+
 export type ExperimentalPersistentPtyListInput = { readonly sessionID: Session.ID }
 export type ExperimentalPersistentPtyListOutput = ReadonlyArray<{
   readonly id: Pty.ID
@@ -1784,6 +1801,7 @@ export type ExperimentalPersistentPtyConnectTokenOperation<E = never> = (
 ) => Effect.Effect<ExperimentalPersistentPtyConnectTokenOutput, E>
 
 export interface ExperimentalApi<E = never> {
+  readonly terminal: { readonly read: ExperimentalTerminalReadOperation<E> }
   readonly persistentPty: {
     readonly list: ExperimentalPersistentPtyListOperation<E>
     readonly create: ExperimentalPersistentPtyCreateOperation<E>

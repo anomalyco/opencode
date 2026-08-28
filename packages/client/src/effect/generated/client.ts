@@ -198,6 +198,8 @@ import type {
   PtyRemoveOutput,
   PtyConnectTokenInput,
   PtyConnectTokenOutput,
+  ExperimentalTerminalReadInput,
+  ExperimentalTerminalReadOutput,
   ExperimentalPersistentPtyListInput,
   ExperimentalPersistentPtyListOutput,
   ExperimentalPersistentPtyCreateInput,
@@ -1233,6 +1235,15 @@ const adaptGroupPty = (raw: RawClient["server.pty"]) => ({
   connect: { token: EndpointPtyConnectToken(raw) },
 })
 
+const EndpointExperimentalTerminalRead =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalTerminalReadInput) =>
+    preserveEffect<ExperimentalTerminalReadOutput>()(
+      raw["terminal.read"]({ params: { sessionID: input["sessionID"] }, query: { lines: input["lines"] } }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
 const EndpointExperimentalPersistentPtyList =
   (raw: RawClient["server.experimental"]) => (input: ExperimentalPersistentPtyListInput) =>
     preserveEffect<ExperimentalPersistentPtyListOutput>()(
@@ -1320,6 +1331,7 @@ const EndpointExperimentalPersistentPtyConnectToken =
     )
 
 const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
+  terminal: { read: EndpointExperimentalTerminalRead(raw) },
   persistentPty: {
     list: EndpointExperimentalPersistentPtyList(raw),
     create: EndpointExperimentalPersistentPtyCreate(raw),

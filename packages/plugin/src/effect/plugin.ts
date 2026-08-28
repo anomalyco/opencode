@@ -1,4 +1,4 @@
-import type { GenerateApi, PluginApi } from "@opencode-ai/client/effect/api"
+import type { ExperimentalApi, GenerateApi, PluginApi } from "@opencode-ai/client/effect/api"
 import type { Location } from "@opencode-ai/schema/location"
 import type { Effect, Scope } from "effect"
 import type { PluginOptions } from "../options.js"
@@ -30,6 +30,7 @@ export interface Context {
   readonly catalog: CatalogDomain
   readonly command: CommandDomain
   readonly event: EventDomain
+  readonly experimental: Pick<ExperimentalApi<unknown>, "terminal">
   readonly integration: IntegrationDomain
   readonly mcp: MCPDomain
   readonly generate: GenerateApi<unknown>

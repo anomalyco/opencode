@@ -194,6 +194,8 @@ import type {
   PtyRemoveOutput,
   PtyConnectTokenInput,
   PtyConnectTokenOutput,
+  ExperimentalTerminalReadInput,
+  ExperimentalTerminalReadOutput,
   ExperimentalPersistentPtyListInput,
   ExperimentalPersistentPtyListOutput,
   ExperimentalPersistentPtyCreateInput,
@@ -1682,6 +1684,20 @@ export function make(options: ClientOptions) {
       },
     },
     experimental: {
+      terminal: {
+        read: (input: ExperimentalTerminalReadInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalTerminalReadOutput }>(
+            {
+              method: "GET",
+              path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/terminal/read`,
+              query: { lines: input["lines"] },
+              successStatus: 200,
+              declaredStatuses: [503, 401, 400],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+      },
       persistentPty: {
         list: (input: ExperimentalPersistentPtyListInput, requestOptions?: RequestOptions) =>
           request<{ readonly data: ExperimentalPersistentPtyListOutput }>(
