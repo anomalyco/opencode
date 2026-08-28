@@ -748,8 +748,17 @@ async function loadDirectorySnapshot(sdk: OpencodeClient, directory: string) {
       ProviderV2.ID,
       Provider.Info
     >
+    const defaultAgent = agents.find((agent) => agent.mode === "primary" && agent.hidden !== true)
+    const defaultAgentModel = defaultAgent?.model
+      ? providers[ProviderV2.ID.make(defaultAgent.model.providerID)]?.models[ModelV2.ID.make(defaultAgent.model.modelID)]
+        ? {
+            providerID: ProviderV2.ID.make(defaultAgent.model.providerID),
+            modelID: ModelV2.ID.make(defaultAgent.model.modelID),
+          }
+        : undefined
+      : undefined
     const defaultModelStarted = performance.now()
-    const defaultModel = defaultModelFromConfig(configResponse?.data?.model, providers)
+    const defaultModel = defaultAgentModel ?? defaultModelFromConfig(configResponse?.data?.model, providers)
     ACPProfile.duration("acp.directory.defaultModel.resolve", defaultModelStarted, { configured: !!defaultModel })
     const modes = agents
       .filter((agent) => agent.mode !== "subagent" && agent.hidden !== true)
@@ -775,7 +784,7 @@ async function loadDirectorySnapshot(sdk: OpencodeClient, directory: string) {
       directory,
       providers,
       modes,
-      defaultModeID: agents.find((agent) => agent.mode === "primary" && agent.hidden !== true)?.name ?? "build",
+      defaultModeID: defaultAgent?.name ?? "build",
       commands: commands.toSorted((a, b) => a.name.localeCompare(b.name)),
       ...(defaultModel ? { defaultModel } : {}),
     })

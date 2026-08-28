@@ -731,6 +731,46 @@ describe("ACP service sessions", () => {
     expect(result.configOptions?.find((option) => option.id === "model")?.currentValue).toBe("test/configured-model")
   })
 
+  it("prefers the default agent's assigned model over the configured model", async () => {
+    const sdk = {
+      config: {
+        providers: () => Promise.resolve({ data: { providers: [provider], default: { test: modelID } } }),
+        get: () => Promise.resolve({ data: { model: "test/configured-model" } }),
+      },
+      app: {
+        agents: () =>
+          Promise.resolve({
+            data: [
+              {
+                name: "build",
+                mode: "primary",
+                permission: [],
+                options: {},
+                model: { providerID: "test", modelID: "second-model" },
+              },
+            ],
+          }),
+        skills: () => Promise.resolve({ data: [] }),
+      },
+      command: {
+        list: () => Promise.resolve({ data: [] }),
+      },
+      session: {
+        create: (input: { model?: { id?: string } }) => Promise.resolve({ data: { id: input.model?.id } }),
+        list: () => Promise.resolve({ data: [] }),
+      },
+      mcp: {
+        add: () => Promise.resolve({ data: {} }),
+      },
+    } as unknown as OpencodeClient
+    const service = ACPService.make({ sdk })
+
+    const result = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+
+    expect(result.sessionId).toBe("second-model")
+    expect(result.configOptions?.find((option) => option.id === "model")?.currentValue).toBe("test/second-model")
+  })
+
   it("does not scan last-used sessions when resolving the new session default", async () => {
     const historyCalls: string[] = []
     const sdk = {
