@@ -72,7 +72,9 @@ const hostedContent = (result: ToolResultValue): NonEmptyContent => {
  * concurrently without a lock. Two rules keep that safe, and every method must preserve
  * them. (1) Commit state marks synchronously before the first await: never a yield
  * between a check (`tool.settled`, `stepStarted`, ...) and its mark, so check-and-mark
- * stays atomic under cooperative scheduling. (2) Never require a cross-source event
+ * stays atomic under cooperative scheduling. Provider-event publication remains
+ * uninterruptible through its writes so cancellation cannot strand a mark without
+ * its durable event. (2) Never require a cross-source event
  * order: each publishing fiber is sequential, so per-source order holds by construction,
  * and consumers fold by id/ordinal rather than global position.
  */
@@ -533,7 +535,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
         yield* failAssistant({ type: "provider.unknown", message: event.message })
         return
     }
-  })
+  }, Effect.uninterruptible)
 
   const publishTraced = Effect.fn("SessionRunner.publishLLMEvent")(publish)
 
