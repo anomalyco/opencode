@@ -3,6 +3,7 @@ export * as Mcp from "./index.js"
 import { Mcp } from "@opencode-ai/schema/mcp"
 import { McpEvent } from "@opencode-ai/schema/mcp-event"
 import { ephemeral } from "@opencode-ai/schema/event"
+import type { Session } from "@opencode-ai/schema/session"
 import { createHash } from "node:crypto"
 import { isDeepStrictEqual } from "node:util"
 import { Cause, Context, Effect, Exit, FiberSet, Latch, Layer, Schema, Scope, Stream, Types } from "effect"
@@ -153,6 +154,7 @@ export interface Interface extends State.Transformable<Draft> {
     readonly server: ServerName | string
     readonly name: string
     readonly args?: Record<string, unknown>
+    readonly sessionID?: Session.ID
   }) => Effect.Effect<ToolResult, NotFoundError | ToolCallError>
   readonly instructions: () => Effect.Effect<ServerInstructions[]>
   readonly prompts: () => Effect.Effect<Prompt[]>
@@ -762,7 +764,7 @@ export const layer = (options?: Options) =>
               message: "MCP server is not connected",
             })
           const result = yield* target.entry.client
-            .callTool({ name: input.name, args: input.args })
+            .callTool({ name: input.name, args: input.args, sessionID: input.sessionID })
             .pipe(
               Effect.mapError(
                 (error) => new ToolCallError({ server: target.name, tool: input.name, message: error.message }),

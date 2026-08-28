@@ -49,6 +49,7 @@ import { executeTool, toolDefinitions, toolIdentity, waitForTool } from "./lib/t
 let assertion: Deferred.Deferred<Permission.AssertInput> | undefined
 let decision: Effect.Effect<void, Permission.Error> = Effect.void
 let calls = 0
+let invocations: Array<Parameters<Mcp.Interface["callTool"]>[0]> = []
 
 type ResourcePage = {
   items: Array<{ name: string; uri: string; description?: string; mimeType?: string }>
@@ -83,6 +84,12 @@ function resourceServer(
         resourceLists: 0,
         templateLists: 0,
         toolLists: 0,
+        toolCalls: [] as Array<{
+          name: string
+          arguments: Record<string, unknown> | undefined
+          sessionID: unknown
+          progressToken: unknown
+        }>,
         initializations: 0,
         urls: [] as string[],
       }
@@ -130,6 +137,17 @@ function resourceServer(
             content: [{ type: "text", text: JSON.stringify(result) }],
             structuredContent: result,
           }
+        })
+      }
+      if (!input.emptyElicitation && !input.urlElicitation) {
+        protocol.setRequestHandler(CallToolRequestSchema, (request) => {
+          state.toolCalls.push({
+            name: request.params.name,
+            arguments: request.params.arguments,
+            sessionID: request.params._meta?.sessionID,
+            progressToken: request.params._meta?.progressToken,
+          })
+          return Promise.resolve({ content: [] })
         })
       }
       if (input.resources !== false) {
@@ -313,6 +331,7 @@ const mcp = Layer.mock(Mcp.Service, {
   callTool: (input) =>
     Effect.sync(() => {
       calls += 1
+      invocations.push(input)
       if (input.name === "fail")
         return new Mcp.ToolResult({
           server: Mcp.ServerName.make(input.server),
@@ -378,6 +397,43 @@ describe("MCP errors", () => {
 test("MCP tool names match V1 sanitization", () => {
   expect(McpTool.namespace("context 7")).toBe("context_7")
   expect(McpTool.name("context 7", "resolve.library/id")).toBe("context_7_resolve_library_id")
+})
+
+test("passes session IDs as MCP request metadata", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const server = yield* resourceServer()
+        const connection = yield* connect(
+          "session-metadata",
+          new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false }),
+          import.meta.dir,
+        )
+        yield* connection.callTool({
+          name: "echo",
+          args: { text: "hello" },
+          sessionID: Session.ID.make("ses_mcp_metadata"),
+        })
+        yield* connection.callTool({ name: "echo" })
+
+        expect(server.state.toolCalls).toEqual([
+          {
+            name: "echo",
+            arguments: { text: "hello" },
+            sessionID: "ses_mcp_metadata",
+            progressToken: expect.any(Number),
+          },
+          {
+            name: "echo",
+            arguments: {},
+            sessionID: undefined,
+            progressToken: expect.any(Number),
+          },
+        ])
+        expect(server.state.toolCalls[0]?.progressToken).not.toBe(server.state.toolCalls[1]?.progressToken)
+      }),
+    ),
+  )
 })
 
 test("preserves output schema validation across paginated tool discovery", async () => {
@@ -1607,6 +1663,54 @@ it.effect("advertises MCP output schemas to Code Mode", () =>
     ])
     expect(toolSet.codeModeCatalog?.find((tool) => tool.path === "demo.search")?.signature).toContain("ok: boolean")
     expect(execute?.description).not.toContain("tools.demo.search")
+  }),
+)
+
+it.effect("forwards the invoking session through direct and Code Mode MCP tools", () =>
+  Effect.gen(function* () {
+    assertion = yield* Deferred.make<Permission.AssertInput>()
+    decision = Effect.void
+    invocations = []
+    const registry = yield* Tool.Service
+    const registration = yield* McpTool.Service
+    yield* registration.flush
+    const toolSet = yield* registry.snapshot()
+
+    expect(toolSet.definitions.find((tool) => tool.name === "direct_lookup")?.inputSchema).not.toHaveProperty(
+      "properties.sessionID",
+    )
+    expect(toolSet.codeModeCatalog?.find((tool) => tool.path === "demo.search")?.signature).not.toContain("sessionID")
+
+    const directSessionID = Session.ID.make("ses_mcp_direct")
+    yield* toolSet.execute({
+      sessionID: directSessionID,
+      ...toolIdentity,
+      call: { type: "tool-call", id: "call_mcp_direct", name: "direct_lookup", input: {} },
+    })
+    expect(invocations[0]).toEqual({
+      server: "direct",
+      name: "lookup",
+      args: {},
+      sessionID: directSessionID,
+    })
+
+    const codeModeSessionID = Session.ID.make("ses_mcp_codemode")
+    yield* toolSet.execute({
+      sessionID: codeModeSessionID,
+      ...toolIdentity,
+      call: {
+        type: "tool-call",
+        id: "call_mcp_codemode",
+        name: "execute",
+        input: { code: "return await tools.demo.search({})" },
+      },
+    })
+    expect(invocations[1]).toEqual({
+      server: "demo",
+      name: "search",
+      args: {},
+      sessionID: codeModeSessionID,
+    })
   }),
 )
 

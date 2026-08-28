@@ -26,6 +26,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js"
 import { Cause, Effect, Exit, Schema } from "effect"
 import { ConfigMCP } from "@opencode-ai/schema/config/mcp"
+import type { Session } from "@opencode-ai/schema/session"
 import { McpStdio } from "./stdio.js"
 
 const DEFAULT_STARTUP_TIMEOUT = 30_000
@@ -156,6 +157,7 @@ export interface Connection {
   readonly callTool: (input: {
     readonly name: string
     readonly args?: Record<string, unknown>
+    readonly sessionID?: Session.ID
   }) => Effect.Effect<CallToolResult, Error>
   readonly onClose: (callback: () => void) => void
   /** Registers a callback fired when the server emits an MCP logging notification. */
@@ -396,7 +398,11 @@ export const connect = Effect.fnUntraced(function* (
         Effect.tryPromise({
           try: (signal) =>
             client.callTool(
-              { name: input.name, arguments: input.args ?? {} },
+              {
+                name: input.name,
+                arguments: input.args ?? {},
+                ...(input.sessionID === undefined ? {} : { _meta: { sessionID: input.sessionID } }),
+              },
               CallToolResultSchema,
               // Keep progress tokens available while enforcing a hard wall-clock execution timeout.
               { signal, timeout: executionTimeout, onprogress: () => {} },
