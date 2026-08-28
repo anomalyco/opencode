@@ -48,7 +48,7 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
       continue
     }
 
-    const plugin = yield* PluginModule.load(operation, { refresh: true }).pipe(
+    const plugin = yield* PluginModule.load(operation).pipe(
       Effect.catchCause((cause) =>
         Effect.logWarning("failed to load plugin", { target: operation.target, cause }).pipe(
           Effect.as({ error: Cause.pretty(cause) }),
@@ -78,6 +78,9 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
       ...post.filter((plugin) => enabled.has(plugin.id)),
     ],
     failures: [...failures.values()],
+    refreshes: [...packages.entries()].flatMap(([target, plugin]) =>
+      !path.isAbsolute(target) && enabled.has(plugin.id) ? [target] : [],
+    ),
   }
 })
 
@@ -89,6 +92,7 @@ export const layer = Layer.effect(
     const instance = yield* InstancePlugins.Service
     const sources = yield* ConfigPluginSource.Service
     const bus = yield* Bus.Service
+    const npm = yield* Npm.Service
     const ready = yield* Latch.make()
     let observed = 0
 
@@ -113,6 +117,18 @@ export const layer = Layer.effect(
       const resolved = yield* resolve(pre, post, operations)
       // Replace the active generation in one scoped, batched activation.
       yield* registry.activate(resolved.plugins, resolved.failures)
+      if (resolved.refreshes.length) {
+        yield* Effect.forEach(
+          resolved.refreshes,
+          (target) =>
+            npm
+              .add(target, { subpaths: ["server", ""], refresh: true })
+              .pipe(
+                Effect.catchCause((cause) => Effect.logWarning("failed to refresh package plugin", { target, cause })),
+              ),
+          { concurrency: "unbounded", discard: true },
+        ).pipe(Effect.forkDetach)
+      }
     })
     const updates = Stream.merge(sources.changes(), bus.subscribe([Event.Updated, SdkPlugins.Updated])).pipe(
       // Make accepted work visible to flush before coalescing the burst.
