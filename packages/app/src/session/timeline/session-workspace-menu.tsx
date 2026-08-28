@@ -1,6 +1,6 @@
 import { Menu } from "@opencode-ai/ui/menu"
 import { Icon } from "@opencode-ai/ui/icon"
-import { getDirectory, getFilename } from "@opencode-ai/util/path"
+import { getFilename } from "@opencode-ai/util/path"
 import { createStore } from "solid-js/store"
 import { createSignal, For, Show, type ComponentProps, type JSX } from "solid-js"
 import type { Project } from "@/runtime/server/types"
@@ -11,6 +11,7 @@ import { useSettingsDialog } from "@/settings/command"
 import { pathKey } from "@/workspaces/path-key"
 import { showToast } from "@/shell/notifications/toast"
 import { containsDirectory, sameDirectory, workspaceDirectories } from "@/workspaces/paths"
+import { createWorktree } from "@/workspaces/create"
 
 export function SessionWorkspaceMenu(props: {
   eligible?: boolean
@@ -55,7 +56,14 @@ export function SessionWorkspaceMenu(props: {
     setStore("selected", selection)
 
     try {
-      const destination = selection === "create" ? await createWorkspace(props.project, sdk) : selection
+      const destination =
+        selection === "create"
+          ? await createWorktree({
+              api: sdk.api,
+              directory: props.directory,
+              project: data.location.info({ directory: props.directory })?.project,
+            })
+          : selection
       if (!destination) return
 
       await sdk.api.session.move({ sessionID, directory: destination })
@@ -123,14 +131,4 @@ export function SessionWorkspaceMenu(props: {
       </Menu.Portal>
     </Menu>
   )
-}
-
-async function createWorkspace(project: Project, serverSDK: ReturnType<typeof useServerSDK>) {
-  const created = await serverSDK.api.worktree.create({
-    projectID: project.id,
-    strategy: "git",
-    directory: getDirectory(project.worktree),
-  })
-  await serverSDK.api.location.get({ location: { directory: created.directory } })
-  return created.directory
 }

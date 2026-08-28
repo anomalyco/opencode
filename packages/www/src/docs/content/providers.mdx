@@ -38,6 +38,70 @@ The `providers` object is keyed by provider ID. Each provider accepts these fiel
 | `body`     | JSON fields merged into request bodies.                         |
 | `models`   | Models to add or override, keyed by catalog model ID.           |
 
+## Azure OpenAI and Microsoft Foundry
+
+Azure supports either an API key or your existing Microsoft Entra ID session from the Azure CLI.
+
+1. Install the [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli) and sign in:
+
+   ```bash
+   az login
+   ```
+
+   If the resource belongs to another tenant or subscription, select them first:
+
+   ```bash
+   az login --tenant TENANT_ID
+   az account set --subscription NAME_OR_ID
+   ```
+
+2. Find your Azure resource name in the [Azure portal](https://portal.azure.com/) or
+   [Microsoft Foundry](https://ai.azure.com/): open the Azure OpenAI or Foundry resource and copy its **Resource name**.
+   It is also the first part of the endpoint: `my-models` in `https://my-models.openai.azure.com/` or
+   `https://my-models.services.ai.azure.com/`.
+
+   If your identity can list resources, the Azure CLI can display the names and resource groups:
+
+   ```bash
+   az cognitiveservices account list \
+     --query "[].{name:name,resourceGroup:resourceGroup}" \
+     --output table
+   ```
+
+3. In OpenCode, run `/connect`, select **Azure**, and choose **Microsoft Entra ID (Azure CLI)**. OpenCode lists the Azure
+   resources visible to your active CLI session, including their resource groups. Select one, or choose **Type your own
+   answer** to enter a resource name that is not listed. If resource listing is unavailable, OpenCode asks for the name
+   directly. If `AZURE_RESOURCE_NAME` is already set, OpenCode uses it without prompting.
+
+4. Select a deployed model with `/models`.
+
+OpenCode discovers successful model deployments from the active Azure subscription and refreshes access tokens through your
+Azure CLI session. Set `AZURE_RESOURCE_GROUP` when you already know the resource group and want to skip subscription-wide
+resource discovery.
+
+Listing deployments requires Azure management permissions, which are separate from inference permissions. If your identity
+cannot list deployments, the Azure model catalog remains available. Select a model whose name matches the deployment, or
+configure the deployment name explicitly:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "azure": {
+      "models": {
+        "gpt-5-mini": {
+          "modelID": "gpt-production",
+        },
+      },
+    },
+  },
+}
+```
+
+Your identity needs the **Cognitive Services OpenAI User** role for Azure OpenAI models or the **Cognitive Services User**
+role for other Foundry models. If a request fails because the token belongs to another tenant, sign in again with
+`az login --tenant TENANT_ID`.
+
 ## Endpoint
 
 Override `settings.baseURL` to send an existing provider through a proxy or compatible endpoint. Its existing package,
