@@ -1,4 +1,4 @@
-import { Effect, Layer, Stream } from "effect"
+import { Effect, Layer } from "effect"
 import { Config } from "@opencode-ai/core/config"
 import { Location } from "@opencode-ai/core/location"
 import { Mcp } from "@opencode-ai/core/mcp/index"
