@@ -168,9 +168,9 @@ describe("util.effect-flock", () => {
       yield* Effect.scoped(
         Effect.gen(function* () {
           yield* flock.acquire("eflock:heartbeat", dir, { staleMs: 300 })
-          yield* Effect.promise(() => sleep(150))
+          yield* Effect.sleep(150)
           const first = yield* Effect.promise(() => fs.stat(heartbeat))
-          yield* Effect.promise(() => sleep(250))
+          yield* Effect.sleep(250)
           const second = yield* Effect.promise(() => fs.stat(heartbeat))
 
           expect(second.mtimeMs).toBeGreaterThan(first.mtimeMs)
