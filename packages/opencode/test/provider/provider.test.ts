@@ -1380,6 +1380,29 @@ it.instance(
   },
 )
 
+it.instance(
+  "config provider npm override propagates to inherited models",
+  Effect.gen(function* () {
+    yield* set("OPENAI_API_KEY", "test-api-key")
+    const providers = yield* list
+    expect(providers[ProviderV2.ID.openai]).toBeDefined()
+    // An inherited model (not declared in config) should pick up the
+    // config-level provider npm override, not keep the models.dev default.
+    const model = providers[ProviderV2.ID.openai].models["gpt-4o"]
+    expect(model).toBeDefined()
+    expect(model.api.npm).toBe("@ai-sdk/anthropic")
+  }),
+  {
+    config: {
+      provider: {
+        openai: {
+          npm: "@ai-sdk/anthropic",
+        },
+      },
+    },
+  },
+)
+
 test("mode options and cost are derived from the base model", () => {
   const provider = {
     id: "openai",
