@@ -116,6 +116,21 @@ describe("toSessionError", () => {
     })
   })
 
+  test("preserves native tool messages and nested causes without changing classification", () => {
+    expect(
+      toSessionError(
+        new Tool.Error({
+          message: "Request failed",
+          error: new Error("fetch failed", { cause: new Error("Connection refused") }),
+        }),
+      ),
+    ).toEqual({ type: "unknown", message: "Request failed\nfetch failed\nConnection refused" })
+    expect(toSessionError(new Tool.Error({ message: "Request failed", error: new Error() }))).toEqual({
+      type: "tool.execution",
+      message: "Request failed",
+    })
+  })
+
   test("preserves unresolved provider endpoint errors", () => {
     const error = new ModelResolver.UnresolvedProviderVariablesError({
       providerID: Provider.ID.make("cloudflare-workers-ai"),

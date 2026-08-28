@@ -5,15 +5,15 @@ import { CodeMode, Tool, toolError } from "../src/index.js"
 const run = (tool: Tool.Tool<never>) =>
   Effect.runPromise(CodeMode.make({ tools: { host: { call: tool } } }).execute("return await tools.host.call({})"))
 
-class UnsafeHostError extends Schema.TaggedError<UnsafeHostError>()("UnsafeHostError", {
-  reason: Schema.String,
+class HostError extends Schema.TaggedError<HostError>()("HostError", {
+  message: Schema.String,
 }) {}
 
 describe("CodeMode host failure boundary", () => {
-  test("preserves explicit safe tool failures", async () => {
+  test("preserves explicit tool failures", async () => {
     const result = await run(
       Tool.make({
-        description: "Fail safely",
+        description: "Fail",
         input: Schema.Struct({}),
         output: Schema.String,
         execute: () => Effect.fail(toolError("Authorized request was refused")),
@@ -26,10 +26,10 @@ describe("CodeMode host failure boundary", () => {
     })
   })
 
-  test("does not rewrite explicit safe tool failures", async () => {
+  test("does not rewrite explicit tool failures", async () => {
     const result = await run(
       Tool.make({
-        description: "Fail safely",
+        description: "Fail",
         input: Schema.Struct({}),
         output: Schema.String,
         execute: () => Effect.fail(toolError("File not found: /tmp/report.json")),
@@ -42,10 +42,15 @@ describe("CodeMode host failure boundary", () => {
     })
   })
 
-  test("sanitizes unknown host failures and defects", async () => {
+  test("preserves host failures, defects, and rejected Promises", async () => {
     for (const failure of [
-      Effect.fail(new UnsafeHostError({ reason: "Authorization: Bearer typed-secret" })),
-      Effect.die(new Error("postgres://user:defect-secret@example.invalid")),
+      Effect.fail(new HostError({ message: "Connection refused" })),
+      Effect.fail("Connection refused"),
+      Effect.fail({ message: "Connection refused" }),
+      Effect.die(new Error("Connection refused")),
+      Effect.promise(async () => {
+        throw new Error("Connection refused")
+      }),
     ]) {
       const result = await run(
         Tool.make({
@@ -56,33 +61,55 @@ describe("CodeMode host failure boundary", () => {
         }),
       )
 
-      expect(result.ok ? undefined : result.error).toStrictEqual({
-        kind: "ToolFailure",
-        message: "Tool execution failed",
-      })
-      expect(JSON.stringify(result)).not.toMatch(/typed-secret|defect-secret|Authorization: Bearer/)
+      expect(result).toMatchObject({ ok: false, error: { kind: "ToolFailure" } })
+      if (result.ok) return
+      expect(result.error.message).toContain("Connection refused")
+      expect(result.error.message).not.toContain("Tool execution failed")
     }
   })
 
-  test("sanitizes invalid host output", async () => {
-    const secret = "invalid-output-secret"
+  test("preserves nested and combined error messages", async () => {
+    for (const failure of [
+      Effect.die(new Error("Request failed", { cause: new Error("Connection refused") })),
+      Effect.fail(toolError("Request failed", new Error("Connection refused"))),
+      Effect.die(new AggregateError([new Error("Connection refused")], "Request failed")),
+      Effect.die(new Error("Request failed", { cause: Cause.fail(new Error("Connection refused")) })),
+      Effect.failCause(Cause.combine(Cause.fail(new Error("Request failed")), Cause.die("Connection refused"))),
+    ]) {
+      const result = await run(
+        Tool.make({
+          description: "Fail with multiple messages",
+          input: Schema.Struct({}),
+          output: Schema.String,
+          execute: () => failure,
+        }),
+      )
+
+      expect(result).toMatchObject({ ok: false, error: { kind: "ToolFailure" } })
+      if (result.ok) return
+      expect(result.error.message).toContain("Request failed")
+      expect(result.error.message).toContain("Connection refused")
+    }
+  })
+
+  test("reports invalid host output with schema details", async () => {
     const result = await run(
       Tool.make({
         description: "Return invalid output",
         input: Schema.Struct({}),
-        output: Schema.Struct({ safe: Schema.String }),
-        execute: () => Effect.succeed({ safe: 1, secret } as unknown as { readonly safe: string }),
+        output: Schema.Struct({ value: Schema.String }),
+        execute: () => Effect.succeed({ value: 1 } as unknown as { readonly value: string }),
       }),
     )
 
-    expect(result.ok ? undefined : result.error).toStrictEqual({
-      kind: "InvalidToolOutput",
-      message: "Invalid output from tool 'host.call'.",
-    })
-    expect(JSON.stringify(result)).not.toMatch(/invalid-output-secret/)
+    expect(result).toMatchObject({ ok: false, error: { kind: "InvalidToolOutput" } })
+    if (result.ok) return
+    expect(result.error.message).toContain("Invalid output from tool 'host.call'")
+    expect(result.error.message).toContain("Expected string")
+    expect(result.error.message).toContain("value")
   })
 
-  test("sanitizes host output that throws while being copied", async () => {
+  test("reports host output copying errors", async () => {
     const result = await run(
       Tool.make({
         description: "Return hostile output",
@@ -94,7 +121,7 @@ describe("CodeMode host failure boundary", () => {
               {},
               {
                 ownKeys: () => {
-                  throw new Error("host-output-secret")
+                  throw new Error("Cannot enumerate output")
                 },
               },
             ),
@@ -102,11 +129,10 @@ describe("CodeMode host failure boundary", () => {
       }),
     )
 
-    expect(result.ok ? undefined : result.error).toStrictEqual({
-      kind: "InvalidToolOutput",
-      message: "Invalid output from tool 'host.call'.",
-    })
-    expect(JSON.stringify(result)).not.toMatch(/host-output-secret/)
+    expect(result).toMatchObject({ ok: false, error: { kind: "InvalidToolOutput" } })
+    if (result.ok) return
+    expect(result.error.message).toContain("Invalid output from tool 'host.call'")
+    expect(result.error.message).toContain("Cannot enumerate output")
   })
 
   test("caught tool failures are Error values in-program", async () => {
@@ -118,7 +144,7 @@ describe("CodeMode host failure boundary", () => {
               description: "Refuse",
               input: Schema.Struct({}),
               output: Schema.String,
-              execute: () => Effect.fail(toolError("Refused")),
+              execute: () => Effect.die(new Error("Refused")),
             }),
           },
         },
@@ -229,7 +255,7 @@ describe("CodeMode tool-call observation", () => {
       { phase: "start", index: 0, name: "context.lookup" },
       { phase: "end", index: 0, name: "context.lookup", outcome: "failure", message: "Lookup refused" },
       { phase: "start", index: 0, name: "context.lookup" },
-      { phase: "end", index: 0, name: "context.lookup", outcome: "failure", message: "Tool execution failed" },
+      { phase: "end", index: 0, name: "context.lookup", outcome: "failure", message: "broken" },
     ])
   })
 

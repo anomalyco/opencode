@@ -316,7 +316,10 @@ describe("EditTool", () => {
             ),
           ).toEqual({
             status: "error",
-            error: { type: "permission.rejected", message: "Permission denied: external_directory" },
+            error: {
+              type: "permission.rejected",
+              message: `Unable to edit ${external}\nPermission denied: external_directory`,
+            },
           })
           expect(edit.assertions.map((input) => input.action)).toEqual(["external_directory"])
           expect(edit.reads).toBe(0)
@@ -330,7 +333,7 @@ describe("EditTool", () => {
             ),
           ).toEqual({
             status: "error",
-            error: { type: "permission.rejected", message: "Permission denied: edit" },
+            error: { type: "permission.rejected", message: `Unable to edit ${external}\nPermission denied: edit` },
           })
           expect(deniedEdit.assertions.map((input) => input.action)).toEqual(["external_directory", "edit"])
           expect(deniedEdit.reads).toBe(1)
@@ -364,7 +367,7 @@ describe("EditTool", () => {
 
               expect(matching).toEqual({
                 status: "error",
-                error: { type: "permission.rejected", message: "Permission denied: edit" },
+                error: { type: "permission.rejected", message: "Unable to edit secret.txt\nPermission denied: edit" },
               })
               expect(missing).toEqual(matching)
               expect(edit.assertions.map((input) => input.action)).toEqual(["edit", "edit"])

@@ -12,6 +12,7 @@ import { PluginPromise } from "@opencode-ai/core/plugin/promise"
 import { WebSearch } from "@opencode-ai/core/websearch"
 import { Vcs } from "@opencode-ai/core/vcs"
 import { Session } from "@opencode-ai/core/session"
+import { SessionErrors } from "@opencode-ai/core/session/error"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionInbox } from "@opencode-ai/core/session/inbox"
 import { Tool } from "@opencode-ai/core/tool"
@@ -912,6 +913,80 @@ describe("fromPromise", () => {
       ).toMatchObject({
         output: { output: "Hello", toolCalls: [{ tool: "acme.hello", status: "completed" }] },
       })
+    }),
+  )
+
+  it.effect("reports rejected Promise tool errors through Code Mode", () =>
+    Effect.gen(function* () {
+      const plugins = yield* Plugin.Service
+      const registry = yield* Tool.Service
+      const host = yield* PluginHost.make(plugins)
+      yield* PluginPromise.fromPromise(
+        define({
+          id: "failing-promise-tool",
+          setup: async (ctx) => {
+            await ctx.tool.transform((tools) => {
+              tools.add({
+                name: "create",
+                description: "Create a session",
+                input: Schema.Struct({ failure: Schema.Literals(["schema", "wrapped", "missing"]) }),
+                options: { namespace: "example" },
+                execute: async ({ failure }) => {
+                  if (failure === "wrapped")
+                    throw new Tool.Error({ message: "Request failed", error: new Error("Connection refused") })
+                  if (failure === "missing")
+                    throw new SessionErrors.NotFoundError({ sessionID: Session.ID.make("ses_missing") })
+                  await ctx.session.create({ agent: undefined })
+                  return { content: "unreachable" }
+                },
+              })
+            })
+          },
+        }),
+      ).effect(host)
+
+      const snapshot = yield* registry.snapshot()
+      const input = {
+        sessionID: Session.ID.make("ses_failing_promise_tool"),
+        agent: Agent.ID.make("build"),
+        messageID: SessionMessage.ID.make("msg_failing_promise_tool"),
+        call: {
+          type: "tool-call" as const,
+          id: "call_failing_promise_tool",
+          name: "execute",
+          input: { code: 'return await tools.example.create({ failure: "schema" })' },
+        },
+      }
+      const result = yield* snapshot.execute(input)
+
+      expect(result.metadata).toMatchObject({
+        error: true,
+        toolCalls: [{ tool: "example.create", status: "error" }],
+      })
+      expect(result.content).toEqual([
+        {
+          type: "text",
+          text: expect.stringContaining('Expected string | null\n  at ["agent"]'),
+        },
+      ])
+      const wrapped = yield* snapshot.execute({
+        ...input,
+        call: {
+          ...input.call,
+          id: "call_wrapped_error",
+          input: { code: 'return await tools.example.create({ failure: "wrapped" })' },
+        },
+      })
+      expect(wrapped.content).toEqual([{ type: "text", text: "Request failed\nConnection refused" }])
+      const missing = yield* snapshot.execute({
+        ...input,
+        call: {
+          ...input.call,
+          id: "call_missing_error",
+          input: { code: 'return await tools.example.create({ failure: "missing" })' },
+        },
+      })
+      expect(missing.content).toEqual([{ type: "text", text: "Session.NotFoundError" }])
     }),
   )
 

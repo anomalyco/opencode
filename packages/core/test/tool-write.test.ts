@@ -376,7 +376,10 @@ describe("WriteTool", () => {
             ),
           ).toEqual({
             status: "error",
-            error: { type: "permission.rejected", message: "Permission denied: external_directory" },
+            error: {
+              type: "permission.rejected",
+              message: `Unable to write ${external}\nPermission denied: external_directory`,
+            },
           })
           expect(fixture.assertions.map((input) => input.action)).toEqual(["external_directory"])
           expect(fixture.writes).toEqual([])
@@ -389,7 +392,7 @@ describe("WriteTool", () => {
             ),
           ).toEqual({
             status: "error",
-            error: { type: "permission.rejected", message: "Permission denied: edit" },
+            error: { type: "permission.rejected", message: "Unable to write denied.txt\nPermission denied: edit" },
           })
           expect(deniedEdit.assertions.map((input) => input.action)).toEqual(["edit"])
           expect(deniedEdit.writes).toEqual([])
