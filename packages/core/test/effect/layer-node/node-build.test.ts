@@ -4,11 +4,13 @@ import { Node } from "@opencode-ai/util/effect/app-node"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Location } from "@opencode-ai/core/location"
-import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
+import { Entry, fromMap } from "@opencode-ai/core/instance-map/internal"
+import { InstanceMap } from "@opencode-ai/core/instance-map"
 import type { LocationError, LocationServices } from "@opencode-ai/core/location-services"
 import { Project } from "@opencode-ai/core/project"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { tmpdir } from "../../fixture/tmpdir"
+import { location } from "../../fixture/location"
 
 class Value extends Context.Service<Value, { readonly value: string }>()("test/TagValue") {}
 class Result extends Context.Service<Result, { readonly value: string }>()("test/TagResult") {}
@@ -24,7 +26,7 @@ describe("node build", () => {
     })
     const layer = AppNodeBuilder.build(result)
     const program = Effect.gen(function* () {
-      expect(Option.isNone(yield* Effect.serviceOption(LocationServiceMap.Service))).toBe(true)
+      expect(Option.isNone(yield* Effect.serviceOption(InstanceMap.Service))).toBe(true)
       return (yield* Result).value
     }).pipe(Effect.provide(layer))
 
@@ -34,8 +36,8 @@ describe("node build", () => {
   test("detects cycles through a replaced location service map", async () => {
     const a = Node.makeGlobalNode({
       service: CycleA,
-      layer: Layer.effect(CycleA, Effect.as(LocationServiceMap.Service, CycleA.of({}))),
-      deps: [LocationServiceMap.node],
+      layer: Layer.effect(CycleA, Effect.as(InstanceMap.Service, CycleA.of({}))),
+      deps: [InstanceMap.node],
     })
     const b = Node.makeGlobalNode({
       service: CycleB,
@@ -46,25 +48,19 @@ describe("node build", () => {
       deps: [a],
     })
     const mapLayer = Layer.effect(
-      LocationServiceMap.Service,
+      InstanceMap.Service,
       Effect.gen(function* () {
         const service = yield* CycleB
-        return yield* LayerMap.make(
-          (ref: Location.Ref) =>
-            Layer.succeed(
-              Location.Service,
-              Location.Service.of({
-                directory: ref.directory,
-                workspaceID: ref.workspaceID,
-                project: { id: Project.ID.global, directory: service.directory, canonical: service.directory },
-              }),
-            ),
+        const keyed = yield* LayerMap.make(
+          (entry: Entry) =>
+            Layer.succeed(Location.Service, location(entry.location, { projectDirectory: service.directory })),
           { idleTimeToLive: "1 minute" },
         )
-      }) as unknown as Effect.Effect<LayerMap.LayerMap<Location.Ref, LocationServices, LocationError>, never, CycleB>,
+        return fromMap(keyed as unknown as LayerMap.LayerMap<Entry, LocationServices, LocationError>)
+      }),
     )
-    const map = Node.makeGlobalNode({ service: LocationServiceMap.Service, layer: mapLayer, deps: [b] })
-    expect(() => AppNodeBuilder.build(LayerNode.group([a]), [[LocationServiceMap.node, map]])).toThrow(
+    const map = Node.makeGlobalNode({ service: InstanceMap.Service, layer: mapLayer, deps: [b] })
+    expect(() => AppNodeBuilder.build(LayerNode.group([a]), [[InstanceMap.node, map]])).toThrow(
       "Cycle detected in layer tree",
     )
   })
@@ -84,13 +80,13 @@ describe("node build", () => {
       }),
     )
     const ref = Location.Ref.make({ directory: AbsolutePath.make(tmp.path) })
-    const layer = AppNodeBuilder.build(LayerNode.group([Project.node, LocationServiceMap.node]), [
+    const layer = AppNodeBuilder.build(LayerNode.group([Project.node, InstanceMap.node]), [
       [Project.node, projectLayer],
     ])
     const program = Effect.gen(function* () {
       yield* Project.Service
-      const locations = yield* LocationServiceMap.Service
-      expect(Option.isSome(yield* Effect.serviceOption(LocationServiceMap.Service))).toBe(true)
+      const locations = yield* InstanceMap.Service
+      expect(Option.isSome(yield* Effect.serviceOption(InstanceMap.Service))).toBe(true)
       return yield* Location.Service.pipe(Effect.provide(locations.get(ref)))
     }).pipe(Effect.provide(layer))
 
@@ -116,7 +112,7 @@ describe("node build", () => {
     })
     const serviceLayer = AppNodeBuilder.build(result)
     const program = Effect.gen(function* () {
-      expect(Option.isNone(yield* Effect.serviceOption(LocationServiceMap.Service))).toBe(true)
+      expect(Option.isNone(yield* Effect.serviceOption(InstanceMap.Service))).toBe(true)
       return (yield* Result).value
     }).pipe(Effect.provide(serviceLayer))
 

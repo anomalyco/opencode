@@ -1,7 +1,7 @@
 export * as Session from "./session.js"
 export * from "./session/schema.js"
 
-import { Cause, Effect, Layer, Schema, Context, RcMap, Stream, Scope } from "effect"
+import { Cause, Effect, Layer, Schema, Context, Stream, Scope } from "effect"
 import { ListAnchor } from "@opencode-ai/schema/session"
 import { and, asc, desc, eq, gt, isNull, like, lt, or, type SQL } from "drizzle-orm"
 import { Project } from "./project.js"
@@ -30,7 +30,7 @@ import { SessionExecution } from "./session/execution.js"
 import { SessionModelTransport } from "./session/model-transport.js"
 import { ForkEmptyError, MessageDecodeError, NotFoundError } from "./session/error.js"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
-import { LocationServiceMap } from "./location-service-map.js"
+import { InstanceMap } from "./instance-map.js"
 import { SessionEvent } from "./session/event.js"
 import { SessionInbox } from "./session/inbox.js"
 import { InstructionState } from "./session/instruction-state.js"
@@ -342,7 +342,7 @@ const layer = Layer.effect(
     const global = yield* Global.Service
     const execution = yield* SessionExecution.Service
     const store = yield* SessionStore.Service
-    const locations = yield* LocationServiceMap.Service
+    const locations = yield* InstanceMap.Service
     const fs = yield* FSUtil.Service
     const jobs = yield* Job.Service
     const environments = yield* SessionEnvironment.Service
@@ -350,13 +350,9 @@ const layer = Layer.effect(
     const activeShells = new Set<SessionSchema.ID>()
     const shellLocks = KeyedMutex.makeUnsafe<SessionSchema.ID>()
     const closeTransport = Effect.fn("Session.closeTransport")(function* (session: SessionSchema.Info) {
-      const location = Location.Ref.make({
-        directory: session.location.directory,
-        workspaceID: session.location.workspaceID,
-      })
-      if (!(yield* RcMap.has(locations.rcMap, location))) return
+      if (!(yield* locations.has(session.location))) return
       yield* SessionModelTransport.Service.use((transport) => transport.close(session.id)).pipe(
-        Effect.provide(locations.get(location)),
+        Effect.provide(locations.forSession(session)),
       )
     })
     const isDurableSessionEvent = Schema.is(SessionEvent.Durable)
@@ -658,7 +654,7 @@ const layer = Layer.effect(
               if (existing) return existing
               const item = yield* restore(
                 preparePrompt(input, messageID).pipe(
-                  Effect.provide(locations.get(session.location)),
+                  Effect.provide(locations.forSession(session)),
                   Effect.provideService(FSUtil.Service, fs),
                 ),
               )
@@ -690,7 +686,7 @@ const layer = Layer.effect(
       ),
       generate: Effect.fn("Session.generate")(function* (input) {
         const session = yield* result.get(input.sessionID)
-        const generate = yield* SessionGenerate.Service.pipe(Effect.provide(locations.get(session.location)))
+        const generate = yield* SessionGenerate.Service.pipe(Effect.provide(locations.forSession(session)))
         return yield* generate.generate(input)
       }),
       command: Effect.fn("Session.command")(function* (input) {
@@ -699,7 +695,7 @@ const layer = Layer.effect(
           const plugins = yield* PluginSupervisor.Service
           yield* plugins.flush
           return yield* Command.Service
-        }).pipe(Effect.provide(locations.get(session.location)))
+        }).pipe(Effect.provide(locations.forSession(session)))
         const delivery = input.delivery ?? "steer"
         yield* commands.execute({
           name: input.command,
@@ -733,7 +729,7 @@ const layer = Layer.effect(
                   metadata: { sessionID: input.sessionID },
                 })
                 .pipe(Effect.orDie)
-            }).pipe(Effect.provide(locations.get(session.location)))
+            }).pipe(Effect.provide(locations.forSession(session)))
             yield* bus.publish(
               SessionEvent.Shell.Started,
               {
@@ -756,7 +752,7 @@ const layer = Layer.effect(
                     .pipe(Effect.catchTag("Shell.NotFoundError", () => Effect.succeed(missingShellOutput())))
                 : missingShellOutput()
               return { shell: terminal.info, output }
-            }).pipe(Effect.provide(locations.get(session.location)))
+            }).pipe(Effect.provide(locations.forSession(session)))
             yield* bus.publish(SessionEvent.Shell.Ended, {
               sessionID: input.sessionID,
               shell: completed.shell,
@@ -774,7 +770,7 @@ const layer = Layer.effect(
       }),
       skill: Effect.fn("Session.skill")(function* (input) {
         const session = yield* result.get(input.sessionID)
-        const skills = yield* Skill.Service.pipe(Effect.provide(locations.get(session.location)))
+        const skills = yield* Skill.Service.pipe(Effect.provide(locations.forSession(session)))
         const skill = yield* skills.get(input.skill)
         if (!skill) return yield* new SkillNotFoundError({ skill: input.skill })
         yield* bus.publish(
@@ -969,7 +965,7 @@ const layer = Layer.effect(
               Effect.provideService(Database.Service, database),
               Effect.provideService(Bus.Service, bus),
             )
-          }).pipe(Effect.provide(locations.get(session.location)))
+          }).pipe(Effect.provide(locations.forSession(session)))
         }),
         clear: Effect.fn("Session.revert.clear")(function* (sessionID) {
           const session = yield* result.get(sessionID)
@@ -978,7 +974,7 @@ const layer = Layer.effect(
             const plugins = yield* PluginSupervisor.Service
             yield* plugins.flush
             return yield* SessionRevert.clear(session).pipe(Effect.provideService(Bus.Service, bus))
-          }).pipe(Effect.provide(locations.get(session.location)))
+          }).pipe(Effect.provide(locations.forSession(session)))
           yield* execution.wake(sessionID)
           return revert
         }),
@@ -1222,7 +1218,7 @@ export const node = makeGlobalNode({
     Project.node,
     SessionExecution.node,
     SessionStore.node,
-    LocationServiceMap.node,
+    InstanceMap.node,
     SessionProjector.node,
     FSUtil.node,
     Global.node,

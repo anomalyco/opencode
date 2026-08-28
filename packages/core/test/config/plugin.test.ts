@@ -11,7 +11,7 @@ import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Global } from "@opencode-ai/util/global"
 import { Bus } from "@opencode-ai/core/bus"
 import { Location } from "@opencode-ai/core/location"
-import { LocationServiceMap } from "@opencode-ai/core/location-services"
+import { InstanceMap } from "@opencode-ai/core/location-services"
 import { Plugin } from "@opencode-ai/core/plugin"
 import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
 import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
@@ -25,12 +25,12 @@ import { tempGlobalLayer } from "../fixture/global"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node]), [
+  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SdkPlugins.node, InstanceMap.node]), [
     [Global.node, tempGlobalLayer],
   ]),
 )
 const staticIt = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node]), [
+  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SdkPlugins.node, InstanceMap.node]), [
     [ConfigPluginSource.node, ConfigPluginSource.empty],
     [Global.node, tempGlobalLayer],
   ]),
@@ -480,7 +480,7 @@ function withLocation<A, E, R>(
     Effect.flatMap((tmp) =>
       effect.pipe(
         Effect.scoped,
-        Effect.provide(LocationServiceMap.Service.get(Location.Ref.make({ directory: AbsolutePath.make(tmp.path) }))),
+        Effect.provide(InstanceMap.Service.get(Location.Ref.make({ directory: AbsolutePath.make(tmp.path) }))),
       ),
     ),
   )

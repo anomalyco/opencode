@@ -5,7 +5,7 @@ import { Bus } from "@opencode-ai/core/bus"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Watcher } from "@opencode-ai/core/filesystem/watcher"
-import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
+import { InstanceMap } from "@opencode-ai/core/instance-map"
 import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { PluginRuntime } from "@opencode-ai/core/plugin/runtime"
 import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
@@ -34,7 +34,7 @@ const it = testEffect(
       Bus.node,
       SessionProjector.node,
       Session.node,
-      LocationServiceMap.node,
+      InstanceMap.node,
       PluginRuntime.providerNodeWithCell(runtime),
     ]),
     [
@@ -56,7 +56,7 @@ const setup = Effect.gen(function* () {
   const tmp = yield* project
   const sessions = yield* Session.Service
   const session = yield* sessions.create({ location: { directory: AbsolutePath.make(tmp.path) } })
-  const locations = yield* LocationServiceMap.Service
+  const locations = yield* InstanceMap.Service
   const services = locations.get(session.location)
   const hooks = yield* Effect.gen(function* () {
     const plugins = yield* PluginSupervisor.Service

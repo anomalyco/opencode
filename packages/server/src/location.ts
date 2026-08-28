@@ -1,12 +1,12 @@
 import { Location } from "@opencode-ai/core/location"
-import { LocationServiceMap } from "@opencode-ai/core/location-services"
+import { InstanceMap } from "@opencode-ai/core/location-services"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Workspace } from "@opencode-ai/core/workspace"
 import { Effect, Layer } from "effect"
 import { HttpServerRequest } from "effect/unstable/http"
 import { HttpApiMiddleware } from "effect/unstable/httpapi"
 
-export type LocationServices = Layer.Success<ReturnType<(typeof LocationServiceMap.Service)["get"]>>
+export type LocationServices = Layer.Success<ReturnType<(typeof InstanceMap.Service)["get"]>>
 
 export class LocationMiddleware extends HttpApiMiddleware.Service<LocationMiddleware, { provides: LocationServices }>()(
   "@opencode/HttpApiLocation",
@@ -49,7 +49,7 @@ function decode(input: string) {
 export const layer = Layer.effect(
   LocationMiddleware,
   Effect.gen(function* () {
-    const locations = yield* LocationServiceMap.Service
+    const locations = yield* InstanceMap.Service
     return LocationMiddleware.of((effect) =>
       Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest

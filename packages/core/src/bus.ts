@@ -6,6 +6,7 @@ import type { EventLog } from "@opencode-ai/schema/event-log"
 import { and, asc, eq, gt, lte, sql } from "drizzle-orm"
 import { Database } from "./database/database.js"
 import { EventSequenceTable, EventTable } from "./event/sql.js"
+import type { Instance } from "./instance.js"
 import type { Location } from "@opencode-ai/schema/location"
 import { KeyedMutex } from "./effect/keyed-mutex.js"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
@@ -201,23 +202,23 @@ export function configured(options?: Options) {
         const { db } = yield* Database.Service
         const logReadPageSize = options?.logReadPageSize ?? 512
         const persist = options?.persist ?? false
-        const sessions = new Map<SessionID, Location.Ref>()
+        const sessions = new Map<SessionID, Instance.Key>()
         // Keep routing separate from the public event, and retain its snapshot
         // while a slow subscriber drains events queued before a move or deletion.
-        const routes = new WeakMap<Event.Payload, readonly Location.Ref[]>()
+        const routes = new WeakMap<Event.Payload, readonly Instance.Key[]>()
 
         const isSessionEvent = (event: Event.Payload): event is SessionEvent.Event =>
           Object.hasOwn(SessionEvent.All.cases, event.type)
 
         const prepareRoutes = Effect.fnUntraced(function* (events: readonly Event.Payload[]) {
-          const updates = new Map<SessionID, Location.Ref | undefined>()
-          const resolved = new Map<Event.Payload, readonly Location.Ref[]>()
+          const updates = new Map<SessionID, Instance.Key | undefined>()
+          const resolved = new Map<Event.Payload, readonly Instance.Key[]>()
           for (const event of events) {
             if (!isSessionEvent(event)) continue
             const id = event.data.sessionID
             if (event.type === "session.created") {
-              updates.set(id, event.data.location)
-              resolved.set(event, [event.location ?? event.data.location])
+              updates.set(id, Location.instanceKey(event.data.location))
+              resolved.set(event, [Location.instanceKey(event.location ?? event.data.location)])
               continue
             }
             if (event.location && event.type !== "session.forked" && event.type !== "session.moved") {
@@ -225,38 +226,42 @@ export function configured(options?: Options) {
               continue
             }
             const owner = event.type === "session.forked" ? event.data.parentID : id
-            let ref = updates.has(owner) ? updates.get(owner) : sessions.get(owner)
-            if (!ref && !updates.has(owner)) {
+            let key = updates.has(owner) ? updates.get(owner) : sessions.get(owner)
+            if (!key && !updates.has(owner)) {
               const row = yield* db
                 .select({ directory: SessionTable.directory, workspaceID: SessionTable.workspace_id })
                 .from(SessionTable)
                 .where(eq(SessionTable.id, owner))
                 .get()
                 .pipe(Effect.orDie)
-              ref = row
-                ? { directory: AbsolutePath.make(row.directory), workspaceID: row.workspaceID ?? undefined }
+              key = row
+                ? Location.instanceKey({
+                    directory: AbsolutePath.make(row.directory),
+                    workspaceID: row.workspaceID ?? undefined,
+                  })
                 : undefined
-              updates.set(owner, ref)
+              updates.set(owner, key)
             }
             if (event.type === "session.moved") {
               // Both owners need the transition, even if the producer supplied
               // an envelope location. Later events use only the destination.
-              updates.set(id, event.data.location)
-              resolved.set(event, ref ? [ref, event.data.location] : [event.data.location])
+              const destination = Location.instanceKey(event.data.location)
+              updates.set(id, destination)
+              resolved.set(event, key ? [key, destination] : [destination])
               continue
             }
-            if (event.type === "session.forked") updates.set(id, ref)
-            resolved.set(event, event.location ? [event.location] : ref ? [ref] : [])
+            if (event.type === "session.forked") updates.set(id, key)
+            resolved.set(event, event.location ? [Location.instanceKey(event.location)] : key ? [key] : [])
             if (event.type === "session.deleted") updates.set(id, undefined)
           }
           // Apply only after the projection transaction commits. A failed move
-          // must not redirect events away from the Session's actual location.
+          // must not redirect events away from the Session's actual instance.
           return () => {
-            for (const [id, ref] of updates) {
-              if (ref) sessions.set(id, ref)
+            for (const [id, key] of updates) {
+              if (key) sessions.set(id, key)
               else sessions.delete(id)
             }
-            for (const [event, ref] of resolved) routes.set(event, ref)
+            for (const [event, keys] of resolved) routes.set(event, keys)
           }
         })
 
@@ -736,13 +741,15 @@ export function configured(options?: Options) {
                 Option.match(location, {
                   onNone: () => stream,
                   onSome: (location) => {
-                    const matches = (ref: Location.Ref) =>
-                      ref.directory === location.directory && ref.workspaceID === location.workspaceID
+                    const self = Location.instanceKey(location)
                     return stream.pipe(
                       Stream.filter((event) => {
-                        const refs = routes.get(event)
-                        if (refs) return refs.some(matches)
-                        return !event.location || matches(event.location)
+                        const keys = routes.get(event)
+                        if (keys) return keys.includes(self)
+                        if (!event.location) return true
+                        const key = Location.instanceKey(event.location)
+                        routes.set(event, [key])
+                        return key === self
                       }),
                     )
                   },

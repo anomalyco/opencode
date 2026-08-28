@@ -8,8 +8,9 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Global } from "@opencode-ai/util/global"
 import { Instance } from "@opencode-ai/core/instance"
+import { Entry, fromMap } from "@opencode-ai/core/instance-map/internal"
 import { InstancePlugins } from "@opencode-ai/core/plugin/instance"
-import { LocationServiceMap } from "@opencode-ai/core/location-services"
+import { InstanceMap } from "@opencode-ai/core/location-services"
 import { Location } from "@opencode-ai/core/location"
 import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
@@ -26,24 +27,29 @@ const agentPlugin = (pluginID: string, agentID: string) =>
     effect: (ctx) => ctx.agent.transform((agents) => agents.update(Agent.ID.make(agentID), () => {})),
   })
 
-// A host-owned assignment in miniature: the map decides per ref which plugins
-// an instance is born with, the way an embedder will per Slack thread.
+// The retained location selects construction options without interpreting the key.
 const instances = Layer.effect(
-  LocationServiceMap.Service,
-  LayerMap.make(
-    (ref: Location.Ref) =>
-      Instance.layer(ref, {
-        plugins: path.basename(ref.directory) === "thread-a" ? [agentPlugin("thread-a-plugin", "thread-a-agent")] : [],
-        replacements: [[Global.node, tempGlobalLayer]],
-      }),
-    { idleTimeToLive: Duration.infinity },
+  InstanceMap.Service,
+  Effect.map(
+    LayerMap.make(
+      (entry: Entry) => {
+        const ref = entry.location
+        return Instance.layer(ref, {
+          plugins:
+            path.basename(ref.directory) === "thread-a" ? [agentPlugin("thread-a-plugin", "thread-a-agent")] : [],
+          replacements: [[Global.node, tempGlobalLayer]],
+        })
+      },
+      { idleTimeToLive: Duration.infinity },
+    ),
+    fromMap,
   ),
 )
 
 const it = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node]), [
+  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SdkPlugins.node, InstanceMap.node]), [
     [Global.node, tempGlobalLayer],
-    [LocationServiceMap.node, instances],
+    [InstanceMap.node, instances],
   ]),
 )
 
@@ -55,7 +61,7 @@ describe("InstancePlugins", () => {
     ).pipe(
       Effect.flatMap((dir) =>
         Effect.gen(function* () {
-          const locations = yield* LocationServiceMap.Service
+          const locations = yield* InstanceMap.Service
           const sdk = yield* SdkPlugins.Service
           yield* sdk.register(agentPlugin("global-plugin", "global-agent"))
 

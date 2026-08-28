@@ -17,7 +17,7 @@ import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Global } from "@opencode-ai/util/global"
 import { Location } from "@opencode-ai/core/location"
 import { LocationMutation } from "@opencode-ai/core/location-mutation"
-import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
+import { InstanceMap } from "@opencode-ai/core/instance-map"
 import { Model } from "@opencode-ai/core/model"
 import { Provider } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -148,7 +148,7 @@ const nodes = LayerNode.group([
   Session.node,
   SessionExecution.node,
   PluginRuntime.providerNode,
-  LocationServiceMap.node,
+  InstanceMap.node,
   filesystem,
   FSUtil.node,
   Global.node,
@@ -212,7 +212,7 @@ const withSession = <A, E, R>(directory: string, body: (registry: Tool.Interface
       location,
       model: sessionModel,
     })
-    const locations = yield* LocationServiceMap.Service
+    const locations = yield* InstanceMap.Service
     const locationLayer = locations.get(location)
     return yield* Effect.gen(function* () {
       const plugins = yield* PluginSupervisor.Service

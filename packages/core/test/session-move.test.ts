@@ -1,14 +1,14 @@
 import { describe, expect } from "bun:test"
 import path from "path"
 import { mkdir, rm } from "fs/promises"
-import { Effect, Layer, LayerMap } from "effect"
+import { Effect, Layer } from "effect"
 import { Worktree } from "@opencode-ai/schema/worktree"
 import { Bus } from "@opencode-ai/core/bus"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Location } from "@opencode-ai/core/location"
-import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
-import type { LocationServices } from "@opencode-ai/core/location-services"
+import { InstanceMap } from "@opencode-ai/core/instance-map"
+import { stubLocations } from "./fixture/location"
 import { Project } from "@opencode-ai/core/project"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
@@ -30,19 +30,14 @@ const it = testEffect(
     ],
   ),
 )
-const unavailableLocations = Layer.effect(
-  LocationServiceMap.Service,
-  LayerMap.make(
-    () => Layer.effectDiscard(Effect.fail(new Error("broken location"))) as unknown as Layer.Layer<LocationServices>,
-  ),
-)
+const unavailableLocations = stubLocations(Layer.effectDiscard(Effect.die(new Error("broken location"))))
 const itWithUnavailableDestination = testEffect(
   AppNodeBuilder.build(
     LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionStore.node, Session.node]),
     [
       [Project.node, globalProjectLayer],
       [SessionExecution.node, SessionExecution.noopLayer],
-      [LocationServiceMap.node, unavailableLocations],
+      [InstanceMap.node, unavailableLocations],
     ],
   ),
 )

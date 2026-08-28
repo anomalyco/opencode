@@ -71,7 +71,7 @@ const layer = Layer.effect(
         const readable = files.filter((file): file is { path: string; content: string } => file !== undefined)
         if (readable.length === 0) return
         // Publish directly rather than through Session.synthetic: a Location-scoped layer
-        // cannot depend on Session (it routes through LocationServiceMap, forming a type
+        // cannot depend on Session (it routes through InstanceMap, forming a type
         // cycle with this node). The durable publish commits the synthetic and its metadata
         // ledger atomically, so releasing the claim afterwards cannot readmit the paths.
         yield* bus.publish(SessionEvent.Synthetic, {

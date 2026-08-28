@@ -10,7 +10,7 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Bus } from "@opencode-ai/core/bus"
 import { Location } from "@opencode-ai/core/location"
-import { LocationServiceMap } from "@opencode-ai/core/location-services"
+import { InstanceMap } from "@opencode-ai/core/location-services"
 import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
 import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -244,7 +244,7 @@ test("controls arbitrary tools through scoped SDK overlays", async () => {
           permission: "simulate_lookup",
           options: { codemode: false },
         }
-        const locations = yield* LocationServiceMap.Service
+        const locations = yield* InstanceMap.Service
         const [primary, secondary] = yield* Effect.all([
           Layer.build(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory) }))),
           Layer.build(locations.get(Location.Ref.make({ directory: AbsolutePath.make(secondDirectory) }))),
@@ -699,10 +699,9 @@ const toolLifecycleLayer = (endpoint: string) => {
     layer: SimulatedProvider.layerDrive({ endpoint, version: "test" }),
     deps: [SdkPlugins.node],
   })
-  return AppNodeBuilder.build(
-    LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node, provider]),
-    [[Config.node, Config.testLayer()]],
-  )
+  return AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SdkPlugins.node, InstanceMap.node, provider]), [
+    [Config.node, Config.testLayer()],
+  ])
 }
 
 function messagesFrom(socket: WebSocket) {

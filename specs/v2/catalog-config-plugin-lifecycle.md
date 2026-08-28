@@ -55,7 +55,7 @@ yield* transform((draft) => mutateAnyConfigField(draft))
 Configured plugin installation/updates should not block location readiness. Build an initial snapshot from authored config and fast built-ins, then activate slow plugins in the background and coalesce their resulting reload requests.
 
 ```ts
-LocationServiceMap.get(ref)
+InstanceMap.get(ref)
   → build location layer
     → Config.layer reads authored documents
       → merge authored documents
@@ -214,7 +214,7 @@ yield* transform(update)
 Configured plugin installation/updates should not block location readiness. Build an initial catalog from immediately available sources, then activate slow plugins in the background and coalesce refresh requests.
 
 ```ts
-LocationServiceMap.get(ref)
+InstanceMap.get(ref)
   → build location layer
     → Catalog.layer creates empty catalog state
     → PluginBoot.layer activates immediately available plugins

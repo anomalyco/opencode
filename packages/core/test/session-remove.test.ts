@@ -13,7 +13,7 @@ import { SessionModelTransport } from "@opencode-ai/core/session/model-transport
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { SessionEnvironment } from "@opencode-ai/core/session/environment"
-import { LocationServiceMap } from "@opencode-ai/core/location-services"
+import { InstanceMap } from "@opencode-ai/core/location-services"
 import { testEffect } from "./lib/effect"
 import { globalProjectLayer } from "./lib/project"
 import { tmpdirScoped } from "./fixture/tmpdir"
@@ -36,7 +36,7 @@ const it = testEffect(
       SessionStore.node,
       SessionEnvironment.node,
       Session.node,
-      LocationServiceMap.node,
+      InstanceMap.node,
     ]),
     [
       [Project.node, globalProjectLayer],
@@ -56,7 +56,7 @@ describe("Session.remove", () => {
       const child = yield* session.create({ parentID: parent.id })
       yield* session.environment({ sessionID: parent.id, variables: { SESSION_ENV: "parent" } })
       yield* session.environment({ sessionID: child.id, variables: { SESSION_ENV: "child" } })
-      const locations = yield* LocationServiceMap.Service
+      const locations = yield* InstanceMap.Service
       yield* Effect.acquireRelease(locations.contextEffect(location), () => locations.invalidate(location))
       closed.length = 0
 

@@ -5,7 +5,7 @@ import { Agent } from "../agent.js"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { Job } from "../job.js"
 import { Location } from "../location.js"
-import { LocationServiceMap } from "../location-service-map.js"
+import { InstanceMap } from "../instance-map.js"
 import { Mcp } from "../mcp/index.js"
 import { PersistentPty } from "../persistent-pty.js"
 import { Session } from "../session.js"
@@ -111,7 +111,7 @@ export const providerLayerWithCell = (cell: Cell) =>
     Effect.gen(function* () {
       const sessions = yield* Session.Service
       const jobs = yield* Job.Service
-      const locations = yield* LocationServiceMap.Service
+      const locations = yield* InstanceMap.Service
       const persistentPty = yield* PersistentPty.Service
       const runtime: Interface = {
         session: sessions,
@@ -169,7 +169,7 @@ export const providerNodeWithCell = (cell: Cell) =>
   makeGlobalNode({
     name: "plugin-runtime-provider",
     layer: providerLayerWithCell(cell),
-    deps: [node, Session.node, Job.node, LocationServiceMap.node, PersistentPty.node],
+    deps: [node, Session.node, Job.node, InstanceMap.node, PersistentPty.node],
   })
 
 export const providerNode = providerNodeWithCell(defaultCell)

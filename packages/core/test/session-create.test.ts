@@ -34,7 +34,7 @@ import { SessionTransfer } from "@opencode-ai/core/session/transfer"
 import { Workspace } from "@opencode-ai/core/workspace"
 import { Expected } from "./lib/session-message"
 import { testEffect } from "./lib/effect"
-import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
+import { InstanceMap } from "@opencode-ai/core/instance-map"
 import { promptLocationLayer } from "./fixture/prompt-location"
 import { globalProjectLayer } from "./lib/project"
 import { tmpdir } from "./fixture/tmpdir"
@@ -53,7 +53,7 @@ const it = testEffect(
     [
       [Bus.node, Bus.configured({ persist: true })],
       [Project.node, globalProjectLayer],
-      [LocationServiceMap.node, promptLocationLayer],
+      [InstanceMap.node, promptLocationLayer],
       [SessionExecution.node, SessionExecution.noopLayer],
     ],
   ),

@@ -20,7 +20,7 @@ import { Job } from "@opencode-ai/core/job"
 import { Mcp } from "@opencode-ai/core/mcp/index"
 import { Global } from "@opencode-ai/util/global"
 import { InstructionDiscovery } from "@opencode-ai/core/instruction-discovery"
-import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
+import { InstanceMap } from "@opencode-ai/core/instance-map"
 import { LocationActivity } from "@opencode-ai/core/location-activity"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { SessionRestart } from "@opencode-ai/core/session/execution/restart"
@@ -64,7 +64,7 @@ const applicationServiceNodes = [
   Credential.node,
   WellKnown.node,
   PtyEnvironment.node,
-  LocationServiceMap.node,
+  InstanceMap.node,
   LocationActivity.node,
   SessionRestart.node,
   Workspace.node,

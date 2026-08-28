@@ -7,7 +7,7 @@ import { Agent } from "@opencode-ai/core/agent"
 import { Bus } from "@opencode-ai/core/bus"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
+import { InstanceMap } from "@opencode-ai/core/instance-map"
 import { Model } from "@opencode-ai/core/model"
 import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { Provider } from "@opencode-ai/core/provider"
@@ -28,7 +28,7 @@ import { testEffect } from "./lib/effect"
 
 const it = testEffect(
   AppNodeBuilder.build(
-    LayerNode.group([Database.node, Bus.node, SessionProjector.node, Session.node, LocationServiceMap.node]),
+    LayerNode.group([Database.node, Bus.node, SessionProjector.node, Session.node, InstanceMap.node]),
     [
       [Bus.node, Bus.configured({ persist: true })],
       [Global.node, tempGlobalLayer],
@@ -110,7 +110,7 @@ describe("Session.revert files", () => {
             "Keep this later edit.\n",
           )
           expect((yield* session.get(created.id)).revert).toBeUndefined()
-        }).pipe(Effect.provide(LocationServiceMap.Service.get(created.location)))
+        }).pipe(Effect.provide(InstanceMap.Service.get(created.location)))
       }),
     // Real Location/plugin startup and Git snapshots can exceed five seconds under CI load.
     { timeout: 15_000 },

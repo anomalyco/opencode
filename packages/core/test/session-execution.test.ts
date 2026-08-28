@@ -6,8 +6,8 @@ import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Bus } from "@opencode-ai/core/bus"
 import { Job } from "@opencode-ai/core/job"
 import { KV } from "@opencode-ai/core/kv"
-import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
-import type { LocationServices } from "@opencode-ai/core/location-services"
+import { InstanceMap } from "@opencode-ai/core/instance-map"
+import { stubLocations } from "./fixture/location"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -21,7 +21,7 @@ import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionRunner } from "@opencode-ai/core/session/runner/index"
 import { SessionInboxTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
-import { Context, Deferred, Effect, Exit, Fiber, Layer, LayerMap, Scope } from "effect"
+import { Context, Deferred, Effect, Exit, Fiber, Layer, Scope } from "effect"
 import { eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 
@@ -1295,15 +1295,8 @@ function buildExecution(
         drain: (input) => drain(input).pipe(Effect.as(SessionRunner.DrainResult.Complete())),
       }),
     )
-    const locations = Layer.effect(
-      LocationServiceMap.Service,
-      LayerMap.make(
-        () =>
-          // The local execution test only needs the Session runner from the Location graph.
-          // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
-          runner as unknown as Layer.Layer<LocationServices>,
-      ),
-    )
+    // The local execution test only needs the Session runner from the Location graph.
+    const locations = stubLocations(runner)
     return yield* Layer.buildWithScope(
       SessionRestart.layer(options).pipe(
         Layer.provideMerge(sessionLayer),

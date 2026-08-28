@@ -5,7 +5,7 @@ import { Deferred, Effect, Fiber } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Bus } from "@opencode-ai/core/bus"
 import { Database } from "@opencode-ai/core/database/database"
-import { LocationServiceMap } from "@opencode-ai/core/location-services"
+import { InstanceMap } from "@opencode-ai/core/location-services"
 import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -19,7 +19,7 @@ import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node]), [
+  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SdkPlugins.node, InstanceMap.node]), [
     [Global.node, tempGlobalLayer],
   ]),
 )
@@ -48,9 +48,7 @@ function withFormatter<A, E, R>(
           return yield* body(yield* Formatter.Service, directory)
         }).pipe(
           Effect.scoped,
-          Effect.provide(
-            LocationServiceMap.Service.get(Location.Ref.make({ directory: AbsolutePath.make(directory) })),
-          ),
+          Effect.provide(InstanceMap.Service.get(Location.Ref.make({ directory: AbsolutePath.make(directory) }))),
         ),
       ),
     ),

@@ -7,8 +7,9 @@ import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Global } from "@opencode-ai/util/global"
 import { Config } from "@opencode-ai/core/config"
 import { Instance } from "@opencode-ai/core/instance"
+import { Entry, fromMap } from "@opencode-ai/core/instance-map/internal"
 import { InstructionDiscovery } from "@opencode-ai/core/instruction-discovery"
-import { LocationServiceMap } from "@opencode-ai/core/location-services"
+import { InstanceMap } from "@opencode-ai/core/location-services"
 import { Location } from "@opencode-ai/core/location"
 import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
@@ -35,25 +36,29 @@ const hostConfig: LayerNode.Replacements = [
 
 // Same directory contents, two instances: one vanilla, one with discovery.
 const instances = Layer.effect(
-  LocationServiceMap.Service,
-  LayerMap.make(
-    (ref: Location.Ref) => {
-      const name = path.basename(ref.directory)
-      return Instance.layer(ref, {
-        // "bare" exercises the vanilla defaults themselves: no caller Config.
-        discovery: name !== "vanilla" && name !== "bare",
-        // Caller replacements win over the vanilla defaults.
-        replacements: [[Global.node, tempGlobalLayer], ...(name === "vanilla" ? hostConfig : [])],
-      })
-    },
-    { idleTimeToLive: Duration.infinity },
+  InstanceMap.Service,
+  Effect.map(
+    LayerMap.make(
+      (entry: Entry) => {
+        const ref = entry.location
+        const name = path.basename(ref.directory)
+        return Instance.layer(ref, {
+          // "bare" exercises the vanilla defaults themselves: no caller Config.
+          discovery: name !== "vanilla" && name !== "bare",
+          // Caller replacements win over the vanilla defaults.
+          replacements: [[Global.node, tempGlobalLayer], ...(name === "vanilla" ? hostConfig : [])],
+        })
+      },
+      { idleTimeToLive: Duration.infinity },
+    ),
+    fromMap,
   ),
 )
 
 const it = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node]), [
+  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SdkPlugins.node, InstanceMap.node]), [
     [Global.node, tempGlobalLayer],
-    [LocationServiceMap.node, instances],
+    [InstanceMap.node, instances],
   ]),
 )
 
@@ -65,7 +70,7 @@ describe("Instance vanilla", () => {
     ).pipe(
       Effect.flatMap((dir) =>
         Effect.gen(function* () {
-          const locations = yield* LocationServiceMap.Service
+          const locations = yield* InstanceMap.Service
           const plant = (name: string) =>
             Effect.promise(async () => {
               const directory = path.join(dir.path, name)
@@ -127,7 +132,7 @@ describe("Instance vanilla", () => {
     ).pipe(
       Effect.flatMap((dir) =>
         Effect.gen(function* () {
-          const locations = yield* LocationServiceMap.Service
+          const locations = yield* InstanceMap.Service
           const directory = path.join(dir.path, "vanilla")
           const marker = path.join(directory, "ambient-loaded.txt")
           // A plugin module whose import writes a sentinel: project-marker

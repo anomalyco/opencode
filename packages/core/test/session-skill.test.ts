@@ -1,13 +1,13 @@
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Effect, Layer, LayerMap } from "effect"
+import { Effect, Layer } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Bus } from "@opencode-ai/core/bus"
 import { Location } from "@opencode-ai/core/location"
-import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
-import type { LocationServices } from "@opencode-ai/core/location-services"
+import { InstanceMap } from "@opencode-ai/core/instance-map"
+import { stubLocations } from "./fixture/location"
 import { Project } from "@opencode-ai/core/project"
 import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor-service"
 import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
@@ -40,20 +40,13 @@ const skills = Layer.mergeAll(
   }),
   Layer.succeed(PluginSupervisor.Service, { flush: Effect.void }),
 )
-const locations = Layer.effect(
-  LocationServiceMap.Service,
-  LayerMap.make(
-    () =>
-      // The skill endpoint only needs the location-scoped Skill service.
-      // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
-      skills as unknown as Layer.Layer<LocationServices>,
-  ),
-)
+// The skill endpoint only needs the location-scoped Skill service.
+const locations = stubLocations(skills)
 const it = testEffect(
   AppNodeBuilder.build(
     LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionStore.node, Session.node]),
     [
-      [LocationServiceMap.node, locations],
+      [InstanceMap.node, locations],
       [Project.node, projects],
       [SessionExecution.node, SessionExecution.noopLayer],
     ],

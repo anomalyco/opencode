@@ -4,7 +4,7 @@ import { Cause, Context, Effect, Exit, Layer } from "effect"
 import { Bus } from "../bus.js"
 import { Database } from "../database/database.js"
 import { Job } from "../job.js"
-import { LocationServiceMap } from "../location-service-map.js"
+import { InstanceMap } from "../instance-map.js"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { SessionEvent } from "./event.js"
 import { SessionRunCoordinator } from "./run-coordinator.js"
@@ -51,7 +51,7 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const store = yield* SessionStore.Service
-    const locations = yield* LocationServiceMap.Service
+    const locations = yield* InstanceMap.Service
     const bus = yield* Bus.Service
     const jobs = yield* Job.Service
     const db = (yield* Database.Service).db
@@ -88,7 +88,7 @@ export const layer = Layer.effect(
       const result = yield* SessionRunner.Service.use((runner) =>
         runner.drain({ sessionID, force, continuation, promotable }),
       ).pipe(
-        Effect.provide(locations.get(session.location)),
+        Effect.provide(locations.forSession(session)),
         Effect.tapCause((cause) =>
           Cause.hasInterruptsOnly(cause)
             ? Effect.void
@@ -170,7 +170,7 @@ export const layer = Layer.effect(
 export const node = makeGlobalNode({
   service: Service,
   layer,
-  deps: [SessionStore.node, LocationServiceMap.node, Bus.node, Database.node, Job.node],
+  deps: [SessionStore.node, InstanceMap.node, Bus.node, Database.node, Job.node],
 })
 
 /** Low-level compatibility layer for callers that only need durable Session recording. */

@@ -1,6 +1,6 @@
 import { Database } from "@opencode-ai/core/database/database"
 import { Location } from "@opencode-ai/core/location"
-import { LocationServiceMap } from "@opencode-ai/core/location-services"
+import { InstanceMap } from "@opencode-ai/core/location-services"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
 import { SessionTable } from "@opencode-ai/core/session/sql"
@@ -25,7 +25,7 @@ export const formLocationLayer = Layer.effect(
   FormLocationMiddleware,
   Effect.gen(function* () {
     const { db } = yield* Database.Service
-    const locations = yield* LocationServiceMap.Service
+    const locations = yield* InstanceMap.Service
 
     return FormLocationMiddleware.of((effect) =>
       Effect.gen(function* () {
@@ -62,12 +62,12 @@ export const formLocationLayer = Layer.effect(
 
         return yield* effect.pipe(
           Effect.provide(
-            locations.get(
-              Location.Ref.make({
+            locations.forSession({
+              location: Location.Ref.make({
                 directory: AbsolutePath.make(row.directory),
                 workspaceID: row.workspaceID ? Workspace.ID.make(row.workspaceID) : undefined,
               }),
-            ),
+            }),
           ),
         )
       }),

@@ -82,7 +82,7 @@ import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { asc, desc, eq, sql } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 import { promptLocationLayer } from "./fixture/prompt-location"
-import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
+import { InstanceMap } from "@opencode-ai/core/instance-map"
 import { Expected } from "./lib/session-message"
 import { permissionLayer } from "./lib/permission"
 import { agentHost, catalogHost, host } from "./plugin/host"
@@ -483,7 +483,7 @@ const layer = Layer.unwrap(
       [
         ...replacements,
         [Bus.node, Bus.configured({ persist: true })],
-        [LocationServiceMap.node, promptLocationLayer],
+        [InstanceMap.node, promptLocationLayer],
         [Catalog.node, promptCatalog],
         [SessionExecution.node, execution],
       ],

@@ -6,7 +6,7 @@ import { Database } from "../src/database/database"
 import { Bus } from "../src/bus"
 import { SdkPlugins } from "../src/plugin/sdk"
 import { Location } from "../src/location"
-import { LocationServiceMap } from "../src/location-service-map"
+import { InstanceMap } from "../src/instance-map"
 import { AbsolutePath } from "../src/schema"
 
 const args = process.argv.slice(2)
@@ -22,7 +22,7 @@ if (!Number.isInteger(iterations) || iterations < 1) {
 }
 
 const ref = Location.Ref.make({ directory: AbsolutePath.make(path.resolve(directory)) })
-const layer = AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node]))
+const layer = AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SdkPlugins.node, InstanceMap.node]))
 
 const measure = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   Effect.gen(function* () {
@@ -51,7 +51,7 @@ const print = (name: string, samples: ReadonlyArray<number>) => {
 }
 
 const program = Effect.gen(function* () {
-  const locations = yield* LocationServiceMap.Service
+  const locations = yield* InstanceMap.Service
   const load = locations.contextEffect(ref).pipe(Effect.scoped)
 
   const first = yield* measure(load)

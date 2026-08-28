@@ -24,7 +24,7 @@ Manual compaction and Session movement use the same inbox as control items. Each
 
 ## Execution Is Process-Local
 
-`SessionExecution` is process-global and keyed only by Session ID. At drain start it loads the Session, enters its Location through `LocationServiceMap`, and invokes the Location-scoped runner. The runner, model resolution, tools, permissions, plugins, and filesystem remain Location-scoped.
+`SessionExecution` is process-global and keyed only by Session ID. At drain start it loads the Session, selects its instance through `InstanceMap.forSession`, and invokes the Location-scoped runner. Default assignment still shares one instance per canonical Location. The runner, model resolution, tools, permissions, plugins, and filesystem remain Location-scoped.
 
 `SessionRunCoordinator` provides the local ownership rules:
 

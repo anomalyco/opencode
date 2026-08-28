@@ -1,9 +1,10 @@
 import fs from "fs/promises"
 import path from "path"
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { Config } from "@opencode-ai/schema/config"
 import { Money } from "@opencode-ai/schema/money"
 import {
+  Context,
   DateTime,
   Deferred,
   Duration,
@@ -13,7 +14,6 @@ import {
   Hash,
   Layer,
   LayerMap,
-  RcMap,
   Schema,
   Stream,
 } from "effect"
@@ -24,7 +24,8 @@ import { Catalog } from "@opencode-ai/core/catalog"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Global } from "@opencode-ai/util/global"
-import { LocationServiceMap, type LocationServices } from "@opencode-ai/core/location-services"
+import { Entry, fromMap } from "@opencode-ai/core/instance-map/internal"
+import { InstanceMap, type LocationServices } from "@opencode-ai/core/location-services"
 import { LocationActivity } from "@opencode-ai/core/location-activity"
 import { Location } from "@opencode-ai/core/location"
 import { Plugin } from "@opencode-ai/core/plugin"
@@ -41,6 +42,7 @@ import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { tmpdir } from "./fixture/tmpdir"
 import { tempGlobalLayer } from "./fixture/global"
+import { location } from "./fixture/location"
 import { testEffect } from "./lib/effect"
 import { toolDefinitions, waitForTool } from "./lib/tool"
 import { Database } from "../src/database/database"
@@ -49,41 +51,37 @@ import { Reference } from "../src/reference"
 import { Tool } from "../src/tool"
 
 const it = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, LocationServiceMap.node]), [
-    [Global.node, tempGlobalLayer],
-  ]),
+  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, InstanceMap.node]), [[Global.node, tempGlobalLayer]]),
 )
 const itWithSdk = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node]), [
+  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SdkPlugins.node, InstanceMap.node]), [
     [Global.node, tempGlobalLayer],
   ]),
 )
 const activityLocations = Layer.effect(
-  LocationServiceMap.Service,
-  LayerMap.make(
-    (ref) =>
-      // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
-      Layer.succeed(
-        Location.Service,
-        Location.Service.of({
-          directory: ref.directory,
-          workspaceID: ref.workspaceID,
-          project: { id: Project.ID.global, directory: ref.directory, canonical: ref.directory },
-        }),
-      ) as unknown as Layer.Layer<LocationServices>,
-    { idleTimeToLive: Duration.infinity },
+  InstanceMap.Service,
+  Effect.map(
+    LayerMap.make(
+      (entry: Entry) => {
+        const ref = entry.location
+        // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
+        return Layer.succeed(Location.Service, location(ref)) as unknown as Layer.Layer<LocationServices>
+      },
+      { idleTimeToLive: Duration.infinity },
+    ),
+    fromMap,
   ),
 )
 const itWithActivity = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, LocationServiceMap.node, LocationActivity.node]), [
-    [LocationServiceMap.node, activityLocations],
+  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, InstanceMap.node, LocationActivity.node]), [
+    [InstanceMap.node, activityLocations],
   ]),
 )
 
-describe("LocationServiceMap", () => {
+describe("InstanceMap", () => {
   itWithActivity.effect("does not refresh lifetime from inferred Session routing", () =>
     Effect.gen(function* () {
-      const locations = yield* LocationServiceMap.Service
+      const locations = yield* InstanceMap.Service
       const bus = yield* Bus.Service
       const ref = Location.Ref.make({ directory: AbsolutePath.make("/project") })
       const sessionID = Session.ID.make("ses_routing_activity")
@@ -99,13 +97,13 @@ describe("LocationServiceMap", () => {
       const event = yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID })
       expect(event).not.toHaveProperty("location")
       yield* TestClock.adjust("2 minutes")
-      expect(Array.from(yield* RcMap.keys(locations.rcMap))).toEqual([])
+      expect(yield* locations.entries).toEqual([])
     }),
   )
 
   itWithActivity.effect("refreshes lifetime from Session events only", () =>
     Effect.gen(function* () {
-      const locations = yield* LocationServiceMap.Service
+      const locations = yield* InstanceMap.Service
       const bus = yield* Bus.Service
       const ref = Location.Ref.make({ directory: AbsolutePath.make("/project") })
       const sessionID = Session.ID.make("ses_location_activity")
@@ -115,16 +113,16 @@ describe("LocationServiceMap", () => {
       yield* TestClock.adjust("59 minutes")
       yield* bus.publish(Catalog.Event.Updated, {}, { location: ref })
       yield* TestClock.adjust("2 minutes")
-      expect(Array.from(yield* RcMap.keys(locations.rcMap))).toEqual([])
+      expect(yield* locations.entries).toEqual([])
 
       yield* read
       yield* bus.publish(SessionEvent.Execution.Started, { sessionID }, { location: ref })
       yield* TestClock.adjust("59 minutes")
       yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID }, { location: ref })
       yield* TestClock.adjust("1 minute")
-      expect(Array.from(yield* RcMap.keys(locations.rcMap))).toEqual([ref])
+      expect((yield* locations.entries).map((entry) => entry.key)).toEqual([Location.instanceKey(ref)])
       yield* TestClock.adjust("59 minutes")
-      expect(Array.from(yield* RcMap.keys(locations.rcMap))).toEqual([])
+      expect(yield* locations.entries).toEqual([])
     }),
   )
 
@@ -135,7 +133,7 @@ describe("LocationServiceMap", () => {
     ).pipe(
       Effect.flatMap((dir) =>
         Effect.gen(function* () {
-          const locations = yield* LocationServiceMap.Service
+          const locations = yield* InstanceMap.Service
           const directory = path.join(dir.path, "recreated")
           const ref = Location.Ref.make({ directory: AbsolutePath.make(directory) })
 
@@ -157,7 +155,7 @@ describe("LocationServiceMap", () => {
     ).pipe(
       Effect.flatMap((dir) =>
         Effect.gen(function* () {
-          const locations = yield* LocationServiceMap.Service
+          const locations = yield* InstanceMap.Service
           const directory = AbsolutePath.make(path.join(dir.path, "workspace-only"))
           const workspaceRef = Location.Ref.make({ directory, workspaceID: Workspace.ID.make("wrk_liveness") })
           const localRef = Location.Ref.make({ directory })
@@ -168,12 +166,12 @@ describe("LocationServiceMap", () => {
           // evicted by a zero idle time-to-live.
           const location = yield* Location.Service.pipe(Effect.provide(locations.get(workspaceRef)), Effect.scoped)
           expect(location.directory).toBe(directory)
-          expect(Array.from(yield* RcMap.keys(locations.rcMap))).toEqual([workspaceRef])
+          expect((yield* locations.entries).map((entry) => entry.key)).toEqual([Location.instanceKey(workspaceRef)])
 
           // A local ref with the same missing directory keeps the existing
           // behavior: dropped as soon as it goes idle so a retry can rebuild it.
           yield* Location.Service.pipe(Effect.provide(locations.get(localRef)), Effect.scoped, Effect.exit)
-          expect(Array.from(yield* RcMap.keys(locations.rcMap))).toEqual([workspaceRef])
+          expect((yield* locations.entries).map((entry) => entry.key)).toEqual([Location.instanceKey(workspaceRef)])
         }),
       ),
     ),
@@ -187,7 +185,7 @@ describe("LocationServiceMap", () => {
       Effect.flatMap((dir) =>
         Effect.gen(function* () {
           const sdk = yield* SdkPlugins.Service
-          const locations = yield* LocationServiceMap.Service
+          const locations = yield* InstanceMap.Service
           const id = Agent.ID.make("persistent-sdk-agent")
           const plugin = EffectPlugin.define({
             id: "persistent-sdk-plugin",
@@ -228,7 +226,7 @@ describe("LocationServiceMap", () => {
             }),
           )
 
-          const locations = yield* LocationServiceMap.Service
+          const locations = yield* InstanceMap.Service
           const context = yield* locations.contextEffect(Location.Ref.make({ directory: AbsolutePath.make(dir.path) }))
           yield* Deferred.await(started)
 
@@ -276,7 +274,7 @@ describe("LocationServiceMap", () => {
             }),
           )
 
-          const locations = yield* LocationServiceMap.Service
+          const locations = yield* InstanceMap.Service
           const context = yield* locations.contextEffect(Location.Ref.make({ directory: AbsolutePath.make(dir.path) }))
           yield* Deferred.await(firstStarted)
 
@@ -333,7 +331,7 @@ describe("LocationServiceMap", () => {
             }),
           )
 
-          const locations = yield* LocationServiceMap.Service
+          const locations = yield* InstanceMap.Service
           const context = yield* locations.contextEffect(Location.Ref.make({ directory: AbsolutePath.make(dir.path) }))
           yield* Deferred.await(firstStarted)
 
@@ -373,7 +371,7 @@ describe("LocationServiceMap", () => {
     ).pipe(
       Effect.flatMap((dir) =>
         Effect.gen(function* () {
-          const locations = yield* LocationServiceMap.Service
+          const locations = yield* InstanceMap.Service
           const context = yield* locations.contextEffect(Location.Ref.make({ directory: AbsolutePath.make(dir.path) }))
           const flushFiber = yield* PluginSupervisor.Service.use((supervisor) => supervisor.flush).pipe(
             Effect.provide(context),
@@ -409,7 +407,7 @@ describe("LocationServiceMap", () => {
             }),
           )
 
-          const locations = yield* LocationServiceMap.Service
+          const locations = yield* InstanceMap.Service
           const context = yield* locations.contextEffect(Location.Ref.make({ directory: AbsolutePath.make(dir.path) }))
           yield* PluginSupervisor.Service.use((supervisor) => supervisor.flush).pipe(Effect.provide(context))
           expect(activations.count).toBe(1)
@@ -430,7 +428,7 @@ describe("LocationServiceMap", () => {
     ).pipe(
       Effect.flatMap((dir) =>
         Effect.gen(function* () {
-          const locations = yield* LocationServiceMap.Service
+          const locations = yield* InstanceMap.Service
           const context = yield* locations.contextEffect(Location.Ref.make({ directory: AbsolutePath.make(dir.path) }))
           yield* PluginSupervisor.Service.use((supervisor) => supervisor.flush).pipe(Effect.provide(context))
 
@@ -485,7 +483,7 @@ describe("LocationServiceMap", () => {
             }),
           )
 
-          const locations = yield* LocationServiceMap.Service
+          const locations = yield* InstanceMap.Service
           const context = yield* locations.contextEffect(Location.Ref.make({ directory: AbsolutePath.make(dir.path) }))
           yield* Deferred.await(started)
           const flushFiber = yield* PluginSupervisor.Service.use((supervisor) => supervisor.flush).pipe(
@@ -521,9 +519,7 @@ describe("LocationServiceMap", () => {
             return yield* plugins.list()
           }).pipe(
             Effect.scoped,
-            Effect.provide(
-              LocationServiceMap.Service.get(Location.Ref.make({ directory: AbsolutePath.make(dir.path) })),
-            ),
+            Effect.provide(InstanceMap.Service.get(Location.Ref.make({ directory: AbsolutePath.make(dir.path) }))),
           )
 
           expect(plugins.map((plugin) => plugin.id)).toEqual([Plugin.ID.make("opencode.agent")])
@@ -585,9 +581,7 @@ describe("LocationServiceMap", () => {
             expect((yield* registry.list()).map((plugin) => String(plugin.id))).toEqual(["opencode.agent"])
           }).pipe(
             Effect.scoped,
-            Effect.provide(
-              LocationServiceMap.Service.get(Location.Ref.make({ directory: AbsolutePath.make(dir.path) })),
-            ),
+            Effect.provide(InstanceMap.Service.get(Location.Ref.make({ directory: AbsolutePath.make(dir.path) }))),
           )
         }),
       ),
@@ -602,7 +596,7 @@ describe("LocationServiceMap", () => {
       Effect.flatMap(([first, second]) =>
         Effect.scoped(
           Effect.gen(function* () {
-            const locations = yield* LocationServiceMap.Service
+            const locations = yield* InstanceMap.Service
             const bus = yield* Bus.Service
             const firstRef = Location.Ref.make({ directory: AbsolutePath.make(first.path) })
             const secondRef = Location.Ref.make({ directory: AbsolutePath.make(second.path) })
@@ -639,7 +633,7 @@ describe("LocationServiceMap", () => {
       Effect.flatMap((dir) =>
         Effect.scoped(
           Effect.gen(function* () {
-            const locations = yield* LocationServiceMap.Service
+            const locations = yield* InstanceMap.Service
             const directory = AbsolutePath.make(dir.path)
             const constructed = Location.Ref.make({ directory })
             const decoded = Schema.decodeUnknownSync(Location.Ref)({ directory })
@@ -663,7 +657,7 @@ describe("LocationServiceMap", () => {
       Effect.flatMap((dir) =>
         Effect.scoped(
           Effect.gen(function* () {
-            const locations = yield* LocationServiceMap.Service
+            const locations = yield* InstanceMap.Service
             const directory = AbsolutePath.make(dir.path)
             const alternate = AbsolutePath.make(directory.replaceAll("\\", "/"))
             const absent = Location.Ref.make({ directory: alternate })
@@ -676,13 +670,14 @@ describe("LocationServiceMap", () => {
 
             const first = yield* locations.contextEffect(absent)
             expect(yield* locations.contextEffect(present)).toBe(first)
-            expect(Array.from(yield* RcMap.keys(locations.rcMap))).toEqual([
-              Location.Ref.make({ directory, workspaceID: undefined }),
+            expect(yield* locations.entries).toEqual([
+              { key: Location.instanceKey(present), location: Location.canonical(present) },
             ])
+            expect(Context.get(first, Location.Service).directory).toBe(directory)
 
             // Invalidating with the shape opposite to the one that booted must evict.
             yield* locations.invalidate(present)
-            expect(Array.from(yield* RcMap.keys(locations.rcMap))).toHaveLength(0)
+            expect(yield* locations.entries).toHaveLength(0)
           }),
         ),
       ),
@@ -726,9 +721,7 @@ describe("LocationServiceMap", () => {
               }
             }).pipe(
               Effect.scoped,
-              Effect.provide(
-                LocationServiceMap.Service.get(Location.Ref.make({ directory: AbsolutePath.make(directory) })),
-              ),
+              Effect.provide(InstanceMap.Service.get(Location.Ref.make({ directory: AbsolutePath.make(directory) }))),
             )
 
           const blockedID = Provider.ID.make("blocked-location")
@@ -816,7 +809,7 @@ describe("LocationServiceMap", () => {
               }),
               catalog.model.available,
             )
-          }).pipe(Effect.provide(LocationServiceMap.Service.get(location)), Effect.flip)
+          }).pipe(Effect.provide(InstanceMap.Service.get(location)), Effect.flip)
 
           expect(failure).toMatchObject({
             _tag: "SessionRunnerModel.ModelUnavailableError",
@@ -859,7 +852,7 @@ describe("LocationServiceMap", () => {
                 }),
                 catalog.model.available,
               )
-            }).pipe(Effect.provide(LocationServiceMap.Service.get(location)), Effect.flip)
+            }).pipe(Effect.provide(InstanceMap.Service.get(location)), Effect.flip)
 
             expect(failure).toMatchObject({
               _tag: "SessionRunnerModel.ModelUnavailableError",
@@ -913,7 +906,7 @@ describe("LocationServiceMap", () => {
               }),
               catalog.model.available,
             )
-          }).pipe(Effect.provide(LocationServiceMap.Service.get(location)))
+          }).pipe(Effect.provide(InstanceMap.Service.get(location)))
 
           expect(resolved.ref).toEqual(
             Model.Ref.make({
@@ -956,7 +949,7 @@ describe("LocationServiceMap", () => {
           })
         }).pipe(
           Effect.scoped,
-          Effect.provide(LocationServiceMap.Service.get(Location.Ref.make({ directory: AbsolutePath.make(dir.path) }))),
+          Effect.provide(InstanceMap.Service.get(Location.Ref.make({ directory: AbsolutePath.make(dir.path) }))),
         ),
       ),
     ),
@@ -1010,12 +1003,44 @@ describe("LocationServiceMap", () => {
             expect((yield* mcp.servers()).map((server) => String(server.name))).toEqual(["dynamic", "example"])
           }).pipe(
             Effect.scoped,
-            Effect.provide(
-              LocationServiceMap.Service.get(Location.Ref.make({ directory: AbsolutePath.make(dir.path) })),
-            ),
+            Effect.provide(InstanceMap.Service.get(Location.Ref.make({ directory: AbsolutePath.make(dir.path) }))),
           )
         }),
       ),
     ),
   )
+})
+
+describe("Location.instanceKey", () => {
+  test("distinguishes directories and workspace placement", () => {
+    const local = Location.Ref.make({ directory: AbsolutePath.make(path.resolve("instance-key")) })
+    const workspace = Location.Ref.make({
+      directory: local.directory,
+      workspaceID: Workspace.ID.make("wrk_instance_key"),
+    })
+    const other = Location.Ref.make({ directory: AbsolutePath.make(path.resolve("other-repo")) })
+    expect(new Set([local, workspace, other].map(Location.instanceKey)).size).toBe(3)
+  })
+
+  test("optional-key shape does not split instances", () => {
+    const explicit = Location.Ref.make({ directory: AbsolutePath.make("/tmp/instance-key"), workspaceID: undefined })
+    const implicit = Location.Ref.make({ directory: AbsolutePath.make("/tmp/instance-key") })
+    expect(Location.instanceKey(explicit)).toBe(Location.instanceKey(implicit))
+  })
+
+  test("distinguishes workspace IDs containing separators and escapes", () => {
+    const ref = Location.Ref.make({
+      directory: AbsolutePath.make(path.resolve("repo")),
+      workspaceID: Workspace.ID.make("wrk_team:alpha%3A"),
+    })
+    const escaped = Location.Ref.make({ ...ref, workspaceID: Workspace.ID.make("wrk_team%3Aalpha%3A") })
+    expect(Location.instanceKey(ref)).not.toBe(Location.instanceKey(escaped))
+  })
+
+  test.skipIf(process.platform !== "win32")("normalizes Windows separators before minting", () => {
+    const ref = Location.Ref.make({ directory: AbsolutePath.make("C:\\workspace\\repo") })
+    const mixed = Location.Ref.make({ directory: AbsolutePath.make("C:/workspace\\repo") })
+    expect(Location.instanceKey(mixed)).toBe(Location.instanceKey(ref))
+    expect(Location.canonical(mixed)).toEqual(ref)
+  })
 })

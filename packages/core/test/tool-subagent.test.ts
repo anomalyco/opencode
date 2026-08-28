@@ -15,7 +15,7 @@ import { Provider } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Agent } from "@opencode-ai/core/agent"
 import { Job } from "@opencode-ai/core/job"
-import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
+import { InstanceMap } from "@opencode-ai/core/instance-map"
 import { Session } from "@opencode-ai/core/session"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
@@ -112,7 +112,7 @@ const nodes = LayerNode.group([
   Session.node,
   SessionExecution.node,
   PluginRuntime.providerNode,
-  LocationServiceMap.node,
+  InstanceMap.node,
 ])
 const replacements = [
   [SessionExecution.node, executionNode],
@@ -123,7 +123,7 @@ const it = testEffect(AppNodeBuilder.build(nodes, [...replacements, [PluginSuper
 
 const withSubagent = (location: Location.Ref) =>
   Effect.gen(function* () {
-    const locations = yield* LocationServiceMap.Service
+    const locations = yield* InstanceMap.Service
     yield* PluginSupervisor.Service.use((supervisor) => supervisor.flush).pipe(Effect.provide(locations.get(location)))
     yield* Agent.Service.use((agents) =>
       agents.transform((draft) => {
@@ -159,7 +159,7 @@ describe("SubagentTool", () => {
           const parent = yield* session.create({ location })
           yield* withSubagent(parent.location)
 
-          const locations = yield* LocationServiceMap.Service
+          const locations = yield* InstanceMap.Service
           const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
           expect((yield* registry.snapshot()).definitions.map((tool) => tool.name)).toContain(SubagentTool.name)
           expect(
@@ -194,7 +194,7 @@ describe("SubagentTool", () => {
           const root = yield* sessions.create({ location })
           const parent = yield* sessions.create({ parentID: root.id, title: "parent" })
           yield* withSubagent(parent.location)
-          const locations = yield* LocationServiceMap.Service
+          const locations = yield* InstanceMap.Service
           const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
 
           expect(
@@ -236,7 +236,7 @@ describe("SubagentTool", () => {
           const root = yield* sessions.create({ location })
           const parent = yield* sessions.create({ parentID: root.id, title: "parent", model: parentModel })
           yield* withSubagent(parent.location)
-          const locations = yield* LocationServiceMap.Service
+          const locations = yield* InstanceMap.Service
           const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
 
           const settled = yield* executeTool(registry, {
@@ -276,7 +276,7 @@ describe("SubagentTool", () => {
           const sessions = yield* Session.Service
           const parent = yield* sessions.create({ location, model: parentModel })
           yield* withSubagent(parent.location)
-          const locations = yield* LocationServiceMap.Service
+          const locations = yield* InstanceMap.Service
           const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
           const progress: Tool.Metadata[] = []
 
@@ -339,7 +339,7 @@ describe("SubagentTool", () => {
           const sessions = yield* Session.Service
           const parent = yield* sessions.create({ location, model: parentModel })
           yield* withSubagent(parent.location)
-          const locations = yield* LocationServiceMap.Service
+          const locations = yield* InstanceMap.Service
           const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
 
           const first = yield* executeTool(registry, {
@@ -400,7 +400,7 @@ describe("SubagentTool", () => {
             model: childModel,
           })
           yield* withSubagent(parent.location)
-          const locations = yield* LocationServiceMap.Service
+          const locations = yield* InstanceMap.Service
           const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
           const jobs = yield* Job.Service
           yield* jobs.start({ id: child.id, type: SubagentTool.name, run: Effect.never })
@@ -459,7 +459,7 @@ describe("SubagentTool", () => {
             model: parentModel,
           })
           yield* withSubagent(parent.location)
-          const locations = yield* LocationServiceMap.Service
+          const locations = yield* InstanceMap.Service
           const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
           const call = (sessionID: Session.ID, id: string, agent = "reviewer") =>
             executeTool(registry, {
@@ -521,7 +521,7 @@ describe("SubagentTool", () => {
           const sessions = yield* Session.Service
           const parent = yield* sessions.create({ location })
           yield* withSubagent(parent.location)
-          const locations = yield* LocationServiceMap.Service
+          const locations = yield* InstanceMap.Service
           const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
 
           expect(
@@ -558,7 +558,7 @@ describe("SubagentTool", () => {
           const sessions = yield* Session.Service
           const parent = yield* sessions.create({ location })
           yield* withSubagent(parent.location)
-          const locations = yield* LocationServiceMap.Service
+          const locations = yield* InstanceMap.Service
           const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
           const bus = yield* Bus.Service
           const admitted = yield* bus.subscribe(SessionEvent.InboxEnqueued).pipe(
