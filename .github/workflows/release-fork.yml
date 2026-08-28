@@ -1,0 +1,177 @@
+name: release-fork
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version without the v prefix"
+        required: true
+        default: "1.18.23"
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-fork-${{ inputs.version }}
+  cancel-in-progress: false
+
+env:
+  OPENCODE_VERSION: ${{ inputs.version }}
+  OPENCODE_CHANNEL: prod
+
+jobs:
+  create-release:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v4.3.0
+        with:
+          fetch-depth: 0
+
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view "v${OPENCODE_VERSION}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            echo "Release v${OPENCODE_VERSION} already exists"
+            exit 1
+          fi
+          gh release create "v${OPENCODE_VERSION}" \
+            --draft \
+            --generate-notes \
+            --target "${GITHUB_SHA}" \
+            --title "v${OPENCODE_VERSION}" \
+            --repo "${GITHUB_REPOSITORY}"
+
+  build-cli:
+    needs: create-release
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v4.3.0
+
+      - uses: ./.github/actions/setup-bun
+
+      - name: Build CLI archives
+        env:
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+          OPENCODE_RELEASE: "true"
+        run: |
+          ./packages/opencode/script/build.ts
+          ./packages/cli/script/build.ts
+
+  build-desktop:
+    needs: create-release
+    strategy:
+      fail-fast: false
+      matrix:
+        settings:
+          - host: macos-26-intel
+            target: x86_64-apple-darwin
+            platform_flag: --mac --x64
+            bun_install_flags: --os=darwin --cpu=x64
+          - host: macos-26
+            target: aarch64-apple-darwin
+            platform_flag: --mac --arm64
+            bun_install_flags: --os=darwin --cpu=arm64
+          - host: windows-2025
+            target: aarch64-pc-windows-msvc
+            platform_flag: --win --arm64
+            bun_install_flags: --os=win32 --cpu=arm64
+          - host: windows-2025
+            target: x86_64-pc-windows-msvc
+            platform_flag: --win
+            bun_install_flags: --os=win32 --cpu=x64
+          - host: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            platform_flag: --linux
+          - host: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            platform_flag: --linux --arm64
+    runs-on: ${{ matrix.settings.host }}
+    steps:
+      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v4.3.0
+
+      - uses: ./.github/actions/setup-bun
+        with:
+          install-flags: ${{ matrix.settings.bun_install_flags }}
+
+      - name: Install Linux packaging tools
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends rpm
+
+      - name: Prepare desktop build
+        working-directory: packages/desktop
+        run: bun ./scripts/prepare.ts
+        env:
+          OPENCODE_VERSION: ${{ env.OPENCODE_VERSION }}
+          OPENCODE_CHANNEL: prod
+          RUST_TARGET: ${{ matrix.settings.target }}
+
+      - name: Build desktop application
+        working-directory: packages/desktop
+        run: bun run build
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+          OPENCODE_VERSION: ${{ env.OPENCODE_VERSION }}
+          OPENCODE_CHANNEL: prod
+          RUST_TARGET: ${{ matrix.settings.target }}
+          OPENCODE_UNSIGNED_BUILD: "true"
+
+      - name: Package desktop installer
+        working-directory: packages/desktop
+        run: npx electron-builder ${{ matrix.settings.platform_flag }} --publish never --config electron-builder.config.ts
+        env:
+          GITHUB_ACTIONS: "false"
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          OPENCODE_CHANNEL: prod
+          OPENCODE_UNSIGNED_BUILD: "true"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: desktop-${{ matrix.settings.target }}
+          path: packages/desktop/dist/*
+
+  publish-release:
+    needs:
+      - build-cli
+      - build-desktop
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: desktop-*
+          path: /tmp/desktop
+          merge-multiple: true
+
+      - name: Upload desktop installers and publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mapfile -d '' files < <(find /tmp/desktop -type f \( \
+            -name '*.AppImage' -o \
+            -name '*.blockmap' -o \
+            -name '*.deb' -o \
+            -name '*.dmg' -o \
+            -name '*.exe' -o \
+            -name '*.json' -o \
+            -name '*.rpm' -o \
+            -name '*.tar.gz' -o \
+            -name '*.yml' -o \
+            -name '*.zip' \
+          \) -print0)
+          if (( ${#files[@]} == 0 )); then
+            echo "No desktop release assets found"
+            exit 1
+          fi
+          gh release upload "v${OPENCODE_VERSION}" "${files[@]}" \
+            --clobber \
+            --repo "${GITHUB_REPOSITORY}"
+          gh release edit "v${OPENCODE_VERSION}" \
+            --draft=false \
+            --latest \
+            --repo "${GITHUB_REPOSITORY}"
