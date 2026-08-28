@@ -857,8 +857,7 @@ describe("SessionModelTransport", () => {
   test("records metadata-only lifecycle metrics", async () => {
     const fixture = automatic()
 
-    await run(
-      fixture.connector,
+    await Effect.runPromise(
       Effect.gen(function* () {
         const transport = yield* SessionModelTransport.Service
         const executor = transport.bind(session)
@@ -874,7 +873,11 @@ describe("SessionModelTransport", () => {
         )
         expect(JSON.stringify(lifecycle)).not.toContain("secret-one")
         expect(JSON.stringify(lifecycle)).not.toContain("secret-two")
-      }),
+      }).pipe(
+        Effect.provide(SessionModelTransport.makeLayer(fixture.connector)),
+        Effect.scoped,
+        Effect.provideService(Metric.MetricRegistry, new Map()),
+      ),
     )
   })
 })

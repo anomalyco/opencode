@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { asc, eq } from "drizzle-orm"
-import { DateTime, Effect, Schema } from "effect"
+import { Effect, Schema } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
@@ -24,12 +24,11 @@ const it = testEffect(
     [Bus.node, Bus.configured({ persist: true })],
   ]),
 )
-const timestamp = DateTime.makeUnsafe(1)
 const model = { id: Model.ID.make("model"), providerID: Provider.ID.make("provider") }
 
 const content = (text: string) => [{ type: "text" as const, text }] as const
 
-describe("Tool.Metadata", () => {
+describe("Session tool progress", () => {
   it.effect("keeps progress live-only and terminal settlements durable", () =>
     Effect.gen(function* () {
       const { db } = yield* Database.Service
