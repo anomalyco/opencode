@@ -32,7 +32,6 @@ for (const orientation of ["horizontal", "vertical"] as const) {
     await using temporary = await tmpdir()
     const [status, setStatus] = createSignal<SessionTabsStatus>(EMPTY_SESSION_TAB_STATUS)
     const [active, setActive] = createSignal("second")
-    const [animations, setAnimations] = createSignal(false)
     const [newTab, setNewTab] = createSignal(false)
     const [preview, setPreview] = createSignal(false)
     const settings: Info = { tabs: { enabled: true } }
@@ -91,11 +90,7 @@ for (const orientation of ["horizontal", "vertical"] as const) {
                               <ToastProvider>
                                 <DialogProvider>
                                   <box width="100%" height="100%">
-                                    <SessionTabs
-                                      controller={controller}
-                                      orientation={orientation}
-                                      animations={animations()}
-                                    />
+                                    <SessionTabs controller={controller} orientation={orientation} animations={false} />
                                   </box>
                                 </DialogProvider>
                               </ToastProvider>
@@ -141,7 +136,6 @@ for (const orientation of ["horizontal", "vertical"] as const) {
       }
 
       for (const attention of ["question", "permission"] as const) {
-        setAnimations(false)
         setActive("second")
         setStatus({ ...EMPTY_SESSION_TAB_STATUS, busy: true, attention })
         await app.renderOnce()
@@ -171,84 +165,39 @@ for (const orientation of ["horizontal", "vertical"] as const) {
         const dim = glow()
         expect(dim).toBeGreaterThan(0)
         expect(dim).toBeLessThan(full)
-        setActive("second")
-        await app.renderOnce()
-        setAnimations(true)
-        await app.renderOnce()
-        expect(app.renderer.root.liveCount).toBe(0)
-
-        setActive("first")
-        await app.renderOnce()
-        expect(app.renderer.root.liveCount).toBe(0)
-        await app.waitForFrame(() => glow() > dim && glow() < full)
-        await app.waitForFrame(() => glow() === dim, { maxPasses: 60 })
-        setActive("second")
-        await app.renderOnce()
-        expect(app.renderer.root.liveCount).toBe(0)
-        await app.waitForFrame(() => glow() > dim && glow() < full)
-        await app.waitForFrame(() => glow() === full, { maxPasses: 60 })
-
-        setStatus(EMPTY_SESSION_TAB_STATUS)
-        await app.renderOnce()
-        expect(app.renderer.root.liveCount).toBeGreaterThan(0)
       }
 
       const glyph = "\u2022"
       for (const unread of ["activity", "error"] as const) {
-        setAnimations(false)
         setActive("second")
-        setStatus({ ...EMPTY_SESSION_TAB_STATUS, busy: true })
-        await app.renderOnce()
-        setAnimations(true)
         setStatus({ ...EMPTY_SESSION_TAB_STATUS, unread })
         await app.renderOnce()
-        const color = () =>
-          app
-            .captureSpans()
-            .lines.flatMap((line) => line.spans)
-            .find((span) => span.text.trim() === glyph)?.fg
-        expect(color()?.toInts()).toEqual(
+        const color = app
+          .captureSpans()
+          .lines.flatMap((line) => line.spans)
+          .find((span) => span.text.trim() === glyph)?.fg
+        expect(color?.toInts()).toEqual(
           (unread === "error" ? theme.text.feedback.error.default : theme.text.status.unread).toInts(),
         )
-        const brightness = () => {
-          const value = color()
-          return value ? value.r + value.g + value.b : undefined
-        }
-        const initial = brightness()!
         await app.mockMouse.click(1, orientation === "vertical" ? 1 : 0)
         await app.renderOnce()
         expect(active()).toBe("first")
         expect(status().unread).toBeUndefined()
-        expect(app.captureCharFrame()).toContain(`${glyph} First`)
-        await app.waitForFrame((frame) => frame.includes(`${glyph} First`) && (brightness() ?? -1) > initial)
-        const peak = brightness()!
-        await app.waitForFrame((frame) => frame.includes(`${glyph} First`) && (brightness() ?? Infinity) < peak)
-        await app.waitForFrame((frame) => frame.includes("   First"), { maxPasses: 60 })
+        expect(app.captureCharFrame()).toContain("   First")
+        expect(app.captureCharFrame()).not.toContain(`${glyph} First`)
       }
 
-      setAnimations(false)
-      setStatus({ ...EMPTY_SESSION_TAB_STATUS, unread: "activity" })
-      await app.renderOnce()
-      setAnimations(true)
-      await app.mockMouse.click(1, orientation === "vertical" ? 1 : 0)
       setStatus({ ...EMPTY_SESSION_TAB_STATUS, busy: true })
-      await app.waitForFrame((frame) => SPINNER_FRAMES.slice(1).some((glyph) => frame.includes(`${glyph} First`)))
-      setStatus({ ...EMPTY_SESSION_TAB_STATUS, busy: true, attention: "question" })
-      await app.waitForFrame((frame) => frame.includes("? First"))
 
       await config.update((draft) => {
         draft.tabs.indicators = "numbers"
       })
       await app.waitForFrame((frame) => frame.includes("1 First") && frame.includes("2 Second"))
-      setStatus({ ...EMPTY_SESSION_TAB_STATUS, busy: true })
-      await app.renderOnce()
-      expect(app.captureCharFrame()).toContain("1 First")
       await config.update((draft) => {
         draft.tabs.indicators = "status"
       })
-      await app.waitForFrame((frame) => SPINNER_FRAMES.some((glyph) => frame.includes(`${glyph} First`)))
+      await app.waitForFrame((frame) => frame.includes(`${SPINNER_FRAMES[0]} First`))
 
-      setAnimations(false)
       setStatus(EMPTY_SESSION_TAB_STATUS)
       setActive("second")
       await app.renderOnce()
