@@ -121,7 +121,7 @@ describe("Permission", () => {
     }),
   )
 
-  it.effect("evaluates against an explicit provider-turn agent", () =>
+  it.effect("evaluates against an explicit agent", () =>
     Effect.gen(function* () {
       yield* setup([{ action: "read", resource: "*", effect: "allow" }])
       const agents = yield* Agent.Service

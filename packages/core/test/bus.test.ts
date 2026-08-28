@@ -228,10 +228,10 @@ describe("Bus", () => {
       )
 
       const event = yield* bus.publish(SyncMessage, { id: "one", text: "hello" })
-      yield* bus.publish(SyncMessage, { id: "one", text: "after unsubscribe" })
+      yield* bus.publish(SyncMessage, { id: "one", text: "second event" })
 
       expect(received[0]).toEqual(event)
-      expect(received[1]?.data).toEqual({ id: "one", text: "after unsubscribe" })
+      expect(received[1]?.data).toEqual({ id: "one", text: "second event" })
     }),
   )
 

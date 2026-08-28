@@ -514,7 +514,7 @@ function userPart(part: ContentPart): UserContent {
 function assistantPart(part: ContentPart): AssistantContent {
   switch (part.type) {
     case "text":
-      return [{ type: "text", text: part.text }]
+      return [{ type: "text", text: part.text, providerOptions: metadataProviderOptions(part.providerMetadata) }]
     case "media":
       return [{ type: "file", mediaType: part.mediaType, data: part.data, filename: part.filename }]
     case "reasoning":

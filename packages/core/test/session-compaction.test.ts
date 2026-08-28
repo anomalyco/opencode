@@ -143,6 +143,13 @@ test("compaction prompt requires the checkpoint headings in order", () => {
   expect(prompt).toContain("Keep every section, even when empty.")
 })
 
+test("compaction points an existing summary to the following history", () => {
+  const prompt = SessionCompaction.buildPrompt({ previousSummary: "Previous summary", context: ["Recent history"] })
+
+  expect(prompt.split("\n", 1)[0]).toBe("Update the anchored summary below using the conversation history below.")
+  expect(prompt).not.toContain("conversation history above")
+})
+
 it.effect("auto compaction reserves a buffer below the prompt ceiling", () =>
   Effect.gen(function* () {
     const compaction = yield* SessionCompaction.Service

@@ -40,9 +40,14 @@ export function isRetryable(error: AIError) {
   }
 }
 
+/** Bound provider-requested delays so a hostile or buggy retry-after cannot stall a session for hours. */
+const RETRY_AFTER_MAX = Duration.toMillis("15 minutes")
+
 const retryAfter = (input: Input) => {
   if (input.cause.reason._tag === "RateLimit" || input.cause.reason._tag === "ProviderInternal")
-    return input.cause.reason.retryAfterMs
+    return input.cause.reason.retryAfterMs === undefined
+      ? undefined
+      : Math.min(input.cause.reason.retryAfterMs, RETRY_AFTER_MAX)
   return undefined
 }
 

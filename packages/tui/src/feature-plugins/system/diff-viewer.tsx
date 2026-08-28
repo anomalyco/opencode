@@ -3,9 +3,8 @@ import type { FileDiffInfo } from "@opencode-ai/client"
 import { Plugin } from "@opencode-ai/plugin/tui"
 import type { KeymapCommand, Route } from "@opencode-ai/plugin/tui/context"
 import { TextAttributes, type BorderSides, type BoxRenderable, type ScrollBoxRenderable } from "@opentui/core"
-import { LANGUAGE_EXTENSIONS } from "../../util/filetype"
+import { filetype } from "../../util/filetype"
 import { useTerminalDimensions } from "@opentui/solid"
-import path from "path"
 import { createEffect, createMemo, createResource, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js"
 import { DiffViewerFileTree } from "./diff-viewer-file-tree"
 import { Panel, PanelGroup, Separator } from "./diff-viewer-ui"
@@ -57,13 +56,6 @@ const normalizeDiffs = (diffs: readonly FileDiffInfo[]): DiffFile[] =>
     deletions: item.deletions,
     status: item.status,
   }))
-
-function filetype(input?: string) {
-  if (!input) return "none"
-  const language = LANGUAGE_EXTENSIONS[path.extname(input)]
-  if (["typescriptreact", "javascriptreact", "javascript"].includes(language)) return "typescript"
-  return language
-}
 
 function storedView(value: unknown): DiffView | undefined {
   if (value === "split" || value === "unified") return value
@@ -141,10 +133,7 @@ function DiffViewer(props: { context: Plugin.Context }) {
   const previousHunkShortcut = shortcut("diff.previous_hunk")
   const nextFileShortcut = shortcut("diff.next_file")
   const previousFileShortcut = shortcut("diff.previous_file")
-  const toggleFileTreeShortcut = shortcut("diff.toggle_file_tree")
-  const singlePatchShortcut = shortcut("diff.single_patch")
   const switchSourceShortcut = shortcut("diff.switch_source")
-  const toggleViewShortcut = shortcut("diff.toggle_view")
   const markReviewedShortcut = shortcut("diff.mark_reviewed")
   const helpShortcut = shortcut("diff.help")
   let scroll: ScrollBoxRenderable | undefined
@@ -294,7 +283,6 @@ function DiffViewer(props: { context: Plugin.Context }) {
     setSelectedHunk({ fileIndex: next.fileIndex, hunkIndex: next.hunkIndex, scrollTop: patchScroll.scrollTop })
   }
 
-  const highlightedPatchFileIndex = () => fileRows().find((row) => row.id === highlightedFileNode())?.fileIndex
   const firstPatchFileIndex = () => fileRows().find((row) => row.fileIndex !== undefined)?.fileIndex
   const visiblePatchFiles = createMemo(() => {
     if (!singlePatch()) {
@@ -681,8 +669,8 @@ function DiffViewer(props: { context: Plugin.Context }) {
     },
   ]
 
-  const switchDiffOptions = createMemo(() => {
-    return [
+  const openSwitchDiffDialog = () => {
+    const options = [
       {
         title: "Working tree",
         value: "working" as const,
@@ -694,16 +682,13 @@ function DiffViewer(props: { context: Plugin.Context }) {
         description: "Show changes compared to main branch",
       },
     ]
-  })
-
-  const openSwitchDiffDialog = () => {
     dialog.show(() => (
       <DialogSelect
         title="Switch source"
         skipFilter={true}
         renderFilter={false}
         current={mode()}
-        options={switchDiffOptions().map((option) => ({
+        options={options.map((option) => ({
           ...option,
           onSelect() {
             dialog.clear()
