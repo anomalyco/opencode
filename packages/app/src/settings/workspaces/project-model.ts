@@ -1,6 +1,6 @@
 import { getFilename } from "@opencode-ai/util/path"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { useMutation } from "@tanstack/solid-query"
+import { createQuery, useMutation } from "@tanstack/solid-query"
 import { createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useGlobal } from "@/runtime/server/runtime"
@@ -11,6 +11,11 @@ export function createEditProjectModel(props: { project: LocalProject; server: S
   const dialog = useDialog()
   const global = useGlobal()
   const serverCtx = createMemo(() => global.ensureServerCtx(props.server))
+  const icons = createQuery(() => ({
+    queryKey: [serverCtx().sdk.scope, props.project.worktree, "project-icons"] as const,
+    queryFn: ({ signal }) =>
+      serverCtx().sdk.api.project.icons({ location: { directory: props.project.worktree } }, { signal }),
+  }))
   const folderName = createMemo(() => getFilename(props.project.worktree))
   const defaultName = createMemo(() => props.project.name || folderName())
   const [store, setStore] = createStore({
@@ -100,6 +105,7 @@ export function createEditProjectModel(props: { project: LocalProject; server: S
     setStore,
     folderName,
     defaultName,
+    icons,
     save,
     submit,
     drop,

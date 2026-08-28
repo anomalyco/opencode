@@ -20,6 +20,20 @@ export const ProjectGroup = HttpApiGroup.make("server.project")
     ),
   )
   .add(
+    HttpApiEndpoint.get("project.icons", `${root}/icons`, {
+      query: LocationQuery,
+      success: Schema.Array(Project.IconCandidate),
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.project.icons",
+          summary: "List project icons",
+          description: "Discover favicon candidates in the requested project worktree.",
+        }),
+      ),
+  )
+  .add(
     HttpApiEndpoint.patch("project.update", `${root}/:projectID`, {
       params: { projectID: Project.ID },
       payload: UpdatePayload,

@@ -143,6 +143,32 @@ function ProjectSettingsDialog(props: { project: LocalProject; server: ServerCon
                     <span>{language.t("dialog.project.edit.icon.recommended")}</span>
                   </div>
                 </div>
+                <Show when={model.icons.data?.length}>
+                  <div class="-ml-1 flex flex-wrap gap-1.5">
+                    <For each={model.icons.data}>
+                      {(candidate) => (
+                        <button
+                          type="button"
+                          aria-label={language.t("dialog.project.edit.icon.select", { path: candidate.path })}
+                          aria-pressed={model.store.iconOverride === candidate.url}
+                          class="flex size-8 items-center justify-center rounded-[10px] p-1 outline outline-1 outline-transparent transition-[background-color,outline-color] hover:bg-v2-overlay-simple-overlay-hover focus-visible:outline-v2-border-border-focus"
+                          classList={{
+                            "bg-v2-overlay-simple-overlay-hover [box-shadow:inset_0_0_0_2px_var(--v2-border-border-focus)]":
+                              model.store.iconOverride === candidate.url,
+                          }}
+                          onClick={() => model.setStore("iconOverride", candidate.url)}
+                        >
+                          <ProjectAvatar
+                            fallback={model.store.name || model.defaultName()}
+                            src={candidate.url}
+                            variant={getProjectAvatarVariant(model.store.color)}
+                            class="!size-6 [&_[data-slot=project-avatar-surface]]:!rounded-[6px]"
+                          />
+                        </button>
+                      )}
+                    </For>
+                  </div>
+                </Show>
               </div>
 
               <Show when={!model.store.iconOverride}>

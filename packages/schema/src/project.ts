@@ -2,7 +2,7 @@ export * as Project from "./project.js"
 
 import { Schema } from "effect"
 import { ephemeral, inventory } from "./event.js"
-import { AbsolutePath, NonNegativeInt, optional } from "./schema.js"
+import { AbsolutePath, NonNegativeInt, optional, RelativePath } from "./schema.js"
 import { ProjectID } from "./project-id.js"
 
 export const ID = ProjectID
@@ -23,6 +23,11 @@ export const Icon = Schema.Struct({
   color: optional(Schema.String),
 }).annotate({ identifier: "Project.Icon" })
 export interface Icon extends Schema.Schema.Type<typeof Icon> {}
+export const IconCandidate = Schema.Struct({
+  path: RelativePath,
+  url: Schema.String,
+}).annotate({ identifier: "Project.IconCandidate" })
+export interface IconCandidate extends Schema.Schema.Type<typeof IconCandidate> {}
 export const Commands = Schema.Struct({
   start: optional(
     Schema.String.annotate({ description: "Startup script to run when creating a new workspace (worktree)" }),

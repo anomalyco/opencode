@@ -4,10 +4,11 @@ import { Context, Effect, Layer, Schema } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { and, asc, desc, eq, gte, isNull, lte } from "drizzle-orm"
 import path from "path"
-import { AbsolutePath } from "./schema.js"
+import { AbsolutePath, RelativePath } from "./schema.js"
 import { Bus } from "./bus.js"
 import { Database } from "./database/database.js"
 import { Worktree } from "@opencode-ai/schema/worktree"
+import type { IconCandidate } from "@opencode-ai/schema/project"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Git } from "./git.js"
 import { AppProcess } from "@opencode-ai/util/process"
@@ -61,6 +62,7 @@ export const root = Effect.fn("Project.root")(function* (
 
 export interface Interface {
   readonly list: () => Effect.Effect<ReadonlyArray<Info>>
+  readonly icons: (directory: AbsolutePath) => Effect.Effect<ReadonlyArray<IconCandidate>>
   readonly update: (input: UpdateInput) => Effect.Effect<Info, NotFoundError>
   readonly resolve: (input: AbsolutePath, options?: { readonly discovery?: boolean }) => Effect.Effect<Resolved>
 }
@@ -209,6 +211,23 @@ const layer = Layer.effect(
         .all()
         .pipe(Effect.orDie)
       return rows.map(fromRow)
+    })
+
+    const icons = Effect.fn("Project.icons")(function* (directory: AbsolutePath) {
+      const files = yield* fs
+        .scan("**/favicon.{ico,png,svg,jpg,jpeg,webp}", { cwd: directory, include: "file" })
+        .pipe(Effect.orDie)
+      return yield* Effect.forEach(
+        files.toSorted((a, b) => a.length - b.length || a.localeCompare(b)),
+        (file) =>
+          fs.readFile(path.join(directory, file)).pipe(
+            Effect.orDie,
+            Effect.map((content) => ({
+              path: RelativePath.make(file.replaceAll("\\", "/")),
+              url: `data:${FSUtil.mimeType(file)};base64,${Buffer.from(content).toString("base64")}`,
+            })),
+          ),
+      )
     })
 
     const update = Effect.fn("Project.update")(function* (input: UpdateInput) {
@@ -378,7 +397,7 @@ const layer = Layer.effect(
       })
     })
 
-    return Service.of({ list, update, resolve })
+    return Service.of({ list, icons, update, resolve })
   }),
 )
 

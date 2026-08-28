@@ -10,7 +10,7 @@ import { Database } from "@opencode-ai/core/database/database"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectSchema } from "@opencode-ai/core/project/schema"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
-import { AbsolutePath } from "@opencode-ai/core/schema"
+import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
 import { Hash } from "@opencode-ai/util/hash"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
@@ -65,6 +65,53 @@ describe("Project.list", () => {
           sandboxes: [abs("/older/sandbox")],
         },
       ])
+    }),
+  )
+})
+
+describe("Project.icons", () => {
+  it.live("discovers supported favicons ordered by relative path length and name", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      yield* Effect.promise(async () => {
+        await fs.mkdir(path.join(tmp.path, "a"))
+        await fs.mkdir(path.join(tmp.path, "b"))
+        await fs.mkdir(path.join(tmp.path, "nested", "app"), { recursive: true })
+        await Bun.write(path.join(tmp.path, "favicon.ico"), "ico")
+        await Bun.write(path.join(tmp.path, "favicon.png"), "png")
+        await Bun.write(path.join(tmp.path, "a", "favicon.svg"), "<svg />")
+        await Bun.write(path.join(tmp.path, "b", "favicon.jpg"), "jpg")
+        await Bun.write(path.join(tmp.path, "nested", "app", "favicon.jpeg"), "jpeg")
+        await Bun.write(path.join(tmp.path, "nested", "app", "favicon.webp"), "webp")
+        await Bun.write(path.join(tmp.path, "nested", "app", "favicon.gif"), "gif")
+        await Bun.write(path.join(tmp.path, "nested", "app", "icon.png"), "icon")
+      })
+      const project = yield* Project.Service
+
+      expect(yield* project.icons(abs(tmp.path))).toEqual([
+        { path: RelativePath.make("favicon.ico"), url: "data:image/vnd.microsoft.icon;base64,aWNv" },
+        { path: RelativePath.make("favicon.png"), url: "data:image/png;base64,cG5n" },
+        { path: RelativePath.make("a/favicon.svg"), url: "data:image/svg+xml;base64,PHN2ZyAvPg==" },
+        { path: RelativePath.make("b/favicon.jpg"), url: "data:image/jpeg;base64,anBn" },
+        { path: RelativePath.make("nested/app/favicon.jpeg"), url: "data:image/jpeg;base64,anBlZw==" },
+        { path: RelativePath.make("nested/app/favicon.webp"), url: "data:image/webp;base64,d2VicA==" },
+      ])
+    }),
+  )
+
+  it.live("returns no candidates when the worktree has no favicons", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      yield* Effect.promise(() => Bun.write(path.join(tmp.path, "icon.png"), "icon"))
+      const project = yield* Project.Service
+
+      expect(yield* project.icons(abs(tmp.path))).toEqual([])
     }),
   )
 })
