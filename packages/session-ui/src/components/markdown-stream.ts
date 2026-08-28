@@ -85,6 +85,19 @@ export function stream(text: string, live: boolean): Block[] {
   return [...result, { raw, src: openCode(code.raw), mode: "code", language: language(code.lang) }]
 }
 
+// Streaming projection bounds the work done per delta. Re-lexing the whole
+// accumulated text on every delta is O(n²) for a long single part and freezes
+// the UI (see sync.tsx delta coalescing; freeze tracked in #36043 — see also #6172, #42264). While a tail
+// block is still open we grow it in place, only re-lexing when the appended
+// text introduces a block boundary (a blank line) or the tail exceeds this cap.
+// A boundary-less tail (one giant paragraph, list, or table) keeps growing in
+// place past the cap so it is never re-lexed on every delta.
+const LIVE_TAIL_MAX = 2048
+
+function hasBlockBoundary(text: string) {
+  return text.includes("\n\n")
+}
+
 export function project(previous: Projection | undefined, text: string, live: boolean): Projection {
   if (!live) {
     const current =
@@ -106,17 +119,26 @@ export function project(previous: Projection | undefined, text: string, live: bo
   if (!previous || !text.startsWith(previous.text)) return { text, blocks: stream(text, live) }
   const tail = previous.blocks.at(-1)
   const suffix = text.slice(previous.text.length)
-  if (!suffix || tail?.mode !== "code" || tail.complete || closesFence(tail.raw, suffix))
-    return { text, blocks: stream(text, live) }
-  return {
-    text,
-    blocks: [
-      ...previous.blocks.slice(0, -1),
-      {
-        ...tail,
-        raw: tail.raw + suffix,
-        src: tail.src + suffix,
-      },
-    ],
+  if (!suffix) return previous
+  if (tail?.mode === "live") {
+    const raw = tail.raw + suffix
+    if (raw.length <= LIVE_TAIL_MAX || !hasBlockBoundary(suffix)) {
+      return { text, blocks: [...previous.blocks.slice(0, -1), { ...tail, raw, src: heal(raw) }] }
+    }
+    return { text, blocks: [...previous.blocks.slice(0, -1), ...stream(raw, true)] }
   }
+  if (tail?.mode === "code" && !tail.complete && !closesFence(tail.raw, suffix)) {
+    return {
+      text,
+      blocks: [
+        ...previous.blocks.slice(0, -1),
+        {
+          ...tail,
+          raw: tail.raw + suffix,
+          src: tail.src + suffix,
+        },
+      ],
+    }
+  }
+  return { text, blocks: stream(text, live) }
 }

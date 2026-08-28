@@ -228,4 +228,36 @@ describe("markdown stream", () => {
       complete: true,
     })
   })
+
+  test("appends plain text deltas without reprojecting frozen blocks", () => {
+    const previous = project(undefined, "# Plan\n\nFinished paragraph.\n\n- final", true)
+    const next = project(previous, `${previous.text} item`, true)
+
+    expect(next.blocks[0]).toBe(previous.blocks[0])
+    expect(next.blocks[1]).toBe(previous.blocks[1])
+    expect(next.blocks.at(-1)).toEqual({ raw: "- final item", src: "- final item", mode: "live" })
+  })
+
+  test("boundedly re-lexes the live tail once it exceeds the cap", () => {
+    const unit = "para\n\n"
+    let grown = project(undefined, unit, true)
+    for (let i = 0; i < 400; i++) {
+      grown = project(grown, `${grown.text}${unit}`, true)
+    }
+
+    expect(grown.blocks.at(-1)!.mode).toBe("live")
+    expect(grown.blocks.filter((block) => block.mode === "full").length).toBeGreaterThan(0)
+  })
+
+  test("grows a boundary-less oversized tail in place without splitting", () => {
+    const word = "word "
+    let grown = project(undefined, word, true)
+    for (let i = 0; i < 600; i++) {
+      grown = project(grown, `${grown.text}${word}`, true)
+    }
+
+    expect(grown.blocks).toHaveLength(1)
+    expect(grown.blocks[0]!.mode).toBe("live")
+    expect(grown.blocks[0]!.raw).toBe(word.repeat(601))
+  })
 })
