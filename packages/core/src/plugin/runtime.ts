@@ -6,7 +6,8 @@ import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { Job } from "../job.js"
 import { Location } from "../location.js"
 import { LocationServiceMap } from "../location-service-map.js"
-import { MCP } from "../mcp/index.js"
+import { Mcp } from "../mcp/index.js"
+import { PersistentPty } from "../persistent-pty.js"
 import { Session } from "../session.js"
 
 export interface Interface {
@@ -29,6 +30,7 @@ export interface Interface {
     | "context"
   >
   readonly job: Pick<Job.Interface, "start" | "wait" | "block" | "background" | "cancel" | "completeBackground">
+  readonly persistentPty: Pick<PersistentPty.Interface, "read">
   readonly location: {
     readonly agent: {
       readonly list: (
@@ -38,7 +40,7 @@ export interface Interface {
     readonly mcp: {
       readonly list: (
         ref: Location.Ref,
-      ) => Effect.Effect<{ readonly location: Location.Info; readonly data: MCP.ServerInfo[] }, unknown>
+      ) => Effect.Effect<{ readonly location: Location.Info; readonly data: Mcp.ServerInfo[] }, unknown>
     }
   }
 }
@@ -76,7 +78,7 @@ export const layerWithCell = (cell: Cell) =>
         resume: (sessionID) => require(cell, (runtime) => runtime.session.resume(sessionID)),
         switchAgent: (input) => require(cell, (runtime) => runtime.session.switchAgent(input)),
         switchModel: (input) => require(cell, (runtime) => runtime.session.switchModel(input)),
-        interrupt: (sessionID) => require(cell, (runtime) => runtime.session.interrupt(sessionID)),
+        interrupt: (sessionID, options) => require(cell, (runtime) => runtime.session.interrupt(sessionID, options)),
         synthetic: (input) => require(cell, (runtime) => runtime.session.synthetic(input)),
         wait: (sessionID) => require(cell, (runtime) => runtime.session.wait(sessionID)),
         context: (sessionID) => require(cell, (runtime) => runtime.session.context(sessionID)),
@@ -89,6 +91,9 @@ export const layerWithCell = (cell: Cell) =>
         cancel: (id) => require(cell, (runtime) => runtime.job.cancel(id)),
         completeBackground: (notificationID) =>
           require(cell, (runtime) => runtime.job.completeBackground(notificationID)),
+      },
+      persistentPty: {
+        read: (sessionID, lines) => require(cell, (runtime) => runtime.persistentPty.read(sessionID, lines)),
       },
       location: {
         agent: {
@@ -107,9 +112,11 @@ export const providerLayerWithCell = (cell: Cell) =>
       const sessions = yield* Session.Service
       const jobs = yield* Job.Service
       const locations = yield* LocationServiceMap.Service
+      const persistentPty = yield* PersistentPty.Service
       const runtime: Interface = {
         session: sessions,
         job: jobs,
+        persistentPty,
         location: {
           agent: {
             list: (ref) =>
@@ -130,7 +137,7 @@ export const providerLayerWithCell = (cell: Cell) =>
             list: (ref) =>
               Effect.gen(function* () {
                 const location = yield* Location.Service
-                const mcp = yield* MCP.Service
+                const mcp = yield* Mcp.Service
                 return {
                   location: new Location.Info({
                     directory: location.directory,
@@ -162,7 +169,7 @@ export const providerNodeWithCell = (cell: Cell) =>
   makeGlobalNode({
     name: "plugin-runtime-provider",
     layer: providerLayerWithCell(cell),
-    deps: [node, Session.node, Job.node, LocationServiceMap.node],
+    deps: [node, Session.node, Job.node, LocationServiceMap.node, PersistentPty.node],
   })
 
 export const providerNode = providerNodeWithCell(defaultCell)

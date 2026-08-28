@@ -361,29 +361,29 @@ describe("FSUtil", () => {
     it(
       "exists works",
       Effect.gen(function* () {
-        yield* FSUtil.Service
+        const fs = yield* FSUtil.Service
         const filesys = yield* FileSystem.FileSystem
         const tmp = yield* filesys.makeTempDirectoryScoped()
         const file = path.join(tmp, "exists.txt")
         yield* filesys.writeFileString(file, "yes")
 
-        expect(yield* filesys.exists(file)).toBe(true)
-        expect(yield* filesys.exists(file + ".nope")).toBe(false)
+        expect(yield* fs.exists(file)).toBe(true)
+        expect(yield* fs.exists(file + ".nope")).toBe(false)
       }),
     )
 
     it(
       "remove works",
       Effect.gen(function* () {
-        yield* FSUtil.Service
+        const fs = yield* FSUtil.Service
         const filesys = yield* FileSystem.FileSystem
         const tmp = yield* filesys.makeTempDirectoryScoped()
         const file = path.join(tmp, "delete-me.txt")
         yield* filesys.writeFileString(file, "bye")
 
-        yield* filesys.remove(file)
+        yield* fs.remove(file)
 
-        expect(yield* filesys.exists(file)).toBe(false)
+        expect(yield* fs.exists(file)).toBe(false)
       }),
     )
   })

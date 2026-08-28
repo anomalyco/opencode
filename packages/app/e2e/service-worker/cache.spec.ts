@@ -198,6 +198,10 @@ fixture(
 fixture(
   "precaches public files of every type and size, excluding deployment metadata and source maps",
   async ({ page, site, builds, context }) => {
+    for (const output of Object.values(builds)) {
+      expect(output["/sw.js.map"]).toBeUndefined()
+      expect(Object.keys(output).some((path) => path.startsWith("/_assets/") && path.endsWith(".map"))).toBe(true)
+    }
     await install(page, site.url)
     const files = ["/nested/data.json", "/nested/font.woff2", "/nested/module.wasm", "/large.bin"]
     await context.setOffline(true)
