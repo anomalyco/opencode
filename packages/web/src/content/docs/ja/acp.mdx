@@ -24,12 +24,15 @@ ACP 経由で OpenCode を使用するには、`opencode acp` コマンドを実
 
 ### Zed
 
-[Zed](https://zed.dev) 構成 (`~/.config/zed/settings.json`) に追加します。
+コマンドパレットで `zed: acp registry` を実行し、[Zed ACP レジストリ](https://zed.dev/docs/ai/external-agents#registry)から OpenCode をインストールします。
+
+代わりにカスタムの OpenCode 実行ファイルを使用する場合は、[Zed](https://zed.dev) の設定 (`~/.config/zed/settings.json`) に追加します。
 
 ```json title="~/.config/zed/settings.json"
 {
   "agent_servers": {
     "OpenCode": {
+      "type": "custom",
       "command": "opencode",
       "args": ["acp"]
     }
