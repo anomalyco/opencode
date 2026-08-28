@@ -1247,10 +1247,7 @@ const onResponseFinish = Effect.fn("OpenResponses.onResponseFinish")(function* (
     for (const item of event.response?.output ?? []) {
       const id = item.id ?? (item.type === "function_call" ? item.call_id : undefined)
       if (id === undefined) continue
-      const tracked =
-        (item.type === "function_call" && current.tools[id]) ||
-        (item.type === "reasoning" && current.reasoningItems[id]?.open)
-      if (!tracked) continue
+      if (item.type !== "function_call" || !current.tools[id]) continue
       const [next, emitted] = yield* onOutputItemDone(current, item)
       current = next
       events.push(...emitted)
