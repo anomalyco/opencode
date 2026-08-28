@@ -69,6 +69,11 @@ export type CreateDataInput = {
 const messageIDFromEvent = (eventID: string) => eventID.replace(/^evt_/, "msg_")
 const messagePageLimit = 20
 
+// Sessions whose cached transcript outgrows this bound release their cache when the session
+// view unmounts, so re-entering the session reduces one fresh page instead of every page the
+// user ever scrolled through.
+export const messageCacheReleaseLimit = messagePageLimit * 20
+
 // Global MCP elicitations temporarily use "global" instead of a real session ID, so the
 // server cannot recover their Location when settling them. Preserve the event Location
 // until MCP elicitations carry session ownership.
@@ -1469,6 +1474,18 @@ export function createData(config: CreateDataInput) {
         },
         invalidate(sessionID: string) {
           sync.invalidate(`session.message:${sessionID}`)
+        },
+        release(sessionID: string) {
+          messageIndex.delete(sessionID)
+          // Invalidate so the next visit re-syncs instead of replaying a resolved sync.
+          sync.invalidate(`session.message:${sessionID}`)
+          setStore(
+            "session",
+            produce((draft) => {
+              delete draft.message[sessionID]
+              delete draft.messageCursor[sessionID]
+            }),
+          )
         },
       },
       permission: {
