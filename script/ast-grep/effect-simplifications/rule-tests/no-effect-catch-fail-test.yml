@@ -1,0 +1,51 @@
+id: no-effect-catch-fail
+valid:
+  - effect.pipe(Effect.mapError((error) => transform(error)))
+  - Effect.mapError(effect, (error) => transform(error))
+  - stream.pipe(Stream.mapError((error) => transform(error)))
+  - Stream.mapError(stream, (error) => transform(error))
+  - effect.pipe(Effect.catch((error) => Effect.fail(error)))
+  - stream.pipe(Stream.catch((error) => Stream.fail(error)))
+  - "effect.pipe(Effect.catch((error: Error) => Effect.fail(error)))"
+  - "stream.pipe(Stream.catch((error: Error) => Stream.fail(error)))"
+  - effect.pipe(Effect.catch((error) => Effect.fail((error))))
+  - effect.pipe(Effect.catch((error) => { log(error); return Effect.fail(transform(error)) }))
+  - stream.pipe(Stream.catch((error) => { log(error); return Stream.fail(transform(error)) }))
+  - "effect.pipe(Effect.catch((error) => condition ? Effect.fail(transform(error)) : Effect.fail(other(error))))"
+  - "stream.pipe(Stream.catch((error) => condition ? Stream.fail(transform(error)) : Stream.fail(other(error))))"
+  - effect.pipe(Effect.catchCause((cause) => Effect.fail(transform(cause))))
+  - stream.pipe(Stream.catchCause((cause) => Stream.fail(transform(cause))))
+  - effect.pipe(Effect.catch((error) => cleanup.pipe(Effect.andThen(Effect.fail(transform(error))))))
+  - stream.pipe(Stream.catch((error) => cleanup.pipe(Stream.concat(Stream.fail(transform(error))))))
+  - effect.pipe(Other.catch((error) => Effect.fail(transform(error))))
+  - stream.pipe(Other.catch((error) => Stream.fail(transform(error))))
+  - effect.pipe(Effect.catch((error) => Stream.fail(transform(error))))
+  - stream.pipe(Stream.catch((error) => Effect.fail(transform(error))))
+  - Effect.catch(effect, options, (error) => Effect.fail(transform(error)))
+  - Stream.catch(stream, options, (error) => Stream.fail(transform(error)))
+  - effect.pipe(Effect.catch(function (error) { return Effect.fail(transform(error)) }))
+  - stream.pipe(Stream.catch(function (error) { return Stream.fail(transform(error)) }))
+  - "effect.pipe(Effect.catch((error): Other.Effect<never, Wrapped> => Effect.fail(transform(error))))"
+  - "stream.pipe(Stream.catch((error): Other.Stream<string, Wrapped> => Stream.fail(transform(error))))"
+invalid:
+  - effect.pipe(Effect.catch((error) => Effect.fail(transform(error))))
+  - Effect.catch(effect, (error) => Effect.fail(transform(error)))
+  - effect.pipe(Effect.catch(error => Effect.fail(new Wrapped(error))))
+  - effect.pipe(Effect.catch((error) => { return Effect.fail(transform(error)) }))
+  - Effect.catch(effect, error => { return Effect.fail(transform(error)) })
+  - "effect.pipe(Effect.catch((error: Error) => Effect.fail(transform(error))))"
+  - "effect.pipe(Effect.catch((error): Effect.Effect<never, Wrapped> => Effect.fail(transform(error))))"
+  - "effect.pipe(Effect.catch((error: Error): Effect.Effect<never, Wrapped, Scope> => { return Effect.fail(transform(error)) }))"
+  - stream.pipe(Stream.catch((error) => Stream.fail(transform(error))))
+  - Stream.catch(stream, (error) => Stream.fail(transform(error)))
+  - stream.pipe(Stream.catch(error => Stream.fail(new Wrapped(error))))
+  - stream.pipe(Stream.catch((error) => { return Stream.fail(transform(error)) }))
+  - "stream.pipe(Stream.catch((error: Error) => Stream.fail(transform(error))))"
+  - "stream.pipe(Stream.catch((error): Stream.Stream<string, Wrapped> => Stream.fail(transform(error))))"
+  - "stream.pipe(Stream.catch((error: Error): Stream.Stream<string, Wrapped, Scope> => { return Stream.fail(transform(error)) }))"
+  - |
+    effect.pipe(
+      Effect.catch((error) =>
+        Effect.fail(transform(error)),
+      ),
+    )

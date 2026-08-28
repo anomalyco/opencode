@@ -24,8 +24,8 @@ export const invoke = (plan: Plan, input: unknown): Effect.Effect<unknown, unkno
     const response = yield* client
       .execute(request)
       .pipe(
-        Effect.catch((cause) =>
-          Effect.fail(toolError(`${plan.operation.method} ${plan.operation.path} failed: transport error`, cause)),
+        Effect.mapError((cause) =>
+          toolError(`${plan.operation.method} ${plan.operation.path} failed: transport error`, cause),
         ),
       )
     const text = yield* readResponseBody(response, plan)
