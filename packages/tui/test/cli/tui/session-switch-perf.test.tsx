@@ -61,7 +61,7 @@ function mount(): Harness {
   function Probe() {
     data = useData()
     client = useClient()
-    rows = createSessionRows(() => sessionID, () => syncedCount++)
+    rows = createSessionRows(() => route.sessionID, () => syncedCount++)
     return null
   }
 
