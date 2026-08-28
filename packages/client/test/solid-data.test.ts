@@ -485,6 +485,102 @@ test("preserves assistant content replacement events across an active message re
   }
 })
 
+test.each([
+  "session.execution.succeeded",
+  "session.execution.failed",
+  "session.execution.interrupted",
+  "session.execution.started",
+  "session.deleted",
+] as const)("preserves %s activity when an older snapshot arrives", async (type) => {
+  const release = Promise.withResolvers<void>()
+  const requested = Promise.withResolvers<void>()
+  const setup = activityFixture(async () => {
+    requested.resolve()
+    await release.promise
+    return Response.json({
+      data: {
+        ...(type === "session.execution.started" ? {} : { ses_refresh: { type: "running" } }),
+        ses_hydrated: { type: "running" },
+      },
+    })
+  })
+
+  try {
+    if (type !== "session.execution.started") setup.data.session.setStatus("ses_refresh", "running")
+    setup.emit({ type: "server.connected", data: {} })
+    await requested.promise
+    setup.emit({
+      id: "evt_activity",
+      created: 2,
+      type,
+      durable: { aggregateID: "ses_refresh", seq: 2, version: 1 },
+      data: { sessionID: "ses_refresh", reason: "user" },
+    })
+    expect(setup.data.session.status("ses_refresh")).toBe(type === "session.execution.started" ? "running" : "idle")
+    release.resolve()
+    await wait(() => setup.data.session.status("ses_hydrated") === "running")
+    expect(setup.data.session.status("ses_refresh")).toBe(type === "session.execution.started" ? "running" : "idle")
+  } finally {
+    release.resolve()
+    setup.dispose()
+  }
+})
+
+test("ignores activity snapshots from an older connection", async () => {
+  const reads: ReturnType<typeof Promise.withResolvers<Response>>[] = []
+  const setup = activityFixture(() => {
+    const read = Promise.withResolvers<Response>()
+    reads.push(read)
+    return read.promise
+  })
+
+  try {
+    setup.emit({ type: "server.connected", data: {} })
+    await wait(() => reads.length === 1)
+    setup.emit({ type: "server.connected", data: {} })
+    await wait(() => reads.length === 2)
+    reads[1]?.resolve(Response.json({ data: { ses_new: { type: "running" } } }))
+    await wait(() => setup.data.session.status("ses_new") === "running")
+    reads[0]?.resolve(Response.json({ data: { ses_old: { type: "running" } } }))
+    await Bun.sleep(20)
+    expect(setup.data.session.status("ses_new")).toBe("running")
+    expect(setup.data.session.status("ses_old")).toBe("idle")
+  } finally {
+    reads.forEach((read) => read.resolve(Response.json({ data: {} })))
+    setup.dispose()
+  }
+})
+
+function activityFixture(read: () => Response | Promise<Response>) {
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      const path = new URL(request.url).pathname
+      if (path === "/api/session/active") return read()
+      if (path === "/api/project") return Response.json([])
+      if (path === "/api/location") return Response.json({ directory: "/project" })
+      return Response.json({ location: { directory: "/project" }, data: { branch: "main" } })
+    },
+  })
+  return createRoot((dispose) => ({
+    data: createData({
+      api: () => api,
+      directory: "/project",
+      event: {
+        on: () => () => {},
+        listen(handler) {
+          listeners.add(handler)
+          return () => listeners.delete(handler)
+        },
+      },
+    }),
+    emit: (details: OpenCodeEvent) => listeners.forEach((listener) => listener({ name: details.type, details })),
+    dispose,
+  }))
+}
+
 async function wait(check: () => boolean) {
   const started = Date.now()
   while (!check()) {

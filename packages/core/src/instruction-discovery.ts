@@ -39,12 +39,14 @@ export interface Interface extends State.Transformable<Draft> {
   // Discovery policy lives here because internal plugins have no per-composition options channel.
   // Move it into plugin config once plugins can consume their own options.
   readonly project: boolean
+  readonly global: boolean
   readonly list: () => Effect.Effect<File[] | Instructions.Unavailable>
   readonly load: () => Effect.Effect<Instructions.List>
 }
 
 export const Options = Schema.Struct({
   project: Schema.optional(Schema.Boolean),
+  global: Schema.optional(Schema.Boolean),
 })
 export type Options = typeof Options.Type
 
@@ -95,6 +97,7 @@ export const layer = (options?: Options) =>
 
       return Service.of({
         project: options?.project !== false,
+        global: options?.global !== false,
         transform: state.transform,
         reload: state.reload,
         list,
