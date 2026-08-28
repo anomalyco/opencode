@@ -15,6 +15,25 @@ import { createEventStream, createFetch, json } from "./fixture/tui-client"
 
 const target = "fixture-plugin@latest"
 const entrypoint = new URL("./fixture/plugin-inspection.tsx", import.meta.url).href
+const updateTarget = "fixture-update@latest"
+async function updateGraphs(directory: string) {
+  const sources = await Promise.all(
+    ["a", "b"].map(async (version) => {
+      const root = new URL(`./fixture/update-${version}/tui.tsx`, import.meta.url)
+      const entry = path.join(directory, `update-${version}`, "tui.tsx")
+      await Bun.write(
+        entry,
+        (await Bun.file(root).text()).replace('"../plugin-inspection"', JSON.stringify(entrypoint)),
+      )
+      await Bun.write(
+        path.join(directory, `update-${version}`, "helper.ts"),
+        await Bun.file(new URL("helper.ts", root)).text(),
+      )
+      return pathToFileURL(entry).href
+    }),
+  )
+  return { a: sources[0], b: sources[1] }
+}
 
 async function boot(
   directory: string,
@@ -25,6 +44,9 @@ async function boot(
     server?: () => PluginInfo[]
     check?: PackageResolver["check"]
     resolve?: PackageResolver["resolve"]
+    update?: PackageResolver["update"]
+    commit?: PackageResolver["commit"]
+    inventoryError?: () => boolean
   } = {},
 ) {
   const app = await createTestRenderer({
@@ -36,6 +58,7 @@ async function boot(
   const location = { directory, project: { id: "proj_fixture", directory, canonical: directory } }
   const events = createEventStream()
   const requests: { path: string; directory: string | null; target: string }[] = []
+  const inventories: (string | null)[] = []
   const calls = createFetch(async (url, request) => {
     if (url.pathname.startsWith("/api/plugin/")) {
       const body = await request.json()
@@ -43,6 +66,8 @@ async function boot(
       return json({ location, data: { installed: "9.0.0", available: "10.0.0", mutable: true } })
     }
     if (url.pathname === "/api/plugin") {
+      inventories.push(url.searchParams.get("location[directory]"))
+      if (options.inventoryError?.()) return json({ message: "Inventory unavailable" }, { status: 503 })
       return json({ location, data: options.server?.() ?? [] })
     }
     if (url.pathname === "/api/location")
@@ -55,6 +80,11 @@ async function boot(
   process.chdir(directory)
   probe.setups = 0
   probe.cleanups = 0
+  probe.updateSetups = []
+  probe.updateCleanups = []
+  probe.updateEvents = []
+  probe.updateSetup = Promise.resolve()
+  probe.failUpdate = false
   const { run } = await import("../src/app")
   const task = Effect.runPromise(
     run({
@@ -70,6 +100,8 @@ async function boot(
       packages: {
         resolve: options.resolve ?? (async () => ({ entrypoint, revision: "1.0.0" })),
         check: options.check ?? (async () => ({ installed: "1.0.0", available: "2.0.0", mutable: true })),
+        update: options.update ?? (async () => ({})),
+        commit: options.commit ?? (async () => {}),
       },
       terminalHandoff: async () => ({ renderer: app.renderer, mode: "dark", complete: () => {} }),
       args: {},
@@ -94,6 +126,8 @@ async function boot(
     ...app,
     events,
     requests,
+    inventories,
+    task,
     async [Symbol.asyncDispose]() {
       app.renderer.destroy()
       await task.finally(async () => {
@@ -250,6 +284,9 @@ test.each(["active", "failed", "without-tui"])(
     const details = await app.waitForFrame((frame) => frame.includes("Loaded") && frame.includes("Installed"))
     expect(details).toMatch(/Loaded\s+1\.0\.0/)
     expect(details).toMatch(/Installed\s+9\.0\.0/)
+    expect(details).not.toContain("Update & Apply")
+    app.mockInput.pressKey("\x1b[6~")
+    await app.waitForFrame((frame) => frame.includes("Inspection only") && frame.includes("hot apply"))
     app.mockInput.pressEscape()
     await app.waitFor(() => app.renderer.currentFocusedEditor instanceof InputRenderable)
     app.mockInput.pressKey("c", { ctrl: true })
@@ -345,3 +382,404 @@ test.each([false, true])(
     await app.waitForFrame((frame) => frame.includes("Runtime") && !frame.includes("Available"))
   },
 )
+
+test.each([40, 100])(
+  "Update & Apply swaps only active target code and preserves manual mode at width %s",
+  async (width) => {
+    await using tmp = await tmpdir()
+    const versions = await updateGraphs(tmp.path)
+    const pending = Promise.withResolvers<Awaited<ReturnType<PackageResolver["update"]>>>()
+    let selected = { entrypoint: versions.a, revision: "1.0.0" }
+    const updates: string[] = []
+    const checks: string[] = []
+    const resolutions: string[] = []
+    await using app = await boot(tmp.path, {
+      width,
+      plugins: [target, updateTarget],
+      resolve: async (spec) => {
+        resolutions.push(spec)
+        return spec === target ? { entrypoint, revision: "1.0.0" } : selected
+      },
+      check: async (spec) => {
+        checks.push(spec)
+        return { installed: selected.revision, available: "2.0.0", mutable: true }
+      },
+      update: (spec) => {
+        updates.push(spec)
+        return pending.promise
+      },
+      commit: async (spec, entry) => {
+        expect(spec).toBe(updateTarget)
+        expect(probe.updateSetups).toEqual(["A", "B"])
+        expect(
+          probe
+            .plugins()
+            .registered()
+            .find((item) => item.id === "fixture.update"),
+        ).toMatchObject({ active: true, revision: "2.0.0" })
+        selected = { entrypoint: entry.entrypoint!, revision: entry.revision! }
+      },
+    })
+    await app.waitForFrame((frame) => frame.includes("Update code A"))
+    expect(await probe.plugins().deactivate("opencode.sidebar.context")).toBe(true)
+    const order = probe
+      .plugins()
+      .registered()
+      .map((item) => item.id)
+    await open(app, "fixture.update")
+    app.mockInput.pressEnter()
+    const unchecked = await app.waitForFrame((frame) => frame.includes("Check for updates"))
+    expect(unchecked).not.toMatch(/>.*Update & Apply/)
+    app.mockInput.pressKey("r", { ctrl: true })
+    await app.waitForFrame((frame) => frame.includes("Update & Apply") && frame.includes("New revision available"))
+    app.mockInput.pressArrow("down")
+    app.mockInput.pressEnter()
+    const busy = await app.waitForFrame((frame) => frame.includes("Updating & applying..."))
+    expect(busy.split("\n").length).toBeLessThanOrEqual(25)
+    await app.waitFor(() => updates.length === 1)
+    app.mockInput.pressEnter()
+    expect(updates).toEqual([updateTarget])
+    expect(selected.entrypoint).toBe(versions.a)
+    expect(probe.updateCleanups).toEqual([])
+    pending.resolve({ entrypoint: versions.b, revision: "2.0.0" })
+    await app.waitFor(() => selected.entrypoint === versions.b)
+    await app.waitForFrame((frame) => !frame.includes("Updating & applying...") && frame.includes("Check for updates"))
+    if (width === 100) {
+      const details = await app.waitForFrame((frame) => /Loaded\s+2\.0\.0/.test(frame))
+      expect(details).toMatch(/Installed\s+2\.0\.0/)
+      expect(details).toMatch(/Available\s+2\.0\.0/)
+      expect(details).not.toContain("New revision available")
+    }
+    expect(probe.updateSetups).toEqual(["A", "B"])
+    expect(probe.updateCleanups).toEqual(["A"])
+    expect([probe.setups, probe.cleanups]).toEqual([1, 0])
+    expect(
+      probe
+        .plugins()
+        .registered()
+        .map((item) => item.id),
+    ).toEqual(order)
+    expect(
+      probe
+        .plugins()
+        .registered()
+        .find((item) => item.id === "opencode.sidebar.context")?.active,
+    ).toBe(false)
+    expect(resolutions).toEqual([target, updateTarget])
+    expect(checks).toEqual([updateTarget])
+    expect(app.requests).toEqual([])
+    app.mockInput.pressEscape()
+    await app.waitFor(() => app.renderer.currentFocusedEditor instanceof InputRenderable)
+    expect(app.renderer.currentFocusedEditor?.plainText).toBe("fixture.update")
+    app.mockInput.pressEscape()
+    await app.waitForFrame((frame) => frame.includes("Update code B"))
+    await probe.config().update((draft) => {
+      draft.plugins = [target, { package: updateTarget, options: { flag: true } }]
+    })
+    await app.waitFor(() => probe.updateSetups.length === 3)
+    expect(probe.updateSetups).toEqual(["A", "B", "B"])
+    expect(resolutions).toEqual([target, updateTarget])
+  },
+)
+
+test("a fresh graph applies changed helper code even with identical root bytes and package revision", async () => {
+  await using tmp = await tmpdir()
+  const versions = await updateGraphs(tmp.path)
+  expect(await Bun.file(new URL(versions.a)).text()).toBe(await Bun.file(new URL(versions.b)).text())
+  let selected = versions.a
+  await using app = await boot(tmp.path, {
+    plugins: [target, updateTarget],
+    resolve: async (spec) => ({ entrypoint: spec === target ? entrypoint : selected, revision: "1.0.0" }),
+    update: async () => ({ entrypoint: versions.b, revision: "1.0.0" }),
+    commit: async (_spec, entry) => {
+      selected = entry.entrypoint!
+    },
+  })
+  await app.waitForFrame((frame) => frame.includes("Update code A"))
+  await probe.plugins().deactivate("fixture.inspection")
+  expect(await probe.plugins().update(updateTarget)).toEqual({ installed: "1.0.0", available: "1.0.0", mutable: true })
+  await app.waitForFrame((frame) => frame.includes("Update code B"))
+  expect(selected).toBe(versions.b)
+  expect(probe.updateSetups).toEqual(["A", "B"])
+  expect([probe.setups, probe.cleanups]).toEqual([1, 1])
+  expect(
+    probe
+      .plugins()
+      .registered()
+      .find((item) => item.id === "fixture.inspection")?.active,
+  ).toBe(false)
+})
+
+test.each(["import", "invalid", "id", "setup"])(
+  "failed %s candidate retains last-good code and cache selection, then permits retry",
+  async (kind) => {
+    await using tmp = await tmpdir()
+    const versions = await updateGraphs(tmp.path)
+    const bad = pathToFileURL(path.join(tmp.path, "candidate.ts")).href
+    if (kind === "invalid") await Bun.write(new URL(bad), "export default {}\n")
+    if (kind === "id") await Bun.write(new URL(bad), 'export default { id: "fixture.changed", setup() {} }\n')
+    let candidate = kind === "setup" ? versions.b : bad
+    let selected = versions.a
+    await using app = await boot(tmp.path, {
+      plugins: [target, updateTarget],
+      resolve: async (spec) => ({ entrypoint: spec === target ? entrypoint : selected, revision: "1.0.0" }),
+      update: async () => ({ entrypoint: candidate, revision: "2.0.0" }),
+      commit: async (_spec, entry) => {
+        selected = entry.entrypoint!
+      },
+    })
+    await app.waitForFrame((frame) => frame.includes("Update code A"))
+    probe.failUpdate = kind === "setup"
+    await expect(probe.plugins().update(updateTarget)).rejects.toThrow()
+    await app.waitForFrame((frame) => frame.includes("Update code A"))
+    expect(selected).toBe(versions.a)
+    expect(
+      probe
+        .plugins()
+        .registered()
+        .find((item) => item.id === "fixture.update"),
+    ).toMatchObject({ active: true, revision: "1.0.0" })
+    expect(
+      probe
+        .plugins()
+        .list()
+        .find((item) => item.target === updateTarget),
+    ).toMatchObject({ status: "failed", error: expect.stringContaining("previous version still active") })
+    expect(probe.updateCleanups).toEqual(kind === "setup" ? ["A"] : [])
+    expect(probe.updateSetups).toEqual(kind === "setup" ? ["A", "B", "A"] : ["A"])
+    expect([probe.setups, probe.cleanups]).toEqual([1, 0])
+    expect(probe.plugins().canUpdate(updateTarget)).toBe(true)
+    app.events.emit({ id: "evt_apply_probe", type: "server.connected", data: {} })
+    await app.waitFor(() => probe.updateEvents.length > 0)
+    expect(probe.updateEvents).toEqual(["A"])
+    candidate = versions.b
+    probe.failUpdate = false
+    await probe.plugins().update(updateTarget)
+    await app.waitForFrame((frame) => frame.includes("Update code B"))
+    expect(selected).toBe(versions.b)
+  },
+)
+
+test.each(["active", "failed", "without-tui", "read-error"])(
+  "fresh %s server ownership blocks downloads at the default location",
+  async (kind) => {
+    await using tmp = await tmpdir()
+    let server: PluginInfo[] = []
+    let readError = false
+    let updates = 0
+    await using app = await boot(tmp.path, {
+      server: () => server,
+      inventoryError: () => readError,
+      update: async () => {
+        updates++
+        return {}
+      },
+    })
+    probe.navigate("/projects/active-session")
+    await app.waitFor(() => probe.location().current?.directory === "/projects/active-session")
+    await open(app)
+    app.mockInput.pressKey("r", { ctrl: true })
+    await app.waitForFrame((frame) => frame.includes("↑ update"))
+    const info = { id: "fixture.server", source: { type: "package" as const, package: target }, tui: kind === "active" }
+    if (kind === "read-error") readError = true
+    else
+      server = [
+        kind === "failed"
+          ? { ...info, status: "failed", error: "Failed server plugin" }
+          : { ...info, status: "active" },
+      ]
+    const reads = app.inventories.length
+    await expect(probe.plugins().update(target)).rejects.toThrow()
+    expect(app.inventories.length).toBeGreaterThan(reads)
+    expect(app.inventories.at(-1)).toBe(tmp.path)
+    expect(updates).toBe(0)
+    expect([probe.setups, probe.cleanups]).toEqual([1, 0])
+    expect(app.requests).toEqual([])
+  },
+)
+
+test("unknown, local, built-in, disabled, failed-initial and pinned packages cannot update", async () => {
+  await using tmp = await tmpdir()
+  const versions = await updateGraphs(tmp.path)
+  const local = pathToFileURL(path.join(tmp.path, "local.ts")).href
+  await Bun.write(new URL(local), 'export default { id: "fixture.local", setup() {} }\n')
+  let mutable = false
+  let updates = 0
+  await using app = await boot(tmp.path, {
+    plugins: [target, "fixture-broken@latest", updateTarget, "-fixture.update", local],
+    resolve: async (spec) => {
+      if (spec === updateTarget) return { entrypoint: versions.a, revision: "1.0.0" }
+      if (spec !== target) throw new Error("Initial import unavailable")
+      return { entrypoint, revision: "1.0.0" }
+    },
+    check: async () => ({ mutable }),
+    update: async () => {
+      updates++
+      if (!mutable) throw new Error("Pinned package cannot be updated")
+      return {}
+    },
+  })
+  for (const spec of ["unknown", local, "opencode.sidebar.context", "fixture-broken@latest", updateTarget]) {
+    expect(probe.plugins().canUpdate(spec)).toBe(false)
+    await expect(probe.plugins().update(spec)).rejects.toThrow("Not an active CLI-only")
+  }
+  await expect(probe.plugins().update(target)).rejects.toThrow("Pinned")
+  mutable = true
+  await probe.plugins().deactivate("fixture.inspection")
+  expect(probe.plugins().canUpdate(target)).toBe(false)
+  await expect(probe.plugins().update(target)).rejects.toThrow("Not an active CLI-only")
+  await open(app)
+  app.mockInput.pressKey("r", { ctrl: true })
+  await app.waitForFrame((frame) => !frame.includes("Checking...") && frame.includes("enable"))
+  app.mockInput.pressEnter()
+  const detail = await app.waitForFrame((frame) => frame.includes("Check for updates"))
+  expect(detail).not.toContain("Update & Apply")
+  app.mockInput.pressKey("\x1b[6~")
+  await app.waitForFrame((frame) => frame.includes("disabled or unloaded"))
+  expect(updates).toBe(1)
+})
+
+test("cache commit failure truthfully keeps new code owned and exposes the persistence error", async () => {
+  await using tmp = await tmpdir()
+  const versions = await updateGraphs(tmp.path)
+  const selected = versions.a
+  await using app = await boot(tmp.path, {
+    plugins: [target, updateTarget],
+    resolve: async (spec) => ({ entrypoint: spec === target ? entrypoint : selected, revision: "1.0.0" }),
+    update: async () => ({ entrypoint: versions.b, revision: "2.0.0" }),
+    commit: async () => {
+      throw new Error("Cache write denied")
+    },
+  })
+  await app.waitForFrame((frame) => frame.includes("Update code A"))
+  await open(app, "fixture.update")
+  app.mockInput.pressKey("r", { ctrl: true })
+  await app.waitForFrame((frame) => frame.includes("↑ update"))
+  app.mockInput.pressEnter()
+  await app.waitForFrame((frame) => frame.includes("Update & Apply"))
+  app.mockInput.pressArrow("down")
+  app.mockInput.pressEnter()
+  await app.waitForFrame((frame) => frame.includes("View error details") && !frame.includes("Updating & applying..."))
+  const detail = await app.waitForFrame((frame) => /Loaded\s+2\.0\.0/.test(frame))
+  expect(detail).toMatch(/Installed\s+1\.0\.0/)
+  app.mockInput.pressArrow("down")
+  app.mockInput.pressEnter()
+  await app.waitForFrame((frame) => frame.includes("Update error:") && frame.includes("Cache write denied"))
+  expect(selected).toBe(versions.a)
+  expect(
+    probe
+      .plugins()
+      .registered()
+      .find((item) => item.id === "fixture.update"),
+  ).toMatchObject({ active: true, revision: "2.0.0" })
+  app.events.emit({ id: "evt_apply_probe", type: "server.connected", data: {} })
+  await app.waitFor(() => probe.updateEvents.length > 0)
+  expect(probe.updateEvents).toEqual(["B"])
+  await probe.plugins().deactivate("fixture.update")
+  expect(probe.updateCleanups).toEqual(["A", "B"])
+})
+
+test("queued updates read ownership only when their serialized operation starts", async () => {
+  await using tmp = await tmpdir()
+  const versions = await updateGraphs(tmp.path)
+  const pending = Promise.withResolvers<Awaited<ReturnType<PackageResolver["update"]>>>()
+  let inventory: PluginInfo[] = []
+  let updates = 0
+  await using app = await boot(tmp.path, {
+    plugins: [target, updateTarget],
+    server: () => inventory,
+    resolve: async (spec) => ({ entrypoint: spec === target ? entrypoint : versions.a, revision: "1.0.0" }),
+    update: () => {
+      updates++
+      return pending.promise
+    },
+  })
+  await app.waitForFrame((frame) => frame.includes("Update code A"))
+  const first = probe.plugins().update(updateTarget)
+  await app.waitFor(() => updates === 1)
+  const queued = probe
+    .plugins()
+    .update(updateTarget)
+    .then(
+      () => undefined,
+      (error: unknown) => error,
+    )
+  inventory = [
+    {
+      source: { type: "package", package: updateTarget },
+      status: "failed",
+      tui: false,
+      error: "Late server owner",
+    },
+  ]
+  pending.resolve({ entrypoint: versions.b, revision: "2.0.0" })
+  await first
+  expect(await queued).toMatchObject({ message: expect.stringContaining("inspection only") })
+  expect(updates).toBe(1)
+  expect(probe.updateSetups).toEqual(["A", "B"])
+  await app.waitForFrame((frame) => frame.includes("Update code B"))
+})
+
+test.each([
+  { phase: "download", cause: "removal" },
+  { phase: "download", cause: "shutdown" },
+  { phase: "setup", cause: "removal" },
+  { phase: "setup", cause: "shutdown" },
+])("update aborts without publishing when $cause crosses async $phase", async ({ phase, cause }) => {
+  await using tmp = await tmpdir()
+  const versions = await updateGraphs(tmp.path)
+  const downloading = Promise.withResolvers<void>()
+  const download = Promise.withResolvers<Awaited<ReturnType<PackageResolver["update"]>>>()
+  const setup = Promise.withResolvers<void>()
+  let selected = versions.a
+  let commits = 0
+  await using app = await boot(tmp.path, {
+    plugins: [target, updateTarget],
+    resolve: async (spec) => ({ entrypoint: spec === target ? entrypoint : selected, revision: "1.0.0" }),
+    update: () => {
+      downloading.resolve()
+      return phase === "download" ? download.promise : Promise.resolve({ entrypoint: versions.b, revision: "2.0.0" })
+    },
+    commit: async (_spec, entry) => {
+      commits++
+      selected = entry.entrypoint!
+    },
+  })
+  await app.waitForFrame((frame) => frame.includes("Update code A"))
+  probe.updateSetup = setup.promise
+  const operation = probe
+    .plugins()
+    .update(updateTarget)
+    .then(
+      () => undefined,
+      (error: unknown) => error,
+    )
+  try {
+    await downloading.promise
+    if (phase === "setup") await app.waitFor(() => probe.updateSetups.includes("B"))
+    if (cause === "shutdown") app.renderer.destroy()
+    if (cause === "removal")
+      await probe.config().update((draft) => {
+        draft.plugins = [target]
+      })
+  } finally {
+    download.resolve({ entrypoint: versions.b, revision: "2.0.0" })
+    setup.resolve()
+  }
+  expect(await operation).toMatchObject({ message: expect.stringContaining("update aborted") })
+  if (cause === "shutdown") await app.task
+  if (cause === "removal")
+    await app.waitFor(
+      () =>
+        !probe
+          .plugins()
+          .registered()
+          .some((item) => item.id === "fixture.update"),
+    )
+  expect(selected).toBe(versions.a)
+  expect(commits).toBe(0)
+  expect(probe.updateSetups).toEqual(phase === "download" ? ["A"] : ["A", "B"])
+  expect(probe.updateCleanups).toEqual(phase === "download" ? ["A"] : ["A", "B"])
+  expect(probe.plugins().canUpdate(updateTarget)).toBe(false)
+  if (cause === "shutdown") expect(probe.plugins().registered()).toEqual([])
+})

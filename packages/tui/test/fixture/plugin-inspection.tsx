@@ -1,4 +1,5 @@
 import { Plugin } from "@opencode-ai/plugin/tui"
+import { onCleanup } from "solid-js"
 import { useConfig } from "../../src/config"
 import { useLocation } from "../../src/context/location"
 import { useRoute } from "../../src/context/route"
@@ -7,6 +8,11 @@ import { usePlugin } from "../../src/plugin/context"
 export const probe = {
   setups: 0,
   cleanups: 0,
+  updateSetups: [] as string[],
+  updateCleanups: [] as string[],
+  updateEvents: [] as string[],
+  updateSetup: Promise.resolve(),
+  failUpdate: false,
   plugins: (): ReturnType<typeof usePlugin> => {
     throw new Error("Plugin probe not mounted")
   },
@@ -19,6 +25,31 @@ export const probe = {
   navigate: (_directory: string): void => {
     throw new Error("Plugin probe not mounted")
   },
+}
+
+export function updatePlugin(version: string) {
+  return Plugin.define({
+    id: "fixture.update",
+    async setup(context) {
+      probe.updateSetups.push(version)
+      context.ui.slot({
+        append: "home.footer",
+        render: () => {
+          onCleanup(
+            context.data.listen((event) => {
+              if (event.details.id === "evt_apply_probe") probe.updateEvents.push(version)
+            }),
+          )
+          return <text>Update code {version}</text>
+        },
+      })
+      if (version === "B" && probe.failUpdate) throw new Error("Candidate setup failed")
+      if (version === "B") await probe.updateSetup
+      return () => {
+        probe.updateCleanups.push(version)
+      }
+    },
+  })
 }
 
 export default Plugin.define({

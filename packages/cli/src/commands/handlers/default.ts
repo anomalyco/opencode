@@ -8,7 +8,7 @@ import { Context, Effect, FileSystem, Option, Queue } from "effect"
 import { ServerConnection } from "../../services/server-connection"
 import { Updater } from "../../services/updater"
 import { UpdatePreflight } from "../../services/update-preflight"
-import { Npm } from "@opencode-ai/util/npm"
+import { TuiPackages } from "../../services/tui-packages"
 import { OPENCODE_CHANNEL, OPENCODE_VERSION } from "../../version"
 import { Env } from "../../env"
 
@@ -50,7 +50,7 @@ export default Runtime.handler(Commands, (input) =>
     yield* updater.check().pipe(Effect.forkScoped)
     preflight.loading()
     const config = yield* Config.Service
-    const npm = yield* Npm.Service
+    const packages = yield* TuiPackages.make
     const fileSystem = yield* FileSystem.FileSystem
     const runServicePromise = Effect.runPromiseWith(Context.make(FileSystem.FileSystem, fileSystem))
     const context = yield* Effect.context<FileSystem.FileSystem>()
@@ -83,14 +83,7 @@ export default Runtime.handler(Commands, (input) =>
         get: () => runPromise(config.get()),
         update: (update) => runPromise(config.update(update)),
       },
-      packages: {
-        resolve: (spec, install = true) =>
-          runPromise(install ? npm.add(spec, { subpaths: ["tui"] }) : npm.resolve(spec, { subpaths: ["tui"] })),
-        check: (spec) =>
-          runPromise(
-            npm.check(spec).pipe(Effect.mapError((error) => (error.cause instanceof Error ? error.cause : error))),
-          ),
-      },
+      packages,
       environment: requestedServer === undefined ? Env.session() : undefined,
       terminalHandoff: () => preflight.finish(),
       log: (level, message, tags) => {

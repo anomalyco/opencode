@@ -34,12 +34,14 @@ export function PluginsDialog(props: {
   const dialog = useDialog()
   const dimensions = useTerminalDimensions()
   const [locked, setLocked] = createSignal(false)
-  const [busy, setBusy] = createSignal(false)
+  const [busy, setBusy] = createSignal<"check" | "update">()
   const [list, setList] = createSignal<DialogSelectRef<string>>()
   const [filter, setFilter] = createSignal("")
   const [detail, setDetail] = createSignal<string>()
   const [errorDetail, setErrorDetail] = createSignal(false)
-  const [errors, setErrors] = createSignal<Record<string, string | undefined>>({})
+  const [errors, setErrors] = createSignal<
+    Record<string, { operation: "Check" | "Update"; message: string } | undefined>
+  >({})
   const [checks, setChecks] = props.context.storage.memory("checks", {
     initial: { packages: {} as Record<string, PackageStatus> },
   })
@@ -118,17 +120,23 @@ export function PluginsDialog(props: {
     const value = checked(entry)
     return value?.mutable && value.available && value.available !== (revision(entry) ?? value.installed)
   }
+  const canUpdate = (entry: Entry | undefined) =>
+    entry?.runtime === "tui" &&
+    owner(entry)?.runtime === "tui" &&
+    checked(entry)?.mutable === true &&
+    props.plugins.canUpdate(entry.target)
   const entryError = (entry: Entry | undefined) => {
     const load = pluginError(entry)
-    const check = errors()[checkKey(entry)]
-    return load && check ? `Load error:\n${load}\n\nCheck error:\n${check}` : (check ?? load)
+    const operation = errors()[checkKey(entry)]
+    const error = operation ? `${operation.operation} error:\n${operation.message}` : undefined
+    return load && error ? `Load error:\n${load}\n\n${error}` : (error ?? load)
   }
   const check = (entry: Entry | undefined) => {
     const target = owner(entry)
     if (locked() || !entry || !target) return
     const key = checkKey(entry)
     setLocked(true)
-    setBusy(true)
+    setBusy("check")
     setErrors((items) => ({ ...items, [key]: undefined }))
     const task =
       target.runtime === "server"
@@ -143,11 +151,34 @@ export function PluginsDialog(props: {
         }),
       )
       .catch((cause) => {
-        setErrors((items) => ({ ...items, [key]: errorMessage(cause) }))
+        setErrors((items) => ({ ...items, [key]: { operation: "Check", message: errorMessage(cause) } }))
         props.context.ui.toast.show({ variant: "error", message: "Could not check plugin updates; view details." })
       })
       .finally(() => {
-        setBusy(false)
+        setBusy()
+        setLocked(false)
+      })
+  }
+  const update = (entry: Entry) => {
+    if (locked() || entry.runtime !== "tui" || !canUpdate(entry)) return
+    const key = checkKey(entry)
+    setLocked(true)
+    setBusy("update")
+    setErrors((items) => ({ ...items, [key]: undefined }))
+    void props.plugins
+      .update(entry.target)
+      .then((result) => {
+        setChecks((draft) => {
+          draft.packages[key] = result
+        })
+        props.context.ui.toast.show({ variant: "success", message: "Updated and applied in this terminal." })
+      })
+      .catch((cause) => {
+        setErrors((items) => ({ ...items, [key]: { operation: "Update", message: errorMessage(cause) } }))
+        props.context.ui.toast.show({ variant: "error", message: "Could not update and apply plugin; view details." })
+      })
+      .finally(() => {
+        setBusy()
         setLocked(false)
       })
   }
@@ -261,7 +292,9 @@ export function PluginsDialog(props: {
             footerHints={!busy() && dimensions().width >= 60 ? [{ title: "enter", label: "details" }] : []}
             footer={
               <Show when={busy()}>
-                <text fg={props.context.theme.text.subdued}>Checking...</text>
+                <text fg={props.context.theme.text.subdued}>
+                  {busy() === "update" ? "Updating & applying..." : "Checking..."}
+                </text>
               </Show>
             }
           />
@@ -285,7 +318,16 @@ export function PluginsDialog(props: {
                         scroll = value
                       }}
                       width="100%"
-                      height={Math.min(10, Math.max(2, Math.floor((dimensions().height * 3) / 4) - 8))}
+                      height={Math.min(
+                        10,
+                        Math.max(
+                          2,
+                          Math.floor((dimensions().height * 3) / 4) -
+                            8 -
+                            (canUpdate(entry()) ? 2 : 0) -
+                            (entryError(entry()) ? 2 : 0),
+                        ),
+                      )}
                       scrollbarOptions={{ visible: false }}
                     >
                       <text width="100%" fg={props.context.theme.text.subdued} wrapMode="word">
@@ -299,8 +341,13 @@ export function PluginsDialog(props: {
                           `Available  ${owner(entry()) ? (checked(entry()) ? (checked(entry())?.available ?? "Unknown") : "Not checked") : "Not applicable"}${checked(entry())?.mutable === false ? " (pinned)" : ""}`,
                           owner(entry())
                             ? owner(entry())?.runtime === "server"
-                              ? "Restart the server, then reopen the TUI to apply updates."
-                              : "Select a newer package spec in cli.json, then reopen the TUI."
+                              ? "Inspection only: server plugins and TUI companions do not support hot apply."
+                              : entry().runtime === "tui" &&
+                                  props.plugins.canUpdate(pluginSource(entry(), props.context))
+                                ? checked(entry())?.mutable === false
+                                  ? "Select a newer package spec in cli.json, then reopen the TUI."
+                                  : "Check for updates, then Update & Apply in this terminal; no server restart."
+                                : "Inspection only: disabled or unloaded plugins do not support hot apply. Enable first or change cli.json."
                             : pluginSource(entry(), props.context) === "builtin"
                               ? "Updates with OpenCode itself."
                               : "Local/SDK source; no package check.",
@@ -311,11 +358,13 @@ export function PluginsDialog(props: {
                 }
                 options={[
                   ...(owner(entry()) ? [{ title: "Check for updates", value: "check" }] : []),
+                  ...(canUpdate(entry()) ? [{ title: "Update & Apply", value: "update" }] : []),
                   ...(entryError(entry()) ? [{ title: "View error details", value: "error" }] : []),
                   { title: "Back to plugins", value: "back" },
                 ]}
                 onSelect={(option) => {
                   if (option.value === "check") return check(entry())
+                  if (option.value === "update") return update(entry())
                   if (option.value === "error") return setErrorDetail(true)
                   back()
                 }}
@@ -333,9 +382,11 @@ export function PluginsDialog(props: {
                 footer={
                   <text fg={props.context.theme.text.subdued}>
                     {busy()
-                      ? "Checking..."
+                      ? busy() === "update"
+                        ? "Updating & applying..."
+                        : "Checking..."
                       : entryError(entry())
-                        ? "Check/load failed; view error."
+                        ? "Plugin operation failed; view error."
                         : available(entry())
                           ? "↑ New revision available."
                           : checked(entry())?.mutable === false

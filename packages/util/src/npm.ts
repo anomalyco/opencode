@@ -28,7 +28,7 @@ export interface EntryPoint {
 export interface Interface {
   readonly add: (
     pkg: string,
-    options?: { readonly subpaths?: readonly string[]; readonly refresh?: boolean },
+    options?: { readonly subpaths?: readonly string[]; readonly refresh?: boolean; readonly root?: string },
   ) => Effect.Effect<EntryPoint, InstallFailedError | EffectFlock.LockError>
   readonly resolve: (pkg: string, options?: { readonly subpaths?: readonly string[] }) => Effect.Effect<EntryPoint>
   readonly check: (
@@ -178,13 +178,21 @@ const layer = Layer.effect(
       }
     })
     const refreshed = new Set<string>()
-    const reify = (input: { dir: string; add?: string[]; update?: boolean }) =>
+    const reify = (input: { dir: string; add?: string[]; update?: boolean; configDir?: string }) =>
       Effect.gen(function* () {
         yield* flock.acquire(`npm-install:${input.dir}`)
         const { Arborist } = yield* Effect.promise(() => import("@npmcli/arborist"))
         const add = input.add ?? []
-        const npmOptions = yield* NpmConfig.load(input.dir)
-        const options = input.update ? { ...npmOptions, preferOnline: true, noGitRevCache: true } : npmOptions
+        const npmOptions = yield* NpmConfig.load(input.configDir ?? input.dir)
+        const options = input.update
+          ? {
+              ...npmOptions,
+              preferOnline: true,
+              noGitRevCache: true,
+              // Independent roots must copy file dependencies, not link into another tree.
+              ...(input.configDir === undefined ? {} : { installLinks: true }),
+            }
+          : npmOptions
         const arborist = new Arborist({
           ...options,
           path: input.dir,
@@ -215,45 +223,52 @@ const layer = Layer.effect(
         }),
       )
 
-    const add = Effect.fn("Npm.add")(function* (
-      pkg: string,
-      options?: { readonly subpaths?: readonly string[]; readonly refresh?: boolean },
-    ) {
-      const parsed = yield* parse(pkg)
-      const parsedName = parsed?.name ?? undefined
-      const dir = yield* directory(pkg)
-      const name = yield* installedName(pkg, dir, parsedName)
-      const cached = yield* afs.existsSafe(path.join(dir, "node_modules", name))
-      const refresh = options?.refresh && isMutable(parsed) && !refreshed.has(pkg)
+    const add = Effect.fn("Npm.add")(
+      function* (pkg: string, options?: Parameters<Interface["add"]>[1]) {
+        const parsed = yield* parse(pkg)
+        const parsedName = parsed?.name ?? undefined
+        const root = yield* directory(pkg)
+        const dir = options?.root ?? root
+        const name = yield* installedName(pkg, dir, parsedName)
+        const cached = options?.root === undefined && (yield* afs.existsSafe(path.join(dir, "node_modules", name)))
+        const refresh = options?.root === undefined && options?.refresh && isMutable(parsed) && !refreshed.has(pkg)
 
-      if (refresh) {
-        refreshed.add(pkg)
-        if (cached)
-          yield* reify({ dir, add: [pkg], update: true }).pipe(
-            Effect.catchCause(() => Effect.logWarning("failed to refresh cached package; using installed version")),
-          )
-      }
+        if (refresh) {
+          refreshed.add(pkg)
+          if (cached)
+            yield* reify({ dir, add: [pkg], update: true }).pipe(
+              Effect.catchCause(() => Effect.logWarning("failed to refresh cached package; using installed version")),
+            )
+        }
 
-      if (cached) {
-        return yield* entry(dir, name, path.join(dir, "node_modules", name), parsed?.type, options?.subpaths)
-      }
+        if (cached) {
+          return yield* entry(dir, name, path.join(dir, "node_modules", name), parsed?.type, options?.subpaths)
+        }
 
-      const tree = yield* reify({ dir, add: [pkg] })
-      const first = tree.edgesOut.values().next().value?.to
-      if (!first) {
-        const installed = yield* installedName(pkg, dir, parsedName)
-        const result = yield* entry(
+        const tree = yield* reify({
           dir,
-          installed,
-          path.join(dir, "node_modules", installed),
-          parsed?.type,
-          options?.subpaths,
-        )
-        if (result.entrypoint) return result
-        return yield* new InstallFailedError({ add: [pkg], dir })
-      }
-      return yield* entry(dir, first.name, first.path, parsed?.type, options?.subpaths)
-    }, Effect.scoped)
+          add: [pkg],
+          ...(options?.root === undefined ? {} : { configDir: root, update: true }),
+        })
+        const first = tree.edgesOut.values().next().value?.to
+        if (!first) {
+          const installed = yield* installedName(pkg, dir, parsedName)
+          const result = yield* entry(
+            dir,
+            installed,
+            path.join(dir, "node_modules", installed),
+            parsed?.type,
+            options?.subpaths,
+          )
+          if (result.entrypoint) return result
+          return yield* new InstallFailedError({ add: [pkg], dir })
+        }
+        return yield* entry(dir, first.name, first.path, parsed?.type, options?.subpaths)
+      },
+      (effect, _pkg, options?: Parameters<Interface["add"]>[1]) =>
+        // Arborist cannot abort its IO; keep the fresh install's lock until it settles.
+        options?.root === undefined ? Effect.scoped(effect) : Effect.scoped(effect).pipe(Effect.uninterruptible),
+    )
 
     const resolve = Effect.fn("Npm.resolve")(function* (
       pkg: string,

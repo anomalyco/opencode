@@ -23,9 +23,26 @@ Exact npm versions and full Git commit hashes remain pinned; change their config
 Built-in plugins update with OpenCode, and local files do not have package update checks.
 
 To apply a newer server package revision, use the existing [restart workflow](/plugins), then close and reopen the TUI to
-load its companion. The Plugins dialog only inspects and checks revisions; it does not apply updates.
-For a package configured only in `cli.json`, select a newer version or Git commit in its package spec, then reopen the TUI.
-Reopening the TUI alone does not refresh a cached CLI-only package.
+load its companion. Server package rows and their matching TUI rows support inspection, not hot apply.
+
+## Apply CLI-only updates
+
+For an active package configured only in `cli.json`, open its details and select **Update & Apply**. OpenCode installs the
+revision allowed by its configured spec into a fresh dependency graph, then uses the existing TUI cleanup/setup lifecycle
+to apply it in the current terminal. Neither the terminal nor the connected server needs to restart.
+
+The new graph is selected in a separate TUI cache after successful setup. Newly opened terminals use that selection;
+already-running terminals apply their updates independently. Updating does not overwrite files in the server's package
+cache or in previously loaded TUI graphs. If importing or setting up a candidate fails, its cache selection is not
+published, and the existing lifecycle retains or restores the previous plugin when possible.
+
+This action is limited to active CLI-only package plugins. Disabled plugins, local files, built-ins, exact pins, and
+packages in the connected server's inventory do not offer hot apply. Enable a disabled plugin before updating it, and
+change an exact pin's configured spec to select another revision. Server ownership must be verified before downloading
+an update; reconnect if that verification is unavailable.
+
+Applying code reruns the plugin's setup. Plugin-local state such as drafts and connections can reset unless the plugin
+preserves it. Updates are explicit and apply only to the selected plugin; they do not enable unrelated disabled plugins.
 
 ## CLI-only plugins
 

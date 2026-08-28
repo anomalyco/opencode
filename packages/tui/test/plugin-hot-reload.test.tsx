@@ -92,7 +92,12 @@ async function bootApp(
       app: { name: "test", version: "test", channel: "test" },
       server: { endpoint: { url: server.url.toString() } },
       config: { get: async () => ({}), update: async () => ({}) },
-      packages: { resolve: options?.resolve ?? (async () => ({})), check: async () => ({ mutable: false }) },
+      packages: {
+        resolve: options?.resolve ?? (async () => ({})),
+        check: async () => ({ mutable: false }),
+        update: async () => ({}),
+        commit: async () => {},
+      },
       args: {},
       log: () => {},
     }).pipe(
