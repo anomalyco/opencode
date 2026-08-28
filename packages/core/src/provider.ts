@@ -14,6 +14,11 @@ export type ID = typeof ID.Type
 export const AISDK_PREFIX = "aisdk:"
 export const isAISDK = (value: string | undefined): value is string => value?.startsWith(AISDK_PREFIX) ?? false
 export const aisdk = (value: string) => (isAISDK(value) ? value : `${AISDK_PREFIX}${value}`)
+// Only `@ai-sdk/*` is unambiguous enough to auto-prefix; other AI SDK-compatible packages still
+// require the explicit "aisdk:" discriminator so native modules are never misclassified.
+export const looksLikeAISDK = (value: string | undefined): boolean => value?.startsWith("@ai-sdk/") ?? false
+export const normalizeAISDK = (value: string | undefined) =>
+  value !== undefined && looksLikeAISDK(value) ? aisdk(value) : value
 export function packageName(value: string): string
 export function packageName(value: undefined): undefined
 export function packageName(value: string | undefined): string | undefined

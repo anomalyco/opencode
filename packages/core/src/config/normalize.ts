@@ -25,10 +25,11 @@ import { ConfigPermissionV1 } from "../v1/config/permission.js"
 import { ConfigPluginV1 } from "../v1/config/plugin.js"
 import { ConfigProviderV1 } from "../v1/config/provider.js"
 import { ConfigMigrateV1 } from "../v1/config/migrate.js"
+import { Provider } from "../provider.js"
 import { PositiveInt } from "../schema.js"
 
 export interface Diagnostic {
-  readonly kind: "conflict" | "invalid" | "unsupported"
+  readonly kind: "conflict" | "invalid" | "unsupported" | "normalized"
   readonly path: readonly string[]
   readonly message: string
 }
@@ -164,6 +165,7 @@ export function normalize(input: unknown): Result {
     isRecord(input.provider) || isRecord(input.providers),
     diagnostics,
   )
+  normalizeProviderPackages(encoded, diagnostics)
 
   const toolRules = migrateTools(input.tools, diagnostics)
   const permissionRules = migratePermissions(input.permission, diagnostics)
@@ -773,6 +775,33 @@ function invalid(path: string[], diagnostics: Diagnostic[]) {
 
 function conflict(path: string[], diagnostics: Diagnostic[]) {
   diagnostics.push({ kind: "conflict", path, message: "retained native value over legacy value" })
+}
+
+function normalizeProviderPackages(encoded: Record<string, unknown>, diagnostics: Diagnostic[]) {
+  const providers = encoded.providers
+  if (!isRecord(providers)) return
+  Object.entries(providers).forEach(([id, value]) => {
+    if (!isRecord(value)) return
+    const path = ["providers", id]
+    normalizePackageField(value, path, diagnostics)
+    if (!isRecord(value.models)) return
+    Object.entries(value.models).forEach(([modelID, model]) => {
+      if (!isRecord(model)) return
+      normalizePackageField(model, [...path, "models", modelID], diagnostics)
+    })
+  })
+}
+
+function normalizePackageField(entry: Record<string, unknown>, path: string[], diagnostics: Diagnostic[]) {
+  const pkg = entry.package
+  if (typeof pkg !== "string" || pkg.startsWith(Provider.AISDK_PREFIX) || !Provider.looksLikeAISDK(pkg)) return
+  const normalized = Provider.aisdk(pkg)
+  entry.package = normalized
+  diagnostics.push({
+    kind: "normalized",
+    path,
+    message: `normalized AI SDK package "${pkg}" to "${normalized}" (the "aisdk:" prefix selects the AI SDK loader)`,
+  })
 }
 
 function isDirectLegacyMcp(value: unknown) {
