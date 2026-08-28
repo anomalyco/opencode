@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { type Renderable, ScrollBoxRenderable } from "@opentui/core"
+import { EmbeddedTerminalRenderable, type Renderable, ScrollBoxRenderable } from "@opentui/core"
 import { createTestRenderer } from "@opentui/core/testing"
 import { Effect, FileSystem } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -7,6 +7,241 @@ import { Global } from "@opencode-ai/util/global"
 import path from "node:path"
 import { createEventStream, createFetch, directory, json } from "./fixture/tui-client"
 import { tmpdir } from "./fixture/fixture"
+
+test.each([100, 44])("Ctrl-O is immediate, dismissible, and prunes cached deletions at width %s", async (width) => {
+  await using state = await tmpdir()
+  const setup = await createTestRenderer({ width, height: 30, useThread: false, kittyKeyboard: true })
+  setup.renderer.start()
+  const ready = Promise.withResolvers<void>()
+  const requested = Promise.withResolvers<void>()
+  const response = Promise.withResolvers<Response>()
+  const projects = Promise.withResolvers<Response>()
+  const refresh = Promise.withResolvers<Response>()
+  const events = createEventStream()
+  const cachedSession = {
+    id: "ses_cached",
+    title: "Cached session",
+    projectID: "proj_fixture",
+    location: { directory: "/fixture" },
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    time: { created: 1, updated: 2 },
+  }
+  let requests = 0
+  const calls = createFetch((url) => {
+    if (url.pathname === "/api/session") {
+      requests++
+      requested.resolve()
+      if (requests === 1) return response.promise
+      if (requests === 2 || requests === 4) return refresh.promise.then((response) => response.clone())
+      if (requests > 4) return new Response("Unavailable", { status: 503 })
+      return json({ data: [cachedSession], cursor: {} })
+    }
+    if (url.pathname === "/api/project") return projects.promise
+    return undefined
+  }, events)
+  const server = Bun.serve({ port: 0, fetch: (request) => calls.fetch(request) })
+  try {
+    const { run } = await import("../src/app")
+    const task = Effect.runPromise(
+      run({
+        app: { name: "test", version: "test", channel: "test" },
+        server: { endpoint: { url: server.url.toString() } },
+        config: { get: async () => ({ animations: false }), update: async () => ({}) },
+        packages: { resolve: async () => undefined },
+        terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: ready.resolve }),
+        args: {},
+        log: () => {},
+      }).pipe(Effect.provide(Global.layerWith({ state: state.path })), Effect.provide(FileSystem.layerNoop({}))),
+    )
+    await ready.promise
+    await setup.waitForFrame((frame) => frame.includes("commands"))
+    setup.mockInput.pressKey("o", { ctrl: true })
+    await requested.promise
+    await setup.renderOnce()
+    expect(setup.captureCharFrame()).toContain("Search sessions")
+    expect(setup.captureCharFrame()).toContain("Refreshing")
+    projects.resolve(
+      json([
+        {
+          id: "proj_fixture",
+          canonical: "/fixture",
+          name: "Fixture project",
+          time: { created: 1, updated: 2 },
+          sandboxes: [],
+        },
+      ]),
+    )
+    await setup.waitForFrame((frame) => frame.includes("Fixture project"))
+    setup.mockInput.pressKey("o", { ctrl: true })
+    expect(requests).toBe(1)
+    setup.mockInput.pressEscape()
+    await setup.waitForFrame((frame) => !frame.includes("Fixture project"))
+    response.resolve(json({ data: [{ ...cachedSession, id: "ses_disposed", title: "Disposed response" }], cursor: {} }))
+    await setup.renderOnce()
+    expect(setup.captureCharFrame()).not.toContain("Fixture project")
+    setup.mockInput.pressKey("o", { ctrl: true })
+    await setup.waitForFrame((frame) => frame.includes("Refreshing"))
+    expect(setup.captureCharFrame()).not.toContain("Disposed")
+    setup.mockInput.pressEscape()
+    await setup.waitForFrame((frame) => !frame.includes("Fixture project"))
+    setup.mockInput.pressKey("o", { ctrl: true })
+    await setup.waitForFrame((frame) => frame.includes("Cached"))
+    setup.mockInput.pressEscape()
+    await setup.waitForFrame((frame) => !frame.includes("Fixture project"))
+    setup.mockInput.pressKey("o", { ctrl: true })
+    await setup.waitForFrame((frame) => frame.includes("Cached") && frame.includes("Refreshing"))
+    events.emit({
+      id: "evt_deleted",
+      created: 1,
+      type: "session.deleted",
+      durable: { aggregateID: "ses_cached", seq: 1, version: 2 },
+      data: { sessionID: "ses_cached" },
+    })
+    await setup.waitForFrame((frame) => !frame.includes("Cached"))
+    refresh.resolve(json({ data: [cachedSession], cursor: {} }))
+    await setup.waitForFrame((frame) => frame.includes("Fixture project") && !frame.includes("Refreshing"))
+    expect(setup.captureCharFrame()).not.toContain("Cached")
+    setup.mockInput.pressEscape()
+    await setup.waitForFrame((frame) => !frame.includes("Fixture project"))
+    setup.mockInput.pressKey("o", { ctrl: true })
+    await setup.waitForFrame((frame) => frame.includes("Could not refresh sessions"))
+    expect(setup.captureCharFrame()).not.toContain("Cached")
+    setup.renderer.destroy()
+    await task
+  } finally {
+    response.resolve(json({ data: [], cursor: {} }))
+    projects.resolve(json([]))
+    refresh.resolve(json({ data: [], cursor: {} }))
+    if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+    await server.stop()
+  }
+})
+
+test.each(["dismissed", "refreshing"])(
+  "Ctrl-O retains committed movement of a cached-only session while %s",
+  async (phase) => {
+    await using state = await tmpdir()
+    const setup = await createTestRenderer({ width: 100, height: 30, useThread: false, kittyKeyboard: true })
+    setup.renderer.start()
+    const ready = Promise.withResolvers<void>()
+    const refresh = Promise.withResolvers<Response>()
+    const metadata = Promise.withResolvers<Response>()
+    const destinationRequested = Promise.withResolvers<void>()
+    const events = createEventStream()
+    const cached = {
+      id: "ses_cached_move",
+      title: "Cached movement",
+      projectID: "proj_old",
+      location: { directory: "/fixture/old" },
+      cost: 0,
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      time: { created: 1, updated: 2 },
+    }
+    let requests = 0
+    const locations: string[] = []
+    const calls = createFetch((url) => {
+      if (url.pathname === "/api/session") {
+        if (url.searchParams.has("parentID")) {
+          const parent = url.searchParams.get("parentID")
+          if (parent && parent !== "null") return json({ data: [], cursor: {} })
+        }
+        return requests++ === 0
+          ? json({ data: [cached], cursor: {} })
+          : refresh.promise.then((response) => response.clone())
+      }
+      if (url.pathname === `/api/session/${cached.id}`) return metadata.promise
+      if (url.pathname === `/api/session/${cached.id}/message`) return json({ data: [], cursor: {} })
+      if (url.pathname === `/api/session/${cached.id}/inbox` || url.pathname === `/api/session/${cached.id}/permission`)
+        return json({ data: [] })
+      if (url.pathname === "/api/project")
+        return json(
+          ["old", "new"].map((name) => ({
+            id: `proj_${name}`,
+            canonical: `/fixture/${name}`,
+            name: name === "old" ? "Old" : "New",
+            time: { created: 1, updated: 2 },
+            sandboxes: [],
+          })),
+        )
+      if (url.pathname === "/api/location") {
+        const query = url.searchParams.get("location[directory]") ?? ""
+        locations.push(query)
+        if (query.includes("/fixture/new")) {
+          destinationRequested.resolve()
+          return json({
+            directory: "/fixture/new",
+            project: { id: "proj_new", directory: "/fixture/new", canonical: "/fixture/new" },
+          })
+        }
+      }
+      return undefined
+    }, events)
+    const server = Bun.serve({ port: 0, fetch: (request) => calls.fetch(request) })
+    const { run } = await import("../src/app")
+    const task = Effect.runPromise(
+      run({
+        app: { name: "test", version: "test", channel: "test" },
+        server: { endpoint: { url: server.url.toString() } },
+        config: { get: async () => ({ animations: false, tabs: { enabled: false } }), update: async () => ({}) },
+        packages: { resolve: async () => undefined },
+        terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: ready.resolve }),
+        args: {},
+        log: () => {},
+      }).pipe(Effect.provide(Global.layerWith({ state: state.path })), Effect.provide(FileSystem.layerNoop({}))),
+    )
+    try {
+      await ready.promise
+      await setup.waitForFrame((frame) => frame.includes("commands"))
+      setup.mockInput.pressKey("o", { ctrl: true })
+      await setup.waitForFrame((frame) => frame.includes(cached.title) && !frame.includes("Refreshing"))
+      setup.mockInput.pressEscape()
+      await setup.waitForFrame((frame) => !frame.includes("Search sessions"))
+      if (phase === "refreshing") {
+        setup.mockInput.pressKey("o", { ctrl: true })
+        await setup.waitForFrame((frame) => frame.includes(cached.title) && frame.includes("Refreshing"))
+      }
+      events.emit({
+        id: "evt_cached_moved",
+        created: 3,
+        type: "session.moved",
+        durable: { aggregateID: cached.id, seq: 1, version: 1 },
+        data: { sessionID: cached.id, location: { directory: "/fixture/new" }, projectID: "proj_new" },
+      })
+      if (phase === "dismissed") {
+        setup.mockInput.pressKey("o", { ctrl: true })
+        refresh.resolve(new Response("Unavailable", { status: 503 }))
+        await setup.waitForFrame((frame) => frame.includes("Could not refresh sessions"))
+      }
+      if (phase === "refreshing") {
+        await setup.waitForFrame((frame) =>
+          frame.split("\n").some((line) => line.includes(cached.title) && line.includes("New")),
+        )
+        refresh.resolve(json({ data: [cached], cursor: {} }))
+        await setup.waitForFrame((frame) => frame.includes(cached.title) && !frame.includes("Refreshing"))
+      }
+      await setup.waitForFrame((frame) =>
+        frame.split("\n").some((line) => line.includes(cached.title) && line.includes("New")),
+      )
+      expect(
+        setup
+          .captureCharFrame()
+          .split("\n")
+          .find((line) => line.includes(cached.title)),
+      ).toContain("New")
+      locations.length = 0
+      setup.mockInput.pressEnter()
+      await destinationRequested.promise
+      expect(locations.some((query) => query.includes("/fixture/old"))).toBe(false)
+    } finally {
+      refresh.resolve(json({ data: [], cursor: {} }))
+      metadata.resolve(json({ data: { ...cached, projectID: "proj_new", location: { directory: "/fixture/new" } } }))
+      setup.renderer.destroy()
+      await task
+      await server.stop()
+    }
+  },
+)
 
 test("SIGHUP clears title and disposes scoped resources once", async () => {
   const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
@@ -218,6 +453,87 @@ test("session title generated while an untitled session is loading remains visib
     setup.renderer.destroy()
     await task
   } finally {
+    if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+    await server.stop()
+  }
+})
+
+test("automatic rename refreshes the displayed title before settling, even without a renamed event", async () => {
+  await using state = await tmpdir()
+  const setup = await createTestRenderer({ width: 90, height: 20, useThread: false, kittyKeyboard: true })
+  setup.renderer.start()
+  const events = createEventStream()
+  const response = Promise.withResolvers<Response>()
+  const bodies: unknown[] = []
+  const location = { directory, project: { id: "project", directory, canonical: directory } }
+  const session = {
+    id: "ses_rename",
+    title: "Compiler cleanup",
+    projectID: "project",
+    location: { directory },
+    agent: "build",
+    model: { providerID: "provider", id: "model" },
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    time: { created: 0, updated: 0 },
+  }
+  const calls = createFetch(async (url, request) => {
+    if (url.pathname === "/api/location") return json(location)
+    if (url.pathname === "/api/agent")
+      return json({ location, data: [{ id: "build", mode: "primary", hidden: false, permissions: [] }] })
+    if (url.pathname === "/api/model")
+      return json({ location, data: [{ id: "model", providerID: "provider", name: "Model", variants: [] }] })
+    if (url.pathname === "/api/provider") return json({ location, data: [{ id: "provider", name: "Provider" }] })
+    if (url.pathname === "/api/session") return json({ data: [], cursor: {} })
+    if (url.pathname === "/api/session/ses_rename") return json({ data: session })
+    if (/^\/api\/session\/ses_rename\/(message|inbox|permission)$/.test(url.pathname))
+      return json({ data: [], cursor: {} })
+    if (url.pathname === "/api/session/ses_rename/rename") {
+      bodies.push(await request.json())
+      return response.promise
+    }
+    return undefined
+  }, events)
+  const server = Bun.serve({ port: 0, fetch: (request) => calls.fetch(request) })
+
+  try {
+    const { run } = await import("../src/app")
+    const task = Effect.runPromise(
+      run({
+        app: { name: "test", version: "test", channel: "test" },
+        server: { endpoint: { url: server.url.toString() } },
+        config: {
+          get: async () => ({
+            tabs: { enabled: true, layout: "vertical" },
+            session: { sidebar: "hide" },
+          }),
+          update: async () => ({}),
+        },
+        packages: { resolve: async () => undefined },
+        terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
+        args: { sessionID: session.id },
+        log: () => {},
+      }).pipe(Effect.provide(Global.layerWith({ state: state.path })), Effect.provide(FileSystem.layerNoop({}))),
+    )
+
+    await setup.waitForFrame((frame) => frame.includes(session.title) && frame.includes("Build · Model Provider"))
+    await setup.mockInput.typeText("/rename")
+    setup.mockInput.pressEscape()
+    setup.mockInput.pressEnter()
+    await setup.waitFor(() => bodies.length === 1)
+    await setup.renderOnce()
+    expect(bodies[0]).toEqual({ title: "" })
+    expect(setup.captureCharFrame()).toContain("Compiler cleanup")
+
+    session.title = "Simplify compiler parsing"
+    response.resolve(new Response(null, { status: 204 }))
+    await setup.waitForFrame((frame) => frame.includes(session.title), { maxPasses: 60 })
+    expect(setup.captureCharFrame()).not.toContain("Compiler cleanup")
+
+    setup.renderer.destroy()
+    await task
+  } finally {
+    response.resolve(new Response(null, { status: 204 }))
     if (!setup.renderer.isDestroyed) setup.renderer.destroy()
     await server.stop()
   }
@@ -851,3 +1167,144 @@ test("ctrl+c dismisses autocomplete and shell mode before exiting", async () => 
     await server.stop()
   }
 })
+
+test.each(["manual", "select"] as const)(
+  "selection copy and dismissal respect %s mode in the prompt and terminal pane",
+  async (copy) => {
+    const setup = await createTestRenderer({ width: 100, height: 30, useThread: false, kittyKeyboard: true })
+    setup.renderer.start()
+    const ready = Promise.withResolvers<void>()
+    const session = {
+      id: "dummy",
+      title: "Selection fixture",
+      projectID: "project",
+      location: { directory },
+      cost: 0,
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      time: { created: 0, updated: 0 },
+    }
+    const pty = {
+      id: "pty_fixture",
+      sessionID: session.id,
+      title: "Terminal",
+      command: "/bin/sh",
+      args: [],
+      cwd: directory,
+      status: "running",
+      pid: 1,
+      foregroundProcess: null,
+      size: { cols: 48, rows: 24 },
+      output: { head: 0, tail: 0 },
+    }
+    const input: string[] = []
+    const calls = createFetch((url, request) => {
+      if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
+      if (url.pathname === "/api/session/dummy") return json({ data: session })
+      if (url.pathname === "/api/session/dummy/message") return json({ data: [], cursor: {} })
+      if (url.pathname === "/api/session/dummy/inbox") return json({ data: [] })
+      if (url.pathname === "/api/session/dummy/permission") return json({ data: [] })
+      if (url.pathname === "/api/experimental/session/dummy/terminal")
+        return json({ data: request.method === "POST" ? pty : [pty] })
+      if (url.pathname === "/api/experimental/persistent-pty/pty_fixture/snapshot")
+        return json({
+          data: {
+            info: pty,
+            text: "alpha beta gamma",
+            checkpoint: Buffer.from("alpha beta gamma").toString("base64"),
+            cursor: { x: 16, y: 0 },
+          },
+        })
+      if (url.pathname === "/api/experimental/persistent-pty/pty_fixture/connect-token")
+        return json({ data: { ticket: "fixture" } })
+      return undefined
+    }, createEventStream())
+    const server = Bun.serve({
+      port: 0,
+      fetch(request, server) {
+        if (new URL(request.url).pathname.endsWith("/connect") && server.upgrade(request)) return undefined
+        return calls.fetch(request)
+      },
+      websocket: {
+        open(socket) {
+          socket.send(JSON.stringify({ type: "attached", inputProtocol: 1, role: "controller", info: pty }))
+          socket.send(JSON.stringify({ type: "replay_complete" }))
+        },
+        message(_socket, message) {
+          const data = Buffer.from(message)
+          if (data[0] === 1) input.push(data.subarray(5).toString())
+        },
+      },
+    })
+
+    try {
+      const { run } = await import("../src/app")
+      const task = Effect.runPromise(
+        run({
+          app: { name: "test", version: "test", channel: "test" },
+          server: { endpoint: { url: server.url.toString() } },
+          config: {
+            get: async () => ({
+              animations: false,
+              terminal: { copy },
+              session: { terminal: true },
+            }),
+            update: async () => ({}),
+          },
+          packages: { resolve: async () => undefined },
+          args: { sessionID: session.id },
+          terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: ready.resolve }),
+          log: () => {},
+        }).pipe(Effect.provide(AppNodeBuilder.build(Global.node)), Effect.provide(FileSystem.layerNoop({}))),
+      )
+
+      await ready.promise
+      await setup.waitForFrame((frame) => frame.includes("commands"))
+      await setup.mockInput.typeText("selection audit draft")
+      setup.mockInput.pressKey("a", { ctrl: true, shift: true })
+      expect(setup.renderer.getSelection()?.getSelectedText()).toBe("selection audit draft")
+
+      setup.mockInput.pressEscape()
+      expect(setup.renderer.hasSelection).toBeFalse()
+      expect(setup.renderer.currentFocusedEditor?.plainText).toBe("selection audit draft")
+
+      setup.mockInput.pressKey("c", { ctrl: true })
+      await setup.waitForFrame((frame) => !frame.includes("selection audit draft"))
+      expect(setup.renderer.currentFocusedEditor?.plainText).toBe("")
+      expect(setup.renderer.hasSelection).toBeFalse()
+      expect(setup.renderer.isDestroyed).toBeFalse()
+
+      await setup.mockInput.typeText("/terminal")
+      await setup.waitForFrame((frame) => frame.includes("New terminal"))
+      setup.mockInput.pressEnter()
+      await setup.waitForFrame((frame) => frame.includes("alpha beta gamma"))
+      setup.mockInput.pressKey("x", { ctrl: true })
+      setup.mockInput.pressArrow("right")
+      const terminal = setup.renderer.currentFocusedRenderable
+      if (!(terminal instanceof EmbeddedTerminalRenderable)) throw new Error("Terminal was not focused")
+      setup.renderer.startSelection(terminal, terminal.x + 6, terminal.y)
+      setup.renderer.updateSelection(terminal, terminal.x + 9, terminal.y, { finishDragging: true })
+      expect(setup.renderer.getSelection()?.getSelectedText()).toBe("beta")
+
+      setup.mockInput.pressEscape()
+      expect(setup.renderer.hasSelection).toBeFalse()
+      expect(terminal.hasSelection()).toBeFalse()
+
+      await setup.mockMouse.click(terminal.x + 6, terminal.y)
+      if (copy === "select") {
+        setup.renderer.updateSelection(terminal, terminal.x + 9, terminal.y, { finishDragging: true })
+        expect(setup.renderer.getSelection()?.getSelectedText()).toBe("beta")
+      }
+      setup.mockInput.pressKey("c", { ctrl: true })
+      await setup.waitFor(() => input.length > 0)
+      expect(input).toEqual(["\x03"])
+      expect(setup.renderer.hasSelection).toBeFalse()
+      expect(setup.renderer.isDestroyed).toBeFalse()
+
+      setup.renderer.destroy()
+      await task
+    } finally {
+      if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+      await server.stop()
+    }
+  },
+)
