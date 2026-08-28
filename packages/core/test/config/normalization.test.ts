@@ -362,6 +362,20 @@ describe("ConfigNormalize", () => {
     ])
   })
 
+  test("normalizes MCP timeout fields in schema order with per-leaf recovery", () => {
+    const result = normalized({ mcp: { timeout: { execution: 3000, startup: "invalid", catalog: 2000 } } })
+
+    expect(result.encoded.mcp).toEqual({ timeout: { catalog: 2000, execution: 3000 } })
+    expect(result.diagnostics.map((item) => [item.kind, item.path])).toEqual([
+      ["invalid", ["mcp", "timeout", "startup"]],
+    ])
+    expect(normalized({ mcp: { timeout: {} } }).encoded.mcp).toBeUndefined()
+
+    const unknown = normalized({ mcp: { timeout: { unknown: 1000 } } })
+    expect(unknown.encoded.mcp).toBeUndefined()
+    expect(unknown.diagnostics.map((item) => [item.kind, item.path])).toEqual([["invalid", ["mcp", "timeout"]]])
+  })
+
   test("merges bounded compaction leaves and omits unsupported leaves", () => {
     const result = normalized({
       compaction: {

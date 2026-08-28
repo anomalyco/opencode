@@ -253,7 +253,7 @@ const layer = Layer.effect(
           return Stream.concat(lines, tail) as Stream.Stream<string, AppProcessError | PlatformError>
         }),
       )
-      const mapped = built.pipe(Stream.mapError((cause): AppProcessError => wrapError(description, cause)))
+      const mapped = built.pipe(Stream.mapError((cause) => wrapError(description, cause)))
       if (!options?.signal) return mapped
       const signal = options.signal
       return mapped.pipe(

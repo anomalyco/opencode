@@ -101,6 +101,10 @@ await ctx.session.hook("context", (event) => {
   event.tools.read.description = "Read a file using narrow line ranges."
   delete event.tools.write
 })
+
+await ctx.session.hook("retry", (event) => {
+  if (event.attempt >= 3) event.decision = { retry: false }
+})
 ```
 
 Promise tools use complete executable tool values with async executors:

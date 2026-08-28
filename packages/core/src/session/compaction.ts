@@ -1,6 +1,7 @@
 export * as SessionCompaction from "./compaction.js"
 
 import { LLMClient, LLMEvent, Message } from "@opencode-ai/ai"
+import { Agent } from "@opencode-ai/schema/agent"
 import { SessionError } from "@opencode-ai/schema/session-error"
 import { Context, Effect, Layer, Stream } from "effect"
 import { Bus } from "../bus.js"
@@ -15,7 +16,6 @@ import { SessionSchema } from "./schema.js"
 import { toSessionError } from "./to-session-error.js"
 import { Token } from "../util/token.js"
 import { SessionUsage } from "./usage.js"
-import { Agent } from "../agent.js"
 import { State } from "../state.js"
 
 const DEFAULT_BUFFER = 20_000
