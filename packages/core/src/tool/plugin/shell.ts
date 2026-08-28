@@ -19,7 +19,7 @@ export const name = "shell"
 export const DEFAULT_TIMEOUT_MS = 2 * 60 * 1_000
 
 const BACKGROUND_INSTRUCTION =
-  "You will be notified automatically when the command finishes. Avoid sleep commands or polling for completion; if you need the output before then, read the file directly."
+  "You will be notified automatically when the command finishes. The notification will include the command's output. DO NOT run sleep commands or poll the output file to check for completion. You can read from the file when its current output would be useful, such as when inspecting logs from a background server. Otherwise, continue with other work or end your response."
 const OS =
   process.platform === "darwin"
     ? "macOS"

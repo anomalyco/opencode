@@ -13,10 +13,11 @@ import type { Versioned } from "../plugin.js"
  * for the instance's lifetime; runtime dynamism lives inside plugins through
  * the container transform/reload APIs.
  *
- * Limitations, both shared with `SdkPlugins`: `vcs` marker declarations are
- * not seen by `ProjectMarkers` (it is global and runs during project
- * resolution, before the instance exists), and config plugin operations may
- * disable instance plugins by id.
+ * Limitations: `vcs` marker declarations in an instance list are not seen by
+ * `ProjectMarkers` (it is global and runs during project resolution, before
+ * the instance exists — unlike `SdkPlugins`, whose declarations it consumes
+ * directly), and config plugin operations may disable instance plugins by id,
+ * matching `SdkPlugins` behavior.
  */
 export type List = readonly Plugin[]
 
@@ -28,7 +29,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/In
 
 export const node = makeLocationNode({
   service: Service,
-  layer: Layer.succeed(Service, Service.of({ all: () => [] })),
+  layer: bound([]),
   deps: [],
 })
 

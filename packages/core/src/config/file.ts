@@ -81,7 +81,7 @@ type Edit = { readonly path: (string | number)[]; readonly value: unknown }
 
 function parseSource(text: string, errors: ParseError[]) {
   const root = parseTree(text, errors, { allowTrailingComma: true })
-  if (!root || errors.length) return
+  if (!root || errors.length) return undefined
   // parse() assigns onto {}, invoking the __proto__ setter instead of retaining
   // an own JSON key. Construct object entries from the AST without those setters.
   const value = (node: Node): unknown => {

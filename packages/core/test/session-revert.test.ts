@@ -23,7 +23,7 @@ import { Money } from "@opencode-ai/schema/money"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Global } from "@opencode-ai/util/global"
 import { tempGlobalLayer } from "./fixture/global"
-import { tmpdir } from "./fixture/tmpdir"
+import { tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(
@@ -42,10 +42,7 @@ describe("Session.revert files", () => {
     "undoes and restores a file rename without losing either path",
     () =>
       Effect.gen(function* () {
-        const tmp = yield* Effect.acquireRelease(
-          Effect.promise(() => tmpdir()),
-          (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-        )
+        const tmp = yield* tmpdirScoped()
         const directory = path.join(tmp.path, "project")
         const original = path.join(directory, "old name.txt")
         const renamed = path.join(directory, "new name.txt")

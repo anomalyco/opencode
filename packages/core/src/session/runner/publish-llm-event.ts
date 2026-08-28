@@ -396,7 +396,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
         yield* text.append(event.id, event.text, providerState(event.providerMetadata))
         return
       case "text-end":
-        yield* text.end(event.id, providerState(event.providerMetadata))
+        yield* text.end(event.id, providerState(event.providerMetadata), event.text)
         return
       case "reasoning-start":
         outputStarted = true
@@ -412,7 +412,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
         yield* reasoning.append(event.id, event.text, providerState(event.providerMetadata))
         return
       case "reasoning-end":
-        yield* reasoning.end(event.id, providerState(event.providerMetadata))
+        yield* reasoning.end(event.id, providerState(event.providerMetadata), event.text)
         return
       case "tool-input-start":
         outputStarted = true

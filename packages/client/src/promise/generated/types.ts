@@ -378,6 +378,14 @@ export type SessionStatus =
 
 export type PtyTicketConnectToken = { ticket: string; expires_in: number }
 
+export type PersistentPtyReadResult = {
+  ptyID: string
+  title: string
+  cwd: string
+  foregroundProcess: string | null
+  screen: { text: string; cols: number; rows: number; cursor: { x: number; y: number } }
+}
+
 export type PersistentPtyHandoff = { directory: string; instanceID: string; ticket: string; expiresAt: number }
 
 export type ShellInfo1 = {
@@ -5768,6 +5776,13 @@ export type PtyConnectTokenOutput = {
   location: { directory: string; workspaceID?: string; project: { id: string; directory: string; canonical: string } }
   data: PtyTicketConnectToken
 }
+
+export type ExperimentalPersistentPtyReadInput = {
+  readonly sessionID: { readonly sessionID: string }["sessionID"]
+  readonly lines?: { readonly lines?: number | undefined }["lines"]
+}
+
+export type ExperimentalPersistentPtyReadOutput = { data: PersistentPtyReadResult | null }["data"]
 
 export type ExperimentalPersistentPtyListInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
 

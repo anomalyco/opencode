@@ -193,6 +193,11 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
     event: {
       subscribe: () => bus.subscribe().pipe(Stream.filter(EventManifest.isServer)),
     },
+    experimental: {
+      terminal: {
+        read: (input) => runtime.persistentPty.read(input.sessionID, input.lines),
+      },
+    },
     generate: {
       text: (input) => generate.text(input).pipe(Effect.map((text) => ({ text }))),
     },

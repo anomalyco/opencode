@@ -491,6 +491,59 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
+  it.effect("ignores late tool deltas after contentBlockStop", () =>
+    Effect.gen(function* () {
+      const body = eventStreamBody(
+        [
+          "contentBlockStart",
+          {
+            contentBlockIndex: 0,
+            start: { toolUse: { toolUseId: "tool_1", name: "lookup" } },
+          },
+        ],
+        ["contentBlockDelta", { contentBlockIndex: 0, delta: { toolUse: { input: '{"query":"weather"}' } } }],
+        ["contentBlockStop", { contentBlockIndex: 0 }],
+        ["contentBlockDelta", { contentBlockIndex: 0, delta: { toolUse: { input: '{"late":true}' } } }],
+        ["messageStop", { stopReason: "tool_use" }],
+      )
+      const response = yield* LLMClient.generate(baseRequest).pipe(Effect.provide(fixedBytes(body)))
+
+      expect(response.toolCalls).toEqual([
+        { type: "tool-call", id: "tool_1", name: "lookup", input: { query: "weather" } },
+      ])
+      expect(response.events.filter((event) => event.type === "tool-input-delta")).toEqual([
+        {
+          type: "tool-input-delta",
+          id: "tool_1",
+          name: "lookup",
+          text: '{"query":"weather"}',
+          input: { query: "weather" },
+        },
+      ])
+    }),
+  )
+
+  it.effect("rejects tool deltas without contentBlockStart", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.generate(baseRequest).pipe(
+        Effect.provide(
+          fixedBytes(
+            eventStreamBody(
+              ["contentBlockDelta", { contentBlockIndex: 0, delta: { toolUse: { input: "{}" } } }],
+              ["messageStop", { stopReason: "tool_use" }],
+            ),
+          ),
+        ),
+        Effect.flip,
+      )
+
+      expect(error).toMatchObject({
+        reason: { _tag: "InvalidProviderOutput" },
+        message: "Bedrock Converse tool delta is missing its tool call",
+      })
+    }),
+  )
+
   it.effect("recovers incomplete tool input at finalization", () =>
     Effect.gen(function* () {
       const body = eventStreamBody(

@@ -405,6 +405,19 @@ describe("OpenAI-compatible Chat route", () => {
     }),
   )
 
+  it.effect("ignores events after the done sentinel", () =>
+    Effect.gen(function* () {
+      const body = `${sseEvents(
+        deltaChunk({ content: "Hello" }),
+        deltaChunk({}, "stop"),
+      )}data: ${JSON.stringify(deltaChunk({ content: " late" }))}\n\n`
+      const response = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse(body)))
+
+      expect(response.text).toBe("Hello")
+      expect(response.finishReason).toEqual({ normalized: "stop", raw: "stop" })
+    }),
+  )
+
   it.effect("accepts nullable usage and preserves provider fields", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(request).pipe(

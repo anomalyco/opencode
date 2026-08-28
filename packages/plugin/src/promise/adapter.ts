@@ -77,6 +77,7 @@ export function fromPromise(plugin: Plugin) {
         )
         const AgentEndpoints = ClientApi.groups["server.agent"].endpoints
         const CommandEndpoints = ClientApi.groups["server.command"].endpoints
+        const ExperimentalEndpoints = ClientApi.groups["server.experimental"].endpoints
         const GenerateEndpoints = ClientApi.groups["server.generate"].endpoints
         const IntegrationEndpoints = ClientApi.groups["server.integration"].endpoints
         const McpEndpoints = ClientApi.groups["server.mcp"].endpoints
@@ -187,6 +188,11 @@ export function fromPromise(plugin: Plugin) {
                   Stream.map((event) => event as unknown as PromiseEvent),
                 ),
               ),
+          },
+          experimental: {
+            terminal: {
+              read: adaptApiMethod(ExperimentalEndpoints["persistentPty.read"], host.experimental.terminal.read),
+            },
           },
           generate: {
             text: adaptApiMethod(GenerateEndpoints["generate.text"], host.generate.text),
