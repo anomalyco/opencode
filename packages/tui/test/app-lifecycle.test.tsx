@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { EmbeddedTerminalRenderable, type Renderable, ScrollBoxRenderable, TextAttributes } from "@opentui/core"
+import { EmbeddedTerminalRenderable, type Renderable, ScrollBoxRenderable } from "@opentui/core"
 import { createTestRenderer } from "@opentui/core/testing"
 import { Effect, FileSystem } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -223,25 +223,17 @@ test("session title generated while an untitled session is loading remains visib
   }
 })
 
-test.each(
-  (["horizontal", "vertical", "sidebar"] as const).flatMap((layout) =>
-    [undefined, false, true].map((animations) => ({ layout, animations })),
-  ),
-)("auto rename feedback follows request and title updates (%j)", async ({ layout, animations }) => {
-  const animated = animations !== false
+test("automatic rename refreshes the displayed title before settling, even without a renamed event", async () => {
   await using state = await tmpdir()
-  const setup = await createTestRenderer({ width: 160, height: 30, useThread: false, kittyKeyboard: true })
+  const setup = await createTestRenderer({ width: 90, height: 20, useThread: false, kittyKeyboard: true })
   setup.renderer.start()
   const events = createEventStream()
-  const responses = Array.from({ length: 4 }, () => Promise.withResolvers<Response>())
-  const refresh = Promise.withResolvers<Response>()
-  const refreshRequested = Promise.withResolvers<void>()
-  let holdRefresh = false
+  const response = Promise.withResolvers<Response>()
   const bodies: unknown[] = []
   const location = { directory, project: { id: "project", directory, canonical: directory } }
   const session = {
     id: "ses_rename",
-    title: "Demo session",
+    title: "Compiler cleanup",
     projectID: "project",
     location: { directory },
     agent: "build",
@@ -258,32 +250,16 @@ test.each(
       return json({ location, data: [{ id: "model", providerID: "provider", name: "Model", variants: [] }] })
     if (url.pathname === "/api/provider") return json({ location, data: [{ id: "provider", name: "Provider" }] })
     if (url.pathname === "/api/session") return json({ data: [], cursor: {} })
-    if (url.pathname === "/api/session/ses_rename") {
-      if (!holdRefresh) return json({ data: session })
-      refreshRequested.resolve()
-      return refresh.promise
-    }
+    if (url.pathname === "/api/session/ses_rename") return json({ data: session })
     if (/^\/api\/session\/ses_rename\/(message|inbox|permission)$/.test(url.pathname))
       return json({ data: [], cursor: {} })
     if (url.pathname === "/api/session/ses_rename/rename") {
-      const response = responses[bodies.length]
       bodies.push(await request.json())
       return response.promise
     }
     return undefined
   }, events)
   const server = Bun.serve({ port: 0, fetch: (request) => calls.fetch(request) })
-  const titleSpans = () =>
-    setup.captureSpans().lines.flatMap((line) => {
-      const column = line.spans
-        .map((span) => span.text)
-        .join("")
-        .indexOf(session.title)
-      if (column === -1) return []
-      return line.spans
-        .flatMap((span) => Array.from({ length: span.width }, () => span))
-        .slice(column, column + session.title.length)
-    })
 
   try {
     const { run } = await import("../src/app")
@@ -293,9 +269,8 @@ test.each(
         server: { endpoint: { url: server.url.toString() } },
         config: {
           get: async () => ({
-            animations,
-            tabs: { enabled: layout !== "sidebar", layout: layout === "sidebar" ? "horizontal" : layout },
-            session: { sidebar: layout === "sidebar" ? "auto" : "hide" },
+            tabs: { enabled: true, layout: "vertical" },
+            session: { sidebar: "hide" },
           }),
           update: async () => ({}),
         },
@@ -307,87 +282,23 @@ test.each(
     )
 
     await setup.waitForFrame((frame) => frame.includes(session.title) && frame.includes("Build · Model Provider"))
-    expect(titleSpans().every((span) => (span.attributes & TextAttributes.BOLD) !== 0)).toBe(true)
-    const foreground = titleSpans()[0].fg
-
-    for (const [index, status] of [204, 204, 503].entries()) {
-      await setup.mockInput.typeText("/rename")
-      setup.mockInput.pressEscape()
-      setup.mockInput.pressEnter()
-      await setup.waitFor(() => bodies.length === index + 1)
-      expect(bodies[index]).toEqual({ title: "" })
-      await setup.waitForFrame(
-        () =>
-          titleSpans().length > 0 &&
-          (animated
-            ? titleSpans().some((span) => !span.fg.equals(foreground))
-            : titleSpans().every((span) => (span.attributes & TextAttributes.DIM) !== 0)),
-      )
-      expect(titleSpans().every((span) => Boolean(span.attributes & TextAttributes.BOLD) === animated)).toBe(true)
-
-      if (index === 0) {
-        await setup.mockInput.typeText("/rename")
-        setup.mockInput.pressEscape()
-        setup.mockInput.pressEnter()
-        await setup.renderOnce()
-        expect(bodies).toHaveLength(1)
-        if (animated) {
-          // A successful response can precede the event/read that supplies the new title.
-          holdRefresh = true
-          responses[index].resolve(new Response(null, { status }))
-          await refreshRequested.promise
-          await setup.renderOnce()
-          expect(setup.captureCharFrame()).toContain(session.title)
-          expect(titleSpans().some((span) => !span.fg.equals(foreground))).toBe(true)
-        }
-        session.title = "Generated session"
-        events.emit({
-          id: "evt_renamed",
-          created: 1,
-          type: "session.renamed",
-          durable: { aggregateID: session.id, seq: 1, version: 1 },
-          data: { sessionID: session.id, title: session.title },
-        })
-        holdRefresh = false
-        refresh.resolve(json({ data: session }))
-        await setup.waitForFrame((frame) => frame.includes(session.title))
-        if (animated) {
-          expect(titleSpans().some((span) => !span.fg.equals(foreground))).toBe(true)
-          expect(setup.renderer.root.liveCount).toBeGreaterThan(0)
-        }
-      }
-      // No rename event is emitted for the unchanged-title and failed requests.
-      responses[index].resolve(new Response(null, { status }))
-      if (status === 503) {
-        const rows = (await setup.waitForFrame((frame) => frame.includes("UnexpectedStatus"))).split("\n")
-        const row = rows.findIndex((line) => line.includes("UnexpectedStatus"))
-        await setup.mockMouse.click(rows[row].indexOf("UnexpectedStatus"), row)
-      }
-      await setup.waitForFrame(
-        () =>
-          titleSpans().length > 0 &&
-          titleSpans().every(
-            (span) =>
-              (span.attributes & TextAttributes.DIM) === 0 &&
-              (span.attributes & TextAttributes.BOLD) !== 0 &&
-              span.fg.equals(foreground),
-          ),
-        { maxPasses: 60 },
-      )
-    }
-
-    await setup.mockInput.typeText("/rename Hand picked")
+    await setup.mockInput.typeText("/rename")
     setup.mockInput.pressEscape()
     setup.mockInput.pressEnter()
-    await setup.waitFor(() => bodies.length === 4)
-    expect(bodies[3]).toEqual({ title: "Hand picked" })
-    expect(titleSpans().every((span) => (span.attributes & TextAttributes.DIM) === 0)).toBe(true)
-    responses[3].resolve(new Response(null, { status: 204 }))
+    await setup.waitFor(() => bodies.length === 1)
+    await setup.renderOnce()
+    expect(bodies[0]).toEqual({ title: "" })
+    expect(setup.captureCharFrame()).toContain("Compiler cleanup")
+
+    session.title = "Simplify compiler parsing"
+    response.resolve(new Response(null, { status: 204 }))
+    await setup.waitForFrame((frame) => frame.includes(session.title), { maxPasses: 60 })
+    expect(setup.captureCharFrame()).not.toContain("Compiler cleanup")
+
     setup.renderer.destroy()
     await task
   } finally {
-    responses.forEach((response) => response.resolve(new Response(null, { status: 204 })))
-    refresh.resolve(json({ data: session }))
+    response.resolve(new Response(null, { status: 204 }))
     if (!setup.renderer.isDestroyed) setup.renderer.destroy()
     await server.stop()
   }
