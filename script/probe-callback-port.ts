@@ -10,6 +10,7 @@ const modes = [
   "no-connection",
   "force-first",
   "fixed-force-first",
+  "listen-callback",
   "response-connection-close",
   "socket-reset-after-flush",
   "socket-destroy-after-flush",
@@ -172,7 +173,7 @@ async function probe(mode: (typeof modes)[number]) {
     used.add(state.port)
     const second = await bind(servers[1].server, state.port, "::1", deadline.signal)
     if (!second.ok) throw new Error(`IPv6 setup failed: ${JSON.stringify(second.error)}`)
-    const occupied = await bind(servers[2].server, state.port, "localhost", deadline.signal)
+    const occupied = await bind(servers[2].server, state.port, "localhost", deadline.signal, mode === "listen-callback")
     log("occupied-bind", occupied)
     if (occupied.ok || occupied.error.code !== "EADDRINUSE")
       throw new Error("Expected localhost bind to fail with EADDRINUSE while both families are occupied")
@@ -216,7 +217,7 @@ async function probe(mode: (typeof modes)[number]) {
     // These are production's nine 200ms retries, not a sleep-based proposed fix.
     for (const attempt of [1, 2, 3, 4, 5, 6, 7, 8, 9]) {
       await timers.setTimeout(200, undefined, { signal: deadline.signal })
-      const result = await bind(servers[2].server, state.port, "localhost", deadline.signal)
+      const result = await bind(servers[2].server, state.port, "localhost", deadline.signal, mode === "listen-callback")
       const observation = { attempt, afterFetchMs: Math.round(performance.now() - state.fetchAt), ...result }
       attempts.push(observation)
       log("rebind", observation)
@@ -269,19 +270,20 @@ async function probe(mode: (typeof modes)[number]) {
   }
 }
 
-async function bind(server: Server, port: number, host: string, signal: AbortSignal) {
+async function bind(server: Server, port: number, host: string, signal: AbortSignal, callback = false) {
   signal.throwIfAborted()
   const result = Promise.withResolvers<{ ok: true } | { ok: false; error: ReturnType<typeof describe> }>()
   const onError = (cause: unknown) => result.resolve({ ok: false, error: describe(cause) })
   const onListening = () => result.resolve({ ok: true })
   server.once("error", onError)
-  server.once("listening", onListening)
+  if (!callback) server.once("listening", onListening)
   try {
-    server.listen(port, host)
+    if (callback) server.listen(port, host, onListening)
+    if (!callback) server.listen(port, host)
     return await bounded(result.promise, AbortSignal.any([signal, AbortSignal.timeout(1000)]))
   } finally {
     server.off("error", onError)
-    server.off("listening", onListening)
+    if (!callback) server.off("listening", onListening)
   }
 }
 

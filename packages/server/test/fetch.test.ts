@@ -49,6 +49,7 @@ function occupy(port: number, cancel = false) {
                 listening: item.server.listening,
               })
             })
+          if (cancel) traceTcp(port)
         })
       }),
     }))
@@ -76,6 +77,22 @@ function occupy(port: number, cancel = false) {
       }),
     )
     return requests
+  })
+}
+
+function traceTcp(port: number) {
+  if (process.platform !== "win32") return
+  const child = Bun.spawn(["netstat", "-ano"], { stdout: "pipe", stderr: "ignore" })
+  void Promise.all([new Response(child.stdout).text(), child.exited]).then(([output, exitCode]) => {
+    const rows = output.split(/\r?\n/).flatMap((line) => {
+      const fields = line.trim().split(/\s+/)
+      if (fields[0] !== "TCP" || fields.length < 5) return []
+      const safe = /^(127\.0\.0\.1|\[::1\]|0\.0\.0\.0|\[::\]):\d+$/
+      if (!safe.test(fields[1]) || !safe.test(fields[2])) return []
+      if (!fields[1].endsWith(`:${port}`) && !fields[2].endsWith(`:${port}`)) return []
+      return [{ local: fields[1], peer: fields[2], state: fields[3], thisProcess: fields[4] === String(process.pid) }]
+    })
+    console.error("[DEBUG-ci-callback] fixture-tcp-after-stop", { port, exitCode, rows })
   })
 }
 
