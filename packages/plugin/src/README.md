@@ -49,6 +49,9 @@ await registration.dispose()
 `ctx.experimental` has no compatibility guarantees. Its methods use the generated
 client API contracts; terminal reads do not register a tool.
 
+The plugin's `experimental.terminal.read` maps to `experimental.persistentPty.read`
+in the server/client API.
+
 ```ts
 const terminal = await ctx.experimental.terminal.read({ sessionID, lines: 100 })
 if (terminal) console.log(terminal.screen.text)

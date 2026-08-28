@@ -191,7 +191,7 @@ export function fromPromise(plugin: Plugin) {
           },
           experimental: {
             terminal: {
-              read: adaptApiMethod(ExperimentalEndpoints["terminal.read"], host.experimental.terminal.read),
+              read: adaptApiMethod(ExperimentalEndpoints["persistentPty.read"], host.experimental.terminal.read),
             },
           },
           generate: {

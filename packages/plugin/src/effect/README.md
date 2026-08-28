@@ -34,6 +34,9 @@ Registrations are owned by the plugin scope. Closing the scope removes them auto
 `ctx.experimental` has no compatibility guarantees. Its methods use the generated
 Effect client API contracts; terminal reads do not register a tool.
 
+The plugin's `experimental.terminal.read` maps to `experimental.persistentPty.read`
+in the server/client API.
+
 ```ts
 const terminal = yield * ctx.experimental.terminal.read({ sessionID, lines: 100 })
 if (terminal) console.log(terminal.screen.text)

@@ -30,7 +30,7 @@ smoke(
       const base = HttpServer.formatAddress(server.address)
       const client = OpenCode.make({ baseUrl: base, headers: { authorization: `Basic ${btoa("opencode:secret")}` } })
       const sessionID = "ses_terminal_read"
-      expect(yield* Effect.promise(() => client.experimental.terminal.read({ sessionID }))).toBeNull()
+      expect(yield* Effect.promise(() => client.experimental.persistentPty.read({ sessionID }))).toBeNull()
       expect(existsSync(fixture.directory)).toBeFalse()
       yield* Effect.promise(async () => {
         for (const lines of ["0", "-1", "1.5", "65536", "nope"]) {
@@ -64,7 +64,7 @@ smoke(
         }),
       )
       expect(yield* waitForText(base, first.id, "20")).toContain("1\n2\n")
-      expect(yield* Effect.promise(() => client.experimental.terminal.read({ sessionID }))).toBeNull()
+      expect(yield* Effect.promise(() => client.experimental.persistentPty.read({ sessionID }))).toBeNull()
       const controller = yield* Effect.acquireRelease(
         Effect.promise(() => openTerminalSocket(base, first.id, "read-first")),
         (connection) => Effect.sync(() => connection.socket.close()),
@@ -73,7 +73,7 @@ smoke(
         Effect.promise(() => openTerminalSocket(base, second.id, "read-second", "observer")),
         (connection) => Effect.sync(() => connection.socket.close()),
       )
-      const current = yield* Effect.promise(() => client.experimental.terminal.read({ sessionID }))
+      const current = yield* Effect.promise(() => client.experimental.persistentPty.read({ sessionID }))
       if (!current) throw new Error("Expected the controller's terminal to be selected")
       expect(current).toEqual({
         ptyID: first.id,
@@ -83,10 +83,10 @@ smoke(
         screen: { text: "18\n19\n20\n", cols: 40, rows: 4, cursor: { x: 0, y: 3 } },
       })
       expect(current.foregroundProcess === null || typeof current.foregroundProcess === "string").toBeTrue()
-      expect(yield* Effect.promise(() => client.experimental.terminal.read({ sessionID: "ses_other" }))).toBeNull()
+      expect(yield* Effect.promise(() => client.experimental.persistentPty.read({ sessionID: "ses_other" }))).toBeNull()
       yield* Effect.promise(() => client.experimental.persistentPty.snapshot({ ptyID: second.id }))
       for (const lines of [2, 6, 65535]) {
-        const value = yield* Effect.promise(() => client.experimental.terminal.read({ sessionID, lines }))
+        const value = yield* Effect.promise(() => client.experimental.persistentPty.read({ sessionID, lines }))
         expect(value?.ptyID).toBe(first.id)
         expect(value?.screen.rows).toBe(4)
         const expected = Array.from({ length: 20 }, (_, index) => String(index + 1))
@@ -103,7 +103,7 @@ smoke(
           size: { cols: 42, rows: 5 },
         }),
       )
-      expect((yield* Effect.promise(() => client.experimental.terminal.read({ sessionID })))?.ptyID).toBe(first.id)
+      expect((yield* Effect.promise(() => client.experimental.persistentPty.read({ sessionID })))?.ptyID).toBe(first.id)
       observer.socket.send(controlFrame(30, 3))
       yield* Effect.promise(() => waitForRead(client, sessionID, second.id))
       controller.socket.send(inputFrame(40, 4, "typed\n"))
@@ -113,21 +113,25 @@ smoke(
         Effect.promise(() => openTerminalSocket(base, second.id, "read-takeover")),
         (connection) => Effect.sync(() => connection.socket.close()),
       )
-      expect((yield* Effect.promise(() => client.experimental.terminal.read({ sessionID })))?.ptyID).toBe(second.id)
+      expect((yield* Effect.promise(() => client.experimental.persistentPty.read({ sessionID })))?.ptyID).toBe(
+        second.id,
+      )
       takeover.socket.close()
       yield* Effect.promise(() => client.experimental.persistentPty.remove({ ptyID: first.id }))
-      expect((yield* Effect.promise(() => client.experimental.terminal.read({ sessionID })))?.ptyID).toBe(second.id)
+      expect((yield* Effect.promise(() => client.experimental.persistentPty.read({ sessionID })))?.ptyID).toBe(
+        second.id,
+      )
       yield* Effect.promise(() => client.experimental.persistentPty.remove({ ptyID: second.id }))
-      expect(yield* Effect.promise(() => client.experimental.terminal.read({ sessionID }))).toBeNull()
+      expect(yield* Effect.promise(() => client.experimental.persistentPty.read({ sessionID }))).toBeNull()
       yield* Effect.promise(() => client.experimental.persistentPty.shutdown())
-      expect(yield* Effect.promise(() => client.experimental.terminal.read({ sessionID }))).toBeNull()
+      expect(yield* Effect.promise(() => client.experimental.persistentPty.read({ sessionID }))).toBeNull()
     }),
   20_000,
 )
 
 async function waitForRead(client: ReturnType<typeof OpenCode.make>, sessionID: string, ptyID: string) {
   for (let attempt = 0; attempt < 100; attempt++) {
-    const result = await client.experimental.terminal.read({ sessionID })
+    const result = await client.experimental.persistentPty.read({ sessionID })
     if (result?.ptyID === ptyID) return result
     await Bun.sleep(20)
   }

@@ -20,7 +20,7 @@ const terminalErrors = [PtyNotFoundError, ServiceUnavailableError] as const
 
 export const PersistentPtyGroup = HttpApiGroup.make("server.experimental")
   .add(
-    HttpApiEndpoint.get("terminal.read", "/api/experimental/session/:sessionID/terminal/read", {
+    HttpApiEndpoint.get("persistentPty.read", "/api/experimental/session/:sessionID/terminal/read", {
       params: { sessionID: Session.ID },
       query: {
         lines: Schema.NumberFromString.pipe(Schema.decodeTo(PersistentPty.ReadLines), Schema.optional),

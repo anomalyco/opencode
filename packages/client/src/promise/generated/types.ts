@@ -5757,12 +5757,12 @@ export type PtyConnectTokenOutput = {
   data: PtyTicketConnectToken
 }
 
-export type ExperimentalTerminalReadInput = {
+export type ExperimentalPersistentPtyReadInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]
   readonly lines?: { readonly lines?: number | undefined }["lines"]
 }
 
-export type ExperimentalTerminalReadOutput = { data: PersistentPtyReadResult | null }["data"]
+export type ExperimentalPersistentPtyReadOutput = { data: PersistentPtyReadResult | null }["data"]
 
 export type ExperimentalPersistentPtyListInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
 

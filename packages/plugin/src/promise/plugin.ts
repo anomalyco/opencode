@@ -30,7 +30,9 @@ export interface Context {
   readonly catalog: CatalogDomain
   readonly command: CommandDomain
   readonly event: EventDomain
-  readonly experimental: Pick<OpenCodeClient["experimental"], "terminal">
+  readonly experimental: {
+    readonly terminal: Pick<OpenCodeClient["experimental"]["persistentPty"], "read">
+  }
   readonly integration: IntegrationDomain
   readonly mcp: MCPDomain
   readonly generate: GenerateApi

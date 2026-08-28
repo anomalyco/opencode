@@ -1637,8 +1637,8 @@ export interface PtyApi<E = never> {
   readonly connect: { readonly token: PtyConnectTokenOperation<E> }
 }
 
-export type ExperimentalTerminalReadInput = { readonly sessionID: Session.ID; readonly lines?: number | undefined }
-export type ExperimentalTerminalReadOutput = {
+export type ExperimentalPersistentPtyReadInput = { readonly sessionID: Session.ID; readonly lines?: number | undefined }
+export type ExperimentalPersistentPtyReadOutput = {
   readonly ptyID: Pty.ID
   readonly title: string
   readonly cwd: string
@@ -1650,9 +1650,9 @@ export type ExperimentalTerminalReadOutput = {
     readonly cursor: { readonly x: number; readonly y: number }
   }
 } | null
-export type ExperimentalTerminalReadOperation<E = never> = (
-  input: ExperimentalTerminalReadInput,
-) => Effect.Effect<ExperimentalTerminalReadOutput, E>
+export type ExperimentalPersistentPtyReadOperation<E = never> = (
+  input: ExperimentalPersistentPtyReadInput,
+) => Effect.Effect<ExperimentalPersistentPtyReadOutput, E>
 
 export type ExperimentalPersistentPtyListInput = { readonly sessionID: Session.ID }
 export type ExperimentalPersistentPtyListOutput = ReadonlyArray<{
@@ -1801,8 +1801,8 @@ export type ExperimentalPersistentPtyConnectTokenOperation<E = never> = (
 ) => Effect.Effect<ExperimentalPersistentPtyConnectTokenOutput, E>
 
 export interface ExperimentalApi<E = never> {
-  readonly terminal: { readonly read: ExperimentalTerminalReadOperation<E> }
   readonly persistentPty: {
+    readonly read: ExperimentalPersistentPtyReadOperation<E>
     readonly list: ExperimentalPersistentPtyListOperation<E>
     readonly create: ExperimentalPersistentPtyCreateOperation<E>
     readonly shutdown: ExperimentalPersistentPtyShutdownOperation<E>
