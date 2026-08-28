@@ -204,9 +204,18 @@ describe("LocationMutation", () => {
     expect(LocationMutation.resolvePath("/project", "~/notes.md", home)).toBe(path.resolve(home, "notes.md"))
     expect(LocationMutation.resolvePath("/project", "~draft.md", home)).toBe(path.resolve("/project", "~draft.md"))
     expect(LocationMutation.resolvePath("/project", "~\\notes.md", home)).toBe(
-      process.platform === "win32"
-        ? path.resolve(home, "notes.md")
-        : path.resolve("/project", "~\\notes.md"),
+      process.platform === "win32" ? path.resolve(home, "notes.md") : path.resolve("/project", "~\\notes.md"),
+    )
+  })
+
+  test.each([
+    ["/c/Users/aiden/notes.md", "C:/Users/aiden/notes.md"],
+    ["/C:/Users/aiden/notes.md", "C:/Users/aiden/notes.md"],
+    ["/cygdrive/c/Users/aiden/notes.md", "C:/Users/aiden/notes.md"],
+    ["/mnt/c/Users/aiden/notes.md", "C:/Users/aiden/notes.md"],
+  ])("normalizes Windows shell drive path %s before resolution", (input, windows) => {
+    expect(LocationMutation.resolvePath("/project", input)).toBe(
+      process.platform === "win32" ? path.resolve(windows) : path.resolve(input),
     )
   })
 

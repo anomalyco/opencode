@@ -58,16 +58,18 @@ export interface Interface {
   readonly resolve: (input: ResolveInput) => Effect.Effect<Target, FSUtil.Error>
 }
 
-/** Lexical absolute path, expanding a leading `~` before resolving against `directory`. */
-export const resolvePath = (directory: string, input: string, home = Global.Path.home) =>
-  path.resolve(
+/** Lexical absolute path, normalizing Windows shell paths and expanding `~` before resolution. */
+export const resolvePath = (directory: string, input: string, home = Global.Path.home) => {
+  const normalized = FSUtil.windowsPath(input)
+  return path.resolve(
     directory,
-    input === "~"
+    normalized === "~"
       ? home
-      : input.startsWith("~/") || (process.platform === "win32" && input.startsWith("~\\"))
-        ? path.join(home, input.slice(2))
-        : input,
+      : normalized.startsWith("~/") || (process.platform === "win32" && normalized.startsWith("~\\"))
+        ? path.join(home, normalized.slice(2))
+        : normalized,
   )
+}
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/LocationMutation") {}
 
