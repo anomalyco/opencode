@@ -76,7 +76,7 @@ export const layerWithCell = (cell: Cell) =>
         resume: (sessionID) => require(cell, (runtime) => runtime.session.resume(sessionID)),
         switchAgent: (input) => require(cell, (runtime) => runtime.session.switchAgent(input)),
         switchModel: (input) => require(cell, (runtime) => runtime.session.switchModel(input)),
-        interrupt: (sessionID) => require(cell, (runtime) => runtime.session.interrupt(sessionID)),
+        interrupt: (sessionID, options) => require(cell, (runtime) => runtime.session.interrupt(sessionID, options)),
         synthetic: (input) => require(cell, (runtime) => runtime.session.synthetic(input)),
         wait: (sessionID) => require(cell, (runtime) => runtime.session.wait(sessionID)),
         context: (sessionID) => require(cell, (runtime) => runtime.session.context(sessionID)),

@@ -53,6 +53,9 @@ export class UpdateError extends Schema.TaggedError<UpdateError>()("Config.Updat
 
 export const Options = Schema.Struct({
   project: Schema.optional(Schema.Boolean),
+  // false skips the global config dir, ~/.claude, and ~/.agents; wellknown,
+  // file, and content entries still load.
+  global: Schema.optional(Schema.Boolean),
   file: Schema.optional(Schema.String),
   content: Schema.optional(Schema.String),
 })
@@ -220,28 +223,39 @@ export const layer = (options?: Options) =>
                 })
                 .pipe(Effect.orDie)
 
+        const globalEnabled = options?.global !== false
+        // A walked path that resolves into a global root is global config
+        // however the walk reached it (home above the project, or a location
+        // beneath the global config dir), so global: false excludes it
+        // uniformly — classified once here, not per consumer below.
+        const globalRoots = [globalDirectory, globalClaudeDirectory, globalAgentsDirectory].map((item) =>
+          path.resolve(item),
+        )
+        const visible = globalEnabled
+          ? discovered
+          : discovered.filter((item) => {
+              const resolved = path.resolve(item)
+              return !globalRoots.some((root) => resolved === root || resolved.startsWith(root + path.sep))
+            })
         // We load certain files from a few other folders in the ecosystem
         const claude = [
           ...new Set([
-            ...((yield* fs.isDir(globalClaudeDirectory)) ? [globalClaudeDirectory] : []),
-            ...discovered.filter((item) => path.basename(item) === ".claude").toReversed(),
+            ...(globalEnabled && (yield* fs.isDir(globalClaudeDirectory)) ? [globalClaudeDirectory] : []),
+            ...visible.filter((item) => path.basename(item) === ".claude").toReversed(),
           ]),
         ].map((directory) => new ClaudeDirectory({ type: "claude", path: AbsolutePath.make(directory) }))
         const agents = [
           ...new Set([
-            ...((yield* fs.isDir(globalAgentsDirectory)) ? [globalAgentsDirectory] : []),
-            ...discovered.filter((item) => path.basename(item) === ".agents").toReversed(),
+            ...(globalEnabled && (yield* fs.isDir(globalAgentsDirectory)) ? [globalAgentsDirectory] : []),
+            ...visible.filter((item) => path.basename(item) === ".agents").toReversed(),
           ]),
         ].map((directory) => new AgentsDirectory({ type: "agents", path: AbsolutePath.make(directory) }))
 
-        const directories = [
-          globalDirectory,
-          ...discovered
-            .filter((item) => path.basename(item) === ".opencode")
-            .toReversed()
-            .map((directory) => AbsolutePath.make(directory)),
-        ]
-        const directPaths = discovered
+        const projectDirectories = visible
+          .filter((item) => path.basename(item) === ".opencode")
+          .toReversed()
+          .map((directory) => AbsolutePath.make(directory))
+        const directPaths = visible
           .filter((item) => ![".agents", ".claude", ".opencode"].includes(path.basename(item)))
           .toReversed()
         fileTargets.clear()
@@ -273,15 +287,21 @@ export const layer = (options?: Options) =>
               )
             : []
 
-        const supplementary = yield* Effect.forEach(directories, loadDirectory).pipe(Effect.orDie)
+        // Global entries sit below explicit and direct files; project
+        // directories rank above them.
+        const globalSupplementary = globalEnabled ? yield* loadDirectory(globalDirectory).pipe(Effect.orDie) : []
+        const projectSupplementary = yield* Effect.forEach(projectDirectories, loadDirectory).pipe(
+          Effect.orDie,
+          Effect.map((entries) => entries.flat()),
+        )
         return [
           ...(yield* loadWellknown().pipe(Effect.orDie)),
           ...claude,
           ...agents,
-          ...(supplementary[0] ?? []),
+          ...globalSupplementary,
           ...explicit,
           ...direct,
-          ...supplementary.slice(1).flat(),
+          ...projectSupplementary,
           ...content,
         ]
       })

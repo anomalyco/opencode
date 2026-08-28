@@ -128,6 +128,85 @@ describe("Config", () => {
     ),
   )
 
+  it.live("excludes home-level claude and agents directories when global is disabled", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) => {
+        const global = path.join(tmp.path, "global")
+        const home = path.join(global, "home")
+        const project = path.join(home, "project")
+        const ambient = (entries: readonly { type: string }[]) =>
+          entries.filter((entry) => entry.type === "claude" || entry.type === "agents")
+        return Effect.promise(() =>
+          Promise.all([
+            fs.mkdir(project, { recursive: true }),
+            fs.mkdir(path.join(home, ".claude"), { recursive: true }),
+            fs.mkdir(path.join(home, ".agents"), { recursive: true }),
+          ]),
+        ).pipe(
+          Effect.andThen(
+            Effect.gen(function* () {
+              // The fixture is real: with global enabled the walk finds both.
+              const config = yield* Config.Service
+              expect(ambient(yield* config.entries()).length).toBe(2)
+            }).pipe(Effect.provide(testLayer(project, global))),
+          ),
+          Effect.andThen(
+            // Home-level directories are global config however the walk
+            // reaches them, so global: false excludes them even with the
+            // project walk enabled.
+            Effect.gen(function* () {
+              const config = yield* Config.Service
+              expect(ambient(yield* config.entries())).toEqual([])
+            }).pipe(
+              Effect.provide(
+                testLayer(project, global, project, undefined, undefined, undefined, undefined, { global: false }),
+              ),
+            ),
+          ),
+        )
+      }),
+    ),
+  )
+
+  it.live("excludes global config reached through the project walk when global is disabled", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) => {
+        // The location sits BENEATH the global config dir, so the upward walk
+        // reaches the global opencode.json as a direct file.
+        const global = path.join(tmp.path, "global")
+        const project = path.join(global, "plugins", "demo")
+        return Effect.promise(async () => {
+          await fs.mkdir(project, { recursive: true })
+          await fs.writeFile(path.join(global, "opencode.json"), JSON.stringify({ shell: "global-sentinel" }))
+        }).pipe(
+          Effect.andThen(
+            // Fixture control: with global enabled the file loads.
+            Effect.gen(function* () {
+              const config = yield* Config.Service
+              expect(Config.latest(yield* config.entries(), "shell")).toBe("global-sentinel")
+            }).pipe(Effect.provide(testLayer(project, global))),
+          ),
+          Effect.andThen(
+            Effect.gen(function* () {
+              const config = yield* Config.Service
+              expect(Config.latest(yield* config.entries(), "shell")).toBeUndefined()
+            }).pipe(
+              Effect.provide(
+                testLayer(project, global, project, undefined, undefined, undefined, undefined, { global: false }),
+              ),
+            ),
+          ),
+        )
+      }),
+    ),
+  )
+
   it.effect("fails updates when no file-backed document exists", () =>
     Effect.gen(function* () {
       const config = yield* Config.Service

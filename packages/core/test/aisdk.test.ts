@@ -326,6 +326,8 @@ it.effect("projects replay metadata onto AI SDK prompt parts", () =>
         model: resolved,
         messages: [
           Message.assistant([
+            { type: "text", text: "Answer", providerMetadata: { anthropic: { cacheControl: { type: "ephemeral" } } } },
+            { type: "text", text: " without metadata" },
             { type: "reasoning", text: "Think", providerMetadata: { anthropic: { signature: "signed" } } },
             {
               type: "tool-call",
@@ -344,6 +346,16 @@ it.effect("projects replay metadata onto AI SDK prompt parts", () =>
       {
         role: "assistant",
         content: [
+          {
+            type: "text",
+            text: "Answer",
+            providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
+          },
+          {
+            type: "text",
+            text: " without metadata",
+            providerOptions: undefined,
+          },
           {
             type: "reasoning",
             text: "Think",

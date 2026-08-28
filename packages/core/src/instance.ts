@@ -114,17 +114,42 @@ export type Error = LayerNode.Error<typeof graph>
 export interface Options {
   // Plugins this instance is born with; empty and absent are equivalent.
   readonly plugins?: InstancePlugins.List
+  // Filesystem config discovery; true (default) is today's behavior. When
+  // false the instance boots vanilla: no upward config scan, no global config
+  // dir, no plugin-dir loading or ambient plugin module imports, no boot-time
+  // AGENTS.md discovery. Wellknown integration config and host-injected values
+  // still apply, and a config value that explicitly names something
+  // file-backed (a skill path, an MCP command) is a request, not discovery.
+  // Use-triggered behavior also stays: reading a file still injects nested
+  // AGENTS.md instructions — that is session-time context, not boot-time
+  // population.
+  readonly discovery?: boolean
   readonly replacements?: LayerNode.Replacements
 }
+
+// Vanilla neutralizes the discovery inputs; the plugin list stays untouched.
+// These are defaults ahead of caller replacements: a host that replaces a
+// gated node itself owns that node's discovery flags. Plugin-directory
+// discovery needs no swap here — implicit scanning only triggers on Directory
+// config entries, which a no-scan Config never produces, and the default
+// source still honors explicit plugin operations from wellknown and
+// host-injected config.
+const vanillaReplacements: LayerNode.Replacements = [
+  [Config.node, Config.configured({ project: false, global: false })],
+  [InstructionDiscovery.node, InstructionDiscovery.configured({ project: false, global: false })],
+]
 
 // One instance is one compiled, fresh copy of the graph standing on a directory.
 export function layer(ref: Location.Ref, options: Options = {}) {
   const startedAt = performance.now()
-  // Bound pairs come last, so they win over caller replacements of the same nodes.
-  const allReplacements = (options.replacements ?? []).concat([
-    [Location.node, Location.boundNode(ref)],
+  // Ordered: vanilla defaults, then caller replacements (which win over the
+  // defaults), then bound pairs (which win over everything).
+  const allReplacements: LayerNode.Replacements = [
+    ...(options.discovery === false ? vanillaReplacements : []),
+    ...(options.replacements ?? []),
+    [Location.node, Location.boundNode(ref, { discovery: options.discovery })],
     [InstancePlugins.node, InstancePlugins.bound(options.plugins ?? [])],
-  ])
+  ]
   // Apply replacements during hoist, not afterward: replacements can
   // introduce new tagged dependencies (Location.boundNode depends on
   // Project), and the hoist walk is the only pass that can still slice

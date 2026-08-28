@@ -113,6 +113,36 @@ describe("Plugin", () => {
     }),
   )
 
+  it.effect("forwards session interrupt options through the runtime cell", () =>
+    Effect.gen(function* () {
+      const plugins = yield* Plugin.Service
+      const fallback = yield* PluginRuntime.Service
+      const cell = PluginRuntime.makeCell()
+      const sessionID = Session.ID.create()
+      const calls: Array<{ sessionID: Session.ID; options: { continue?: boolean } | undefined }> = []
+      cell.runtime = {
+        ...fallback,
+        session: {
+          ...fallback.session,
+          interrupt: (id, options) =>
+            Effect.sync(() => {
+              calls.push({ sessionID: id, options })
+              return true
+            }),
+        },
+      }
+      const runtime = yield* PluginRuntime.Service.pipe(Effect.provide(PluginRuntime.layerWithCell(cell)))
+      const host = yield* PluginHost.make(plugins).pipe(Effect.provideService(PluginRuntime.Service, runtime))
+
+      expect(yield* runtime.session.interrupt(sessionID)).toBe(true)
+      expect(yield* host.session.interrupt({ sessionID, continue: true })).toEqual({ interrupted: true })
+      expect(calls).toEqual([
+        { sessionID, options: undefined },
+        { sessionID, options: { continue: true } },
+      ])
+    }),
+  )
+
   it.effect("registers and removes scoped VCS providers", () =>
     Effect.gen(function* () {
       const plugins = yield* Plugin.Service

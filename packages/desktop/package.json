@@ -40,7 +40,7 @@
     "@sentry/vite-plugin": "catalog:",
     "@solid-primitives/storage": "catalog:",
     "@solidjs/meta": "catalog:",
-    "@solidjs/router": "0.15.4",
+    "@solidjs/router": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "@typescript/native-preview": "catalog:",
