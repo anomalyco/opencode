@@ -37,6 +37,7 @@ const patterns = [
   /too large for model with \d+ maximum context length/i,
   /prompt has [\d,]+ tokens?, but the configured context size is [\d,]+ tokens?/i,
   /model_context_window_exceeded/i,
+  /range of input length should be/i,
   /too many tokens/i,
   /token limit exceeded/i,
   /request_too_large/i,
