@@ -82,7 +82,6 @@ jobs:
           - host: windows-2025
             target: aarch64-pc-windows-msvc
             platform_flag: --win --arm64
-            bun_install_flags: --os=win32 --cpu=arm64
           - host: windows-2025
             target: x86_64-pc-windows-msvc
             platform_flag: --win
