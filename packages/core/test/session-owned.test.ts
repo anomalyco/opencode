@@ -119,10 +119,10 @@ describe("Session-owned handles", () => {
   it.live("acquires Location only for new prompt preparation and persists before waking", () =>
     Effect.gen(function* () {
       const fixture = yield* setup()
-      const handle = fixture.sessions(sessionID)
-      expect(typeof fixture.sessions).toBe("function")
+      const handle = fixture.sessions.forSession(sessionID)
+      const { get, prompt } = handle
       expect(handle.id).toBe(sessionID)
-      expect((yield* handle.get().pipe(Effect.satisfiesServicesType<never>())).location).toEqual(source)
+      expect((yield* get().pipe(Effect.satisfiesServicesType<never>())).location).toEqual(source)
       const synthetic = yield* handle.synthetic({ text: "Background result", resume: false })
       expect(fixture.locations).toEqual([])
       expect(fixture.wakes).toEqual([])
@@ -135,12 +135,12 @@ describe("Session-owned handles", () => {
           event.prompt.text += " prepared"
         }),
       )
-      const first = yield* handle.prompt({
+      const first = yield* prompt({
         id: SessionMessage.ID.make("msg_owned_prepared"),
         text: "Original",
         files: [{ uri: new URL("./session-owned.test.ts", import.meta.url).href }],
       })
-      const retried = yield* fixture.sessions(sessionID).prompt({
+      const retried = yield* fixture.sessions.forSession(sessionID).prompt({
         id: first.id,
         text: "Ignored retry",
         files: [{ uri: "file:///missing-owned-retry" }],
@@ -150,7 +150,9 @@ describe("Session-owned handles", () => {
       expect(retried).toEqual(first)
       expect(first.payload.text).toBe("Original prepared")
       expect(first.payload.files?.[0]?.mime).toBe("text/plain")
-      expect(Buffer.from(first.payload.files?.[0]?.data ?? "", "base64").toString()).toContain("Session.make(location)")
+      expect(Buffer.from(first.payload.files?.[0]?.data ?? "", "base64").toString()).toBe(
+        yield* Effect.promise(() => Bun.file(import.meta.path).text()),
+      )
       expect(calls).toEqual(["Original"])
       expect(fixture.locations).toEqual([source])
       expect(fixture.flushes).toEqual([source])
@@ -166,9 +168,9 @@ describe("Session-owned handles", () => {
   it.live("keeps the first admission across handles, including delivered retries and identity conflicts", () =>
     Effect.gen(function* () {
       const fixture = yield* setup()
-      const first = fixture.sessions(sessionID)
-      const second = fixture.sessions(sessionID)
-      const other = fixture.sessions(otherID)
+      const first = fixture.sessions.forSession(sessionID)
+      const second = fixture.sessions.forSession(sessionID)
+      const other = fixture.sessions.forSession(otherID)
       const prompt = yield* first.prompt({ text: "Keep this", metadata: { source: "first" }, resume: false })
       const retry = { id: prompt.id, text: "Ignore this", metadata: { source: "retry" }, resume: false }
       expect(yield* second.prompt({ ...retry, delivery: "queue" })).toEqual(prompt)
@@ -222,7 +224,7 @@ describe("Session-owned handles", () => {
   it.live("reads fresh placement through an existing handle after a projected move", () =>
     Effect.gen(function* () {
       const fixture = yield* setup()
-      const handle = fixture.sessions(sessionID)
+      const handle = fixture.sessions.forSession(sessionID)
       yield* handle.prompt({ text: "Before move", resume: false })
       const get = handle.get()
       const prompt = handle.prompt({ text: "After move", resume: false })
@@ -240,7 +242,7 @@ describe("Session-owned handles", () => {
       yield* prompt
       expect(fixture.locations).toEqual([source, destination])
       expect(fixture.flushes).toEqual([source, destination])
-      expect((yield* fixture.sessions(otherID).get()).location).toEqual(source)
+      expect((yield* fixture.sessions.forSession(otherID).get()).location).toEqual(source)
     }),
   )
 
@@ -278,16 +280,16 @@ describe("Session-owned handles", () => {
           output: () => Effect.succeed(Output.make({ output: "owned", cursor: 5, size: 5, truncated: false })),
         }),
       })
-      const shell = yield* fixture
-        .sessions(sessionID)
+      const shell = yield* fixture.sessions
+        .forSession(sessionID)
         .shell({ id: Event.ID.make("evt_owned_shell"), command: started.command })
         .pipe(Effect.forkScoped)
       yield* Deferred.await(blocked)
 
-      const admitted = yield* fixture.sessions(sessionID).prompt({ text: "Admit while the shell runs" })
+      const admitted = yield* fixture.sessions.forSession(sessionID).prompt({ text: "Admit while the shell runs" })
       expect(yield* SessionInbox.find(fixture.db, admitted.id)).toEqual(admitted)
       expect(fixture.wakes).toEqual([])
-      const other = yield* fixture.sessions(otherID).prompt({ text: "Independent Session" })
+      const other = yield* fixture.sessions.forSession(otherID).prompt({ text: "Independent Session" })
       expect(fixture.wakes).toEqual([{ sessionID: otherID, pending: [other.id], enqueued: 1 }])
 
       yield* Deferred.succeed(release, undefined)
@@ -305,8 +307,8 @@ describe("Session-owned handles", () => {
   it.live("allows a prompt hook to admit synthetic input through another handle for the same Session", () =>
     Effect.gen(function* () {
       const fixture = yield* setup()
-      const handle = fixture.sessions(sessionID)
-      const nested = fixture.sessions(sessionID)
+      const handle = fixture.sessions.forSession(sessionID)
+      const nested = fixture.sessions.forSession(sessionID)
       yield* fixture.hooks.register("session", "prompt", (event) =>
         Effect.gen(function* () {
           expect(event.sessionID).toBe(sessionID)
@@ -333,8 +335,8 @@ describe("Session-owned handles", () => {
   it.live("mutates only this handle's pending inbox and preserves public conflict tags", () =>
     Effect.gen(function* () {
       const fixture = yield* setup()
-      const handle = fixture.sessions(sessionID)
-      const second = fixture.sessions(sessionID)
+      const handle = fixture.sessions.forSession(sessionID)
+      const second = fixture.sessions.forSession(sessionID)
       const queued = yield* handle.synthetic({ text: "Queued", delivery: "queue", resume: false })
       const steer = yield* handle.prompt({ text: "Steer", resume: false })
       const compact = yield* handle.compact({ delivery: "queue" })
@@ -347,7 +349,7 @@ describe("Session-owned handles", () => {
         { id: compact.id, type: "compaction", delivery: "queue" },
       ])
       expect(fixture.wakes).toHaveLength(2)
-      expect(yield* fixture.sessions(otherID).cancelInbox(queued.id).pipe(Effect.flip)).toMatchObject({
+      expect(yield* fixture.sessions.forSession(otherID).cancelInbox(queued.id).pipe(Effect.flip)).toMatchObject({
         _tag: "Session.InboxConflictError",
         sessionID: otherID,
         inboxID: queued.id,
@@ -372,7 +374,7 @@ describe("Session-owned handles", () => {
       yield* second.cancelInbox(steer.id)
       expect(yield* handle.inbox()).toEqual([])
       const missingID = SessionSchema.ID.make("ses_owned_missing")
-      const missing = yield* fixture.sessions(missingID).inbox().pipe(Effect.flip)
+      const missing = yield* fixture.sessions.forSession(missingID).inbox().pipe(Effect.flip)
       expect(missing).toBeInstanceOf(NotFoundError)
       expect(missing).toMatchObject({ _tag: "Session.NotFoundError", sessionID: missingID })
       expect(fixture.locations).toEqual([source])
@@ -411,9 +413,9 @@ describe("Session-owned handles", () => {
             ),
         }),
       })
-      const first = yield* fixture.sessions(sessionID).resume().pipe(Effect.forkScoped)
+      const first = yield* fixture.sessions.forSession(sessionID).resume().pipe(Effect.forkScoped)
       yield* Deferred.await(started)
-      const second = yield* fixture.sessions(sessionID).resume().pipe(Effect.forkScoped)
+      const second = yield* fixture.sessions.forSession(sessionID).resume().pipe(Effect.forkScoped)
       yield* Deferred.await(joining)
       yield* Fiber.interrupt(second)
 
@@ -423,11 +425,11 @@ describe("Session-owned handles", () => {
       expect(drains).toEqual([sessionID])
       yield* Deferred.succeed(release, undefined)
       yield* Fiber.join(first)
-      yield* fixture.sessions(sessionID).wait()
+      yield* fixture.sessions.forSession(sessionID).wait()
       expect(drains).toEqual([sessionID])
       expect(yield* coordinator.active).toEqual(new Set())
-      expect(yield* fixture.sessions(sessionID).interrupt({ continue: true })).toBe(false)
-      expect(yield* fixture.sessions(sessionID).interrupt()).toBe(false)
+      expect(yield* fixture.sessions.forSession(sessionID).interrupt({ continue: true })).toBe(false)
+      expect(yield* fixture.sessions.forSession(sessionID).interrupt()).toBe(false)
       expect(interrupts).toEqual([
         { sessionID, options: { continue: true } },
         { sessionID, options: undefined },
@@ -439,7 +441,7 @@ describe("Session-owned handles", () => {
   it.live("keeps preparation interruptible without admitting input or committing a staged revert", () =>
     Effect.gen(function* () {
       const fixture = yield* setup({ snapshot: Layer.mock(Snapshot.Service, { capture: () => Effect.undefined }) })
-      const handle = fixture.sessions(sessionID)
+      const handle = fixture.sessions.forSession(sessionID)
       const boundary = yield* handle.synthetic({ text: "Revert boundary", resume: false })
       yield* SessionInbox.promote(fixture.db, fixture.bus, sessionID, "steer")
       yield* handle.revert.stage({ messageID: boundary.id, files: false })
@@ -464,7 +466,7 @@ describe("Session-owned handles", () => {
       expect(yield* fixture.store.context(sessionID)).toMatchObject([{ id: boundary.id }])
       yield* handle.revert.stage({ messageID: boundary.id, files: false })
       const acquisitions = fixture.locations.length
-      yield* fixture.sessions(sessionID).revert.commit()
+      yield* fixture.sessions.forSession(sessionID).revert.commit()
       expect((yield* handle.get()).revert).toBeUndefined()
       expect(yield* fixture.store.context(sessionID)).toEqual([])
       expect(fixture.locations).toHaveLength(acquisitions)

@@ -26,7 +26,17 @@ Manual compaction and Session movement use the same inbox as control items. Each
 
 Core's ID-addressed Session facade delegates prompt, synthetic, compaction, pending-input, shell, revert, and execution-control operations to the ID-bound Session values in `session/session.ts`. Those operations own preparation, request idempotency, admission ordering, and wake policy. The facade supplies lazy Location services; the lower operations do not depend on `LocationServiceMap` or call back into the facade.
 
-The host acquires `Session.make` once so references to the same Session share shell scheduling gates and the existing execution coordinator. A Session value retains its ID, not a cached projection or permanently selected runner. Obtaining or discarding a value does not start or interrupt execution. Admission stays independently callable while execution is active.
+The host acquires `Session.make` once, then selects ID-bound values through `forSession`. The existing facade remains the Effect service; the lower factory does not introduce a second service or a Layer per Session ID.
+
+```ts
+Effect.gen(function* () {
+  const sessions = yield* Session.make((ref) => locations.get(ref))
+  const session = sessions.forSession(sessionID)
+  yield* session.prompt({ text: "Inspect the failing tests", resume: false })
+})
+```
+
+References share operation implementations, shell scheduling gates, and the existing execution coordinator. A Session value retains its ID, not a cached projection or permanently selected runner. Obtaining or discarding a value does not start or interrupt execution. Admission stays independently callable while execution is active.
 
 Location services are acquired only when an operation needs them. In particular, retry reconciliation happens before prompt preparation, so an already-admitted input skips hooks and attachment resolution. Execution continues to resolve placement independently at drain start and after movement.
 

@@ -4,6 +4,7 @@ import { Effect, Layer } from "effect"
 import { Base64, FileAttachment, Prompt } from "@opencode-ai/schema/prompt"
 import { PromptInput } from "@opencode-ai/schema/prompt-input"
 import { Event } from "@opencode-ai/schema/event"
+import type { Info } from "@opencode-ai/schema/shell"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import path from "path"
 import { fileURLToPath } from "url"
@@ -55,7 +56,10 @@ type PromptRequest = {
   resume?: boolean
 }
 
-/** Build once per host. Values share scheduling gates and reload their Session's current state. */
+/**
+ * Build once per host: `const sessions = yield* Session.make(location)`.
+ * Use `sessions.forSession(id)` for handles that share gates and reload current state.
+ */
 export const make = Effect.fn("Session.make")(function* (location: (ref: Location.Ref) => Layer.Layer<Services>) {
   const database = yield* Database.Service
   const db = database.db
@@ -66,266 +70,322 @@ export const make = Effect.fn("Session.make")(function* (location: (ref: Locatio
   const activeShells = new Set<SessionSchema.ID>()
   const shellLocks = KeyedMutex.makeUnsafe<SessionSchema.ID>()
 
-  return (sessionID: SessionSchema.ID) => {
-    const get = Effect.fn("Session.get")(function* () {
-      const session = yield* store.get(sessionID)
-      if (!session) return yield* new NotFoundError({ sessionID })
-      return session
-    })
-    const pendingConflict = Effect.fn("Session.pendingConflict")(function* (inboxID: SessionMessage.ID) {
-      yield* get()
-      return yield* new InboxConflictError({ sessionID, inboxID })
-    })
-    const mutatePending = (
-      inboxID: SessionMessage.ID,
-      mutation: (
-        bus: Bus.Interface,
-        input: { readonly id: SessionMessage.ID; readonly sessionID: SessionSchema.ID },
-      ) => Effect.Effect<unknown>,
-      wake = false,
+  const get = Effect.fn("Session.get")(function* (sessionID: SessionSchema.ID) {
+    const session = yield* store.get(sessionID)
+    if (!session) return yield* new NotFoundError({ sessionID })
+    return session
+  })
+  const pendingConflict = Effect.fn("Session.pendingConflict")(function* (
+    sessionID: SessionSchema.ID,
+    inboxID: SessionMessage.ID,
+  ) {
+    yield* get(sessionID)
+    return yield* new InboxConflictError({ sessionID, inboxID })
+  })
+  const mutatePending = (
+    sessionID: SessionSchema.ID,
+    inboxID: SessionMessage.ID,
+    mutation: (
+      bus: Bus.Interface,
+      input: { readonly id: SessionMessage.ID; readonly sessionID: SessionSchema.ID },
+    ) => Effect.Effect<unknown>,
+    wake = false,
+  ) =>
+    Effect.uninterruptible(
+      Effect.gen(function* () {
+        yield* mutation(bus, { sessionID, id: inboxID }).pipe(
+          Effect.catchDefect((defect) =>
+            defect instanceof SessionInbox.LifecycleConflict ? pendingConflict(sessionID, inboxID) : Effect.die(defect),
+          ),
+        )
+        if (wake) yield* execution.wake(sessionID)
+      }),
+    )
+
+  const inbox = Effect.fn("Session.inbox")(function* (sessionID: SessionSchema.ID) {
+    yield* get(sessionID)
+    return yield* SessionInbox.list(db, sessionID)
+  })
+  const cancelInbox = Effect.fn("Session.cancelInbox")((sessionID: SessionSchema.ID, inboxID: SessionMessage.ID) =>
+    mutatePending(sessionID, inboxID, SessionInbox.cancel),
+  )
+  const steerInbox = Effect.fn("Session.steerInbox")((sessionID: SessionSchema.ID, inboxID: SessionMessage.ID) =>
+    mutatePending(sessionID, inboxID, SessionInbox.steer, true),
+  )
+  const queueInbox = Effect.fn("Session.queueInbox")((sessionID: SessionSchema.ID, inboxID: SessionMessage.ID) =>
+    mutatePending(sessionID, inboxID, SessionInbox.queue),
+  )
+  const prompt = Effect.fn("Session.prompt")((sessionID: SessionSchema.ID, input: PromptRequest) =>
+    Effect.uninterruptibleMask((restore) =>
+      Effect.gen(function* () {
+        const session = yield* get(sessionID)
+        const messageID = input.id ?? SessionMessage.ID.create()
+        const admitted = yield* Effect.gen(function* () {
+          const existing = yield* SessionInbox.reconcile(db, {
+            id: messageID,
+            sessionID: session.id,
+            delivery: input.delivery ?? "steer",
+          })
+          if (existing) return existing
+          const item = yield* restore(
+            preparePrompt({ ...input, sessionID }, messageID).pipe(
+              Effect.provide(location(session.location)),
+              Effect.provideService(FSUtil.Service, fs),
+            ),
+          )
+          // Commit a staged revert only after preparation succeeds, before admitting new work.
+          if (session.revert) yield* SessionRevert.commit(session).pipe(Effect.provideService(Bus.Service, bus))
+          return yield* SessionInbox.admit(db, bus, {
+            id: messageID,
+            sessionID: session.id,
+            item,
+          })
+        }).pipe(
+          Effect.catchDefect((defect) =>
+            defect instanceof SessionInbox.LifecycleConflict
+              ? new PromptConflictError({ sessionID, messageID })
+              : Effect.die(defect),
+          ),
+        )
+        // First admission wins: same-session reuse is idempotent and ignores the
+        // retried payload, metadata, and delivery mode.
+        if (admitted.type !== "user" || admitted.sessionID !== sessionID)
+          return yield* new PromptConflictError({ sessionID, messageID })
+        if (input.resume !== false) {
+          if (activeShells.has(admitted.sessionID)) return admitted
+          yield* execution.wake(admitted.sessionID)
+        }
+        return admitted
+      }),
+    ),
+  )
+  const shell = Effect.fn("Session.shell")(function* (
+    sessionID: SessionSchema.ID,
+    input: { id?: Event.ID; command: string },
+  ) {
+    const session = yield* get(sessionID)
+    yield* shellLocks.withLock(sessionID)(
+      Effect.gen(function* () {
+        activeShells.add(sessionID)
+        yield* execution.awaitIdle(sessionID)
+        const started = yield* Effect.gen(function* () {
+          const plugins = yield* PluginSupervisor.Service
+          yield* plugins.flush
+          const shell = yield* Shell.Service
+          return yield* shell
+            .create({
+              command: input.command,
+              cwd: session.location.directory,
+              timeout: 0,
+              metadata: { sessionID },
+            })
+            .pipe(Effect.orDie)
+        }).pipe(Effect.provide(location(session.location)))
+        yield* bus.publish(
+          SessionEvent.Shell.Started,
+          {
+            sessionID,
+            shell: started,
+          },
+          { id: input.id },
+        )
+        const completed = yield* Effect.gen(function* () {
+          const shell = yield* Shell.Service
+          const terminal = yield* shell.wait(started.id).pipe(
+            Effect.map((info) => ({ info, retained: true as const })),
+            Effect.catchTag("Shell.NotFoundError", () =>
+              Effect.succeed({ info: synthesizeTerminalShellInfo(started), retained: false as const }),
+            ),
+          )
+          const output = terminal.retained
+            ? yield* shell
+                .output(started.id, { limit: SHELL_MAX_CAPTURE_BYTES })
+                .pipe(Effect.catchTag("Shell.NotFoundError", () => Effect.succeed(missingShellOutput())))
+            : missingShellOutput()
+          return { shell: terminal.info, output }
+        }).pipe(Effect.provide(location(session.location)))
+        yield* bus.publish(SessionEvent.Shell.Ended, {
+          sessionID,
+          shell: completed.shell,
+          output: completed.output,
+        })
+      }).pipe(
+        Effect.ensuring(
+          Effect.gen(function* () {
+            activeShells.delete(sessionID)
+            yield* execution.wake(sessionID)
+          }),
+        ),
+      ),
+    )
+  })
+  const compact = Effect.fn("Session.compact")(function* (
+    sessionID: SessionSchema.ID,
+    input: { id?: SessionMessage.ID; delivery?: SessionInbox.Delivery },
+  ) {
+    yield* get(sessionID)
+    const inputID = input.id ?? SessionMessage.ID.create()
+    const admitted = yield* SessionInbox.admitCompaction(db, bus, {
+      id: inputID,
+      sessionID,
+      delivery: input.delivery ?? "steer",
+    }).pipe(
+      Effect.catchDefect((defect) =>
+        defect instanceof SessionInbox.LifecycleConflict
+          ? new CompactionConflictError({ sessionID, inputID })
+          : Effect.die(defect),
+      ),
+    )
+    yield* execution.wake(sessionID)
+    return admitted
+  })
+  const wait = Effect.fn("Session.wait")(function* (sessionID: SessionSchema.ID) {
+    yield* get(sessionID)
+    yield* execution.awaitIdle(sessionID)
+  })
+  const resume = Effect.fn("Session.resume")(function* (sessionID: SessionSchema.ID) {
+    yield* get(sessionID)
+    yield* execution.resume(sessionID)
+  })
+  const synthetic = Effect.fn("Session.synthetic")(
+    (
+      sessionID: SessionSchema.ID,
+      input: {
+        id?: SessionMessage.ID
+        text: string
+        description?: string
+        metadata?: Record<string, unknown>
+        delivery?: SessionInbox.Delivery
+        resume?: boolean
+      },
     ) =>
       Effect.uninterruptible(
         Effect.gen(function* () {
-          yield* mutation(bus, { sessionID, id: inboxID }).pipe(
+          yield* get(sessionID)
+          const inputID = input.id ?? SessionMessage.ID.create()
+          const admittedInput = SessionInbox.Item.make({
+            type: "synthetic",
+            payload: {
+              text: input.text,
+              description: input.description,
+              metadata: input.metadata,
+            },
+            delivery: input.delivery ?? "steer",
+          })
+          const admitted = yield* SessionInbox.admit(db, bus, {
+            id: inputID,
+            sessionID,
+            item: admittedInput,
+          }).pipe(
             Effect.catchDefect((defect) =>
-              defect instanceof SessionInbox.LifecycleConflict ? pendingConflict(inboxID) : Effect.die(defect),
+              defect instanceof SessionInbox.LifecycleConflict
+                ? new SyntheticConflictError({ sessionID, inputID })
+                : Effect.die(defect),
             ),
           )
-          if (wake) yield* execution.wake(sessionID)
+          // First admission wins: same-session reuse is idempotent and ignores the
+          // retried payload, metadata, and delivery mode.
+          if (admitted.type !== "synthetic" || admitted.sessionID !== sessionID)
+            return yield* new SyntheticConflictError({ sessionID, inputID })
+          if (input.resume !== false && !(yield* get(sessionID)).revert) yield* execution.wake(sessionID)
+          return admitted
         }),
+      ),
+  )
+  const interrupt = Effect.fn("Session.interrupt")(
+    (sessionID: SessionSchema.ID, options?: { readonly continue?: boolean }) =>
+      Effect.uninterruptible(execution.interrupt(sessionID, options)),
+  )
+  const stage = Effect.fn("Session.revert.stage")(function* (
+    sessionID: SessionSchema.ID,
+    input: { messageID: SessionMessage.ID; files?: boolean },
+  ): Effect.fn.Return<
+    SessionSchema.Revert,
+    NotFoundError | SessionRevert.MessageNotFoundError | BusyError | Snapshot.Error
+  > {
+    const session = yield* get(sessionID)
+    if ((yield* execution.active).has(sessionID)) return yield* new BusyError({ sessionID })
+    return yield* Effect.gen(function* () {
+      const plugins = yield* PluginSupervisor.Service
+      yield* plugins.flush
+      return yield* SessionRevert.stage({ session, messageID: input.messageID, files: input.files }).pipe(
+        Effect.provideService(Database.Service, database),
+        Effect.provideService(Bus.Service, bus),
       )
+    }).pipe(Effect.provide(location(session.location)))
+  })
+  const clear = Effect.fn("Session.revert.clear")(function* (sessionID: SessionSchema.ID) {
+    const session = yield* get(sessionID)
+    if ((yield* execution.active).has(sessionID)) return yield* new BusyError({ sessionID })
+    const revert = yield* Effect.gen(function* () {
+      const plugins = yield* PluginSupervisor.Service
+      yield* plugins.flush
+      return yield* SessionRevert.clear(session).pipe(Effect.provideService(Bus.Service, bus))
+    }).pipe(Effect.provide(location(session.location)))
+    yield* execution.wake(sessionID)
+    return revert
+  })
+  const commit = Effect.fn("Session.revert.commit")(function* (sessionID: SessionSchema.ID) {
+    const session = yield* get(sessionID)
+    if ((yield* execution.active).has(sessionID)) return yield* new BusyError({ sessionID })
+    return yield* SessionRevert.commit(session).pipe(Effect.provideService(Bus.Service, bus))
+  })
+  const revert = { stage, clear, commit }
+  const operations = {
+    get,
+    inbox,
+    prompt,
+    synthetic,
+    shell,
+    compact,
+    wait,
+    resume,
+    interrupt,
+    cancelInbox,
+    steerInbox,
+    queueInbox,
+    revert,
+  }
+
+  const forSession = (sessionID: SessionSchema.ID) => {
+    const get = operations.get.bind(undefined, sessionID)
+    const inbox = operations.inbox.bind(undefined, sessionID)
+    const prompt = operations.prompt.bind(undefined, sessionID)
+    const synthetic = operations.synthetic.bind(undefined, sessionID)
+    const shell = operations.shell.bind(undefined, sessionID)
+    const compact = operations.compact.bind(undefined, sessionID)
+    const wait = operations.wait.bind(undefined, sessionID)
+    const resume = operations.resume.bind(undefined, sessionID)
+    const interrupt = operations.interrupt.bind(undefined, sessionID)
+    const cancelInbox = operations.cancelInbox.bind(undefined, sessionID)
+    const steerInbox = operations.steerInbox.bind(undefined, sessionID)
+    const queueInbox = operations.queueInbox.bind(undefined, sessionID)
+    const stage = operations.revert.stage.bind(undefined, sessionID)
+    const clear = operations.revert.clear.bind(undefined, sessionID)
+    const commit = operations.revert.commit.bind(undefined, sessionID)
+    const revert = { stage, clear, commit }
 
     return {
       id: sessionID,
       get,
-      inbox: Effect.fn("Session.inbox")(function* () {
-        yield* get()
-        return yield* SessionInbox.list(db, sessionID)
-      }),
-      cancelInbox: Effect.fn("Session.cancelInbox")((inboxID: SessionMessage.ID) =>
-        mutatePending(inboxID, SessionInbox.cancel),
-      ),
-      steerInbox: Effect.fn("Session.steerInbox")((inboxID: SessionMessage.ID) =>
-        mutatePending(inboxID, SessionInbox.steer, true),
-      ),
-      queueInbox: Effect.fn("Session.queueInbox")((inboxID: SessionMessage.ID) =>
-        mutatePending(inboxID, SessionInbox.queue),
-      ),
-      prompt: Effect.fn("Session.prompt")((input: PromptRequest) =>
-        Effect.uninterruptibleMask((restore) =>
-          Effect.gen(function* () {
-            const session = yield* get()
-            const messageID = input.id ?? SessionMessage.ID.create()
-            const admitted = yield* Effect.gen(function* () {
-              const existing = yield* SessionInbox.reconcile(db, {
-                id: messageID,
-                sessionID: session.id,
-                delivery: input.delivery ?? "steer",
-              })
-              if (existing) return existing
-              const item = yield* restore(
-                preparePrompt({ ...input, sessionID }, messageID).pipe(
-                  Effect.provide(location(session.location)),
-                  Effect.provideService(FSUtil.Service, fs),
-                ),
-              )
-              // Commit a staged revert only after preparation succeeds, before admitting new work.
-              if (session.revert) yield* SessionRevert.commit(session).pipe(Effect.provideService(Bus.Service, bus))
-              return yield* SessionInbox.admit(db, bus, {
-                id: messageID,
-                sessionID: session.id,
-                item,
-              })
-            }).pipe(
-              Effect.catchDefect((defect) =>
-                defect instanceof SessionInbox.LifecycleConflict
-                  ? new PromptConflictError({ sessionID, messageID })
-                  : Effect.die(defect),
-              ),
-            )
-            // First admission wins: same-session reuse is idempotent and ignores the
-            // retried payload, metadata, and delivery mode.
-            if (admitted.type !== "user" || admitted.sessionID !== sessionID)
-              return yield* new PromptConflictError({ sessionID, messageID })
-            if (input.resume !== false) {
-              if (activeShells.has(admitted.sessionID)) return admitted
-              yield* execution.wake(admitted.sessionID)
-            }
-            return admitted
-          }),
-        ),
-      ),
-      shell: Effect.fn("Session.shell")(function* (input: { id?: Event.ID; command: string }) {
-        const session = yield* get()
-        yield* shellLocks.withLock(sessionID)(
-          Effect.gen(function* () {
-            activeShells.add(sessionID)
-            yield* execution.awaitIdle(sessionID)
-            const started = yield* Effect.gen(function* () {
-              const plugins = yield* PluginSupervisor.Service
-              yield* plugins.flush
-              const shell = yield* Shell.Service
-              return yield* shell
-                .create({
-                  command: input.command,
-                  cwd: session.location.directory,
-                  timeout: 0,
-                  metadata: { sessionID },
-                })
-                .pipe(Effect.orDie)
-            }).pipe(Effect.provide(location(session.location)))
-            yield* bus.publish(
-              SessionEvent.Shell.Started,
-              {
-                sessionID,
-                shell: started,
-              },
-              { id: input.id },
-            )
-            const completed = yield* Effect.gen(function* () {
-              const shell = yield* Shell.Service
-              const terminal = yield* shell.wait(started.id).pipe(
-                Effect.map((info) => ({ info, retained: true as const })),
-                Effect.catchTag("Shell.NotFoundError", () =>
-                  Effect.succeed({ info: synthesizeTerminalShellInfo(started), retained: false as const }),
-                ),
-              )
-              const output = terminal.retained
-                ? yield* shell
-                    .output(started.id, { limit: SHELL_MAX_CAPTURE_BYTES })
-                    .pipe(Effect.catchTag("Shell.NotFoundError", () => Effect.succeed(missingShellOutput())))
-                : missingShellOutput()
-              return { shell: terminal.info, output }
-            }).pipe(Effect.provide(location(session.location)))
-            yield* bus.publish(SessionEvent.Shell.Ended, {
-              sessionID,
-              shell: completed.shell,
-              output: completed.output,
-            })
-          }).pipe(
-            Effect.ensuring(
-              Effect.gen(function* () {
-                activeShells.delete(sessionID)
-                yield* execution.wake(sessionID)
-              }),
-            ),
-          ),
-        )
-      }),
-      compact: Effect.fn("Session.compact")(function* (input: {
-        id?: SessionMessage.ID
-        delivery?: SessionInbox.Delivery
-      }) {
-        yield* get()
-        const inputID = input.id ?? SessionMessage.ID.create()
-        const admitted = yield* SessionInbox.admitCompaction(db, bus, {
-          id: inputID,
-          sessionID,
-          delivery: input.delivery ?? "steer",
-        }).pipe(
-          Effect.catchDefect((defect) =>
-            defect instanceof SessionInbox.LifecycleConflict
-              ? new CompactionConflictError({ sessionID, inputID })
-              : Effect.die(defect),
-          ),
-        )
-        yield* execution.wake(sessionID)
-        return admitted
-      }),
-      wait: Effect.fn("Session.wait")(function* () {
-        yield* get()
-        yield* execution.awaitIdle(sessionID)
-      }),
-      resume: Effect.fn("Session.resume")(function* () {
-        yield* get()
-        yield* execution.resume(sessionID)
-      }),
-      synthetic: Effect.fn("Session.synthetic")(
-        (input: {
-          id?: SessionMessage.ID
-          text: string
-          description?: string
-          metadata?: Record<string, unknown>
-          delivery?: SessionInbox.Delivery
-          resume?: boolean
-        }) =>
-          Effect.uninterruptible(
-            Effect.gen(function* () {
-              yield* get()
-              const inputID = input.id ?? SessionMessage.ID.create()
-              const admittedInput = SessionInbox.Item.make({
-                type: "synthetic",
-                payload: {
-                  text: input.text,
-                  description: input.description,
-                  metadata: input.metadata,
-                },
-                delivery: input.delivery ?? "steer",
-              })
-              const admitted = yield* SessionInbox.admit(db, bus, {
-                id: inputID,
-                sessionID,
-                item: admittedInput,
-              }).pipe(
-                Effect.catchDefect((defect) =>
-                  defect instanceof SessionInbox.LifecycleConflict
-                    ? new SyntheticConflictError({ sessionID, inputID })
-                    : Effect.die(defect),
-                ),
-              )
-              // First admission wins: same-session reuse is idempotent and ignores the
-              // retried payload, metadata, and delivery mode.
-              if (admitted.type !== "synthetic" || admitted.sessionID !== sessionID)
-                return yield* new SyntheticConflictError({ sessionID, inputID })
-              if (input.resume !== false && !(yield* get()).revert) yield* execution.wake(sessionID)
-              return admitted
-            }),
-          ),
-      ),
-      interrupt: Effect.fn("Session.interrupt")((options?: { readonly continue?: boolean }) =>
-        Effect.uninterruptible(execution.interrupt(sessionID, options)),
-      ),
-      revert: {
-        stage: Effect.fn("Session.revert.stage")(function* (input: {
-          messageID: SessionMessage.ID
-          files?: boolean
-        }): Effect.fn.Return<
-          SessionSchema.Revert,
-          NotFoundError | SessionRevert.MessageNotFoundError | BusyError | Snapshot.Error
-        > {
-          const session = yield* get()
-          if ((yield* execution.active).has(sessionID)) return yield* new BusyError({ sessionID })
-          return yield* Effect.gen(function* () {
-            const plugins = yield* PluginSupervisor.Service
-            yield* plugins.flush
-            return yield* SessionRevert.stage({ session, messageID: input.messageID, files: input.files }).pipe(
-              Effect.provideService(Database.Service, database),
-              Effect.provideService(Bus.Service, bus),
-            )
-          }).pipe(Effect.provide(location(session.location)))
-        }),
-        clear: Effect.fn("Session.revert.clear")(function* () {
-          const session = yield* get()
-          if ((yield* execution.active).has(sessionID)) return yield* new BusyError({ sessionID })
-          const revert = yield* Effect.gen(function* () {
-            const plugins = yield* PluginSupervisor.Service
-            yield* plugins.flush
-            return yield* SessionRevert.clear(session).pipe(Effect.provideService(Bus.Service, bus))
-          }).pipe(Effect.provide(location(session.location)))
-          yield* execution.wake(sessionID)
-          return revert
-        }),
-        commit: Effect.fn("Session.revert.commit")(function* () {
-          const session = yield* get()
-          if ((yield* execution.active).has(sessionID)) return yield* new BusyError({ sessionID })
-          return yield* SessionRevert.commit(session).pipe(Effect.provideService(Bus.Service, bus))
-        }),
-      },
+      inbox,
+      prompt,
+      synthetic,
+      shell,
+      compact,
+      wait,
+      resume,
+      interrupt,
+      cancelInbox,
+      steerInbox,
+      queueInbox,
+      revert,
     }
   }
+  return { forSession }
 })
 
-export type Handle = ReturnType<Effect.Success<ReturnType<typeof make>>>
+export type Handle = ReturnType<Effect.Success<ReturnType<typeof make>>["forSession"]>
 
 function missingShellOutput() {
   const output = "Shell command output is no longer available."
@@ -337,9 +397,7 @@ function missingShellOutput() {
   }
 }
 
-function synthesizeTerminalShellInfo(
-  started: Effect.Success<ReturnType<Shell.Interface["create"]>>,
-): Effect.Success<ReturnType<Shell.Interface["create"]>> {
+function synthesizeTerminalShellInfo(started: Info): Info {
   return {
     ...started,
     // The Shell record was removed before waiters could observe it; publish a terminal

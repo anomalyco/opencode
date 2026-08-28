@@ -105,11 +105,7 @@ type CreateBaseInput = {
 type CreateInput = CreateBaseInput &
   ({ location: Location.Ref; parentID?: never } | { parentID: SessionSchema.ID; location?: never })
 
-type CompactInput = {
-  id?: SessionMessage.ID
-  sessionID: SessionSchema.ID
-  delivery?: SessionInbox.Delivery
-}
+type CompactInput = Parameters<Session.Handle["compact"]>[0] & { sessionID: SessionSchema.ID }
 
 type ForkInput = {
   sessionID: SessionSchema.ID
@@ -244,17 +240,9 @@ export interface Interface {
     void,
     NotFoundError | DestinationNotFoundError | DestinationNotDirectoryError | DestinationUnavailableError
   >
-  readonly prompt: (input: {
-    id?: SessionMessage.ID
-    sessionID: SessionSchema.ID
-    text: string
-    files?: PromptInput.Prompt["files"]
-    agents?: PromptInput.Prompt["agents"]
-    skills?: PromptInput.Prompt["skills"]
-    metadata?: Record<string, unknown>
-    delivery?: SessionInbox.Delivery
-    resume?: boolean
-  }) => Effect.Effect<SessionInbox.User, NotFoundError | PromptConflictError | AttachmentError | SkillNotFoundError>
+  readonly prompt: (
+    input: Parameters<Session.Handle["prompt"]>[0] & { sessionID: SessionSchema.ID },
+  ) => ReturnType<Session.Handle["prompt"]>
   /** Generates text from current Session context without admitting input or mutating history. */
   readonly generate: (input: {
     sessionID: SessionSchema.ID
@@ -269,11 +257,9 @@ export interface Interface {
     skills?: PromptInput.Prompt["skills"]
     delivery?: SessionInbox.Delivery
   }) => Effect.Effect<void, NotFoundError | Command.NotFoundError | Command.ExecutionError>
-  readonly shell: (input: {
-    id?: Event.ID
-    sessionID: SessionSchema.ID
-    command: string
-  }) => Effect.Effect<void, NotFoundError>
+  readonly shell: (
+    input: Parameters<Session.Handle["shell"]>[0] & { sessionID: SessionSchema.ID },
+  ) => ReturnType<Session.Handle["shell"]>
   readonly skill: (input: {
     id?: SessionMessage.ID
     sessionID: SessionSchema.ID
@@ -288,15 +274,9 @@ export interface Interface {
   readonly background: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError>
   readonly resume: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError | SessionRunner.RunError>
   readonly interrupt: (sessionID: SessionSchema.ID, options?: { readonly continue?: boolean }) => Effect.Effect<boolean>
-  readonly synthetic: (input: {
-    id?: SessionMessage.ID
-    sessionID: SessionSchema.ID
-    text: string
-    description?: string
-    metadata?: Record<string, unknown>
-    delivery?: SessionInbox.Delivery
-    resume?: boolean
-  }) => Effect.Effect<SessionInbox.Synthetic, NotFoundError | SyntheticConflictError>
+  readonly synthetic: (
+    input: Parameters<Session.Handle["synthetic"]>[0] & { sessionID: SessionSchema.ID },
+  ) => ReturnType<Session.Handle["synthetic"]>
   readonly revert: {
     readonly stage: (input: {
       sessionID: SessionSchema.ID
@@ -439,7 +419,7 @@ const layer = Layer.effect(
         })
         return yield* result.get(sessionID).pipe(Effect.orDie)
       }),
-      get: (sessionID) => sessions(sessionID).get(),
+      get: (sessionID) => sessions.forSession(sessionID).get(),
       environment: Effect.fn("Session.environment")(function* (input) {
         yield* result.get(input.sessionID)
         if (input.variables !== undefined) yield* environments.set(input.sessionID, input.variables)
@@ -577,10 +557,10 @@ const layer = Layer.effect(
         yield* result.get(sessionID)
         return yield* store.context(sessionID)
       }),
-      inbox: (sessionID) => sessions(sessionID).inbox(),
-      cancelInbox: (input) => sessions(input.sessionID).cancelInbox(input.inboxID),
-      steerInbox: (input) => sessions(input.sessionID).steerInbox(input.inboxID),
-      queueInbox: (input) => sessions(input.sessionID).queueInbox(input.inboxID),
+      inbox: (sessionID) => sessions.forSession(sessionID).inbox(),
+      cancelInbox: (input) => sessions.forSession(input.sessionID).cancelInbox(input.inboxID),
+      steerInbox: (input) => sessions.forSession(input.sessionID).steerInbox(input.inboxID),
+      queueInbox: (input) => sessions.forSession(input.sessionID).queueInbox(input.inboxID),
       log: (input) =>
         Stream.unwrap(
           result
@@ -592,7 +572,7 @@ const layer = Layer.effect(
               Bus.isSynced(item) || isDurableSessionEvent(item),
           ),
         ),
-      prompt: (input) => sessions(input.sessionID).prompt(input),
+      prompt: (input) => sessions.forSession(input.sessionID).prompt(input),
       generate: Effect.fn("Session.generate")(function* (input) {
         const session = yield* result.get(input.sessionID)
         const generate = yield* SessionGenerate.Service.pipe(Effect.provide(locations.get(session.location)))
@@ -620,7 +600,7 @@ const layer = Layer.effect(
           },
         })
       }),
-      shell: (input) => sessions(input.sessionID).shell(input),
+      shell: (input) => sessions.forSession(input.sessionID).shell(input),
       skill: Effect.fn("Session.skill")(function* (input) {
         const session = yield* result.get(input.sessionID)
         const skills = yield* Skill.Service.pipe(Effect.provide(locations.get(session.location)))
@@ -724,8 +704,8 @@ const layer = Layer.effect(
         )
         yield* execution.wake(input.sessionID)
       }),
-      compact: (input) => sessions(input.sessionID).compact(input),
-      wait: (sessionID) => sessions(sessionID).wait(),
+      compact: (input) => sessions.forSession(input.sessionID).compact(input),
+      wait: (sessionID) => sessions.forSession(sessionID).wait(),
       active: execution.active,
       background: Effect.fn("Session.background")(function* (sessionID) {
         yield* result.get(sessionID)
@@ -745,13 +725,13 @@ const layer = Layer.effect(
           })
           .pipe(Effect.catchTag("Session.SyntheticConflictError", Effect.die))
       }),
-      resume: (sessionID) => sessions(sessionID).resume(),
-      synthetic: (input) => sessions(input.sessionID).synthetic(input),
-      interrupt: (sessionID, options) => sessions(sessionID).interrupt(options),
+      resume: (sessionID) => sessions.forSession(sessionID).resume(),
+      synthetic: (input) => sessions.forSession(input.sessionID).synthetic(input),
+      interrupt: (sessionID, options) => sessions.forSession(sessionID).interrupt(options),
       revert: {
-        stage: (input) => sessions(input.sessionID).revert.stage(input),
-        clear: (sessionID) => sessions(sessionID).revert.clear(),
-        commit: (sessionID) => sessions(sessionID).revert.commit(),
+        stage: (input) => sessions.forSession(input.sessionID).revert.stage(input),
+        clear: (sessionID) => sessions.forSession(sessionID).revert.clear(),
+        commit: (sessionID) => sessions.forSession(sessionID).revert.commit(),
       },
     })
 
