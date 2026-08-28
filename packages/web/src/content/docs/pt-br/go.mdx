@@ -82,6 +82,7 @@ A lista atual de modelos inclui:
 - **DeepSeek V4 Pro**
 - **DeepSeek V4 Flash**
 - **DeepSeek V4 Flash Vision Exp**
+- **Hy4 preview**
 - **Hy3**
 
 A lista de modelos pode mudar conforme testamos e adicionamos novos.
@@ -125,6 +126,7 @@ A tabela abaixo fornece uma contagem estimada de requisições com base nos padr
 | DeepSeek V4 Pro              | 1,050                   | 2,600                  | 5,200               |
 | DeepSeek V4 Flash            | 7,600                   | 18,900                 | 37,800              |
 | DeepSeek V4 Flash Vision Exp | 3,800                   | 9,450                  | 18,900              |
+| Hy4 preview                  | 1,350                   | 3,380                  | 6,770               |
 | Hy3                          | 4,300                   | 10,750                 | 21,500              |
 
 As estimativas se baseiam nos padrões de requisições observados:
@@ -147,6 +149,7 @@ As estimativas se baseiam nos padrões de requisições observados:
 - Qwen3.7 Max — 420 tokens de entrada, 66.000 em cache, 200 tokens de saída por requisição
 - Qwen3.7 Plus — 500 tokens de entrada, 57.000 em cache, 190 tokens de saída por requisição
 - Qwen3.6 Plus — 500 tokens de entrada, 57.000 em cache, 190 tokens de saída por requisição
+- Hy4 preview — 830 tokens de entrada, 71.500 em cache, 295 tokens de saída por requisição
 - Hy3 — 830 tokens de entrada, 71.500 em cache, 295 tokens de saída por requisição
 - MiMo-V2.5 — 830 tokens de entrada, 71.500 em cache, 295 tokens de saída por requisição
 - MiMo-V2.5-Pro — 790 tokens de entrada, 86.000 em cache, 305 tokens de saída por requisição
@@ -186,6 +189,7 @@ As estimativas também se baseiam nos seguintes preços por 1M tokens e no uso m
 | DeepSeek V4 Flash (Peak)                | $0.44   | $1.32  | $0.014           | -                | $30 |
 | DeepSeek V4 Flash Vision Exp (Off-Peak) | $0.22   | $0.66  | $0.007           | -                | $15 |
 | DeepSeek V4 Flash Vision Exp (Peak)     | $0.44   | $1.32  | $0.014           | -                | $15 |
+| Hy4 preview                             | $0.834  | $2.501 | $0.042           | -                | $30 |
 | Hy3                                     | $0.14   | $0.58  | $0.035           | -                | $60 |
 
 **DeepSeek V4 Flash / V4 Flash Vision Exp / V4 Pro:** Os horários Peak são 01:00-04:00 e 06:00-10:00 UTC, de segunda a sexta-feira; todos os demais horários, incluindo os fins de semana, são Off-Peak. [Saiba mais](https://api-docs.deepseek.com/quick_start/pricing/).
@@ -252,6 +256,7 @@ Você também pode acessar os modelos do Go através dos seguintes endpoints de 
 | Qwen3.7 Max                  | qwen3.7-max                  | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.7 Plus                 | qwen3.7-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus                 | qwen3.6-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Hy4 preview                  | hy4-preview                  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Hy3                          | hy3                          | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 
 O [ID do modelo](/docs/config/#models) na sua configuração do OpenCode
@@ -297,6 +302,7 @@ https://opencode.ai/zen/go/v1/models
 | DeepSeek V4 Pro              | Não usado              | 0 dias            |
 | DeepSeek V4 Flash            | Não usado              | 0 dias            |
 | DeepSeek V4 Flash Vision Exp | Não usado              | 0 dias            |
+| Hy4 preview                  | Não usado              | 0 dias            |
 | Hy3                          | Não usado              | 0 dias            |
 
 - **Grok 4.6:** O ZDR desativa recursos importantes da API que dependem de dados armazenados, incluindo a Responses API com estado, Files and Collections e a Batch API. [Saiba mais](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
