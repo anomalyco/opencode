@@ -2,15 +2,12 @@ import { Database } from "@opencode-ai/core/database/database"
 import { LocationServiceMap } from "@opencode-ai/core/location-services"
 import { Location } from "@opencode-ai/core/location"
 import { AbsolutePath } from "@opencode-ai/core/schema"
-import { Session } from "@opencode-ai/core/session"
-import { SessionTable } from "@opencode-ai/core/session/sql"
 import { Workspace } from "@opencode-ai/core/workspace"
-import { eq } from "drizzle-orm"
-import { Effect, Layer, Schema } from "effect"
-import { HttpRouter } from "effect/unstable/http"
+import { Effect, Layer } from "effect"
 import { HttpApiMiddleware } from "effect/unstable/httpapi"
 import { InvalidRequestError, SessionNotFoundError } from "@opencode-ai/protocol/errors"
 import type { LocationServices } from "../location"
+import { requireSession } from "./session-validation"
 
 export class SessionLocationMiddleware extends HttpApiMiddleware.Service<
   SessionLocationMiddleware,
@@ -18,8 +15,6 @@ export class SessionLocationMiddleware extends HttpApiMiddleware.Service<
 >()("@opencode/HttpApiSessionLocation", {
   error: [InvalidRequestError, SessionNotFoundError],
 }) {}
-
-const decodeSessionID = Schema.decodeUnknownEffect(Session.ID)
 
 export const sessionLocationLayer = Layer.effect(
   SessionLocationMiddleware,
@@ -29,27 +24,7 @@ export const sessionLocationLayer = Layer.effect(
 
     return SessionLocationMiddleware.of((effect) =>
       Effect.gen(function* () {
-        const route = yield* HttpRouter.RouteContext
-        const sessionID = yield* decodeSessionID(route.params.sessionID).pipe(
-          Effect.mapError(
-            () =>
-              new InvalidRequestError({
-                message: "Invalid session ID",
-                field: "sessionID",
-              }),
-          ),
-        )
-        const row = yield* db
-          .select({ directory: SessionTable.directory, workspaceID: SessionTable.workspace_id })
-          .from(SessionTable)
-          .where(eq(SessionTable.id, sessionID))
-          .get()
-          .pipe(Effect.orDie)
-        if (!row)
-          return yield* new SessionNotFoundError({
-            sessionID,
-            message: `Session not found: ${sessionID}`,
-          })
+        const row = yield* requireSession(db)
 
         return yield* effect.pipe(
           Effect.provide(

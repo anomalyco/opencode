@@ -30,6 +30,7 @@ import { Model } from "@opencode-ai/schema/model"
 import { Location } from "@opencode-ai/schema/location"
 import { SessionEvent } from "@opencode-ai/schema/session-event"
 import { EventLog } from "@opencode-ai/schema/event-log"
+import { SessionValidationMiddleware } from "../middleware/session-validation.js"
 
 const ParentIDFilter = Schema.Union([
   Session.ID,
@@ -465,7 +466,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         success: HttpApiSchema.NoContent,
         error: [SessionNotFoundError, ServiceUnavailableError],
       })
-        .middleware(sessionLocationMiddleware)
+        .middleware(SessionValidationMiddleware)
         .annotateMerge(
           OpenApi.annotations({
             identifier: "v2.session.wait",
@@ -673,7 +674,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         }).annotate({ identifier: "SessionInterruptResponse" }),
         error: SessionNotFoundError,
       })
-        .middleware(sessionLocationMiddleware)
+        .middleware(SessionValidationMiddleware)
         .annotateMerge(
           OpenApi.annotations({
             identifier: "v2.session.interrupt",

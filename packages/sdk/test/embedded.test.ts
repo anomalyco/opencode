@@ -509,6 +509,109 @@ it.live("embedded client exposes plugin-backed web search", () =>
   ),
 )
 
+for (const continuation of [false, true]) {
+  it.live(
+    `session controls bypass a cold Location during interrupt cleanup (continue=${continuation})`,
+    () =>
+      withEmbedded("opencode-embedded-session-controls-", (fixture) =>
+        Effect.gen(function* () {
+          const llm = yield* TestLLM.Service
+          const started = yield* Deferred.make<void>()
+          const cleanupStarted = yield* Deferred.make<void>()
+          const cleanupGate = yield* Deferred.make<void>()
+          const unavailable = yield* Ref.make(false)
+          const boots = yield* Ref.make(0)
+          const model = LanguageModel.make({ id: "session-controls", provider: "test", route: OpenAIChat.route })
+          yield* llm.push(
+            Stream.fromEffect(
+              Deferred.succeed(started, undefined).pipe(
+                Effect.andThen(Effect.never),
+                Effect.onInterrupt(() =>
+                  Deferred.succeed(cleanupStarted, undefined).pipe(Effect.andThen(Deferred.await(cleanupGate))),
+                ),
+              ),
+            ),
+          )
+          const models = Layer.effect(
+            SessionRunnerModel.Service,
+            Effect.gen(function* () {
+              yield* Ref.update(boots, (count) => count + 1)
+              if (yield* Ref.get(unavailable)) return yield* Effect.die("Location is unavailable during cleanup")
+              return SessionRunnerModel.Service.of({
+                resolve: () =>
+                  Effect.succeed(
+                    SessionRunnerModel.resolved(model, {
+                      capabilities: { tools: true, input: ["text"], output: ["text"] },
+                      cost: [],
+                      limit: { context: 100_000, output: 1_000 },
+                    }),
+                  ),
+              })
+            }),
+          )
+          const opencode = yield* fixture.sdk.OpenCode.create(
+            {
+              config: { directory: fixture.directory, project: false, content: "{}" },
+              fs: { filewatcher: false },
+            },
+            {
+              overrides: [
+                [llmClient, Layer.succeed(LLMClient.Service, llm.client)],
+                [SessionRunnerModel.node, models],
+              ],
+            },
+          )
+          // Release blocked cleanup before the embedded host's finalizer on assertion failure.
+          yield* Effect.addFinalizer(() => Deferred.succeed(cleanupGate, undefined).pipe(Effect.asVoid))
+          const session = yield* opencode.sessions.create({ title: "Session controls", location: location(fixture) })
+          yield* opencode.sessions.wait({ sessionID: session.id })
+          expect(yield* opencode.sessions.interrupt({ sessionID: session.id })).toEqual({ interrupted: false })
+          expect(yield* Ref.get(boots)).toBe(0)
+
+          yield* opencode.sessions.prompt({ sessionID: session.id, text: "Start the model" })
+          yield* Deferred.await(started).pipe(Effect.timeout("5 seconds"))
+          expect(yield* Ref.get(boots)).toBe(1)
+          expect(llm.requests).toHaveLength(1)
+          const steer = yield* opencode.sessions.prompt({ sessionID: session.id, text: "Continue here", resume: false })
+          const queued = yield* opencode.sessions.prompt({
+            sessionID: session.id,
+            text: "Keep this queued",
+            delivery: "queue",
+            resume: false,
+          })
+
+          yield* Ref.set(unavailable, true)
+          yield* opencode.debug.location.evict({ location: location(fixture) })
+          expect(yield* opencode.debug.location.list()).toEqual([])
+          const waiting = yield* opencode.sessions.wait({ sessionID: session.id }).pipe(Effect.forkScoped)
+          expect(
+            yield* opencode.sessions
+              .interrupt({ sessionID: session.id, continue: continuation })
+              .pipe(Effect.timeout("2 seconds")),
+          ).toEqual({ interrupted: true })
+          yield* Deferred.await(cleanupStarted).pipe(Effect.timeout("2 seconds"))
+          expect(waiting.pollUnsafe()).toBeUndefined()
+          expect(yield* opencode.sessions.active()).toEqual({ [session.id]: { type: "running" } })
+          expect(yield* opencode.sessions.interrupt({ sessionID: session.id })).toEqual({ interrupted: false })
+          expect(yield* Ref.get(boots)).toBe(1)
+          expect(yield* opencode.debug.location.list()).toEqual([])
+
+          // Only real continuation may acquire a fresh graph, after the interrupted drain settles.
+          yield* Ref.set(unavailable, false)
+          yield* Deferred.succeed(cleanupGate, undefined)
+          yield* Fiber.join(waiting).pipe(Effect.timeout("5 seconds"))
+          expect(yield* opencode.sessions.active()).toEqual({})
+          expect(yield* Ref.get(boots)).toBe(continuation ? 2 : 1)
+          expect(llm.requests).toHaveLength(continuation ? 2 : 1)
+          expect((yield* opencode.sessions.inbox.list({ sessionID: session.id })).map((item) => item.id)).toEqual(
+            continuation ? [queued.id] : [steer.id, queued.id],
+          )
+        }),
+      ).pipe(Effect.provide(TestLLM.layer({ fallback: TestLLM.text("Finished", "answer") }))),
+    15_000,
+  )
+}
+
 it.live(
   "Location-owned runner events reach the ready global client",
   () =>
