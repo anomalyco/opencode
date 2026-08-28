@@ -125,9 +125,9 @@ export const layer = Layer.effect(
       Stream.debounce("100 millis"),
       Stream.runForEach((target) =>
         Effect.gen(function* () {
-          yield* activate()
+          yield* activate().pipe(Effect.catchCause((cause) => Effect.logError("failed to reload plugins", { cause })))
           if (observed === target) yield* ready.open
-        }).pipe(Effect.catchCause((cause) => Effect.logError("failed to reload plugins", { cause }))),
+        }),
       ),
       Effect.forkScoped({ startImmediately: true }),
     )
