@@ -391,6 +391,10 @@ export interface ParserState {
   readonly name: string
   readonly providerMetadataKey: string
   readonly tools: ToolStream.State<string>
+  // Call ids that already emitted their terminal tool-call event, so duplicate
+  // or late item events for the same call stay no-ops. Keyed by `call_id`
+  // because duplicate events may disagree on whether `item.id` is present.
+  readonly completedTools: ReadonlySet<string>
   readonly hasFunctionCall: boolean
   readonly lifecycle: Lifecycle.State
   readonly outputItems: Readonly<Record<number, string>>
@@ -892,6 +896,12 @@ export const onReasoningDelta = (state: ParserState, event: Event, itemID: strin
   if (!event.delta || !item) return [state, NO_EVENTS]
   const index = event.summary_index ?? 0
   if (item.summaryParts[index] === "concluded") return [state, NO_EVENTS]
+  // An unseen index cannot reopen an item whose parts have all concluded.
+  if (
+    item.summaryParts[index] === undefined &&
+    Object.values(item.summaryParts).every((status) => status === "concluded")
+  )
+    return [state, NO_EVENTS]
   const started: StepResult =
     item.summaryParts[index] === undefined ? startReasoningSummaryPart(state, itemID, index) : [state, NO_EVENTS]
   const current = started[0].reasoningItems[itemID]
@@ -937,17 +947,36 @@ const reasoningMetadata = (state: ParserState, item: StreamItem & { id: string }
 const onOutputItemAdded = (state: ParserState, event: Event): StepResult => {
   const item = event.item
   if (item?.type === "message" && item.id !== undefined) {
+    const itemID = item.id
     const phase = messagePhase(item.phase)
+    // A new message item is an implicit boundary for every earlier message
+    // item: text still streaming is ended, and all older items leave the
+    // tracked set so their late deltas stay no-ops instead of overlapping.
+    const events: LLMEvent[] = []
+    const lifecycle = [...state.lifecycle.text]
+      .filter((id) => id !== itemID)
+      .reduce((lifecycle, id) => {
+        const openPhase = state.messagePhases[id]
+        return Lifecycle.textEnd(
+          lifecycle,
+          events,
+          id,
+          providerMetadata(state, { itemId: id, ...(openPhase === undefined ? {} : { phase: openPhase }) }),
+        )
+      }, state.lifecycle)
+    const nextPhase = phase === undefined ? state.messagePhases[itemID] : phase
     return [
       {
         ...state,
-        messageItems: new Set([...state.messageItems, item.id]),
-        messagePhases: phase === undefined ? state.messagePhases : { ...state.messagePhases, [item.id]: phase },
+        lifecycle,
+        messageItems: new Set([itemID]),
+        messagePhases: nextPhase === undefined ? {} : { [itemID]: nextPhase },
       },
-      NO_EVENTS,
+      events,
     ]
   }
   if (item && isReasoningItem(item)) {
+    if (state.reasoningItems[item.id] !== undefined) return [state, NO_EVENTS]
     const events: LLMEvent[] = []
     return [
       {
@@ -967,6 +996,10 @@ const onOutputItemAdded = (state: ParserState, event: Event): StepResult => {
   }
   if (item?.type !== "function_call" || !item.call_id) return [state, NO_EVENTS]
   const id = item.id ?? item.call_id
+  // Pending tools always store the call id, so this also catches duplicates
+  // that disagree on whether `item.id` is present.
+  if (Object.values(state.tools).some((tool) => tool?.id === item.call_id) || state.completedTools.has(item.call_id))
+    return [state, NO_EVENTS]
   const metadata = item.id !== undefined ? providerMetadata(state, { itemId: item.id }) : undefined
   const events: LLMEvent[] = []
   const lifecycle = Lifecycle.stepStart(state.lifecycle, events)
@@ -1073,20 +1106,36 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
 
   if (item.type === "function_call") {
     if (!item.call_id || !item.name) return [state, NO_EVENTS] satisfies StepResult
-    const id = item.id ?? item.call_id
-    const tools = state.tools[id]
-      ? state.tools
-      : ToolStream.start(state.tools, id, {
-          id: item.call_id,
-          name: item.name,
-          providerMetadata: item.id !== undefined ? providerMetadata(state, { itemId: item.id }) : undefined,
-        })
+    const callID = item.call_id
+    if (state.completedTools.has(callID)) return [state, NO_EVENTS] satisfies StepResult
+    const metadata = item.id !== undefined ? providerMetadata(state, { itemId: item.id }) : undefined
+    const fallback = item.id ?? callID
+    // Match the pending tool by call id so item events that disagree on
+    // whether `item.id` is present still resolve the same call.
+    const registered =
+      state.tools[fallback] !== undefined
+        ? fallback
+        : Object.keys(state.tools).find((key) => state.tools[key]?.id === callID)
+    const id = registered ?? fallback
+    const tools =
+      registered !== undefined
+        ? state.tools
+        : ToolStream.start(state.tools, id, {
+            id: callID,
+            name: item.name,
+            providerMetadata: metadata,
+          })
     const result =
       item.arguments === undefined
         ? yield* ToolStream.finish(state.id, tools, id)
         : yield* ToolStream.finishWithInput(state.id, tools, id, item.arguments)
     const events: LLMEvent[] = []
-    const resultEvents = result.events ?? []
+    const finished = result.events ?? []
+    // A done-only call never streamed a start event, so open its lifecycle here.
+    const resultEvents =
+      registered !== undefined || finished.length === 0
+        ? finished
+        : [LLMEvent.toolInputStart({ id: callID, name: item.name, providerMetadata: metadata }), ...finished]
     const lifecycle = resultEvents.length ? Lifecycle.stepStart(state.lifecycle, events) : state.lifecycle
     events.push(...resultEvents)
     return [
@@ -1097,6 +1146,7 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
           resultEvents.some((event) => LLMEvent.is.toolCall(event) || LLMEvent.is.toolInputError(event)) ||
           state.hasFunctionCall,
         tools: result.tools,
+        completedTools: new Set([...state.completedTools, callID]),
       },
       events,
     ] satisfies StepResult
@@ -1113,14 +1163,45 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
           (lifecycle, entry) => Lifecycle.reasoningEnd(lifecycle, events, `${item.id}:${entry[0]}`, metadata),
           state.lifecycle,
         )
-      const { [item.id]: _removed, ...reasoningItems } = state.reasoningItems
-      return [{ ...state, lifecycle, reasoningItems }, events] satisfies StepResult
+      // Keep the fully-concluded entry so duplicate or late events for this
+      // item remain no-ops instead of reopening lifecycle state.
+      return [
+        {
+          ...state,
+          lifecycle,
+          reasoningItems: {
+            ...state.reasoningItems,
+            [item.id]: {
+              ...reasoningItem,
+              encryptedContent: item.encrypted_content ?? reasoningItem.encryptedContent,
+              summaryParts: Object.fromEntries(
+                Object.keys(reasoningItem.summaryParts).map((index) => [index, "concluded" as const]),
+              ),
+            },
+          },
+        },
+        events,
+      ] satisfies StepResult
     }
     if (!state.lifecycle.reasoning.has(item.id)) {
       const lifecycle = Lifecycle.stepStart(state.lifecycle, events)
       events.push(LLMEvent.reasoningStart({ id: item.id, providerMetadata: metadata }))
       events.push(LLMEvent.reasoningEnd({ id: item.id, providerMetadata: metadata }))
-      return [{ ...state, lifecycle }, events] satisfies StepResult
+      return [
+        {
+          ...state,
+          lifecycle,
+          reasoningItems: {
+            ...state.reasoningItems,
+            [item.id]: {
+              encryptedContent: item.encrypted_content,
+              summaryParts: { 0: "concluded" },
+              deltaIndexes: new Set(),
+            },
+          },
+        },
+        events,
+      ] satisfies StepResult
     }
     return [
       { ...state, lifecycle: Lifecycle.reasoningEnd(state.lifecycle, events, item.id, metadata) },
@@ -1259,7 +1340,12 @@ export const step = (state: ParserState, input: Event) => {
   if (event.type === "response.output_item.added") {
     if (event.item?.type === "message" && event.item.id === undefined)
       return ProviderShared.eventError(state.id, `${event.type} message is missing id`)
-    if (event.item && isReasoningItem(event.item) && state.lifecycle.reasoning.size > 0)
+    if (
+      event.item &&
+      isReasoningItem(event.item) &&
+      state.reasoningItems[event.item.id] === undefined &&
+      state.lifecycle.reasoning.size > 0
+    )
       return ProviderShared.eventError(state.id, `${event.type} started reasoning before the previous item ended`)
     const id = event.item?.id ?? (event.item?.type === "function_call" ? event.item.call_id : undefined)
     return Effect.succeed(
@@ -1310,6 +1396,7 @@ export const initial = (request: LLMRequest, extension: Extension = BASE): Parse
   providerMetadataKey: request.model.route.providerMetadataKey ?? "openresponses",
   hasFunctionCall: false,
   tools: ToolStream.empty<string>(),
+  completedTools: new Set<string>(),
   lifecycle: Lifecycle.initial(),
   outputItems: {},
   messageItems: new Set<string>(),
