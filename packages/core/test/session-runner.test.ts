@@ -4874,6 +4874,23 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("caps an excessive provider retry-after delay at fifteen minutes", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      yield* admit(session, "Retry capped rate limit")
+      yield* TestLLM.push(Stream.fail(rateLimited(3_600_000)))
+      yield* TestLLM.push(TestLLM.text("Recovered", "retry-cap-success"))
+
+      const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      yield* TestLLM.wait(1)
+      yield* TestClock.adjust("899999 millis")
+      expect(requests).toHaveLength(1)
+      yield* TestClock.adjust("1 millis")
+      yield* Fiber.join(run)
+      expect(requests).toHaveLength(2)
+    }),
+  )
+
   it.effect("continues an incomplete stream after observable text", () =>
     Effect.gen(function* () {
       const session = yield* setup
