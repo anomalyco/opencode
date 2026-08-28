@@ -6,7 +6,7 @@ import { Global } from "@opencode-ai/util/global"
 import { createEventStream, createFetch, directory, json } from "./fixture/tui-client"
 import { tmpdir } from "./fixture/fixture"
 
-test.each(["bottom", "scrolled", "cancel", "scroll-cancel"])(
+test.each(["bottom", "scrolled", "cancel", "scroll-cancel", "up-cancel", "mouse-cancel", "failure"])(
   "Home loads a stable, bounded beginning (%s)",
   async (mode) => {
     await using state = await tmpdir()
@@ -30,6 +30,7 @@ test.each(["bottom", "scrolled", "cancel", "scroll-cancel"])(
     const pages: { end: number; limit: number }[] = []
     const release = Promise.withResolvers<void>()
     const finish = Promise.withResolvers<void>()
+    const events = createEventStream()
     const calls = createFetch(async (url) => {
       if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
       if (url.pathname === "/api/session/dummy") return json({ data: session })
@@ -40,12 +41,14 @@ test.each(["bottom", "scrolled", "cancel", "scroll-cancel"])(
         pages.push({ end, limit })
         if (end < messages.length) await release.promise
         if (end === 0) await finish.promise
+        if (mode === "failure" && end === 0 && pages.filter((page) => page.end === 0).length === 1)
+          return json({ message: "offline" }, { status: 503 })
         return json({ data: messages.slice(start, end).toReversed(), cursor: end ? { next: String(start) } : {} })
       }
       if (url.pathname === "/api/session/dummy/inbox") return json({ data: [] })
       if (url.pathname === "/api/session/dummy/permission") return json({ data: [] })
       return undefined
-    }, createEventStream())
+    }, events)
     const server = Bun.serve({ port: 0, idleTimeout: 0, fetch: (request) => calls.fetch(request) })
 
     const { run } = await import("../src/app")
@@ -108,6 +111,46 @@ test.each(["bottom", "scrolled", "cancel", "scroll-cancel"])(
       ])
       expect(frames).toEqual([before])
 
+      if (mode === "failure") {
+        release.resolve()
+        finish.resolve()
+        await setup.waitForFrame((frame) => !frame.includes("Loading session history"))
+        events.emit({
+          id: "evt_live",
+          created: 400,
+          type: "session.inbox.enqueued",
+          durable: { aggregateID: "dummy", seq: 1, version: 1 },
+          data: {
+            sessionID: "dummy",
+            inboxID: "message-live",
+            item: { type: "user", payload: { text: "Live message after failure" }, delivery: "steer" },
+          },
+        })
+        await setup.waitForFrame((frame) => frame.includes("Live message after failure"))
+        expect(mounted()).toHaveLength(21)
+        setup.mockInput.pressKey("HOME")
+        await setup.waitForFrame(
+          (frame) => frame.includes("History message 0000") && !frame.includes("Loading session history"),
+        )
+        expect(mounted()).toHaveLength(60)
+        return
+      }
+      if (mode === "up-cancel" || mode === "mouse-cancel") {
+        if (mode === "up-cancel") setup.mockInput.pressKey("F6")
+        if (mode === "mouse-cancel") await setup.mockMouse.scroll(scroll.viewport.x + 2, scroll.viewport.y + 2, "up")
+        await setup.waitForFrame(
+          (frame) => frame.includes("Jump to latest") && !frame.includes("Loading session history"),
+        )
+        await setup.waitForVisualIdle()
+        const cancelled = visible()
+        release.resolve()
+        finish.resolve()
+        await setup.waitForVisualIdle({ quietFrames: 4 })
+        expect(visible()).toBe(cancelled)
+        expect(mounted()).toHaveLength(20)
+        expect(pages).toHaveLength(2)
+        return
+      }
       if (mode.endsWith("cancel")) {
         setup.mockInput.pressKey(mode === "cancel" ? "END" : "F7")
         await setup.waitForFrame(
@@ -120,9 +163,10 @@ test.each(["bottom", "scrolled", "cancel", "scroll-cancel"])(
         expect(scroll.scrollTop).toBe(maximum())
         release.resolve()
         finish.resolve()
-        await setup.waitFor(() => Boolean(scroll.getRenderable("message-360")))
-        await setup.waitForVisualIdle()
+        await setup.waitForVisualIdle({ quietFrames: 4 })
         expect(scroll.scrollTop).toBe(maximum())
+        expect(mounted()).toHaveLength(20)
+        expect(pages).toHaveLength(2)
         expect(setup.captureCharFrame()).not.toContain("History message 0000")
         setup.renderer.off("frame", capture)
         setup.mockInput.pressKey("HOME")
@@ -145,6 +189,7 @@ test.each(["bottom", "scrolled", "cancel", "scroll-cancel"])(
       expect(scroll.scrollTop).toBe(0)
       expect(pages).toEqual([
         { end: 400, limit: 20 },
+        ...(mode.endsWith("cancel") ? [{ end: 380, limit: 200 }] : []),
         { end: 380, limit: 200 },
         { end: 180, limit: 200 },
         { end: 0, limit: 200 },
@@ -173,7 +218,7 @@ test.each(["bottom", "scrolled", "cancel", "scroll-cancel"])(
       await setup.waitForVisualIdle()
       expect(scroll.scrollTop).toBe(0)
       expect(mounted()).toHaveLength(60)
-      expect(pages).toHaveLength(4)
+      expect(pages).toHaveLength(mode.endsWith("cancel") ? 5 : 4)
     } finally {
       release.resolve()
       finish.resolve()

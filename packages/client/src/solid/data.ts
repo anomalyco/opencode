@@ -1453,23 +1453,27 @@ export function createData(config: CreateDataInput) {
         loading(sessionID: string) {
           return store.session.messageLoading[sessionID] ?? false
         },
-        async loadMore(sessionID: string, options?: { all?: boolean }) {
+        async loadMore(sessionID: string, options?: { all?: boolean; signal?: AbortSignal }) {
           while (messageLoads.has(sessionID)) {
             await messageLoads.get(sessionID)
-            if (!options?.all) return
+            if (!options?.all || options.signal?.aborted) return
           }
           const cursor = store.session.messageCursor[sessionID]
-          if (!cursor) return
+          if (!cursor || options?.signal?.aborted) return
           setStore("session", "messageLoading", sessionID, true)
           const request = (async () => {
             const fetched: SessionMessageInfo[] = []
             let next: string | undefined = cursor
             do {
-              const response = await api().message.list({
-                sessionID,
-                limit: options?.all ? 200 : messagePageLimit,
-                cursor: next,
-              })
+              const response = await api().message.list(
+                {
+                  sessionID,
+                  limit: options?.all ? 200 : messagePageLimit,
+                  cursor: next,
+                },
+                { signal: options?.signal },
+              )
+              if (options?.signal?.aborted) return
               fetched.push(...response.data)
               next = response.cursor.next ?? undefined
               if (!options?.all) break
@@ -1477,13 +1481,17 @@ export function createData(config: CreateDataInput) {
             // A jump through history publishes once, not once per page of offscreen messages.
             const existing = store.session.message[sessionID] ?? []
             const ids = new Set(existing.map((item) => item.id))
-            const messages = [...fetched.toReversed().filter((item) => !ids.has(item.id)), ...existing]
+            const messages = [...fetched.reverse().filter((item) => !ids.has(item.id)), ...existing]
             messageIndex.set(sessionID, new Map(messages.map((item, position) => [item.id, position])))
             batch(() => {
               setStore("session", "message", sessionID, reconcile(messages))
               setStore("session", "messageCursor", sessionID, next)
             })
-          })().finally(() => setStore("session", "messageLoading", sessionID, false))
+          })()
+            .catch((error) => {
+              if (!options?.signal?.aborted) throw error
+            })
+            .finally(() => setStore("session", "messageLoading", sessionID, false))
           track(messageLoads, sessionID, request)
           return request
         },

@@ -302,7 +302,7 @@ export function Session(props: {
 
   const clearMessageNavigation = () => {
     ensureAllRowsPending?.splice(0)
-    if (firstJump()) setVisibleRowsEnd(undefined)
+    firstJump()?.()
     setFirstJump(undefined)
     setNavigationSlack(0)
     setNavigationMessage(undefined)
@@ -374,6 +374,7 @@ export function Session(props: {
   let awayTimer: ReturnType<typeof setTimeout> | undefined
   onCleanup(() => {
     if (awayTimer) clearTimeout(awayTimer)
+    firstJump()?.()
     if (!scroll || scroll.isDestroyed) return
     scroll.verticalScrollBar.off("change", updateAwayFromBottom)
     saveScrollAnchor()
@@ -456,6 +457,7 @@ export function Session(props: {
   }
   /** Message navigation needs the full transcript mounted before walking or jumping. */
   const ensureAllRows = (continuation: () => void) => {
+    if (firstJump()) clearMessageNavigation()
     if (!ensureAllRowsPending && hidden() === 0 && visibleEnd() === rows.length) return continuation()
     if (ensureAllRowsPending) {
       ensureAllRowsPending.push(continuation)
@@ -664,6 +666,7 @@ export function Session(props: {
     })
 
   const jumpToBackgroundTool = (target: BackgroundToolTarget, beforeMessageID: string) => {
+    if (firstJump()) clearMessageNavigation()
     const jump = () => {
       const index = backgroundToolRowIndex(rows, messages(), target, beforeMessageID)
       if (index === -1) {
@@ -766,33 +769,44 @@ export function Session(props: {
       run: () => {
         if (firstJump()) return
         clearMessageNavigation()
-        const first = () => {
-          if (firstJump() !== first || scroll.isDestroyed) return
-          scroll.stickyScroll = false
+        const request = new AbortController()
+        const previous = { start: hiddenRows(), end: visibleRowsEnd() }
+        const cancel = () => {
+          request.abort()
           batch(() => {
-            setHiddenRows(0)
-            setVisibleRowsEnd(rows.length > TRANSCRIPT_BACKFILL_CHUNK ? TRANSCRIPT_BACKFILL_CHUNK : undefined)
-            scroll.scrollTo(0)
-          })
-          afterLayout(() => {
-            if (firstJump() !== first) return
-            scroll.scrollTo(0)
-            setFirstJump(undefined)
-            updateAwayFromBottom()
+            setHiddenRows(previous.start)
+            setVisibleRowsEnd(previous.end)
           })
         }
         // Pin both ends so publishing older history cannot briefly mount the whole transcript.
         batch(() => {
-          setFirstJump(() => first)
+          setFirstJump(() => cancel)
           setHiddenRows(hidden())
           setVisibleRowsEnd(visibleEnd())
         })
-        void data.session.message.loadMore(route.sessionID, { all: true }).then(first, (error) => {
-          if (firstJump() !== first || scroll.isDestroyed) return
-          setFirstJump(undefined)
-          toast.error(error)
-          updateAwayFromBottom()
-        })
+        void data.session.message.loadMore(route.sessionID, { all: true, signal: request.signal }).then(
+          () => {
+            if (firstJump() !== cancel || scroll.isDestroyed) return
+            scroll.stickyScroll = false
+            batch(() => {
+              setHiddenRows(0)
+              setVisibleRowsEnd(rows.length > TRANSCRIPT_BACKFILL_CHUNK ? TRANSCRIPT_BACKFILL_CHUNK : undefined)
+              scroll.scrollTo(0)
+            })
+            afterLayout(() => {
+              if (firstJump() !== cancel) return
+              scroll.scrollTo(0)
+              setFirstJump(undefined)
+              updateAwayFromBottom()
+            })
+          },
+          (error) => {
+            if (firstJump() !== cancel || scroll.isDestroyed) return
+            clearMessageNavigation()
+            toast.error(error)
+            updateAwayFromBottom()
+          },
+        )
         dialog.clear()
       },
     },
@@ -1346,6 +1360,7 @@ export function Session(props: {
                 flexGrow={1}
                 scrollAcceleration={scrollAcceleration()}
                 onMouseScroll={(event) => {
+                  if (firstJump()) clearMessageNavigation()
                   if (event.scroll?.direction === "up" && revealOlderRows()) return
                   if (event.scroll?.direction === "down" && revealNewerRows()) return
                   updateAwayFromBottom()
