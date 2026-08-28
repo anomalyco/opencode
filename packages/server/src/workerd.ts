@@ -8,6 +8,7 @@ import type { DurableObjectStorage } from "@opencode-ai/core/database/sqlite.wor
 import { EnvironmentUnavailable } from "@opencode-ai/core/environment/unavailable"
 import { FileSystem } from "@opencode-ai/core/filesystem"
 import { FileSystemSearch } from "@opencode-ai/core/filesystem/search"
+import { ModelsDevCache } from "@opencode-ai/core/models-dev/cache"
 import { Pty } from "@opencode-ai/core/pty"
 import { Snapshot } from "@opencode-ai/core/snapshot"
 import { Vcs } from "@opencode-ai/core/vcs"
@@ -30,6 +31,7 @@ import type { ServerOptions } from "./options"
  *   backs them; Snapshot and Vcs degrade to no-op results.
  * - Config is injected as a string (no filesystem); plugin discovery is
  *   precompiled-only, and stdio MCP reports the same no-plane failure as Shell.
+ * - The models.dev catalog is memory-only, with no local filesystem cache.
  *
  * Bundle with the `workerd` condition, e.g.
  * `bun build src/workerd.ts --conditions=workerd --target=node`
@@ -81,6 +83,7 @@ export function replacements(options: Options): LayerNode.Replacements {
     [Vcs.node, vcsLayer],
     [FileSystem.node, fileSystemLayer],
     [FileSystemSearch.node, fileSystemSearchLayer],
+    [ModelsDevCache.node, ModelsDevCache.disabledLayer],
     [Pty.node, ptyLayer],
     // Precompiled (internal and SDK) plugins only: no plugin-directory scan, npm
     // install, or import of plugin code from disk.
