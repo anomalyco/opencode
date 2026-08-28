@@ -1,0 +1,18 @@
+{
+  "mcp": {
+    "legacy": {
+      "type": "local",
+      "command": ["legacy-mcp"],
+      "enabled": false
+    },
+    "shared": {
+      "type": "remote",
+      "url": "https://legacy.example.com/mcp"
+    },
+    "native": {
+      "type": "local",
+      "command": ["native-mcp"],
+      "enabled": false
+    }
+  }
+}

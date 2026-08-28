@@ -25,6 +25,7 @@ const checkLoggedIn = query(async () => {
 const models = [
   { name: "Grok 4.6", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },
   { name: "GPT 5.6 Luna", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },
+  { name: "GLM-5.3-Flash", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "GLM-5.3", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "GLM-5.2", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "GLM-5.1", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
@@ -35,6 +36,7 @@ const models = [
   { name: "MiMo-V2.5-Pro", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "MiMo-V2.5", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Qwen3.8 Max", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
+  { name: "Qwen3.8 Flash", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Qwen3.7 Max", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Qwen3.7 Plus", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Qwen3.6 Plus", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
@@ -70,18 +72,17 @@ function LimitsGraph(props: { href: string }) {
   const baseline = 100
   const graph = [
     { id: "kimi-k3", name: "Kimi K3", req: 110, d: "50ms" },
-    { id: "qwen3.8-max", name: "Qwen3.8 Max", req: 160, d: "90ms" },
     { id: "grok-4.6", name: "Grok 4.6", req: 169, d: "75ms" },
-    { id: "glm-5.2", name: "GLM-5.2", req: 880, d: "100ms" },
     { id: "gpt-5.6-luna", name: "GPT 5.6 Luna", req: 2050, d: "290ms" },
+    { id: "glm-5.3-flash", name: "GLM-5.3-Flash", req: 3160, baseReq: 1580, bonus: "2x usage", d: "100ms" },
     { id: "minimax-m3", name: "MiniMax M3", req: 3200, d: "210ms" },
     { id: "qwen3.7-plus", name: "Qwen3.7 Plus", req: 4300, d: "300ms" },
+    { id: "qwen3.8-flash", name: "Qwen3.8 Flash", req: 5400, d: "315ms" },
     { id: "deepseek-v4-flash", name: "DeepSeek V4 Flash", req: 7600, d: "330ms" },
     { id: "longcat-2.0", name: "LongCat-2.0", req: 11400, d: "335ms" },
     { id: "mimo-v2.5", name: "MiMo-V2.5", req: 30100, d: "340ms" },
-    { id: "hy3", name: "Hy3", req: 34400, baseReq: 4300, d: "320ms" },
+    { id: "hy3", name: "Hy3", req: 34400, baseReq: 4300, bonus: "8x usage", d: "320ms" },
     { id: "muse-spark-1.2-contributor", name: "Muse Spark 1.2 Contributor", req: 45300, edge: true, d: "360ms" },
-    { id: "ox-alpha-free", name: "Ox Alpha Free", req: Infinity, infinite: true, edge: true, d: "400ms" },
   ]
 
   const w = 1040
@@ -152,7 +153,7 @@ function LimitsGraph(props: { href: string }) {
           <g data-slot="bars">
             <For each={graph}>
               {(m, i) => (
-                <g style={{ "--d": m.d } as any}>
+                <g data-model={m.id} style={{ "--d": m.d } as any}>
                   <rect
                     x={left}
                     y={gy(i()) - bh / 2}
@@ -220,7 +221,7 @@ function LimitsGraph(props: { href: string }) {
                   </span>
                 )}
                 {"infinite" in m && <span data-limited>({i18n.t("go.graph.limitedTime")})</span>}
-                {m.baseReq && <span data-bonus>8x usage</span>}
+                {"bonus" in m && <span data-bonus>{m.bonus}</span>}
               </span>
             )}
           </For>
