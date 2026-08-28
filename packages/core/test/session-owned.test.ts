@@ -1,0 +1,473 @@
+import { describe, expect } from "bun:test"
+import { and, eq } from "drizzle-orm"
+import { Cause, Deferred, Effect, Exit, Fiber, Layer } from "effect"
+import { Event } from "@opencode-ai/schema/event"
+import { Location } from "@opencode-ai/schema/location"
+import { Project } from "@opencode-ai/schema/project"
+import { ID, Info, Output } from "@opencode-ai/schema/shell"
+import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { FSUtil } from "@opencode-ai/util/fs-util"
+import { Global } from "@opencode-ai/util/global"
+import { Bus } from "../src/bus.js"
+import { Database } from "../src/database/database.js"
+import { EventTable } from "../src/event/sql.js"
+import { Image } from "../src/image.js"
+import { PluginHooks } from "../src/plugin/hooks.js"
+import { PluginSupervisor } from "../src/plugin/supervisor-service.js"
+import { ProjectTable } from "../src/project/sql.js"
+import { AbsolutePath, RelativePath } from "../src/schema.js"
+import { InboxConflictError, NotFoundError, PromptConflictError } from "../src/session/error.js"
+import { SessionEvent } from "../src/session/event.js"
+import { SessionExecution } from "../src/session/execution.js"
+import { SessionInbox } from "../src/session/inbox.js"
+import { SessionMessage } from "../src/session/message.js"
+import { SessionProjector } from "../src/session/projector.js"
+import { SessionRunCoordinator } from "../src/session/run-coordinator.js"
+import { SessionSchema } from "../src/session/schema.js"
+import { Session } from "../src/session/session.js"
+import { SessionStore } from "../src/session/store.js"
+import { Shell } from "../src/shell.js"
+import { Skill } from "../src/skill.js"
+import { Snapshot } from "../src/snapshot.js"
+import { tempGlobalLayer } from "./fixture/global"
+import { testEffect } from "./lib/effect"
+
+const it = testEffect(
+  LayerNode.compile(LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionStore.node, FSUtil.node]), [
+    [Bus.node, Bus.configured({ persist: true })],
+    [Global.node, tempGlobalLayer],
+  ]),
+)
+const sessionID = SessionSchema.ID.make("ses_owned")
+const otherID = SessionSchema.ID.make("ses_owned_other")
+const source = Location.Ref.make({ directory: AbsolutePath.make("/project") })
+
+const setup = Effect.fnUntraced(function* (options?: {
+  execution?: SessionExecution.Interface
+  shell?: Layer.Layer<Shell.Service>
+  snapshot?: Layer.Layer<Snapshot.Service>
+}) {
+  const database = yield* Database.Service
+  const bus = yield* Bus.Service
+  const store = yield* SessionStore.Service
+  yield* database.db
+    .insert(ProjectTable)
+    .values({ id: Project.ID.global, worktree: source.directory, sandboxes: [] })
+    .run()
+    .pipe(Effect.orDie)
+  yield* Effect.forEach([sessionID, otherID], (id) =>
+    bus.publish(SessionEvent.Created, {
+      sessionID: id,
+      projectID: Project.ID.global,
+      location: source,
+      slug: "owned",
+      title: "Owned session",
+      version: "test",
+    }),
+  )
+  const hooks = yield* PluginHooks.Service.pipe(Effect.provide(LayerNode.compile(PluginHooks.node)))
+  const locations: Location.Ref[] = []
+  const flushes: Location.Ref[] = []
+  const wakes: Array<{ sessionID: SessionSchema.ID; pending: SessionMessage.ID[]; enqueued: number }> = []
+  const execution = SessionExecution.Service.of({
+    active: Effect.succeed(new Set<SessionSchema.ID>()),
+    resume: () => Effect.void,
+    awaitIdle: () => Effect.void,
+    interrupt: () => Effect.succeed(false),
+    wake: (id) =>
+      Effect.gen(function* () {
+        const pending = yield* SessionInbox.list(database.db, id)
+        const events = yield* database.db
+          .select({ id: EventTable.id })
+          .from(EventTable)
+          .where(
+            and(
+              eq(EventTable.aggregate_id, id),
+              eq(EventTable.type, Bus.versionedType(SessionEvent.InboxEnqueued.type, 1)),
+            ),
+          )
+          .all()
+          .pipe(Effect.orDie)
+        wakes.push({ sessionID: id, pending: pending.map((item) => item.id), enqueued: events.length })
+      }),
+  })
+  const services = Layer.mergeAll(
+    Layer.succeed(PluginHooks.Service, hooks),
+    Layer.mock(Image.Service, {}),
+    Layer.mock(Skill.Service, {}),
+    options?.snapshot ?? Layer.mock(Snapshot.Service, {}),
+    options?.shell ?? Layer.mock(Shell.Service, {}),
+  )
+  const location = (ref: Location.Ref): Layer.Layer<Session.Services> => {
+    locations.push(ref)
+    return Layer.merge(
+      services,
+      Layer.succeed(PluginSupervisor.Service, {
+        flush: Effect.sync(() => {
+          flushes.push(ref)
+        }),
+      }),
+    )
+  }
+  const sessions = yield* Session.make(location).pipe(
+    Effect.provideService(SessionExecution.Service, options?.execution ?? execution),
+  )
+  return { sessions, hooks, locations, flushes, wakes, db: database.db, bus, store }
+})
+
+describe("Session-owned handles", () => {
+  it.live("acquires Location only for new prompt preparation and persists before waking", () =>
+    Effect.gen(function* () {
+      const fixture = yield* setup()
+      const handle = fixture.sessions(sessionID)
+      expect(typeof fixture.sessions).toBe("function")
+      expect(handle.id).toBe(sessionID)
+      expect((yield* handle.get().pipe(Effect.satisfiesServicesType<never>())).location).toEqual(source)
+      const synthetic = yield* handle.synthetic({ text: "Background result", resume: false })
+      expect(fixture.locations).toEqual([])
+      expect(fixture.wakes).toEqual([])
+
+      const calls: string[] = []
+      yield* fixture.hooks.register("session", "prompt", (event) =>
+        Effect.sync(() => {
+          expect(fixture.flushes).toEqual([source])
+          calls.push(event.prompt.text)
+          event.prompt.text += " prepared"
+        }),
+      )
+      const first = yield* handle.prompt({
+        id: SessionMessage.ID.make("msg_owned_prepared"),
+        text: "Original",
+        files: [{ uri: new URL("./session-owned.test.ts", import.meta.url).href }],
+      })
+      const retried = yield* fixture.sessions(sessionID).prompt({
+        id: first.id,
+        text: "Ignored retry",
+        files: [{ uri: "file:///missing-owned-retry" }],
+        delivery: "queue",
+      })
+
+      expect(retried).toEqual(first)
+      expect(first.payload.text).toBe("Original prepared")
+      expect(first.payload.files?.[0]?.mime).toBe("text/plain")
+      expect(Buffer.from(first.payload.files?.[0]?.data ?? "", "base64").toString()).toContain("Session.make(location)")
+      expect(calls).toEqual(["Original"])
+      expect(fixture.locations).toEqual([source])
+      expect(fixture.flushes).toEqual([source])
+      expect(fixture.wakes).toEqual([
+        { sessionID, pending: [synthetic.id, first.id], enqueued: 2 },
+        { sessionID, pending: [synthetic.id, first.id], enqueued: 2 },
+      ])
+      expect(yield* SessionInbox.find(fixture.db, first.id)).toEqual(first)
+      expect(yield* fixture.store.context(sessionID)).toEqual([])
+    }),
+  )
+
+  it.live("keeps the first admission across handles, including delivered retries and identity conflicts", () =>
+    Effect.gen(function* () {
+      const fixture = yield* setup()
+      const first = fixture.sessions(sessionID)
+      const second = fixture.sessions(sessionID)
+      const other = fixture.sessions(otherID)
+      const prompt = yield* first.prompt({ text: "Keep this", metadata: { source: "first" }, resume: false })
+      const retry = { id: prompt.id, text: "Ignore this", metadata: { source: "retry" }, resume: false }
+      expect(yield* second.prompt({ ...retry, delivery: "queue" })).toEqual(prompt)
+      const conflict = yield* other.prompt(retry).pipe(Effect.flip)
+      expect(conflict).toBeInstanceOf(PromptConflictError)
+      expect(conflict).toMatchObject({ _tag: "Session.PromptConflictError", sessionID: otherID, messageID: prompt.id })
+      expect(yield* second.synthetic(retry).pipe(Effect.flip)).toMatchObject({
+        _tag: "Session.SyntheticConflictError",
+        sessionID,
+        inputID: prompt.id,
+      })
+      const synthetic = yield* first.synthetic({ text: "Original completion", description: "Job", resume: false })
+      expect(yield* second.synthetic({ ...retry, id: synthetic.id })).toEqual(synthetic)
+      expect(yield* first.inbox()).toEqual([prompt, synthetic])
+
+      yield* SessionInbox.promote(fixture.db, fixture.bus, sessionID, "steer")
+      // Delivered identity must be recoverable from the message, without retained enqueue history.
+      yield* fixture.db
+        .delete(EventTable)
+        .where(
+          and(
+            eq(EventTable.aggregate_id, sessionID),
+            eq(EventTable.type, Bus.versionedType(SessionEvent.InboxEnqueued.type, 1)),
+          ),
+        )
+        .run()
+        .pipe(Effect.orDie)
+      expect((yield* second.prompt({ ...retry, files: [{ uri: "file:///missing-owned-retry" }] })).payload).toEqual(
+        prompt.payload,
+      )
+      expect((yield* second.synthetic({ ...retry, id: synthetic.id })).payload).toEqual(synthetic.payload)
+      expect(yield* other.synthetic({ ...retry, id: synthetic.id }).pipe(Effect.flip)).toMatchObject({
+        _tag: "Session.SyntheticConflictError",
+        sessionID: otherID,
+        inputID: synthetic.id,
+      })
+      expect(yield* second.prompt({ ...retry, id: synthetic.id }).pipe(Effect.flip)).toMatchObject({
+        _tag: "Session.PromptConflictError",
+        sessionID,
+        messageID: synthetic.id,
+      })
+      expect(yield* second.inbox()).toEqual([])
+      expect(yield* fixture.store.context(sessionID)).toMatchObject([
+        { id: prompt.id, text: "Keep this", metadata: { source: "first" } },
+        { id: synthetic.id, text: "Original completion", description: "Job" },
+      ])
+      expect(fixture.locations).toEqual([source])
+    }),
+  )
+
+  it.live("reads fresh placement through an existing handle after a projected move", () =>
+    Effect.gen(function* () {
+      const fixture = yield* setup()
+      const handle = fixture.sessions(sessionID)
+      yield* handle.prompt({ text: "Before move", resume: false })
+      const get = handle.get()
+      const prompt = handle.prompt({ text: "After move", resume: false })
+      const destination = Location.Ref.make({ directory: AbsolutePath.make("/project/moved") })
+
+      yield* fixture.bus.publish(SessionEvent.Moved, {
+        sessionID,
+        location: destination,
+        projectID: Project.ID.global,
+        subpath: RelativePath.make("moved"),
+      })
+
+      expect((yield* get).location).toEqual(destination)
+      expect(fixture.locations).toEqual([source])
+      yield* prompt
+      expect(fixture.locations).toEqual([source, destination])
+      expect(fixture.flushes).toEqual([source, destination])
+      expect((yield* fixture.sessions(otherID).get()).location).toEqual(source)
+    }),
+  )
+
+  it.live("shares the manual-shell wake gate across same-ID handles without gating other Sessions", () =>
+    Effect.gen(function* () {
+      const blocked = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      const started = Info.make({
+        id: ID.make("sh_owned"),
+        command: "echo owned",
+        cwd: source.directory,
+        shell: "sh",
+        file: "/project/shell.out",
+        status: "running",
+        metadata: { sessionID },
+        time: { started: 0 },
+      })
+      const fixture = yield* setup({
+        shell: Layer.mock(Shell.Service, {
+          create: (input) =>
+            Effect.sync(() => {
+              expect(input).toEqual({
+                command: started.command,
+                cwd: source.directory,
+                timeout: 0,
+                metadata: { sessionID },
+              })
+              return started
+            }),
+          wait: () =>
+            Deferred.succeed(blocked, undefined).pipe(
+              Effect.andThen(Deferred.await(release)),
+              Effect.as(Info.make({ ...started, status: "exited", exit: 0, time: { started: 0, completed: 1 } })),
+            ),
+          output: () => Effect.succeed(Output.make({ output: "owned", cursor: 5, size: 5, truncated: false })),
+        }),
+      })
+      const shell = yield* fixture
+        .sessions(sessionID)
+        .shell({ id: Event.ID.make("evt_owned_shell"), command: started.command })
+        .pipe(Effect.forkScoped)
+      yield* Deferred.await(blocked)
+
+      const admitted = yield* fixture.sessions(sessionID).prompt({ text: "Admit while the shell runs" })
+      expect(yield* SessionInbox.find(fixture.db, admitted.id)).toEqual(admitted)
+      expect(fixture.wakes).toEqual([])
+      const other = yield* fixture.sessions(otherID).prompt({ text: "Independent Session" })
+      expect(fixture.wakes).toEqual([{ sessionID: otherID, pending: [other.id], enqueued: 1 }])
+
+      yield* Deferred.succeed(release, undefined)
+      yield* Fiber.join(shell)
+      expect(fixture.wakes).toEqual([
+        { sessionID: otherID, pending: [other.id], enqueued: 1 },
+        { sessionID, pending: [admitted.id], enqueued: 1 },
+      ])
+      expect(yield* fixture.store.context(sessionID)).toMatchObject([
+        { type: "shell", shellID: started.id, status: "exited", output: { output: "owned" } },
+      ])
+    }),
+  )
+
+  it.live("allows a prompt hook to admit synthetic input through another handle for the same Session", () =>
+    Effect.gen(function* () {
+      const fixture = yield* setup()
+      const handle = fixture.sessions(sessionID)
+      const nested = fixture.sessions(sessionID)
+      yield* fixture.hooks.register("session", "prompt", (event) =>
+        Effect.gen(function* () {
+          expect(event.sessionID).toBe(sessionID)
+          yield* nested.synthetic({ text: "Admitted by hook", resume: false })
+          event.prompt.text += " prepared"
+        }).pipe(Effect.orDie),
+      )
+
+      const prompt = yield* handle.prompt({ text: "Original", resume: false })
+
+      expect(yield* handle.inbox()).toMatchObject([
+        { type: "synthetic", payload: { text: "Admitted by hook" } },
+        { id: prompt.id, type: "user", payload: { text: "Original prepared" } },
+      ])
+      yield* SessionInbox.promote(fixture.db, fixture.bus, sessionID, "steer")
+      expect(yield* fixture.store.context(sessionID)).toMatchObject([
+        { type: "synthetic", text: "Admitted by hook" },
+        { type: "user", text: "Original prepared" },
+      ])
+      expect(fixture.locations).toEqual([source])
+    }),
+  )
+
+  it.live("mutates only this handle's pending inbox and preserves public conflict tags", () =>
+    Effect.gen(function* () {
+      const fixture = yield* setup()
+      const handle = fixture.sessions(sessionID)
+      const second = fixture.sessions(sessionID)
+      const queued = yield* handle.synthetic({ text: "Queued", delivery: "queue", resume: false })
+      const steer = yield* handle.prompt({ text: "Steer", resume: false })
+      const compact = yield* handle.compact({ delivery: "queue" })
+
+      yield* second.steerInbox(queued.id)
+      yield* second.queueInbox(steer.id)
+      expect(yield* handle.inbox()).toMatchObject([
+        { id: queued.id, delivery: "steer" },
+        { id: steer.id, delivery: "queue" },
+        { id: compact.id, type: "compaction", delivery: "queue" },
+      ])
+      expect(fixture.wakes).toHaveLength(2)
+      expect(yield* fixture.sessions(otherID).cancelInbox(queued.id).pipe(Effect.flip)).toMatchObject({
+        _tag: "Session.InboxConflictError",
+        sessionID: otherID,
+        inboxID: queued.id,
+      })
+      yield* second.cancelInbox(compact.id)
+      const cancelled = yield* handle.cancelInbox(compact.id).pipe(Effect.flip)
+      expect(cancelled).toBeInstanceOf(InboxConflictError)
+      expect(cancelled).toMatchObject({ _tag: "Session.InboxConflictError", sessionID, inboxID: compact.id })
+      expect(yield* handle.compact({ id: steer.id }).pipe(Effect.flip)).toMatchObject({
+        _tag: "Session.CompactionConflictError",
+        sessionID,
+        inputID: steer.id,
+      })
+
+      expect(yield* SessionInbox.promote(fixture.db, fixture.bus, sessionID, "steer")).toBe(1)
+      expect(yield* second.queueInbox(queued.id).pipe(Effect.flip)).toMatchObject({
+        _tag: "Session.InboxConflictError",
+        sessionID,
+        inboxID: queued.id,
+      })
+      expect(yield* handle.inbox()).toMatchObject([{ id: steer.id, delivery: "queue" }])
+      yield* second.cancelInbox(steer.id)
+      expect(yield* handle.inbox()).toEqual([])
+      const missingID = SessionSchema.ID.make("ses_owned_missing")
+      const missing = yield* fixture.sessions(missingID).inbox().pipe(Effect.flip)
+      expect(missing).toBeInstanceOf(NotFoundError)
+      expect(missing).toMatchObject({ _tag: "Session.NotFoundError", sessionID: missingID })
+      expect(fixture.locations).toEqual([source])
+    }),
+  )
+
+  it.live("joins same-ID resumes without transferring execution ownership to a cancelled caller", () =>
+    Effect.gen(function* () {
+      const started = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      const joining = yield* Deferred.make<void>()
+      const drains: SessionSchema.ID[] = []
+      const resumes: SessionSchema.ID[] = []
+      const interrupts: Array<{ sessionID: SessionSchema.ID; options?: { readonly continue?: boolean } }> = []
+      const coordinator = yield* SessionRunCoordinator.make<SessionSchema.ID, never>({
+        drain: (id) =>
+          Effect.sync(() => void drains.push(id)).pipe(
+            Effect.andThen(Deferred.succeed(started, undefined)),
+            Effect.andThen(Deferred.await(release)),
+          ),
+      })
+      const fixture = yield* setup({
+        execution: SessionExecution.Service.of({
+          active: coordinator.active,
+          resume: (id) =>
+            Effect.gen(function* () {
+              resumes.push(id)
+              if (resumes.length === 2) yield* Deferred.succeed(joining, undefined)
+              yield* coordinator.run(id)
+            }),
+          wake: coordinator.wake,
+          awaitIdle: coordinator.awaitIdle,
+          interrupt: (id, options) =>
+            Effect.sync(() => void interrupts.push({ sessionID: id, options })).pipe(
+              Effect.andThen(coordinator.interrupt(id)),
+            ),
+        }),
+      })
+      const first = yield* fixture.sessions(sessionID).resume().pipe(Effect.forkScoped)
+      yield* Deferred.await(started)
+      const second = yield* fixture.sessions(sessionID).resume().pipe(Effect.forkScoped)
+      yield* Deferred.await(joining)
+      yield* Fiber.interrupt(second)
+
+      const cancelled = yield* Fiber.await(second)
+      expect(Exit.isFailure(cancelled) && Cause.hasInterruptsOnly(cancelled.cause)).toBe(true)
+      expect(yield* coordinator.active).toEqual(new Set([sessionID]))
+      expect(drains).toEqual([sessionID])
+      yield* Deferred.succeed(release, undefined)
+      yield* Fiber.join(first)
+      yield* fixture.sessions(sessionID).wait()
+      expect(drains).toEqual([sessionID])
+      expect(yield* coordinator.active).toEqual(new Set())
+      expect(yield* fixture.sessions(sessionID).interrupt({ continue: true })).toBe(false)
+      expect(yield* fixture.sessions(sessionID).interrupt()).toBe(false)
+      expect(interrupts).toEqual([
+        { sessionID, options: { continue: true } },
+        { sessionID, options: undefined },
+      ])
+      expect(fixture.locations).toEqual([])
+    }),
+  )
+
+  it.live("keeps preparation interruptible without admitting input or committing a staged revert", () =>
+    Effect.gen(function* () {
+      const fixture = yield* setup({ snapshot: Layer.mock(Snapshot.Service, { capture: () => Effect.undefined }) })
+      const handle = fixture.sessions(sessionID)
+      const boundary = yield* handle.synthetic({ text: "Revert boundary", resume: false })
+      yield* SessionInbox.promote(fixture.db, fixture.bus, sessionID, "steer")
+      yield* handle.revert.stage({ messageID: boundary.id, files: false })
+      const entered = yield* Deferred.make<void>()
+      const hook = yield* fixture.hooks.register("session", "prompt", () =>
+        Deferred.succeed(entered, undefined).pipe(Effect.andThen(Effect.never)),
+      )
+
+      const submission = yield* handle.prompt({ text: "Cancelled before admission" }).pipe(Effect.forkScoped)
+      yield* Deferred.await(entered)
+      yield* Fiber.interrupt(submission)
+
+      const cancelled = yield* Fiber.await(submission)
+      expect(Exit.isFailure(cancelled) && Cause.hasInterruptsOnly(cancelled.cause)).toBe(true)
+      expect(yield* handle.inbox()).toEqual([])
+      expect((yield* handle.get()).revert?.messageID).toBe(boundary.id)
+      expect(yield* fixture.store.context(sessionID)).toMatchObject([{ id: boundary.id }])
+      expect(fixture.wakes).toEqual([])
+      yield* hook.dispose
+      yield* handle.revert.clear()
+      expect((yield* handle.get()).revert).toBeUndefined()
+      expect(yield* fixture.store.context(sessionID)).toMatchObject([{ id: boundary.id }])
+      yield* handle.revert.stage({ messageID: boundary.id, files: false })
+      const acquisitions = fixture.locations.length
+      yield* fixture.sessions(sessionID).revert.commit()
+      expect((yield* handle.get()).revert).toBeUndefined()
+      expect(yield* fixture.store.context(sessionID)).toEqual([])
+      expect(fixture.locations).toHaveLength(acquisitions)
+    }),
+  )
+})
