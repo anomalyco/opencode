@@ -3,6 +3,7 @@ import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import {
   getStatsModelsComparisonData,
   type ModelUsagePoint,
+  type RetentionEntry,
   type StatsModelComparisonInput,
   type StatsModelComparisonEntry,
 } from "@opencode-ai/stats-core/domain/home"
@@ -31,6 +32,7 @@ import {
   applyThemePreference,
   Footer,
   getGitHubStars,
+  githubLink,
   Header,
   isThemePreference,
   themeStorageKey,
@@ -240,7 +242,11 @@ export default function ModelCompareDetailPage(props: ModelCompareDetailPageProp
         <Meta name="twitter:description" content={description()} />
         <script type="application/ld+json">{structuredData()}</script>
       </Show>
-      <Header githubStars={githubStars() ?? "150K"} links={compareHeaderLinks} brandHref={import.meta.env.BASE_URL} />
+      <Header
+        githubStars={githubStars() ?? githubLink.fallbackStars}
+        links={compareHeaderLinks}
+        brandHref={import.meta.env.BASE_URL}
+      />
       <div data-component="container">
         <div data-component="content">
           <ComparisonHero
@@ -944,6 +950,17 @@ function buildComparisonDetailSections(models: readonly ComparisonModel[]): Comp
       ],
       usage: models.map((model) => model.stats?.usage ?? []),
     },
+    {
+      title: "Retention",
+      badge: "Week 1",
+      rows: [
+        comparisonDetailRow(
+          "Returning users",
+          models.map((model) => retentionCell(model.stats?.weeklyRetention)),
+          "higher",
+        ),
+      ],
+    },
   ]
 }
 
@@ -1024,6 +1041,15 @@ function usageMetricCell(value: number | undefined, format: "compact" | "integer
 
 function percentCell(value: number | undefined): ComparisonDetailCell {
   return value === undefined ? { value: "No usage" } : { value: formatPercent(value), score: value }
+}
+
+function retentionCell(value: RetentionEntry | null | undefined): ComparisonDetailCell {
+  if (!value || value.rank === null) return { value: "Pending" }
+  return {
+    value: formatPercent(value.rate),
+    unit: `${formatTokens(value.eligibleUserWeeks)} user-weeks`,
+    score: value.rate,
+  }
 }
 
 function tokenCell(value: number | undefined, trend: number | undefined): ComparisonDetailCell {

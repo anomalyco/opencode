@@ -211,6 +211,12 @@ export function Session() {
       .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
   })
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
+  const messagesBeforeRevert = () => {
+    const messageID = session()?.revert?.messageID
+    if (!messageID) return messages()
+    const index = messages().findIndex((message) => message.id === messageID)
+    return index === -1 ? messages() : messages().slice(0, index)
+  }
   const foregroundTasks = createMemo(() =>
     sync.data.capabilities.experimentalBackgroundSubagents
       ? messages().flatMap((message) =>
@@ -236,9 +242,11 @@ export function Session() {
   const disabled = createMemo(() => permissions().length > 0 || questions().length > 0)
 
   const pending = createMemo(() => {
-    const completed = messages().findLast((x) => x.role === "assistant" && x.time.completed)?.id
-    return messages().findLast((x) => x.role === "assistant" && !x.time.completed && (!completed || x.id > completed))
-      ?.id
+    const completed = messages().findLastIndex((message) => message.role === "assistant" && message.time.completed)
+    const pending = messages().findLastIndex(
+      (message, index) => index > completed && message.role === "assistant" && !message.time.completed,
+    )
+    return pending === -1 ? undefined : pending
   })
 
   const lastAssistant = createMemo(() => {
@@ -610,8 +618,7 @@ export function Session() {
       run: async () => {
         const status = sync.data.session_status?.[route.sessionID]
         if (status?.type !== "idle") await sdk.client.session.abort({ sessionID: route.sessionID }).catch(() => {})
-        const revert = session()?.revert?.messageID
-        const message = messages().findLast((x) => (!revert || x.id < revert) && x.role === "user")
+        const message = messagesBeforeRevert().findLast((item) => item.role === "user")
         if (!message) return
         void sdk.client.session
           .revert({
@@ -872,10 +879,7 @@ export function Session() {
       value: "messages.copy",
       category: "Session",
       run: () => {
-        const revertID = session()?.revert?.messageID
-        const lastAssistantMessage = messages().findLast(
-          (msg) => msg.role === "assistant" && (!revertID || msg.id < revertID),
-        )
+        const lastAssistantMessage = messagesBeforeRevert().findLast((message) => message.role === "assistant")
         if (!lastAssistantMessage) {
           toast.show({ message: "No assistant messages found", variant: "error" })
           dialog.clear()
@@ -1118,13 +1122,22 @@ export function Session() {
 
   const revertInfo = createMemo(() => session()?.revert)
   const revertMessageID = createMemo(() => revertInfo()?.messageID)
+  const revertMessageIndex = createMemo(() => {
+    const messageID = revertMessageID()
+    if (!messageID) return -1
+    return messages().findIndex((message) => message.id === messageID)
+  })
 
   const revertDiffFiles = createMemo(() => getRevertDiffFiles(revertInfo()?.diff ?? ""))
 
   const revertRevertedMessages = createMemo(() => {
     const messageID = revertMessageID()
     if (!messageID) return []
-    return messages().filter((x) => x.id >= messageID && x.role === "user")
+    const index = revertMessageIndex()
+    if (index === -1) return []
+    return messages()
+      .slice(index)
+      .filter((message) => message.role === "user")
   })
 
   const revert = createMemo(() => {
@@ -1247,7 +1260,9 @@ export function Session() {
                           )
                         })()}
                       </Match>
-                      <Match when={revert()?.messageID && message.id >= revert()!.messageID}>
+                      <Match
+                        when={revert()?.messageID && revertMessageIndex() !== -1 && index() >= revertMessageIndex()}
+                      >
                         <></>
                       </Match>
                       <Match when={message.role === "user"}>
@@ -1352,7 +1367,7 @@ function UserMessage(props: {
   parts: Part[]
   onMouseUp: () => void
   index: number
-  pending?: string
+  pending?: number
 }) {
   const ctx = use()
   const local = useLocal()
@@ -1370,7 +1385,7 @@ function UserMessage(props: {
   const files = createMemo(() => props.parts.flatMap((x) => (x.type === "file" ? [x] : [])))
   const { theme } = useTheme()
   const [hover, setHover] = createSignal(false)
-  const queued = createMemo(() => props.pending && props.message.id > props.pending)
+  const queued = createMemo(() => props.pending !== undefined && props.index > props.pending)
   const color = createMemo(() => local.agent.color(props.message.agent))
   const queuedFg = createMemo(() => selectedForeground(theme, color()))
   const metadataVisible = createMemo(() => queued() || ctx.showTimestamps())
@@ -1580,6 +1595,7 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
     // OpenRouter encrypts some reasoning blocks; drop the placeholder.
     return props.part.text.replace("[REDACTED]", "").trim()
   })
+  const opaque = createMemo(() => !content() && Boolean(props.part.metadata))
   // Reasoning is finalized when the server sets `time.end` (see processor.ts).
   // Flips independently of the parent message completing.
   const isDone = createMemo(() => props.part.time.end !== undefined)
@@ -1592,12 +1608,12 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
   const syntax = createSyntaxStyleMemo(() => generateSubtleSyntax(theme))
 
   const toggle = () => {
-    if (!inMinimal()) return
+    if (!inMinimal() || opaque()) return
     setExpanded((prev) => !prev)
   }
 
   return (
-    <Show when={content()}>
+    <Show when={content() || opaque()}>
       <box
         ref={(el: BoxRenderable) => alwaysSeparate.add(el)}
         paddingLeft={3}
@@ -1607,14 +1623,15 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
       >
         <box onMouseUp={toggle}>
           <ReasoningHeader
-            toggleable={inMinimal()}
+            toggleable={inMinimal() && !opaque()}
             open={!inMinimal() || expanded()}
             done={isDone()}
             title={summary().title}
             duration={isDone() ? Locale.duration(duration()) : undefined}
+            encrypted={opaque()}
           />
         </box>
-        <Show when={(!inMinimal() || expanded()) && summary().body}>
+        <Show when={!opaque() && (!inMinimal() || expanded()) && summary().body}>
           <box paddingLeft={inMinimal() ? 2 : 0} marginTop={1}>
             <code
               filetype="markdown"
@@ -1638,12 +1655,18 @@ function ReasoningHeader(props: {
   done: boolean
   title: string | null
   duration?: string
+  encrypted?: boolean
 }) {
   const { theme } = useTheme()
   const fg = () =>
     props.open
       ? RGBA.fromValues(theme.warning.r, theme.warning.g, theme.warning.b, theme.thinkingOpacity)
       : theme.warning
+  const completed = () => {
+    if (props.encrypted) return `Thought${props.duration ? ` · ${props.duration}` : ""}`
+    const detail = [props.title, props.duration].filter(Boolean).join(" · ")
+    return `${props.toggleable ? (props.open ? "- " : "+ ") : ""}Thought${detail ? `: ${detail}` : ""}`
+  }
 
   return (
     <Switch>
@@ -1654,22 +1677,7 @@ function ReasoningHeader(props: {
       </Match>
       <Match when={true}>
         <text fg={fg()} wrapMode="none">
-          <Show when={props.toggleable}>
-            <span>{props.open ? "- " : "+ "}</span>
-          </Show>
-          <span>Thought</span>
-          <Show when={props.title || props.duration}>
-            <span>: </span>
-          </Show>
-          <Show when={props.title}>
-            <span>{props.title}</span>
-          </Show>
-          <Show when={props.duration}>
-            <span>
-              {props.title ? " · " : ""}
-              {props.duration}
-            </span>
-          </Show>
+          {completed()}
         </text>
       </Match>
     </Switch>

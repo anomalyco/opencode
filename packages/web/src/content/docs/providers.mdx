@@ -457,6 +457,39 @@ If you encounter "I'm sorry, but I cannot assist with that request" errors, try 
    /models
    ```
 
+#### Microsoft Entra ID (Azure CLI)
+
+You can use your Azure CLI session instead of an API key. [Install the Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli), run `az login`, then run `/connect`, select **Azure**, and choose **Microsoft Entra ID (Azure CLI)**. OpenCode lists the Resources visible to your Azure CLI session and their Resource groups. Select a Resource, or choose **Enter another resource name** to enter one manually. If resource listing is unavailable, OpenCode asks for the name directly. Use `az login --tenant TENANT_ID` if the Resource belongs to a different tenant.
+
+Find the Resource name by opening your Azure OpenAI or Foundry Resource in the [Azure portal](https://portal.azure.com/) or [Microsoft Foundry](https://ai.azure.com/). It is also the first part of the endpoint: `my-models` in `https://my-models.openai.azure.com/` or `https://my-models.services.ai.azure.com/`. If your identity can list Resources, you can also find their names and Resource groups with:
+
+```bash
+az cognitiveservices account list \
+  --query "[].{name:name,resourceGroup:resourceGroup}" \
+  --output table
+```
+
+OpenCode finds the Resource group and discovers its deployed models from the active Azure CLI subscription. Run `az account set --subscription NAME_OR_ID` first if the Resource is in a different subscription. Set `AZURE_RESOURCE_GROUP` to skip listing the subscription and query a known Resource directly.
+
+Model discovery requires Azure control-plane permissions, which are separate from inference permissions. If your identity cannot list deployments, OpenCode keeps the Azure model catalog available instead. Select a model whose name matches your deployment, or configure its deployment name explicitly:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "azure": {
+      "models": {
+        "gpt-5-mini": {
+          "id": "gpt-production"
+        }
+      }
+    }
+  }
+}
+```
+
+Assign your identity the inference role required by the deployment: **Cognitive Services OpenAI User** for Azure OpenAI models or **Cognitive Services User** for other Foundry models. OpenCode refreshes access tokens through the Azure CLI, including versions earlier than 2.54.0, so you only need to sign in again when the CLI session expires.
+
 ---
 
 ### Azure Cognitive Services
@@ -759,7 +792,7 @@ Cloudflare Workers AI lets you run AI models on Cloudflare's global network dire
 
 ### DigitalOcean
 
-DigitalOcean's [Inference Engine](https://docs.digitalocean.com/products/inference/) provides access to open models like GPT-OSS, Llama, Qwen, and DeepSeek, plus custom [Inference Routers](https://docs.digitalocean.com/products/genai-platform/concepts/inference-routers/) that route each request to the cheapest, fastest, or best-fit model for a task.
+DigitalOcean's [Inference Engine](https://docs.digitalocean.com/products/inference/) provides access to open models like GPT-OSS, Llama, Qwen, and DeepSeek, plus custom [Inference Routers](https://docs.digitalocean.com/products/inference/how-to/use-inference-router/) that route each request to the cheapest, fastest, or best-fit model for a task.
 
 OpenCode supports two authentication methods:
 
@@ -1505,6 +1538,30 @@ To use Kimi K2 from Moonshot AI:
 
 ---
 
+### Modal
+
+1. Create a [shared Endpoint](https://modal.com/endpoints) for the model you want to use.
+
+2. Create a [proxy token](https://modal.com/docs/guide/endpoints#proxy-tokens), then join its ID and secret with a period:
+
+   ```txt
+   wk-<id>.ws-<secret>
+   ```
+
+3. Run the `/connect` command, search for **Modal**, and enter the combined proxy token.
+
+   ```txt
+   /connect
+   ```
+
+4. Run the `/models` command to select one of the endpoints in your Modal workspace.
+
+   ```txt
+   /models
+   ```
+
+---
+
 ### NVIDIA
 
 NVIDIA provides access to Nemotron models and many other open models through [build.nvidia.com](https://build.nvidia.com) for free.
@@ -1694,6 +1751,10 @@ We recommend signing up for [ChatGPT Plus or Pro](https://chatgpt.com/pricing).
    /models
    ```
 
+##### Compute residency
+
+For ChatGPT OAuth, OpenCode automatically applies a regional inference residency requirement when one is advertised by your workspace credentials. It forwards the compute residency value from the credential instead of maintaining a fixed list of regions. Data residency at rest does not imply regional inference.
+
 ##### Using API keys
 
 If you already have an API key, you can select **Manually enter API Key** and paste it in your terminal.
@@ -1861,6 +1922,70 @@ OpenCode Zen is a list of tested and verified models provided by the OpenCode te
 
 ---
 
+### Poolside
+
+[Poolside](https://poolside.ai) provides access to its models through an OpenAI-compatible API.
+
+1. Head over to [platform.poolside.ai](https://platform.poolside.ai), sign in, open the **API Keys** tab, and click **New key** to generate an API key.
+
+2. Run the `/connect` command and search for **Poolside**.
+
+   ```txt
+   /connect
+   ```
+
+3. Enter your Poolside API key.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Run the `/models` command to select a model.
+
+   ```txt
+   /models
+   ```
+
+#### Poolside deployment
+
+If your organization runs a Poolside deployment, configure it as a custom OpenAI-compatible provider. Store the API key or token from your Poolside administrator in `~/.secrets/poolside-key`. Use a unique provider ID and add the model IDs available from your deployment.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "poolside-deployment": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Poolside deployment",
+      "options": {
+        "baseURL": "https://poolside.example.com/openai/v1",
+        "apiKey": "{file:~/.secrets/poolside-key}"
+      },
+      "models": {
+        "<served-model-id>": {
+          "name": "Poolside deployment model",
+          "reasoning": true,
+          "interleaved": {
+            "field": "reasoning_content"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+Replace `poolside.example.com` with your deployment's host and `<served-model-id>` with a model ID returned by its `/openai/v1/models` endpoint. Model availability and thinking behavior depend on the deployment's configuration.
+
+:::tip
+You can also install [Poolside Agent CLI](https://github.com/poolsideai/pool) to use Poolside agents directly from your terminal.
+:::
+
+---
+
 ### SAP AI Core
 
 SAP AI Core provides access to 40+ models from OpenAI, Anthropic, Google, Amazon, Meta, Mistral, and AI21 through a unified platform.
@@ -1998,6 +2123,35 @@ To use [Scaleway Generative APIs](https://www.scaleway.com/en/docs/generative-ap
    ```
 
 4. Run the `/models` command to select a model like _devstral-2-123b-instruct-2512_ or _gpt-oss-120b_.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### SCX.ai
+
+[SCX.ai](https://scx.ai) is an Australian sovereign AI platform serving open models over an OpenAI-compatible API, hosted on renewable-powered infrastructure in Australia.
+
+1. Head over to the [SCX.ai platform](https://platform.scx.ai) to create an account and generate an API key.
+
+2. Run the `/connect` command and search for **SCX.ai**.
+
+   ```txt
+   /connect
+   ```
+
+3. Enter your SCX.ai API key.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Run the `/models` command to select a model like _MiniMax-M2.7_ or _GLM-5.2_.
 
    ```txt
    /models
@@ -2220,9 +2374,9 @@ Some useful routing options:
 
 ### xAI
 
-Three ways to authenticate: a SuperGrok subscription via browser OAuth, the same SuperGrok subscription via a headless device-code flow (for VPS / SSH / Docker), or a pay-as-you-go API key from the xAI console.
+Two ways to authenticate: a SuperGrok subscription via device-code OAuth or a pay-as-you-go API key from the xAI console.
 
-#### Option A — SuperGrok OAuth (browser login)
+#### Option A — SuperGrok subscription
 
 1. Run the `/connect` command and search for **xAI**.
 
@@ -2230,9 +2384,11 @@ Three ways to authenticate: a SuperGrok subscription via browser OAuth, the same
    /connect
    ```
 
-2. Select **xAI Grok OAuth (SuperGrok Subscription)**. OpenCode opens xAI's consent screen in your browser and waits for the callback on `http://127.0.0.1:56121/callback`.
+2. Select **SuperGrok Subscription**. OpenCode opens xAI's verification link with the user code pre-populated when supported.
 
-3. Run the `/models` command to select a Grok model.
+3. Approve the consent screen. If xAI asks for a code, enter the user code displayed by OpenCode. OpenCode polls xAI's token endpoint and stores the resulting OAuth tokens once you approve.
+
+4. Run the `/models` command to select a Grok model.
 
    ```txt
    /models
@@ -2240,25 +2396,7 @@ Three ways to authenticate: a SuperGrok subscription via browser OAuth, the same
 
 OpenCode refreshes the OAuth access token automatically. Any Grok or X Premium plan that includes Grok API access works; you do not need a separate `XAI_API_KEY`.
 
-#### Option B — SuperGrok device-code (headless / remote server / VPS)
-
-Use this when OpenCode is running somewhere a browser can't reach the loopback redirect: a VPS, a remote dev box over SSH, inside Docker, in CI, etc. No callback port is opened on the host running OpenCode — instead xAI hands the CLI a short code that you type into a browser on any other device (laptop, phone, …).
-
-1. Run the `/connect` command on the remote host and search for **xAI**.
-
-   ```txt
-   /connect
-   ```
-
-2. Select **xAI Grok OAuth (Headless / Remote / VPS)**. OpenCode prints a verification URL and a short user code.
-
-   ```txt
-   Open https://x.ai/device on any device and enter code: ABCD-1234
-   ```
-
-3. Open the URL on a device that has a browser (your laptop or phone), enter the code, and approve the consent screen. OpenCode polls xAI's token endpoint and stores the resulting OAuth tokens once you approve. Token refresh works the same as Option A.
-
-#### Option C — API key
+#### Option B — API key
 
 1. Head over to the [xAI console](https://console.x.ai/), create an account, and generate an API key.
 
@@ -2415,7 +2553,7 @@ You can use any OpenAI-compatible provider with opencode. Most modern AI provide
      "provider": {
        "myprovider": {
          "npm": "@ai-sdk/openai-compatible",
-         "name": "My AI ProviderDisplay Name",
+         "name": "My AI Provider Display Name",
          "options": {
            "baseURL": "https://api.myprovider.com/v1"
          },
@@ -2453,7 +2591,7 @@ Here's an example setting the `apiKey`, `headers`, and model `limit` options.
   "provider": {
     "myprovider": {
       "npm": "@ai-sdk/openai-compatible",
-      "name": "My AI ProviderDisplay Name",
+      "name": "My AI Provider Display Name",
       "options": {
         "baseURL": "https://api.myprovider.com/v1",
         "apiKey": "{env:ANTHROPIC_API_KEY}",

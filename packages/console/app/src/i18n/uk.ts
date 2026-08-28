@@ -255,9 +255,9 @@ export const dict = {
   "zen.privacy.exceptionsLink": "такими винятками",
 
   "go.title": "OpenCode Go | Недорогі моделі кодування для всіх",
-  "go.banner.text": "Kimi K3 отримує 2x ліміти використання протягом обмеженого часу",
+  "go.banner.text": "GLM-5.3-Flash отримує 2x ліміти використання протягом обмеженого часу",
   "go.meta.description":
-    "Go починається від $5 за перший місяць, потім $10/місяць, зі щедрими 5-годинними лімітами запитів для Grok 4.5, GLM-5.2, GLM-5.1, Kimi K3, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro, DeepSeek V4 Flash та Hy3.",
+    "Go коштує $10/місяць, зі щедрими лімітами використання та надійним доступом до провідних моделей для кодування.",
   "go.hero.title": "Недорогі моделі кодування для всіх",
   "go.hero.body":
     "Go надає агентне програмування програмістам у всьому світі, пропонуючи щедрі ліміти та надійний доступ до найкращих моделей з відкритим кодом.",
@@ -266,13 +266,13 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "Підписатися на Go",
   "go.cta.price": "$10/місяць",
-  "go.cta.promo": "$5 перший місяць",
-  "go.pricing.body":
-    "Використовуйте з будь-яким агентом. $5 перший місяць, потім $10/місяць. Поповнюйте за потреби. Скасуйте в будь-який час.",
+  "go.pricing.body": "Використовуйте з будь-яким агентом. $10/місяць. Поповнюйте за потреби. Скасуйте в будь-який час.",
   "go.graph.free": "Безкоштовно",
   "go.graph.freePill": "Big Pickle та безкоштовні моделі",
   "go.graph.go": "Go",
   "go.graph.label": "Запитів за 5 годин",
+  "go.graph.limitedRegions": "обмежені регіони",
+  "go.graph.limitedTime": "обмежений час",
   "go.graph.usageLimits": "Ліміти використання",
   "go.graph.aria": "Запитів за 5 год: {{free}} vs {{go}}",
 
@@ -299,22 +299,20 @@ export const dict = {
   "go.testimonials.frank.quote": "Хотів би я досі бути в Nvidia.",
   "go.problem.title": "Яку проблему вирішує Go?",
   "go.problem.body":
-    "Ми зосереджені на тому, щоб зробити досвід OpenCode доступним для якомога більшої кількості людей. OpenCode Go — це недорога підписка: $5 за перший місяць, потім $10/місяць. Вона надає щедрі ліміти та надійний доступ до найкращих моделей з відкритим кодом.",
+    "Ми зосереджені на тому, щоб зробити досвід OpenCode доступним для якомога більшої кількості людей. OpenCode Go — це недорога підписка за $10/місяць. Вона надає щедрі ліміти та надійний доступ до найкращих моделей з відкритим кодом.",
   "go.problem.subtitle": " ",
   "go.problem.item1": "Недорога підписка",
   "go.problem.item2": "Щедрі ліміти та надійний доступ",
   "go.problem.item3": "Створено для якомога більшої кількості програмістів",
-  "go.problem.item4":
-    "Включає Grok 4.5, GLM-5.2, GLM-5.1, Kimi K3, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro, DeepSeek V4 Flash та Hy3",
+  "go.problem.item4": "Добірка моделей, протестованих для агентного кодування",
   "go.how.title": "Як працює Go",
-  "go.how.body":
-    "Go починається від $5 за перший місяць, потім $10/місяць. Використовуйте з OpenCode або будь-яким агентом.",
+  "go.how.body": "Go коштує $10/місяць. Використовуйте з OpenCode або будь-яким агентом.",
   "go.how.step1.title": "Створіть обліковий запис",
   "go.how.step1.beforeLink": "дотримуйтесь",
   "go.how.step1.link": "інструкцій з налаштування",
   "go.how.step2.title": "Підпишіться на Go",
-  "go.how.step2.link": "$5 перший місяць",
-  "go.how.step2.afterLink": "потім $10/місяць із щедрими лімітами",
+  "go.how.step2.link": "$10/місяць",
+  "go.how.step2.afterLink": "із щедрими лімітами",
   "go.how.step3.title": "Почніть кодувати",
   "go.how.step3.body": "з надійним доступом до моделей з відкритим кодом",
   "go.privacy.title": "Ваша конфіденційність важлива для нас",
@@ -331,17 +329,33 @@ export const dict = {
   "go.faq.a2": "Go включає моделі, перелічені нижче, із щедрими лімітами та надійним доступом.",
   "go.faq.q3": "Чи Go те саме, що Zen?",
   "go.faq.a3":
-    "Ні. Zen — це плата за використання, тоді як Go починається від $5 за перший місяць, потім $10/місяць, із щедрими лімітами та надійним доступом до моделей з відкритим кодом Grok 4.5, GLM-5.2, GLM-5.1, Kimi K3, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro, DeepSeek V4 Flash та Hy3.",
+    "Ні. Zen — це плата за використання, тоді як Go коштує $10/місяць, із щедрими лімітами та надійним доступом до добірки моделей.",
   "go.faq.q4": "Скільки коштує Go?",
   "go.faq.a4.p1.beforePricing": "Go коштує",
-  "go.faq.a4.p1.pricingLink": "$5 за перший місяць",
-  "go.faq.a4.p1.afterPricing": "потім $10/місяць із щедрими лімітами.",
+  "go.faq.a4.p1.pricingLink": "$10/місяць",
+  "go.faq.a4.p1.afterPricing": "із щедрими лімітами.",
   "go.faq.a4.p2.beforeAccount": "Ви можете керувати підпискою в",
   "go.faq.a4.p2.accountLink": "обліковому записі",
   "go.faq.a4.p3": "Скасуйте в будь-який час.",
   "go.faq.q5": "А як щодо даних та конфіденційності?",
-  "go.faq.a5.body":
-    "План розроблений переважно для міжнародних користувачів, з моделями в США, ЄС та Сінгапурі. Провайдери дотримуються політики нульового зберігання.",
+  "go.faq.a5.model": "Модель",
+  "go.faq.a5.training": "Навчання моделей",
+  "go.faq.a5.retention": "Зберігання даних",
+  "go.faq.a5.retention30": "30 днів",
+  "go.faq.a5.retention0": "0 днів",
+  "go.faq.a5.used": "Використовується",
+  "go.faq.a5.notUsed": "Не використовується",
+  "go.faq.a5.noAgreement": "Немає угоди",
+  "go.faq.a5.notZdr": "Не ZDR",
+  "go.faq.a5.grokRetention":
+    "ZDR вимикає важливі функції API, які залежать від збережених даних, зокрема Responses API зі збереженням стану, Files and Collections та Batch API.",
+  "go.faq.a5.gptRetention":
+    "Журнали моніторингу зловживань створюються для всіх випадків використання функцій API та зберігаються до 30 днів.",
+  "go.faq.a5.learnMore": "Докладніше",
+  "go.faq.a5.deepseekRetention": "Угода ZDR поновлюється щомісяця. Поточна угода дійсна до 31 серпня 2026 року.",
+  "go.faq.a5.museRetention":
+    "Значно знижені ціни на токени в обмін на дозвіл використовувати ваші промпти та відповіді для навчання майбутніх моделей Meta.",
+
   "go.faq.a5.beforeExceptions":
     "Моделі Go розміщені в США. Провайдери дотримуються політики нульового зберігання та не використовують ваші дані для навчання моделей, за",
   "go.faq.a5.exceptionsLink": "такими винятками",
@@ -354,7 +368,7 @@ export const dict = {
 
   "go.faq.q9": "Яка різниця між безкоштовними моделями та Go?",
   "go.faq.a9":
-    "Безкоштовні моделі включають Big Pickle та акційні моделі з лімітом 200 запитів/день. Go включає Grok 4.5, GLM-5.2, GLM-5.1, Kimi K3, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro, DeepSeek V4 Flash та Hy3 із вищими лімітами.",
+    "Безкоштовні моделі включають Big Pickle та доступні на той момент акційні моделі з квотою 200 запитів/день. Go пропонує добірку моделей із вищими квотами запитів, що застосовуються протягом ковзних періодів (5 годин, тижня та місяця), приблизно еквівалентними $12 за 5 годин, $30 на тиждень і $60 на місяць (фактична кількість запитів залежить від моделі та використання).",
 
   "zen.api.error.rateLimitExceeded": "Перевищено ліміт запитів. Спробуйте пізніше.",
   "zen.api.error.modelNotSupported": "Модель {{model}} не підтримується",
@@ -379,7 +393,10 @@ export const dict = {
     "Ви досягли місячного ліміту витрат ${{amount}}. Керуйте лімітами: {{membersUrl}}",
   "zen.api.error.modelDisabled": "Модель вимкнено",
   "zen.api.error.regionNotAllowed":
-    "Ця модель розміщена в Китаї. Якщо ви хочете використовувати цю модель, увімкніть її в налаштуваннях: {{consoleGoUrl}}",
+    "Остання версія цієї моделі доступна лише на серверах у Китаї, і для її використання потрібно надати явну згоду: {{consoleGoUrl}}",
+  "zen.api.error.countryNotAllowed": "Ця модель недоступна у вашій країні.",
+  "zen.api.error.trainingNotAllowed":
+    "Ця модель збирає дані, які використовуються для покращення її якості; для її використання потрібна ваша явна згода: {{consoleGoUrl}}",
   "zen.api.error.trialEnded":
     "Безкоштовна акція для {{model}} закінчилася. Ви можете продовжити використання, підписавшись на OpenCode Go — {{link}}",
 
@@ -652,22 +669,32 @@ export const dict = {
   "workspace.lite.time.fewSeconds": "кілька секунд",
   "workspace.lite.subscription.message": "Ви підписані на OpenCode Go.",
   "workspace.lite.subscription.manage": "Керувати підпискою",
-  "workspace.lite.subscription.rollingUsage": "Ковзне використання",
+  "workspace.lite.subscription.rollingUsage": "Використання за 5 годин",
+  "workspace.lite.subscription.rollingQuota": "Квота на 5 годин",
   "workspace.lite.subscription.weeklyUsage": "Тижневе використання",
+  "workspace.lite.subscription.weeklyQuota": "Тижнева квота",
   "workspace.lite.subscription.monthlyUsage": "Місячне використання",
+  "workspace.lite.subscription.monthlyQuota": "Місячна квота",
   "workspace.lite.subscription.resetsIn": "Скидається через",
+  "workspace.lite.subscription.showDetails": "Показати подробиці",
+  "workspace.lite.subscription.hideDetails": "Приховати подробиці",
+  "workspace.lite.subscription.model": "Модель",
+  "workspace.lite.subscription.contribution": "%",
+  "workspace.lite.subscription.total": "Усього",
   "workspace.lite.subscription.useBalance": "Використовуйте доступний баланс після досягнення лімітів",
   "workspace.lite.subscription.selectProvider": 'Виберіть "OpenCode Go" як провайдера в конфігурації opencode.',
   "workspace.lite.providers.title": "Провайдери",
   "workspace.lite.providers.description": "Керуйте провайдерами, які використовуються для маршрутизації.",
+  "workspace.lite.providers.allowTraining": "Дозволити моделі, що навчаються на даних запитів",
   "workspace.lite.providers.useChina": "Увімкнути моделі, розміщені в Китаї",
   "workspace.lite.black.message":
     "Ви вже підписані на OpenCode Black або в списку очікування. Спочатку скасуйте підписку, якщо хочете перейти на Go.",
   "workspace.lite.other.message": "Інший учасник цього робочого простору вже підписаний на OpenCode Go.",
-  "workspace.lite.promo.description": "OpenCode Go починається від {{price}}, потім $10/місяць, із щедрими лімітами.",
-  "workspace.lite.promo.price": "$5 за перший місяць",
+  "workspace.lite.promo.description": "OpenCode Go коштує {{price}} і має щедрі ліміти.",
+  "workspace.lite.promo.price": "$10/місяць",
   "workspace.lite.promo.modelsTitle": "Що включено",
-  "workspace.lite.promo.footer": "План призначений для міжнародних користувачів. Ціни можуть змінюватися.",
+  "workspace.lite.promo.footer":
+    "План призначений насамперед для міжнародних користувачів і забезпечує стабільний глобальний доступ. Ціни та ліміти використання можуть змінюватися з урахуванням перших даних про використання та відгуків.",
   "workspace.lite.promo.subscribe": "Підписатися на Go",
   "workspace.lite.promo.subscribing": "Перенаправлення...",
   "workspace.lite.promo.otherMethods": "Інші способи оплати",

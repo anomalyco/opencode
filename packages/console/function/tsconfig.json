@@ -6,6 +6,6 @@
     "moduleResolution": "bundler",
     "jsx": "preserve",
     "jsxImportSource": "react",
-    "types": ["@cloudflare/workers-types", "node"]
+    "types": ["@cloudflare/workers-types", "bun", "node"]
   }
 }

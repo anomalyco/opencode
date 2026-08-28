@@ -1,11 +1,10 @@
 import { Index, createMemo } from "solid-js"
+import type { UiI18nPluralKey } from "@opencode-ai/ui/context"
 import { AnimatedCountLabel } from "./tool-count-label"
 
 export type CountItem = {
-  key: string
+  key: UiI18nPluralKey
   count: number
-  one: string
-  other: string
 }
 
 export function AnimatedCountList(props: { items: CountItem[]; fallback?: string; class?: string }) {
@@ -36,11 +35,7 @@ export function AnimatedCountList(props: { items: CountItem[]; fallback?: string
               </span>
               <span data-slot="tool-count-summary-item" data-active={active() ? "true" : "false"}>
                 <span data-slot="tool-count-summary-item-inner">
-                  <AnimatedCountLabel
-                    one={item().one}
-                    other={item().other}
-                    count={Math.max(0, Math.round(item().count))}
-                  />
+                  <AnimatedCountLabel plural={item().key} count={Math.max(0, Math.round(item().count))} />
                 </span>
               </span>
             </>
