@@ -9,7 +9,7 @@ import { RestrictToElement } from "@dnd-kit/dom/modifiers"
 import { arrayMove } from "@dnd-kit/helpers"
 import { tabHref, tabKey, type SessionTab, type Tab } from "@/context/tabs"
 import { ServerConnection } from "@/context/server"
-import { DraftTabItem, TabNavItem } from "@/components/titlebar-tab-nav"
+import { DraftTabItem, TabNavItem, type TitlebarTabMenuActions } from "@/components/titlebar-tab-nav"
 import { useGlobal, type ServerCtx } from "@/context/global"
 import { useLanguage } from "@/context/language"
 import { useCommand } from "@/context/command"
@@ -32,6 +32,7 @@ function SessionTabSlot(props: {
   onRename: (title: string) => Promise<void>
   onNavigate: (element: HTMLDivElement) => void
   onClose: () => void
+  menuActions: TitlebarTabMenuActions
 }) {
   const sortable = useSortable({
     get id() {
@@ -62,6 +63,7 @@ function SessionTabSlot(props: {
         onRename={props.onRename}
         onNavigate={() => props.onNavigate(ref)}
         onClose={props.onClose}
+        menuActions={props.menuActions}
         active={props.active()}
         forceTruncate={props.forceTruncate}
         dragging={sortable.isDragSource()}
@@ -80,6 +82,7 @@ function SessionTabEntry(props: {
   onVisibleChange: (visible: boolean) => void
   onNavigate: (element: HTMLDivElement) => void
   onClose: () => void
+  menuActions: TitlebarTabMenuActions
 }) {
   const tabs = useTabs()
   const language = useLanguage()
@@ -162,6 +165,7 @@ function SessionTabEntry(props: {
         onRename={rename}
         onNavigate={props.onNavigate}
         onClose={props.onClose}
+        menuActions={props.menuActions}
       />
     </Show>
   )
@@ -175,6 +179,7 @@ function DraftTabSlot(props: {
   title: string
   onNavigate: (element: HTMLDivElement) => void
   onClose: () => void
+  menuActions: TitlebarTabMenuActions
 }) {
   const sortable = useSortable({
     get id() {
@@ -202,6 +207,7 @@ function DraftTabSlot(props: {
         title={props.title}
         onNavigate={() => props.onNavigate(ref)}
         onClose={props.onClose}
+        menuActions={props.menuActions}
         active={props.active()}
         dragging={sortable.isDragSource()}
       />
@@ -215,6 +221,10 @@ export function TitlebarTabStrip(props: {
   forceTruncate: boolean
   onNavigate: (tab: Tab, el?: HTMLDivElement) => void
   onClose: (tab: Tab) => void
+  onCloseAll: () => void
+  onCloseBefore: (index: number) => void
+  onCloseAfter: (index: number) => void
+  onCloseOthers: (index: number) => void
   onReorder: (keys: string[]) => void
   onOverflowChange: (overflowing: boolean) => void
 }) {
@@ -337,7 +347,32 @@ export function TitlebarTabStrip(props: {
               {(tab) => {
                 const id = tabKey(tab)
                 let ref!: HTMLDivElement
+                const index = () => props.tabs.findIndex((item) => tabKey(item) === id)
                 const visibleIndex = () => visibleTabs().findIndex((item) => tabKey(item) === id)
+                const hasTabsToRight = () => {
+                  const current = index()
+                  if (current === -1) return false
+                  return language.direction() === "rtl" ? current > 0 : current < props.tabs.length - 1
+                }
+                const closeTabsToRight = () => {
+                  const current = index()
+                  if (current === -1) return
+                  if (language.direction() === "rtl") {
+                    props.onCloseBefore(current)
+                    return
+                  }
+                  props.onCloseAfter(current)
+                }
+                const menuActions: TitlebarTabMenuActions = {
+                  onCloseAll: props.onCloseAll,
+                  onCloseRight: closeTabsToRight,
+                  onCloseOthers: () => {
+                    const current = index()
+                    if (current !== -1) props.onCloseOthers(current)
+                  },
+                  closeRightDisabled: () => !hasTabsToRight(),
+                  closeOthersDisabled: () => props.tabs.length < 2,
+                }
                 useTabShortcut(visibleIndex, () => props.onNavigate(tab, ref))
                 const serverCtx = createMemo(() => {
                   if (tab.type !== "session") return
@@ -360,6 +395,7 @@ export function TitlebarTabStrip(props: {
                         props.onNavigate(tab, element)
                       }}
                       onClose={() => props.onClose(tab)}
+                      menuActions={menuActions}
                     />
                   )
                 }
@@ -376,6 +412,7 @@ export function TitlebarTabStrip(props: {
                       props.onNavigate(tab, element)
                     }}
                     onClose={() => props.onClose(tab)}
+                    menuActions={menuActions}
                   />
                 )
               }}
