@@ -1,8 +1,7 @@
 import { Effect } from "effect"
-import { pathToFileURL } from "url"
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Npm } from "@opencode-ai/util/npm"
-import { importModule } from "@opencode-ai/util/runtime-import"
+import { loadSDKFactory } from "./sdk-factory.js"
 
 export const DynamicProviderPlugin = define({
   id: "opencode.provider.dynamic",
@@ -13,18 +12,7 @@ export const DynamicProviderPlugin = define({
       Effect.fn(function* (evt) {
         if (evt.sdk) return
 
-        const installedPath = evt.package.startsWith("file://")
-          ? evt.package
-          : (yield* npm.add(evt.package).pipe(Effect.orDie)).entrypoint
-        if (!installedPath) throw new Error(`Package ${evt.package} has no import entrypoint`)
-
-        const mod = (yield* Effect.promise(() =>
-          importModule(installedPath.startsWith("file://") ? installedPath : pathToFileURL(installedPath).href),
-        ).pipe(Effect.orDie)) as Record<string, (options: any) => any>
-        const match = Object.keys(mod).find((name) => name.startsWith("create"))
-        if (!match) throw new Error(`Package ${evt.package} has no provider factory export`)
-
-        evt.sdk = mod[match](evt.options)
+        evt.sdk = ((yield* loadSDKFactory(npm, evt.package)) as (options: any) => any)(evt.options)
       }),
     )
   }),

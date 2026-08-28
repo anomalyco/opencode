@@ -2,6 +2,43 @@ import { describe, expect, test } from "bun:test"
 import { normalize, resolveFileDiff, text } from "./session-diff"
 
 describe("session diff", () => {
+  test.each([
+    ["carriage return", "\r"],
+    ["line separator", "\u2028"],
+    ["paragraph separator", "\u2029"],
+  ])(
+    "parses adversarial patch headers containing a %s",
+    (_, separator) => {
+      // GHSA-73rr-hh4g-fpgx: isolate synchronous hangs and memory growth from the test runner.
+      const name = `a${separator}b.ts`
+      const padding = " ".repeat(10_000)
+      const patches = [
+        `--- ${name}\t\n+++ b.ts\t\n`,
+        `--- a.ts\t\n+++ ${name}\t\n`,
+        `--- ${padding}${name}\t\n+++ b.ts\t\n`,
+        `--- a.ts\t\n+++ ${padding}${name}\t\n`,
+        `Index: ${padding}${name}\n--- a.ts\t\n+++ b.ts\t\n`,
+        `diff -r abc -r def ${padding}${name}\n--- a.ts\t\n+++ b.ts\t\n`,
+      ].map((header) => `${header}@@ -1 +1 @@\n-old\n+new\n`)
+      const result = Bun.spawnSync({
+        cmd: [
+          process.execPath,
+          "--eval",
+          `import { completePatchContents } from "./session-diff.ts"
+         console.log(JSON.stringify((await Bun.stdin.json()).map(completePatchContents)))`,
+        ],
+        cwd: import.meta.dir,
+        stdin: Buffer.from(JSON.stringify(patches)),
+        timeout: 5_000,
+        killSignal: "SIGKILL",
+      })
+
+      expect(result.exitCode, result.stderr.toString()).toBe(0)
+      expect(JSON.parse(result.stdout.toString())).toEqual(patches.map(() => ({ before: "old\n", after: "new\n" })))
+    },
+    10_000,
+  )
+
   test("renders whole-file unified patches as complete diffs", () => {
     const diff = {
       file: "a.ts",
