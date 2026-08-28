@@ -6,7 +6,7 @@ import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { Job } from "../job.js"
 import { Location } from "../location.js"
 import { LocationServiceMap } from "../location-service-map.js"
-import { MCP } from "../mcp/index.js"
+import { Mcp } from "../mcp/index.js"
 import { Session } from "../session.js"
 
 export interface Interface {
@@ -38,7 +38,7 @@ export interface Interface {
     readonly mcp: {
       readonly list: (
         ref: Location.Ref,
-      ) => Effect.Effect<{ readonly location: Location.Info; readonly data: MCP.ServerInfo[] }, unknown>
+      ) => Effect.Effect<{ readonly location: Location.Info; readonly data: Mcp.ServerInfo[] }, unknown>
     }
   }
 }
@@ -130,7 +130,7 @@ export const providerLayerWithCell = (cell: Cell) =>
             list: (ref) =>
               Effect.gen(function* () {
                 const location = yield* Location.Service
-                const mcp = yield* MCP.Service
+                const mcp = yield* Mcp.Service
                 return {
                   location: new Location.Info({
                     directory: location.directory,

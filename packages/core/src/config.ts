@@ -81,12 +81,13 @@ export const testLayer = (initial: Entry[] = []) =>
           Effect.gen(function* () {
             const current = yield* Ref.get(entries)
             const index = current.findIndex((entry) => entry.type === "document" && entry.path !== undefined)
-            if (index === -1)
-              return yield* Effect.fail(new UpdateError({ message: "No editable config document found" }))
             const entry = current[index]
             if (!entry || entry.type !== "document")
               return yield* Effect.fail(new UpdateError({ message: "No editable config document found" }))
-            const info = produce(entry.info, update)
+            const info = yield* Effect.try({
+              try: () => produce(entry.info, update),
+              catch: (cause) => new UpdateError({ message: "Config update failed", cause }),
+            })
             yield* Ref.set(entries, current.with(index, new Document({ type: "document", path: entry.path, info })))
             return info
           }),

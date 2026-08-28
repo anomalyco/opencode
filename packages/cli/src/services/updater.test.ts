@@ -1,8 +1,30 @@
 import { describe, expect, test } from "bun:test"
+import path from "node:path"
 import { action } from "./updater-action"
 import { decodePolicy } from "./updater"
 
 describe("updater", () => {
+  test("remembers successful installs across checks and accepts the next release", async () => {
+    // Isolate compiled version constants and the update endpoint from other tests.
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        "--define",
+        'OPENCODE_VERSION="0.0.0-next-16473"',
+        "--define",
+        'OPENCODE_CHANNEL="beta"',
+        path.join(import.meta.dir, "fixtures/updater.ts"),
+      ],
+      { env: { ...process.env, OPENCODE_DISABLE_AUTOUPDATE: "" }, stdout: "pipe", stderr: "pipe" },
+    )
+    const [code, stdout, stderr] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ])
+    expect(code, stdout + stderr).toBe(0)
+  })
+
   test("reads autoupdate from JSONC", () => {
     expect(decodePolicy('{ // preference\n "autoupdate": "notify",\n}')).toBe("notify")
     expect(decodePolicy('{ "autoupdate": false }')).toBe(false)
@@ -30,6 +52,14 @@ describe("updater", () => {
 
   test("reports up-to-date only when versions match", () => {
     expect(action("1.2.3", "1.2.3", true)).toBe("none")
+  })
+
+  test("skips an installed update but still accepts the next release", () => {
+    const current = "0.0.0-next-16473"
+    const installed = "0.0.0-beta-17498"
+    expect(action(current, installed, true)).toBe("upgrade")
+    expect(action(current, installed, true, installed)).toBe("none")
+    expect(action(current, "0.0.0-beta-17499", true, installed)).toBe("upgrade")
   })
 
   test("upgrades when latest is lower (rollback)", () => {

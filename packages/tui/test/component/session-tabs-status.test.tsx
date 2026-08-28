@@ -124,6 +124,12 @@ for (const orientation of ["horizontal", "vertical"] as const) {
         setActive("second")
         setStatus({ ...EMPTY_SESSION_TAB_STATUS, busy: true, attention })
         await app.renderOnce()
+        const indicatorColor = () =>
+          app
+            .captureSpans()
+            .lines.flatMap((line) => line.spans)
+            .find((span) => span.text.trim() === (attention === "question" ? "?" : "!"))?.fg
+        expect(indicatorColor()?.toInts()).toEqual(theme.text.status[attention].toInts())
         const glow = () => {
           const colors = app
             .captureSpans()
@@ -140,6 +146,7 @@ for (const orientation of ["horizontal", "vertical"] as const) {
         expect(full).toBeGreaterThan(0)
         setActive("first")
         await app.renderOnce()
+        expect(indicatorColor()?.toInts()).toEqual(theme.text.status[attention].toInts())
         const dim = glow()
         expect(dim).toBeGreaterThan(0)
         expect(dim).toBeLessThan(full)

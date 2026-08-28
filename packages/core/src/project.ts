@@ -41,6 +41,7 @@ export interface Resolved {
   readonly previous?: ID
   readonly id: ID
   readonly directory: AbsolutePath
+  // This checkout's main directory; the stored project canonical may be another clone.
   readonly canonical: AbsolutePath
   readonly vcs?: Vcs
   readonly vcsBackend?: string
@@ -110,11 +111,17 @@ const layer = Layer.effect(
         .get()
         .pipe(Effect.orDie)
       yield* upsertProject(db, project).pipe(Effect.orDie)
-      if (previous && previous.canonical !== project.canonical) {
+      // Clones share a project ID; only replace a canonical directory that is gone.
+      if (
+        previous &&
+        previous.canonical !== project.canonical &&
+        !(yield* fs.exists(previous.canonical).pipe(Effect.orElseSucceed(() => true)))
+      ) {
         const row = yield* db
-          .select()
-          .from(ProjectTable)
+          .update(ProjectTable)
+          .set({ worktree: project.canonical })
           .where(eq(ProjectTable.id, project.id))
+          .returning()
           .get()
           .pipe(Effect.orDie)
         if (row) yield* bus.publish(ProjectSchema.Event.Updated, fromRow(row))
