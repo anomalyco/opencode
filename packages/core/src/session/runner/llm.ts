@@ -1,7 +1,7 @@
 export * as SessionRunnerLLM from "./llm.js"
 
 import { Message } from "@opencode-ai/ai"
-import { Config, Effect, FiberMap, Layer, Pull, Schedule } from "effect"
+import { Cause, Config, Effect, Exit, FiberMap, Layer, Pull, Schedule } from "effect"
 import { Database } from "../../database/database.js"
 import { Bus } from "../../bus.js"
 import { InstructionState } from "../instruction-state.js"
@@ -132,14 +132,29 @@ const layer = Layer.effect(
               if (pending?.type === "compaction") {
                 const session = yield* store.get(sessionID)
                 if (!session) return yield* Effect.die(new Error(`Session not found: ${sessionID}`))
-                yield* compaction.compactManual({
-                  session,
-                  resolveModel: context.resolveModel,
-                  prepare: context.prepare,
-                  messages: store.context(sessionID),
-                  inputID: pending.id,
-                  restore,
-                })
+                const compacted = yield* restore(
+                  Effect.gen(function* () {
+                    return yield* compaction.compactManual({
+                      session,
+                      resolveModel: context.resolveModel,
+                      prepare: context.prepare,
+                      messages: yield* store.context(sessionID),
+                      inputID: pending.id,
+                      started: true,
+                    })
+                  }),
+                ).pipe(Effect.exit)
+                if (Exit.isFailure(compacted)) {
+                  yield* bus.publish(SessionEvent.Compaction.Failed, {
+                    sessionID,
+                    reason: "manual",
+                    error: Cause.hasInterruptsOnly(compacted.cause)
+                      ? { type: "aborted", message: "Compaction cancelled" }
+                      : { type: "compaction.failed", message: Cause.pretty(compacted.cause) },
+                    inputID: pending.id,
+                  })
+                  return yield* Effect.failCause(compacted.cause)
+                }
                 force = false
                 continue
               }

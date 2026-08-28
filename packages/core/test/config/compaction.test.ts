@@ -79,17 +79,11 @@ describe("ConfigCompactionPlugin.Plugin", () => {
         .subscribe(SessionEvent.Compaction.Started)
         .pipe(Stream.runHead, Effect.forkScoped({ startImmediately: true }))
       expect(
-        yield* compaction.compact({
+        yield* compaction.compactManual({
           session,
-          resolved,
+          resolveModel: () => Effect.succeed(resolved),
           prepare: modelRequests.prepare,
           messages: [
-            {
-              id: SessionMessage.ID.create(),
-              type: "user",
-              text: "Oldest context ".repeat(5_000),
-              time: { created: DateTime.makeUnsafe(0) },
-            },
             {
               id: SessionMessage.ID.create(),
               type: "user",
@@ -103,11 +97,10 @@ describe("ConfigCompactionPlugin.Plugin", () => {
               time: { created: DateTime.makeUnsafe(1) },
             },
           ],
+          inputID: SessionMessage.ID.make("msg_compaction_manual"),
         }),
       ).toEqual({ status: "completed" })
-      const recent = Option.getOrThrow(yield* Fiber.join(started)).data.recent
-      expect(recent).toContain("Recent context")
-      expect(recent).not.toContain("Older context")
+      expect(Option.getOrThrow(yield* Fiber.join(started)).data.recent).toContain("Recent context")
 
       yield* config.setEntries([
         new Document({

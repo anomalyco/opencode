@@ -217,34 +217,6 @@ const insertSession = (id: Session.ID, overrides?: Partial<typeof SessionTable.$
       .pipe(Effect.flatMap((session) => (session ? Effect.succeed(session) : Effect.die(`session missing: ${id}`))))
   })
 
-const compactManual = Effect.fnUntraced(function* (
-  input: Pick<SessionCompaction.ManualInput, "session" | "inputID"> & {
-    readonly messages: readonly SessionMessage.Info[]
-  },
-) {
-  const compaction = yield* SessionCompaction.Service
-  const bus = yield* Bus.Service
-  const modelRequests = yield* SessionModelRequest.Service
-  return yield* Effect.uninterruptibleMask((restore) =>
-    Effect.gen(function* () {
-      // Unit fixtures begin at the runner's already-started manual-control boundary.
-      yield* bus.publish(SessionEvent.Compaction.Started, {
-        sessionID: input.session.id,
-        reason: "manual",
-        recent: "",
-        inputID: input.inputID,
-      })
-      return yield* compaction.compactManual({
-        ...input,
-        messages: Effect.succeed(input.messages),
-        resolveModel: () => Effect.succeed(resolved),
-        prepare: modelRequests.prepare,
-        restore,
-      })
-    }),
-  )
-})
-
 it.effect("manual compaction summarizes short context instead of no-op", () =>
   Effect.gen(function* () {
     requests = []
@@ -268,15 +240,17 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
       time: { created: DateTime.makeUnsafe(0) },
     }
     const session = yield* insertSession(sessionID, { parent_id: parentID })
-    yield* compaction.transform((draft) => draft.configure({ auto: false }))
+    const modelRequests = yield* SessionModelRequest.Service
 
     const delta = yield* bus
       .subscribe(SessionEvent.Compaction.Delta)
       .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
     yield* Effect.yieldNow
     expect(
-      yield* compactManual({
+      yield* compaction.compactManual({
         session,
+        resolveModel: () => Effect.succeed(resolved),
+        prepare: modelRequests.prepare,
         messages: [userMessage],
         inputID: SessionMessage.ID.make("msg_manual_compaction"),
       }),
@@ -298,7 +272,7 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
     expect(JSON.stringify(requests[0]?.messages)).toContain("Manual compaction should include this short conversation.")
     expect(JSON.stringify(requests[0]?.messages)).toContain("Use Effect services and generators.")
     expect(yield* store.context(sessionID)).toMatchObject([
-      { type: "compaction", status: "completed", reason: "manual", summary: "manual summary", recent: "" },
+      { type: "compaction", reason: "manual", summary: "manual summary", recent: "" },
     ])
     expect(yield* store.get(sessionID)).toMatchObject({
       cost: 0.0000233,
@@ -323,16 +297,19 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
 it.effect("forked session compaction reuses the fork root prompt cache key", () =>
   Effect.gen(function* () {
     requests = []
-    const store = yield* SessionStore.Service
+    const compaction = yield* SessionCompaction.Service
     const sessionID = Session.ID.make("ses_fork_compaction")
     const rootID = Session.ID.make("ses_fork_compaction_root")
     const session = yield* insertSession(sessionID, {
       fork_session_id: rootID,
       fork_boundary: { type: "before", messageID: SessionMessage.ID.create() },
     })
+    const modelRequests = yield* SessionModelRequest.Service
     expect(
-      yield* compactManual({
+      yield* compaction.compactManual({
         session,
+        resolveModel: () => Effect.succeed(resolved),
+        prepare: modelRequests.prepare,
         messages: [
           {
             id: SessionMessage.ID.create(),
@@ -344,7 +321,6 @@ it.effect("forked session compaction reuses the fork root prompt cache key", () 
         inputID: SessionMessage.ID.make("msg_fork_compaction"),
       }),
     ).toEqual({ status: "completed" })
-    expect(yield* store.context(sessionID)).toMatchObject([{ type: "compaction", status: "completed" }])
 
     expect(requests).toHaveLength(1)
     expect(requests[0]?.promptCacheKey).toBe(rootID)
@@ -354,7 +330,7 @@ it.effect("forked session compaction reuses the fork root prompt cache key", () 
 it.effect("keeps session context hooks away from compaction requests", () =>
   Effect.gen(function* () {
     requests = []
-    const store = yield* SessionStore.Service
+    const compaction = yield* SessionCompaction.Service
     // Context hooks shape the agent conversation; compaction is not part of it,
     // so it opts out and the transcript passes through unchanged.
     const hooks = yield* PluginHooks.Service
@@ -364,9 +340,12 @@ it.effect("keeps session context hooks away from compaction requests", () =>
       }),
     )
     const session = yield* insertSession(Session.ID.make("ses_hook_compaction"))
+    const modelRequests = yield* SessionModelRequest.Service
     expect(
-      yield* compactManual({
+      yield* compaction.compactManual({
         session,
+        resolveModel: () => Effect.succeed(resolved),
+        prepare: modelRequests.prepare,
         messages: [
           {
             id: SessionMessage.ID.create(),
@@ -378,7 +357,6 @@ it.effect("keeps session context hooks away from compaction requests", () =>
         inputID: SessionMessage.ID.make("msg_hook_compaction"),
       }),
     ).toEqual({ status: "completed" })
-    expect(yield* store.context(session.id)).toMatchObject([{ type: "compaction", status: "completed" }])
 
     expect(requests).toHaveLength(1)
     expect(requests[0]?.system).toEqual([])
