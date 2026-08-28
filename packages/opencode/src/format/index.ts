@@ -1,5 +1,5 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { Effect, Layer, Context, Schema } from "effect"
+import { Duration, Effect, Layer, Context, Schema } from "effect"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { ChildProcess } from "effect/unstable/process"
 import { AppProcess } from "@opencode-ai/core/process"
@@ -27,6 +27,8 @@ export interface Interface {
 export class Service extends Context.Service<Service, Interface>()("@opencode/Format") {}
 
 export const use = serviceUse(Service)
+
+const DEFAULT_FORMATTER_TIMEOUT_SECONDS = 120
 
 const layer = Layer.effect(
   Service,
@@ -91,6 +93,7 @@ const layer = Layer.effect(
                     stdout: "ignore",
                     stderr: "ignore",
                   }),
+                  { timeout: Duration.seconds(item.timeout ?? DEFAULT_FORMATTER_TIMEOUT_SECONDS) },
                 )
                 .pipe(
                   Effect.catch((error) =>
