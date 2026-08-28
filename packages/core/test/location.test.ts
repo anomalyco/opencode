@@ -1,5 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Location } from "@opencode-ai/core/location"
 import { Project } from "@opencode-ai/core/project"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -21,7 +22,7 @@ const projectLayer = Layer.succeed(
     commit: () => Effect.void,
   }),
 )
-const it = testEffect(Location.layer(ref).pipe(Layer.provide(projectLayer)))
+const it = testEffect(AppNodeBuilder.build(Location.boundNode(ref), [[Project.node, projectLayer]]))
 
 describe("Location", () => {
   it.effect("resolves the current project and vcs information", () =>

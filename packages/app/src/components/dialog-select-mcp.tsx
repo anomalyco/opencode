@@ -19,7 +19,7 @@ export const DialogSelectMcp: Component = () => {
   const language = useLanguage()
 
   const items = createMemo(() =>
-    Object.entries(sync.data.mcp ?? {})
+    Object.entries(sync().data.mcp ?? {})
       .map(([name, status]) => ({ name, status: status.status }))
       .sort((a, b) => a.name.localeCompare(b.name)),
   )
@@ -43,12 +43,12 @@ export const DialogSelectMcp: Component = () => {
         filterKeys={["name", "status"]}
         sortBy={(a, b) => a.name.localeCompare(b.name)}
         onSelect={(x) => {
-          if (!x || toggle.isPending) return
+          if (!x || x.status === "pending" || toggle.isPending) return
           toggle.mutate(x.name)
         }}
       >
         {(i) => {
-          const mcpStatus = () => sync.data.mcp[i.name]
+          const mcpStatus = () => sync().data.mcp[i.name]
           const status = () => mcpStatus()?.status
           const statusLabel = () => {
             const key = status() ? statusLabels[status() as keyof typeof statusLabels] : undefined
@@ -76,7 +76,7 @@ export const DialogSelectMcp: Component = () => {
               <div onClick={(e) => e.stopPropagation()}>
                 <Switch
                   checked={enabled()}
-                  disabled={toggle.isPending && toggle.variables === i.name}
+                  disabled={status() === "pending" || (toggle.isPending && toggle.variables === i.name)}
                   onChange={() => {
                     if (toggle.isPending) return
                     toggle.mutate(i.name)

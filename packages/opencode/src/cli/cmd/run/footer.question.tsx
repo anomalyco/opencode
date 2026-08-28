@@ -268,9 +268,8 @@ export function RunQuestionBody(props: {
   })
 
   return (
-    <box id="run-direct-footer-question-body" width="100%" height="100%" flexDirection="column">
+    <box width="100%" height="100%" flexDirection="column">
       <box
-        id="run-direct-footer-question-panel"
         flexDirection="column"
         gap={1}
         paddingLeft={1}
@@ -281,14 +280,13 @@ export function RunQuestionBody(props: {
         backgroundColor={props.theme.surface}
       >
         <Show when={!single()}>
-          <box id="run-direct-footer-question-tabs" flexDirection="row" gap={1} paddingLeft={1} flexShrink={0}>
+          <box flexDirection="row" gap={1} paddingLeft={1} flexShrink={0}>
             <For each={props.request.questions}>
               {(item, index) => {
                 const active = () => state().tab === index()
                 const answered = () => (state().answers[index()]?.length ?? 0) > 0
                 return (
                   <box
-                    id={`run-direct-footer-question-tab-${index()}`}
                     paddingLeft={1}
                     paddingRight={1}
                     backgroundColor={active() ? props.theme.highlight : props.theme.surface}
@@ -304,7 +302,6 @@ export function RunQuestionBody(props: {
               }}
             </For>
             <box
-              id="run-direct-footer-question-tab-confirm"
               paddingLeft={1}
               paddingRight={1}
               backgroundColor={confirm() ? props.theme.highlight : props.theme.surface}
@@ -382,7 +379,6 @@ export function RunQuestionBody(props: {
                       const hit = () => state().answers[state().tab]?.includes(item.label) ?? false
                       return (
                         <box
-                          id={`run-direct-footer-question-option-${index()}`}
                           flexDirection="column"
                           gap={0}
                           onMouseOver={() => {
@@ -428,7 +424,6 @@ export function RunQuestionBody(props: {
 
                   <Show when={questionCustom(props.request, state())}>
                     <box
-                      id="run-direct-footer-question-option-custom"
                       flexDirection="column"
                       gap={0}
                       onMouseOver={() => {
@@ -480,7 +475,6 @@ export function RunQuestionBody(props: {
                       >
                         <box paddingLeft={3}>
                           <textarea
-                            id="run-direct-footer-question-custom"
                             width="100%"
                             minHeight={1}
                             maxHeight={4}
@@ -518,7 +512,6 @@ export function RunQuestionBody(props: {
       </box>
 
       <box
-        id="run-direct-footer-question-actions"
         flexDirection={narrow() ? "column" : "row"}
         flexShrink={0}
         gap={1}

@@ -82,7 +82,11 @@ export type ReconcileResult = { readonly _tag: "Unchanged" } | Updated | Replace
 export class InitializationBlocked extends Schema.TaggedErrorClass<InitializationBlocked>()(
   "SystemContext.InitializationBlocked",
   { keys: Schema.Array(Key) },
-) {}
+) {
+  override get message() {
+    return `System context initialization blocked by unavailable sources: ${this.keys.join(", ")}`
+  }
+}
 
 export class DuplicateKeyError extends Schema.TaggedErrorClass<DuplicateKeyError>()("SystemContext.DuplicateKeyError", {
   key: Key,

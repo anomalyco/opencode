@@ -25,7 +25,7 @@ class Database extends Context.Service<Database, DatabaseShape>()("@opencode/exa
 
 class UserStoreError extends Schema.TaggedErrorClass<UserStoreError>()("UserStoreError", {
   message: Schema.String,
-  cause: Schema.optional(Schema.Defect),
+  cause: Schema.optional(Schema.Defect()),
 }) {}
 
 const mapStoreError = (message: string) => (cause: unknown) => new UserStoreError({ message, cause })

@@ -35,12 +35,12 @@
         cursor: default;
         user-select: none;
 
-        background-color: var(--background-stronger);
-        border: 1px solid var(--border-weak-base);
+        background-color: var(--v2-background-bg-base);
+        border: 0.5px solid var(--v2-border-border-base);
         border-radius: 0;
         box-shadow: none;
         overflow: clip;
-        color: var(--text-strong);
+        color: var(--v2-text-text-base);
         transition: background-color 0.15s ease;
 
         /* text-12-regular */
@@ -52,10 +52,10 @@
         letter-spacing: var(--letter-spacing-normal);
 
         &:hover:not([data-disabled]) {
-          background-color: var(--surface-base-hover);
+          background-color: var(--v2-overlay-simple-overlay-hover);
         }
         &:active:not([data-disabled]) {
-          background-color: var(--surface-base-active);
+          background-color: var(--v2-overlay-simple-overlay-pressed);
         }
         &:focus-visible {
           outline: none;
@@ -82,9 +82,9 @@
 
     &[data-expanded] {
       [data-slot="accordion-content"] {
-        border: 1px solid var(--border-weak-base);
+        border: 0.5px solid var(--v2-border-border-base);
         border-top: 0;
-        background-color: var(--background-stronger);
+        background-color: var(--v2-background-bg-layer-01);
       }
     }
 
@@ -101,6 +101,30 @@
       border: 0;
       background-color: transparent;
     }
+  }
+}
+
+body:not([data-new-layout]) [data-component="accordion"] {
+  [data-slot="accordion-item"] [data-slot="accordion-header"] [data-slot="accordion-trigger"] {
+    background-color: var(--background-stronger);
+    border-width: 1px;
+    border-color: var(--border-weak-base);
+    color: var(--text-strong);
+
+    &:hover:not([data-disabled]) {
+      background-color: var(--surface-base-hover);
+    }
+
+    &:active:not([data-disabled]) {
+      background-color: var(--surface-base-active);
+    }
+  }
+
+  [data-slot="accordion-item"][data-expanded] [data-slot="accordion-content"] {
+    border-width: 1px;
+    border-color: var(--border-weak-base);
+    border-top: 0;
+    background-color: var(--background-stronger);
   }
 }
 

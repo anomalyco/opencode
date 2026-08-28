@@ -36,6 +36,10 @@ export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "exper
     const background = yield* BackgroundJob.Service
     const flags = yield* RuntimeFlags.Service
 
+    const capabilities = Effect.fn("ExperimentalHttpApi.capabilities")(function* () {
+      return { backgroundSubagents: flags.experimentalBackgroundSubagents }
+    })
+
     const getConsole = Effect.fn("ExperimentalHttpApi.console")(function* () {
       const [state, groups] = yield* Effect.all(
         [
@@ -133,8 +137,9 @@ export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "exper
 
     const session = Effect.fn("ExperimentalHttpApi.session")(function* (ctx: { query: typeof SessionListQuery.Type }) {
       const limit = ctx.query.limit ?? 100
+      const directory = ctx.query.directory ? yield* InstanceState.directory : undefined
       const all = yield* sessions.listGlobal({
-        directory: ctx.query.directory,
+        directory,
         roots: ctx.query.roots,
         start: ctx.query.start,
         cursor: ctx.query.cursor,
@@ -171,6 +176,7 @@ export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "exper
     })
 
     return handlers
+      .handle("capabilities", capabilities)
       .handle("console", getConsole)
       .handle("consoleOrgs", listConsoleOrgs)
       .handle("consoleSwitch", switchConsole)

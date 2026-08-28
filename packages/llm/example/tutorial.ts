@@ -238,7 +238,7 @@ const inspectFakeProvider = Effect.gen(function* () {
 // Provide the LLM runtime and the HTTP request executor once. Keep one path
 // enabled at a time so the tutorial can demonstrate generate, prepare, stream,
 // or tool-loop behavior without spending tokens on every example.
-const requestExecutorLayer = RequestExecutor.defaultLayer
+const requestExecutorLayer = RequestExecutor.fetchLayer
 const llmDeps = Layer.mergeAll(requestExecutorLayer, WebSocketExecutor.layer)
 const llmClientLayer = LLMClient.layer.pipe(Layer.provide(llmDeps))
 

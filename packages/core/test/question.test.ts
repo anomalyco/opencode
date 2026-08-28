@@ -1,15 +1,14 @@
 import { describe, expect } from "bun:test"
 import { Context, Deferred, Effect, Exit, Fiber, Layer, Scope } from "effect"
-import { Database } from "@opencode-ai/core/database/database"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { EventV2 } from "@opencode-ai/core/event"
 import { QuestionV2 } from "@opencode-ai/core/question"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { testEffect } from "./lib/effect"
 
-const database = Database.layerFromPath(":memory:")
-const events = EventV2.layer.pipe(Layer.provide(database))
-const questions = QuestionV2.layer.pipe(Layer.provide(events))
-const it = testEffect(Layer.mergeAll(database, events, questions))
+const questions = AppNodeBuilder.build(LayerNode.group([EventV2.node, QuestionV2.node]))
+const it = testEffect(questions)
 
 const sessionID = SessionV2.ID.make("ses_question_test")
 const question: QuestionV2.Info = {

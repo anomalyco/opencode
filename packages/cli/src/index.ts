@@ -9,6 +9,7 @@ import { Daemon } from "./services/daemon"
 
 const Handlers = Runtime.handlers(Commands, {
   $: () => import("./commands/handlers/default"),
+  api: () => import("./commands/handlers/api"),
   debug: {
     agents: () => import("./commands/handlers/debug/agents"),
   },
@@ -24,7 +25,7 @@ const Handlers = Runtime.handlers(Commands, {
 })
 
 Runtime.run(Commands, Handlers, { version: "local" }).pipe(
-  Effect.provide(Daemon.defaultLayer),
+  Effect.provide(Daemon.layer),
   Effect.provide(NodeServices.layer),
   Effect.scoped,
   NodeRuntime.runMain,

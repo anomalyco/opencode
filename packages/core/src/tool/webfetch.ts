@@ -1,11 +1,15 @@
 export * as WebFetchTool from "./webfetch"
 
 import { ToolFailure } from "@opencode-ai/llm"
-import { Duration, Effect, Layer, Schema, Stream } from "effect"
+import { Duration, Effect, Layer, Schema } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { Parser } from "htmlparser2"
 import TurndownService from "turndown"
+import { makeLocationNode } from "../effect/app-node"
+import { LayerNodePlatform } from "../effect/app-node-platform"
 import { PermissionV2 } from "../permission"
+import { collectBoundedResponseBody } from "./http-body"
+import { ToolRegistry } from "./registry"
 import { Tool } from "./tool"
 import { Tools } from "./tools"
 
@@ -86,24 +90,11 @@ const execute = (http: HttpClient.HttpClient, url: string, format: Format, userA
   http.execute(request(url, format, userAgent)).pipe(Effect.flatMap(HttpClientResponse.filterStatusOk))
 
 const collectBody = (response: HttpClientResponse.HttpClientResponse) =>
-  Effect.gen(function* () {
-    const contentLength = response.headers["content-length"]
-    if (contentLength && Number.parseInt(contentLength, 10) > MAX_RESPONSE_BYTES) {
-      return yield* Effect.fail(new Error(`Response too large (exceeds ${MAX_RESPONSE_BYTES} byte limit)`))
-    }
-    const chunks: Uint8Array[] = []
-    let size = 0
-    yield* Stream.runForEach(response.stream, (chunk) =>
-      Effect.gen(function* () {
-        size += chunk.byteLength
-        if (size > MAX_RESPONSE_BYTES)
-          return yield* Effect.fail(new Error(`Response too large (exceeds ${MAX_RESPONSE_BYTES} byte limit)`))
-        chunks.push(chunk)
-        return undefined
-      }),
-    )
-    return Buffer.concat(chunks, size)
-  })
+  collectBoundedResponseBody(
+    response,
+    MAX_RESPONSE_BYTES,
+    () => new Error(`Response too large (exceeds ${MAX_RESPONSE_BYTES} byte limit)`),
+  )
 
 const mimeFrom = (contentType: string) => contentType.split(";", 1)[0]?.trim().toLowerCase() ?? ""
 const isImageAttachment = (mime: string) =>
@@ -124,7 +115,7 @@ const convert = (content: string, contentType: string, format: Format) => {
   return content
 }
 
-export const layer = Layer.effectDiscard(
+const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const tools = yield* Tools.Service
     const http = yield* HttpClient.HttpClient
@@ -171,12 +162,16 @@ export const layer = Layer.effectDiscard(
                   orElse: () => Effect.fail(new Error("Request timed out")),
                 }),
               )
-              const content = convert(new TextDecoder().decode(body), contentType, input.format)
+              const content = new TextDecoder().decode(body)
+              const output = yield* Effect.try({
+                try: () => convert(content, contentType, input.format),
+                catch: (error) => error,
+              })
               return {
                 url: input.url,
                 contentType,
                 format: input.format,
-                output: content,
+                output,
               }
             }).pipe(Effect.mapError(() => new ToolFailure({ message: `Unable to fetch ${input.url}` }))),
         }),
@@ -184,6 +179,12 @@ export const layer = Layer.effectDiscard(
       .pipe(Effect.orDie)
   }),
 )
+
+export const node = makeLocationNode({
+  name: "tool/webfetch",
+  layer,
+  deps: [ToolRegistry.node, PermissionV2.node, LayerNodePlatform.httpClient],
+})
 
 export function extractTextFromHTML(html: string) {
   let text = ""

@@ -1,15 +1,14 @@
 export * as FileSystem from "./filesystem"
 
+import { makeLocationNode } from "./effect/app-node"
 import path from "path"
-import { pathToFileURL } from "url"
-import { Context, Effect, Layer, Option, Schema } from "effect"
-import { EventV2 } from "./event"
+import { Context, Effect, Layer, Schema } from "effect"
 import { FSUtil } from "./fs-util"
 import { Location } from "./location"
 import { PositiveInt, RelativePath } from "./schema"
 import { FileSystemSearch } from "./filesystem/search"
-import { Entry, Match } from "./filesystem/schema"
-export { Entry, Match, Submatch } from "./filesystem/schema"
+import { Entry, FileSystem, FindInput, Match } from "@opencode-ai/schema/filesystem"
+export { Entry, Match, Submatch } from "@opencode-ai/schema/filesystem"
 
 export const ReadInput = Schema.Struct({
   path: RelativePath,
@@ -30,11 +29,7 @@ export const ListInput = Schema.Struct({
 })
 export type ListInput = typeof ListInput.Type
 
-export class FindInput extends Schema.Class<FindInput>("FileSystem.FindInput")({
-  query: Schema.String,
-  type: Schema.Literals(["file", "directory"]).pipe(Schema.optional),
-  limit: PositiveInt.pipe(Schema.optional),
-}) {}
+export { FindInput }
 
 export class GlobInput extends Schema.Class<GlobInput>("FileSystem.GlobInput")({
   pattern: Schema.String,
@@ -49,17 +44,10 @@ export class GrepInput extends Schema.Class<GrepInput>("FileSystem.GrepInput")({
   limit: PositiveInt.pipe(Schema.optional),
 }) {}
 
-export const Event = {
-  Edited: EventV2.define({
-    type: "file.edited",
-    schema: {
-      file: Schema.String,
-    },
-  }),
-}
+export const Event = FileSystem.Event
 
 export interface Interface {
-  readonly read: (input: ReadInput) => Effect.Effect<Content>
+  readonly read: (input: ReadInput) => Effect.Effect<{ readonly content: Uint8Array; readonly mime: string }>
   readonly list: (input?: ListInput) => Effect.Effect<Entry[]>
   readonly find: (input: FindInput) => Effect.Effect<Entry[]>
   readonly glob: (input: GlobInput) => Effect.Effect<readonly Entry[]>
@@ -91,27 +79,9 @@ const baseLayer = Layer.effect(
         const target = yield* resolve(input.path)
         const info = yield* fs.stat(target.real).pipe(Effect.orDie)
         if (info.type !== "File") return yield* Effect.die(new Error("Path is not a file"))
-        const bytes = yield* fs.readFile(target.real).pipe(Effect.orDie)
-        const mime = FSUtil.mimeType(target.real)
-        if (!bytes.includes(0)) {
-          const content = yield* Effect.sync(() => new TextDecoder("utf-8", { fatal: true }).decode(bytes)).pipe(
-            Effect.option,
-          )
-          if (Option.isSome(content))
-            return {
-              uri: pathToFileURL(target.real).href,
-              name: path.basename(target.real),
-              content: content.value,
-              encoding: "utf8" as const,
-              mime,
-            }
-        }
         return {
-          uri: pathToFileURL(target.real).href,
-          name: path.basename(target.real),
-          content: Buffer.from(bytes).toString("base64"),
-          encoding: "base64" as const,
-          mime,
+          content: yield* fs.readFile(target.real).pipe(Effect.orDie),
+          mime: FSUtil.mimeType(target.real),
         }
       }),
       list: Effect.fn("FileSystem.list")(function* (input = {}) {
@@ -127,10 +97,9 @@ const baseLayer = Layer.effect(
                 const absolute = path.join(target.absolute, item.name)
                 const relative = path.relative(target.directory, absolute)
                 return [
-                  new Entry({
+                  Entry.make({
                     path: RelativePath.make(relative + (item.type === "directory" ? path.sep : "")),
                     type: item.type,
-                    mime: item.type === "directory" ? "application/x-directory" : FSUtil.mimeType(absolute),
                   }),
                 ]
               })
@@ -142,6 +111,8 @@ const baseLayer = Layer.effect(
   }),
 )
 
-export const layer = baseLayer.pipe(Layer.provide(FileSystemSearch.defaultLayer), Layer.provide(FSUtil.defaultLayer))
-
-export const locationLayer = layer
+export const node = makeLocationNode({
+  service: Service,
+  layer: baseLayer,
+  deps: [FSUtil.node, Location.node, FileSystemSearch.node],
+})

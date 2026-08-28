@@ -42,6 +42,27 @@ function unwrapNamedError(error: unknown): unknown {
   return error
 }
 
+// Client-synthesized session not-found errors share one constructor and
+// predicate so the message contract cannot drift between the sync store
+// (server-session.ts), the route lineage (session-lineage.ts), and the
+// not-found fallback matching (session.tsx).
+const sessionNotFoundMessage = (sessionID: string) => `Session not found: ${sessionID}`
+
+export function sessionNotFoundError(sessionID: string) {
+  return new Error(sessionNotFoundMessage(sessionID))
+}
+
+export function isLocalSessionNotFoundError(error: unknown, sessionID: string) {
+  return error instanceof Error && error.message === sessionNotFoundMessage(sessionID)
+}
+
+export function isSessionNotFoundError(error: unknown, sessionID: string) {
+  const unwrapped = unwrapNamedError(error)
+  if (typeof unwrapped !== "object" || unwrapped === null) return false
+  const value = unwrapped as Record<string, unknown>
+  return value._tag === "SessionNotFoundError" && value.sessionID === sessionID
+}
+
 function isConfigInvalidErrorLike(error: unknown): error is ConfigInvalidError {
   if (typeof error !== "object" || error === null) return false
   const o = error as Record<string, unknown>

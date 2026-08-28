@@ -17,12 +17,31 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Check exempt issue author
+        id: author
+        run: |
+          LOGIN="${{ github.event.issue.user.login }}"
+          ASSOCIATION="${{ github.event.issue.author_association }}"
+
+          if [ "$LOGIN" = "opencode-agent[bot]" ] ||
+             [ "$ASSOCIATION" = "OWNER" ] ||
+             [ "$ASSOCIATION" = "MEMBER" ] ||
+             grep -qxiF "$LOGIN" .github/TEAM_MEMBERS; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Skipping issue automation for exempt author: $LOGIN ($ASSOCIATION)"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: ./.github/actions/setup-bun
+        if: steps.author.outputs.skip != 'true'
 
       - name: Install opencode
+        if: steps.author.outputs.skip != 'true'
         run: curl -fsSL https://opencode.ai/install | bash
 
       - name: Check duplicates and compliance
+        if: steps.author.outputs.skip != 'true'
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -38,6 +57,7 @@ jobs:
           opencode run -m opencode/claude-sonnet-4-6 "A new issue has been created:
 
           Issue number: ${{ github.event.issue.number }}
+          Issue author association: ${{ github.event.issue.author_association }}
 
           Lookup this issue with gh issue view ${{ github.event.issue.number }}.
 
@@ -48,6 +68,8 @@ jobs:
           TASK 1: CONTRIBUTING GUIDELINES COMPLIANCE CHECK
 
           Check whether the issue follows our contributing guidelines and issue templates.
+
+          If the issue author association is OWNER or MEMBER, skip this compliance check. Do not add the needs:compliance label for organization-owned issues.
 
           This project has three issue templates that every issue MUST use one of:
 
@@ -83,7 +105,7 @@ jobs:
 
           Based on your findings, post a SINGLE comment on issue #${{ github.event.issue.number }}. Build the comment as follows:
 
-          If the issue is NOT compliant, start the comment with:
+          If the issue is NOT compliant and the author association is not OWNER or MEMBER, start the comment with:
           <!-- issue-compliance -->
           Then explain what needs to be fixed and that they have 2 hours to edit the issue before it is automatically closed. Also add the label needs:compliance to the issue using: gh issue edit ${{ github.event.issue.number }} --add-label needs:compliance
 
@@ -129,12 +151,31 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Check exempt issue author
+        id: author
+        run: |
+          LOGIN="${{ github.event.issue.user.login }}"
+          ASSOCIATION="${{ github.event.issue.author_association }}"
+
+          if [ "$LOGIN" = "opencode-agent[bot]" ] ||
+             [ "$ASSOCIATION" = "OWNER" ] ||
+             [ "$ASSOCIATION" = "MEMBER" ] ||
+             grep -qxiF "$LOGIN" .github/TEAM_MEMBERS; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Skipping issue automation for exempt author: $LOGIN ($ASSOCIATION)"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: ./.github/actions/setup-bun
+        if: steps.author.outputs.skip != 'true'
 
       - name: Install opencode
+        if: steps.author.outputs.skip != 'true'
         run: curl -fsSL https://opencode.ai/install | bash
 
       - name: Recheck compliance
+        if: steps.author.outputs.skip != 'true'
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -148,8 +189,11 @@ jobs:
             }
         run: |
           opencode run -m opencode/claude-sonnet-4-6 "Issue #${{ github.event.issue.number }} was previously flagged as non-compliant and has been edited.
+          Issue author association: ${{ github.event.issue.author_association }}
 
           Lookup this issue with gh issue view ${{ github.event.issue.number }}.
+
+          If the issue author association is OWNER or MEMBER, remove the needs:compliance label if present, delete the previous compliance comment if present, and do not post a new comment.
 
           Re-check whether the issue now follows our contributing guidelines and issue templates.
 

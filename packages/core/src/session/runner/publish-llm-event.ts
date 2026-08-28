@@ -10,6 +10,7 @@ type Input = {
   readonly sessionID: SessionSchema.ID
   readonly agent: string
   readonly model: ModelV2.Ref
+  readonly snapshot?: string
 }
 
 const safe = (value: number | undefined) => Math.max(0, Number.isFinite(value) ? (value ?? 0) : 0)
@@ -65,15 +66,20 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
   >()
   const timestamp = DateTime.now
   let assistantMessageID: SessionMessage.ID | undefined
+  let assistantActive = false
+  let assistantFailed = false
   let providerFailed = false
+  let stepSettlement: { readonly finish: string; readonly tokens: ReturnType<typeof tokens> } | undefined
 
   const startAssistant = Effect.fnUntraced(function* () {
     if (assistantMessageID !== undefined) return assistantMessageID
     assistantMessageID = SessionMessage.ID.create()
+    assistantActive = true
     yield* events.publish(SessionEvent.Step.Started, {
       ...input,
       assistantMessageID,
       timestamp: yield* timestamp,
+      snapshot: input.snapshot,
     })
     return assistantMessageID
   })
@@ -188,6 +194,20 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
 
   const flush = Effect.fn("SessionRunner.flush")(function* () {
     yield* flushFragments()
+  })
+
+  const failAssistant = Effect.fnUntraced(function* (message: string) {
+    if (assistantFailed) return
+    yield* flush()
+    const assistantMessageID = yield* startAssistant()
+    assistantActive = false
+    assistantFailed = true
+    yield* events.publish(SessionEvent.Step.Failed, {
+      sessionID: input.sessionID,
+      timestamp: yield* timestamp,
+      assistantMessageID,
+      error: { type: "unknown", message },
+    })
   })
 
   const failUnsettledTools = Effect.fn("SessionRunner.failUnsettledTools")(function* (
@@ -375,26 +395,15 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
       }
       case "step-finish":
         yield* flush()
-        yield* events.publish(SessionEvent.Step.Ended, {
-          sessionID: input.sessionID,
-          timestamp: yield* timestamp,
-          assistantMessageID: yield* startAssistant(),
-          finish: event.reason,
-          cost: 0,
-          tokens: tokens(event.usage),
-        })
+        assistantActive = false
+        if (stepSettlement) return yield* Effect.die("Duplicate step finish")
+        stepSettlement = { finish: event.reason, tokens: tokens(event.usage) }
         return
       case "finish":
         return
       case "provider-error":
         providerFailed = true
-        yield* flush()
-        yield* events.publish(SessionEvent.Step.Failed, {
-          sessionID: input.sessionID,
-          timestamp: yield* timestamp,
-          assistantMessageID: yield* startAssistant(),
-          error: { type: "unknown", message: event.message },
-        })
+        yield* failAssistant(event.message)
         return
     }
   })
@@ -402,9 +411,12 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
   return {
     publish,
     flush,
+    failAssistant,
     failUnsettledTools,
+    hasActiveAssistant: () => assistantActive,
     hasAssistantStarted: () => assistantMessageID !== undefined,
     hasProviderError: () => providerFailed,
+    stepSettlement: () => stepSettlement,
     startAssistant,
     assistantMessageID: assistantMessageIDForTool,
   }

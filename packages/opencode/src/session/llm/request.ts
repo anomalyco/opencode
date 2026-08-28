@@ -146,6 +146,16 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
   )
 
   const tools = resolveTools(input)
+  // Codex parity: OpenAI Responses-family providers hardcode `strict: false`
+  // on every function tool so MCP-sourced and dynamic schemas that don't
+  // satisfy OpenAI's structured-outputs constraints still register.
+  if (
+    input.model.api.npm === "@ai-sdk/openai" ||
+    input.model.api.npm === "@ai-sdk/azure" ||
+    input.model.api.npm === "@ai-sdk/amazon-bedrock/mantle"
+  ) {
+    for (const key of Object.keys(tools)) tools[key] = { ...tools[key], strict: false }
+  }
   if (
     input.model.providerID.includes("github-copilot") &&
     Object.keys(tools).length === 0 &&
@@ -186,9 +196,9 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
         : {
             "x-session-affinity": input.sessionID,
             "X-Session-Id": input.sessionID,
-            ...(input.parentSessionID ? { "x-parent-session-id": input.parentSessionID } : {}),
             "User-Agent": USER_AGENT,
           }),
+      ...(input.parentSessionID ? { "x-parent-session-id": input.parentSessionID } : {}),
       ...input.model.headers,
       ...headers,
     },

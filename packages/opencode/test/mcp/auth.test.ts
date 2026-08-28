@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test"
 import { setTimeout as sleep } from "node:timers/promises"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Effect, Layer } from "effect"
 import { FSUtil } from "@opencode-ai/core/fs-util"
-import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 import { McpAuth } from "../../src/mcp/auth"
 
 function authFile() {
@@ -10,7 +10,7 @@ function authFile() {
   let activeWrites = 0
   let sawOverlap = false
 
-  const layer = Layer.effect(
+  const fsLayer = Layer.effect(
     FSUtil.Service,
     Effect.gen(function* () {
       const fs = yield* FSUtil.Service
@@ -41,14 +41,14 @@ function authFile() {
             : fs.writeJson(file, value, mode),
       })
     }),
-  ).pipe(Layer.provide(FSUtil.defaultLayer))
+  ).pipe(Layer.provide(AppNodeBuilder.build(FSUtil.node)))
 
-  return { layer, raw: () => raw }
+  return { fsLayer, raw: () => raw }
 }
 
-function authService(layer: Layer.Layer<FSUtil.Service>) {
+function authService(fsLayer: Layer.Layer<FSUtil.Service>) {
   return McpAuth.Service.use((auth) => Effect.succeed(auth)).pipe(
-    Effect.provide(McpAuth.layer.pipe(Layer.provide(EffectFlock.defaultLayer), Layer.provide(layer))),
+    Effect.provide(AppNodeBuilder.build(McpAuth.node, [[FSUtil.node, fsLayer]])),
   )
 }
 
@@ -57,8 +57,8 @@ test("serializes concurrent auth file updates across service instances", async (
 
   await Effect.runPromise(
     Effect.gen(function* () {
-      const first = yield* authService(file.layer)
-      const second = yield* authService(file.layer)
+      const first = yield* authService(file.fsLayer)
+      const second = yield* authService(file.fsLayer)
 
       yield* Effect.all(
         [

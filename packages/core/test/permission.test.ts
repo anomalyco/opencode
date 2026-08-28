@@ -1,7 +1,9 @@
 import { describe, expect } from "bun:test"
-import { Deferred, Effect, Fiber, Layer } from "effect"
+import { Cause, Deferred, Effect, Fiber, Layer } from "effect"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { Database } from "@opencode-ai/core/database/database"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
 import { Location } from "@opencode-ai/core/location"
 import { PermissionV2 } from "@opencode-ai/core/permission"
@@ -12,37 +14,28 @@ import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionTable } from "@opencode-ai/core/session/sql"
-import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { eq } from "drizzle-orm"
 import { location } from "./fixture/location"
 import { testEffect } from "./lib/effect"
 
-const database = Database.layerFromPath(":memory:")
 const current = Layer.succeed(
   Location.Service,
   Location.Service.of(location({ directory: AbsolutePath.make("/project") })),
 )
-const events = EventV2.layer.pipe(Layer.provide(database))
-const store = SessionStore.layer.pipe(Layer.provide(database))
-const sessions = SessionV2.layer.pipe(
-  Layer.provide(events),
-  Layer.provide(database),
-  Layer.provide(store),
-  Layer.provide(Project.defaultLayer),
-  Layer.provide(SessionExecution.noopLayer),
+const it = testEffect(
+  AppNodeBuilder.build(
+    LayerNode.group([
+      Database.node,
+      EventV2.node,
+      SessionStore.node,
+      PermissionSaved.node,
+      AgentV2.node,
+      PermissionV2.node,
+    ]),
+    [[Location.node, current]],
+  ),
 )
-const saved = PermissionSaved.layer.pipe(Layer.provide(database))
-const layer = PermissionV2.locationLayer.pipe(
-  Layer.provideMerge(database),
-  Layer.provideMerge(store),
-  Layer.provideMerge(events),
-  Layer.provideMerge(current),
-  Layer.provideMerge(sessions),
-  Layer.provideMerge(SessionExecution.noopLayer),
-  Layer.provideMerge(saved),
-)
-const it = testEffect(layer)
 
 function setup(rules: PermissionV2.Ruleset = []) {
   return Effect.gen(function* () {
@@ -74,8 +67,7 @@ function setup(rules: PermissionV2.Ruleset = []) {
 function setRules(rules: PermissionV2.Ruleset) {
   return Effect.gen(function* () {
     const agents = yield* AgentV2.Service
-    const update = yield* agents.transform()
-    yield* update((editor) =>
+    yield* agents.transform((editor) =>
       editor.update(AgentV2.ID.make("test"), (agent) => {
         agent.permissions = [...rules]
       }),
@@ -130,7 +122,7 @@ describe("PermissionV2", () => {
     Effect.gen(function* () {
       yield* setup([{ action: "read", resource: "*", effect: "allow" }])
       const agents = yield* AgentV2.Service
-      yield* agents.update((editor) =>
+      yield* agents.transform((editor) =>
         editor.update(AgentV2.ID.make("reviewer"), (agent) => {
           agent.permissions.push({ action: "read", resource: "*", effect: "deny" })
         }),
@@ -139,7 +131,7 @@ describe("PermissionV2", () => {
 
       expect(yield* service.ask(assertion())).toMatchObject({ effect: "allow" })
       expect(yield* service.ask(assertion({ agent: AgentV2.ID.make("reviewer") }))).toMatchObject({ effect: "deny" })
-      yield* agents.update((editor) =>
+      yield* agents.transform((editor) =>
         editor.update(AgentV2.ID.make("reviewer"), (agent) => {
           agent.permissions = []
         }),
@@ -155,8 +147,8 @@ describe("PermissionV2", () => {
       const service = yield* PermissionV2.Service
       yield* service.assert(assertion())
       yield* setRules([{ action: "read", resource: "*", effect: "deny" }])
-      const denied = yield* service.assert(assertion()).pipe(Effect.flip)
-      expect(denied).toBeInstanceOf(PermissionV2.DeniedError)
+      const blocked = yield* service.assert(assertion()).pipe(Effect.flip)
+      expect(blocked).toBeInstanceOf(PermissionV2.BlockedError)
       expect(yield* service.list()).toEqual([])
     }),
   )
@@ -187,8 +179,7 @@ describe("PermissionV2", () => {
         .run()
         .pipe(Effect.orDie)
       const agents = yield* AgentV2.Service
-      const update = yield* agents.transform()
-      yield* update((editor) =>
+      yield* agents.transform((editor) =>
         editor.update(AgentV2.ID.make("build"), (agent) => {
           agent.permissions = [{ action: "todowrite", resource: "*", effect: "allow" }]
         }),
@@ -214,7 +205,7 @@ describe("PermissionV2", () => {
         .run()
         .pipe(Effect.orDie)
       const agents = yield* AgentV2.Service
-      yield* agents.update((editor) => {
+      yield* agents.transform((editor) => {
         editor.remove(AgentV2.ID.make("test"))
         editor.remove(AgentV2.ID.make("build"))
       })
@@ -271,6 +262,24 @@ describe("PermissionV2", () => {
       yield* Fiber.join(fiber)
       expect(yield* service.list()).toEqual([])
       expect(yield* service.get(request.id)).toBeUndefined()
+    }),
+  )
+
+  it.effect("defects when an asked permission is declined", () =>
+    Effect.gen(function* () {
+      yield* setup()
+      const { service, fiber, request } = yield* waitForRequest()
+      yield* service.reply({ requestID: request.id, reply: "reject" })
+      const exit = yield* Fiber.await(fiber)
+
+      expect(exit._tag).toBe("Failure")
+      if (exit._tag === "Failure")
+        expect(
+          exit.cause.reasons.some(
+            (reason) => Cause.isDieReason(reason) && reason.defect instanceof PermissionV2.DeclinedError,
+          ),
+        ).toBe(true)
+      expect(yield* service.list()).toEqual([])
     }),
   )
 

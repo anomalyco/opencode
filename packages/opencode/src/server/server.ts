@@ -1,6 +1,7 @@
 import "./init-projectors"
 
 import { NodeHttpServer } from "@effect/platform-node"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { ConfigProvider, Context, Effect, Exit, Layer, Scope } from "effect"
 import { HttpRouter, HttpServer } from "effect/unstable/http"
 import { OpenApi } from "effect/unstable/httpapi"
@@ -10,7 +11,7 @@ import { HttpApiApp } from "./routes/instance/httpapi/server"
 import { disposeMiddleware } from "./routes/instance/httpapi/lifecycle"
 import { WebSocketTracker } from "./routes/instance/httpapi/websocket-tracker"
 import { PublicApi } from "./routes/instance/httpapi/public"
-import type { CorsOptions } from "./cors"
+import type { CorsOptions } from "@opencode-ai/server/cors"
 import { lazy } from "@/util/lazy"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
@@ -67,7 +68,7 @@ export async function openapi() {
   return OpenApi.fromApi(PublicApi)
 }
 
-export let url: URL
+export let url: URL | undefined
 
 export async function listen(opts: ListenOptions): Promise<Listener> {
   const listener = await Effect.runPromise(listenEffect(opts))
@@ -84,15 +85,14 @@ const listenEffect: (opts: ListenOptions) => Effect.Effect<EffectListener, unkno
     const state = yield* startWithPortFallback(opts)
     const address = yield* tcpAddress(state)
     const listenerUrl = makeURL(opts.hostname, address.port)
-    url = listenerUrl
-
     const unpublishMdns = yield* setupMdns(opts, address.port, state.scope)
+    url = listenerUrl
 
     return {
       hostname: opts.hostname,
       port: address.port,
       url: listenerUrl,
-      stop: yield* makeStop(state, unpublishMdns),
+      stop: yield* makeStop(state, unpublishMdns, listenerUrl),
     }
   },
 )
@@ -103,7 +103,7 @@ function listenerLayer(opts: ListenOptions, port: number) {
     disableLogger: true,
     disableListenLog: true,
   }).pipe(
-    Layer.provideMerge(WebSocketTracker.layer),
+    Layer.provideMerge(AppNodeBuilder.build(WebSocketTracker.node)),
     Layer.provideMerge(serverLayer({ port, hostname: opts.hostname })),
     // Install a fresh `ConfigProvider` per listener so `Config.string(...)`
     // reads reflect the current `process.env`. Effect's default
@@ -169,10 +169,19 @@ function setupMdns(opts: ListenOptions, port: number, scope: Scope.Scope) {
   })
 }
 
-function makeStop(state: ListenerState, unpublishMdns: Effect.Effect<void>) {
+function makeStop(state: ListenerState, unpublishMdns: Effect.Effect<void>, listenerUrl: URL) {
   return Effect.gen(function* () {
     const forceCloseOnce = yield* Effect.cached(forceClose(state).pipe(Effect.ignore))
-    const closeScopeOnce = yield* Effect.cached(Scope.close(state.scope, Exit.void).pipe(Effect.ignore))
+    const closeScopeOnce = yield* Effect.cached(
+      Scope.close(state.scope, Exit.void).pipe(
+        Effect.ignore,
+        Effect.ensuring(
+          Effect.sync(() => {
+            if (url === listenerUrl) url = undefined
+          }),
+        ),
+      ),
+    )
 
     return (close?: boolean) =>
       Effect.gen(function* () {

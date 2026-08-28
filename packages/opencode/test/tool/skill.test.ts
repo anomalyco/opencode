@@ -1,10 +1,10 @@
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { Cause, Effect, Exit, Layer } from "effect"
 import { afterEach, describe, expect } from "bun:test"
 import path from "path"
-import { pathToFileURL } from "url"
 import type { Permission } from "../../src/permission"
 import type { Tool } from "@/tool/tool"
 import { SkillTool } from "../../src/tool/skill"
@@ -27,9 +27,7 @@ afterEach(async () => {
   await disposeAllInstances()
 })
 
-const node = CrossSpawnSpawner.defaultLayer
-
-const it = testEffect(Layer.mergeAll(ToolRegistry.defaultLayer, node).pipe(Layer.provide(Ripgrep.defaultLayer)))
+const it = testEffect(LayerNode.compile(LayerNode.group([ToolRegistry.node, CrossSpawnSpawner.node, Ripgrep.node])))
 
 describe("tool.skill", () => {
   it.instance("execute returns skill content block with files", () =>
@@ -90,7 +88,7 @@ Use this skill.
       expect(requests[0].always).toContain("tool-skill")
       expect(result.metadata.dir).toBe(skill)
       expect(result.output).toContain(`<skill_content name="tool-skill">`)
-      expect(result.output).toContain(`Base directory for this skill: ${pathToFileURL(skill).href}`)
+      expect(result.output).toContain(`Base directory for this skill: ${skill}`)
       expect(result.output).toContain(`<file>${file}</file>`)
     }),
   )

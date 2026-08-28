@@ -1448,6 +1448,7 @@ describe("session.message-v2.fromError", () => {
       "prompt is too long: 213462 tokens > 200000 maximum",
       "Your input exceeds the context window of this model",
       "The input token count (1196265) exceeds the maximum number of tokens allowed (1048575)",
+      "tokens in request more than max tokens allowed",
       "Please reduce the length of the messages or completion",
       "400 status code (no body)",
       "413 status code (no body)",
@@ -1610,6 +1611,44 @@ describe("session.message-v2.latest", () => {
     ] as SessionV1.Part[],
   }
 
+  test("selects latest messages by creation time when IDs are nonmonotonic", () => {
+    const oldUser = { ...userInfo("msg_z_user"), time: { created: 100 } }
+    const newUser = { ...userInfo("msg_a_user"), time: { created: 200 } }
+    const oldAssistant = {
+      ...assistantInfo("msg_z_assistant", oldUser.id),
+      time: { created: 300 },
+      finish: "stop",
+    } as SessionV1.Assistant
+    const newAssistant = {
+      ...assistantInfo("msg_a_assistant", newUser.id),
+      time: { created: 400 },
+      finish: "stop",
+    } as SessionV1.Assistant
+
+    const state = MessageV2.latest([
+      { info: newAssistant, parts: [] },
+      { info: oldUser, parts: [] },
+      { info: oldAssistant, parts: [] },
+      { info: newUser, parts: [] },
+    ])
+
+    expect(state.user?.id).toBe(newUser.id)
+    expect(state.assistant?.id).toBe(newAssistant.id)
+    expect(state.finished?.id).toBe(newAssistant.id)
+  })
+
+  test("uses ID as a deterministic tie-breaker for equal creation times", () => {
+    const lower = { ...userInfo("msg_a_user"), time: { created: 100 } }
+    const higher = { ...userInfo("msg_z_user"), time: { created: 100 } }
+
+    const state = MessageV2.latest([
+      { info: higher, parts: [] },
+      { info: lower, parts: [] },
+    ])
+
+    expect(state.user?.id).toBe(higher.id)
+  })
+
   // Regression for double auto-compaction. The reorder in filterCompacted
   // (#27145) returns [compaction-user, summary, ...tail..., continue-user],
   // so picking lastFinished by array position landed on the pre-compaction
@@ -1657,5 +1696,34 @@ describe("session.message-v2.latest", () => {
     expect(state.user?.id).toBe(NEW_COMPACTION_USER)
     expect(state.tasks).toHaveLength(1)
     expect(state.tasks[0]).toMatchObject({ type: "compaction", auto: true })
+  })
+
+  test("selects compaction and subtask work after the finished boundary by creation time", () => {
+    const finished = {
+      ...assistantInfo("msg_z_finished", "msg_parent"),
+      time: { created: 200 },
+      finish: "stop",
+    } as SessionV1.Assistant
+    const oldTask: SessionV1.WithParts = {
+      info: { ...userInfo("msg_z_old"), time: { created: 100 } },
+      parts: [{ ...basePart("msg_z_old", "old"), type: "compaction", auto: true }] as SessionV1.Part[],
+    }
+    const newTask: SessionV1.WithParts = {
+      info: { ...userInfo("msg_a_new"), time: { created: 300 } },
+      parts: [
+        {
+          ...basePart("msg_a_new", "new"),
+          type: "subtask",
+          prompt: "inspect",
+          description: "inspect ordering",
+          agent: "general",
+        },
+      ] as SessionV1.Part[],
+    }
+
+    const state = MessageV2.latest([newTask, { info: finished, parts: [] }, oldTask])
+
+    expect(state.tasks).toHaveLength(1)
+    expect(state.tasks[0]).toMatchObject({ type: "subtask", prompt: "inspect" })
   })
 })

@@ -3,27 +3,30 @@ import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
 import { Effect } from "effect"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Git } from "@opencode-ai/core/git"
-import { AbsolutePath } from "@opencode-ai/core/schema"
+import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
 import { branch, commit, gitRemote } from "./fixture/git"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
-const it = testEffect(Git.defaultLayer)
+const it = testEffect(LayerNode.compile(Git.node))
 
 describe("Git", () => {
   it.live("clones a remote and reads checkout metadata", () =>
     withRemote((fixture) =>
       Effect.gen(function* () {
         const git = yield* Git.Service
-        const target = path.join(fixture.root, "checkout")
-        const result = yield* git.clone({ remote: fixture.remote, target })
+        const target = AbsolutePath.make(path.join(fixture.root, "checkout"))
+        const repository = yield* git.repo.clone({ remote: fixture.remote, directory: target })
 
-        expect(result.exitCode).toBe(0)
-        expect(yield* git.origin(target)).toBe(fixture.remote)
-        expect(yield* git.head(target)).toBeString()
-        expect(yield* git.branch(target)).toBe("main")
-        expect(yield* git.remoteHead(target)).toBe("origin/main")
+        expect(yield* git.remote.get(repository)).toBe(fixture.remote)
+        expect(yield* git.history.head(repository)).toBeString()
+        expect(yield* git.history.branch(repository)).toBe("main")
+        expect(yield* git.history.defaultRemoteBranch(repository)).toBe("main")
+        expect(repository.worktree).toBe(target)
+        expect(repository.gitDirectory).toBe(AbsolutePath.make(path.join(target, ".git")))
+        expect(repository.commonDirectory).toBe(repository.gitDirectory)
         expect(yield* read(path.join(target, "README.md"))).toBe("one\n")
       }),
     ),
@@ -33,19 +36,19 @@ describe("Git", () => {
     withRemote((fixture) =>
       Effect.gen(function* () {
         const git = yield* Git.Service
-        const target = path.join(fixture.root, "checkout")
-        yield* git.clone({ remote: fixture.remote, target })
+        const target = AbsolutePath.make(path.join(fixture.root, "checkout"))
+        const repository = yield* git.repo.clone({ remote: fixture.remote, directory: target })
 
         yield* Effect.promise(() => commit(fixture.source, "two\n", "second"))
-        expect((yield* git.fetch(target)).exitCode).toBe(0)
-        expect((yield* git.reset(target, "origin/main")).exitCode).toBe(0)
+        yield* git.sync.fetchRemotes(repository)
+        yield* git.sync.resetHard(repository, "origin/main")
         expect(yield* read(path.join(target, "README.md"))).toBe("two\n")
 
         yield* Effect.promise(() => branch(fixture.source, "feature/docs", "feature\n"))
-        expect((yield* git.fetchBranch(target, "feature/docs")).exitCode).toBe(0)
-        expect((yield* git.checkout(target, "feature/docs")).exitCode).toBe(0)
-        expect((yield* git.reset(target, "origin/feature/docs")).exitCode).toBe(0)
-        expect(yield* git.branch(target)).toBe("feature/docs")
+        yield* git.sync.fetchBranch(repository, { branch: "feature/docs" })
+        yield* git.sync.checkoutRemoteBranch(repository, { branch: "feature/docs" })
+        yield* git.sync.resetHard(repository, "origin/feature/docs")
+        expect(yield* git.history.branch(repository)).toBe("feature/docs")
         expect(yield* read(path.join(target, "README.md"))).toBe("feature\n")
       }),
     ),
@@ -90,17 +93,72 @@ describe("Git worktrees", () => {
         Effect.promise(() => fs.rm(worktree, { recursive: true, force: true })).pipe(Effect.ignore),
       )
       const git = yield* Git.Service
-      const repo = { directory, store: AbsolutePath.make(path.join(directory, ".git")) }
+      const repo = yield* git.repo.discover(directory)
+      if (!repo) throw new Error("Repository not found")
 
-      yield* git.worktreeCreate({ repo, directory: worktree })
+      yield* git.worktree.create({ repository: repo, directory: worktree })
 
-      expect((yield* git.worktreeList(repo)).some((entry) => entry.endsWith("-git-worktree"))).toBe(true)
-      const linked = yield* git.find(worktree)
-      expect(linked?.directory).toBe(AbsolutePath.make(yield* Effect.promise(() => fs.realpath(worktree))))
-      expect(linked?.store).toBe(repo.store)
+      expect((yield* git.worktree.list(repo)).some((entry) => entry.directory.endsWith("-git-worktree"))).toBe(true)
+      const linked = yield* git.repo.discover(worktree)
+      expect(linked?.worktree).toBe(AbsolutePath.make(yield* Effect.promise(() => fs.realpath(worktree))))
+      expect(linked?.commonDirectory).toBe(repo.commonDirectory)
+      expect(linked?.gitDirectory).not.toBe(repo.gitDirectory)
       if (!linked) throw new Error("Linked worktree not found")
-      yield* git.worktreeRemove({ repo: linked, directory: worktree, force: false })
-      expect((yield* git.worktreeList(repo)).some((entry) => entry.endsWith("-git-worktree"))).toBe(false)
+      yield* git.worktree.remove({ repository: linked, directory: worktree, force: false })
+      expect((yield* git.worktree.list(repo)).some((entry) => entry.directory.endsWith("-git-worktree"))).toBe(false)
+    }),
+  )
+})
+
+describe("Git trees", () => {
+  it.live("captures, compares, previews, and restores scoped trees", () =>
+    Effect.gen(function* () {
+      const root = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+      )
+      yield* Effect.promise(async () => {
+        await initRepo(root.path)
+        await fs.mkdir(path.join(root.path, "scope"))
+        await fs.writeFile(path.join(root.path, "scope", "tracked.txt"), "one\n")
+        await fs.writeFile(path.join(root.path, "outside.txt"), "outside\n")
+        await $`git add .`.cwd(root.path).quiet()
+        await $`git commit -m initial`.cwd(root.path).quiet()
+      })
+      const git = yield* Git.Service
+      const source = yield* git.repo.discover(AbsolutePath.make(root.path))
+      if (!source) throw new Error("Repository not found")
+      const storage = AbsolutePath.make(path.join(root.path, ".snapshot"))
+      const repository = yield* git.repo.create({ worktree: source.worktree, gitDirectory: storage, seed: source })
+      yield* git.index.refresh({ repository, scope: RelativePath.make("scope") })
+      const before = yield* git.tree.write(repository)
+
+      yield* Effect.promise(async () => {
+        await fs.writeFile(path.join(root.path, "scope", "tracked.txt"), "two\n")
+        await fs.writeFile(path.join(root.path, "scope", "added.txt"), "added\n")
+        await fs.writeFile(path.join(root.path, "outside.txt"), "changed outside\n")
+      })
+      yield* git.index.refresh({ repository, scope: RelativePath.make("scope") })
+      const after = yield* git.tree.write(repository)
+
+      expect(yield* git.tree.files({ repository, from: before, to: after })).toEqual([
+        RelativePath.make("scope/added.txt"),
+        RelativePath.make("scope/tracked.txt"),
+      ])
+      const diffs = yield* git.tree.diff({ repository, from: before, to: after, context: 1 })
+      expect(diffs.map((item) => [item.path, item.status])).toEqual([
+        [RelativePath.make("scope/added.txt"), "added"],
+        [RelativePath.make("scope/tracked.txt"), "modified"],
+      ])
+
+      const files = new Map([[RelativePath.make("scope/tracked.txt"), before]])
+      const preview = yield* git.tree.preview({ repository, current: after, files, context: 1 })
+      expect(preview).toHaveLength(1)
+      expect(preview[0]?.path).toBe(RelativePath.make("scope/tracked.txt"))
+      yield* git.tree.restore({ repository, files })
+      expect(yield* read(path.join(root.path, "scope", "tracked.txt"))).toBe("one\n")
+      expect(yield* read(path.join(root.path, "scope", "added.txt"))).toBe("added\n")
+      expect(yield* read(path.join(root.path, "outside.txt"))).toBe("changed outside\n")
     }),
   )
 })

@@ -1,6 +1,7 @@
 import type { Hooks, PluginInput } from "@opencode-ai/plugin"
 import type { Model } from "@opencode-ai/sdk/v2"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import { OauthCallbackPage } from "@opencode-ai/core/oauth/page"
 import { createServer } from "http"
 import open from "open"
 
@@ -58,65 +59,6 @@ function buildAuthorizeUrl(state: string): string {
   return `${DO_AUTHORIZE_URL}?${params.toString()}`
 }
 
-const HTML_CALLBACK = `<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>OpenCode - DigitalOcean Authorization</title>
-    <style>
-      body { font-family: system-ui, -apple-system, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #0b1220; color: #e8eef9; }
-      .container { text-align: center; padding: 2rem; max-width: 32rem; }
-      h1 { color: #e8eef9; margin-bottom: 1rem; }
-      p { color: #9aa9c0; }
-      .error { color: #ff917b; font-family: monospace; margin-top: 1rem; padding: 1rem; background: #3c140d; border-radius: 0.5rem; }
-    </style>
-  </head>
-  <body>
-    <div class="container">
-      <h1 id="title">Finishing sign-in...</h1>
-      <p id="msg">You can close this window once it says you're signed in.</p>
-    </div>
-    <script>
-      (async function() {
-        const params = new URLSearchParams((window.location.hash || "").slice(1))
-        const search = new URLSearchParams(window.location.search)
-        const error = params.get("error") || search.get("error")
-        const errorDescription = params.get("error_description") || search.get("error_description")
-        const titleEl = document.getElementById("title")
-        const msgEl = document.getElementById("msg")
-        const tokenUrl = new URL(${JSON.stringify(OAUTH_TOKEN_PATH)}, window.location.origin).href
-        try {
-          const body = error
-            ? { error, error_description: errorDescription || "" }
-            : { access_token: params.get("access_token") || "", expires_in: params.get("expires_in") || "0", state: params.get("state") || "" }
-          const res = await fetch(tokenUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body),
-          })
-          if (!res.ok) {
-            const detail = await res.text().catch(function () { return "" })
-            throw new Error(detail || ("callback failed (" + res.status + ")"))
-          }
-          if (error) {
-            titleEl.textContent = "Authorization Failed"
-            msgEl.textContent = errorDescription || error
-            msgEl.className = "error"
-            return
-          }
-          titleEl.textContent = "Authorization Successful"
-          msgEl.textContent = "You can close this window and return to OpenCode."
-          setTimeout(function () { window.close() }, 2000)
-        } catch (e) {
-          titleEl.textContent = "Authorization Failed"
-          msgEl.textContent = String(e && e.message ? e.message : e)
-          msgEl.className = "error"
-        }
-      })()
-    </script>
-  </body>
-</html>`
-
 async function startOAuthServer(): Promise<void> {
   if (oauthServer) return
   oauthServer = createServer((req, res) => {
@@ -124,7 +66,7 @@ async function startOAuthServer(): Promise<void> {
 
     if (req.method === "GET" && url.pathname === OAUTH_REDIRECT_PATH) {
       res.writeHead(200, { "Content-Type": "text/html" })
-      res.end(HTML_CALLBACK)
+      res.end(OauthCallbackPage.bootstrap({ tokenPath: OAUTH_TOKEN_PATH, provider: "DigitalOcean" }))
       return
     }
 

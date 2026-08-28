@@ -20,7 +20,7 @@ export function createModelTpsLimiter(providers: { id: string; model: string; tp
     )
   const now = Date.now()
   const currInterval = toInterval(new Date(now))
-  const prevInterval = toInterval(new Date(now - 60 * 1000))
+  const prevInterval = toInterval(new Date(now - 60_000))
 
   return {
     check: async () => {

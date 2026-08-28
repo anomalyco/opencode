@@ -2,8 +2,9 @@ import { describe, expect } from "bun:test"
 import { $ } from "bun"
 import path from "path"
 import { eq } from "drizzle-orm"
-import { Effect, Layer } from "effect"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { Effect } from "effect"
 import { Hash } from "@opencode-ai/core/util/hash"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Database } from "@opencode-ai/core/database/database"
@@ -13,7 +14,7 @@ import { Project } from "@/project/project"
 import { tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
-const it = testEffect(Layer.mergeAll(Project.defaultLayer, Database.defaultLayer, CrossSpawnSpawner.defaultLayer))
+const it = testEffect(LayerNode.compile(LayerNode.group([Project.node, Database.node, CrossSpawnSpawner.node])))
 
 function directories(projectID: ProjectV2.ID) {
   return Database.Service.use(({ db }) =>
@@ -26,7 +27,7 @@ function directories(projectID: ProjectV2.ID) {
         Effect.orDie,
         Effect.map((rows) =>
           rows
-            .map((row) => ({ directory: row.directory, type: row.type }))
+            .map((row) => ({ directory: row.directory, strategy: row.strategy ?? undefined }))
             .toSorted((a, b) => a.directory.localeCompare(b.directory)),
         ),
       ),
@@ -41,7 +42,9 @@ describe("Project directory persistence", () => {
 
       const result = yield* project.fromDirectory(tmp)
 
-      expect(yield* directories(result.project.id)).toEqual([{ directory: tmp, type: "main" }])
+      expect(yield* directories(result.project.id)).toEqual([
+        { directory: AbsolutePath.make(tmp), strategy: undefined },
+      ])
     }),
   )
 
@@ -54,7 +57,9 @@ describe("Project directory persistence", () => {
       const next = yield* project.fromDirectory(tmp)
 
       expect(next.project.id).toBe(result.project.id)
-      expect(yield* directories(result.project.id)).toEqual([{ directory: tmp, type: "main" }])
+      expect(yield* directories(result.project.id)).toEqual([
+        { directory: AbsolutePath.make(tmp), strategy: undefined },
+      ])
     }),
   )
 
@@ -73,8 +78,8 @@ describe("Project directory persistence", () => {
 
       expect(yield* directories(main.project.id)).toEqual(
         [
-          { directory: tmp, type: "main" as const },
-          { directory: worktree, type: "git_worktree" as const },
+          { directory: AbsolutePath.make(tmp), strategy: undefined },
+          { directory: AbsolutePath.make(worktree), strategy: undefined },
         ].toSorted((a, b) => a.directory.localeCompare(b.directory)),
       )
     }),
@@ -92,7 +97,9 @@ describe("Project directory persistence", () => {
 
       const result = yield* project.fromDirectory(worktree)
 
-      expect(yield* directories(result.project.id)).toEqual([{ directory: worktree, type: "git_worktree" }])
+      expect(yield* directories(result.project.id)).toEqual([
+        { directory: AbsolutePath.make(worktree), strategy: undefined },
+      ])
     }),
   )
 
@@ -113,8 +120,8 @@ describe("Project directory persistence", () => {
 
       expect(yield* directories(main.project.id)).toEqual(
         [
-          { directory: tmp, type: "main" as const },
-          { directory: clone, type: "root" as const },
+          { directory: AbsolutePath.make(tmp), strategy: undefined },
+          { directory: AbsolutePath.make(clone), strategy: undefined },
         ].toSorted((a, b) => a.directory.localeCompare(b.directory)),
       )
     }),
@@ -134,7 +141,9 @@ describe("Project directory persistence", () => {
 
       const result = yield* project.fromDirectory(worktree)
 
-      expect(yield* directories(result.project.id)).toEqual([{ directory: worktree, type: "git_worktree" }])
+      expect(yield* directories(result.project.id)).toEqual([
+        { directory: AbsolutePath.make(worktree), strategy: undefined },
+      ])
     }),
   )
 
@@ -163,7 +172,31 @@ describe("Project directory persistence", () => {
 
       yield* project.fromDirectory(tmp)
 
-      expect(yield* directories(remoteID)).toEqual([{ directory: tmp, type: "main" }])
+      expect(yield* directories(remoteID)).toEqual([{ directory: AbsolutePath.make(tmp), strategy: undefined }])
+    }),
+  )
+
+  it.live("clears stale directories when the project id changes", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped({ git: true })
+      const project = yield* Project.Service
+      const original = yield* project.fromDirectory(tmp)
+      const stale = AbsolutePath.make(tmp + "-stale-checkout")
+      const { db } = yield* Database.Service
+      yield* db
+        .insert(ProjectDirectoryTable)
+        .values({ project_id: original.project.id, directory: stale })
+        .run()
+        .pipe(Effect.orDie)
+      const remoteID = ProjectV2.ID.make(Hash.fast("git-remote:github.com/project-directory-test/migration"))
+      yield* Effect.promise(() =>
+        $`git remote add origin git@github.com:project-directory-test/migration.git`.cwd(tmp).quiet(),
+      )
+
+      yield* project.fromDirectory(tmp)
+
+      expect(yield* directories(original.project.id)).toEqual([])
+      expect(yield* directories(remoteID)).toEqual([{ directory: AbsolutePath.make(tmp), strategy: undefined }])
     }),
   )
 })

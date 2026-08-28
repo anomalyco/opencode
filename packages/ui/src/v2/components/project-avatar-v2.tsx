@@ -26,26 +26,18 @@ export const PROJECT_AVATAR_VARIANTS = [
 
 export type ProjectAvatarVariant = (typeof PROJECT_AVATAR_VARIANTS)[number]
 
+// "outline" is a neutral, muted style (e.g. recently closed projects) and is not part of the color rotation.
+export type ProjectAvatarStyle = ProjectAvatarVariant | "outline"
+
 export interface ProjectAvatarProps extends ComponentProps<"div"> {
   fallback: string
   src?: string
-  variant?: ProjectAvatarVariant
+  variant?: ProjectAvatarStyle
   unread?: boolean
-  loading?: boolean
 }
 
 export function ProjectAvatar(props: ProjectAvatarProps) {
-  const [split, rest] = splitProps(props, [
-    "fallback",
-    "src",
-    "variant",
-    "unread",
-    "loading",
-    "class",
-    "classList",
-    "style",
-  ])
-  const src = split.src
+  const [split, rest] = splitProps(props, ["fallback", "src", "variant", "unread", "class", "classList", "style"])
   return (
     <div
       {...rest}
@@ -60,14 +52,10 @@ export function ProjectAvatar(props: ProjectAvatarProps) {
       <div
         data-slot="project-avatar-surface"
         data-variant={split.variant ?? "gray"}
-        data-has-image={src ? "" : undefined}
-        data-loading={split.loading ? "" : undefined}
+        data-has-image={split.src ? "" : undefined}
       >
-        <Show when={src} fallback={first(split.fallback)}>
+        <Show when={split.src} fallback={first(split.fallback)}>
           {(value) => <img src={value()} draggable={false} data-slot="project-avatar-image" />}
-        </Show>
-        <Show when={split.loading}>
-          <span data-slot="project-avatar-loader" aria-hidden="true" />
         </Show>
       </div>
       <Show when={split.unread}>

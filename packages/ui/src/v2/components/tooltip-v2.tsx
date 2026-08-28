@@ -88,8 +88,9 @@ export function TooltipV2(props: TooltipV2Props) {
       <Match when={true}>
         <KobalteTooltip
           gutter={4}
+          openDelay={400}
+          skipDelayDuration={300}
           {...others}
-          openDelay={0}
           closeDelay={0}
           ignoreSafeArea={local.ignoreSafeArea ?? true}
           open={local.forceOpen || state.open}

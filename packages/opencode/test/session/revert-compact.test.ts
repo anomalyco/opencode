@@ -1,28 +1,27 @@
 import { describe, expect } from "bun:test"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { SessionProjector } from "@opencode-ai/core/session/projector"
 import fs from "fs/promises"
 import path from "path"
-import { Effect, Layer } from "effect"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { Effect } from "effect"
 import { Session } from "@/session/session"
 
 import { SessionRevert } from "../../src/session/revert"
 import { MessageV2 } from "../../src/session/message-v2"
 import { Snapshot } from "../../src/snapshot"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
-import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 
-const env = Layer.mergeAll(
-  Session.defaultLayer,
-  SessionRevert.defaultLayer,
-  Snapshot.defaultLayer,
-  CrossSpawnSpawner.defaultLayer,
+const it = testEffect(
+  LayerNode.compile(
+    LayerNode.group([Session.node, SessionRevert.node, Snapshot.node, SessionProjector.node, CrossSpawnSpawner.node]),
+  ),
 )
-
-const it = testEffect(env)
 
 const user = Effect.fn("test.user")(function* (sessionID: SessionID, agent = "default") {
   const session = yield* Session.Service
@@ -33,6 +32,18 @@ const user = Effect.fn("test.user")(function* (sessionID: SessionID, agent = "de
     agent,
     model: { providerID: ProviderV2.ID.make("openai"), modelID: ModelV2.ID.make("gpt-4") },
     time: { created: Date.now() },
+  })
+})
+
+const userAt = Effect.fn("test.userAt")(function* (sessionID: SessionID, id: string, created: number) {
+  const session = yield* Session.Service
+  return yield* session.updateMessage({
+    id: MessageID.make(id),
+    role: "user" as const,
+    sessionID,
+    agent: "default",
+    model: { providerID: ProviderV2.ID.make("openai"), modelID: ModelV2.ID.make("gpt-4") },
+    time: { created },
   })
 })
 
@@ -422,6 +433,39 @@ describe("revert + compact workflow", () => {
           expect(ids).toContain(a1.id)
           expect(ids).not.toContain(u2.id)
           expect(ids).not.toContain(a2.id)
+        }),
+      { git: true },
+    ),
+  )
+
+  it.live(
+    "reverts chronological suffixes on both sides of mixed message ID ordering",
+    provideTmpdirInstance(
+      () =>
+        Effect.gen(function* () {
+          const session = yield* Session.Service
+          const revert = yield* SessionRevert.Service
+          const ids = ["msg_z9-before", "msg_z1-before-wrap", "msg_a0-after-wrap", "msg_a1-after"]
+
+          const run = Effect.fn("test.mixedIDRevert")(function* (target: number) {
+            const info = yield* session.create({})
+            for (const [index, id] of ids.entries()) {
+              const message = yield* userAt(info.id, id, index + 1)
+              yield* text(info.id, message.id, id)
+            }
+
+            const reverted = yield* revert.revert({
+              sessionID: info.id,
+              messageID: MessageID.make(ids[target]!),
+            })
+            yield* revert.cleanup(reverted)
+            const remaining = yield* session.messages({ sessionID: info.id })
+            yield* session.remove(info.id)
+            return remaining.map((msg) => msg.info.time.created)
+          })
+
+          expect(yield* run(1)).toEqual([1])
+          expect(yield* run(2)).toEqual([1, 2])
         }),
       { git: true },
     ),

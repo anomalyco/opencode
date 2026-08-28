@@ -44,7 +44,6 @@ export type ProviderHelper = (input: {
   modifyHeaders: (headers: Headers, apiKey: string, stickyId: string) => void
   modifyBody: (body: Record<string, any>) => Record<string, any>
   createBinaryStreamDecoder: () => ((chunk: Uint8Array) => Uint8Array | undefined) | undefined
-  streamSeparator: string
   createUsageParser: () => {
     parse: (chunk: string) => void
     retrieve: () => any

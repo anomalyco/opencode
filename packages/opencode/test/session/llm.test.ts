@@ -9,13 +9,10 @@ import { InstanceRef } from "../../src/effect/instance-ref"
 import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import z from "zod"
 import { LLM } from "../../src/session/llm"
-import { LLMClient, RequestExecutor, WebSocketExecutor } from "@opencode-ai/llm/route"
-import { Auth } from "@/auth"
-import { Config } from "@/config/config"
+import { LLMClient, RequestExecutor } from "@opencode-ai/llm/route"
 import { Provider } from "@/provider/provider"
 import { ProviderTransform } from "@/provider/transform"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
-import { Plugin } from "@/plugin"
 
 import { testEffect } from "../lib/effect"
 import type { Agent } from "../../src/agent/agent"
@@ -27,6 +24,10 @@ import { LLMAISDK } from "@/session/llm/ai-sdk"
 import { Session as SessionNs } from "@/session/session"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { LayerNodePlatform } from "@opencode-ai/core/effect/app-node-platform"
+import { ProviderError } from "@/provider/error"
 
 type ConfigModel = NonNullable<NonNullable<ConfigV1.Info["provider"]>[string]["models"]>[string]
 
@@ -52,15 +53,13 @@ const openAIConfig = (model: ModelsDev.Provider["models"][string], baseURL: stri
   }
 }
 
-const it = testEffect(Layer.mergeAll(LLM.defaultLayer, Provider.defaultLayer))
+const it = testEffect(AppNodeBuilder.build(LayerNode.group([LLM.node, Provider.node])))
 
 // LLM.stream returns a Stream, not an Effect, so we can't use the serviceUse proxy.
 const drain = (input: LLM.StreamInput) => LLM.Service.use((svc) => svc.stream(input).pipe(Stream.runDrain))
 
-// drainWith builds an isolated runtime so the custom layer fully owns LLM and
-// its transitive deps — `Effect.provide(layer)` over an existing runtime layers
-// the new services on top, but transitive Service overrides (e.g. RequestExecutor)
-// resolved through the outer LLM.defaultLayer leak through.
+// drainWith builds an isolated runtime so custom replacements fully own LLM and
+// its transitive deps.
 const drainWith = (layer: Layer.Layer<LLM.Service>, input: LLM.StreamInput) =>
   Effect.gen(function* () {
     const ctx = yield* InstanceRef
@@ -75,15 +74,16 @@ const drainWith = (layer: Layer.Layer<LLM.Service>, input: LLM.StreamInput) =>
     )
   })
 
-function llmLayerWithExecutor(executor: Layer.Layer<RequestExecutor.Service>, flags: Partial<RuntimeFlags.Info> = {}) {
-  return LLM.layer.pipe(
-    Layer.provide(Auth.defaultLayer),
-    Layer.provide(Config.defaultLayer),
-    Layer.provide(Provider.defaultLayer),
-    Layer.provide(Plugin.defaultLayer),
-    Layer.provide(LLMClient.layer.pipe(Layer.provide(Layer.mergeAll(executor, WebSocketExecutor.layer)))),
-    Layer.provide(RuntimeFlags.layer(flags)),
-  )
+function llmLayerWithExecutor(
+  options: {
+    executor?: Layer.Layer<RequestExecutor.Service>
+    flags?: Partial<RuntimeFlags.Info>
+  } = {},
+) {
+  return AppNodeBuilder.build(LLM.node, [
+    [RuntimeFlags.node, RuntimeFlags.layer(options.flags)],
+    ...(options.executor ? ([[LayerNodePlatform.requestExecutor, options.executor]] as const) : []),
+  ])
 }
 
 describe("session.llm.hasToolCalls", () => {
@@ -754,6 +754,75 @@ function createEventResponse(chunks: unknown[], includeDone = false) {
 
 describe("session.llm.stream", () => {
   const vivgridFixture = { providerID: "vivgrid", modelID: "gemini-3.1-pro-preview" }
+  const opencodeFixture = { providerID: "opencode-test", modelID: vivgridFixture.modelID }
+
+  it.instance(
+    "sends the parent session header for opencode providers",
+    () =>
+      Effect.gen(function* () {
+        const fixture = loadFixture(vivgridFixture.providerID, vivgridFixture.modelID)
+        const request = waitRequest(
+          "/chat/completions",
+          new Response(createChatStream("Hello"), {
+            status: 200,
+            headers: { "Content-Type": "text/event-stream" },
+          }),
+        )
+        const resolved = yield* Provider.use.getModel(
+          ProviderV2.ID.make(opencodeFixture.providerID),
+          ModelV2.ID.make(opencodeFixture.modelID),
+        )
+        const sessionID = SessionID.make("session-child")
+        const parentSessionID = SessionID.make("session-parent")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+        const user = {
+          id: MessageID.make("msg_user-parent-header"),
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: {
+            providerID: ProviderV2.ID.make(opencodeFixture.providerID),
+            modelID: resolved.id,
+          },
+        } satisfies SessionV1.User
+
+        yield* drain({
+          user,
+          sessionID,
+          parentSessionID,
+          model: resolved,
+          agent,
+          system: ["You are a helpful assistant."],
+          messages: [{ role: "user", content: "Hello" }],
+          tools: {},
+        })
+
+        expect((yield* Effect.promise(() => request)).headers.get("x-parent-session-id")).toBe(parentSessionID)
+      }),
+    {
+      config: () => {
+        const fixture = loadFixture(vivgridFixture.providerID, vivgridFixture.modelID)
+        return {
+          enabled_providers: [opencodeFixture.providerID],
+          provider: {
+            [opencodeFixture.providerID]: {
+              name: "OpenCode Test",
+              npm: "@ai-sdk/openai-compatible",
+              models: { [fixture.model.id]: configModel(fixture.model) as ConfigModel },
+              options: { apiKey: "test-key", baseURL: `${state.server!.url.origin}/v1` },
+            },
+          },
+        }
+      },
+    },
+  )
+
   it.instance(
     "sends temperature, tokens, and reasoning options for openai-compatible models",
     () =>
@@ -826,6 +895,255 @@ describe("session.llm.stream", () => {
         enabled_providers: [vivgridFixture.providerID],
         provider: {
           [vivgridFixture.providerID]: {
+            options: { apiKey: "test-key", baseURL: `${state.server!.url.origin}/v1` },
+          },
+        },
+      }),
+    },
+  )
+
+  it.instance(
+    "surfaces network_error finish reasons as retryable stream failures",
+    () =>
+      Effect.gen(function* () {
+        const fixture = loadFixture(vivgridFixture.providerID, vivgridFixture.modelID)
+        const request = waitRequest(
+          "/chat/completions",
+          createEventResponse(
+            [
+              {
+                id: "chatcmpl-network-error",
+                object: "chat.completion.chunk",
+                choices: [{ index: 0, delta: { role: "assistant", content: "" }, finish_reason: "network_error" }],
+              },
+            ],
+            true,
+          ),
+        )
+        const resolved = yield* Provider.use.getModel(
+          ProviderV2.ID.make(vivgridFixture.providerID),
+          ModelV2.ID.make(fixture.model.id),
+        )
+        const sessionID = SessionID.make("session-test-network-error")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+        const user = {
+          id: MessageID.make("msg_user-network-error"),
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: { providerID: ProviderV2.ID.make(vivgridFixture.providerID), modelID: resolved.id },
+        } satisfies SessionV1.User
+
+        const error = yield* drain({
+          user,
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["You are a helpful assistant."],
+          messages: [{ role: "user", content: "Hello" }],
+          tools: {},
+        }).pipe(Effect.flip)
+        yield* Effect.promise(() => request)
+
+        if (!(error instanceof ProviderError.ResponseStreamError)) throw error
+        expect(error.message).toBe("Provider finish_reason: network_error")
+      }),
+    {
+      config: () => ({
+        enabled_providers: [vivgridFixture.providerID],
+        provider: {
+          [vivgridFixture.providerID]: {
+            options: { apiKey: "test-key", baseURL: `${state.server!.url.origin}/v1` },
+          },
+        },
+      }),
+    },
+  )
+
+  const cerebrasFixture = { providerID: "cerebras", modelID: "gpt-oss-120b" }
+  it.instance(
+    "replays Cerebras assistant reasoning using the provider-supported field",
+    () =>
+      Effect.gen(function* () {
+        const fixture = loadFixture(cerebrasFixture.providerID, cerebrasFixture.modelID)
+        const request = waitRequest(
+          "/chat/completions",
+          new Response(createChatStream("Hello"), {
+            status: 200,
+            headers: { "Content-Type": "text/event-stream" },
+          }),
+        )
+
+        const resolved = yield* Provider.use.getModel(
+          ProviderV2.ID.make(cerebrasFixture.providerID),
+          ModelV2.ID.make(fixture.model.id),
+        )
+        const sessionID = SessionID.make("session-test-cerebras-reasoning")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+
+        const user = {
+          id: MessageID.make("msg_user-cerebras-reasoning"),
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: { providerID: ProviderV2.ID.make(cerebrasFixture.providerID), modelID: resolved.id },
+        } satisfies SessionV1.User
+
+        yield* drain({
+          user,
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["You are a helpful assistant."],
+          messages: [
+            { role: "user", content: "Hello" },
+            {
+              role: "assistant",
+              content: [
+                { type: "reasoning", text: "thinking" },
+                { type: "text", text: "Previous answer" },
+              ],
+            },
+            { role: "user", content: "Continue" },
+          ] satisfies ModelMessage[],
+          tools: {},
+        })
+
+        const capture = yield* Effect.promise(() => request)
+        const messages = capture.body.messages as Array<Record<string, unknown>>
+        const assistant = messages.find((msg) => msg.role === "assistant")
+
+        expect(assistant?.reasoning).toBe("thinking")
+        expect(assistant && "reasoning_content" in assistant).toBe(false)
+      }),
+    {
+      config: () => ({
+        enabled_providers: [cerebrasFixture.providerID],
+        provider: {
+          [cerebrasFixture.providerID]: {
+            options: { apiKey: "test-key", baseURL: `${state.server!.url.origin}/v1` },
+          },
+        },
+      }),
+    },
+  )
+
+  const mistralFixture = { providerID: "mistral", modelID: "mistral-small-latest" }
+  it.instance(
+    "replays native Mistral reasoning from chat history",
+    () =>
+      Effect.gen(function* () {
+        const fixture = loadFixture(mistralFixture.providerID, mistralFixture.modelID)
+        const request = waitRequest(
+          "/chat/completions",
+          createEventResponse(
+            [
+              {
+                id: "chatcmpl-mistral",
+                object: "chat.completion.chunk",
+                created: 0,
+                model: fixture.model.id,
+                choices: [{ index: 0, delta: { role: "assistant", content: "Hello" } }],
+              },
+              {
+                id: "chatcmpl-mistral",
+                object: "chat.completion.chunk",
+                created: 0,
+                model: fixture.model.id,
+                choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+              },
+            ],
+            true,
+          ),
+        )
+
+        const resolved = yield* Provider.use.getModel(
+          ProviderV2.ID.make(mistralFixture.providerID),
+          ModelV2.ID.make(fixture.model.id),
+        )
+        const sessionID = SessionID.make("session-test-mistral-reasoning")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+
+        const user = {
+          id: MessageID.make("msg_user-mistral-reasoning"),
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: { providerID: ProviderV2.ID.make(mistralFixture.providerID), modelID: resolved.id },
+        } satisfies SessionV1.User
+
+        const thinking = {
+          type: "thinking",
+          thinking: [
+            { type: "text", text: "thinking" },
+            {
+              type: "tool_reference",
+              tool: "web_search",
+              title: "Example result",
+              url: "https://example.com/tool",
+              favicon: "https://example.com/favicon.ico",
+              description: "Example description",
+            },
+            { type: "reference", reference_ids: [1, "source-2"] },
+          ],
+          closed: true,
+          signature: "sig-123",
+        }
+
+        yield* drain({
+          user,
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["You are a helpful assistant."],
+          messages: [
+            { role: "user", content: "Hello" },
+            {
+              role: "assistant",
+              content: [
+                {
+                  type: "reasoning",
+                  text: "thinking",
+                  providerOptions: { mistral: { thinking } },
+                },
+                { type: "text", text: "Previous answer" },
+              ],
+            },
+            { role: "user", content: "Continue" },
+          ] satisfies ModelMessage[],
+          tools: {},
+        })
+
+        const capture = yield* Effect.promise(() => request)
+        const messages = capture.body.messages as Array<Record<string, unknown>>
+        expect(messages.find((message) => message.role === "assistant")).toEqual({
+          role: "assistant",
+          content: [thinking, { type: "text", text: "Previous answer" }],
+        })
+      }),
+    {
+      config: () => ({
+        enabled_providers: [mistralFixture.providerID],
+        provider: {
+          [mistralFixture.providerID]: {
             options: { apiKey: "test-key", baseURL: `${state.server!.url.origin}/v1` },
           },
         },
@@ -1019,7 +1337,7 @@ describe("session.llm.stream", () => {
         const agent = {
           name: "test",
           mode: "primary",
-          options: {},
+          options: { reasoningMode: "pro" },
           permission: [{ permission: "*", pattern: "*", action: "allow" }],
           temperature: 0.2,
         } satisfies Agent.Info
@@ -1050,6 +1368,7 @@ describe("session.llm.stream", () => {
         expect(body.model).toBe(resolved.api.id)
         expect(body.stream).toBe(true)
         expect((body.reasoning as { effort?: string } | undefined)?.effort).toBe("high")
+        expect((body.reasoning as { mode?: string } | undefined)?.mode).toBe("pro")
 
         const maxTokens = body.max_output_tokens as number | undefined
         expect(maxTokens).toBe(undefined) // match codex cli behavior
@@ -1129,14 +1448,10 @@ describe("session.llm.stream", () => {
         } satisfies Agent.Info
 
         yield* drainWith(
-          LLM.layer.pipe(
-            Layer.provide(Auth.defaultLayer),
-            Layer.provide(Config.defaultLayer),
-            Layer.provide(Provider.defaultLayer),
-            Layer.provide(Plugin.defaultLayer),
-            Layer.provide(failingNativeClient),
-            Layer.provide(RuntimeFlags.layer({ experimentalNativeLlm: false })),
-          ),
+          AppNodeBuilder.build(LLM.node, [
+            [LayerNodePlatform.llmClient, failingNativeClient],
+            [RuntimeFlags.node, RuntimeFlags.layer({ experimentalNativeLlm: false })],
+          ]),
           {
             user: {
               id: MessageID.make("msg_user-native-flag-off"),
@@ -1199,7 +1514,7 @@ describe("session.llm.stream", () => {
           temperature: 0.2,
         } satisfies Agent.Info
 
-        yield* drainWith(llmLayerWithExecutor(RequestExecutor.defaultLayer, { experimentalNativeLlm: true }), {
+        yield* drainWith(llmLayerWithExecutor({ flags: { experimentalNativeLlm: true } }), {
           user: {
             id: MessageID.make("msg_user-native"),
             sessionID,
@@ -1282,7 +1597,7 @@ describe("session.llm.stream", () => {
           permission: [{ permission: "*", pattern: "*", action: "allow" }],
         } satisfies Agent.Info
 
-        yield* drainWith(llmLayerWithExecutor(executor, { experimentalNativeLlm: true }), {
+        yield* drainWith(llmLayerWithExecutor({ executor, flags: { experimentalNativeLlm: true } }), {
           user: {
             id: MessageID.make("msg_user-native-injected-tool"),
             sessionID,
@@ -1314,6 +1629,7 @@ describe("session.llm.stream", () => {
             type: "function",
             name: "lookup",
             description: "Lookup data",
+            strict: false,
             parameters: {
               type: "object",
               properties: { query: { type: "string" } },
@@ -1370,7 +1686,7 @@ describe("session.llm.stream", () => {
           permission: [{ permission: "*", pattern: "*", action: "allow" }],
         } satisfies Agent.Info
 
-        yield* drainWith(llmLayerWithExecutor(RequestExecutor.defaultLayer, { experimentalNativeLlm: true }), {
+        yield* drainWith(llmLayerWithExecutor({ flags: { experimentalNativeLlm: true } }), {
           user: {
             id: MessageID.make("msg_user-native-tool"),
             sessionID,
@@ -1402,6 +1718,7 @@ describe("session.llm.stream", () => {
             type: "function",
             name: "lookup",
             description: "Lookup data",
+            strict: false,
             parameters: {
               type: "object",
               properties: { query: { type: "string" } },

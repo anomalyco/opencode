@@ -21,6 +21,7 @@ const words = [
   "vector",
 ]
 
+const serverKey = "http://127.0.0.1:4096"
 const sourceID = "ses_smoke_source"
 const targetID = "ses_smoke_target"
 const directory = "C:/OpenCode/SmokeProject"
@@ -139,7 +140,7 @@ function toolPart(
       status: "completed",
       input,
       output: lorem(index * 23 + partIndex, outputLength),
-      title: tool === "bash" ? "Verify generated output" : input.filePath || input.path || input.pattern || "completed",
+      title: tool === "bash" ? input.command : input.filePath || input.path || input.pattern || "completed",
       metadata,
       time: { start: 1700000000000 + index * 10_000, end: 1700000000000 + index * 10_000 + 400 },
     },
@@ -200,9 +201,7 @@ function turn(index: number): Message[] {
     ...(index % 8 === 0
       ? [toolPart(index, 8, "apply_patch", { files: [`src/generated/patch-${index}.ts`] }, 620)]
       : []),
-    ...(index % 7 === 0
-      ? [toolPart(index, 4, "bash", { command: "bun typecheck", description: "Verify generated output" }, 620)]
-      : []),
+    ...(index % 7 === 0 ? [toolPart(index, 4, "bash", { command: "bun typecheck" }, 620)] : []),
     ...(index % 10 === 0 ? [toolPart(index, 9, "webfetch", { url: "https://example.com/docs/sample" }, 120)] : []),
     ...(index % 11 === 0 ? [toolPart(index, 10, "websearch", { query: "sample movement notes" }, 240)] : []),
     ...(index % 13 === 0
@@ -242,6 +241,7 @@ function orderedParts(message: Message) {
 
 export const fixture = {
   directory,
+  serverKey,
   project: {
     id: projectID,
     worktree: directory,
@@ -295,6 +295,7 @@ export const fixture = {
         .filter(renderable)
         .map((part) => part.id),
     ),
+    expandedShellPartID: targetMessages.flatMap((message) => message.parts).find((part) => part.tool === "bash")!.id,
   },
 }
 

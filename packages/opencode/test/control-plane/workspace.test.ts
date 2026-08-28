@@ -5,10 +5,10 @@ import Http from "node:http"
 import path from "node:path"
 import { NodeHttpServer } from "@effect/platform-node"
 import { Effect, Exit, Fiber, Layer, Schema } from "effect"
-import { FetchHttpClient, HttpServer, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
+import { HttpServer, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { eq } from "drizzle-orm"
-import { FSUtil } from "@opencode-ai/core/fs-util"
 import { GlobalBus, type GlobalEvent } from "@/bus/global"
+import { Project } from "@/project/project"
 import { Database } from "@opencode-ai/core/database/database"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
@@ -16,6 +16,7 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session as SessionNs } from "@/session/session"
 import { SessionID } from "@/session/schema"
 import { SessionTable } from "@opencode-ai/core/session/sql"
+import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { EventSequenceTable } from "@opencode-ai/core/event/sql"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, provideTmpdirInstance, requireInstance, TestInstance } from "../fixture/fixture"
@@ -27,13 +28,10 @@ import type { Target, WorkspaceAdapter, WorkspaceInfo } from "../../src/control-
 import * as Workspace from "../../src/control-plane/workspace"
 import { InstanceStore } from "@/project/instance-store"
 import { InstanceBootstrap } from "@/project/bootstrap"
-import { Auth } from "@/auth"
-import { SessionPrompt } from "@/session/prompt"
-import { Project } from "@/project/project"
-import { Vcs } from "@/project/vcs"
 import { RuntimeFlags } from "@/effect/runtime-flags"
-import { EventV2Bridge } from "@/event-v2-bridge"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 
 const originalEnv = {
   OPENCODE_AUTH_CONTENT: process.env.OPENCODE_AUTH_CONTENT,
@@ -44,26 +42,27 @@ const originalEnv = {
 }
 
 const workspaceLayer = (experimentalWorkspaces: boolean) =>
-  Workspace.layer.pipe(
-    Layer.provide(Auth.defaultLayer),
-    Layer.provide(SessionNs.defaultLayer),
-    Layer.provide(SessionPrompt.defaultLayer),
-    Layer.provide(Project.defaultLayer),
-    Layer.provide(Vcs.defaultLayer),
-    Layer.provide(Database.defaultLayer),
-    Layer.provide(EventV2Bridge.defaultLayer),
-    Layer.provide(FetchHttpClient.layer),
-    Layer.provide(FSUtil.defaultLayer),
-    Layer.provide(RuntimeFlags.layer({ experimentalWorkspaces })),
-    Layer.provide(Ripgrep.defaultLayer),
-    Layer.provide(InstanceStore.defaultLayer.pipe(Layer.provide(InstanceBootstrap.defaultLayer))),
+  AppNodeBuilder.build(
+    LayerNode.group([
+      Workspace.node,
+      SessionNs.node,
+      SessionProjector.node,
+      Database.node,
+      InstanceStore.node,
+      Ripgrep.node,
+    ]),
+    [
+      [RuntimeFlags.node, RuntimeFlags.layer({ experimentalWorkspaces })],
+      [
+        InstanceStore.bootstrapNode,
+        Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void })),
+      ],
+    ],
   )
 
 const testServerLayer = Layer.mergeAll(
   NodeHttpServer.layer(Http.createServer, { host: "127.0.0.1", port: 0 }),
   workspaceLayer(true),
-  SessionNs.defaultLayer,
-  Database.defaultLayer,
 )
 const it = testEffect(testServerLayer)
 
@@ -134,6 +133,9 @@ const startWorkspaceSyncingWithFlag = (projectID: ProjectV2.ID, experimentalWork
   Effect.runPromise(
     Workspace.use.startWorkspaceSyncing(projectID).pipe(Effect.provide(workspaceLayer(experimentalWorkspaces))),
   )
+
+const listWithFlag = (project: Project.Info, experimentalWorkspaces: boolean) =>
+  Effect.runPromise(Workspace.use.list(project).pipe(Effect.provide(workspaceLayer(experimentalWorkspaces))))
 
 function captureGlobalEvents() {
   const events: GlobalEvent[] = []
@@ -415,6 +417,18 @@ describe("workspace CRUD", () => {
         yield* insertWorkspace(a)
 
         expect(yield* workspace.list(instance.project)).toEqual([a, b])
+      }),
+    { git: true },
+  )
+
+  it.instance(
+    "list is disabled by the experimental workspace flag",
+    () =>
+      Effect.gen(function* () {
+        const instance = yield* requireInstance
+        yield* insertWorkspace(workspaceInfo(instance.project.id, "manual"))
+
+        expect(yield* Effect.promise(() => listWithFlag(instance.project, false))).toEqual([])
       }),
     { git: true },
   )

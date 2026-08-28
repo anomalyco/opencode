@@ -2,8 +2,8 @@ import { QuestionV2 } from "@opencode-ai/core/question"
 import { Effect } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { Api } from "../api"
-import { QuestionNotFoundError } from "../errors"
-import { response } from "../groups/location"
+import { QuestionNotFoundError } from "@opencode-ai/protocol/errors"
+import { response } from "../location"
 
 function missingRequest(id: QuestionV2.ID) {
   return new QuestionNotFoundError({ requestID: id, message: `Question request not found: ${id}` })
@@ -27,6 +27,13 @@ export const QuestionHandler = HttpApiBuilder.group(Api, "server.question", (han
         "question.request.list",
         Effect.fn(function* () {
           return yield* response((yield* QuestionV2.Service).list())
+        }),
+      )
+      .handle(
+        "session.question.list",
+        Effect.fn(function* (ctx) {
+          const requests = yield* (yield* QuestionV2.Service).list()
+          return { data: requests.filter((request) => request.sessionID === ctx.params.sessionID) }
         }),
       )
       .handle(

@@ -42,11 +42,12 @@ const inferenceEventTable = new aws.s3tables.Table(
             { name: "request", type: "string", required: false },
             { name: "client", type: "string", required: false },
             { name: "user_agent", type: "string", required: false },
+            { name: "model", type: "string", required: false },
+            { name: "model_tier", type: "string", required: false },
             { name: "model_variant", type: "string", required: false },
             { name: "source", type: "string", required: false },
             { name: "provider", type: "string", required: false },
             { name: "provider_model", type: "string", required: false },
-            { name: "model", type: "string", required: false },
             { name: "llm_error_code", type: "int", required: false },
             { name: "llm_error_message", type: "string", required: false },
             { name: "error_response", type: "string", required: false },
@@ -56,6 +57,7 @@ const inferenceEventTable = new aws.s3tables.Table(
             { name: "error_cause2", type: "string", required: false },
             { name: "api_key", type: "string", required: false },
             { name: "workspace", type: "string", required: false },
+            { name: "user_id", type: "string", required: false },
             { name: "is_subscription", type: "boolean", required: false },
             { name: "subscription", type: "string", required: false },
             { name: "response_length", type: "long", required: false },
@@ -84,7 +86,7 @@ const inferenceEventTable = new aws.s3tables.Table(
       },
     },
   },
-  { deleteBeforeReplace: $app.stage !== "production" },
+  { deleteBeforeReplace: $app.stage !== "production", ignoreChanges: ["metadata"] },
 )
 
 export const inferenceEvent = new sst.Linkable("InferenceEvent", {
@@ -179,17 +181,31 @@ const statsSyncConfig = new sst.Linkable("StatsSyncConfig", {
   },
 })
 
+const r2SqlAuthToken = new sst.Secret("R2SqlAuthToken")
+const r2Sql = new sst.Linkable("R2Sql", {
+  properties: {
+    accountId: "15d29c8639fd3733b1b5486a2acfd968",
+    bucket: `platform-${$app.stage}-lake`,
+    namespace: "inference",
+    table: "generation",
+  },
+})
+
 export const statSync = new sst.aws.Service("StatsSyncService", {
   cluster: lakeCluster,
   architecture: "arm64",
   cpu: "0.25 vCPU",
-  memory: "0.5 GB",
+  // 0.5 GB caused an OOM crash loop: every restart immediately re-ran the 4 Athena
+  // stats queries (~$5/pass) every ~5 minutes instead of hourly.
+  memory: "2 GB",
   image: {
     context: ".",
     dockerfile: "packages/stats/server/Dockerfile",
   },
   command: ["bun", "src/stat-sync.ts"],
-  link: [database, inferenceEvent, statsSyncConfig],
+  // Keep the legacy Athena link and IAM permissions during the first R2-backed
+  // release so reverting the application code remains a one-deploy rollback.
+  link: [database, inferenceEvent, r2Sql, r2SqlAuthToken, statsSyncConfig],
   permissions: lakeQueryPermissions,
   scaling: {
     min: 1,

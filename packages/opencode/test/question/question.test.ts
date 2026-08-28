@@ -1,4 +1,5 @@
 import { afterEach, expect } from "bun:test"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Cause, Effect, Exit, Fiber, Layer, Queue } from "effect"
 import { Question } from "../../src/question"
 import { InstanceRef } from "../../src/effect/instance-ref"
@@ -10,16 +11,9 @@ import { testEffect } from "../lib/effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { EventV2Bridge } from "../../src/event-v2-bridge"
 
-const it = testEffect(
-  Layer.mergeAll(Question.layer.pipe(Layer.provideMerge(EventV2Bridge.defaultLayer)), CrossSpawnSpawner.defaultLayer),
-)
-const lifecycle = testEffect(
-  Layer.mergeAll(
-    Question.layer.pipe(Layer.provideMerge(EventV2Bridge.defaultLayer)),
-    CrossSpawnSpawner.defaultLayer,
-    testInstanceStoreLayer,
-  ),
-)
+const questionLayer = LayerNode.compile(LayerNode.group([Question.node, EventV2Bridge.node, CrossSpawnSpawner.node]))
+const it = testEffect(questionLayer)
+const lifecycle = testEffect(Layer.mergeAll(questionLayer, testInstanceStoreLayer))
 
 const askEffect = Effect.fn("QuestionTest.ask")(function* (input: {
   sessionID: SessionID

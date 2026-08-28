@@ -380,6 +380,6 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient> = Layer.e
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(FetchHttpClient.layer))
+export const fetchLayer = layer.pipe(Layer.provide(FetchHttpClient.layer))
 
 export * as RequestExecutor from "./executor"

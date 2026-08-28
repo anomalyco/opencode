@@ -1,13 +1,16 @@
 import { test, expect, describe, afterEach, beforeEach, spyOn } from "bun:test"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
-import { Cause, Effect, Exit, Layer, Option } from "effect"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { httpClient } from "@opencode-ai/core/effect/app-node-platform"
+import { Cause, Effect, Exit, Layer, Logger, Option } from "effect"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/unstable/http"
-import { NodeFileSystem, NodePath } from "@effect/platform-node"
 import { Config } from "@/config/config"
 import { ConfigManaged } from "@/config/managed"
 import { ConfigParse } from "../../src/config/parse"
-import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
+import { ConfigV2Compat } from "../../src/config/v2-compat"
+import { snapshot } from "./snapshot"
+import { Npm } from "@opencode-ai/core/npm"
 
 import { InstanceRef } from "../../src/effect/instance-ref"
 import type { InstanceContext } from "../../src/project/instance-context"
@@ -40,13 +43,6 @@ import { ConfigPluginV1 } from "@opencode-ai/core/v1/config/plugin"
 import { AccountTest } from "../fake/account"
 import { AuthTest } from "../fake/auth"
 import { NpmTest } from "../fake/npm"
-
-/** Infra layer that provides FileSystem, Path, ChildProcessSpawner for test fixtures */
-const infra = CrossSpawnSpawner.defaultLayer.pipe(
-  Layer.provideMerge(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
-)
-
-const testFlock = EffectFlock.defaultLayer
 
 const unexpectedHttp = HttpClient.make((request) =>
   Effect.die(`unexpected http request: ${request.method} ${request.url}`),
@@ -104,16 +100,12 @@ const configLayer = (
     client?: HttpClient.HttpClient
   } = {},
 ) =>
-  Config.layer.pipe(
-    Layer.provide(testFlock),
-    Layer.provide(Env.defaultLayer),
-    Layer.provide(options.auth ?? AuthTest.empty),
-    Layer.provide(options.account ?? AccountTest.empty),
-    Layer.provideMerge(infra),
-    Layer.provide(NpmTest.noop),
-    Layer.provide(Layer.succeed(HttpClient.HttpClient, options.client ?? unexpectedHttp)),
-    Layer.provideMerge(FSUtil.defaultLayer),
-  )
+  LayerNode.compile(LayerNode.group([Config.node, FSUtil.node, Env.node, CrossSpawnSpawner.node]), [
+    [Auth.node, options.auth ?? AuthTest.empty],
+    [Account.node, options.account ?? AccountTest.empty],
+    [Npm.node, NpmTest.noop],
+    [httpClient, Layer.succeed(HttpClient.HttpClient, options.client ?? unexpectedHttp)],
+  ])
 
 const layer = configLayer()
 
@@ -171,7 +163,7 @@ const withInstanceDir = <A, E, R>(dir: string, effect: Effect.Effect<A, E, R>) =
     Effect.provideService(TestInstance, { directory: dir }),
     provideInstanceEffect(dir),
     Effect.provide(testInstanceStoreLayer),
-    Effect.provide(CrossSpawnSpawner.defaultLayer),
+    Effect.provide(LayerNode.compile(CrossSpawnSpawner.node)),
   )
 
 const withGlobalConfigDir = <A, E, R>(dir: string, effect: Effect.Effect<A, E, R>) =>
@@ -325,7 +317,7 @@ it.effect("creates global jsonc config with schema when no global configs exist"
 
       const content = yield* FSUtil.use.readFileString(path.join(dir, "opencode.jsonc"))
       expect(content).toContain('"$schema": "https://opencode.ai/config.json"')
-    }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(CrossSpawnSpawner.defaultLayer)),
+    }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),
   ),
 )
 
@@ -340,7 +332,7 @@ it.effect("does not create global config when OPENCODE_CONFIG_DIR is set", () =>
           yield* Config.use.get().pipe(provideInstanceEffect(dir))
 
           expect(yield* FSUtil.use.existsSafe(path.join(dir, "opencode.jsonc"))).toBe(false)
-        }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(CrossSpawnSpawner.defaultLayer)),
+        }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),
       ),
     )
   }),
@@ -403,6 +395,191 @@ it.effect("updates global config and omits empty shell key in jsonc", () =>
       expect(writtenConfig).not.toContain('"shell"')
       expect(parsed.shell).toBeUndefined()
       expect(parsed.model).toBe("test/model")
+    }),
+  ),
+)
+
+it.effect("logs global update diagnostics once without exposing values", () =>
+  withGlobalConfig(
+    {
+      config: {
+        providers: { example: { settings: { apiKey: "keep-me" } } },
+      },
+    },
+    ({ dir }) =>
+      Effect.gen(function* () {
+        const messages: unknown[] = []
+        yield* Config.use.updateGlobal({ username: "updated" }).pipe(
+          Effect.provide(
+            Logger.layer([
+              Logger.make<unknown, void>((options) => {
+                messages.push(options.message)
+              }),
+            ]),
+          ),
+        )
+        expect(JSON.stringify(messages)).not.toContain("keep-me")
+        expect(
+          messages.filter((item) => Array.isArray(item) && item[0] === "configuration compatibility diagnostic"),
+        ).toEqual([
+          [
+            "configuration compatibility diagnostic",
+            expect.objectContaining({
+              source: path.join(dir, "opencode.json"),
+              kind: "unsupported",
+              path: ["providers"],
+            }),
+          ],
+        ])
+      }),
+  ),
+)
+
+const updateFixtures = path.join(import.meta.dir, "fixtures/v2-compat")
+const globalInputs = [...new Bun.Glob("update-global/*-input.{json,jsonc}").scanSync({ cwd: updateFixtures })].sort()
+const projectInputs = [...new Bun.Glob("update-project/*-input.json").scanSync({ cwd: updateFixtures })].sort()
+if (!globalInputs.length || !projectInputs.length) throw new Error("Missing config update fixtures")
+
+for (const input of globalInputs) {
+  const extension = path.extname(input)
+  const name = input.slice(0, -`-input${extension}`.length)
+  const prefix = path.join(updateFixtures, name)
+  it.live(`fixture ${name}`, () =>
+    withGlobalConfig({}, ({ dir }) =>
+      Effect.gen(function* () {
+        const fs = yield* FSUtil.Service
+        const file = path.join(dir, `opencode${extension}`)
+        yield* fs.writeFileString(file, yield* fs.readFileString(path.join(updateFixtures, input)))
+        const patch = ConfigParse.schema(ConfigV1.Info, yield* fs.readJson(`${prefix}-patch.json`), input)
+        const updated = yield* Config.use.updateGlobal(patch)
+        const written = yield* fs.readFileString(file)
+
+        yield* Effect.promise(() => snapshot(`${prefix}-output${extension}`, written))
+        yield* Effect.promise(() => snapshot(`${prefix}-normalized.json`, JSON.stringify(updated.info, null, 2) + "\n"))
+      }),
+    ),
+  )
+}
+
+for (const input of projectInputs) {
+  const name = input.slice(0, -"-input.json".length)
+  const prefix = path.join(updateFixtures, name)
+  it.instance(`fixture ${name}`, () =>
+    Effect.gen(function* () {
+      const instance = yield* TestInstance
+      const fs = yield* FSUtil.Service
+      const file = path.join(instance.directory, "config.json")
+      yield* fs.writeFileString(file, yield* fs.readFileString(path.join(updateFixtures, input)))
+      const patch = ConfigParse.schema(ConfigV1.Info, yield* fs.readJson(`${prefix}-patch.json`), input)
+      yield* Config.use.update(patch)
+      const written = yield* fs.readFileString(file)
+      const normalized = ConfigParse.schema(
+        ConfigV1.Info,
+        ConfigV2Compat.lower(ConfigParse.jsonc(written, file)).value,
+        file,
+      )
+
+      yield* Effect.promise(() => snapshot(`${prefix}-output.json`, written))
+      yield* Effect.promise(() => snapshot(`${prefix}-normalized.json`, JSON.stringify(normalized, null, 2) + "\n"))
+    }),
+  )
+}
+
+for (const name of ["opencode.json", "opencode.jsonc"]) {
+  it.live(`rejects updating ${name} with native permissions without writing it`, () =>
+    withGlobalConfig(
+      { name, config: { permissions: [{ action: "read", resource: "secret-resource", effect: "deny" }] } },
+      ({ dir }) =>
+        Effect.gen(function* () {
+          const fs = yield* FSUtil.Service
+          const file = path.join(dir, name)
+          const before = yield* fs.readFileString(file)
+          const exit = yield* Effect.exit(Config.use.updateGlobal({ username: "changed" }))
+          expect(Exit.isFailure(exit)).toBe(true)
+          if (Exit.isFailure(exit)) {
+            const error = Cause.squash(exit.cause)
+            expect(error).toMatchObject({ data: { path: file, issues: [{ path: ["permissions"] }] } })
+            expect(JSON.stringify(error)).not.toContain("secret-resource")
+          }
+          expect(yield* fs.readFileString(file)).toBe(before)
+        }),
+    ),
+  )
+}
+
+it.instance("rejects a project update with native agent permissions without writing it", () =>
+  Effect.gen(function* () {
+    const instance = yield* TestInstance
+    const fs = yield* FSUtil.Service
+    const file = path.join(instance.directory, "config.json")
+    const before = JSON.stringify({ agents: { reviewer: { permissions: [] } } })
+    yield* fs.writeFileString(file, before)
+    const exit = yield* Effect.exit(Config.use.update({ username: "changed" }))
+    expect(Exit.isFailure(exit)).toBe(true)
+    if (Exit.isFailure(exit))
+      expect(Cause.squash(exit.cause)).toMatchObject({
+        data: { path: file, issues: [{ path: ["agents", "reviewer", "permissions"] }] },
+      })
+    expect(yield* fs.readFileString(file)).toBe(before)
+  }),
+)
+
+it.effect("native project MCP servers override inherited V1 disabled state", () =>
+  withConfigTree(
+    {
+      global: {
+        mcp: {
+          shared: { type: "local", command: ["global-mcp"], enabled: false },
+        },
+      },
+      project: {
+        mcp: {
+          servers: {
+            shared: { type: "local", command: ["project-mcp"] },
+          },
+        },
+      },
+    },
+    Effect.gen(function* () {
+      expect((yield* Config.use.get()).mcp?.shared).toMatchObject({
+        type: "local",
+        command: ["project-mcp"],
+        enabled: true,
+      })
+    }),
+  ),
+)
+
+it.effect("rejects native project permissions even with inherited V1 rules", () =>
+  withConfigTree(
+    {
+      global: {
+        permission: { read: "deny", bash: "ask" },
+        agent: { reviewer: { permission: { edit: "deny" } } },
+      },
+      project: {
+        permissions: [{ action: "read", resource: "*", effect: "allow" }],
+        agents: {
+          reviewer: {
+            system: "Review carefully",
+            permissions: [{ action: "edit", resource: "*", effect: "allow" }],
+          },
+        },
+      },
+    },
+    Effect.gen(function* () {
+      const exit = yield* Effect.exit(Config.use.get())
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit))
+        expect(Cause.squash(exit.cause)).toMatchObject({
+          data: {
+            path: expect.stringContaining(path.join("project", "opencode.json")),
+            issues: [
+              { path: ["permissions"], message: expect.stringContaining('Use V1 "permission" rules or run opencode2') },
+              { path: ["agents", "reviewer", "permissions"], message: expect.stringContaining("not supported") },
+            ],
+          },
+        })
     }),
   ),
 )
@@ -607,12 +784,12 @@ accountTokenIt.instance("resolves env templates in account config with account t
   }),
 )
 
-it.instance("validates config schema and throws on invalid fields", () =>
+it.instance("validates config schema and throws on invalid values", () =>
   Effect.gen(function* () {
     const test = yield* TestInstance
     yield* writeConfigEffect(test.directory, {
       $schema: "https://opencode.ai/config.json",
-      invalid_field: "should cause error",
+      model: 42,
     })
     const exit = yield* Config.use.get().pipe(Effect.exit)
     expect(Exit.isFailure(exit)).toBe(true)
@@ -930,7 +1107,32 @@ it.effect("does not try to install dependencies in read-only OPENCODE_CONFIG_DIR
     yield* Effect.addFinalizer(() => FSUtil.use.chmod(readonly, 0o755).pipe(Effect.ignore))
 
     yield* withProcessEnv("OPENCODE_CONFIG_DIR", readonly, Config.use.get().pipe(provideInstanceEffect(dir)))
-  }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(CrossSpawnSpawner.defaultLayer)),
+  }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),
+)
+
+it.effect("ignores an inaccessible OPENCODE_CONFIG_DIR", () =>
+  Effect.gen(function* () {
+    if (process.platform === "win32") return
+
+    const dir = yield* tmpdirScoped()
+    const configDir = path.join(dir, "inaccessible")
+    yield* FSUtil.use.ensureDir(configDir)
+    yield* FSUtil.use.chmod(configDir, 0o000)
+    yield* Effect.addFinalizer(() => FSUtil.use.chmod(configDir, 0o755).pipe(Effect.ignore))
+
+    yield* withProcessEnv("OPENCODE_CONFIG_DIR", configDir, Config.use.get().pipe(provideInstanceEffect(dir)))
+  }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),
+)
+
+it.effect("creates a missing OPENCODE_CONFIG_DIR", () =>
+  Effect.gen(function* () {
+    const dir = yield* tmpdirScoped()
+    const configDir = path.join(dir, "configdir")
+
+    yield* withProcessEnv("OPENCODE_CONFIG_DIR", configDir, Config.use.get().pipe(provideInstanceEffect(dir)))
+
+    expect(yield* FSUtil.use.readFileString(path.join(configDir, ".gitignore"))).toContain("node_modules")
+  }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),
 )
 
 it.effect("installs dependencies in writable OPENCODE_CONFIG_DIR", () =>
@@ -948,7 +1150,7 @@ it.effect("installs dependencies in writable OPENCODE_CONFIG_DIR", () =>
     )
 
     expect(yield* FSUtil.use.readFileString(path.join(configDir, ".gitignore"))).toContain("package-lock.json")
-  }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(CrossSpawnSpawner.defaultLayer)),
+  }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),
 )
 
 // Note: deduplication and serialization of npm installs is now handled by the
@@ -1316,7 +1518,7 @@ it.instance("permission config preserves user key order", () =>
   }),
 )
 
-test("config parser preserves permission order while rejecting unknown top-level keys", () => {
+test("config parser preserves permission order while ignoring unknown top-level keys", () => {
   const config = ConfigParse.schema(
     ConfigV1.Info,
     {
@@ -1325,18 +1527,13 @@ test("config parser preserves permission order while rejecting unknown top-level
         "*": "deny",
         edit: "ask",
       },
+      plugins: ["example"],
     },
     "test",
   )
 
   expect(Object.keys(config.permission!)).toEqual(["bash", "*", "edit"])
-  try {
-    ConfigParse.schema(ConfigV1.Info, { invalid_field: true }, "test")
-    throw new Error("expected config parse to fail")
-  } catch (err) {
-    const error = err as { data?: { issues?: Array<{ code?: string; keys?: string[]; path?: string[] }> } }
-    expect(error.data?.issues?.[0]).toMatchObject({ code: "unrecognized_keys", keys: ["invalid_field"], path: [] })
-  }
+  expect(config).not.toHaveProperty("plugins")
 })
 
 // MCP config merging tests
@@ -1533,16 +1730,12 @@ test("remote well-known config can use FetchHttpClient layer", async () => {
       Effect.scoped,
       Effect.provide(
         Layer.mergeAll(
-          Config.layer.pipe(
-            Layer.provide(testFlock),
-            Layer.provide(FSUtil.defaultLayer),
-            Layer.provide(Env.defaultLayer),
-            Layer.provide(wellKnownAuth(server.url.origin)),
-            Layer.provide(AccountTest.empty),
-            Layer.provideMerge(infra),
-            Layer.provide(NpmTest.noop),
-            Layer.provide(FetchHttpClient.layer),
-          ),
+          LayerNode.compile(LayerNode.group([Config.node, FSUtil.node, Env.node, CrossSpawnSpawner.node]), [
+            [Auth.node, wellKnownAuth(server.url.origin)],
+            [Account.node, AccountTest.empty],
+            [Npm.node, NpmTest.noop],
+            [httpClient, FetchHttpClient.layer],
+          ]),
           testInstanceStoreLayer,
         ),
       ),

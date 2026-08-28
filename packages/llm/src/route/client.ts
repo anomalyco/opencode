@@ -164,13 +164,20 @@ export interface GenerateMethod {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/LLMClient") {}
 
-const resolveRequestOptions = (request: LLMRequest) =>
-  LLMRequest.update(request, {
-    generation:
-      mergeGenerationOptions(request.model.route.defaults.generation, request.generation) ?? new GenerationOptions({}),
-    providerOptions: mergeProviderOptions(request.model.route.defaults.providerOptions, request.providerOptions),
-    http: mergeHttpOptions(request.model.route.defaults.http, request.http),
+const resolveRequestOptions = (request: LLMRequest) => {
+  const routeDefaults = request.model.route.defaults
+  const modelDefaults = request.model.defaults
+  const generation = mergeGenerationOptions(routeDefaults.generation, modelDefaults?.generation, request.generation)
+  return LLMRequest.update(request, {
+    generation: generation ?? new GenerationOptions({}),
+    providerOptions: mergeProviderOptions(
+      routeDefaults.providerOptions,
+      modelDefaults?.providerOptions,
+      request.providerOptions,
+    ),
+    http: mergeHttpOptions(routeDefaults.http, modelDefaults?.http, request.http),
   })
+}
 
 export interface MakeInput<Body, Frame, Event, State> {
   /** Route id used in diagnostics and prepared request metadata. */
@@ -374,17 +381,12 @@ const streamRequestWith = (runtime: TransportRuntime) => (request: LLMRequest) =
 
 const generateWith = (stream: Interface["stream"]) =>
   Effect.fn("LLM.generate")(function* (request: LLMRequest) {
-    return new LLMResponse(
-      yield* stream(request).pipe(
-        Stream.runFold(
-          () => ({ events: [] as LLMEvent[], usage: undefined as LLMResponse["usage"] }),
-          (acc, event) => {
-            acc.events.push(event)
-            if ("usage" in event && event.usage !== undefined) acc.usage = event.usage
-            return acc
-          },
-        ),
-      ),
+    const state = yield* stream(request).pipe(Stream.runFold(LLMResponse.empty, LLMResponse.reduce))
+    const response = LLMResponse.complete(state)
+    if (response) return response
+    return yield* ProviderShared.eventError(
+      `${request.model.provider}/${request.model.route.id}`,
+      "Provider stream ended without a terminal finish event",
     )
   })
 

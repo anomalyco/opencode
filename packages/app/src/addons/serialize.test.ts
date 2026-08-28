@@ -37,6 +37,14 @@ function writeAndWait(term: Terminal, data: string): Promise<void> {
 }
 
 describe("SerializeAddon", () => {
+  test("preserves color scheme reporting mode", async () => {
+    const { term, addon } = createTerminal()
+    await writeAndWait(term, "\x1b[?2031h")
+
+    expect(addon.serialize().startsWith("\x1b[?2031h")).toBe(true)
+    expect(addon.serialize({ excludeModes: true }).startsWith("\x1b[?2031h")).toBe(false)
+  })
+
   describe("ANSI color preservation", () => {
     test("should preserve text attributes (bold, italic, underline)", async () => {
       const { term, addon } = createTerminal()

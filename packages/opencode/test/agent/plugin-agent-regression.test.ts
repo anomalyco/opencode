@@ -1,16 +1,15 @@
 import { expect } from "bun:test"
-import { FSUtil } from "@opencode-ai/core/fs-util"
-import { LocationServiceMap } from "@opencode-ai/core/location-layer"
-import { Effect, Layer } from "effect"
-import { FetchHttpClient } from "effect/unstable/http"
+import { Npm } from "@opencode-ai/core/npm"
+import { Effect } from "effect"
 import path from "path"
 import { pathToFileURL } from "url"
 import { Agent } from "../../src/agent/agent"
-import { EventV2Bridge } from "../../src/event-v2-bridge"
-import { Config } from "../../src/config/config"
-import { Env } from "../../src/env"
+import { Account } from "../../src/account/account"
+import { Auth } from "../../src/auth"
 import { RuntimeFlags } from "../../src/effect/runtime-flags"
 import { Plugin } from "../../src/plugin"
+import { Provider } from "../../src/provider/provider"
+import { Skill } from "../../src/skill"
 import { AccountTest } from "../fake/account"
 import { AuthTest } from "../fake/auth"
 import { NpmTest } from "../fake/npm"
@@ -18,6 +17,8 @@ import { ProviderTest } from "../fake/provider"
 import { SkillTest } from "../fake/skill"
 import { testEffect } from "../lib/effect"
 import { PLUGIN_AGENT } from "../fixture/agent-plugin.constants"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 
 // `it.instance` skips InstanceBootstrap so LSP / MCP don't spin up — those
 // services hang during scope teardown on Windows and aren't needed
@@ -25,30 +26,16 @@ import { PLUGIN_AGENT } from "../fixture/agent-plugin.constants"
 const pluginUrl = pathToFileURL(path.join(import.meta.dir, "..", "fixture", "agent-plugin.ts")).href
 
 const provider = ProviderTest.fake()
-const configLayer = Config.layer.pipe(
-  Layer.provide(FSUtil.defaultLayer),
-  Layer.provide(Env.defaultLayer),
-  Layer.provide(AuthTest.empty),
-  Layer.provide(AccountTest.empty),
-  Layer.provide(NpmTest.noop),
-  Layer.provide(FetchHttpClient.layer),
+const it = testEffect(
+  AppNodeBuilder.build(LayerNode.group([Agent.node, Plugin.node]), [
+    [Auth.node, AuthTest.empty],
+    [Account.node, AccountTest.empty],
+    [Npm.node, NpmTest.noop],
+    [Provider.node, provider.layer],
+    [Skill.node, SkillTest.empty],
+    [RuntimeFlags.node, RuntimeFlags.layer({ disableDefaultPlugins: true })],
+  ]),
 )
-const pluginLayer = Plugin.layer.pipe(
-  Layer.provide(EventV2Bridge.defaultLayer),
-  Layer.provide(configLayer),
-  Layer.provide(RuntimeFlags.layer({ disableDefaultPlugins: true })),
-)
-const agentLayer = Agent.layer.pipe(
-  Layer.provide(configLayer),
-  Layer.provide(AuthTest.empty),
-  Layer.provide(SkillTest.empty),
-  Layer.provide(provider.layer),
-  Layer.provide(pluginLayer),
-  Layer.provide(LocationServiceMap.layer),
-  Layer.provide(RuntimeFlags.layer({ disableDefaultPlugins: true })),
-)
-
-const it = testEffect(Layer.mergeAll(agentLayer, pluginLayer))
 
 it.instance(
   "plugin-registered agents appear in Agent.list",

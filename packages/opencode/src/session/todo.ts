@@ -1,46 +1,32 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { SessionID } from "./schema"
-import { Effect, Layer, Context, Schema } from "effect"
+import { Effect, Layer, Context } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import { eq } from "drizzle-orm"
 import { asc } from "drizzle-orm"
 import { TodoTable } from "@opencode-ai/core/session/sql"
 import { EventV2Bridge } from "@/event-v2-bridge"
-import { EventV2 } from "@opencode-ai/core/event"
+import { SessionTodo } from "@opencode-ai/schema/session-todo"
 
-export const Info = Schema.Struct({
-  content: Schema.String.annotate({ description: "Brief description of the task" }),
-  status: Schema.String.annotate({
-    description: "Current status of the task: pending, in_progress, completed, cancelled",
-  }),
-  priority: Schema.String.annotate({ description: "Priority level of the task: high, medium, low" }),
-}).annotate({ identifier: "Todo" })
-export type Info = Schema.Schema.Type<typeof Info>
+export const Info = SessionTodo.Info
+export type Info = SessionTodo.Info
 
-export const Event = {
-  Updated: EventV2.define({
-    type: "todo.updated",
-    schema: {
-      sessionID: SessionID,
-      todos: Schema.Array(Info),
-    },
-  }),
-}
+export const Event = SessionTodo.Event
 
 export interface Interface {
-  readonly update: (input: { sessionID: SessionID; todos: Info[] }) => Effect.Effect<void>
+  readonly update: (input: { sessionID: SessionID; todos: ReadonlyArray<Info> }) => Effect.Effect<void>
   readonly get: (sessionID: SessionID) => Effect.Effect<Info[]>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionTodo") {}
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const events = yield* EventV2Bridge.Service
     const { db } = yield* Database.Service
 
-    const update = Effect.fn("Todo.update")(function* (input: { sessionID: SessionID; todos: Info[] }) {
+    const update = Effect.fn("Todo.update")(function* (input: { sessionID: SessionID; todos: ReadonlyArray<Info> }) {
       yield* db
         .transaction((tx) =>
           Effect.gen(function* () {
@@ -83,8 +69,6 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(EventV2Bridge.defaultLayer), Layer.provide(Database.defaultLayer))
-
-export const node = LayerNode.make(layer, [EventV2Bridge.node, Database.node])
+export const node = LayerNode.make({ service: Service, layer: layer, deps: [EventV2Bridge.node, Database.node] })
 
 export * as Todo from "./todo"

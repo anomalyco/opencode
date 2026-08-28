@@ -14,7 +14,7 @@
         "headers": {
           "content-type": "application/json"
         },
-        "body": "{\"model\":\"gpt-5.5\",\"input\":[{\"role\":\"system\",\"content\":\"Call tools exactly as requested.\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Call get_weather with city exactly Paris.\"}]}],\"tools\":[{\"type\":\"function\",\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false}}],\"tool_choice\":{\"type\":\"function\",\"name\":\"get_weather\"},\"stream\":true,\"max_output_tokens\":80}"
+        "body": "{\"model\":\"gpt-5.5\",\"input\":[{\"role\":\"system\",\"content\":\"Call tools exactly as requested.\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Call get_weather with city exactly Paris.\"}]}],\"tools\":[{\"type\":\"function\",\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false},\"strict\":false}],\"tool_choice\":{\"type\":\"function\",\"name\":\"get_weather\"},\"stream\":true,\"max_output_tokens\":80}"
       },
       "response": {
         "status": 200,

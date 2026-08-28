@@ -1,2 +1,4 @@
 sst-env.d.ts
 packages/desktop/src/bindings.ts
+packages/client/src/generated/
+packages/client/src/generated-effect/

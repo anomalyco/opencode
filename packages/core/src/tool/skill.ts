@@ -1,13 +1,13 @@
 export * as SkillTool from "./skill"
 
 import path from "path"
-import { pathToFileURL } from "url"
 import { ToolFailure } from "@opencode-ai/llm"
 import { Effect, Layer, Schema } from "effect"
+import { makeLocationNode } from "../effect/app-node"
 import { FSUtil } from "../fs-util"
-import { PluginBoot } from "../plugin/boot"
 import { SkillV2 } from "../skill"
 import { PermissionV2 } from "../permission"
+import { ToolRegistry } from "./registry"
 import { Tool } from "./tool"
 import { Tools } from "./tools"
 
@@ -40,7 +40,7 @@ export const toModelOutput = (skill: SkillV2.Info, files: ReadonlyArray<string>)
     "",
     skill.content.trim(),
     "",
-    `Base directory for this skill: ${pathToFileURL(directory).href}`,
+    `Base directory for this skill: ${directory}`,
     "Relative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.",
     "Note: file list is sampled.",
     "",
@@ -54,14 +54,12 @@ export const toModelOutput = (skill: SkillV2.Info, files: ReadonlyArray<string>)
 const unableToLoad = (name: string, error?: unknown) =>
   new ToolFailure({ message: `Unable to load skill ${name}`, error })
 
-export const layer = Layer.effectDiscard(
+const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const tools = yield* Tools.Service
     const fs = yield* FSUtil.Service
-    const boot = yield* PluginBoot.Service
     const skills = yield* SkillV2.Service
     const permission = yield* PermissionV2.Service
-    yield* boot.wait()
     yield* tools
       .register({
         [name]: Tool.make({
@@ -103,3 +101,9 @@ export const layer = Layer.effectDiscard(
       .pipe(Effect.orDie)
   }),
 )
+
+export const node = makeLocationNode({
+  name: "tool/skill",
+  layer,
+  deps: [ToolRegistry.node, FSUtil.node, SkillV2.node, PermissionV2.node],
+})

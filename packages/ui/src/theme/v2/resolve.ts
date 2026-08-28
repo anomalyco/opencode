@@ -135,7 +135,7 @@ export function generateV2Primitives(variant: ThemeVariant, isDark: boolean): Re
 export function resolveThemeVariantV2(variant: ThemeVariant, isDark: boolean): ResolvedV2Theme {
   const primitives = generateV2Primitives(variant, isDark)
   const semantics = mapV2Semantics(isDark)
-  const foreground = mapV2Foreground(readPalette(variant).ink, isDark, variant.overrides)
+  const foreground = mapV2Foreground(readPalette(variant).ink, isDark, primitives, variant.overrides)
   return mergeV2Tokens(primitives, semantics, foreground, variant.v2Overrides ?? {})
 }
 

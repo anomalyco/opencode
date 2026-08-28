@@ -1,6 +1,7 @@
 import { describe, expect } from "bun:test"
 import path from "path"
 import * as fs from "fs/promises"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Cause, Effect, Exit, Layer } from "effect"
 import { ApplyPatchTool } from "../../src/tool/apply_patch"
 import { LSP } from "@/lsp/lsp"
@@ -14,13 +15,8 @@ import { SessionID, MessageID } from "../../src/session/schema"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(
-  Layer.mergeAll(
-    LSP.defaultLayer,
-    FSUtil.defaultLayer,
-    Format.defaultLayer,
-    EventV2Bridge.defaultLayer,
-    Truncate.defaultLayer,
-    Agent.defaultLayer,
+  LayerNode.compile(
+    LayerNode.group([LSP.node, FSUtil.node, Format.node, EventV2Bridge.node, Truncate.node, Agent.node]),
   ),
 )
 

@@ -10,6 +10,8 @@ type OpenApiSchema = {
   readonly enum?: readonly unknown[]
   readonly properties?: Record<string, OpenApiSchema>
   readonly required?: readonly string[]
+  readonly contentSchema?: OpenApiSchema
+  readonly contentMediaType?: string
 }
 type OpenApiResponse = {
   readonly description?: string
@@ -68,6 +70,20 @@ function isBuiltInEndpointError(name: string) {
 }
 
 describe("PublicApi OpenAPI v2 errors", () => {
+  test("includes plugin-facing core schemas", () => {
+    const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
+
+    expect(Object.keys(spec.components.schemas)).toEqual(
+      expect.arrayContaining([
+        "CredentialValue",
+        "IntegrationInputs",
+        "IntegrationMethod",
+        "IntegrationRef",
+        "SkillV2Source",
+      ]),
+    )
+  })
+
   test("documents nested legacy global sync events", () => {
     const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
     const schema = spec.components.schemas.SyncEventSessionCreated
@@ -85,6 +101,21 @@ describe("PublicApi OpenAPI v2 errors", () => {
     })
   })
 
+  test("names the v2 event union without the SSE string wrapper collision", () => {
+    const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
+
+    expect(spec.components.schemas.V2Event1).toBeUndefined()
+    expect(spec.components.schemas.V2Event?.anyOf?.length).toBeGreaterThan(0)
+    expect(spec.components.schemas.V2EventStream).toMatchObject({
+      type: "string",
+      contentMediaType: "application/json",
+      contentSchema: { $ref: "#/components/schemas/V2Event" },
+    })
+    expect(spec.paths["/api/event"]?.get?.responses?.["200"]?.content?.["text/event-stream"]?.schema).toEqual({
+      $ref: "#/components/schemas/V2Event",
+    })
+  })
+
   test("preserves /api auth responses", () => {
     const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
 
@@ -97,7 +128,7 @@ describe("PublicApi OpenAPI v2 errors", () => {
   test("documents references separately from filesystem routes", () => {
     const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
 
-    for (const path of ["/api/fs/read", "/api/fs/list"]) {
+    for (const path of ["/api/fs/read/*", "/api/fs/list"]) {
       expect(spec.paths[path]?.get?.parameters, path).not.toContainEqual(expect.objectContaining({ name: "reference" }))
     }
     expect(spec.paths["/api/reference"]?.get).toBeDefined()
@@ -110,6 +141,32 @@ describe("PublicApi OpenAPI v2 errors", () => {
       "/api/session/{sessionID}/prompt",
       "/api/session/{sessionID}/permission/{requestID}/reply",
       "/api/session/{sessionID}/question/{requestID}/reply",
+    ]) {
+      expect(spec.paths[path]?.post?.requestBody?.required, path).toBe(true)
+    }
+  })
+
+  test("documents integration discovery and connection routes", () => {
+    const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
+
+    for (const [method, path] of [
+      ["get", "/api/integration"],
+      ["get", "/api/integration/{integrationID}"],
+      ["post", "/api/integration/{integrationID}/connect/key"],
+      ["post", "/api/integration/{integrationID}/connect/oauth"],
+      ["get", "/api/integration/attempt/{attemptID}"],
+      ["post", "/api/integration/attempt/{attemptID}/complete"],
+      ["delete", "/api/integration/attempt/{attemptID}"],
+      ["delete", "/api/credential/{credentialID}"],
+      ["patch", "/api/credential/{credentialID}"],
+    ] as const) {
+      expect(spec.paths[path]?.[method], `${method.toUpperCase()} ${path}`).toBeDefined()
+    }
+
+    for (const path of [
+      "/api/integration/{integrationID}/connect/key",
+      "/api/integration/{integrationID}/connect/oauth",
+      "/api/integration/attempt/{attemptID}/complete",
     ]) {
       expect(spec.paths[path]?.post?.requestBody?.required, path).toBe(true)
     }

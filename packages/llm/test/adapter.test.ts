@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
-import { LLM } from "../src"
+import { LLM, LLMResponse } from "../src"
 import { Route, Endpoint, LLMClient, Protocol, type FramingDef } from "../src/route"
 import { Model } from "../src/schema"
 import { testEffect } from "./lib/effect"
@@ -112,9 +112,16 @@ describe("llm route", () => {
       const llm = yield* LLMClient.Service
       const events = Array.from(yield* llm.stream(request).pipe(Stream.runCollect))
       const response = yield* llm.generate(request)
+      const reduced = LLMResponse.fromEvents(events)
 
       expect(events.map((event) => event.type)).toEqual(["text-delta", "finish"])
-      expect(response.events.map((event) => event.type)).toEqual(["text-delta", "finish"])
+      expect(reduced).toBeDefined()
+      if (!reduced) throw new Error("stream reducer did not produce a completed response")
+      expect(response.events).toEqual(events)
+      expect(response.message).toEqual(reduced.message)
+      expect(response.usage).toEqual(reduced.usage)
+      expect(response.finishReason).toEqual(reduced.finishReason)
+      expect(response.message.content).toEqual([{ type: "text", text: 'echo:{"body":"hello"}' }])
     }),
   )
 

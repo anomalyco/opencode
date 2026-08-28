@@ -86,7 +86,7 @@ export async function convertToOpenAIResponsesInput({
                         : {
                             image_url: `data:${mediaType};base64,${convertToBase64(part.data)}`,
                           }),
-                    detail: part.providerOptions?.openai?.imageDetail,
+                    detail: part.providerOptions?.copilot?.imageDetail,
                   }
                 } else if (part.mediaType === "application/pdf") {
                   if (part.data instanceof URL) {
@@ -127,7 +127,7 @@ export async function convertToOpenAIResponsesInput({
               input.push({
                 role: "assistant",
                 content: [{ type: "output_text", text: part.text }],
-                id: (part.providerOptions?.openai?.itemId as string) ?? undefined,
+                id: (part.providerOptions?.copilot?.itemId as string) ?? undefined,
               })
               break
             }
@@ -143,7 +143,7 @@ export async function convertToOpenAIResponsesInput({
                 input.push({
                   type: "local_shell_call",
                   call_id: part.toolCallId,
-                  id: (part.providerOptions?.openai?.itemId as string) ?? undefined,
+                  id: (part.providerOptions?.copilot?.itemId as string) ?? undefined,
                   action: {
                     type: "exec",
                     command: parsedInput.action.command,
@@ -162,7 +162,7 @@ export async function convertToOpenAIResponsesInput({
                 call_id: part.toolCallId,
                 name: part.toolName,
                 arguments: JSON.stringify(part.input),
-                id: (part.providerOptions?.openai?.itemId as string) ?? undefined,
+                id: (part.providerOptions?.copilot?.itemId as string) ?? undefined,
               })
               break
             }
@@ -275,7 +275,7 @@ export async function convertToOpenAIResponsesInput({
           const output = part.output
 
           if (output.type === "execution-denied") {
-            const approvalId = (output.providerOptions?.openai as { approvalId?: string } | undefined)?.approvalId
+            const approvalId = (output.providerOptions?.copilot as { approvalId?: string } | undefined)?.approvalId
 
             if (approvalId) {
               continue

@@ -22,5 +22,8 @@ export function useCommand() {
     keybind(id: string) {
       return keybinds[id]
     },
+    keybindParts(id: string) {
+      return keybinds[id]?.split("+") ?? []
+    },
   }
 }
