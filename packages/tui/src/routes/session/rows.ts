@@ -1,6 +1,7 @@
 import type { SessionInboxEnqueued, SessionMessageAssistant, SessionMessageInfo } from "@opencode-ai/client"
 import { createEffect, on, onCleanup, type Accessor } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
+import { messageCacheReleaseLimit } from "@opencode-ai/client/solid"
 import { useConfig } from "../../config"
 import { useData } from "../../context/data"
 import { useClient } from "../../context/client"
@@ -280,6 +281,12 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
     }),
   ]
   onCleanup(() => subscriptions.forEach((unsubscribe) => unsubscribe()))
+  onCleanup(() => {
+    // Leaving a deeply scrolled session drops its cache so the next visit paints from one
+    // fresh page instead of reducing every page loaded during the previous visit.
+    if (data.session.message.list(sessionID()).length <= messageCacheReleaseLimit) return
+    data.session.message.release(sessionID())
+  })
 
   return rows
 }

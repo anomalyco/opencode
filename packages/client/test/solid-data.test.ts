@@ -492,3 +492,103 @@ async function wait(check: () => boolean) {
     await Bun.sleep(10)
   }
 }
+
+test("releases an oversized transcript cache and resyncs a fresh page on re-entry", async () => {
+  const total = 120
+  const pageLimit = 20
+  const messages = Array.from({ length: total }, (_, index) => ({
+    id: `msg_${String(index).padStart(4, "0")}`,
+    type: "user" as const,
+    text: `message ${index}`,
+    time: { created: index },
+  }))
+  let requests = 0
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      const url = new URL(request.url)
+      if (url.pathname !== "/api/session/ses_scroll/message") throw new Error(`Unexpected request: ${request.url}`)
+      requests++
+      const k = Number(url.searchParams.get("cursor") ?? 0)
+      const slice = messages.slice(Math.max(0, total - (k + 1) * pageLimit), total - k * pageLimit)
+      const next = (k + 1) * pageLimit < total ? String(k + 1) : undefined
+      return Response.json({ data: slice.toReversed(), cursor: { next } })
+    },
+  })
+  const event: CreateDataInput["event"] = {
+    on: () => () => {},
+    listen: () => () => {},
+  }
+  const setup = createRoot((dispose) => ({
+    data: createData({ api: () => api, directory: "/project", event, connection: { status: () => "connected" } }),
+    dispose,
+  }))
+
+  try {
+    await setup.data.session.message.sync("ses_scroll")
+    expect(setup.data.session.message.list("ses_scroll").map((item) => item.id)).toEqual(
+      messages.slice(total - pageLimit).map((item) => item.id),
+    )
+    await setup.data.session.message.loadMore("ses_scroll")
+    await setup.data.session.message.loadMore("ses_scroll")
+    expect(setup.data.session.message.list("ses_scroll")).toHaveLength(60)
+    expect(setup.data.session.message.more("ses_scroll")).toBe(true)
+
+    setup.data.session.message.release("ses_scroll")
+    expect(setup.data.session.message.list("ses_scroll")).toEqual([])
+    expect(setup.data.session.message.more("ses_scroll")).toBe(false)
+
+    const before = requests
+    await setup.data.session.message.sync("ses_scroll")
+    expect(requests).toBeGreaterThan(before)
+    expect(setup.data.session.message.list("ses_scroll")).toHaveLength(pageLimit)
+    expect(setup.data.session.message.list("ses_scroll")[0]?.id).toBe(`msg_${String(total - pageLimit).padStart(4, "0")}`)
+  } finally {
+    setup.dispose()
+  }
+})
+
+test("reaches the complete transcript in order after a release", async () => {
+  const total = 120
+  const pageLimit = 20
+  const messages = Array.from({ length: total }, (_, index) => ({
+    id: `msg_${String(index).padStart(4, "0")}`,
+    type: "user" as const,
+    text: `message ${index}`,
+    time: { created: index },
+  }))
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      const url = new URL(request.url)
+      if (url.pathname !== "/api/session/ses_scroll/message") throw new Error(`Unexpected request: ${request.url}`)
+      const k = Number(url.searchParams.get("cursor") ?? 0)
+      const slice = messages.slice(Math.max(0, total - (k + 1) * pageLimit), total - k * pageLimit)
+      const next = (k + 1) * pageLimit < total ? String(k + 1) : undefined
+      return Response.json({ data: slice.toReversed(), cursor: { next } })
+    },
+  })
+  const event: CreateDataInput["event"] = {
+    on: () => () => {},
+    listen: () => () => {},
+  }
+  const setup = createRoot((dispose) => ({
+    data: createData({ api: () => api, directory: "/project", event, connection: { status: () => "connected" } }),
+    dispose,
+  }))
+
+  try {
+    await setup.data.session.message.sync("ses_scroll")
+    await setup.data.session.message.loadMore("ses_scroll")
+    setup.data.session.message.release("ses_scroll")
+    await setup.data.session.message.sync("ses_scroll")
+    while (setup.data.session.message.more("ses_scroll")) await setup.data.session.message.loadMore("ses_scroll")
+
+    const ids = setup.data.session.message.list("ses_scroll").map((item) => item.id)
+    expect(ids).toEqual(messages.map((item) => item.id))
+  } finally {
+    setup.dispose()
+  }
+})
