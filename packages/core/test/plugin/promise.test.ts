@@ -915,7 +915,7 @@ describe("fromPromise", () => {
     }),
   )
 
-  it.effect("returns content-only plugin results through Code Mode", () =>
+  it.effect("returns content-only plugin results and rejected Promises through Code Mode", () =>
     Effect.gen(function* () {
       const plugins = yield* Plugin.Service
       const registry = yield* Tool.Service
@@ -927,8 +927,11 @@ describe("fromPromise", () => {
             tools.add({
               name: "demo_status",
               description: "Returns a status string",
-              input: Schema.Struct({}),
-              execute: async () => ({ content: [{ type: "text", text: "hello" }] }),
+              input: Schema.Struct({ fail: Schema.optionalKey(Schema.Boolean) }),
+              execute: async ({ fail }) => {
+                if (fail) await ctx.session.create({ agent: undefined })
+                return { content: [{ type: "text", text: "hello" }] }
+              },
               options: { codemode: true },
             })
           })
@@ -952,6 +955,22 @@ describe("fromPromise", () => {
       expect(throughCodeMode).toMatchObject({
         output: { output: "hello", toolCalls: [{ tool: "demo_status", status: "completed" }] },
         content: [{ type: "text", text: "hello" }],
+      })
+      expect(
+        yield* toolSet.execute({
+          sessionID: Session.ID.make("ses_content_only_tool"),
+          agent: Agent.ID.make("build"),
+          messageID: SessionMessage.ID.make("msg_content_only_tool"),
+          call: {
+            type: "tool-call",
+            id: "call_failed_tool",
+            name: "execute",
+            input: { code: "return await tools.demo_status({ fail: true })" },
+          },
+        }),
+      ).toMatchObject({
+        content: [{ type: "text", text: 'Expected string | null\n  at ["agent"]' }],
+        metadata: { error: true },
       })
     }),
   )
