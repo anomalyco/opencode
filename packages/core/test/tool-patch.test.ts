@@ -920,7 +920,7 @@ describe("PatchTool", () => {
     ),
   )
 
-  it.live("treats a sibling path inside the project worktree as external to the Location", () =>
+  it.live("treats a sibling path inside the project worktree as internal", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
       (tmp) => {
@@ -939,9 +939,8 @@ describe("PatchTool", () => {
                       call("*** Begin Patch\n*** Update File: ../sibling.txt\n@@\n-before\n+after\n*** End Patch"),
                     ),
                   ).toMatchObject({ status: "completed" })
-                  expect(assertions.map((input) => input.action)).toEqual(["external_directory", "edit"])
-                  expect(assertions[0]?.resources).toEqual([path.join(tmp.path, "*").replaceAll("\\", "/")])
-                  expect(assertions[1]?.resources).toEqual([target.replaceAll("\\", "/")])
+                  expect(assertions.map((input) => input.action)).toEqual(["edit"])
+                  expect(assertions[0]?.resources).toEqual(["../sibling.txt"])
                   expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("after\n")
                 }),
               tmp.path,

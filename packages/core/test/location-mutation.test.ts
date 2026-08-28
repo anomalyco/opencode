@@ -11,12 +11,20 @@ import { tmpdir } from "./fixture/tmpdir"
 import { location } from "./fixture/location"
 import { it } from "./lib/effect"
 
-function provide(directory: string) {
+function provide(directory: string, projectDirectory = directory) {
   return Effect.provide(
     LayerNode.compile(LocationMutation.node, [
       [
         Location.node,
-        Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
+        Layer.succeed(
+          Location.Service,
+          Location.Service.of(
+            location(
+              { directory: AbsolutePath.make(directory) },
+              { projectDirectory: AbsolutePath.make(projectDirectory) },
+            ),
+          ),
+        ),
       ],
     ]),
   )
@@ -73,6 +81,30 @@ describe("LocationMutation", () => {
           resource: path.join(root, "*").replaceAll("\\", "/"),
         })
       }).pipe(provide(directory)),
+    ),
+  )
+
+  it.live("allows a relative path outside the Location but inside the project worktree", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const active = path.join(directory, "packages", "opencode")
+        yield* Effect.promise(() => fs.mkdir(active, { recursive: true }))
+        const target = yield* (yield* LocationMutation.Service).resolve({ path: "../../README.md" })
+        expect(target).toMatchObject({
+          absolute: path.join(directory, "README.md"),
+          resource: "../../README.md",
+        })
+        expect(target.externalDirectory).toBeUndefined()
+      }).pipe(provide(path.join(directory, "packages", "opencode"), directory)),
+    ),
+  )
+
+  it.live("does not treat a filesystem-root project sentinel as an internal boundary", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const target = yield* (yield* LocationMutation.Service).resolve({ path: "../outside.txt" })
+        expect(target.externalDirectory).toBeDefined()
+      }).pipe(provide(directory, path.parse(directory).root)),
     ),
   )
 
