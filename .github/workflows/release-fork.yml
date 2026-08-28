@@ -34,8 +34,12 @@ jobs:
         run: |
           set -euo pipefail
           if gh release view "v${OPENCODE_VERSION}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
-            echo "Release v${OPENCODE_VERSION} already exists"
-            exit 1
+            if [ "$(gh release view "v${OPENCODE_VERSION}" --repo "${GITHUB_REPOSITORY}" --json isDraft --jq .isDraft)" != "true" ]; then
+              echo "Published release v${OPENCODE_VERSION} already exists"
+              exit 1
+            fi
+            echo "Reusing existing draft release v${OPENCODE_VERSION}"
+            exit 0
           fi
           gh release create "v${OPENCODE_VERSION}" \
             --draft \

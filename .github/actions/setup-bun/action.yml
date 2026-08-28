@@ -58,10 +58,18 @@ runs:
         # Workaround for patched peer variants
         # e.g. ./patches/ for standard-openapi
         # https://github.com/oven-sh/bun/issues/28147
-        if [ "$RUNNER_OS" = "Windows" ]; then
-          bun install --linker hoisted ${{ inputs.install-flags }}
-        else
-          bun install ${{ inputs.install-flags }}
+        install_dependencies() {
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            bun install --linker hoisted ${{ inputs.install-flags }}
+          else
+            bun install ${{ inputs.install-flags }}
+          fi
+        }
+
+        if ! install_dependencies; then
+          echo "Bun install failed; clearing the runner-local Bun cache and retrying"
+          rm -rf "$(bun pm cache)"
+          install_dependencies
         fi
       shell: bash
 
