@@ -29,7 +29,7 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
   const terminalResize = createPaneResize({
     value: () => layout.terminalWidth ?? defaultTerminalWidth(),
     defaultValue: defaultTerminalWidth,
-    clamp: (width) => clampTerminalPaneWidth(width, availableWidth()),
+    clamp: (width) => Math.min(Math.floor(dimensions().width * 0.3), clampTerminalPaneWidth(width, availableWidth())),
     fromMouse: (event) => dimensions().width - event.x - 1,
     contains: (event, width) => event.x >= dimensions().width - width - 1 && event.x <= dimensions().width - width,
     onCommit: (width) => {
