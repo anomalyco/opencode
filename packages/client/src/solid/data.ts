@@ -1455,8 +1455,8 @@ export function createData(config: CreateDataInput) {
         },
         async loadMore(sessionID: string, options?: { all?: boolean; signal?: AbortSignal }) {
           while (messageLoads.has(sessionID)) {
-            await messageLoads.get(sessionID)
-            if (!options?.all || options.signal?.aborted) return
+            const published = await messageLoads.get(sessionID)
+            if ((!options?.all && published) || options?.signal?.aborted) return
           }
           const cursor = store.session.messageCursor[sessionID]
           if (!cursor || options?.signal?.aborted) return
@@ -1487,13 +1487,14 @@ export function createData(config: CreateDataInput) {
               setStore("session", "message", sessionID, reconcile(messages))
               setStore("session", "messageCursor", sessionID, next)
             })
+            return true
           })()
             .catch((error) => {
               if (!options?.signal?.aborted) throw error
             })
             .finally(() => setStore("session", "messageLoading", sessionID, false))
           track(messageLoads, sessionID, request)
-          return request
+          await request
         },
         invalidate(sessionID: string) {
           sync.invalidate(`session.message:${sessionID}`)

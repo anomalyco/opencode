@@ -6,7 +6,7 @@ import { Global } from "@opencode-ai/util/global"
 import { createEventStream, createFetch, directory, json } from "./fixture/tui-client"
 import { tmpdir } from "./fixture/fixture"
 
-test.each(["bottom", "scrolled", "cancel", "scroll-cancel", "up-cancel", "mouse-cancel", "failure"])(
+test.each(["bottom", "scrolled", "cancel", "scroll-cancel", "up-cancel", "mouse-cancel", "page-cancel", "failure"])(
   "Home loads a stable, bounded beginning (%s)",
   async (mode) => {
     await using state = await tmpdir()
@@ -84,6 +84,10 @@ test.each(["bottom", "scrolled", "cancel", "scroll-cancel", "up-cancel", "mouse-
         setup.mockInput.pressKey("F6")
         await setup.waitForFrame((frame) => frame.includes("Jump to latest"))
       }
+      if (mode === "page-cancel") {
+        scroll.scrollTo(0)
+        await setup.waitForFrame((frame) => frame.includes("History message 0380"))
+      }
       await setup.waitForVisualIdle()
       const visible = () =>
         JSON.stringify(
@@ -111,6 +115,22 @@ test.each(["bottom", "scrolled", "cancel", "scroll-cancel", "up-cancel", "mouse-
       ])
       expect(frames).toEqual([before])
 
+      if (mode === "page-cancel") {
+        setup.mockInput.pressKey("F8")
+        await setup.waitForFrame((frame) => !frame.includes("Loading session history"))
+        release.resolve()
+        finish.resolve()
+        await setup.waitFor(() => Boolean(scroll.getRenderable("message-360")))
+        await setup.waitForVisualIdle()
+        expect(setup.captureCharFrame()).toContain("History message 0379")
+        expect(mounted()).toHaveLength(40)
+        expect(pages).toEqual([
+          { end: 400, limit: 20 },
+          { end: 380, limit: 200 },
+          { end: 380, limit: 20 },
+        ])
+        return
+      }
       if (mode === "failure") {
         release.resolve()
         finish.resolve()

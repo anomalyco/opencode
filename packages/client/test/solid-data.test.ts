@@ -414,7 +414,7 @@ test("loads bounded message pages", async () => {
   }
 })
 
-test.each(["success", "failure", "cancel", "cancel-retry"])("bulk history publishes once (%s)", async (mode) => {
+test.each(["success", "failure", "cancel", "cancel-retry", "cancel-page"])("bulk history (%s)", async (mode) => {
   const messages = [1, 2, 3].map((index) => ({
     id: `msg_${index}`,
     type: "user",
@@ -460,7 +460,9 @@ test.each(["success", "failure", "cancel", "cancel-retry"])("bulk history publis
     expect(requests.slice(1).map((url) => url.searchParams.get("limit"))).toEqual(["200", "200", "200"])
     if (mode.startsWith("cancel")) controller.abort()
     const retry =
-      mode === "cancel-retry" ? setup.data.session.message.loadMore("ses_refresh", { all: true }) : undefined
+      mode === "cancel-retry" || mode === "cancel-page"
+        ? setup.data.session.message.loadMore("ses_refresh", mode === "cancel-retry" ? { all: true } : undefined)
+        : undefined
     release.resolve()
     expect((await settled).map((result) => result.status)).toEqual(
       mode === "failure" ? ["rejected", "rejected"] : ["fulfilled", "fulfilled"],
@@ -470,10 +472,11 @@ test.each(["success", "failure", "cancel", "cancel-retry"])("bulk history publis
     expect(setup.data.session.message.loading("ses_refresh")).toBe(false)
     expect(setup.data.session.message.more("ses_refresh")).toBe(!success)
     expect(setup.data.session.message.list("ses_refresh").map((message) => message.id)).toEqual(
-      success ? ["msg_1", "msg_2", "msg_3"] : ["msg_3"],
+      success ? ["msg_1", "msg_2", "msg_3"] : mode === "cancel-page" ? ["msg_2", "msg_3"] : ["msg_3"],
     )
     expect(setup.data.session.message.get("ses_refresh", "msg_3")).toBe(newest)
-    expect(requests).toHaveLength(mode === "cancel-retry" ? 7 : 4)
+    expect(requests).toHaveLength(mode === "cancel-retry" ? 7 : mode === "cancel-page" ? 5 : 4)
+    if (mode === "cancel-page") expect(requests.at(-1)?.searchParams.get("limit")).toBe("20")
   } finally {
     release.resolve()
     setup.dispose()
