@@ -2,7 +2,7 @@ import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { Agent } from "@opencode-ai/core/agent"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { MCP } from "@opencode-ai/core/mcp/index"
+import { Mcp } from "@opencode-ai/core/mcp/index"
 import { McpInstructions } from "@opencode-ai/core/mcp/instructions"
 import { Permission } from "@opencode-ai/core/permission"
 import { McpTool } from "@opencode-ai/core/tool/mcp"
@@ -17,15 +17,15 @@ const selection = (permissions: Permission.Ruleset = []) => {
 }
 
 const instructions = (server: string, text: string) =>
-  new MCP.ServerInstructions({ server: MCP.ServerName.make(server), instructions: text })
+  new Mcp.ServerInstructions({ server: Mcp.ServerName.make(server), instructions: text })
 
-const tool = (server: string, name = "search") => new MCP.Tool({ server: MCP.ServerName.make(server), name })
+const tool = (server: string, name = "search") => new Mcp.Tool({ server: Mcp.ServerName.make(server), name })
 
-const layer = (catalog: () => MCP.ServerInstructions[], tools: () => MCP.Tool[]) =>
+const layer = (catalog: () => Mcp.ServerInstructions[], tools: () => Mcp.Tool[]) =>
   AppNodeBuilder.build(McpInstructions.node, [
     [
-      MCP.node,
-      Layer.mock(MCP.Service, {
+      Mcp.node,
+      Layer.mock(Mcp.Service, {
         instructions: () => Effect.succeed(catalog()),
         tools: () => Effect.succeed(tools()),
       }),
@@ -113,7 +113,7 @@ describe("McpInstructions", () => {
       Effect.provide(
         layer(
           () => [instructions("alpha", "Alpha instructions")],
-          () => [new MCP.Tool({ server: MCP.ServerName.make("alpha"), name: "search", codemode: false })],
+          () => [new Mcp.Tool({ server: Mcp.ServerName.make("alpha"), name: "search", codemode: false })],
         ),
       ),
     ),
@@ -125,7 +125,7 @@ describe("McpInstructions", () => {
       const service = yield* McpInstructions.Service
       const initialized = yield* service.load(selection()).pipe(Effect.flatMap(readInitial))
 
-      tools = [new MCP.Tool({ server: MCP.ServerName.make("alpha"), name: "search", codemode: false })]
+      tools = [new Mcp.Tool({ server: Mcp.ServerName.make("alpha"), name: "search", codemode: false })]
       const changed = yield* readUpdate(yield* service.load(selection()), initialized)
       expect(changed.text).toBe(
         [

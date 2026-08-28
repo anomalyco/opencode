@@ -792,7 +792,6 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
     const ongoingToolCalls: Record<
       number,
       | {
-          toolName: string
           toolCallId: string
           codeInterpreter?: {
             containerId: string
@@ -851,7 +850,6 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
             if (isResponseOutputItemAddedChunk(value)) {
               if (value.item.type === "function_call") {
                 ongoingToolCalls[value.output_index] = {
-                  toolName: value.item.name,
                   toolCallId: value.item.call_id,
                 }
 
@@ -862,7 +860,6 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
                 })
               } else if (value.item.type === "web_search_call") {
                 ongoingToolCalls[value.output_index] = {
-                  toolName: webSearchToolName ?? "web_search",
                   toolCallId: value.item.id,
                 }
 
@@ -873,7 +870,6 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
                 })
               } else if (value.item.type === "computer_call") {
                 ongoingToolCalls[value.output_index] = {
-                  toolName: "computer_use",
                   toolCallId: value.item.id,
                 }
 
@@ -884,7 +880,6 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
                 })
               } else if (value.item.type === "code_interpreter_call") {
                 ongoingToolCalls[value.output_index] = {
-                  toolName: "code_interpreter",
                   toolCallId: value.item.id,
                   codeInterpreter: {
                     containerId: value.item.container_id,

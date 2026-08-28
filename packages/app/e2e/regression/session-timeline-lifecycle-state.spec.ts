@@ -28,7 +28,7 @@ for (const expanded of [false, true]) {
     })
     const trigger = expanded
       ? page.locator(`[data-timeline-part-id="${id}"] [data-slot="collapsible-trigger"]`)
-      : page.getByRole("button", { name: "Used Shell" })
+      : page.getByRole("button", { name: "Used 1 Shell", exact: true })
     await expect(trigger).toHaveAttribute("aria-expanded", String(expanded))
     await trigger.click()
     await expect(trigger).toHaveAttribute("aria-expanded", String(!expanded))
@@ -141,7 +141,7 @@ for (const open of [false, true]) {
     await timeline.send(partUpdated(shell(shellID, "completed", "done")))
     await timeline.send(messageUpdated(completedAssistantInfo(assistant)))
     await timeline.send(status("idle"))
-    const used = group.getByRole("button", { name: "Used Shell", exact: true })
+    const used = group.getByRole("button", { name: "Used 1 Shell", exact: true })
     await expect(used).toHaveAttribute("aria-expanded", "false")
     await used.click()
     await expect(used).toHaveAttribute("aria-expanded", "true")
@@ -150,7 +150,7 @@ for (const open of [false, true]) {
       "aria-expanded",
       String(open),
     )
-    await expect(group.locator('[data-component="tag"]')).toHaveText("1")
+    await expect(used.locator('[data-slot="basic-tool-tool-title"]')).toHaveText("1 Shell")
     await expect(page.locator('[data-timeline-row="Thinking"]')).toHaveCount(0)
     await expect(used).toHaveAttribute("aria-expanded", "true")
     if (!open) await thought.click()

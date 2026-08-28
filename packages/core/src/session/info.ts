@@ -49,6 +49,7 @@ export function fromRow(row: typeof SessionTable.$inferSelect): SessionSchema.In
       workspaceID: row.workspace_id ? Workspace.ID.make(row.workspace_id) : undefined,
     }),
     subpath: row.path ? RelativePath.make(row.path) : undefined,
+    metadata: row.metadata ?? undefined,
     revert: row.revert ? decodeRevert(row.revert) : undefined,
     outcome: row.idle_outcome ?? undefined,
     time: {
