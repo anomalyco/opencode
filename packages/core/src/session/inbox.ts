@@ -65,6 +65,13 @@ export class LifecycleConflict extends Schema.TaggedError<LifecycleConflict>()("
   id: SessionMessage.ID,
 }) {}
 
+function matches<Type extends Item["type"]>(
+  stored: Info,
+  request: PendingRef & { readonly type: Type },
+): stored is Extract<Info, { readonly type: Type }> {
+  return stored.sessionID === request.sessionID && stored.type === request.type
+}
+
 const fromRow = (row: typeof SessionInboxTable.$inferSelect): Info => {
   const base = {
     id: SessionMessage.ID.make(row.id),
@@ -116,7 +123,7 @@ const promotedFromMessage = Effect.fn("SessionInbox.promotedFromMessage")(functi
     .pipe(Effect.orDie)
   if (row === undefined) return undefined
   if (row.session_id !== sessionID || (row.type !== "user" && row.type !== "synthetic"))
-    return yield* Effect.die(new LifecycleConflict({ id }))
+    return yield* new LifecycleConflict({ id })
   const message = decodeMessage({ ...row.data, id: row.id, type: row.type })
   const base = { id, sessionID, timeCreated: message.time.created, delivery }
   if (message.type === "user")
@@ -131,38 +138,39 @@ const promotedFromMessage = Effect.fn("SessionInbox.promotedFromMessage")(functi
       type: "synthetic",
       payload: decodeSynthetic(message),
     })
-  return yield* Effect.die(new LifecycleConflict({ id }))
+  return yield* new LifecycleConflict({ id })
 })
 
-/** Reconciles pending or delivered work without preparing a new admission payload. */
-export const reconcile = Effect.fn("SessionInbox.reconcile")(function* (
+/** First admission wins for matching Session and type, without preparing a new payload. */
+export const reconcile = Effect.fn("SessionInbox.reconcile")(function* <Type extends Item["type"]>(
   db: DatabaseService,
   request: {
     readonly id: SessionMessage.ID
     readonly sessionID: SessionSchema.ID
+    readonly type: Type
     readonly delivery: Delivery
   },
 ) {
-  const existing = yield* find(db, request.id)
-  if (existing !== undefined) {
-    if (existing.type === "compaction") return yield* Effect.die(new LifecycleConflict({ id: request.id }))
-    return existing
-  }
-  return yield* promotedFromMessage(db, request.sessionID, request.id, request.delivery)
+  const existing =
+    (yield* find(db, request.id)) ?? (yield* promotedFromMessage(db, request.sessionID, request.id, request.delivery))
+  if (existing === undefined) return undefined
+  if (existing.type === "compaction" || !matches(existing, request))
+    return yield* new LifecycleConflict({ id: request.id })
+  return existing
 })
 
-export const admit = Effect.fn("SessionInbox.admit")(function* (
+export const admit = Effect.fn("SessionInbox.admit")(function* <Type extends Item["type"]>(
   db: DatabaseService,
   bus: Bus.Interface,
   request: {
     readonly id: SessionMessage.ID
     readonly sessionID: SessionSchema.ID
-    readonly item: Item
+    readonly item: Item & { readonly type: Type }
   },
 ) {
-  const existing = yield* reconcile(db, { ...request, delivery: request.item.delivery })
+  const existing = yield* reconcile(db, { ...request, type: request.item.type, delivery: request.item.delivery })
   if (existing !== undefined) return existing
-  return yield* bus
+  const admitted = yield* bus
     .publish(SessionEvent.InboxEnqueued, {
       inboxID: request.id,
       sessionID: request.sessionID,
@@ -178,13 +186,16 @@ export const admit = Effect.fn("SessionInbox.admit")(function* (
         }),
       ),
       Effect.catchDefect((defect) =>
-        find(db, request.id).pipe(
-          Effect.flatMap((stored) =>
-            stored?.type === request.item.type ? Effect.succeed(stored) : Effect.die(defect),
-          ),
-        ),
+        defect instanceof LifecycleConflict
+          ? find(db, request.id).pipe(
+              Effect.flatMap((stored) => (stored === undefined ? Effect.fail(defect) : Effect.succeed(stored))),
+            )
+          : Effect.die(defect),
       ),
     )
+  if (!matches(admitted, { ...request, type: request.item.type }))
+    return yield* new LifecycleConflict({ id: request.id })
+  return admitted
 })
 
 export const admitCompaction = Effect.fn("SessionInbox.admitCompaction")(function* (
@@ -198,19 +209,17 @@ export const admitCompaction = Effect.fn("SessionInbox.admitCompaction")(functio
       const exact = yield* find(db, input.id)
       if (exact) {
         if (exact.type === "compaction" && exact.sessionID === input.sessionID) return exact
-        return yield* Effect.die(new LifecycleConflict({ id: input.id }))
+        return yield* new LifecycleConflict({ id: input.id })
       }
       if (yield* promotedFromMessage(db, input.sessionID, input.id, input.delivery))
-        return yield* Effect.die(new LifecycleConflict({ id: input.id }))
+        return yield* new LifecycleConflict({ id: input.id })
       const pending = (yield* list(db, input.sessionID)).find((item) => item.type === "compaction")
       if (pending) return pending
-      const admitted = yield* admit(db, bus, {
+      return yield* admit(db, bus, {
         id: input.id,
         sessionID: input.sessionID,
-        item: Item.make({ type: "compaction", payload: {}, delivery: input.delivery }),
+        item: { type: "compaction", payload: {}, delivery: Delivery.make(input.delivery) },
       })
-      if (admitted.type === "compaction") return admitted
-      return yield* Effect.die(new LifecycleConflict({ id: input.id }))
     }),
   )
 })
@@ -392,7 +401,11 @@ export const has = Effect.fn("SessionInbox.has")(function* (
 })
 
 const publishMutation = <A, E, R>(input: PendingRef, effect: Effect.Effect<A, E, R>) =>
-  serialized(input.sessionID, effect).pipe(Effect.asVoid)
+  serialized(input.sessionID, effect).pipe(
+    Effect.asVoid,
+    // Bus projectors abort their transaction through the defect channel.
+    Effect.catchDefect((defect) => (defect instanceof LifecycleConflict ? Effect.fail(defect) : Effect.die(defect))),
+  )
 
 export const cancel = Effect.fn("SessionInbox.cancel")((bus: Bus.Interface, input: PendingRef) =>
   publishMutation(
@@ -447,6 +460,7 @@ const publish = Effect.fn("SessionInbox.publish")(function* (
             defect instanceof LifecycleConflict
               ? promotedFromMessage(db, sessionID, entry.id, entry.delivery).pipe(
                   Effect.flatMap((stored) => (stored !== undefined ? Effect.void : Effect.die(defect))),
+                  Effect.orDie,
                 )
               : Effect.die(defect),
           ),

@@ -40,6 +40,10 @@ References share operation implementations, shell scheduling gates, and the exis
 
 Location services are acquired only when an operation needs them. In particular, retry reconciliation happens before prompt preparation, so an already-admitted input skips hooks and attachment resolution. Execution continues to resolve placement independently at drain start and after movement.
 
+`servicesFor` selects instance services from the saved placement. Shared dependencies are captured at construction: prompt preparation retains the host filesystem utility, and `SessionRevert.make` retains the database and Bus. Returned operations do not require callers to re-provide those services.
+
+Inbox commands own identity and type checks and return typed `SessionInbox.LifecycleConflict` errors. Session operations translate these into their public operation-specific errors and decide whether to wake execution. The Bus/projector boundary still uses defects to abort invalid projections; Inbox translates only lifecycle conflicts, not unrelated defects. Pending-input mutation does not schedule execution itself: steering wakes after a successful mutation, while queueing and cancellation do not.
+
 ## Execution Is Process-Local
 
 `SessionExecution` is process-global and keyed only by Session ID. At drain start it loads the Session, enters its Location through `LocationServiceMap`, and invokes the Location-scoped runner. The runner, model resolution, tools, permissions, plugins, and filesystem remain Location-scoped.

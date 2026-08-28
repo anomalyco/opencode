@@ -699,7 +699,7 @@ const layer = Layer.effect(
               id: SessionMessage.ID.create(),
               sessionID: input.sessionID,
               item,
-            })
+            }).pipe(Effect.orDie)
           }),
         )
         yield* execution.wake(input.sessionID)
