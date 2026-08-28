@@ -74,6 +74,7 @@ export type LifecycleInput = {
   onQueuedPromptAction?: (action: QueuedPromptAction, inboxID: string) => Promise<void>
   onSubagentSelect?: (sessionID: string | undefined) => void
   onSubagentInterrupt?: (sessionID: string) => void
+  onSubagentPrompt?: (sessionID: string, prompt: RunPrompt) => boolean | void | Promise<boolean | void>
 }
 
 export type Lifecycle = {
@@ -269,6 +270,7 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
     subscribeThemeSignal: input.host.signals.sigusr2.subscribe,
     onSubagentSelect: input.onSubagentSelect,
     onSubagentInterrupt: input.onSubagentInterrupt,
+    onSubagentPrompt: input.onSubagentPrompt,
   })
 
   const sigint = () => {

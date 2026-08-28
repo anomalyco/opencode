@@ -593,4 +593,159 @@ describe("run interactive runtime", () => {
     expect(catalogs.skill).toHaveBeenCalledWith(query, { signal: expect.any(AbortSignal) })
     expect(fileFind).toHaveBeenCalledWith({ query: "index", type: "file", ...query })
   })
+
+  test("steers the selected subagent session through session.prompt with a fresh id", async () => {
+    const sdk = OpenCode.make({ baseUrl: "https://opencode.test" })
+    const painted = defer<void>()
+    const api = footer()
+    api.idle = () => painted.promise
+    let lifecycle!: LifecycleInput
+    stubCatalogLists(sdk)
+    // The generated method has conditional return types for throwOnError; this
+    // mock represents the successful branch.
+    // @ts-expect-error successful SDK response is valid for both modes at runtime
+    const prompted = spyOn(sdk.session, "prompt").mockImplementation(() => ok({ data: undefined }))
+    const interrupted = spyOn(sdk.session, "interrupt").mockImplementation(() => ok({ interrupted: true }))
+
+    const task = runInteractiveDeferredMode(
+      {
+        host: host(),
+        sdk,
+        directory: "/tmp",
+        target: async () => ({
+          sessionID: "ses_root",
+          location: { directory: "/tmp", project: { id: "pro-1", directory: "/tmp", canonical: "/tmp" } },
+          agent: "build",
+          model: undefined,
+          variant: undefined,
+          resume: false,
+        }),
+        agent: "build",
+        model: undefined,
+        variant: undefined,
+        files: [],
+      },
+      {
+        createRuntimeLifecycle: async (input) => {
+          lifecycle = input
+          return {
+            footer: api,
+            onResize: () => () => {},
+            refreshTheme: () => {},
+            setTitle: () => {},
+            resetForReplay: () => Promise.resolve(),
+            close: () => Promise.resolve(),
+          }
+        },
+        streamTransport: Promise.resolve({
+          createSessionTransport: async (input) => {
+            setTimeout(() => input.footer.close(), 0)
+            return {
+              runPromptTurn: async () => {},
+              admitPromptTurn: async () => {},
+              waitForIdle: async () => {},
+              interruptActiveTurn: async () => {},
+              selectSubagent: () => {},
+              replayOnResize: async () => false,
+              close: async () => {},
+            }
+          },
+          formatUnknownError: (error: unknown) => String(error),
+        }),
+      },
+    )
+
+    painted.resolve()
+    await task
+
+    await lifecycle.onSubagentPrompt?.("ses_child_a", { text: "focus on the parser", parts: [] })
+    expect(prompted).toHaveBeenCalledTimes(1)
+    const [request] = prompted.mock.calls[0]
+    expect(request).toMatchObject({
+      sessionID: "ses_child_a",
+      text: "focus on the parser",
+      delivery: "steer",
+    })
+    expect(request.id).toMatch(/^msg_/)
+    expect(interrupted).not.toHaveBeenCalled()
+
+    await lifecycle.onSubagentPrompt?.("ses_child_a", { text: "and the tests", parts: [] })
+    const [retry] = prompted.mock.calls[1]
+    expect(retry.id).not.toBe(request.id)
+  })
+
+  test("keeps sibling subagent sessions out of prompt and interrupt traffic", async () => {
+    const sdk = OpenCode.make({ baseUrl: "https://opencode.test" })
+    const painted = defer<void>()
+    const api = footer()
+    api.idle = () => painted.promise
+    let lifecycle!: LifecycleInput
+    stubCatalogLists(sdk)
+    // The generated method has conditional return types for throwOnError; this
+    // mock represents the successful branch.
+    // @ts-expect-error successful SDK response is valid for both modes at runtime
+    const prompted = spyOn(sdk.session, "prompt").mockImplementation(() => ok({ data: undefined }))
+    const interrupted = spyOn(sdk.session, "interrupt").mockImplementation(() => ok({ interrupted: true }))
+
+    const task = runInteractiveDeferredMode(
+      {
+        host: host(),
+        sdk,
+        directory: "/tmp",
+        target: async () => ({
+          sessionID: "ses_root",
+          location: { directory: "/tmp", project: { id: "pro-1", directory: "/tmp", canonical: "/tmp" } },
+          agent: "build",
+          model: undefined,
+          variant: undefined,
+          resume: false,
+        }),
+        agent: "build",
+        model: undefined,
+        variant: undefined,
+        files: [],
+      },
+      {
+        createRuntimeLifecycle: async (input) => {
+          lifecycle = input
+          return {
+            footer: api,
+            onResize: () => () => {},
+            refreshTheme: () => {},
+            setTitle: () => {},
+            resetForReplay: () => Promise.resolve(),
+            close: () => Promise.resolve(),
+          }
+        },
+        streamTransport: Promise.resolve({
+          createSessionTransport: async (input) => {
+            setTimeout(() => input.footer.close(), 0)
+            return {
+              runPromptTurn: async () => {},
+              admitPromptTurn: async () => {},
+              waitForIdle: async () => {},
+              interruptActiveTurn: async () => {},
+              selectSubagent: () => {},
+              replayOnResize: async () => false,
+              close: async () => {},
+            }
+          },
+          formatUnknownError: (error: unknown) => String(error),
+        }),
+      },
+    )
+
+    painted.resolve()
+    await task
+
+    await lifecycle.onSubagentPrompt?.("ses_child_a", { text: "hello", parts: [] })
+    lifecycle.onSubagentInterrupt?.("ses_child_a")
+
+    const promptedSessions = prompted.mock.calls.map((call) => call[0].sessionID)
+    const interruptedSessions = interrupted.mock.calls.map((call) => call[0].sessionID)
+    expect(promptedSessions).toEqual(["ses_child_a"])
+    expect(interruptedSessions).toEqual(["ses_child_a"])
+    // Child interrupts stay parked: no parent-style continue flag.
+    expect(interrupted.mock.calls[0][0]).toEqual({ sessionID: "ses_child_a" })
+  })
 })

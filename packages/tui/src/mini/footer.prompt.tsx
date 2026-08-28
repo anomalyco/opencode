@@ -49,7 +49,7 @@ const AUTOCOMPLETE_ROWS = FOOTER_MENU_ROWS
 const AUTOCOMPLETE_BOTTOM_ROWS = 1
 
 export const TEXTAREA_MIN_ROWS = 1
-const TEXTAREA_MAX_ROWS = 6
+export const TEXTAREA_MAX_ROWS = 6
 export const PROMPT_MAX_ROWS = TEXTAREA_MAX_ROWS + AUTOCOMPLETE_ROWS - 1 + AUTOCOMPLETE_BOTTOM_ROWS
 
 type Mention = Extract<RunPromptPart, { type: "file" | "agent" | "skill" }>
@@ -180,7 +180,7 @@ export function RunPromptBody(props: {
   cursorStyle: RunTuiConfig["cursor"]
   placeholder: () => StyledText | string
   onSubmit: () => void
-  onKeyDown: (event: KeyEvent) => void
+  onKeyDown?: (event: KeyEvent) => void
   onContentChange: () => void
   bind: (area?: TextareaRenderable) => void
 }) {
