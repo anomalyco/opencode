@@ -197,7 +197,8 @@ Native package options:
 You can also use an npm package such as `@acme/opencode-provider` or an absolute `file://` URL for a local package.
 
 To use an [AI SDK](https://ai-sdk.dev) provider package instead of a native one, prefix the package name with `aisdk:`.
-The prefix is what selects the AI SDK runtime — an unprefixed name is always loaded as a native OpenCode package:
+The prefix is what selects the AI SDK runtime — a name without it is treated as a native OpenCode package unless it is
+an obvious `@ai-sdk/*` package:
 
 ```jsonc title="opencode.jsonc"
 {

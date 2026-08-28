@@ -111,19 +111,28 @@ describe("ConfigNormalize", () => {
   })
 
   test("leaves prefixed, native, and non-ai-sdk package values untouched", () => {
-    const result = normalized({
+    const input = {
       providers: {
         prefixed: { package: "aisdk:@ai-sdk/openai-compatible", models: { chat: {} } },
         native: { package: "@opencode-ai/ai/providers/openai", models: { chat: {} } },
+        mixed: {
+          package: "aisdk:@ai-sdk/anthropic",
+          models: { chat: { package: "@opencode-ai/ai/providers/openai-compatible" } },
+        },
         file: { package: "file:///some/provider", models: { chat: {} } },
         thirdparty: { package: "@scope/ai-sdk-provider", models: { chat: {} } },
         missing: { models: { chat: {} } },
       },
-    })
+    }
+    const snapshot = structuredClone(input)
+    const result = normalized(input)
     expect(result.diagnostics.filter((item) => item.kind === "normalized")).toEqual([])
+    expect(input).toEqual(snapshot)
     const info = Schema.decodeUnknownSync(Info, options)(result.encoded)
     expect(info.providers?.prefixed?.package).toBe("aisdk:@ai-sdk/openai-compatible")
     expect(info.providers?.native?.package).toBe("@opencode-ai/ai/providers/openai")
+    expect(info.providers?.mixed?.package).toBe("aisdk:@ai-sdk/anthropic")
+    expect(info.providers?.mixed?.models?.chat?.package).toBe("@opencode-ai/ai/providers/openai-compatible")
     expect(info.providers?.file?.package).toBe("file:///some/provider")
     expect(info.providers?.thirdparty?.package).toBe("@scope/ai-sdk-provider")
     expect(info.providers?.missing?.package).toBeUndefined()
