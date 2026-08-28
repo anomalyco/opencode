@@ -72,6 +72,7 @@ OpenCode Go 的工作方式与 OpenCode 中的其他提供商一样。
 - **DeepSeek V4 Pro**
 - **DeepSeek V4 Flash**
 - **DeepSeek V4 Flash Vision Exp**
+- **Hy4 preview**
 - **Hy3**
 
 随着我们进行测试和添加新模型，该列表可能会发生变化。
@@ -115,6 +116,7 @@ OpenCode Go 包含以下限制：
 | DeepSeek V4 Pro              | 1,050           | 2,600      | 5,200      |
 | DeepSeek V4 Flash            | 7,600           | 18,900     | 37,800     |
 | DeepSeek V4 Flash Vision Exp | 3,800           | 9,450      | 18,900     |
+| Hy4 preview                  | 1,350           | 3,380      | 6,770      |
 | Hy3                          | 4,300           | 10,750     | 21,500     |
 
 预估值基于观察到的请求模式：
@@ -139,6 +141,7 @@ OpenCode Go 包含以下限制：
 - Qwen3.7 Max — 每次请求 420 个输入 token，66,000 个缓存 token，200 个输出 token
 - Qwen3.7 Plus — 每次请求 500 个输入 token，57,000 个缓存 token，190 个输出 token
 - Qwen3.6 Plus — 每次请求 500 个输入 token，57,000 个缓存 token，190 个输出 token
+- Hy4 preview — 每次请求 830 个输入 token，71,500 个缓存 token，295 个输出 token
 - Hy3 — 每次请求 830 个输入 token，71,500 个缓存 token，295 个输出 token
 
 预估值还基于以下每 1M tokens 的价格以及每个模型包含的每月使用额度：
@@ -176,6 +179,7 @@ OpenCode Go 包含以下限制：
 | DeepSeek V4 Flash (Peak)                | $0.44  | $1.32  | $0.014    | -        | $30      |
 | DeepSeek V4 Flash Vision Exp (Off-Peak) | $0.22  | $0.66  | $0.007    | -        | $15      |
 | DeepSeek V4 Flash Vision Exp (Peak)     | $0.44  | $1.32  | $0.014    | -        | $15      |
+| Hy4 preview                             | $0.834 | $2.501 | $0.042    | -        | $30      |
 | Hy3                                     | $0.14  | $0.58  | $0.035    | -        | $60      |
 
 **DeepSeek V4 Flash / V4 Flash Vision Exp / V4 Pro:** Peak 时段为周一至周五的 01:00-04:00 和 06:00-10:00 UTC；其他所有时段（包括周末）均为 Off-Peak。[了解更多](https://api-docs.deepseek.com/quick_start/pricing/)。
@@ -240,6 +244,7 @@ OpenCode Go 包含以下限制：
 | Qwen3.7 Max                  | qwen3.7-max                  | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.7 Plus                 | qwen3.7-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus                 | qwen3.6-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Hy4 preview                  | hy4-preview                  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Hy3                          | hy3                          | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 
 你的 OpenCode 配置中的 [模型 ID](/docs/config/#models) 使用 `opencode-go/<model-id>` 格式。例如，对于 Kimi K3，你将在配置中使用 `opencode-go/kimi-k3`。
@@ -283,6 +288,7 @@ https://opencode.ai/zen/go/v1/models
 | DeepSeek V4 Pro              | 不使用   | 0 天     |
 | DeepSeek V4 Flash            | 不使用   | 0 天     |
 | DeepSeek V4 Flash Vision Exp | 不使用   | 0 天     |
+| Hy4 preview                  | 不使用   | 0 天     |
 | Hy3                          | 不使用   | 0 天     |
 
 - **Grok 4.6:** ZDR 会禁用依赖所存储数据的重要 API 功能，包括有状态的 Responses API、Files and Collections 和 Batch API。[了解更多](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr)。
