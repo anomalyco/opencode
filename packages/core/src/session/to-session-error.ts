@@ -1,5 +1,4 @@
-import { AIError } from "@opencode-ai/ai"
-import { errorMessage } from "@opencode-ai/codemode"
+import { AIError, ToolFailure } from "@opencode-ai/ai"
 import { Tool } from "@opencode-ai/schema/tool"
 import { SessionError } from "@opencode-ai/schema/session-error"
 import { Permission } from "../permission.js"
@@ -37,14 +36,12 @@ export function toSessionError(cause: unknown): SessionError.Error {
     }
   }
   if (cause instanceof Permission.BlockedError) return { type: "permission.rejected", message: cause.message }
-  if (cause instanceof Tool.Error) {
-    if (cause.error === undefined) return { type: "tool.execution", message: errorMessage(cause) }
+  if (cause instanceof ToolFailure || cause instanceof Tool.Error) {
+    if (cause.error === undefined) return { type: "tool.execution", message: cause.message }
+    // The canonical error is the sole model-visible representation, so a cause
+    // with no message must not erase the tool's curated failure message.
     const unwrapped = toSessionError(cause.error)
-    return {
-      ...unwrapped,
-      ...(unwrapped.message === "" ? { type: "tool.execution" } : {}),
-      message: errorMessage(cause),
-    }
+    return unwrapped.message === "" ? { ...unwrapped, type: "tool.execution", message: cause.message } : unwrapped
   }
   if (cause instanceof StepFailedError) return cause.error
   if (cause instanceof AgentNotFoundError) return { type: "unknown", message: cause.message }
@@ -58,7 +55,7 @@ export function toSessionError(cause: unknown): SessionError.Error {
   )
     return { type: "provider.no-route", message: cause.message }
   if (cause instanceof Integration.AuthorizationError) return { type: "provider.auth", message: cause.message }
-  return { type: "unknown", message: errorMessage(cause) }
+  return { type: "unknown", message: cause instanceof Error ? cause.message : String(cause) }
 }
 
 function providerError(type: string, reason: AIError["reason"]): SessionError.Error {

@@ -57,11 +57,7 @@ export class Error extends Schema.TaggedError<Error>()("Tool.Error", {
   message: Schema.String,
   error: Schema.optional(Schema.Defect()),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
-}) {
-  override get cause() {
-    return this.error
-  }
-}
+}) {}
 
 export interface TextContent extends Schema.Schema.Type<typeof TextContent> {}
 export const TextContent = Schema.Struct({

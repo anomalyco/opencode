@@ -136,7 +136,7 @@ describe("SkillTool", () => {
               }),
             ).toEqual({
               status: "error",
-              error: { type: "permission.rejected", message: "Unable to load skill effect\nPermission denied: skill" },
+              error: { type: "permission.rejected", message: "Permission denied: skill" },
             })
             deny = false
             const flat = Skill.Info.make({

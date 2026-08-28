@@ -349,7 +349,7 @@ describe("WebSearchTool registration", () => {
     }),
   )
 
-  it.effect("reports HTTP failure details with the attempted provider", () =>
+  it.effect("reports safe HTTP failures with the attempted provider", () =>
     Effect.gen(function* () {
       const fixture = yield* setup
       const registry = fixture.registry
@@ -388,10 +388,8 @@ describe("WebSearchTool registration", () => {
               .pipe(Effect.flip)
 
             const sessionError = toSessionError(error)
-            expect(sessionError).toEqual({
-              type: "unknown",
-              message: `${message}\nStatusCode: non 2xx status code (${status} POST https://mcp.exa.ai/mcp?exaApiKey=secret)`,
-            })
+            expect(sessionError).toEqual({ type: "tool.execution", message })
+            expect(sessionError.message).not.toContain("secret")
             expect(error.metadata).toEqual({ provider: "exa" })
             expect(progress).toEqual([{ provider: "exa" }])
           }),

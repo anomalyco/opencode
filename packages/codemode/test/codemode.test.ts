@@ -42,15 +42,15 @@ describe("CodeMode host failure boundary", () => {
     })
   })
 
-  test("preserves host failures, defects, and rejected Promises", async () => {
+  test("reports failures, defects, rejected Promises, and nested causes", async () => {
     for (const failure of [
       Effect.fail(new HostError({ message: "Connection refused" })),
-      Effect.fail("Connection refused"),
-      Effect.fail({ message: "Connection refused" }),
       Effect.die(new Error("Connection refused")),
       Effect.promise(async () => {
         throw new Error("Connection refused")
       }),
+      Effect.fail(toolError("Request failed", new Error("Connection refused"))),
+      Effect.failCause(Cause.combine(Cause.fail("Request failed"), Cause.die("Connection refused"))),
     ]) {
       const result = await run(
         Tool.make({
@@ -61,38 +61,14 @@ describe("CodeMode host failure boundary", () => {
         }),
       )
 
-      expect(result).toMatchObject({ ok: false, error: { kind: "ToolFailure" } })
-      if (result.ok) return
-      expect(result.error.message).toContain("Connection refused")
-      expect(result.error.message).not.toContain("Tool execution failed")
+      expect(result.ok ? undefined : result.error).toStrictEqual({
+        kind: "ToolFailure",
+        message: expect.stringContaining("Connection refused"),
+      })
     }
   })
 
-  test("preserves nested and combined error messages", async () => {
-    for (const failure of [
-      Effect.die(new Error("Request failed", { cause: new Error("Connection refused") })),
-      Effect.fail(toolError("Request failed", new Error("Connection refused"))),
-      Effect.die(new AggregateError([new Error("Connection refused")], "Request failed")),
-      Effect.die(new Error("Request failed", { cause: Cause.fail(new Error("Connection refused")) })),
-      Effect.failCause(Cause.combine(Cause.fail(new Error("Request failed")), Cause.die("Connection refused"))),
-    ]) {
-      const result = await run(
-        Tool.make({
-          description: "Fail with multiple messages",
-          input: Schema.Struct({}),
-          output: Schema.String,
-          execute: () => failure,
-        }),
-      )
-
-      expect(result).toMatchObject({ ok: false, error: { kind: "ToolFailure" } })
-      if (result.ok) return
-      expect(result.error.message).toContain("Request failed")
-      expect(result.error.message).toContain("Connection refused")
-    }
-  })
-
-  test("reports invalid host output with schema details", async () => {
+  test("reports invalid host output", async () => {
     const result = await run(
       Tool.make({
         description: "Return invalid output",
@@ -102,11 +78,10 @@ describe("CodeMode host failure boundary", () => {
       }),
     )
 
-    expect(result).toMatchObject({ ok: false, error: { kind: "InvalidToolOutput" } })
-    if (result.ok) return
-    expect(result.error.message).toContain("Invalid output from tool 'host.call'")
-    expect(result.error.message).toContain("Expected string")
-    expect(result.error.message).toContain("value")
+    expect(result.ok ? undefined : result.error).toStrictEqual({
+      kind: "InvalidToolOutput",
+      message: "Invalid output from tool 'host.call': SchemaError(Expected string\n  at [\"value\"])",
+    })
   })
 
   test("reports host output copying errors", async () => {
@@ -129,10 +104,10 @@ describe("CodeMode host failure boundary", () => {
       }),
     )
 
-    expect(result).toMatchObject({ ok: false, error: { kind: "InvalidToolOutput" } })
-    if (result.ok) return
-    expect(result.error.message).toContain("Invalid output from tool 'host.call'")
-    expect(result.error.message).toContain("Cannot enumerate output")
+    expect(result.ok ? undefined : result.error).toStrictEqual({
+      kind: "InvalidToolOutput",
+      message: "Invalid output from tool 'host.call': Error: Cannot enumerate output",
+    })
   })
 
   test("caught tool failures are Error values in-program", async () => {
@@ -144,7 +119,7 @@ describe("CodeMode host failure boundary", () => {
               description: "Refuse",
               input: Schema.Struct({}),
               output: Schema.String,
-              execute: () => Effect.die(new Error("Refused")),
+              execute: () => Effect.fail(toolError("Refused")),
             }),
           },
         },

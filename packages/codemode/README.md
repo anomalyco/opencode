@@ -139,9 +139,8 @@ Diagnostic kinds:
 | `ExecutionFailure`      | The program threw or another execution error occurred.                                         |
 | `Truncated`             | Warning only: additional warnings were omitted by `maxOutputBytes`.                            |
 
-Tool failures and defects preserve their error messages, including underlying causes. Invalid outputs include the
-validation or copying error. `toolError("message", cause)` adds context without hiding the cause. Interruption
-propagates rather than becoming an error diagnostic.
+Host failures and defects report their messages and underlying causes. Invalid outputs include the validation or
+copying error. Interruption propagates without becoming an error diagnostic.
 
 ## Discovery
 

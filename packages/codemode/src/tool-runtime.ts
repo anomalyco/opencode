@@ -1,5 +1,5 @@
-import { Cause, Effect, Exit, Schema } from "effect"
-import { toolError, errorMessage } from "./tool-error.js"
+import { Cause, Effect, Exit, Formatter, Schema } from "effect"
+import { toolError } from "./tool-error.js"
 import {
   decodeInput as decodeToolInput,
   decodeOutput as decodeToolOutput,
@@ -497,7 +497,9 @@ export const make = <R>(
         const durationMs = Date.now() - startedAt
         if (Exit.isSuccess(exit)) return onEnd({ ...call, durationMs, outcome: "success" })
         if (Cause.hasInterruptsOnly(exit.cause)) return onEnd({ ...call, durationMs, outcome: "interrupted" })
-        return onEnd({ ...call, durationMs, outcome: "failure", message: errorMessage(exit.cause) })
+        const error = Cause.squash(exit.cause)
+        const message = error instanceof Error ? error.message : Cause.pretty(exit.cause)
+        return onEnd({ ...call, durationMs, outcome: "failure", message })
       }),
     )
   }
@@ -518,7 +520,7 @@ export const make = <R>(
         catch: (cause) =>
           new ToolRuntimeError(
             "InvalidToolInput",
-            `Invalid input for tool '${name}': ${errorMessage(cause)}`,
+            `Invalid input for tool '${name}': ${String(cause)}`,
             name === "search" ? [] : ["The signature may have changed. Use search to get the current signature."],
           ),
       })
@@ -531,14 +533,20 @@ export const make = <R>(
         Effect.gen(function* () {
           if (hooks?.onToolCallStart !== undefined) yield* hooks.onToolCallStart(call)
           const raw = yield* Effect.suspend(() => tool.execute(input)).pipe(
-            Effect.catchCause((cause) =>
-              Cause.hasInterruptsOnly(cause) ? Effect.interrupt : Effect.fail(toolError(errorMessage(cause))),
-            ),
+            Effect.catchCause((cause) => {
+              if (Cause.hasInterruptsOnly(cause)) return Effect.interrupt
+              return Effect.fail(
+                toolError(
+                  Cause.prettyErrors(cause)
+                    .map((error) => (error.cause ? Formatter.format(error) : error.message || error.name))
+                    .join("\n"),
+                ),
+              )
+            }),
           )
           return yield* Effect.try({
             try: () => copyIn(decodeToolOutput(tool, raw), `Result from tool '${name}'`),
-            catch: (cause) =>
-              new ToolRuntimeError("InvalidToolOutput", `Invalid output from tool '${name}': ${errorMessage(cause)}`),
+            catch: (cause) => new ToolRuntimeError("InvalidToolOutput", `Invalid output from tool '${name}': ${cause}`),
           })
         }),
         call,

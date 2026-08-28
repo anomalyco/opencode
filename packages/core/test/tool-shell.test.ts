@@ -812,7 +812,7 @@ describe("ShellTool", () => {
                 status: "error",
                 error: {
                   type: "unknown",
-                  message: `Unable to execute command: ${cwdCommand}\nWorking directory does not exist: ${path.join(tmp.path, "missing")}`,
+                  message: `Working directory does not exist: ${path.join(tmp.path, "missing")}`,
                 },
               }),
             ),

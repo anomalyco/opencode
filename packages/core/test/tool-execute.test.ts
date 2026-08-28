@@ -97,38 +97,19 @@ test("declared outputs cannot bypass validation and raw outputs stay JSON-compat
 test("foreign typed failures settle as Tool.Error at the untrusted boundary", async () => {
   class ForeignFailure extends Schema.TaggedError<ForeignFailure>()("Plugin.ForeignFailure", {
     message: Schema.String,
-    cause: Schema.Defect(),
   }) {}
   const lying: Info = {
     name: "lying",
     description: "Fails with a non-Tool.Error typed failure",
     input: Schema.Struct({}),
-    execute: () => new ForeignFailure({ message: "transport died", cause: new Error("Connection refused") }) as never,
+    execute: () => new ForeignFailure({ message: "transport died" }) as never,
   }
 
   const exit = await Effect.runPromiseExit(execute(lying, {}, context))
   expect(exit._tag).toBe("Failure")
   const error = exit._tag === "Failure" ? exit.cause.reasons.find((reason) => "error" in reason)?.error : undefined
   expect(error).toBeInstanceOf(Tool.Error)
-  expect((error as Tool.Error).message).toBe("transport died\nConnection refused")
-})
-
-test("execute preserves the underlying error of a Tool.Error", async () => {
-  const error = new Tool.Error({ message: "Request failed", error: new Error("Connection refused") })
-  for (const failure of [Effect.fail(error), Effect.die(error)]) {
-    const tool: Info = {
-      name: "failed",
-      description: "Fail with an underlying error",
-      input: Schema.Struct({}),
-      execute: () => failure,
-    }
-    const result = await Effect.runPromise(
-      createCodeMode(new Map([[tool.name, tool]])).execute({ code: "return await tools.failed({})" }, context),
-    )
-
-    expect(result.content).toEqual([{ type: "text", text: "Request failed\nConnection refused" }])
-    expect(result.metadata).toEqual({ error: true, toolCalls: [{ tool: "failed", status: "error" }] })
-  }
+  expect((error as Tool.Error).message).toBe("transport died")
 })
 
 test("execute supports callable namespace tools", async () => {

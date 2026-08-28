@@ -1,5 +1,4 @@
 import type { ToolDefinition } from "@opencode-ai/ai"
-import { errorMessage } from "@opencode-ai/codemode"
 import { Tool } from "@opencode-ai/schema/tool"
 import type { StandardJSONSchemaV1, StandardSchemaV1 } from "@standard-schema/spec"
 import { Cache, Effect, JsonSchema, Schema, SchemaIssue, SchemaRepresentation } from "effect"
@@ -38,7 +37,7 @@ export const execute = (tool: Tool.Info<any, any>, input: unknown, context: Tool
         error instanceof Tool.Error
           ? error
           : new Tool.Error({
-              message: errorMessage(error),
+              message: error instanceof globalThis.Error ? error.message : String(error),
             }),
       ),
     )

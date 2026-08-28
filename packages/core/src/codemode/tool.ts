@@ -65,7 +65,9 @@ export const create = (
           (name, tool, input) =>
             Effect.gen(function* () {
               const index = yield* Ref.getAndUpdate(callIndex, (index) => index + 1)
-              const executed = yield* executeTool(name, tool, input, context)
+              const executed = yield* executeTool(name, tool, input, context).pipe(
+                Effect.mapError((failure) => toolError(failure.message, failure)),
+              )
               const content =
                 typeof executed.content === "string"
                   ? [{ type: "text" as const, text: executed.content }]
