@@ -81,6 +81,22 @@ describe("provider error classification", () => {
     ).toEqual(["ProviderInternal", "ProviderInternal", "ProviderInternal"])
   })
 
+  test("classifies provider capacity messages as provider internal", () => {
+    const message =
+      "The model is currently at capacity due to high demand. Please try again in a few minutes, or use a higher service tier for priority processing."
+
+    expect(
+      [
+        classifyProviderFailure({ message }),
+        classifyProviderFailure({
+          message: "Provider request failed",
+          rawBody: "The service is temporarily at capacity.",
+        }),
+      ].map((failure) => failure._tag),
+    ).toEqual(["ProviderInternal", "ProviderInternal"])
+    expect(classifyProviderFailure({ message: "Please try again later." })._tag).toBe("UnknownProvider")
+  })
+
   test("classifies transient client statuses as provider internal", () => {
     expect([408, 409].map((status) => classifyProviderFailure({ message: `HTTP ${status}`, status })._tag)).toEqual([
       "ProviderInternal",

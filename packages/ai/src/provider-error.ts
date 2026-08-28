@@ -76,6 +76,7 @@ const INVALID_REQUEST_CODES = new Set(["invalid_prompt", "invalid_request_error"
 const RATE_LIMIT_TEXT = /rate increased too quickly|rate[-_\s]?limit|too[_\s]?many[_\s]?requests/i
 const QUOTA_TEXT = /insufficient[-_\s]?quota|quota[-_\s]?exceeded/i
 const CONTENT_POLICY_TEXT = /content[-_\s]?policy|content_filter|safety/i
+const CAPACITY_TEXT = /\b(?:currently|temporarily) at capacity\b/i
 
 export interface ProviderFailure {
   readonly message: string
@@ -139,6 +140,7 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
     input.status === 408 ||
     input.status === 409 ||
     (input.status !== undefined && input.status >= 500) ||
+    CAPACITY_TEXT.test(text) ||
     codes.some((code) => SERVER_CODES.has(code) || code.includes("exhausted") || code.includes("unavailable"))
   )
     return new ProviderInternalError({
