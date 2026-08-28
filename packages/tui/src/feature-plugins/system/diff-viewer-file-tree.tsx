@@ -66,21 +66,12 @@ export function DiffViewerFileTree(props: DiffViewerFileTreeProps) {
         paddingRight={2}
         backgroundColor={theme.background.default}
       >
-        <box flexShrink={0} flexDirection={props.source ? "column" : "row"} marginBottom={1}>
-          <text
+        <box id="diff-source-header" height={1} flexShrink={0} flexDirection="row" marginBottom={1} gap={1}>
+          <box
             id="diff-source-switch"
-            fg={
-              props.onSwitchSource
-                ? sourceHovered()
-                  ? theme.text.action.secondary.hovered
-                  : theme.text.action.secondary.default
-                : theme.text.default
-            }
-            attributes={TextAttributes.BOLD}
+            flexDirection="row"
             flexGrow={1}
-            wrapMode="none"
-            truncate
-            selectable={false}
+            minWidth={0}
             onMouseOver={() => setSourceHovered(true)}
             onMouseOut={() => setSourceHovered(false)}
             onMouseUp={(event) => {
@@ -89,15 +80,30 @@ export function DiffViewerFileTree(props: DiffViewerFileTreeProps) {
               props.onSwitchSource?.()
             }}
           >
-            {props.source ?? "Files"}
-          </text>
-          <Show when={props.sourceDetail}>
-            <text fg={theme.text.subdued} wrapMode="none" truncate>
-              {props.sourceDetail}
+            <text
+              fg={
+                props.onSwitchSource
+                  ? sourceHovered()
+                    ? theme.text.action.secondary.hovered
+                    : theme.text.action.secondary.default
+                  : theme.text.default
+              }
+              attributes={TextAttributes.BOLD}
+              flexShrink={0}
+              wrapMode="none"
+              selectable={false}
+            >
+              {props.source ?? "Files"}
             </text>
-          </Show>
-          <text fg={theme.text.subdued} wrapMode="none" flexShrink={0}>
-            {reviewedCount()}/{props.files.length} reviewed
+            <Show when={props.sourceDetail}>
+              <text fg={theme.text.subdued} selectable={false} flexGrow={1} minWidth={0} wrapMode="none" truncate>
+                {` · ${props.sourceDetail}`}
+              </text>
+            </Show>
+          </box>
+          <text id="diff-review-count" fg={theme.text.subdued} wrapMode="none" flexShrink={0}>
+            {reviewedCount()}/{props.files.length}
+            {props.source ? "" : " reviewed"}
           </text>
         </box>
         <scrollbox

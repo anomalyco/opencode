@@ -69,9 +69,9 @@ function storedView(value: unknown): DiffView | undefined {
 }
 
 function diffSourceLabel(mode: DiffMode) {
-  if (mode === "branch") return "Branch + uncommitted"
-  if (mode === "committed") return "Branch only"
-  return "Uncommitted only"
+  if (mode === "branch") return "All"
+  if (mode === "committed") return "Committed"
+  return "Uncommitted"
 }
 
 function DiffViewer(props: { context: Plugin.Context }) {
@@ -100,11 +100,18 @@ function DiffViewer(props: { context: Plugin.Context }) {
   )
   // Mode changes share the same lazy base lookup until this viewer is closed.
   const bases = new Map<string, ReturnType<Plugin.Context["client"]["vcs"]["base"]>>()
+  const [reportedBases, setReportedBases] = createSignal<ReadonlyMap<string, Vcs.Base | null>>(new Map())
   const diffInput = createMemo(() => ({ mode: mode(), location: location() }))
   const [diff] = createResource(diffInput, async (input) => {
     const key = locationKey(input.location)
     if (input.mode !== "working" && !bases.has(key)) {
-      bases.set(key, props.context.client.vcs.base({ location: input.location }))
+      bases.set(
+        key,
+        props.context.client.vcs.base({ location: input.location }).then((result) => {
+          setReportedBases((known) => new Map(known).set(key, result.data))
+          return result
+        }),
+      )
     }
     const base = input.mode === "working" ? undefined : await bases.get(key)
     if (input !== diffInput() || (input.mode === "committed" && !base?.data)) {
@@ -125,7 +132,7 @@ function DiffViewer(props: { context: Plugin.Context }) {
     if (!result()) return "Resolving diff..."
     const base = result()?.base
     if (!base) return "Base not reported"
-    return `vs ${base.name}${base.pullRequest ? ` (PR #${base.pullRequest.number})` : ""}`
+    return `vs ${base.name}`
   }
 
   return (
@@ -137,6 +144,7 @@ function DiffViewer(props: { context: Plugin.Context }) {
         error={diff.error}
         mode={mode()}
         sourceDetail={sourceDetail()}
+        sourceBase={reportedBases().get(locationKey(location()))}
         unavailable={mode() === "committed" && !!result() && !result()?.base}
         preferences={config.data.diffs}
         loadImage={(file, signal) => props.context.client.file.read({ path: file, location: location() }, { signal })}
@@ -163,6 +171,7 @@ export function DiffViewerContent(props: {
   error?: unknown
   mode: DiffMode
   sourceDetail?: string
+  sourceBase?: Vcs.Base | null
   unavailable?: boolean
   navigation?: "tree" | "list"
   loadImage?: (file: string, signal: AbortSignal) => Promise<Uint8Array>
@@ -603,19 +612,16 @@ export function DiffViewerContent(props: {
   const openSwitchDiffDialog = () => {
     const options = [
       {
-        title: "Branch + uncommitted",
         value: "branch" as const,
-        details: ["Merge base to working tree", "Staged, unstaged, and untracked"],
+        description: "Branch + local changes",
       },
       {
-        title: "Branch only",
         value: "committed" as const,
-        details: ["Merge base to HEAD", "No uncommitted changes"],
+        description: "Branch commits only",
       },
       {
-        title: "Uncommitted only",
         value: "working" as const,
-        details: ["HEAD to working tree", "Staged, unstaged, and untracked"],
+        description: "Local changes only",
       },
     ]
     dialog.show(() => (
@@ -624,9 +630,24 @@ export function DiffViewerContent(props: {
         skipFilter={true}
         renderFilter={false}
         current={mode()}
+        footer={
+          <Show when={props.sourceBase !== undefined}>
+            <text
+              fg={props.context.theme.contextual.elevated.text.subdued}
+              wrapMode="none"
+              truncate
+              maxWidth={Math.max(1, Math.min(54, dimensions().width - 10))}
+            >
+              {props.sourceBase
+                ? `Base  ${props.sourceBase.name}${props.sourceBase.pullRequest ? ` · PR #${props.sourceBase.pullRequest.number}` : ""}`
+                : "Base not reported"}
+            </text>
+          </Show>
+        }
         options={options.map((option) => ({
           ...option,
-          detailsWrap: true,
+          title: diffSourceLabel(option.value),
+          titleView: diffSourceLabel(option.value).padEnd(11),
           onSelect() {
             dialog.clear()
             props.onSwitchSource(option.value)
@@ -672,25 +693,44 @@ export function DiffViewerContent(props: {
   return (
     <box width="100%" height="100%" backgroundColor={theme.background.default}>
       <Show when={!showFileTree()}>
-        <box paddingLeft={2} paddingRight={2} flexShrink={0}>
-          <text
+        <box
+          id="diff-source-header"
+          paddingLeft={2}
+          paddingRight={2}
+          height={1}
+          flexShrink={0}
+          flexDirection="row"
+          gap={1}
+        >
+          <box
             id="diff-source-switch"
-            fg={theme.text.action.secondary.default}
-            attributes={TextAttributes.BOLD}
-            selectable={false}
+            flexDirection="row"
+            flexGrow={1}
+            minWidth={0}
             onMouseUp={(event) => {
               if (event.button !== MouseButton.LEFT) return
               event.stopPropagation()
               openSwitchDiffDialog()
             }}
           >
-            {diffSourceLabel(mode())}
-          </text>
-          <Show when={props.sourceDetail}>
-            <text fg={theme.text.subdued} wrapMode="none" truncate>
-              {props.sourceDetail}
+            <text
+              fg={theme.text.action.secondary.default}
+              attributes={TextAttributes.BOLD}
+              selectable={false}
+              flexShrink={0}
+              wrapMode="none"
+            >
+              {diffSourceLabel(mode())}
             </text>
-          </Show>
+            <Show when={props.sourceDetail}>
+              <text fg={theme.text.subdued} selectable={false} flexGrow={1} minWidth={0} wrapMode="none" truncate>
+                {` · ${props.sourceDetail}`}
+              </text>
+            </Show>
+          </box>
+          <text id="diff-review-count" fg={theme.text.subdued} flexShrink={0} wrapMode="none">
+            {files().filter((file) => reviewedFileNames().has(file.file)).length}/{files().length}
+          </text>
         </box>
       </Show>
       <box flexGrow={1} minHeight={0}>
@@ -710,7 +750,7 @@ export function DiffViewerContent(props: {
           <Match when={!props.loading && props.unavailable}>
             <box flexGrow={1} padding={2}>
               <text fg={theme.text.subdued}>
-                Branch-only comparison unavailable without base metadata. Choose another diff source.
+                Committed comparison unavailable without base metadata. Choose another diff source.
               </text>
             </box>
           </Match>
@@ -925,7 +965,7 @@ export function DiffViewerContent(props: {
         </Switch>
       </box>
       <Show when={!showFileTree()}>
-        <box position="absolute" top={1} right={0} width={1} height={1}>
+        <box position="absolute" top={0} right={0} width={1} height={1}>
           <HelpShortcut compact />
         </box>
       </Show>
