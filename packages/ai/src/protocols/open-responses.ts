@@ -855,6 +855,11 @@ const decodeReasoningPart = Schema.decodeUnknownOption(
   Schema.Struct({ type: Schema.tag("reasoning_text"), text: Schema.String }),
 )
 
+const joinReasoningText = (parts: ReadonlyArray<string | undefined>) => {
+  if (!parts.some((part) => part !== undefined && part.length > 0)) return undefined
+  return parts.filter((part) => part !== undefined).join("\n\n")
+}
+
 export const outputItemID = (state: ParserState, event: Event) =>
   event.output_index === undefined ? event.item_id : (state.outputItems[event.output_index] ?? event.item_id)
 
@@ -1085,12 +1090,13 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
     const message = state.message?.id === item.id ? state.message : undefined
     const itemPhase = messagePhase(item.phase)
     const phase = itemPhase === undefined ? message?.phase : itemPhase
-    const content = Array.isArray(item.content)
-      ? item.content.flatMap((part: unknown) => {
-          const decoded = Option.getOrUndefined(decodeMessagePart(part))
-          return decoded ? [decoded.type === "output_text" ? decoded.text : decoded.refusal] : []
-        })
-      : []
+    const parts: ReadonlyArray<unknown> = Array.isArray(item.content) ? item.content : []
+    const content: string[] = []
+    for (const part of parts) {
+      const decoded = Option.getOrUndefined(decodeMessagePart(part))
+      if (!decoded) continue
+      content.push(decoded.type === "output_text" ? decoded.text : decoded.refusal)
+    }
     const text = content.length > 0 ? content.join("") : undefined
     const metadata = providerMetadata(state, { itemId: item.id, ...(phase === undefined ? {} : { phase }) })
     const events: LLMEvent[] = []
@@ -1157,35 +1163,30 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
   if (isReasoningItem(item)) {
     if (state.reasoningItems[item.id]?.open === false) return [state, NO_EVENTS] satisfies StepResult
     const metadata = reasoningMetadata(state, item)
-    const summary = Array.isArray(item.summary)
-      ? item.summary.map((part: unknown) => Option.getOrUndefined(decodeSummaryPart(part))?.text)
-      : []
-    const content = Array.isArray(item.content)
-      ? item.content.flatMap((part: unknown) => {
-          const decoded = Option.getOrUndefined(decodeReasoningPart(part))
-          return decoded ? [decoded.text] : []
-        })
-      : []
-    const text = summary.some(Boolean)
-      ? summary.filter((part) => part !== undefined).join("\n\n")
-      : content.some(Boolean)
-        ? content.join("\n\n")
-        : undefined
+    const summaryParts: ReadonlyArray<unknown> = Array.isArray(item.summary) ? item.summary : []
+    const summary: Array<string | undefined> = []
+    for (const part of summaryParts) {
+      const decoded = Option.getOrUndefined(decodeSummaryPart(part))
+      // Keep missing entries so the array still matches the provider's summary indexes.
+      summary.push(decoded?.text)
+    }
+    const reasoningParts: ReadonlyArray<unknown> = Array.isArray(item.content) ? item.content : []
+    const content: string[] = []
+    for (const part of reasoningParts) {
+      const decoded = Option.getOrUndefined(decodeReasoningPart(part))
+      if (decoded) content.push(decoded.text)
+    }
+    const itemText = joinReasoningText(summary) ?? joinReasoningText(content)
     const events: LLMEvent[] = []
     const reasoningItem = state.reasoningItems[item.id]
     if (reasoningItem) {
-      const parts = Object.entries(reasoningItem.summaryParts)
+      const fragments = Object.entries(reasoningItem.summaryParts)
       let lifecycle = state.lifecycle
-      // Once earlier summaries have closed, the whole item cannot replace the remaining fragment.
-      for (const [index, status] of parts) {
+      for (const [index, status] of fragments) {
         if (status === "concluded") continue
-        lifecycle = Lifecycle.reasoningEnd(
-          lifecycle,
-          events,
-          `${item.id}:${index}`,
-          metadata,
-          parts.length === 1 ? text : summary[Number(index)] || undefined,
-        )
+        // Do not repeat earlier summaries that were already emitted as separate fragments.
+        const finalText = fragments.length === 1 ? itemText : summary[Number(index)]
+        lifecycle = Lifecycle.reasoningEnd(lifecycle, events, `${item.id}:${index}`, metadata, finalText || undefined)
       }
       return [
         {
@@ -1210,7 +1211,7 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
         LLMEvent.reasoningEnd({
           id: item.id,
           providerMetadata: metadata,
-          text,
+          text: itemText,
         }),
       )
       return [
