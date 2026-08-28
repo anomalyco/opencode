@@ -18,7 +18,8 @@ GitHub Copilot. It is not a generic OpenAI-compatible provider.
 Keep `chat/` and `responses/` structurally close to their upstream modules, but
 preserve the intentional Copilot adaptations: the `copilot` options and metadata
 namespace, `thinking_budget`, reasoning text and opaque reasoning, stateless
-Responses requests with encrypted reasoning, and rotating response item IDs.
+Responses requests with encrypted reasoning, rotating response item IDs, and
+explicit function-tool strictness taking precedence over the global fallback.
 
 `copilot-provider.ts` is the local adapter assembly entrypoint used by
 `plugin/provider/github-copilot.ts`. `models.ts` is OpenCode-owned catalog
@@ -32,5 +33,6 @@ in:
 - `test/github-copilot/copilot-chat-model.test.ts`
 - `test/github-copilot/convert-to-copilot-messages.test.ts`
 - `test/github-copilot/openai-responses-language-model.test.ts`
+- `test/github-copilot/openai-responses-prepare-tools.test.ts`
 - `test/github-copilot/models.test.ts`
 - `test/plugin/provider-github-copilot.test.ts`
