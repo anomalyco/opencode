@@ -7,7 +7,7 @@ import { Bus } from "@opencode-ai/core/bus"
 import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { Provider } from "@opencode-ai/core/provider"
-import { Effect, Schema, Stream } from "effect"
+import { Effect, Schema } from "effect"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "../plugin/fixture"
 

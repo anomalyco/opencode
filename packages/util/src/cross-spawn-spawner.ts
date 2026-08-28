@@ -1,6 +1,4 @@
 import type { NonEmptyReadonlyArray } from "effect/Array"
-import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem"
-import * as NodePath from "@effect/platform-node/NodePath"
 import * as NodeSink from "@effect/platform-node/NodeSink"
 import * as NodeStream from "@effect/platform-node/NodeStream"
 import { Deferred, Effect, Exit, FileSystem, Layer, Path, PlatformError, Predicate, Sink, Stream } from "effect"
@@ -323,6 +321,22 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
       return Effect.fail(toPlatformError("kill", new Error("Failed to kill child process"), command))
     })
 
+  const stop = (
+    command: ChildProcess.StandardCommand,
+    proc: NodeChildProcess.ChildProcess,
+    exit: ExitSignal,
+    opts: ChildProcess.KillOptions | undefined,
+  ) => {
+    const send = (signal: NodeJS.Signals) =>
+      Effect.catch(killGroup(command, proc, signal), () => killOne(command, proc, signal))
+    const attempt = send(opts?.killSignal ?? "SIGTERM").pipe(Effect.andThen(Deferred.await(exit)), Effect.asVoid)
+    if (!opts?.forceKillAfter) return attempt
+    return Effect.timeoutOrElse(attempt, {
+      duration: opts.forceKillAfter,
+      orElse: () => send("SIGKILL").pipe(Effect.andThen(Deferred.await(exit)), Effect.asVoid),
+    })
+  }
+
   const timeout =
     (
       proc: NodeChildProcess.ChildProcess,
@@ -390,17 +404,7 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
                 if (code !== 0 && Predicate.isNotNull(code)) return yield* Effect.ignore(kill(killGroup))
                 return yield* Effect.void
               }
-              const send = (s: NodeJS.Signals) =>
-                Effect.catch(killGroup(command, proc, s), () => killOne(command, proc, s))
-              const sig = command.options.killSignal ?? "SIGTERM"
-              const attempt = send(sig).pipe(Effect.andThen(Deferred.await(signal)), Effect.asVoid)
-              const escalated = command.options.forceKillAfter
-                ? Effect.timeoutOrElse(attempt, {
-                    duration: command.options.forceKillAfter,
-                    orElse: () => send("SIGKILL").pipe(Effect.andThen(Deferred.await(signal)), Effect.asVoid),
-                  })
-                : attempt
-              return yield* Effect.ignore(escalated)
+              return yield* Effect.ignore(stop(command, proc, signal, command.options))
             }),
           )
 
@@ -426,17 +430,7 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
                 ),
               )
             }),
-            kill: (opts?: ChildProcess.KillOptions) => {
-              const sig = opts?.killSignal ?? "SIGTERM"
-              const send = (s: NodeJS.Signals) =>
-                Effect.catch(killGroup(command, proc, s), () => killOne(command, proc, s))
-              const attempt = send(sig).pipe(Effect.andThen(Deferred.await(signal)), Effect.asVoid)
-              if (!opts?.forceKillAfter) return attempt
-              return Effect.timeoutOrElse(attempt, {
-                duration: opts.forceKillAfter,
-                orElse: () => send("SIGKILL").pipe(Effect.andThen(Deferred.await(signal)), Effect.asVoid),
-              })
-            },
+            kill: (opts?: ChildProcess.KillOptions) => stop(command, proc, signal, opts),
             unref: Effect.sync(() => {
               if (ref) {
                 proc.unref()

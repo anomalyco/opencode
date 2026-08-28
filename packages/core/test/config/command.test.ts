@@ -19,7 +19,7 @@ import { WellKnown } from "@opencode-ai/core/wellknown"
 import { Global } from "@opencode-ai/util/global"
 import { AppProcess } from "@opencode-ai/util/process"
 import { Location } from "@opencode-ai/core/location"
-import { MCP } from "@opencode-ai/core/mcp/index"
+import { Mcp } from "@opencode-ai/core/mcp/index"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { ShellSelect } from "@opencode-ai/core/shell/select"
 import { Watcher } from "@opencode-ai/core/filesystem/watcher"
@@ -43,7 +43,7 @@ const it = testEffect(
   AppNodeBuilder.build(
     LayerNode.group([Command.node, Bus.node, FSUtil.node, AppProcess.node, Location.node, ShellSelect.node]),
     [
-      [MCP.node, emptyMcpLayer],
+      [Mcp.node, emptyMcpLayer],
       [Config.node, emptyConfigLayer],
       [Location.node, testLocationLayer],
       [ShellSelect.node, shellLayer],
@@ -431,9 +431,7 @@ function sourceCases() {
     {
       name: "updated",
       prepare: (directory: string) =>
-        Effect.promise(() =>
-          fs.writeFile(path.join(directory, "review.md"), markdown("Review first", "Review first")),
-        ),
+        Effect.promise(() => fs.writeFile(path.join(directory, "review.md"), markdown("Review first", "Review first"))),
       mutate: (directory: string) =>
         Effect.promise(async () => {
           const file = path.join(directory, "review.md")

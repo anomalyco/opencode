@@ -644,7 +644,7 @@ export function persisted<T>(
       : undefined
   if (channel) onCleanup(() => channel.close())
 
-  const [state, setState, init] = makePersisted(store, {
+  const [state, setState, init] = makePersisted<T, typeof store>(store, {
     name: config.key,
     storage,
     sync: channel ? messageSync(channel) : undefined,

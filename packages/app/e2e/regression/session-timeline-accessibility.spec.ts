@@ -25,7 +25,7 @@ test("space activates a focused timeline button instead of scrolling", async ({ 
     seedHistory: true,
   })
   const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
-  const trigger = page.getByRole("button", { name: "Used Shell" })
+  const trigger = page.getByRole("button", { name: "Used 1 Shell", exact: true })
   await expect
     .poll(() => scroller.evaluate((element) => element.scrollHeight - element.clientHeight))
     .toBeGreaterThan(300)
