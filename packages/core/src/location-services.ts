@@ -12,16 +12,18 @@ export { LocationServiceMap } from "./location-service-map.js"
 export type LocationServices = Instance.Services
 export type LocationError = Instance.Error
 
+export function canonicalizeLocationRef(ref: Location.Ref) {
+  return Location.Ref.make({
+    directory: AbsolutePath.make(process.platform === "win32" ? path.normalize(ref.directory) : ref.directory),
+    workspaceID: ref.workspaceID,
+  })
+}
+
 export function buildLocationServiceMap(
   replacements: LayerNode.Replacements = [],
 ): Layer.Layer<LocationServiceMap.Service> {
   // Structural Equal distinguishes optional-key shape and Windows separator style.
   // The RcMap caches the raw key before the build callback, so normalize both here.
-  const canonical = (ref: Location.Ref) =>
-    Location.Ref.make({
-      directory: AbsolutePath.make(process.platform === "win32" ? path.normalize(ref.directory) : ref.directory),
-      workspaceID: ref.workspaceID,
-    })
   return Layer.effect(
     LocationServiceMap.Service,
     Effect.map(
@@ -35,9 +37,9 @@ export function buildLocationServiceMap(
       }),
       (inner) => ({
         ...inner,
-        get: (ref: Location.Ref) => inner.get(canonical(ref)),
-        contextEffect: (ref: Location.Ref) => inner.contextEffect(canonical(ref)),
-        invalidate: (ref: Location.Ref) => inner.invalidate(canonical(ref)),
+        get: (ref: Location.Ref) => inner.get(canonicalizeLocationRef(ref)),
+        contextEffect: (ref: Location.Ref) => inner.contextEffect(canonicalizeLocationRef(ref)),
+        invalidate: (ref: Location.Ref) => inner.invalidate(canonicalizeLocationRef(ref)),
       }),
     ),
   )

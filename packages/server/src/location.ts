@@ -1,5 +1,5 @@
 import { Location } from "@opencode-ai/core/location"
-import { LocationServiceMap } from "@opencode-ai/core/location-services"
+import { canonicalizeLocationRef, LocationServiceMap } from "@opencode-ai/core/location-services"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
 import { Workspace } from "@opencode-ai/core/workspace"
@@ -45,8 +45,20 @@ export function withLoadedSessionServices<A, E>(
         .get(id)
         .pipe(Effect.mapError(() => new SessionNotFoundError({ sessionID: id, message: `Session not found: ${id}` })))
 
-      if (!(yield* RcMap.has(locations.rcMap, session.location))) return Option.none<A>()
-      return Option.some(yield* use(yield* locations.contextEffect(session.location)))
+      return yield* withLoadedLocationServices(locations, session.location, use)
+    }),
+  )
+}
+
+export function withLoadedLocationServices<A, E>(
+  locations: Context.Service.Shape<typeof LocationServiceMap.Service>,
+  ref: Location.Ref,
+  use: (context: Context.Context<LocationServices>) => Effect.Effect<A, E>,
+) {
+  return Effect.scoped(
+    Effect.gen(function* () {
+      if (!(yield* RcMap.has(locations.rcMap, canonicalizeLocationRef(ref)))) return Option.none<A>()
+      return Option.some(yield* use(yield* locations.contextEffect(ref)))
     }),
   )
 }

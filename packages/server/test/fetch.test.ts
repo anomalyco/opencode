@@ -304,6 +304,15 @@ it.live("does not load a location when reading pending session requests", () =>
       expect(response.status).toBe(200)
       expect(yield* Effect.promise(() => response.json())).toEqual({ data: [] })
     }
+    const global = yield* Effect.promise(() =>
+      handler(
+        new Request("http://opencode.local/api/session/global/form", {
+          headers: { "x-opencode-directory": encodeURIComponent(process.cwd()) },
+        }),
+      ),
+    )
+    expect(global.status).toBe(200)
+    expect(yield* Effect.promise(() => global.json())).toEqual({ data: [] })
     expect(yield* loaded()).toEqual([])
 
     const createdForm = yield* Effect.promise(() =>
@@ -325,6 +334,30 @@ it.live("does not load a location when reading pending session requests", () =>
       data: [{ title: "Test form" }],
     })
     expect(yield* loaded()).toHaveLength(1)
+
+    const globalForm = yield* Effect.promise(() =>
+      handler(
+        new Request("http://opencode.local/api/session/global/form", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-opencode-directory": encodeURIComponent(process.cwd()),
+          },
+          body: JSON.stringify({ title: "Global form", fields: [{ key: "answer", type: "string" }] }),
+        }),
+      ),
+    )
+    expect(globalForm.status).toBe(200)
+
+    const globalForms = yield* Effect.promise(() =>
+      handler(
+        new Request("http://opencode.local/api/session/global/form", {
+          headers: { "x-opencode-directory": encodeURIComponent(process.cwd()) },
+        }),
+      ),
+    )
+    expect(globalForms.status).toBe(200)
+    expect(yield* Effect.promise(() => globalForms.json())).toMatchObject({ data: [{ title: "Global form" }] })
   }),
 )
 
