@@ -18,7 +18,7 @@ import { GrepTool } from "@opencode-ai/core/tool/plugin/grep"
 import { Tool } from "@opencode-ai/core/tool"
 import { location } from "./fixture/location"
 import { tmpdir } from "./fixture/tmpdir"
-import { testEffect } from "./lib/effect"
+import { it } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
 import { executeTool, registerToolPlugin, toolIdentity } from "./lib/tool"
 
@@ -40,7 +40,8 @@ const withTools = <A, E, R>(
   assertions?: Permission.AssertInput[],
 ) =>
   Effect.gen(function* () {
-    return yield* body(yield* Tool.Service)
+    const registry = yield* Tool.Service
+    return yield* body(registry)
   }).pipe(
     Effect.provide(
       AppNodeBuilder.build(LayerNode.group([Tool.node, globToolNode, grepToolNode]), [
@@ -66,8 +67,6 @@ const call = (name: "glob" | "grep", input: unknown) => ({
   ...toolIdentity,
   call: { type: "tool-call" as const, id: `call-${name}`, name, input },
 })
-
-const it = testEffect(Layer.empty)
 
 describe("search tools", () => {
   it.live("bounds omitted glob and grep limits", () =>

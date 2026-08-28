@@ -1,5 +1,5 @@
 import { Plugin } from "@opencode-ai/plugin/effect"
-import type { IntegrationMethod, IntegrationMethodRegistration } from "@opencode-ai/plugin/effect/integration"
+import type { IntegrationMethod } from "@opencode-ai/plugin/effect/integration"
 import { Agent } from "@opencode-ai/core/agent"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Credential } from "@opencode-ai/core/credential"
@@ -57,6 +57,11 @@ export function host(overrides: Overrides = {}): Plugin.Context {
     },
     event: overrides.event ?? {
       subscribe: () => Stream.empty,
+    },
+    experimental: overrides.experimental ?? {
+      terminal: {
+        read: () => Effect.die("unused experimental.terminal.read"),
+      },
     },
     generate: overrides.generate ?? {
       text: () => Effect.die("unused generate.text"),
@@ -439,10 +444,6 @@ export function webSearchHost(websearch: WebSearch.Interface): Plugin.Context["w
         })
       }),
   }
-}
-
-function oauthCredential(value: Credential.OAuth) {
-  return Credential.OAuth.make({ ...value, methodID: Integration.MethodID.make(value.methodID) })
 }
 
 function internalMethod(value: IntegrationMethod): Integration.Method {

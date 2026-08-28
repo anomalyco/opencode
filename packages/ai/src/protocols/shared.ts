@@ -207,15 +207,16 @@ export const errorText = (error: unknown) => {
 
 /**
  * `framing` step for Server-Sent Events. Decodes UTF-8, runs the SSE channel
- * decoder, optionally filters named events, and drops empty / `[DONE]`
- * keep-alive events so the protocol event schema sees one JSON string per
- * element. Retry control events are ignored without interrupting the stream.
+ * decoder, optionally filters named events, and drops empty events. `[DONE]`
+ * is dropped by default or retained for protocols that use it as their stream
+ * boundary. Retry control events are ignored without interrupting the stream.
  * Decoder failures become provider output errors so the public error channel
  * stays `AIError`.
  */
 export const sseFraming = (
   bytes: Stream.Stream<Uint8Array, AIError>,
   events?: ReadonlySet<string>,
+  includeDone = false,
 ): Stream.Stream<string, AIError> =>
   bytes.pipe(
     Stream.decodeText(),
@@ -240,7 +241,7 @@ export const sseFraming = (
       (event) =>
         (events === undefined || events.has(event.event)) &&
         event.data.length > 0 &&
-        (event.data !== "[DONE]" || (events !== undefined && event.event !== "message")),
+        (event.data !== "[DONE]" || includeDone || (events !== undefined && event.event !== "message")),
     ),
     Stream.map((event) => event.data),
   )

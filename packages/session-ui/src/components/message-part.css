@@ -702,12 +702,6 @@
     white-space: nowrap;
   }
 
-  [data-component="tag"] {
-    flex-shrink: 0;
-    border: 0;
-    background: var(--v2-background-bg-layer-03);
-  }
-
   [data-slot="collapsible-arrow"] {
     color: var(--icon-weaker);
     cursor: pointer;

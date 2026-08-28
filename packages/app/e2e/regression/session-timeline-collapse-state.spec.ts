@@ -93,7 +93,8 @@ test.describe("regression: session timeline local row state", () => {
     await expectSessionTitle(page, title)
 
     const group = page.locator('[data-component="collapsed-tool-group"]')
-    const summary = group.getByRole("button", { name: "Used Patch", exact: true })
+    const summary = group.getByRole("button", { name: /^Used \d+ Patch$/ })
+    await expect(summary).toHaveAccessibleName("Used 1 Patch")
     await summary.click()
     await group.locator(`[data-timeline-part-id="${editPartID}"]`).evaluate((element) => {
       element.setAttribute("data-disclosure-probe", "existing")
@@ -109,7 +110,8 @@ test.describe("regression: session timeline local row state", () => {
       if (count === 3) await trigger.click()
       const id = `prt_patch_${count}`
       events.push(...toolEvents({ ...part, id, callID: id }))
-      await expect(group.locator('[data-component="tag"]')).toHaveText(String(count))
+      await expect(summary).toHaveAccessibleName(`Used ${count} Patch`)
+      await expect(summary.locator('[data-slot="basic-tool-tool-title"]')).toHaveText(`${count} Patch`)
       await expect(group).toHaveAttribute("data-timeline-part-ids", new RegExp(`${id}$`))
       await expect(trigger).toHaveAttribute("aria-expanded", String(count === 2))
       await expect(summary).toHaveAttribute("aria-expanded", "true")

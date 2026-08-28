@@ -202,7 +202,7 @@ export const preview = Effect.fn("InstructionState.preview")(function* (
     update: Instructions.renderUpdate(
       instructions,
       dereference(state.current_values, stored),
-      dereferenceDelta(result.delta, new Map([...stored, ...observedBlobs])),
+      dereferenceDelta(result.delta, observedBlobs),
     ),
   }
 })

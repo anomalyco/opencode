@@ -4,7 +4,7 @@ import os from "node:os"
 import path from "node:path"
 import { Context, Effect, Layer, Schema } from "effect"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
-import { Added, Handoff, PersistentPty, Removed } from "@opencode-ai/schema/persistent-pty"
+import { Added, Handoff, PersistentPty, ReadLines, Removed, type ReadResult } from "@opencode-ai/schema/persistent-pty"
 import { Session } from "@opencode-ai/schema/session"
 import { Bus } from "../bus.js"
 import { Pty } from "@opencode-ai/schema/pty"
@@ -93,6 +93,7 @@ export interface Interface {
     data: Uint8Array,
   ) => Effect.Effect<void, NotFoundError | UnavailableError>
   readonly snapshot: (id: Pty.ID) => Effect.Effect<Snapshot, NotFoundError | UnavailableError>
+  readonly read: (sessionID: Session.ID, lines?: number) => Effect.Effect<ReadResult | null, UnavailableError>
   readonly remove: (id: Pty.ID) => Effect.Effect<void, NotFoundError | UnavailableError>
   readonly shutdown: () => Effect.Effect<void, UnavailableError>
   readonly handoff: () => Effect.Effect<Handoff | null, UnavailableError>
@@ -130,6 +131,8 @@ export const configured = (options: Options = {}) =>
         options.handoff,
       ).pipe(Effect.mapError(unavailable))
       const removing = new Set<Pty.ID>()
+      // Controller activity selects a terminal; observer reads and pane visibility do not.
+      const current = new Map<Session.ID, Pty.ID>()
 
       const list = Effect.fn("PersistentPty.list")(function* (sessionID?: Session.ID) {
         const response = yield* optionalRequest(daemon, { op: "list" })
@@ -189,7 +192,7 @@ export const configured = (options: Options = {}) =>
         rows: number,
         attachmentID?: string,
       ) {
-        yield* get(id)
+        const terminal = yield* get(id)
         const response = yield* request(daemon, {
           op: "resize",
           id: fromID(id),
@@ -198,6 +201,7 @@ export const configured = (options: Options = {}) =>
           rows,
         })
         if (response.type !== "ok") return yield* unexpected(response)
+        current.set(terminal.sessionID, id)
         return undefined
       })
 
@@ -207,7 +211,7 @@ export const configured = (options: Options = {}) =>
         cols: number,
         rows: number,
       ) {
-        yield* get(id)
+        const terminal = yield* get(id)
         const response = yield* request(daemon, {
           op: "control",
           id: fromID(id),
@@ -216,6 +220,7 @@ export const configured = (options: Options = {}) =>
           rows,
         })
         if (response.type !== "ok") return yield* unexpected(response)
+        current.set(terminal.sessionID, id)
         return undefined
       })
 
@@ -226,7 +231,7 @@ export const configured = (options: Options = {}) =>
         rows: number,
         data: Uint8Array,
       ) {
-        yield* get(id)
+        const terminal = yield* get(id)
         const response = yield* request(daemon, {
           op: "input",
           id: fromID(id),
@@ -236,6 +241,7 @@ export const configured = (options: Options = {}) =>
           data_base64: Buffer.from(data).toString("base64"),
         })
         if (response.type !== "ok") return yield* unexpected(response)
+        current.set(terminal.sessionID, id)
         return undefined
       })
 
@@ -251,16 +257,46 @@ export const configured = (options: Options = {}) =>
         }
       })
 
+      const read = Effect.fn("PersistentPty.read")(function* (sessionID: Session.ID, lines?: number) {
+        if (lines !== undefined && !Schema.is(ReadLines)(lines))
+          return yield* new UnavailableError({ message: "lines must be an integer between 1 and 65535" })
+        const id = current.get(sessionID)
+        if (!id) return null
+        const terminal = yield* get(id).pipe(Effect.catchTag("PersistentPty.NotFoundError", () => Effect.succeed(null)))
+        if (!terminal || terminal.sessionID !== sessionID) {
+          if (current.get(sessionID) === id) current.delete(sessionID)
+          return null
+        }
+        // Let the daemon choose the live height in the same snapshot when lines is omitted.
+        const response = yield* request(daemon, { op: "read_rows", id: fromID(id), rows: lines })
+        if (response.type !== "rows") return yield* unexpected(response)
+        const info = toInfo(response.terminal)
+        return {
+          ptyID: info.id,
+          title: info.title,
+          cwd: info.cwd,
+          foregroundProcess: info.foregroundProcess,
+          screen: {
+            text: response.lines.join("\n"),
+            cols: info.size.cols,
+            rows: info.size.rows,
+            cursor: { x: response.cursor_x, y: response.cursor_y },
+          },
+        }
+      })
+
       const remove = Effect.fn("PersistentPty.remove")(function* (id: Pty.ID) {
         const terminal = yield* get(id)
         const response = yield* request(daemon, { op: "terminate", id: fromID(id) })
         if (response.type !== "ok") return yield* unexpected(response)
+        if (current.get(terminal.sessionID) === id) current.delete(terminal.sessionID)
         yield* bus.publish(Removed, { sessionID: terminal.sessionID, ptyID: id })
         return undefined
       })
 
       const shutdown = Effect.fn("PersistentPty.shutdown")(function* () {
         const response = yield* daemon.shutdown.pipe(Effect.mapError(unavailable))
+        current.clear()
         if (!response) return
         if (response.type !== "ok") return yield* unexpected(response)
       })
@@ -296,6 +332,7 @@ export const configured = (options: Options = {}) =>
             },
           })
           .pipe(Effect.mapError(unavailable))
+        if (attachment.role === "controller") current.set(Session.ID.make(attachment.terminal.group_id), id)
         return {
           info: toInfo(attachment.terminal),
           role: attachment.role,
@@ -315,6 +352,7 @@ export const configured = (options: Options = {}) =>
         control,
         input,
         snapshot,
+        read,
         remove,
         shutdown,
         handoff,
