@@ -28,9 +28,9 @@ export const Input = Schema.Struct({
   agent: Schema.String.annotate({ description: "The type of specialized agent to use for this task" }),
   description: Schema.String.annotate({ description: "A short 3-5 word label for the task, displayed to the user" }),
   prompt: Schema.String.annotate({ description: "The task for the subagent to perform" }),
-  sessionID: Schema.optionalKey(SessionSchema.ID).annotate({
+  sessionID: Schema.optionalKey(Schema.NullOr(SessionSchema.ID)).annotate({
     description:
-      "Optional. To continue a previous child, pass the sessionID returned by its earlier subagent call. To start a new child, omit this field. Never pass the current session ID or invent an ID.",
+      "To continue a previous child, pass the sessionID returned by its earlier subagent call. To start a new child, pass null or omit this field. Never pass the current session ID or invent an ID.",
   }),
   background: Schema.optionalKey(Schema.Boolean).annotate({
     description:
@@ -45,7 +45,7 @@ export const Output = Schema.Struct({
 })
 export const description = [
   "Spawns an agent in a child session to work on the specified task.",
-  "To start a new child, omit sessionID. To continue a previous child, pass the sessionID returned by its earlier subagent call.",
+  "To start a new child, pass sessionID=null or omit sessionID. To continue a previous child, pass the sessionID returned by its earlier subagent call.",
   "Never pass the current session ID or invent an ID.",
   "New child sessions start with fresh context, so include all relevant context and instructions when you don't pass a sessionID.",
   "Foreground (default) runs the subagent to completion and returns its final response.",
@@ -117,7 +117,7 @@ export const Plugin = {
                 .pipe(Effect.mapError((error) => new ToolFailure({ message: `Subagent denied: ${agent.id}`, error })))
 
               const existing =
-                input.sessionID === undefined
+                input.sessionID == null
                   ? undefined
                   : yield* sessions
                       .get(input.sessionID)
