@@ -1,4 +1,4 @@
-export * as MCPOAuth from "./oauth.js"
+export * as McpOAuth from "./oauth.js"
 
 import { auth, type OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js"
 import type { OAuthClientInformationMixed, OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js"

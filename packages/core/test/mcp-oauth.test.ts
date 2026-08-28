@@ -3,7 +3,7 @@ import { auth, refreshAuthorization } from "@modelcontextprotocol/sdk/client/aut
 import { ConfigMCP } from "@opencode-ai/schema/config/mcp"
 import { Credential } from "@opencode-ai/schema/credential"
 import { Integration } from "@opencode-ai/core/integration"
-import { MCPOAuth } from "@opencode-ai/core/mcp/oauth"
+import { McpOAuth } from "@opencode-ai/core/mcp/oauth"
 import { Effect } from "effect"
 
 const authServer = Bun.serve({ port: 0, fetch: () => new Response(null, { status: 404 }) })
@@ -13,7 +13,7 @@ const authorize = (redirect_uri?: string) =>
   Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        const authorization = yield* MCPOAuth.authorize({
+        const authorization = yield* McpOAuth.authorize({
           name: "test",
           config: new ConfigMCP.Remote({
             type: "remote",

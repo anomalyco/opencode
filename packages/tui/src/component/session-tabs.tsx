@@ -1,4 +1,4 @@
-import { RGBA, ScrollBoxRenderable, TextAttributes, type MouseEvent } from "@opentui/core"
+import { BoxRenderable, RGBA, ScrollBoxRenderable, TextAttributes, type MouseEvent } from "@opentui/core"
 import {
   For,
   Index,
@@ -398,7 +398,16 @@ function TabContextMenu(props: { state: TabContextMenuState; tabs: SessionTabsCo
   }
 
   return (
-    <Portal>
+    <Portal
+      ref={(container) => {
+        if (!(container instanceof BoxRenderable)) return
+        // Portal's wrapper otherwise follows the full-height app in root layout.
+        container.position = "absolute"
+        container.left = 0
+        container.top = 0
+        container.zIndex = 2500
+      }}
+    >
       <box
         position="absolute"
         left={0}

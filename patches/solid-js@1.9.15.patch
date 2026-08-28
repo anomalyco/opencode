@@ -1,0 +1,152 @@
+diff --git a/dist/dev.cjs b/dist/dev.cjs
+--- a/dist/dev.cjs
++++ b/dist/dev.cjs
+@@ -1009,18 +1009,21 @@ function cleanNode(node) {
+     }
+   }
+   if (node.tOwned) {
+-    for (i = node.tOwned.length - 1; i >= 0; i--) cleanNode(node.tOwned[i]);
++    const tOwned = node.tOwned;
+     delete node.tOwned;
++    for (i = tOwned.length - 1; i >= 0; i--) cleanNode(tOwned[i]);
+   }
+   if (Transition && Transition.running && node.pure) {
+     reset(node, true);
+   } else if (node.owned) {
+-    for (i = node.owned.length - 1; i >= 0; i--) cleanNode(node.owned[i]);
++    const owned = node.owned;
+     node.owned = null;
++    for (i = owned.length - 1; i >= 0; i--) cleanNode(owned[i]);
+   }
+   if (node.cleanups) {
+-    for (i = node.cleanups.length - 1; i >= 0; i--) node.cleanups[i]();
++    const cleanups = node.cleanups;
+     node.cleanups = null;
++    for (i = cleanups.length - 1; i >= 0; i--) cleanups[i]();
+   }
+   if (Transition && Transition.running) node.tState = 0;else node.state = 0;
+   delete node.sourceMap;
+diff --git a/dist/dev.js b/dist/dev.js
+--- a/dist/dev.js
++++ b/dist/dev.js
+@@ -1007,18 +1007,21 @@ function cleanNode(node) {
+     }
+   }
+   if (node.tOwned) {
+-    for (i = node.tOwned.length - 1; i >= 0; i--) cleanNode(node.tOwned[i]);
++    const tOwned = node.tOwned;
+     delete node.tOwned;
++    for (i = tOwned.length - 1; i >= 0; i--) cleanNode(tOwned[i]);
+   }
+   if (Transition && Transition.running && node.pure) {
+     reset(node, true);
+   } else if (node.owned) {
+-    for (i = node.owned.length - 1; i >= 0; i--) cleanNode(node.owned[i]);
++    const owned = node.owned;
+     node.owned = null;
++    for (i = owned.length - 1; i >= 0; i--) cleanNode(owned[i]);
+   }
+   if (node.cleanups) {
+-    for (i = node.cleanups.length - 1; i >= 0; i--) node.cleanups[i]();
++    const cleanups = node.cleanups;
+     node.cleanups = null;
++    for (i = cleanups.length - 1; i >= 0; i--) cleanups[i]();
+   }
+   if (Transition && Transition.running) node.tState = 0;else node.state = 0;
+   delete node.sourceMap;
+diff --git a/dist/server.cjs b/dist/server.cjs
+--- a/dist/server.cjs
++++ b/dist/server.cjs
+@@ -127,12 +127,14 @@ function onCleanup(fn) {
+ }
+ function cleanNode(node) {
+   if (node.owned) {
+-    for (let i = 0; i < node.owned.length; i++) cleanNode(node.owned[i]);
++    const owned = node.owned;
+     node.owned = null;
++    for (let i = 0; i < owned.length; i++) cleanNode(owned[i]);
+   }
+   if (node.cleanups) {
+-    for (let i = 0; i < node.cleanups.length; i++) node.cleanups[i]();
++    const cleanups = node.cleanups;
+     node.cleanups = null;
++    for (let i = 0; i < cleanups.length; i++) cleanups[i]();
+   }
+ }
+ function catchError(fn, handler) {
+diff --git a/dist/server.js b/dist/server.js
+--- a/dist/server.js
++++ b/dist/server.js
+@@ -125,12 +125,14 @@ function onCleanup(fn) {
+ }
+ function cleanNode(node) {
+   if (node.owned) {
+-    for (let i = 0; i < node.owned.length; i++) cleanNode(node.owned[i]);
++    const owned = node.owned;
+     node.owned = null;
++    for (let i = 0; i < owned.length; i++) cleanNode(owned[i]);
+   }
+   if (node.cleanups) {
+-    for (let i = 0; i < node.cleanups.length; i++) node.cleanups[i]();
++    const cleanups = node.cleanups;
+     node.cleanups = null;
++    for (let i = 0; i < cleanups.length; i++) cleanups[i]();
+   }
+ }
+ function catchError(fn, handler) {
+diff --git a/dist/solid.cjs b/dist/solid.cjs
+--- a/dist/solid.cjs
++++ b/dist/solid.cjs
+@@ -964,18 +964,21 @@ function cleanNode(node) {
+     }
+   }
+   if (node.tOwned) {
+-    for (i = node.tOwned.length - 1; i >= 0; i--) cleanNode(node.tOwned[i]);
++    const tOwned = node.tOwned;
+     delete node.tOwned;
++    for (i = tOwned.length - 1; i >= 0; i--) cleanNode(tOwned[i]);
+   }
+   if (Transition && Transition.running && node.pure) {
+     reset(node, true);
+   } else if (node.owned) {
+-    for (i = node.owned.length - 1; i >= 0; i--) cleanNode(node.owned[i]);
++    const owned = node.owned;
+     node.owned = null;
++    for (i = owned.length - 1; i >= 0; i--) cleanNode(owned[i]);
+   }
+   if (node.cleanups) {
+-    for (i = node.cleanups.length - 1; i >= 0; i--) node.cleanups[i]();
++    const cleanups = node.cleanups;
+     node.cleanups = null;
++    for (i = cleanups.length - 1; i >= 0; i--) cleanups[i]();
+   }
+   if (Transition && Transition.running) node.tState = 0;else node.state = 0;
+ }
+diff --git a/dist/solid.js b/dist/solid.js
+--- a/dist/solid.js
++++ b/dist/solid.js
+@@ -962,18 +962,21 @@ function cleanNode(node) {
+     }
+   }
+   if (node.tOwned) {
+-    for (i = node.tOwned.length - 1; i >= 0; i--) cleanNode(node.tOwned[i]);
++    const tOwned = node.tOwned;
+     delete node.tOwned;
++    for (i = tOwned.length - 1; i >= 0; i--) cleanNode(tOwned[i]);
+   }
+   if (Transition && Transition.running && node.pure) {
+     reset(node, true);
+   } else if (node.owned) {
+-    for (i = node.owned.length - 1; i >= 0; i--) cleanNode(node.owned[i]);
++    const owned = node.owned;
+     node.owned = null;
++    for (i = owned.length - 1; i >= 0; i--) cleanNode(owned[i]);
+   }
+   if (node.cleanups) {
+-    for (i = node.cleanups.length - 1; i >= 0; i--) node.cleanups[i]();
++    const cleanups = node.cleanups;
+     node.cleanups = null;
++    for (i = cleanups.length - 1; i >= 0; i--) cleanups[i]();
+   }
+   if (Transition && Transition.running) node.tState = 0;else node.state = 0;
+ }
