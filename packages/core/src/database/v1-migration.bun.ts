@@ -648,12 +648,15 @@ export function run(options: Options = {}): Effect.Effect<RunResult, never, Data
                   .set({ ...transformed.session, time_updated: next.time_updated })
                   .where(eq(SessionTable.id, next.id))
                   .run()
+                const event = yield* tx.get<{ seq: number | null }>(
+                  sql`SELECT MAX(seq) AS seq FROM event WHERE aggregate_id = ${next.id}`,
+                )
                 yield* tx
                   .insert(EventSequenceTable)
-                  .values({ aggregate_id: next.id, seq: transformed.watermark })
+                  .values({ aggregate_id: next.id, seq: Math.max(transformed.watermark, event?.seq ?? -1) })
                   .onConflictDoUpdate({
                     target: EventSequenceTable.aggregate_id,
-                    set: { seq: transformed.watermark, owner_id: null },
+                    set: { seq: Math.max(transformed.watermark, event?.seq ?? -1), owner_id: null },
                   })
                   .run()
               }),
@@ -809,12 +812,15 @@ function importNextDatabase(
                   })
                   .run(),
               )
+              const event = yield* tx.get<{ seq: number | null }>(
+                sql`SELECT MAX(seq) AS seq FROM event WHERE aggregate_id = ${session.id}`,
+              )
               yield* tx
                 .insert(EventSequenceTable)
-                .values({ aggregate_id: session.id, seq: messages.at(-1)?.seq ?? -1 })
+                .values({ aggregate_id: session.id, seq: Math.max(messages.at(-1)?.seq ?? -1, event?.seq ?? -1) })
                 .onConflictDoUpdate({
                   target: EventSequenceTable.aggregate_id,
-                  set: { seq: messages.at(-1)?.seq ?? -1, owner_id: null },
+                  set: { seq: Math.max(messages.at(-1)?.seq ?? -1, event?.seq ?? -1), owner_id: null },
                 })
                 .run()
             }),
