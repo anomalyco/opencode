@@ -65,104 +65,97 @@ const layer = Layer.effect(
       yield* plugins.flush
       yield* settleStaleToolCalls(sessionID)
 
-      const advanceToStep = Effect.fn("SessionRunner.advanceToStep")(() =>
-        Effect.uninterruptibleMask((restore) =>
-          Effect.gen(function* () {
-            while (true) {
-              // Location entry and idle boundaries allow queued controls, not necessarily queued prompts.
-              const pending = yield* SessionInbox.serialized(
-                sessionID,
-                Effect.gen(function* () {
-                  const next = yield* SessionInbox.nextPromotable(
-                    db,
-                    sessionID,
-                    entering || !continuing ? "input" : "steer",
+      return yield* Effect.uninterruptibleMask((restore) =>
+        Effect.gen(function* () {
+          while (true) {
+            // Location entry and idle boundaries allow queued controls, not necessarily queued prompts.
+            const pending = yield* SessionInbox.serialized(
+              sessionID,
+              Effect.gen(function* () {
+                const next = yield* SessionInbox.nextPromotable(
+                  db,
+                  sessionID,
+                  entering || !continuing ? "input" : "steer",
+                )
+                if (next?.type === "compaction")
+                  yield* bus.publishAll([
+                    [SessionEvent.InboxDelivered, { sessionID, inboxID: next.id }],
+                    [SessionEvent.Compaction.Started, { sessionID, reason: "manual", recent: "", inputID: next.id }],
+                  ])
+                if (next?.type === "move")
+                  yield* restore(
+                    Effect.gen(function* () {
+                      yield* modelTransport.close(sessionID)
+                      yield* bus.publishAll([
+                        [SessionEvent.InboxDelivered, { sessionID, inboxID: next.id }],
+                        [SessionEvent.Moved, { sessionID, ...next.payload }],
+                      ])
+                    }),
                   )
-                  if (next?.type === "compaction")
-                    yield* bus.publishAll([
-                      [SessionEvent.InboxDelivered, { sessionID, inboxID: next.id }],
-                      [SessionEvent.Compaction.Started, { sessionID, reason: "manual", recent: "", inputID: next.id }],
-                    ])
-                  if (next?.type === "move")
-                    yield* restore(
-                      Effect.gen(function* () {
-                        yield* modelTransport.close(sessionID)
-                        yield* bus.publishAll([
-                          [SessionEvent.InboxDelivered, { sessionID, inboxID: next.id }],
-                          [SessionEvent.Moved, { sessionID, ...next.payload }],
-                        ])
-                      }),
-                    )
-                  return next
-                }),
-              )
-              if (!continuing && pending?.delivery !== "steer") {
-                entering = true
-                step = 1
-              }
-              if (pending?.type === "move")
-                return DrainResult.Moved({ continuation: !entering && continuing ? { step } : undefined })
-              if (pending?.type === "compaction") {
-                const session = yield* store.get(sessionID)
-                if (!session) return yield* Effect.die(new Error(`Session not found: ${sessionID}`))
-                const compacted = yield* restore(
-                  Effect.gen(function* () {
-                    return yield* compaction.compactManual({
-                      session,
-                      resolveModel: context.resolveModel,
-                      prepare: context.prepare,
-                      messages: yield* store.context(sessionID),
-                      inputID: pending.id,
-                      started: true,
-                    })
-                  }),
-                ).pipe(Effect.exit)
-                if (Exit.isFailure(compacted)) {
-                  yield* bus.publish(SessionEvent.Compaction.Failed, {
-                    sessionID,
-                    reason: "manual",
-                    error: Cause.hasInterruptsOnly(compacted.cause)
-                      ? { type: "aborted", message: "Compaction cancelled" }
-                      : { type: "compaction.failed", message: Cause.pretty(compacted.cause) },
-                    inputID: pending.id,
-                  })
-                  return yield* Effect.failCause(compacted.cause)
-                }
-                force = false
-                continue
-              }
-              if (!force && !continuing && (!pending || (pending.delivery === "queue" && promotable === "steer")))
-                return DrainResult.Complete()
-              return yield* restore(
-                Effect.gen(function* () {
-                  const selected = yield* prepareContext(sessionID)
-                  const promoted = yield* SessionInbox.promote(
-                    db,
-                    bus,
-                    sessionID,
-                    entering && !continuing ? promotable : "steer",
-                  )
-                  if (promoted > 0 && !selected.session.parentID && SessionTitle.isUntitled(selected.session))
-                    yield* FiberMap.run(titles, sessionID, title.generate(sessionID).pipe(Effect.ignore), {
-                      onlyIfMissing: true,
-                    })
-                  if (promoted > 0) step = 1
-                  return { _tag: "Ready" as const, context: yield* context.load(selected) }
-                }),
-              )
+                return next
+              }),
+            )
+            if (!continuing && pending?.delivery !== "steer") {
+              entering = true
+              step = 1
             }
-          }),
-        ),
+            if (pending?.type === "move")
+              return DrainResult.Moved({ continuation: !entering && continuing ? { step } : undefined })
+            if (pending?.type === "compaction") {
+              const session = yield* store.get(sessionID)
+              if (!session) return yield* Effect.die(new Error(`Session not found: ${sessionID}`))
+              const compacted = yield* restore(
+                Effect.gen(function* () {
+                  return yield* compaction.compactManual({
+                    session,
+                    resolveModel: context.resolveModel,
+                    prepare: context.prepare,
+                    messages: yield* store.context(sessionID),
+                    inputID: pending.id,
+                    started: true,
+                  })
+                }),
+              ).pipe(Effect.exit)
+              if (Exit.isFailure(compacted)) {
+                yield* bus.publish(SessionEvent.Compaction.Failed, {
+                  sessionID,
+                  reason: "manual",
+                  error: Cause.hasInterruptsOnly(compacted.cause)
+                    ? { type: "aborted", message: "Compaction cancelled" }
+                    : { type: "compaction.failed", message: Cause.pretty(compacted.cause) },
+                  inputID: pending.id,
+                })
+                return yield* Effect.failCause(compacted.cause)
+              }
+              force = false
+              continue
+            }
+            if (!force && !continuing && (!pending || (pending.delivery === "queue" && promotable === "steer")))
+              return DrainResult.Complete()
+            // Keep model work and cursor advancement outside the control settlement mask.
+            yield* restore(
+              Effect.gen(function* () {
+                const selected = yield* prepareContext(sessionID)
+                const promoted = yield* SessionInbox.promote(
+                  db,
+                  bus,
+                  sessionID,
+                  entering && !continuing ? promotable : "steer",
+                )
+                if (promoted > 0 && !selected.session.parentID && SessionTitle.isUntitled(selected.session))
+                  yield* FiberMap.run(titles, sessionID, title.generate(sessionID).pipe(Effect.ignore), {
+                    onlyIfMissing: true,
+                  })
+                if (promoted > 0) step = 1
+                continuing = yield* runStep(yield* context.load(selected), step)
+                step++
+                force = false
+                entering = false
+              }),
+            )
+          }
+        }),
       )
-
-      while (true) {
-        const next = yield* advanceToStep()
-        if (next._tag !== "Ready") return next
-        continuing = yield* runStep(next.context, step)
-        step++
-        force = false
-        entering = false
-      }
     })
 
     const prepareContext = Effect.fn("SessionRunner.prepareContext")(function* (sessionID: SessionSchema.ID) {
