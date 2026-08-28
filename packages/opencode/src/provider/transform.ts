@@ -4,6 +4,7 @@ import type { JSONSchema7 } from "@ai-sdk/provider"
 import type * as Provider from "./provider"
 import type * as ModelsDev from "@opencode-ai/core/models-dev"
 import { iife } from "@/util/iife"
+import { Token } from "@/util/token"
 
 type Modality = NonNullable<ModelsDev.Model["modalities"]>["input"][number]
 
@@ -356,6 +357,24 @@ function normalizeMessages(
 }
 
 function applyCaching(msgs: ModelMessage[], model: Provider.Model): ModelMessage[] {
+  // AWS Bedrock hard-rejects a cache point when the cached prefix is below the
+  // model's minimum cacheable size (~1024 tokens for Claude) with HTTP 400
+  // "nothing available to cache" — unlike the Anthropic API, which silently
+  // ignores an undersized cache_control. A short context (e.g. the first turn of
+  // a freshly forked session) would otherwise fail outright, so skip caching for
+  // Bedrock until the prompt is large enough to be cacheable.
+  const isBedrock = model.providerID.includes("bedrock") || model.api.npm === "@ai-sdk/amazon-bedrock"
+  if (isBedrock) {
+    const text = msgs
+      .flatMap((msg) =>
+        typeof msg.content === "string"
+          ? [msg.content]
+          : msg.content.map((part) => ("text" in part && typeof part.text === "string" ? part.text : "")),
+      )
+      .join("")
+    if (Token.estimate(text) < 1024) return msgs
+  }
+
   const system = msgs.filter((msg) => msg.role === "system").slice(0, 2)
   const final = msgs.filter((msg) => msg.role !== "system").slice(-2)
 
