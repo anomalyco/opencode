@@ -6,7 +6,7 @@ Status: **Current semantic overview.** Protocol owns public operations, Schema o
 
 `Session.prompt(...)` publishes one durable `session.inbox.enqueued` fact whose projection inserts one `session_inbox` row before advisory execution begins. An inbox item remains outside model-visible Session History until delivery. The `session.inbox.delivered` projection consumes the row and inserts a visible user or synthetic message atomically; compaction and move control items are consumed without becoming transcript messages.
 
-Reusing a Session ID adopts the existing Session. While a user or synthetic item remains pending, reusing its ID reconciles only when Session, item type, complete payload, metadata, and delivery match; conflicting reuse fails. After delivery, retry reconciliation for those message-producing items uses the projected message and does not require enqueue history or the original delivery mode. Compaction and move controls retain operation-specific conflict behavior.
+Reusing a Session ID adopts the existing Session. Reusing a user or synthetic inbox item ID is idempotent when Session and type match: the first admission wins, and retried payload, metadata, and delivery are ignored. After delivery, retry reconciliation uses the projected message and does not require enqueue history. Cross-Session and cross-type reuse fail. Compaction and move controls retain operation-specific conflict behavior.
 
 `resume` controls scheduling, not durability:
 
@@ -21,6 +21,14 @@ Delivery is explicit:
 Promoting new user input resets the selected agent's step allowance. A batch of steers resets it once.
 
 Manual compaction and Session movement use the same inbox as control items. Each request has its own inbox identity and delivery mode. A control item forms a delivery boundary so later steers do not cross it.
+
+## Session Operations Own Admission Policy
+
+Core's ID-addressed Session facade delegates prompt, synthetic, compaction, pending-input, shell, revert, and execution-control operations to the ID-bound Session values in `session/session.ts`. Those operations own preparation, request idempotency, admission ordering, and wake policy. The facade supplies lazy Location services; the lower operations do not depend on `LocationServiceMap` or call back into the facade.
+
+The host acquires `Session.make` once so references to the same Session share shell scheduling gates and the existing execution coordinator. A Session value retains its ID, not a cached projection or permanently selected runner. Obtaining or discarding a value does not start or interrupt execution. Admission stays independently callable while execution is active.
+
+Location services are acquired only when an operation needs them. In particular, retry reconciliation happens before prompt preparation, so an already-admitted input skips hooks and attachment resolution. Execution continues to resolve placement independently at drain start and after movement.
 
 ## Execution Is Process-Local
 

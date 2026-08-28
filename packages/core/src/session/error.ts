@@ -2,6 +2,7 @@ export * as SessionErrors from "./error.js"
 
 import { Schema } from "effect"
 import { Agent } from "@opencode-ai/schema/agent"
+import { Skill } from "@opencode-ai/schema/skill"
 import { SessionMessage } from "./message.js"
 import { SessionSchema } from "./schema.js"
 import { SessionError } from "@opencode-ai/schema/session-error"
@@ -52,3 +53,42 @@ export class UserInterruptedError extends Schema.TaggedError<UserInterruptedErro
     return "Session interrupted by user"
   }
 }
+
+export class PromptConflictError extends Schema.TaggedError<PromptConflictError>()("Session.PromptConflictError", {
+  sessionID: SessionSchema.ID,
+  messageID: SessionMessage.ID,
+}) {}
+
+export class SyntheticConflictError extends Schema.TaggedError<SyntheticConflictError>()(
+  "Session.SyntheticConflictError",
+  {
+    sessionID: SessionSchema.ID,
+    inputID: SessionMessage.ID,
+  },
+) {}
+
+export class AttachmentError extends Schema.TaggedError<AttachmentError>()("Session.AttachmentError", {
+  uri: Schema.String,
+  message: Schema.String,
+}) {}
+
+export class CompactionConflictError extends Schema.TaggedError<CompactionConflictError>()(
+  "Session.CompactionConflictError",
+  {
+    sessionID: SessionSchema.ID,
+    inputID: SessionMessage.ID,
+  },
+) {}
+
+export class BusyError extends Schema.TaggedError<BusyError>()("Session.BusyError", {
+  sessionID: SessionSchema.ID,
+}) {}
+
+export class InboxConflictError extends Schema.TaggedError<InboxConflictError>()("Session.InboxConflictError", {
+  sessionID: SessionSchema.ID,
+  inboxID: SessionMessage.ID,
+}) {}
+
+export class SkillNotFoundError extends Schema.TaggedError<SkillNotFoundError>()("Session.SkillNotFoundError", {
+  skill: Skill.ID,
+}) {}
