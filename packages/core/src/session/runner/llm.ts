@@ -1,7 +1,7 @@
 export * as SessionRunnerLLM from "./llm.js"
 
 import { Message } from "@opencode-ai/ai"
-import { Cause, Effect, Exit, FiberMap, Layer, Pull, Schedule } from "effect"
+import { Cause, Effect, Exit, FiberMap, Layer, Pull } from "effect"
 import { Database } from "../../database/database.js"
 import { Bus } from "../../bus.js"
 import { InstructionState } from "../instruction-state.js"
@@ -24,6 +24,7 @@ import { SessionRunnerRetry } from "./retry.js"
 import { SessionStep } from "./step.js"
 import { ToolOutput } from "../../tool-output.js"
 import { PluginSupervisor } from "../../plugin/supervisor.js"
+import { PluginHooks } from "../../plugin/hooks.js"
 import { MAX_STEPS_PROMPT } from "./max-steps.js"
 
 const CONTINUE_AFTER_INCOMPLETE_STREAM =
@@ -39,6 +40,7 @@ const layer = Layer.effect(
     const db = (yield* Database.Service).db
     const compaction = yield* SessionCompaction.Service
     const plugins = yield* PluginSupervisor.Service
+    const hooks = yield* PluginHooks.Service
     const title = yield* SessionTitle.Service
     const steps = yield* SessionStep.make
     // Title generation starts once input is visible and must not delay model execution.
@@ -176,7 +178,7 @@ const layer = Layer.effect(
     const runStep = Effect.fn("SessionRunner.runStep")(function* (first: SessionContext.Loaded, step: number) {
       const sessionID = first.session.id
       let assistantMessageID = SessionMessage.ID.create()
-      const retry = yield* Schedule.toStepWithSleep(SessionRunnerRetry.schedule(bus, sessionID))
+      const retry = yield* SessionRunnerRetry.make(bus, hooks, sessionID)
       let initial: SessionContext.Loaded | undefined = first
       let recoverOverflow = true
       let recoverContinuation = true
@@ -232,7 +234,13 @@ const layer = Layer.effect(
         const completed = yield* SessionStep.Outcome.$match(outcome, {
           Completed: (outcome) => Effect.succeed(outcome.needsContinuation),
           Retry: (outcome) =>
-            retry({ cause: outcome.cause, error: outcome.error, assistantMessageID }).pipe(
+            retry({
+              cause: outcome.cause,
+              error: outcome.error,
+              assistantMessageID,
+              agent: loaded.agent.id,
+              model: loaded.model.ref,
+            }).pipe(
               Pull.catchDone(() =>
                 bus
                   .publish(SessionEvent.Step.Failed, { sessionID, assistantMessageID, error: outcome.error })
@@ -241,9 +249,13 @@ const layer = Layer.effect(
               Effect.asVoid,
             ),
           Continue: Effect.fnUntraced(function* (outcome) {
-            yield* retry({ cause: outcome.cause, error: outcome.error, assistantMessageID }).pipe(
-              Pull.catchDone(() => outcome.cause),
-            )
+            yield* retry({
+              cause: outcome.cause,
+              error: outcome.error,
+              assistantMessageID,
+              agent: loaded.agent.id,
+              model: loaded.model.ref,
+            }).pipe(Pull.catchDone(() => outcome.cause))
             yield* bus.publish(SessionEvent.Synthetic, { sessionID, text: CONTINUE_AFTER_INCOMPLETE_STREAM })
             assistantMessageID = SessionMessage.ID.create()
           }),
@@ -299,6 +311,7 @@ export const node = makeLocationNode({
     SessionStore.node,
     SessionCompaction.node,
     PluginSupervisor.node,
+    PluginHooks.node,
     SessionTitle.node,
     Snapshot.node,
     ToolOutput.node,

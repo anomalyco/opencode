@@ -1128,6 +1128,30 @@ effect: (ctx) =>
   }),
 ```
 
+Veto a proposed Session retry or replace its delay in milliseconds. The hook runs after OpenCode classifies the failure
+and computes its backoff, but before the retry is scheduled. It does not expose whether OpenCode internally replays or
+continues the request.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    yield* ctx.session.hook("retry", (event) =>
+      Effect.sync(() => {
+        if (event.error.status === 429) {
+          event.decision = { retry: true, delay: 10_000 }
+          return
+        }
+        if (event.attempt >= 2) event.decision = { retry: false }
+      }),
+    )
+  }),
+```
+
+The hook runs only for retries proposed by OpenCode; it cannot make a normally terminal failure retryable. Multiple hooks
+run in registration order and later hooks see the current `decision`. The built-in maximum attempt count remains a hard
+limit. `attempt` is the proposed retry number, starting at `1`. Invalid delays (`NaN`, infinity, or negative values) fall
+back to the computed delay.
+
 #### Reference
 
 ```ts
@@ -1136,6 +1160,18 @@ interface SessionHooks {
   readonly "model.request": SessionModelRequest
   readonly "http.request": SessionHttpRequest
   readonly "http.response": SessionHttpResponse
+  readonly retry: SessionRetry
+}
+
+type RetryDecision = { retry: false } | { retry: true; delay: number }
+
+interface SessionRetry {
+  readonly sessionID: string
+  readonly agent: string
+  readonly model: { providerID: string; id: string; variant?: string }
+  readonly error: { type: string; message: string; status?: number }
+  readonly attempt: number
+  decision: RetryDecision
 }
 
 interface SessionHookDomain {

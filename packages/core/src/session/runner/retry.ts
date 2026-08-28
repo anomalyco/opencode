@@ -1,9 +1,12 @@
 export * as SessionRunnerRetry from "./retry.js"
 
 import { AIError } from "@opencode-ai/ai"
+import { Agent } from "@opencode-ai/schema/agent"
+import { Model } from "@opencode-ai/schema/model"
 import { SessionError } from "@opencode-ai/schema/session-error"
-import { Duration, Effect, Schedule } from "effect"
+import { Cause, Clock, Duration, Effect, Schedule } from "effect"
 import { Bus } from "../../bus.js"
+import { PluginHooks } from "../../plugin/hooks.js"
 import { SessionEvent } from "../event.js"
 import { SessionMessage } from "../message.js"
 import { SessionSchema } from "../schema.js"
@@ -12,6 +15,8 @@ export interface Input {
   readonly cause: AIError
   readonly error: SessionError.Error
   readonly assistantMessageID: SessionMessage.ID
+  readonly agent: Agent.ID
+  readonly model: Model.Ref
 }
 
 export function isRetryable(error: AIError) {
@@ -55,22 +60,46 @@ const retryAfter = (input: Input) => {
   return undefined
 }
 
-export const schedule = (bus: Bus.Interface, sessionID: SessionSchema.ID) =>
-  Schedule.max([Schedule.exponential("2 seconds"), Schedule.recurs(4)]).pipe(
-    Schedule.jittered,
-    Schedule.setInputType<Input>(),
-    Schedule.modifyDelay(({ input, duration: delay }) => {
-      const minimum = retryAfter(input)
-      const duration = minimum === undefined ? delay : Duration.max(delay, Duration.millis(minimum))
-      return Effect.succeed(Duration.millis(Math.ceil(Duration.toMillis(duration))))
-    }),
-    Schedule.tap((metadata) =>
-      bus.publish(SessionEvent.RetryScheduled, {
-        sessionID,
-        assistantMessageID: metadata.input.assistantMessageID,
-        attempt: metadata.attempt + 1,
-        at: metadata.now + Duration.toMillis(metadata.duration),
-        error: metadata.input.error,
-      }),
-    ),
-  )
+const schedule = Schedule.max([Schedule.exponential("2 seconds"), Schedule.recurs(4)]).pipe(
+  Schedule.jittered,
+  Schedule.setInputType<Input>(),
+  Schedule.modifyDelay(({ input, duration: delay }) => {
+    const minimum = retryAfter(input)
+    const duration = minimum === undefined ? delay : Duration.max(delay, Duration.millis(minimum))
+    return Effect.succeed(Duration.millis(Math.ceil(Duration.toMillis(duration))))
+  }),
+)
+
+export const make = (bus: Bus.Interface, hooks: PluginHooks.Interface, sessionID: SessionSchema.ID) =>
+  Effect.gen(function* () {
+    const step = yield* Schedule.toStep(schedule)
+    let attempt = 0
+    return (input: Input) =>
+      Effect.gen(function* () {
+        const now = yield* Clock.currentTimeMillis
+        const [, duration] = yield* step(now, input)
+        attempt++
+        const delay = Math.ceil(Duration.toMillis(duration))
+        const event: PluginHooks.Domains["session"]["retry"] = {
+          sessionID,
+          agent: input.agent,
+          model: input.model,
+          error: input.error,
+          attempt,
+          decision: { retry: true, delay },
+        }
+        yield* hooks.trigger("session", "retry", event)
+        if (!event.decision.retry) return yield* Cause.done()
+        const normalized =
+          Number.isFinite(event.decision.delay) && event.decision.delay >= 0 ? Math.ceil(event.decision.delay) : delay
+        const scheduled = yield* Clock.currentTimeMillis
+        yield* bus.publish(SessionEvent.RetryScheduled, {
+          sessionID,
+          assistantMessageID: input.assistantMessageID,
+          attempt,
+          at: scheduled + normalized,
+          error: input.error,
+        })
+        yield* Effect.sleep(Duration.millis(normalized))
+      })
+  })
