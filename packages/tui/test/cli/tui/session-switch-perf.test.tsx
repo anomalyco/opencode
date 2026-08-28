@@ -10,6 +10,10 @@ import { TestTuiContexts } from "../../fixture/tui-environment"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 
 const sessionID = "session-switch-perf"
+const destination = "session-switch-destination"
+// Stands in for the shared route store: a switch writes the destination before the outgoing
+// view is disposed, so teardown must not read this to learn which session it was showing.
+const route = { sessionID }
 const total = 5_000
 const pageLimit = 20
 const messages = Array.from({ length: total }, (_, index) => ({
@@ -103,6 +107,7 @@ async function wait(fn: () => boolean, timeout = 4_000) {
 }
 
 test("repaints a released session from one fresh page and stays bounded", async () => {
+  route.sessionID = sessionID
   const app = mount()
   try {
     await wait(() => app.client.connection.status() === "connected")
@@ -113,11 +118,14 @@ test("repaints a released session from one fresh page and stays bounded", async 
       await app.data.session.message.loadMore(sessionID)
     expect(app.data.session.message.list(sessionID).length).toBeGreaterThan(messageCacheReleaseLimit)
 
+    route.sessionID = destination
     setPresent(false)
     await wait(() => app.data.session.message.list(sessionID).length === 0)
+    expect(app.data.session.message.list(destination)).toHaveLength(0)
     expect(app.data.session.message.more(sessionID)).toBe(false)
 
     const reentry = performance.now()
+    route.sessionID = sessionID
     setPresent(true)
     await wait(() => app.synced() >= 2)
     const elapsed = performance.now() - reentry
@@ -131,6 +139,7 @@ test("repaints a released session from one fresh page and stays bounded", async 
 })
 
 test("keeps a small transcript cache across leaving the session view", async () => {
+  route.sessionID = sessionID
   const app = mount()
   try {
     await wait(() => app.client.connection.status() === "connected")
