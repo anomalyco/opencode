@@ -52,18 +52,6 @@ export function sessionRef(database: Context.Service.Shape<typeof Database.Servi
   })
 }
 
-export function withLoadedSessionServices<A, E>(
-  locations: Context.Service.Shape<typeof LocationServiceMap.Service>,
-  database: Context.Service.Shape<typeof Database.Service>,
-  sessionID: string,
-  effect: Effect.Effect<A, E, LocationServices>,
-) {
-  return Effect.gen(function* () {
-    const ref = yield* sessionRef(database, sessionID)
-    return yield* withLoadedLocationServices(locations, ref, effect)
-  })
-}
-
 export function withLoadedLocationServices<A, E>(
   locations: Context.Service.Shape<typeof LocationServiceMap.Service>,
   ref: Location.Ref,

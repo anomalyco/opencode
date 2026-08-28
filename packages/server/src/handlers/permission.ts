@@ -7,7 +7,7 @@ import { Effect, Option } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { Api } from "../api"
 import { PermissionNotFoundError, SessionNotFoundError } from "@opencode-ai/protocol/errors"
-import { response, withLoadedSessionServices } from "../location"
+import { response, sessionRef, withLoadedLocationServices } from "../location"
 
 function missingRequest(id: Permission.ID) {
   return new PermissionNotFoundError({ requestID: id, message: `Permission request not found: ${id}` })
@@ -67,10 +67,10 @@ export const PermissionHandler = HttpApiBuilder.group(Api, "server.permission", 
       .handle(
         "session.permission.list",
         Effect.fn(function* (ctx) {
-          const requests = yield* withLoadedSessionServices(
+          const ref = yield* sessionRef(database, ctx.params.sessionID)
+          const requests = yield* withLoadedLocationServices(
             locations,
-            database,
-            ctx.params.sessionID,
+            ref,
             Permission.Service.use((permission) => permission.forSession(ctx.params.sessionID)),
           )
           return { data: Option.getOrElse(requests, () => []) }

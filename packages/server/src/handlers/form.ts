@@ -11,7 +11,7 @@ import {
 import { Effect, Option } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { Api } from "../api"
-import { requestRef, response, withLoadedLocationServices, withLoadedSessionServices } from "../location"
+import { requestRef, response, sessionRef, withLoadedLocationServices } from "../location"
 
 function missingForm(id: Form.ID) {
   return new FormNotFoundError({ id, message: `Form not found: ${id}` })
@@ -39,10 +39,15 @@ export const FormHandler = HttpApiBuilder.group(Api, "server.form", (handlers) =
       .handle(
         "session.form.list",
         Effect.fn(function* (ctx) {
-          const list = Form.Service.use((form) => form.list({ sessionID: ctx.params.sessionID }))
-          const forms = yield* ctx.params.sessionID === "global"
-            ? withLoadedLocationServices(locations, requestRef(ctx.request), list)
-            : withLoadedSessionServices(locations, database, ctx.params.sessionID, list)
+          const ref =
+            ctx.params.sessionID === "global"
+              ? requestRef(ctx.request)
+              : yield* sessionRef(database, ctx.params.sessionID)
+          const forms = yield* withLoadedLocationServices(
+            locations,
+            ref,
+            Form.Service.use((form) => form.list({ sessionID: ctx.params.sessionID })),
+          )
           return { data: Option.getOrElse(forms, () => []) }
         }),
       )
