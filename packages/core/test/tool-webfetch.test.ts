@@ -179,6 +179,44 @@ describe("WebFetchTool registration", () => {
     }),
   )
 
+  it.effect("decodes non-UTF-8 content using the declared charset", () =>
+    Effect.gen(function* () {
+      reset()
+      respond = () =>
+        Effect.succeed(
+          new Response(new Uint8Array([0x4f, 0x4b, 0x20, 0xd6, 0xd0, 0xce, 0xc4]), {
+            headers: { "content-type": "text/plain; charset=gbk" },
+          }),
+        )
+      const registry = yield* ToolRegistry.Service
+
+      expect(yield* executeTool(registry, call({ url: "https://1.1.1.1/gbk", format: "text" }))).toEqual({
+        type: "text",
+        value: "OK \u4e2d\u6587",
+      })
+    }),
+  )
+
+  it.effect("falls back to the HTML meta charset when the header omits it", () =>
+    Effect.gen(function* () {
+      reset()
+      const html = new TextEncoder().encode('<html><head><meta charset="gbk"></head><body>')
+      const body = new Uint8Array([...html, 0xd6, 0xd0, 0xce, 0xc4])
+      respond = () =>
+        Effect.succeed(
+          new Response(body, {
+            headers: { "content-type": "text/html" },
+          }),
+        )
+      const registry = yield* ToolRegistry.Service
+
+      expect(yield* executeTool(registry, call({ url: "https://1.1.1.1/meta-gbk", format: "text" }))).toEqual({
+        type: "text",
+        value: "\u4e2d\u6587",
+      })
+    }),
+  )
+
   it.effect("returns an error result when HTML-to-Markdown conversion throws", () =>
     Effect.gen(function* () {
       reset()
