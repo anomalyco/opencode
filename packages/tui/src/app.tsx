@@ -72,6 +72,7 @@ import { DialogOpen, DialogOpenKey, loadDialogOpen } from "./component/dialog-op
 import { SessionTabs } from "./component/session-tabs"
 import { clampSessionTabsWidth, sessionTabsFitVertically, SESSION_SIDEBAR_WIDTH } from "./ui/layout"
 import { createPaneResize } from "./ui/pane-resize"
+import { PaneResizeHandle } from "./ui/pane-resize-handle"
 import { ThemeErrorToast } from "./component/theme-error-toast"
 import { createThemeSource, ThemeProvider, useTheme, useThemes } from "./context/theme"
 import { Home } from "./routes/home"
@@ -472,7 +473,6 @@ function App(props: { pair?: DialogPairCredentials }) {
   const client = useClient()
   const toast = useToast()
   const theme = useTheme()
-  const tabsTheme = useTheme("elevated")
   const { mode, supports, setMode, locked, lock, unlock } = useThemes()
   const data = useData()
   const location = useLocation()
@@ -1313,25 +1313,7 @@ function App(props: { pair?: DialogPairCredentials }) {
           </Show>
         </box>
         <Show when={verticalTabsVisible()}>
-          <box
-            position="absolute"
-            left={tabsResize.size() - 1}
-            top={0}
-            zIndex={10}
-            width={2}
-            height="100%"
-            onMouseOver={tabsResize.onMouseOver}
-            onMouseOut={tabsResize.onMouseOut}
-            onMouseDown={tabsResize.onMouseDown}
-          >
-            <box
-              width={1}
-              height="100%"
-              backgroundColor={
-                tabsResize.hovered() || tabsResize.resizing() ? tabsTheme.background.action.primary.hovered : undefined
-              }
-            />
-          </box>
+          <PaneResizeHandle resize={tabsResize} left={tabsResize.size() - 1} />
         </Show>
       </box>
       <Show when={devtools()}>
