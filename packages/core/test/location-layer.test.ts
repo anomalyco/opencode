@@ -31,7 +31,7 @@ import { Plugin } from "@opencode-ai/core/plugin"
 import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
 import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { Model } from "@opencode-ai/core/model"
-import { MCP } from "@opencode-ai/core/mcp/index"
+import { Mcp } from "@opencode-ai/core/mcp/index"
 import { Project } from "@opencode-ai/core/project"
 import { Provider } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -42,7 +42,7 @@ import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { tmpdir } from "./fixture/tmpdir"
 import { tempGlobalLayer } from "./fixture/global"
 import { testEffect } from "./lib/effect"
-import { toolDefinitions, waitForTool } from "./lib/tool"
+import { toolDefinitions } from "./lib/tool"
 import { Database } from "../src/database/database"
 import { Bus } from "../src/bus"
 import { Reference } from "../src/reference"
@@ -702,25 +702,9 @@ describe("LocationServiceMap", () => {
               yield* Reference.Service
               const catalog = yield* Catalog.Service
               yield* catalog.transform((editor) => editor.provider.update(providerID, () => {}))
+              const supervisor = yield* PluginSupervisor.Service
+              yield* supervisor.flush
               const registry = yield* Tool.Service
-              // Tool plugins register during the forked PluginSupervisor boot; wait for
-              // every expected tool rather than relying on batch ordering.
-              yield* Effect.forEach(
-                [
-                  "edit",
-                  "glob",
-                  "grep",
-                  "question",
-                  "read",
-                  "shell",
-                  "skill",
-                  "subagent",
-                  "webfetch",
-                  "websearch",
-                  "write",
-                ],
-                (name) => waitForTool(registry, name),
-              )
               return {
                 providers: yield* catalog.provider.all(),
                 tools: yield* toolDefinitions(registry),
@@ -1000,7 +984,7 @@ describe("LocationServiceMap", () => {
 
           yield* Effect.gen(function* () {
             const supervisor = yield* PluginSupervisor.Service
-            const mcp = yield* MCP.Service
+            const mcp = yield* Mcp.Service
             yield* supervisor.flush
             expect(observed.example).toBe(false)
             yield* mcp.add("dynamic", {

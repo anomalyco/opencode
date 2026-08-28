@@ -183,6 +183,7 @@ export type SessionCreateInput = {
   readonly agent?: Agent.ID | undefined
   readonly model?: Model.Ref | undefined
   readonly location?: Location.Ref | undefined
+  readonly metadata?: Session.Metadata | undefined
 }
 export type SessionCreateOutput = Session.Info
 export type SessionCreateOperation<E = never> = (input?: SessionCreateInput) => Effect.Effect<SessionCreateOutput, E>
@@ -410,6 +411,7 @@ export type SessionLogOutput =
             readonly title?: string | undefined
             readonly agent?: Agent.ID | undefined
             readonly model?: Model.Ref | undefined
+            readonly metadata?: Session.Metadata | undefined
             readonly version: string
           }
         }
@@ -1637,6 +1639,23 @@ export interface PtyApi<E = never> {
   readonly connect: { readonly token: PtyConnectTokenOperation<E> }
 }
 
+export type ExperimentalPersistentPtyReadInput = { readonly sessionID: Session.ID; readonly lines?: number | undefined }
+export type ExperimentalPersistentPtyReadOutput = {
+  readonly ptyID: Pty.ID
+  readonly title: string
+  readonly cwd: string
+  readonly foregroundProcess: string | null
+  readonly screen: {
+    readonly text: string
+    readonly cols: number
+    readonly rows: number
+    readonly cursor: { readonly x: number; readonly y: number }
+  }
+} | null
+export type ExperimentalPersistentPtyReadOperation<E = never> = (
+  input: ExperimentalPersistentPtyReadInput,
+) => Effect.Effect<ExperimentalPersistentPtyReadOutput, E>
+
 export type ExperimentalPersistentPtyListInput = { readonly sessionID: Session.ID }
 export type ExperimentalPersistentPtyListOutput = ReadonlyArray<{
   readonly id: Pty.ID
@@ -1785,6 +1804,7 @@ export type ExperimentalPersistentPtyConnectTokenOperation<E = never> = (
 
 export interface ExperimentalApi<E = never> {
   readonly persistentPty: {
+    readonly read: ExperimentalPersistentPtyReadOperation<E>
     readonly list: ExperimentalPersistentPtyListOperation<E>
     readonly create: ExperimentalPersistentPtyCreateOperation<E>
     readonly shutdown: ExperimentalPersistentPtyShutdownOperation<E>
