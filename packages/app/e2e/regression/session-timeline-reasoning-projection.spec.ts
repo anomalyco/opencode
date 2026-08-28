@@ -105,10 +105,10 @@ for (const summaries of [false, true]) {
       if (profile === "tool") {
         const group = page.locator('[data-component="collapsed-tool-group"]')
         const used = group.locator(':scope > [data-component="collapsible"] > [data-slot="collapsible-trigger"]')
-        await expect(used).toContainText("UsedSkill")
+        await expect(used).toHaveText(/^Used\s*1 Skill$/)
         await expect(used).toHaveAttribute("aria-expanded", "false")
         await expect(page.getByText("Inspecting stability", { exact: true })).toBeHidden()
-        await expect(group.locator('[data-component="tag"]')).toHaveText("1")
+        await expect(used.locator('[data-slot="basic-tool-tool-title"]')).toHaveText("1 Skill")
         await used.click()
         await expect(used).toHaveAttribute("aria-expanded", "true")
         await expect(group.locator(`[data-timeline-part-id="prt_reasoning_tool_${summaries}"]`)).toBeVisible()

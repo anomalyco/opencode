@@ -98,6 +98,7 @@ type CreateBaseInput = {
   title?: string
   agent?: Agent.ID
   model?: Model.Ref
+  metadata?: SessionSchema.Metadata
 }
 type CreateInput = CreateBaseInput &
   ({ location: Location.Ref; parentID?: never } | { parentID: SessionSchema.ID; location?: never })
@@ -409,6 +410,9 @@ const layer = Layer.effect(
               subpath: RelativePath.make(path.relative(project.directory, location.directory).replaceAll("\\", "/")),
               title: input.title,
               agent: input.agent,
+              // Children inherit metadata the way they inherit location, so
+              // host policies that read it treat the family uniformly.
+              metadata: input.metadata ?? parent?.metadata,
               model: input.model
                 ? {
                     id: Model.ID.make(input.model.id),
@@ -1209,7 +1213,7 @@ const SHELL_MAX_CAPTURE_BYTES = 1024 * 1024
 
 export const node = makeGlobalNode({
   service: Service,
-  layer: layer.pipe(Layer.orDie),
+  layer,
   deps: [
     Job.node,
     SessionEnvironment.node,

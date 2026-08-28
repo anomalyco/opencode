@@ -215,8 +215,10 @@ export function createData(config: CreateDataInput) {
   )
   const messageIndex = new Map<string, Map<string, number>>()
   const sync = createSync()
+  let activeUpdates: Map<string, DataSessionStatus | undefined> | undefined
 
   function setSessionActive(sessionID: string, status: DataSessionStatus) {
+    activeUpdates?.set(sessionID, status)
     setStore("session", "active", sessionID, status)
   }
 
@@ -473,6 +475,7 @@ export function createData(config: CreateDataInput) {
   }
 
   function removeSession(sessionID: string) {
+    activeUpdates?.set(sessionID, undefined)
     store.session.pending[sessionID]?.forEach((item) => outbox.delete(item.id))
     messageIndex.delete(sessionID)
     sync.invalidate(`session:${sessionID}`)
@@ -504,17 +507,25 @@ export function createData(config: CreateDataInput) {
 
   function handleEvent(event: OpenCodeEvent) {
     switch (event.type) {
-      case "server.connected":
+      case "server.connected": {
+        const updates = new Map<string, DataSessionStatus | undefined>()
+        activeUpdates = updates
         void api()
           .session.active()
           .then((active) => {
-            setStore(
-              "session",
-              "active",
-              reconcile(Object.fromEntries(Object.keys(active).map((sessionID) => [sessionID, "running" as const]))),
-            )
+            if (activeUpdates !== updates) return
+            // Lifecycle events received during hydration supersede the snapshot.
+            const snapshot = new Map<string, DataSessionStatus>(Object.keys(active).map((id) => [id, "running"]))
+            updates.forEach((status, id) => {
+              if (status === undefined) return snapshot.delete(id)
+              snapshot.set(id, status)
+            })
+            activeUpdates = undefined
+            setStore("session", "active", reconcile(Object.fromEntries(snapshot)))
           })
-          .catch(() => undefined)
+          .catch(() => {
+            if (activeUpdates === updates) activeUpdates = undefined
+          })
         void api()
           .location.get({ location: locationQuery(defaultLocation()) })
           .then((location) => {
@@ -525,6 +536,7 @@ export function createData(config: CreateDataInput) {
         void result.location.vcs.sync().catch((error) => console.error("Failed to preload VCS info", error))
         void result.project.sync().catch((error) => console.error("Failed to preload projects", error))
         return
+      }
       case "project.updated":
         setStore("project", "info", event.data.id, reconcile(event.data))
         return
