@@ -1,4 +1,4 @@
-export * as MCPCodeModeExclusionPlugin from "./mcp-codemode-exclusion.js"
+export * as McpCodeModeExclusionPlugin from "./mcp-codemode-exclusion.js"
 
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Effect } from "effect"
