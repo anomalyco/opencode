@@ -1,6 +1,6 @@
 import { Database } from "@opencode-ai/core/database/database"
 import { Location } from "@opencode-ai/core/location"
-import { contextIfLoaded, LocationServiceMap } from "@opencode-ai/core/location-services"
+import { LocationServiceMap } from "@opencode-ai/core/location-services"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
 import { SessionTable } from "@opencode-ai/core/session/sql"
@@ -71,7 +71,7 @@ export function withLoadedLocationServices<A, E>(
 ) {
   return Effect.scoped(
     Effect.gen(function* () {
-      const context = yield* contextIfLoaded(locations, ref)
+      const context = yield* locations.contextEffectOption(ref)
       if (Option.isNone(context)) return Option.none<A>()
       return Option.some(yield* effect.pipe(Effect.provide(context.value)))
     }),
