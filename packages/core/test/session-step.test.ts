@@ -1,5 +1,5 @@
 import { expect } from "bun:test"
-import { LanguageModel, LLM, LLMClient, LLMEvent } from "@opencode-ai/ai"
+import { LanguageModel, LLM, LLMEvent } from "@opencode-ai/ai"
 import { OpenAIChat } from "@opencode-ai/ai/protocols/openai-chat"
 import { TestLLM } from "@opencode-ai/ai/testing"
 import { Agent } from "@opencode-ai/core/agent"
@@ -29,7 +29,7 @@ const it = testEffect(
     AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SessionProjector.node, ToolOutput.node]), [
       [Bus.node, Bus.configured({ persist: true })],
     ]),
-    TestLLM.layer(),
+    TestLLM.testLayer(),
   ),
 )
 
@@ -37,7 +37,7 @@ for (const finish of ["stop", "content-filter"] as const) {
   it.effect(`settles ${finish} with snapshot files and nonzero usage after its tool`, () =>
     Effect.gen(function* () {
       const db = (yield* Database.Service).db
-      const llm = yield* TestLLM.Service
+      const llm = yield* TestLLM.Test
       const sessionID = Session.ID.create()
       const assistantMessageID = SessionMessage.ID.create()
       const start = Snapshot.ID.make("before")
@@ -45,7 +45,6 @@ for (const finish of ["stop", "content-filter"] as const) {
       const files = [RelativePath.make("changed.ts")]
       let captures = 0
       const steps = yield* SessionStep.make.pipe(
-        Effect.provideService(LLMClient.Service, llm.client),
         Effect.provide(
           Layer.mock(Snapshot.Service)({
             capture: () => Effect.sync(() => (captures++ === 0 ? start : end)),
@@ -111,7 +110,7 @@ for (const finish of ["stop", "content-filter"] as const) {
         })
         .pipe(Effect.exit)
       expect(Exit.isSuccess(result)).toBe(finish === "stop")
-      expect(llm.requests).toHaveLength(1)
+      expect(yield* llm.requests()).toHaveLength(1)
       expect(captures).toBe(2)
       const message = yield* db
         .select()
