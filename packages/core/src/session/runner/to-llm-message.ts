@@ -70,7 +70,18 @@ const toolResult = (tool: SessionMessage.AssistantTool, providerMetadata: Provid
 const assistant = (message: SessionMessage.Assistant, model: Model) => {
   const sameModel =
     String(message.model.providerID) === String(model.provider) && String(message.model.id) === String(model.id)
-  const reuseProviderMetadata = sameModel && message.error === undefined
+  const hasAnthropicThinking = message.content.some(
+    (item) =>
+      item.type === "reasoning" &&
+      item.providerMetadata !== undefined &&
+      "anthropic" in (item.providerMetadata as Record<string, unknown>) &&
+      (item.providerMetadata as { anthropic?: { signature?: unknown; redactedData?: unknown } }).anthropic !== undefined,
+  )
+  // Preserve invariant: never replay tool_use without preceding thinking for Anthropic.
+  // For same-model replay, reuse provider metadata even for errored messages only when the message
+  // contains Anthropic thinking (signature/redacted). This keeps signed/redacted thinking alongside
+  // its tool_use parts, while preserving the deliberate guard for other providers (e.g., OpenAI test).
+  const reuseProviderMetadata = sameModel && (message.error === undefined || hasAnthropicThinking)
   const content = message.content.flatMap((item): ContentPart[] => {
     if (item.type === "text") return [{ type: "text", text: item.text }]
     if (item.type === "reasoning")
