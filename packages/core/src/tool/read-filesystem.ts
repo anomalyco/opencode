@@ -281,6 +281,28 @@ export const read = Effect.fn("ReadTool.read")(function* (
         }
         return true
       }
+      // Density is evaluated over a rolling window instead of per line: a
+      // single line dense in control characters (ANSI escapes in colored
+      // logs, backspace progress bars) would otherwise misfire the 30%
+      // heuristic and fail an otherwise-readable page (#45913).
+      const window = new Uint8Array(4096)
+      let windowLength = 0
+      let windowCursor = 0
+      let windowNonPrintable = 0
+      const consumeWindow = (segment: Uint8Array) => {
+        for (const byte of segment) {
+          if (windowLength === window.length) {
+            const leaving = window[windowCursor]
+            if (leaving === 0 || leaving < 9 || (leaving > 13 && leaving < 32)) windowNonPrintable--
+          } else {
+            windowLength++
+          }
+          window[windowCursor] = byte
+          if (byte === 0 || byte < 9 || (byte > 13 && byte < 32)) windowNonPrintable++
+          windowCursor = (windowCursor + 1) % window.length
+        }
+        return windowNonPrintable / windowLength
+      }
       const consumeChunk = Effect.fnUntraced(function* (chunk: Uint8Array) {
         let start = 0
         while (start < chunk.length) {
@@ -291,7 +313,11 @@ export const read = Effect.fn("ReadTool.read")(function* (
           const newline = chunk.indexOf(10, start)
           const end = newline === -1 ? chunk.length : newline + 1
           const segment = chunk.subarray(start, end)
-          if (binary(resource, segment)) return yield* Effect.fail(new BinaryFileError({ resource }))
+          if (segment.includes(0)) return yield* Effect.fail(new BinaryFileError({ resource }))
+          // Mirror the whole-file path's 64KB sampling: the density verdict
+          // only means something once the window has enough bytes.
+          if (windowLength >= 1024 && consumeWindow(segment) > 0.3)
+            return yield* Effect.fail(new BinaryFileError({ resource }))
           if (!consume(yield* decodeUtf8(resource, decoder, segment))) return false
           start = end
         }

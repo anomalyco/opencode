@@ -116,3 +116,46 @@ describe("ReadToolFileSystem", () => {
     }),
   )
 })
+
+describe("ReadToolFileSystem.paginated binary detection", () => {
+  const ansiLog = (() => {
+    // The dense line sits inside the first page; the surrounding plain lines
+    // keep the rolling window well under the 30% heuristic even though the
+    // dense line alone is ~50% control characters.
+    const head = "line-0\nline-1\n"
+    const tail = Array.from({ length: 20 }, (_, i) => `line-${i}\n`).join("")
+    // One backspace-progress-bar line dense enough in control characters to
+    // trip the 30% per-line heuristic (the #45913 trigger).
+    let dense = ""
+    for (let percent = 10; percent <= 100; percent += 10)
+      dense += `${percent}%` + "\b".repeat(String(percent).length + 1)
+    return head + dense + "\n" + tail
+  })()
+
+  it.effect("keeps reading when a single ANSI-dense line exceeds the ratio", () =>
+    Effect.gen(function* () {
+      const { fs, files, directory } = yield* fixture
+      const file = path.join(directory, "colored.log")
+      yield* files.writeFileString(file, ansiLog)
+
+      const paged = yield* ReadToolFileSystem.read(fs, file, "colored.log", { offset: 1, limit: 10 })
+
+      expect(paged).toMatchObject({ type: "text-page" })
+      expect((paged as { content?: string }).content).toContain("line-6")
+      expect((paged as { content?: string }).content).toContain(String.fromCharCode(8))
+    }),
+  )
+
+  it.effect("still fails a genuinely binary file in the paginated path", () =>
+    Effect.gen(function* () {
+      const { fs, files, directory } = yield* fixture
+      const file = path.join(directory, "binary.log")
+      const bytes = new Uint8Array(64 * 1024).fill(0)
+      yield* files.writeFile(file, bytes)
+
+      const error = yield* ReadToolFileSystem.read(fs, file, "binary.log", { offset: 1, limit: 10 }).pipe(Effect.flip)
+
+      expect(error).toBeInstanceOf(ReadToolFileSystem.BinaryFileError)
+    }),
+  )
+})
