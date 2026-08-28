@@ -65,7 +65,7 @@ test("releasing a transcript selection over tab controls does not activate them"
   }
 })
 
-test("the tab context menu keeps preview tabs open without offering promotion for permanent tabs", async () => {
+test("the horizontal tab context menu keeps preview tabs open without selecting them", async () => {
   const [active, setActive] = createSignal("first")
   const promoted: string[] = []
   const controller = {
@@ -104,18 +104,31 @@ test("the tab context menu keeps preview tabs open without offering promotion fo
     app.renderer.start()
     await app.waitForFrame((frame) => frame.includes("Second"))
 
-    await app.mockMouse.click(5, 0, MouseButton.RIGHT)
+    const first = app
+      .captureCharFrame()
+      .split("\n")
+      .findIndex((line) => line.includes("First"))
+    await app.mockMouse.click(app.captureCharFrame().split("\n")[first]!.indexOf("First"), first, MouseButton.RIGHT)
     await app.waitForFrame((frame) => frame.includes("Rename"))
+    expect(app.captureCharFrame()).toContain("Close")
     expect(app.captureCharFrame()).not.toContain("Keep open")
 
     app.mockInput.pressKey("c", { ctrl: true })
     await app.waitForFrame((frame) => !frame.includes("Rename"))
 
-    await app.mockMouse.click(40, 0, MouseButton.RIGHT)
+    const second = app
+      .captureCharFrame()
+      .split("\n")
+      .findIndex((line) => line.includes("Second"))
+    await app.mockMouse.click(app.captureCharFrame().split("\n")[second]!.indexOf("Second"), second, MouseButton.RIGHT)
     await app.waitForFrame((frame) => frame.includes("Keep open"))
+    expect(app.captureCharFrame()).toContain("Rename")
+    expect(app.captureCharFrame()).toContain("Close")
+    expect(active()).toBe("first")
     const frame = app.captureCharFrame().split("\n")
     const row = frame.findIndex((line) => line.includes("Keep open"))
     await app.mockMouse.click(frame[row]!.indexOf("Keep open"), row)
+    await app.waitForFrame((frame) => !frame.includes("Rename"))
 
     expect(promoted).toEqual(["second"])
     expect(active()).toBe("first")

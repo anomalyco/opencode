@@ -5,8 +5,8 @@ import { Cause, Effect, Layer, Schema, Context, RcMap, Stream, Scope } from "eff
 import { ListAnchor } from "@opencode-ai/schema/session"
 import { and, asc, desc, eq, gt, isNull, like, lt, or, type SQL } from "drizzle-orm"
 import { Project } from "./project.js"
-import { Workspace } from "./workspace.js"
-import { Model } from "./model.js"
+import { Workspace } from "@opencode-ai/schema/workspace"
+import { Model } from "@opencode-ai/schema/model"
 import { Location } from "./location.js"
 import { SessionMessage } from "./session/message.js"
 import { Base64, FileAttachment, Prompt } from "@opencode-ai/schema/prompt"
@@ -17,7 +17,7 @@ import { SessionProjector } from "./session/projector.js"
 import { SessionMessageTable, SessionTable } from "./session/sql.js"
 import { SessionSchema } from "./session/schema.js"
 import { AbsolutePath, PositiveInt, RelativePath } from "./schema.js"
-import { Agent } from "./agent.js"
+import { Agent } from "@opencode-ai/schema/agent"
 import { Money } from "@opencode-ai/schema/money"
 import { App } from "./app.js"
 import { Slug } from "./util/slug.js"
@@ -98,6 +98,7 @@ type CreateBaseInput = {
   title?: string
   agent?: Agent.ID
   model?: Model.Ref
+  metadata?: SessionSchema.Metadata
 }
 type CreateInput = CreateBaseInput &
   ({ location: Location.Ref; parentID?: never } | { parentID: SessionSchema.ID; location?: never })
@@ -409,6 +410,9 @@ const layer = Layer.effect(
               subpath: RelativePath.make(path.relative(project.directory, location.directory).replaceAll("\\", "/")),
               title: input.title,
               agent: input.agent,
+              // Children inherit metadata the way they inherit location, so
+              // host policies that read it treat the family uniformly.
+              metadata: input.metadata ?? parent?.metadata,
               model: input.model
                 ? {
                     id: Model.ID.make(input.model.id),
@@ -1209,7 +1213,7 @@ const SHELL_MAX_CAPTURE_BYTES = 1024 * 1024
 
 export const node = makeGlobalNode({
   service: Service,
-  layer: layer.pipe(Layer.orDie),
+  layer,
   deps: [
     Job.node,
     SessionEnvironment.node,

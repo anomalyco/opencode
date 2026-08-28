@@ -678,6 +678,40 @@ describe("ReadTool", () => {
     }),
   )
 
+  it.effect("normalizes a zero directory offset in the model heading", () =>
+    Effect.gen(function* () {
+      readResult = new ReadToolFileSystem.ListPage({
+        type: "list-page",
+        entries: [FileSystem.Entry.make({ path: RelativePath.make("index.ts"), type: "file" })],
+        truncated: true,
+        next: 2,
+      })
+      const registry = yield* Tool.Service
+
+      const result = yield* executeTool(registry, {
+        sessionID,
+        ...toolIdentity,
+        call: {
+          type: "tool-call",
+          id: "call-read-directory-zero",
+          name: "read",
+          input: { path: "src", offset: 0, limit: 1 },
+        },
+      })
+      expect(result.status).toBe("completed")
+      if (result.status !== "completed") return
+      expect(result.content).toEqual([
+        {
+          type: "text",
+          text: "Read directory src, entries 1-1\nindex.ts\n[Output truncated. Continue reading with offset: 2]",
+        },
+      ])
+      expect(readCalls).toEqual([
+        { input: AbsolutePath.make(path.join(process.cwd(), "src")), page: { offset: 0, limit: 1 } },
+      ])
+    }),
+  )
+
   it.effect("does not list a directory when permission is denied", () =>
     Effect.gen(function* () {
       allow = false

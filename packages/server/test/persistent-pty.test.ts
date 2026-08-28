@@ -7,11 +7,136 @@ import { PersistentPty } from "@opencode-ai/schema/persistent-pty"
 import { Session } from "@opencode-ai/schema/session"
 import { Effect, Exit, Schema, Scope } from "effect"
 import { HttpServer } from "effect/unstable/http"
+import { OpenCode } from "../../client/src/promise/index"
 import { it } from "../../core/test/lib/effect"
 import { ServerProcess } from "../src/process"
 
 const binary = process.env.OPENCODE_PTY_BIN ?? "/root/projects/opencode-pty/target/debug/opencode-pty"
 const smoke = existsSync(binary) ? it.live : it.live.skip
+
+smoke(
+  "reads the latest controlled terminal with optional physical line counts through the SDK",
+  () =>
+    Effect.gen(function* () {
+      const fixture = yield* testDirectory("xdg")
+      const server = yield* ServerProcess.start<never, never>({
+        hostname: "127.0.0.1",
+        port: 0,
+        password: "secret",
+        app: { version: "test-version" },
+        database: { path: fixture.database },
+        fs: { filewatcher: false },
+      })
+      const base = HttpServer.formatAddress(server.address)
+      const client = OpenCode.make({ baseUrl: base, headers: { authorization: `Basic ${btoa("opencode:secret")}` } })
+      const sessionID = "ses_terminal_read"
+      expect(yield* Effect.promise(() => client.experimental.persistentPty.read({ sessionID }))).toBeNull()
+      expect(existsSync(fixture.directory)).toBeFalse()
+      yield* Effect.promise(async () => {
+        for (const lines of ["0", "-1", "1.5", "65536", "nope"]) {
+          const response = await fetch(`${base}/api/experimental/session/${sessionID}/terminal/read?lines=${lines}`, {
+            headers: { authorization: `Basic ${btoa("opencode:secret")}` },
+          })
+          expect(response.status).toBe(400)
+          await response.arrayBuffer()
+        }
+      })
+      expect(existsSync(fixture.directory)).toBeFalse()
+      const first = yield* Effect.promise(() =>
+        client.experimental.persistentPty.create({
+          sessionID,
+          command: "/bin/sh",
+          args: ["-c", "stty -echo; seq 1 20; exec cat"],
+          cwd: fixture.root,
+          title: "first",
+          env: {},
+          size: { cols: 40, rows: 4 },
+        }),
+      )
+      const second = yield* Effect.promise(() =>
+        client.experimental.persistentPty.create({
+          sessionID,
+          command: "/bin/sh",
+          args: ["-c", "printf second; exec cat"],
+          cwd: fixture.root,
+          title: "second",
+          env: {},
+        }),
+      )
+      expect(yield* waitForText(base, first.id, "20")).toContain("1\n2\n")
+      expect(yield* Effect.promise(() => client.experimental.persistentPty.read({ sessionID }))).toBeNull()
+      const controller = yield* Effect.acquireRelease(
+        Effect.promise(() => openTerminalSocket(base, first.id, "read-first")),
+        (connection) => Effect.sync(() => connection.socket.close()),
+      )
+      const observer = yield* Effect.acquireRelease(
+        Effect.promise(() => openTerminalSocket(base, second.id, "read-second", "observer")),
+        (connection) => Effect.sync(() => connection.socket.close()),
+      )
+      const current = yield* Effect.promise(() => client.experimental.persistentPty.read({ sessionID }))
+      if (!current) throw new Error("Expected the controller's terminal to be selected")
+      expect(current).toEqual({
+        ptyID: first.id,
+        title: "first",
+        cwd: fixture.root,
+        foregroundProcess: current.foregroundProcess,
+        screen: { text: "18\n19\n20\n", cols: 40, rows: 4, cursor: { x: 0, y: 3 } },
+      })
+      expect(current.foregroundProcess === null || typeof current.foregroundProcess === "string").toBeTrue()
+      expect(yield* Effect.promise(() => client.experimental.persistentPty.read({ sessionID: "ses_other" }))).toBeNull()
+      yield* Effect.promise(() => client.experimental.persistentPty.snapshot({ ptyID: second.id }))
+      for (const lines of [2, 6, 65535]) {
+        const value = yield* Effect.promise(() => client.experimental.persistentPty.read({ sessionID, lines }))
+        expect(value?.ptyID).toBe(first.id)
+        expect(value?.screen.rows).toBe(4)
+        const expected = Array.from({ length: 20 }, (_, index) => String(index + 1))
+          .concat("")
+          .slice(-lines)
+        expect(value?.screen.text.split("\n")).toEqual(expected)
+      }
+      observer.socket.send(controlFrame(30, 3))
+      expect((yield* Effect.promise(() => waitForRead(client, sessionID, second.id))).screen.rows).toBe(3)
+      yield* Effect.promise(() =>
+        client.experimental.persistentPty.update({
+          ptyID: first.id,
+          attachmentID: "read-first",
+          size: { cols: 42, rows: 5 },
+        }),
+      )
+      expect((yield* Effect.promise(() => client.experimental.persistentPty.read({ sessionID })))?.ptyID).toBe(first.id)
+      observer.socket.send(controlFrame(30, 3))
+      yield* Effect.promise(() => waitForRead(client, sessionID, second.id))
+      controller.socket.send(inputFrame(40, 4, "typed\n"))
+      yield* Effect.promise(() => waitForSocketOutput([controller], "typed"))
+      expect((yield* Effect.promise(() => waitForRead(client, sessionID, first.id))).screen.text).toContain("typed")
+      const takeover = yield* Effect.acquireRelease(
+        Effect.promise(() => openTerminalSocket(base, second.id, "read-takeover")),
+        (connection) => Effect.sync(() => connection.socket.close()),
+      )
+      expect((yield* Effect.promise(() => client.experimental.persistentPty.read({ sessionID })))?.ptyID).toBe(
+        second.id,
+      )
+      takeover.socket.close()
+      yield* Effect.promise(() => client.experimental.persistentPty.remove({ ptyID: first.id }))
+      expect((yield* Effect.promise(() => client.experimental.persistentPty.read({ sessionID })))?.ptyID).toBe(
+        second.id,
+      )
+      yield* Effect.promise(() => client.experimental.persistentPty.remove({ ptyID: second.id }))
+      expect(yield* Effect.promise(() => client.experimental.persistentPty.read({ sessionID }))).toBeNull()
+      yield* Effect.promise(() => client.experimental.persistentPty.shutdown())
+      expect(yield* Effect.promise(() => client.experimental.persistentPty.read({ sessionID }))).toBeNull()
+    }),
+  20_000,
+)
+
+async function waitForRead(client: ReturnType<typeof OpenCode.make>, sessionID: string, ptyID: string) {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const result = await client.experimental.persistentPty.read({ sessionID })
+    if (result?.ptyID === ptyID) return result
+    await Bun.sleep(20)
+  }
+  throw new Error(`Terminal ${ptyID} did not become current for ${sessionID}`)
+}
 
 smoke(
   "creates two persistent terminals for one session through the client API",
@@ -216,10 +341,18 @@ smoke(
         })).data,
       )
       expect(yield* waitForText(base, first.id, "before-restart")).toContain("before-restart")
+      yield* Effect.acquireRelease(
+        Effect.promise(() => openTerminalSocket(base, first.id, "before-restart")),
+        (connection) => Effect.sync(() => connection.socket.close()),
+      )
+      expect((yield* request(base, "GET", `/api/experimental/session/${sessionID}/terminal/read`)).data).toMatchObject({
+        ptyID: first.id,
+      })
 
       const independent = yield* ServerProcess.start<never, never>(options)
       const otherBase = HttpServer.formatAddress(independent.address)
       expect((yield* request(otherBase, "GET", `/api/experimental/session/${sessionID}/terminal`)).data).toEqual([])
+      expect((yield* request(otherBase, "GET", `/api/experimental/session/${sessionID}/terminal/read`)).data).toBeNull()
 
       const handoff = Schema.decodeUnknownSync(PersistentPty.Handoff)(
         (yield* request(base, "POST", "/api/experimental/persistent-pty/handoff")).handoff,
@@ -240,6 +373,9 @@ smoke(
         (yield* request(replacementBase, "GET", `/api/experimental/session/${sessionID}/terminal`)).data,
       ).toMatchObject([{ id: first.id, pid: first.pid }])
       expect(yield* waitForText(replacementBase, first.id, "before-restart")).toContain("before-restart")
+      expect(
+        (yield* request(replacementBase, "GET", `/api/experimental/session/${sessionID}/terminal/read`)).data,
+      ).toBeNull()
 
       yield* Scope.close(replacementScope, Exit.void)
       yield* waitForExit(registration.pid)
