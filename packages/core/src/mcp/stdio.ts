@@ -1,4 +1,4 @@
-export * as MCPStdio from "./stdio.js"
+export * as McpStdio from "./stdio.js"
 
 import { ReadBuffer, serializeMessage } from "@modelcontextprotocol/sdk/shared/stdio.js"
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js"

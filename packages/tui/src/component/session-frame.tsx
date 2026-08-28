@@ -1,4 +1,4 @@
-import { RGBA } from "@opentui/core"
+import { RGBA, type MouseEvent } from "@opentui/core"
 import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { batch, createEffect, createMemo, createResource, createSignal, on, Show } from "solid-js"
 import { useConfig } from "../config"
@@ -6,9 +6,12 @@ import { useData } from "../context/data"
 import { Keymap } from "../context/keymap"
 import { useSessionTerminals } from "../context/session-terminals"
 import { usePromptRef } from "../context/prompt"
+import { useStorage } from "../context/storage"
 import { Session } from "../routes/session"
 import { Sidebar } from "../routes/session/sidebar"
-import { SESSION_SIDEBAR_WIDTH } from "../ui/layout"
+import { clampTerminalPaneWidth, SESSION_SIDEBAR_WIDTH } from "../ui/layout"
+import { createPaneResize } from "../ui/pane-resize"
+import { PaneResizeHandle } from "../ui/pane-resize-handle"
 import { useToast } from "../ui/toast"
 import { TerminalPane } from "./terminal-pane"
 
@@ -20,6 +23,32 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
   const toast = useToast()
   const renderer = useRenderer()
   const dimensions = useTerminalDimensions()
+  const availableWidth = () => Math.max(0, dimensions().width - props.verticalTabsWidth)
+  const defaultTerminalWidth = () => Math.max(1, Math.floor(dimensions().width / 2))
+  const [layout, updateLayout] = useStorage().store<{ terminalWidth?: number }>("layout", { initial: {} })
+  const terminalResize = createPaneResize({
+    value: () => layout.terminalWidth ?? defaultTerminalWidth(),
+    defaultValue: defaultTerminalWidth,
+    clamp: (width) => clampTerminalPaneWidth(width, availableWidth()),
+    fromMouse: (event) => dimensions().width - event.x - 1,
+    contains: (event, width) => event.x >= dimensions().width - width - 1 && event.x <= dimensions().width - width,
+    onCommit: (width) => {
+      void updateLayout((draft) => {
+        draft.terminalWidth = width
+      }).catch((error) => console.error("Failed to persist TUI layout", error))
+    },
+  })
+  let resizeRelease = false
+  const finishTerminalResize = (event: MouseEvent) => {
+    if (terminalResize.resizing()) {
+      // A captured drag-end can be followed by mouse-up on the focus overlay.
+      resizeRelease = true
+      queueMicrotask(() => {
+        resizeRelease = false
+      })
+    }
+    terminalResize.onMouseUp(event)
+  }
   const [sidebarOpen, setSidebarOpen] = createSignal(false)
   const [sessionWidth, setSessionWidth] = createSignal<number>()
   const [terminalFocused, setTerminalFocused] = createSignal(false)
@@ -96,7 +125,16 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
   }))
 
   return (
-    <box flexGrow={1} minWidth={0} minHeight={0} flexDirection="row" position="relative">
+    <box
+      flexGrow={1}
+      minWidth={0}
+      minHeight={0}
+      flexDirection="row"
+      position="relative"
+      onMouseDrag={terminalResize.onMouseDrag}
+      onMouseDragEnd={finishTerminalResize}
+      onMouseUp={finishTerminalResize}
+    >
       <box
         flexGrow={1}
         flexBasis={0}
@@ -124,18 +162,17 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
             height="100%"
             zIndex={1}
             // Consume the release before revealing permission buttons underneath.
-            onMouseUp={focusSession}
+            onMouseUp={() => {
+              if (terminalResize.resizing() || resizeRelease) return
+              focusSession()
+            }}
           />
         </Show>
       </box>
       <Show when={rightPane() === "terminal" || (rightPane() === "sidebar" && wide())}>
         <box
           flexShrink={0}
-          width={
-            rightPane() === "terminal"
-              ? Math.max(1, Math.floor((dimensions().width - props.verticalTabsWidth) / 2))
-              : SESSION_SIDEBAR_WIDTH
-          }
+          width={rightPane() === "terminal" ? terminalResize.size() : SESSION_SIDEBAR_WIDTH}
           minWidth={0}
           minHeight={0}
         >
@@ -146,6 +183,7 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
                 {(ptyID) => (
                   <TerminalPane
                     ptyID={ptyID}
+                    resizing={terminalResize.resizing()}
                     autoFocus={restoreTerminalFocus() || sessions.shouldFocus(ptyID)}
                     onAutoFocus={() => {
                       sessions.clearFocus(ptyID)
@@ -162,6 +200,9 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
             <Sidebar sessionID={props.sessionID} />
           </Show>
         </box>
+      </Show>
+      <Show when={rightPane() === "terminal" && availableWidth() >= 3}>
+        <PaneResizeHandle resize={terminalResize} left={availableWidth() - terminalResize.size() - 1} highlight="right" />
       </Show>
       <Show when={rightPane() === "sidebar" && !wide()}>
         <box

@@ -18,24 +18,20 @@
     "package": "electron-builder --config electron-builder.config.ts",
     "package:mac": "electron-builder --mac --config electron-builder.config.ts",
     "package:win": "electron-builder --win --config electron-builder.config.ts",
-    "package:linux": "electron-builder --linux --config electron-builder.config.ts",
-    "native:build": "bun install --cwd native"
+    "package:linux": "electron-builder --linux --config electron-builder.config.ts"
   },
   "main": "./out/main/index.js",
   "dependencies": {
-    "@effect/platform-node": "catalog:",
     "@zip.js/zip.js": "2.7.62",
-    "effect": "catalog:",
     "electron-context-menu": "4.1.2",
     "electron-log": "^5",
     "electron-store": "11.0.2",
     "electron-updater": "6.8.9",
-    "electron-window-state": "^5.0.3",
-    "drizzle-orm": "catalog:"
+    "electron-window-state": "^5.0.3"
   },
   "devDependencies": {
-    "@actions/artifact": "4.0.0",
     "@brendonovich/vite-plugin-opencode": "0.1.1",
+    "@effect/platform-node": "catalog:",
     "@lydell/node-pty": "catalog:",
     "@opencode-ai/app": "workspace:*",
     "@opencode-ai/client": "workspace:*",
@@ -44,19 +40,18 @@
     "@sentry/vite-plugin": "catalog:",
     "@solid-primitives/storage": "catalog:",
     "@solidjs/meta": "catalog:",
-    "@solidjs/router": "0.15.4",
+    "@solidjs/router": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "@typescript/native-preview": "catalog:",
-    "@valibot/to-json-schema": "1.6.0",
-    "electron": "42.3.3",
-    "electron-builder": "26.15.2",
+    "drizzle-orm": "catalog:",
+    "effect": "catalog:",
+    "electron": "42.10.1",
+    "electron-builder": "26.15.7",
     "electron-vite": "6.0.0-beta.1",
     "solid-js": "catalog:",
-    "sury": "11.0.0-alpha.4",
     "typescript": "~5.6.2",
-    "vite": "8.2.1",
-    "zod-openapi": "5.4.6"
+    "vite": "8.2.2"
   },
   "optionalDependencies": {
     "@lydell/node-pty-darwin-arm64": "1.2.0-beta.12",
@@ -65,13 +60,6 @@
     "@lydell/node-pty-linux-x64": "1.2.0-beta.12",
     "@lydell/node-pty-win32-arm64": "1.2.0-beta.12",
     "@lydell/node-pty-win32-x64": "1.2.0-beta.12",
-    "@parcel/watcher-darwin-arm64": "2.5.1",
-    "@parcel/watcher-darwin-x64": "2.5.1",
-    "@parcel/watcher-linux-arm64-glibc": "2.5.1",
-    "@parcel/watcher-linux-arm64-musl": "2.5.1",
-    "@parcel/watcher-linux-x64-glibc": "2.5.1",
-    "@parcel/watcher-linux-x64-musl": "2.5.1",
-    "@parcel/watcher-win32-arm64": "2.5.1",
-    "@parcel/watcher-win32-x64": "2.5.1"
+    "msgpackr-extract": "3.0.4"
   }
 }

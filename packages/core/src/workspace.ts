@@ -6,7 +6,7 @@ import { eq } from "drizzle-orm"
 import { Clock, Context, Deferred, Duration, Effect, Exit, FiberSet, Layer, Ref, Schedule, Schema, Scope } from "effect"
 import { systemError } from "effect/PlatformError"
 import { make } from "effect/unstable/process/ChildProcessSpawner"
-import type { Driver as EnvironmentDriver } from "./environment/driver.js"
+import type { EnvironmentDriver } from "./environment/driver.js"
 import { Database } from "./database/database.js"
 import { KeyedMutex } from "./effect/keyed-mutex.js"
 import { WorkspaceDriver } from "./workspace/driver.js"
@@ -43,12 +43,11 @@ export interface Interface {
   ) => Effect.Effect<Info, NotFound | WorkspaceDriver.Error | WorkspaceDriver.ProviderNotFound>
   readonly connect: (
     workspaceID: ID,
-  ) => Effect.Effect<EnvironmentDriver, NotFound | WorkspaceDriver.Error | WorkspaceDriver.ProviderNotFound>
+  ) => Effect.Effect<EnvironmentDriver.Driver, NotFound | WorkspaceDriver.Error | WorkspaceDriver.ProviderNotFound>
   /** Makes the workspace absent; reports whether this call destroyed an existing workspace. */
-  readonly destroy: (workspaceID: ID) => Effect.Effect<
-    Workspace.DestroyResult,
-    WorkspaceDriver.Error | WorkspaceDriver.ProviderNotFound
-  >
+  readonly destroy: (
+    workspaceID: ID,
+  ) => Effect.Effect<Workspace.DestroyResult, WorkspaceDriver.Error | WorkspaceDriver.ProviderNotFound>
 }
 
 export interface Options {
@@ -60,7 +59,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Wo
 
 interface Connection {
   readonly driver: WorkspaceDriver.Interface
-  readonly environment: EnvironmentDriver
+  readonly environment: EnvironmentDriver.Driver
   readonly saveBinding: (binding: WorkspaceDriver.Binding) => Effect.Effect<void>
   readonly lastActivity: Ref.Ref<number>
   readonly active: Ref.Ref<number>
@@ -91,12 +90,7 @@ const layer = (options: Options) =>
       const idleThreshold = Duration.toMillis(options.idleThreshold ?? Duration.minutes(20))
 
       const find = (workspaceID: ID) =>
-        db
-          .select()
-          .from(WorkspaceTable)
-          .where(eq(WorkspaceTable.id, workspaceID))
-          .get()
-          .pipe(Effect.orDie)
+        db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, workspaceID)).get().pipe(Effect.orDie)
 
       const load = Effect.fn("Workspace.load")(function* (workspaceID: ID) {
         const row = yield* find(workspaceID)

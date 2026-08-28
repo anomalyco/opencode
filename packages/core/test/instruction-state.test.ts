@@ -322,6 +322,35 @@ describe("InstructionState", () => {
     }),
   )
 
+  it.effect("previews changed and removed instructions from observed blobs", () =>
+    Effect.gen(function* () {
+      const sessionID = SessionSchema.ID.make("ses_instruction_generate_delta")
+      const { db, events } = yield* setup(sessionID)
+      let current = "Initial context"
+      let retired: string | Instructions.Removed = "Retired context"
+      const instructions = Instructions.combine([
+        source(
+          "test/current",
+          Effect.sync(() => current),
+        ),
+        source(
+          "test/retired",
+          Effect.sync(() => retired),
+        ),
+      ])
+      yield* InstructionState.prepare(db, events, instructions, sessionID)
+      current = "Changed context"
+      retired = Instructions.removed
+
+      const assembled = yield* preview(db, sessionID, instructions)
+
+      expect(assembled.initial).toContain("Initial context")
+      expect(assembled.initial).toContain("Retired context")
+      expect(assembled.update).toContain("Changed context")
+      expect(assembled.update).toContain("Removed Retired context")
+    }),
+  )
+
   it.effect("persists chronological updates as system messages", () =>
     Effect.gen(function* () {
       const sessionID = SessionSchema.ID.make("ses_instruction_messages")

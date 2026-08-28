@@ -253,7 +253,7 @@ describe("GoogleVertexPlugin", () => {
       () =>
         Effect.gen(function* () {
           const catalog = yield* Catalog.Service
-          yield* catalog.transform((catalog) =>
+          yield* catalog.transform((catalog) => {
             catalog.provider.update(Provider.ID.make("google-vertex"), (provider) => {
               provider.package = Provider.aisdk("@ai-sdk/openai-compatible")
               provider.settings = {
@@ -262,16 +262,19 @@ describe("GoogleVertexPlugin", () => {
                   "https://${GOOGLE_VERTEX_ENDPOINT}/v1/projects/${GOOGLE_VERTEX_PROJECT}/locations/${GOOGLE_VERTEX_LOCATION}",
               }
               provider.settings = { ...provider.settings, project: "config-project", location: "global" }
-            }),
-          )
+            })
+            catalog.model.update(Provider.ID.make("google-vertex"), Model.ID.make("gemini"), () => {})
+          })
           yield* addPlugin()
           const provider = required(yield* catalog.provider.get(Provider.ID.make("google-vertex")))
+          const model = required(yield* catalog.model.get(Provider.ID.make("google-vertex"), Model.ID.make("gemini")))
           expect(provider.settings?.project).toBe("config-project")
           expect(provider.settings?.location).toBe("global")
           expect(provider).toMatchObject({
             package: "aisdk:@ai-sdk/openai-compatible",
             settings: { baseURL: "https://aiplatform.googleapis.com/v1/projects/config-project/locations/global" },
           })
+          expect(model.settings).toEqual(provider.settings)
         }),
     ),
   )
