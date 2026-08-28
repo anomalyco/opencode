@@ -61,8 +61,8 @@ describe("AISDKNative", () => {
     })
   })
 
-  test("maps Cerebras, DeepInfra, and Together AI settings, headers, and reasoning options to native providers", () => {
-    for (const name of ["cerebras", "deepinfra", "togetherai"]) {
+  test("maps Cerebras, DeepInfra, Groq, and Together AI settings, headers, and reasoning options to native providers", () => {
+    for (const name of ["cerebras", "deepinfra", "groq", "togetherai"]) {
       expect(
         map(`@ai-sdk/${name}`, {
           apiKey: "secret",
@@ -222,9 +222,11 @@ describe("AISDKNative", () => {
       },
       headers: { "x-test": "value" },
     })
-    expect(map("@ai-sdk/amazon-bedrock/mantle", settings, "openai.gpt-oss-safeguard-20b")?.package).toBe(
-      "@opencode-ai/ai/providers/amazon-bedrock/mantle/chat",
-    )
+    for (const modelID of ["openai.gpt-oss-safeguard-20b", "openai.gpt-oss-safeguard-120b"]) {
+      expect(map("@ai-sdk/amazon-bedrock/mantle", settings, modelID)?.package).toBe(
+        "@opencode-ai/ai/providers/amazon-bedrock/mantle/chat",
+      )
+    }
     expect(
       map(
         "@ai-sdk/amazon-bedrock/mantle",

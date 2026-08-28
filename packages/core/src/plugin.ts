@@ -13,7 +13,7 @@ import { Command } from "./command.js"
 import { Bus } from "./bus.js"
 import { Integration } from "./integration.js"
 import { KV } from "./kv.js"
-import { MCP } from "./mcp/index.js"
+import { Mcp } from "./mcp/index.js"
 import { Location } from "./location.js"
 import { PluginHost } from "./plugin/host.js"
 import { PluginRuntime } from "./plugin/runtime.js"
@@ -91,16 +91,11 @@ const layer = Layer.effect(
 
       yield* lock.withPermit(
         Effect.gen(function* () {
-          const next = definitions.map((definition) => ({ id: definition.id, version: definition.version }))
-          const current = Array.from(active.values(), (entry) => ({
-            id: entry.plugin.id,
-            version: entry.plugin.version,
-          }))
           if (
-            current.length === next.length &&
-            current.every((definition, index) => {
-              const candidate = next[index]
-              return definition.id === candidate?.id && definition.version === candidate.version
+            active.size === definitions.length &&
+            Array.from(active.values()).every((entry, index) => {
+              const definition = definitions[index]
+              return entry.plugin.id === definition?.id && entry.plugin.version === definition.version
             })
           ) {
             const nextInventory = [...Array.from(active.values(), (entry) => activeInfo(entry.plugin)), ...failures]
@@ -161,7 +156,7 @@ const layer = Layer.effect(
     yield* Effect.addFinalizer((exit) =>
       Effect.gen(function* () {
         active.clear()
-        yield* State.batch(Scope.close(scope, exit))
+        yield* State.batch(Scope.close(scope, exit), { flush: false })
       }),
     )
 
@@ -197,7 +192,7 @@ export const node = makeLocationNode({
     Command.node,
     Integration.node,
     KV.node,
-    MCP.node,
+    Mcp.node,
     Location.node,
     Reference.node,
     Skill.node,

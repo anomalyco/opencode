@@ -9,6 +9,7 @@ import { llmClient } from "@opencode-ai/core/effect/app-node-platform"
 import { SessionCompaction } from "@opencode-ai/core/session/compaction"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionMessage } from "@opencode-ai/core/session/message"
+import { SessionModelRequest } from "@opencode-ai/core/session/model-request"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { Session } from "@opencode-ai/core/session"
 import { Agent } from "@opencode-ai/core/agent"
@@ -38,17 +39,11 @@ const config = Config.testLayer()
 const it = testEffect(
   Layer.merge(
     config,
-    AppNodeBuilder.build(LayerNode.group([SessionCompaction.node, Config.node, Bus.node]), [
+    AppNodeBuilder.build(LayerNode.group([SessionCompaction.node, SessionModelRequest.node, Config.node, Bus.node]), [
       [
         llmClient,
         Layer.mock(LLMClient.Service)({
           stream: () => Stream.make(LLMEvent.textDelta({ id: "summary", text: "summary" })),
-        }),
-      ],
-      [
-        SessionRunnerModel.node,
-        Layer.mock(SessionRunnerModel.Service)({
-          resolve: () => Effect.succeed(resolved),
         }),
       ],
       [Config.node, config],
@@ -59,6 +54,7 @@ describe("ConfigCompactionPlugin.Plugin", () => {
   it.live("merges settings and reloads changed config", () =>
     Effect.gen(function* () {
       const compaction = yield* SessionCompaction.Service
+      const modelRequests = yield* SessionModelRequest.Service
       const config = yield* Config.Test
       const bus = yield* Bus.Service
       yield* config.setEntries([
@@ -85,6 +81,8 @@ describe("ConfigCompactionPlugin.Plugin", () => {
       expect(
         yield* compaction.compactManual({
           session,
+          resolveModel: () => Effect.succeed(resolved),
+          prepare: modelRequests.prepare,
           messages: [
             {
               id: SessionMessage.ID.create(),

@@ -34,7 +34,10 @@ export interface Interface {
     sessionID: Session.ID
     sanitize?: boolean
   }) => Effect.Effect<Data, Session.NotFoundError | Session.MessageDecodeError>
-  readonly import: (input: { data: Data; location: Location.Ref }) => Effect.Effect<Session.Info, ImportConflictError>
+  readonly import: (input: {
+    data: Data
+    location: Location.Ref
+  }) => Effect.Effect<Session.Info, ImportConflictError | Session.NotFoundError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionTransfer") {}
@@ -66,6 +69,7 @@ const layer = Layer.effect(
           .get()
           .pipe(Effect.orDie)
         if (recorded) return yield* new ImportConflictError({ sessionID })
+        if (input.data.info.parentID) yield* sessions.get(input.data.info.parentID)
         const project = yield* projects.resolve(input.location.directory)
         yield* upsertProject(db, project).pipe(Effect.orDie)
         const messages = input.data.messages.filter(isSettled).map((message, index) => {
@@ -85,6 +89,7 @@ const layer = Layer.effect(
             SessionEvent.Created,
             {
               sessionID,
+              parentID: input.data.info.parentID,
               slug: Slug.create(),
               version: app.version,
               projectID: project.id,
@@ -95,6 +100,7 @@ const layer = Layer.effect(
               title: input.data.info.title,
               agent: input.data.info.agent,
               model: input.data.info.model,
+              metadata: input.data.info.metadata,
             },
             {
               location: input.location,
@@ -173,6 +179,10 @@ function sanitize(data: Data): Data {
     info: {
       ...data.info,
       title: data.info.title === undefined ? undefined : redact("session-title", data.info.id, data.info.title),
+      metadata:
+        data.info.metadata && Object.keys(data.info.metadata).length > 0
+          ? { redacted: `session-metadata:${data.info.id}` }
+          : data.info.metadata,
       location: {
         ...data.info.location,
         directory: AbsolutePath.make(`/${redact("session-directory", data.info.id, data.info.location.directory)}`),

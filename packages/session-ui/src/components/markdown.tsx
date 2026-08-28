@@ -32,6 +32,8 @@ import { getCachedMarkdown, sanitizeMarkdown, touchCachedMarkdown, type Markdown
 import { inlineCodeKind } from "./markdown-inline-code-kind"
 import { renderMermaidSvg } from "./markdown-mermaid"
 import { createMarkdownRenderer } from "./markdown-solid"
+import { useMarkdown, type ReadMarkdownImage } from "../context/markdown"
+import { createMarkdownImages } from "./markdown-image"
 
 type RenderedBlock =
   | (MarkdownCacheEntry & { key: string; mode: Exclude<Block["mode"], "code"> })
@@ -385,6 +387,7 @@ export function Markdown(
 ) {
   const [local, others] = splitProps(props, ["text", "cacheKey", "streaming", "deferUntilReady", "class", "classList"])
   const i18n = useI18n()
+  const markdown = useMarkdown()
   const [root, setRoot] = createSignal<HTMLDivElement>()
   const owner = createUniqueId()
   const activeCodeKeys = new Set<string>()
@@ -507,6 +510,8 @@ export function Markdown(
   )
 
   let copyCleanup: (() => void) | undefined
+  let readImage: ReadMarkdownImage | undefined
+  let images: ReturnType<typeof createMarkdownImages> | undefined
 
   createEffect(() => {
     const container = root()
@@ -515,11 +520,17 @@ export function Markdown(
     const content = local.text ? pendingBlocks(result, projected, local.cacheKey, owner, local.deferUntilReady) : []
     if (!container) return
     if (isServer) return
+    if (readImage !== markdown?.readImage) {
+      images?.dispose()
+      readImage = markdown?.readImage
+      images = readImage ? createMarkdownImages(readImage) : undefined
+    }
     delete container.dataset.markdownReady
     if (content.length === 0) {
       disposeCopyButtons(container)
       disposeRenderedMarkdown(container)
       container.innerHTML = ""
+      images?.update(container)
       if (result?.ready && result.text === local.text) container.dataset.markdownReady = ""
       return
     }
@@ -542,6 +553,7 @@ export function Markdown(
       disposeRenderedMarkdown(child)
       child.remove()
     }
+    images?.update(container)
     container
       .querySelectorAll<HTMLElement>('[data-slot="markdown-copy-button"]')
       .forEach((button) => setCopyState(button, labels, button.dataset.copied === "true"))
@@ -554,6 +566,7 @@ export function Markdown(
   })
 
   onCleanup(() => {
+    images?.dispose()
     if (copyCleanup) copyCleanup()
     const container = root()
     if (container) disposeRenderedMarkdown(container)
@@ -617,7 +630,10 @@ function updateBlock(container: HTMLDivElement, index: number, block: RenderedBl
     updateCodeBlock(container, current, block, labels)
     return
   }
-  const existing = current instanceof HTMLDivElement && current.dataset.markdownKey === block.key ? current : undefined
+  const existing =
+    current instanceof HTMLDivElement && current.dataset.markdownKey === block.key && !renderedCodeTokens.has(current)
+      ? current
+      : undefined
   if (existing?.dataset.markdownHash === block.hash) return
 
   const next = existing ?? document.createElement("div")
@@ -625,28 +641,45 @@ function updateBlock(container: HTMLDivElement, index: number, block: RenderedBl
   next.dataset.markdownKey = block.key
   next.dataset.markdownHash = block.hash
   next.style.display = "contents"
-  const source = document.createElement("div")
+  const rendered = renderedMarkdown.get(next)
+  // Keep live renderers in control of their DOM, including after completion.
+  const source = rendered || block.mode === "live" ? document.createElement("div") : next
+  if (source === next) disposeCopyButtons(next)
   source.innerHTML = block.html
   markInlineCode(source)
   markCodeLinks(source)
-  const html = source.innerHTML
 
-  if (existing) {
-    const rendered = renderedMarkdown.get(existing)
-    if (rendered) {
-      rendered.renderer.update(html, block.mode === "live", rendered.raw !== block.raw)
-      rendered.raw = block.raw
-      return
-    }
-    existing.innerHTML = ""
-    renderedMarkdown.set(existing, {
-      renderer: createMarkdownRenderer(existing, html, block.mode === "live"),
-      raw: block.raw,
-    })
+  if (rendered) {
+    rendered.renderer.update(source.innerHTML, block.mode === "live", rendered.raw !== block.raw)
+    rendered.raw = block.raw
     return
   }
+  if (block.mode === "live") {
+    next.replaceChildren()
+    renderedMarkdown.set(next, {
+      renderer: createMarkdownRenderer(next, source.innerHTML, true),
+      raw: block.raw,
+    })
+  }
+  if (block.mode !== "live") {
+    next.querySelectorAll<HTMLElement>("pre > code").forEach((code) => {
+      const pre = code.parentElement!
+      const wrapper = document.createElement("div")
+      wrapper.dataset.component = "markdown-code"
+      applyCodeMetadata(
+        wrapper,
+        Array.from(code.classList)
+          .find((name) => name.startsWith("language-"))
+          ?.slice(9),
+      )
+      pre.replaceWith(wrapper)
+      wrapper.appendChild(pre)
+      wrapper.appendChild(createCopyButton(labels))
+      decorateMermaid(wrapper, code, true)
+    })
+  }
 
-  renderedMarkdown.set(next, { renderer: createMarkdownRenderer(next, html, block.mode === "live"), raw: block.raw })
+  if (existing) return
   if (!current) {
     container.appendChild(next)
     return
@@ -662,7 +695,10 @@ function updateCodeBlock(
   block: Extract<RenderedBlock, { mode: "code" }>,
   labels: CopyLabels,
 ) {
-  const existing = current instanceof HTMLDivElement && current.dataset.markdownKey === block.key ? current : undefined
+  const existing =
+    current instanceof HTMLDivElement && current.dataset.markdownKey === block.key && renderedCodeTokens.has(current)
+      ? current
+      : undefined
   const next = existing ?? document.createElement("div")
   next.dataset.markdownBlock = ""
   next.dataset.markdownKey = block.key

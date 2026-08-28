@@ -128,6 +128,35 @@ test("interrupted progress metadata remains in the terminal failure snapshot", a
   })
 })
 
+test("interrupted subagent failures expose their existing child session to the model", async () => {
+  const { published, publisher } = capture("anthropic", { interruptProgress: true })
+  const subagent = LLMEvent.toolCall({
+    id: "call-subagent",
+    name: "subagent",
+    input: { agent: "general", description: "Recover child", prompt: "Continue working" },
+  })
+  await Effect.runPromise(publisher.publish(subagent))
+  await Effect.runPromiseExit(publisher.progress(subagent.id, { sessionID: "ses_existing_child", status: "running" }))
+  await Effect.runPromise(publisher.failUnsettledTools({ type: "aborted", message: "Tool execution interrupted" }))
+
+  expect(published.find((event) => event.type === "session.tool.failed.2")?.data).toMatchObject({
+    error: { type: "aborted", message: "Tool execution interrupted (sessionID: ses_existing_child)" },
+    metadata: { sessionID: "ses_existing_child", status: "running" },
+  })
+})
+
+test("interrupted non-subagent failures do not expose their progress session IDs", async () => {
+  const { published, publisher } = capture()
+  await Effect.runPromise(publisher.publish(call))
+  await Effect.runPromise(publisher.progress(call.id, { sessionID: "ses_private", status: "running" }))
+  await Effect.runPromise(publisher.failUnsettledTools({ type: "aborted", message: "Tool execution interrupted" }))
+
+  expect(published.find((event) => event.type === "session.tool.failed.2")?.data).toMatchObject({
+    error: { type: "aborted", message: "Tool execution interrupted" },
+    metadata: { sessionID: "ses_private", status: "running" },
+  })
+})
+
 test("local failure metadata completes the progress snapshot", async () => {
   const { published, publisher } = capture()
   await Effect.runPromise(publisher.publish(call))
@@ -258,6 +287,29 @@ it.effect("batches reasoning deltas and flushes pending reasoning before the ter
   }),
 )
 
+test("authoritative end values replace accumulated deltas in the durable ended events", async () => {
+  const { published, publisher } = capture()
+  await Effect.runPromise(
+    Effect.forEach(
+      [
+        LLMEvent.textStart({ id: "text" }),
+        LLMEvent.textDelta({ id: "text", text: "Hel" }),
+        LLMEvent.textEnd({ id: "text", text: "Hello!" }),
+        LLMEvent.reasoningStart({ id: "reasoning" }),
+        LLMEvent.reasoningDelta({ id: "reasoning", text: "Thin" }),
+        LLMEvent.reasoningEnd({ id: "reasoning", text: "Thinking done." }),
+      ],
+      publisher.publish,
+      { discard: true },
+    ),
+  )
+
+  expect(published.find((event) => event.type === "session.text.ended.1")?.data).toMatchObject({ text: "Hello!" })
+  expect(published.find((event) => event.type === "session.reasoning.ended.1")?.data).toMatchObject({
+    text: "Thinking done.",
+  })
+})
+
 test("tool input deltas are accumulated without being published", async () => {
   const { published, publisher } = capture()
   await Effect.runPromise(
@@ -342,7 +394,7 @@ test("step finish records settlement without publishing step ended", async () =>
   await Effect.runPromise(publisher.publish(LLMEvent.stepStart({ index: 0 })))
   await Effect.runPromise(publisher.publish(LLMEvent.stepFinish({ index: 0, reason: { normalized: "stop" } })))
 
-  expect(published.some((event) => event.type === "step.ended.2")).toBe(false)
+  expect(published.map((event) => event.type)).toEqual(["session.step.started.1"])
   expect(publisher.record().finish).toMatchObject({ finish: "stop" })
 })
 

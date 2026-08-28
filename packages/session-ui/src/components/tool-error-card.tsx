@@ -97,8 +97,7 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
           <div data-component="tool-trigger">
             <div data-slot="basic-tool-tool-trigger-content">
               <span data-slot="basic-tool-tool-indicator" data-component="tool-error-card-icon">
-                {/* 20px-viewBox path at 16px: 1.25 renders the 1px stroke Figma specifies. */}
-                <Icon name="circle-ban-sign" style={{ "stroke-width": 1.25 }} />
+                <Icon name="circle-exclamation" />
               </span>
               <div data-slot="basic-tool-tool-info">
                 <div data-slot="basic-tool-tool-info-structured">

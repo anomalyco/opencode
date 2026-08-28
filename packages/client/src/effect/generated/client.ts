@@ -86,6 +86,8 @@ import type {
   SessionBackgroundOutput,
   SessionMessageInput,
   SessionMessageOutput,
+  SessionMessageUpdateInput,
+  SessionMessageUpdateOutput,
   SessionEnvironmentInput,
   SessionEnvironmentOutput,
   SessionViewInput,
@@ -201,6 +203,7 @@ import type {
   ExperimentalPersistentPtyCreateInput,
   ExperimentalPersistentPtyCreateOutput,
   ExperimentalPersistentPtyShutdownOutput,
+  ExperimentalPersistentPtyHandoffOutput,
   ExperimentalPersistentPtyGetInput,
   ExperimentalPersistentPtyGetOutput,
   ExperimentalPersistentPtyUpdateInput,
@@ -357,6 +360,7 @@ const EndpointSessionCreate = (raw: RawClient["server.session"]) => (input?: Ses
         agent: input?.["agent"],
         model: input?.["model"],
         location: input?.["location"],
+        metadata: input?.["metadata"],
       },
     }).pipe(
       Effect.mapError(mapClientError),
@@ -651,6 +655,17 @@ const EndpointSessionMessage = (raw: RawClient["server.session"]) => (input: Ses
     ),
   )
 
+const EndpointSessionMessageUpdate = (raw: RawClient["server.session"]) => (input: SessionMessageUpdateInput) =>
+  preserveEffect<SessionMessageUpdateOutput>()(
+    raw["session.messageUpdate"]({
+      params: { sessionID: input["sessionID"], messageID: input["messageID"] },
+      payload: { content: input["content"] },
+    }).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((value) => value.data),
+    ),
+  )
+
 const EndpointSessionEnvironment = (raw: RawClient["server.session"]) => (input: SessionEnvironmentInput) =>
   preserveEffect<SessionEnvironmentOutput>()(
     raw["session.environment"]({
@@ -711,6 +726,7 @@ const adaptGroupSession = (raw: RawClient["server.session"]) => ({
   interrupt: EndpointSessionInterrupt(raw),
   background: EndpointSessionBackground(raw),
   message: EndpointSessionMessage(raw),
+  messageUpdate: EndpointSessionMessageUpdate(raw),
   environment: EndpointSessionEnvironment(raw),
   view: EndpointSessionView(raw),
 })
@@ -1251,6 +1267,11 @@ const EndpointExperimentalPersistentPtyShutdown = (raw: RawClient["server.experi
     raw["persistentPty.shutdown"]({}).pipe(Effect.mapError(mapClientError)),
   )
 
+const EndpointExperimentalPersistentPtyHandoff = (raw: RawClient["server.experimental"]) => () =>
+  preserveEffect<ExperimentalPersistentPtyHandoffOutput>()(
+    raw["persistentPty.handoff"]({}).pipe(Effect.mapError(mapClientError)),
+  )
+
 const EndpointExperimentalPersistentPtyGet =
   (raw: RawClient["server.experimental"]) => (input: ExperimentalPersistentPtyGetInput) =>
     preserveEffect<ExperimentalPersistentPtyGetOutput>()(
@@ -1304,6 +1325,7 @@ const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
     list: EndpointExperimentalPersistentPtyList(raw),
     create: EndpointExperimentalPersistentPtyCreate(raw),
     shutdown: EndpointExperimentalPersistentPtyShutdown(raw),
+    handoff: EndpointExperimentalPersistentPtyHandoff(raw),
     get: EndpointExperimentalPersistentPtyGet(raw),
     update: EndpointExperimentalPersistentPtyUpdate(raw),
     snapshot: EndpointExperimentalPersistentPtySnapshot(raw),

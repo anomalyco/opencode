@@ -349,8 +349,7 @@ function MessageTimelineView(
       : projects.find((item) => containsDirectory(item.worktree, sessionDirectory()))
   })
   const workspaceSession = createMemo(() => isWorkspaceDirectory(project(), sessionDirectory()))
-  const showProjectIcon = () =>
-    import.meta.env.VITE_OPENCODE_CHANNEL !== "prod" && settings.general.showProjectIcon()
+  const showProjectIcon = () => import.meta.env.VITE_OPENCODE_CHANNEL !== "prod" && settings.general.showProjectIcon()
   const avatarProject = createMemo(() => {
     if (!showProjectIcon()) return
     const session = props.session.data.info()
@@ -459,7 +458,7 @@ function MessageTimelineView(
       }
     },
     actions: props.actions,
-    showReasoningSummaries: props.data.showReasoningSummaries,
+    reasoningMode: props.data.reasoningMode,
     shellToolDefaultOpen: props.data.shellToolPartsExpanded,
     editToolDefaultOpen: props.data.editToolPartsExpanded,
     disclosure: virtualized.disclosure,
@@ -469,13 +468,13 @@ function MessageTimelineView(
   })
   const backgroundHintPartID = createMemo(() => {
     const blocking = new Set(props.background.blocking().map((task) => task.partID))
-    const row = projection
+    if (blocking.size === 0) return
+    return projection
       .rows()
-      .findLast(
-        (row) => row._tag === "AssistantPart" && row.group.type === "part" && blocking.has(row.group.ref.partID),
+      .flatMap((row) =>
+        row._tag === "AssistantPart" ? (row.group.type === "part" ? [row.group.ref] : row.group.refs) : [],
       )
-    if (row?._tag !== "AssistantPart" || row.group.type !== "part") return
-    return row.group.ref.partID
+      .findLast((ref) => blocking.has(ref.partID))?.partID
   })
   const [backgroundHintRef, setBackgroundHintRef] = createSignal<HTMLDivElement>()
   const backgroundHintPresence = createAnimatedPresence(backgroundHintPartID, () => backgroundHintRef() ?? null)

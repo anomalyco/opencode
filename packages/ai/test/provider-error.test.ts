@@ -11,6 +11,7 @@ describe("provider error classification", () => {
       "Input length 131393 exceeds the maximum allowed input length of 131040 tokens.",
       "The input (516368 tokens) is longer than the model's context length (262144 tokens).",
       "Prompt has 5,958,968 tokens, but the configured context size is 256,000 tokens",
+      "Range of input length should be [1, 129024]",
       "Too many tokens",
       "Token limit exceeded",
     ]
@@ -87,12 +88,12 @@ describe("provider error classification", () => {
     ])
   })
 
-  test("classifies network error text as provider internal", () => {
+  test("classifies any remaining 4xx status as an invalid request", () => {
     expect(
-      ["network error", "network-error", "network_error"].map(
-        (message) => classifyProviderFailure({ message })._tag,
+      [400, 402, 404, 418, 422, 451].map(
+        (status) => classifyProviderFailure({ message: `HTTP ${status}`, status })._tag,
       ),
-    ).toEqual(["ProviderInternal", "ProviderInternal", "ProviderInternal"])
+    ).toEqual(Array(6).fill("InvalidRequest"))
   })
 
   test("classifies nested provider codes when a top-level code is also present", () => {
@@ -105,14 +106,49 @@ describe("provider error classification", () => {
     ).toEqual(["QuotaExceeded", "ProviderInternal", "InvalidRequest"])
   })
 
-  test("keeps unknown and malformed provider payloads non-retryable", () => {
+  test("leaves unrecognized failures unclassified for the retry default", () => {
     expect(classifyProviderFailure({ message: '{"error":{"message":"no_kv_space"}}' })._tag).toBe("UnknownProvider")
     expect(classifyProviderFailure({ message: '{"type":"error","error":{"code":123}}' })._tag).toBe("UnknownProvider")
     expect(classifyProviderFailure({ message: "not-json" })._tag).toBe("UnknownProvider")
+    expect(classifyProviderFailure({ message: "network error" })._tag).toBe("UnknownProvider")
+    expect(classifyProviderFailure({ message: "Provider returned error" })._tag).toBe("UnknownProvider")
   })
 })
 
 describe("provider error rawBody classification", () => {
+  test("classifies provider envelopes without separate code inputs", () => {
+    const cases = [
+      ['{"type":"error","error":{"type":"overloaded_error","message":"Try again"}}', "ProviderInternal"],
+      ['{"error":{"code":"insufficient_quota","message":"Request failed"}}', "QuotaExceeded"],
+      [
+        '{"type":"response.failed","response":{"error":{"code":"authentication_error","message":"Denied"}}}',
+        "Authentication",
+      ],
+      ['{"error":{"code":429,"status":"RESOURCE_EXHAUSTED","message":"Try again"}}', "ProviderInternal"],
+      ['{"exception":{"type":"throttlingException","details":{"message":"Try again"}}}', "RateLimit"],
+    ] as const
+    for (const [rawBody, expected] of cases) {
+      const reason = classifyProviderFailure({ message: "Request failed", rawBody })
+      expect(reason._tag).toBe(expected)
+      expect(reason.body).toBe(rawBody)
+      expect(reason).not.toHaveProperty("code")
+    }
+  })
+
+  test("classifies separately supplied SDK data without replacing the response body", () => {
+    const data = { error: { code: "authentication_error" } }
+    for (const value of [data, JSON.stringify(data)]) {
+      const reason = classifyProviderFailure({
+        message: "Request failed",
+        status: 400,
+        rawBody: '{"message":"Request failed"}',
+        data: value,
+      })
+      expect(reason._tag).toBe("Authentication")
+      expect(reason.body).toBe('{"message":"Request failed"}')
+    }
+  })
+
   test("classifies overflow signals buried in the raw payload when the summary is vague", () => {
     const reason = classifyProviderFailure({
       message: "Request failed",

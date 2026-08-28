@@ -4,18 +4,16 @@ import { isDeepStrictEqual } from "node:util"
 import { LLMClient, AIError, LLMEvent, Message, SystemPart, type LLMRequest } from "@opencode-ai/ai"
 import type { StreamOptions } from "@opencode-ai/ai/route"
 import { Context, DateTime, Effect, Layer, Stream } from "effect"
-import { Agent } from "../agent.js"
-import { Catalog } from "../catalog.js"
+import type { Agent } from "../agent.js"
 import { Database } from "../database/database.js"
 import { Bus } from "../bus.js"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { isExactRootFallback } from "@opencode-ai/util/session-title-fallback"
 import { llmClient } from "../effect/app-node-platform.js"
-import { Model } from "../model.js"
+import { SessionContext } from "./context.js"
 import { SessionEvent } from "./event.js"
 import { SessionHistory } from "./history.js"
-import { SessionModelRequest } from "./model-request.js"
-import { SessionRunnerModel } from "./runner/model.js"
+import type { SessionRunnerModel } from "./runner/model.js"
 import { SessionSchema } from "./schema.js"
 import { SessionUsage } from "./usage.js"
 import { SessionStore } from "./store.js"
@@ -30,10 +28,7 @@ type Dependencies = {
   readonly llm: {
     readonly stream: (request: LLMRequest, options?: StreamOptions) => Stream.Stream<LLMEvent, AIError>
   }
-  readonly agents: Agent.Interface
-  readonly catalog: Catalog.Interface
-  readonly models: SessionRunnerModel.Interface
-  readonly modelRequests: SessionModelRequest.Interface
+  readonly context: SessionContext.Interface
   readonly store: SessionStore.Interface
 }
 
@@ -72,7 +67,7 @@ const attempt = Effect.fn("SessionTitle.attempt")(function* (
         })
       : Effect.void,
   )
-  const prepared = yield* dependencies.modelRequests.prepare({
+  const prepared = yield* dependencies.context.prepare({
     scope: { session: input.session, agentID: input.agent.id, model: input.model },
     transcript: {
       system: input.agent.system ? [SystemPart.make(input.agent.system)] : [],
@@ -106,9 +101,6 @@ const attempt = Effect.fn("SessionTitle.attempt")(function* (
     .find((line) => line.length > 0)
 })
 
-/** Variant IDs that minimize reasoning output, in preference order. */
-const MINIMAL_REASONING_VARIANTS = ["none", "minimal", "low"].map((id) => Model.VariantID.make(id))
-
 const make = (dependencies: Dependencies) => {
   const generate = Effect.fn("SessionTitle.generate")(function* (
     db: Database.Interface["db"],
@@ -140,34 +132,12 @@ const make = (dependencies: Dependencies) => {
           Effect.orElseSucceed(() => firstUser.text),
         )
       : firstUser.text
-    const agent = yield* dependencies.agents.get(Agent.ID.make("title"))
-    if (!agent) return
-    const primary = yield* dependencies.models.resolve(session).pipe(Effect.orElseSucceed(() => undefined))
-    const info = yield* Effect.gen(function* () {
-      if (agent.model) return yield* dependencies.catalog.model.get(agent.model.providerID, agent.model.id)
-      if (!primary) return
-      return yield* dependencies.catalog.model.small(primary.ref.providerID)
-    })
-    const variant =
-      agent.model?.variant ?? MINIMAL_REASONING_VARIANTS.find((id) => info?.variants.some((item) => item.id === id))
-    const preferred =
-      info &&
-      (yield* dependencies.models
-        .resolve({
-          ...session,
-          model: Model.Ref.make({
-            providerID: info.providerID,
-            id: info.id,
-            ...(variant ? { variant } : {}),
-          }),
-        })
-        .pipe(Effect.orElseSucceed(() => undefined)))
-    const selected = preferred ?? primary
-    if (!selected) return
+    const selection = yield* dependencies.context.selectTitle(session)
+    if (!selection) return
     const title =
-      (yield* attempt(dependencies, { session, agent, text, model: selected })) ??
-      (primary && !isDeepStrictEqual(selected.ref, primary.ref)
-        ? yield* attempt(dependencies, { session, agent, text, model: primary })
+      (yield* attempt(dependencies, { session, agent: selection.agent, text, model: selection.selected })) ??
+      (selection.primary && !isDeepStrictEqual(selection.selected.ref, selection.primary.ref)
+        ? yield* attempt(dependencies, { session, agent: selection.agent, text, model: selection.primary })
         : undefined)
     if (!title) return
     const expectedSequence = (yield* Bus.latestSequence(db, sessionID)) + 1
@@ -192,13 +162,10 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const bus = yield* Bus.Service
     const llm = yield* LLMClient.Service
-    const agents = yield* Agent.Service
-    const catalog = yield* Catalog.Service
-    const models = yield* SessionRunnerModel.Service
-    const modelRequests = yield* SessionModelRequest.Service
+    const context = yield* SessionContext.Service
     const store = yield* SessionStore.Service
     const database = yield* Database.Service
-    const title = make({ bus, llm, agents, catalog, models, modelRequests, store })
+    const title = make({ bus, llm, context, store })
     return Service.of({
       generate: (sessionID) => title.generate(database.db, sessionID),
     })
@@ -208,14 +175,5 @@ export const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [
-    Bus.node,
-    llmClient,
-    Agent.node,
-    Catalog.node,
-    SessionRunnerModel.node,
-    SessionModelRequest.node,
-    SessionStore.node,
-    Database.node,
-  ],
+  deps: [Bus.node, llmClient, SessionContext.node, SessionStore.node, Database.node],
 })

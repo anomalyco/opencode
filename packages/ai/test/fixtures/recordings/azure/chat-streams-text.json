@@ -1,10 +1,7 @@
 {
   "version": 1,
   "metadata": {
-    "tags": [
-      "prefix:azure",
-      "provider:azure"
-    ],
+    "tags": ["prefix:azure", "provider:azure"],
     "name": "azure/chat-streams-text",
     "recordedAt": "2026-08-23T17:21:53.198Z"
   },

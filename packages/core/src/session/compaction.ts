@@ -8,9 +8,10 @@ import { Bus } from "../bus.js"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { llmClient } from "../effect/app-node-platform.js"
 import { SessionEvent } from "./event.js"
+import type { SessionContext } from "./context.js"
 import type { SessionMessage } from "./message.js"
-import { SessionModelRequest } from "./model-request.js"
-import { SessionRunnerModel } from "./runner/model.js"
+import type { SessionModelRequest } from "./model-request.js"
+import type { SessionRunnerModel } from "./runner/model.js"
 import { SessionSchema } from "./schema.js"
 import { toSessionError } from "./to-session-error.js"
 import { Token } from "../util/token.js"
@@ -69,14 +70,13 @@ type Dependencies = {
   readonly llm: {
     readonly stream: (request: LLMRequest, options?: StreamOptions) => Stream.Stream<LLMEvent, AIError>
   }
-  readonly models: SessionRunnerModel.Interface
-  readonly modelRequests: SessionModelRequest.Interface
 }
 
 export type AutoInput = {
   readonly session: SessionSchema.Info
   readonly messages: readonly SessionMessage.Info[]
   readonly resolved: SessionRunnerModel.Resolved
+  readonly prepare: SessionModelRequest.Interface["prepare"]
 }
 
 type RequiredInput = Pick<AutoInput, "messages" | "resolved">
@@ -86,6 +86,9 @@ export type ManualInput = {
   readonly messages: readonly SessionMessage.Info[]
   readonly inputID: SessionMessage.ID
   readonly started?: boolean
+  /** Invoked after content planning, not when the caller captures the operation. */
+  readonly resolveModel: SessionContext.Interface["resolveModel"]
+  readonly prepare: SessionModelRequest.Interface["prepare"]
 }
 
 type Plan = {
@@ -96,6 +99,7 @@ type Plan = {
   readonly recent: string
   readonly inputID?: SessionMessage.ID
   readonly started?: boolean
+  readonly prepare: SessionModelRequest.Interface["prepare"]
 }
 
 export type Outcome =
@@ -211,7 +215,7 @@ const select = (
 export const buildPrompt = (input: { readonly previousSummary?: string; readonly context: readonly string[] }) =>
   [
     input.previousSummary
-      ? `Update the anchored summary below using the conversation history above.\nPreserve still-true details, remove stale details, and merge in the new facts.\n<previous-summary>\n${input.previousSummary}\n</previous-summary>`
+      ? `Update the anchored summary below using the conversation history below.\nPreserve still-true details, remove stale details, and merge in the new facts.\n<previous-summary>\n${input.previousSummary}\n</previous-summary>`
       : "Create a new anchored summary from the conversation history.",
     SUMMARY_TEMPLATE,
     "The following is the conversation history:",
@@ -278,7 +282,7 @@ const make = (dependencies: Dependencies) => {
           })
         : Effect.void,
     )
-    const prepared = yield* dependencies.modelRequests.prepare({
+    const prepared = yield* plan.prepare({
       scope: { session: plan.session, agentID: Agent.ID.make("compaction"), model: plan.resolved },
       transcript: { system: [], messages: [Message.user(plan.prompt)] },
       contextHooks: false,
@@ -348,6 +352,7 @@ const make = (dependencies: Dependencies) => {
       return yield* execute({
         session: input.session,
         resolved: input.resolved,
+        prepare: input.prepare,
         reason: "auto",
         ...content,
       })
@@ -387,7 +392,7 @@ const make = (dependencies: Dependencies) => {
         error: { type: "compaction.unavailable", message: "Nothing to compact yet" },
         inputID: input.inputID,
       })
-    const resolved = yield* dependencies.models.resolve(input.session).pipe(
+    const resolved = yield* input.resolveModel(input.session).pipe(
       Effect.catch((cause) =>
         failed({
           sessionID: input.session.id,
@@ -401,6 +406,7 @@ const make = (dependencies: Dependencies) => {
     return yield* execute({
       session: input.session,
       resolved,
+      prepare: input.prepare,
       reason: "manual",
       inputID: input.inputID,
       started: input.started,
@@ -422,14 +428,12 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const bus = yield* Bus.Service
     const llm = yield* LLMClient.Service
-    const models = yield* SessionRunnerModel.Service
-    const modelRequests = yield* SessionModelRequest.Service
-    return make({ bus, llm, models, modelRequests })
+    return make({ bus, llm })
   }),
 )
 
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Bus.node, llmClient, SessionRunnerModel.node, SessionModelRequest.node],
+  deps: [Bus.node, llmClient],
 })

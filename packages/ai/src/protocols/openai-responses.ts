@@ -149,7 +149,9 @@ const hostedToolResult = Effect.fn("OpenAIResponses.hostedToolResult")(function*
   const isError = item.error !== undefined && item.error !== null
   if (item.type === "image_generation_call" && item.result) {
     yield* Effect.fromResult(Encoding.decodeBase64(item.result)).pipe(
-      Effect.mapError(() => ProviderShared.eventError(ADAPTER, "OpenAI Responses returned invalid image base64")),
+      Effect.mapError((cause) =>
+        ProviderShared.eventError(ADAPTER, "OpenAI Responses returned invalid image base64", undefined, cause),
+      ),
     )
     const format = item.output_format ?? "png"
     return {
@@ -184,7 +186,7 @@ const HOSTED_TOOLS = {
 
 const step = (state: OpenResponses.ParserState, event: OpenResponses.Event) => {
   if (event.type === "response.reasoning_text.delta")
-    return event.item_id
+    return event.item_id !== undefined
       ? Effect.succeed(
           OpenResponses.onReasoningDelta(state, event, OpenResponses.outputItemID(state, event) ?? event.item_id),
         )

@@ -3,8 +3,9 @@ import { readFile } from "node:fs/promises"
 import net from "node:net"
 import path from "node:path"
 import { Data, Duration, Effect, Schema, Semaphore } from "effect"
+import type { Handoff } from "@opencode-ai/schema/persistent-pty"
 
-const ProtocolVersion = 6
+const ProtocolVersion = 7
 const MaxFrameBytes = 8 * 1024 * 1024
 
 const Lifecycle = Schema.Union([
@@ -48,6 +49,8 @@ export const WireResponse = Schema.Union([
   Schema.Struct({ type: Schema.Literal("created"), terminal: WireTerminal }),
   Schema.Struct({ type: Schema.Literal("terminals"), terminals: Schema.Array(WireTerminal) }),
   Schema.Struct({ type: Schema.Literal("ok") }),
+  Schema.Struct({ type: Schema.Literal("owned") }),
+  Schema.Struct({ type: Schema.Literal("handoff"), ticket: Schema.String, expires_at: Schema.Number }),
   Schema.Struct({
     type: Schema.Literal("snapshot"),
     terminal: WireTerminal,
@@ -131,6 +134,7 @@ export interface DaemonTransport {
   readonly request: (value: object, start?: boolean) => Effect.Effect<WireResponse, DaemonError>
   readonly requestIfRunning: (value: object) => Effect.Effect<WireResponse | undefined, DaemonError>
   readonly shutdown: Effect.Effect<WireResponse | undefined, DaemonError>
+  readonly handoff: Effect.Effect<Handoff | null, DaemonError>
   readonly subscribe: (
     id: number,
     input: {
@@ -147,19 +151,51 @@ export interface DaemonTransport {
 export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport")(function* (
   directory: string,
   binary: () => Promise<string> = () => Promise.resolve(process.env.OPENCODE_PTY_BIN || "opencode-pty"),
+  inherited?: Handoff,
 ) {
   const startup = Semaphore.makeUnsafe(1)
   let registration: Registration | undefined
+  let owner: Awaited<ReturnType<typeof openOwner>> | undefined
+  let closed = false
+  yield* Effect.addFinalizer(() =>
+    Effect.sync(() => {
+      closed = true
+      owner?.socket.destroy()
+    }),
+  )
+
+  const claim = (current: Registration, ticket?: string) =>
+    Effect.tryPromise({
+      try: async (signal) => {
+        const connection = await openOwner(current, ticket, signal)
+        if (closed || signal.aborted) {
+          connection.socket.destroy()
+          throw new Error("PTY owner scope is closed")
+        }
+        owner = connection
+        registration = current
+        connection.socket.once("close", () => {
+          if (owner !== connection) return
+          owner = undefined
+          registration = undefined
+        })
+      },
+      catch: (cause) => failure("connect", cause),
+    }).pipe(
+      Effect.timeoutOrElse({
+        duration: Duration.seconds(5),
+        orElse: () => Effect.fail(new DaemonError({ kind: "connect", message: "PTY ownership claim timed out" })),
+      }),
+    )
 
   const discover = Effect.fn("PersistentPty.daemon.discover")(function* () {
     const value = yield* Effect.tryPromise({
       try: () => readFile(path.join(directory, "service.json"), "utf8"),
       catch: (cause) => failure("connect", cause),
     })
-    const decoded = yield* Effect.try({
-      try: () => Schema.decodeUnknownSync(Registration)(JSON.parse(value)),
-      catch: (cause) => failure("protocol", cause),
-    })
+    const decoded = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Registration))(value).pipe(
+      Effect.mapError((cause) => failure("protocol", cause)),
+    )
     if (decoded.protocol !== ProtocolVersion)
       return yield* Effect.fail(
         new DaemonError({
@@ -181,9 +217,9 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
 
   const start = Effect.fn("PersistentPty.daemon.start")(function* () {
     const executable = yield* Effect.tryPromise({ try: binary, catch: (cause) => failure("spawn", cause) })
-    yield* Effect.tryPromise({
+    const child = yield* Effect.tryPromise({
       try: () =>
-        new Promise<void>((resolve, reject) => {
+        new Promise<ReturnType<typeof spawn>>((resolve, reject) => {
           const child = spawn(executable, ["daemon"], {
             detached: true,
             stdio: "ignore",
@@ -191,43 +227,54 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
           })
           child.once("spawn", () => {
             child.unref()
-            resolve()
+            resolve(child)
           })
           child.once("error", reject)
         }),
       catch: (cause) => failure("spawn", cause),
     })
-    const deadline = Date.now() + 5_000
-    let last: DaemonError | undefined
-    while (Date.now() < deadline) {
-      const found = yield* discover().pipe(
-        Effect.map((value) => ({ value })),
-        Effect.catch((error) => {
-          last = error
-          return Effect.succeed(undefined)
-        }),
+    return yield* Effect.gen(function* () {
+      const deadline = Date.now() + 5_000
+      let last: DaemonError | undefined
+      while (Date.now() < deadline) {
+        const found = yield* discover().pipe(
+          Effect.map((value) => ({ value })),
+          Effect.catch((error) => {
+            last = error
+            return Effect.succeed(undefined)
+          }),
+        )
+        if (found) {
+          yield* claim(found.value)
+          return found.value
+        }
+        yield* Effect.sleep(50)
+      }
+      return yield* Effect.fail(
+        last ?? new DaemonError({ kind: "connect", message: "opencode-pty did not become ready" }),
       )
-      if (found) return found.value
-      yield* Effect.sleep(50)
-    }
-    return yield* Effect.fail(
-      last ?? new DaemonError({ kind: "connect", message: "opencode-pty did not become ready" }),
+    }).pipe(
+      Effect.onError(() =>
+        Effect.sync(() => {
+          child.kill("SIGTERM")
+        }),
+      ),
     )
   })
 
   const connect = Effect.fn("PersistentPty.daemon.connect")(function* (shouldStart: boolean) {
+    if (closed) return yield* Effect.fail(new DaemonError({ kind: "connect", message: "PTY owner scope is closed" }))
     if (registration) return registration
     return yield* startup.withPermit(
       Effect.gen(function* () {
         if (registration) return registration
         const found = yield* discover().pipe(
           Effect.catch((error) => {
-            if (!shouldStart) return Effect.fail(error)
-            if (error.kind === "connect") return start()
-            if (error.kind !== "protocol" || error.pid === undefined) return Effect.fail(error)
-            return terminate(error.pid).pipe(Effect.andThen(start()))
+            if (shouldStart && error.kind === "connect") return start()
+            return Effect.fail(error)
           }),
         )
+        if (!owner) yield* claim(found)
         registration = found
         return found
       }),
@@ -277,6 +324,27 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
     return yield* Effect.fail(new DaemonError({ kind: "connect", message: "opencode-pty did not stop" }))
   })
 
+  const handoff = startup.withPermit(
+    Effect.gen(function* () {
+      const current = owner
+      const registered = registration
+      if (!current || !registered) return null
+      const response = yield* Effect.tryPromise({
+        try: (signal) => current.exchange({ op: "prepare_handoff" }, signal),
+        catch: (cause) => failure("response", cause),
+      }).pipe(
+        Effect.timeoutOrElse({
+          duration: Duration.seconds(5),
+          orElse: () =>
+            Effect.fail(new DaemonError({ kind: "response", message: "PTY handoff preparation timed out" })),
+        }),
+      )
+      if (response.type !== "handoff")
+        return yield* Effect.fail(new DaemonError({ kind: "protocol", message: "Expected PTY handoff ticket" }))
+      return { directory, instanceID: registered.instance_id, ticket: response.ticket, expiresAt: response.expires_at }
+    }),
+  )
+
   const subscribe = Effect.fn("PersistentPty.daemon.subscribe")(function* (
     id: number,
     input: Parameters<DaemonTransport["subscribe"]>[1],
@@ -296,8 +364,55 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
     return yield* attempt.pipe(Effect.catch((error) => (error.kind === "registration" ? attempt : Effect.fail(error))))
   })
 
-  return { request, requestIfRunning, shutdown, subscribe } satisfies DaemonTransport
+  // A replacement must own its inherited daemon before the server becomes ready.
+  if (inherited) {
+    if (inherited.expiresAt <= Date.now())
+      return yield* Effect.fail(new DaemonError({ kind: "registration", message: "PTY restart handoff expired" }))
+    const current = yield* discover()
+    if (current.instance_id !== inherited.instanceID)
+      return yield* Effect.fail(new DaemonError({ kind: "registration", message: "PTY restart daemon changed" }))
+    yield* claim(current, inherited.ticket)
+  }
+
+  return { request, requestIfRunning, shutdown, handoff, subscribe } satisfies DaemonTransport
 })
+
+async function openOwner(registration: Registration, ticket: string | undefined, signal: AbortSignal) {
+  const socket = net.createConnection({ path: registration.socket })
+  const frames = decoder(socket)
+  const abort = () => socket.destroy()
+  signal.addEventListener("abort", abort, { once: true })
+  const exchange = async (request: object, signal: AbortSignal) => {
+    if (signal.aborted) throw new Error("PTY ownership request interrupted")
+    signal.addEventListener("abort", abort, { once: true })
+    try {
+      socket.write(encode({ token: registration.token, request }))
+      const frame = await frames.next()
+      if (frame.done) throw new Error("PTY daemon closed its ownership connection")
+      const response = decode(frame.value)
+      if (response.type === "error") throw new Error(response.message)
+      return response
+    } finally {
+      signal.removeEventListener("abort", abort)
+    }
+  }
+  try {
+    await new Promise<void>((resolve, reject) => {
+      socket.once("connect", resolve)
+      socket.once("error", reject)
+      socket.once("close", () => reject(new Error("PTY ownership connection closed")))
+    })
+    const response = await exchange({ op: "own", instance_id: registration.instance_id, ticket }, signal)
+    if (response.type !== "owned") throw new Error("PTY daemon does not support server ownership")
+    socket.unref()
+    return { socket, exchange }
+  } catch (error) {
+    socket.destroy()
+    throw error
+  } finally {
+    signal.removeEventListener("abort", abort)
+  }
+}
 
 const oneShot = Effect.fn("PersistentPty.daemon.oneShot")(function* (registration: Registration, request: object) {
   const payload = yield* Effect.try({
@@ -506,30 +621,4 @@ function decode(payload: Uint8Array) {
 
 function failure(kind: DaemonError["kind"], cause: unknown) {
   return new DaemonError({ kind, message: cause instanceof Error ? cause.message : String(cause) })
-}
-
-const terminate = Effect.fn("PersistentPty.daemon.terminate-incompatible")(function* (pid: number) {
-  yield* Effect.logWarning("replacing incompatible opencode-pty daemon", { pid })
-  yield* Effect.try({ try: () => process.kill(pid, "SIGTERM"), catch: (cause) => failure("spawn", cause) }).pipe(
-    Effect.catch((error) => (isMissingProcess(error) ? Effect.void : Effect.fail(error))),
-  )
-  const deadline = Date.now() + 2_000
-  while (Date.now() < deadline && processRunning(pid)) yield* Effect.sleep(25)
-  if (!processRunning(pid)) return
-  yield* Effect.try({ try: () => process.kill(pid, "SIGKILL"), catch: (cause) => failure("spawn", cause) }).pipe(
-    Effect.catch((error) => (isMissingProcess(error) ? Effect.void : Effect.fail(error))),
-  )
-})
-
-function processRunning(pid: number) {
-  try {
-    process.kill(pid, 0)
-    return true
-  } catch {
-    return false
-  }
-}
-
-function isMissingProcess(error: DaemonError) {
-  return error.message.includes("ESRCH") || error.message.includes("no such process")
 }

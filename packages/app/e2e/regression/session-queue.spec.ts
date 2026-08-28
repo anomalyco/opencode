@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test"
-import type { OpenCodeEvent } from "@opencode-ai/client/promise"
+import type { OpenCodeEvent, SessionMessageInfo } from "@opencode-ai/client/promise"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { mockOpenCodeServer } from "../utils/mock-server"
 import { expectAppVisible } from "../utils/waits"
@@ -18,7 +18,7 @@ type InboxRow = {
   delivery: "steer" | "queue"
 }
 
-function createQueueMock(seed: string[]) {
+function createQueueMock(seed: string[], messages: SessionMessageInfo[] = []) {
   const rows: InboxRow[] = seed.map((text, index) => ({
     id: `inb_seed_${index + 1}`,
     sessionID,
@@ -32,13 +32,16 @@ function createQueueMock(seed: string[]) {
   const changes: { inboxID: string; action: "cancel" | "steer" }[] = []
   const log: string[] = []
   let sequence = 0
-  const emit = (type: OpenCodeEvent["type"], data: OpenCodeEvent["data"]) => {
+  const emit = <Type extends OpenCodeEvent["type"]>(
+    type: Type,
+    data: Extract<OpenCodeEvent, { type: Type }>["data"],
+  ) => {
     sequence += 1
     events.push({
       id: `evt_queue_${sequence}`,
       type,
       created: Date.now(),
-      durable: { aggregateID: sessionID, seq: sequence, version: 1 },
+      durable: { aggregateID: sessionID, seq: sequence, version: type === "session.tool.success" ? 2 : 1 },
       data,
     } as OpenCodeEvent)
   }
@@ -47,6 +50,8 @@ function createQueueMock(seed: string[]) {
     prompts,
     changes,
     log,
+    messages,
+    emit,
     events: () => events.splice(0),
     onPrompt: (input: { sessionID: string; body: Record<string, unknown> }) => {
       prompts.push(input.body)
@@ -126,10 +131,11 @@ async function openSession(page: Page, mock: ReturnType<typeof createQueueMock>,
         directory,
         title: "Session queue regression",
         version: "dev",
+        model: { id: "queue-model", providerID: "opencode" },
         time: { created: 1700000000000, updated: 1700000000000 },
       },
     ],
-    pageMessages: () => ({ items: [] }),
+    pageMessages: () => ({ items: mock.messages }),
     sessionStatus: () => ({ [sessionID]: { type: "running" } }),
     inbox: () => mock.rows.map((row) => ({ ...row, payload: { ...row.payload } })),
     onPrompt: mock.onPrompt,
@@ -201,12 +207,15 @@ test("editing restores the existing draft and replaces only the original queue p
   await view.input.fill("my in-progress draft")
   await original.click()
   await expect(view.input).toHaveText("tighten the error copy")
+  await expect(view.input).toBeFocused()
   await view.input.press("Escape")
   await expect(view.input).toHaveText("my in-progress draft")
 
   await original.click()
   await expect(view.input).toHaveText("tighten the error copy")
+  await expect(view.input).toBeFocused()
   await view.input.fill("tighten the error copy and add a retry hint")
+  await expect(view.input).toHaveText("tighten the error copy and add a retry hint")
   await view.input.press("Enter")
 
   await expect(view.rows.locator('[data-action="session-queue-edit"]')).toHaveText([
@@ -224,3 +233,126 @@ test("editing restores the existing draft and replaces only the original queue p
   expect(mock.changes.map((change) => change.action)).toEqual(["cancel", "cancel", "cancel"])
   expect(mock.log[0]).toBe("prompt:queue")
 })
+
+for (const delivery of ["steer", "queue"] as const) {
+  test(`keeps finished tools above a pending ${delivery === "queue" ? "queue-to-steer" : "steer"} follow-up`, async ({
+    page,
+  }, testInfo) => {
+    const model = { id: "queue-model", providerID: "opencode" }
+    const userID = "msg_queue_initial_user"
+    const assistantID = "msg_queue_continued_assistant"
+    const followUp = "U2: Also check the retry path."
+    const mock = createQueueMock(
+      [],
+      [
+        { id: userID, type: "user", text: "U1: Inspect the queue ordering.", time: { created: 1700000000000 } },
+        {
+          id: "msg_queue_initial_assistant",
+          type: "assistant",
+          agent: "build",
+          model,
+          content: [{ type: "text", text: "A1: I will inspect the current implementation." }],
+          finish: "tool-calls",
+          time: { created: 1700000000001, completed: 1700000000002 },
+        },
+      ],
+    )
+    const view = await openSession(page, mock, delivery)
+    const transcript = page.locator("[data-timeline-virtual-content]")
+    const thinking = transcript.locator('[data-timeline-row="Thinking"]')
+    await expect(transcript.getByText("A1: I will inspect the current implementation.", { exact: true })).toBeVisible()
+    await expect(thinking).toHaveCount(0)
+    await expect(view.input).toBeEditable()
+    await view.input.fill(followUp)
+    await view.input.press("Enter")
+    await expect.poll(() => mock.rows.map((row) => row.delivery)).toEqual([delivery])
+    await expect(view.input).toHaveText("")
+
+    const inboxID = mock.rows[0].id
+    const pending = transcript.locator(`[data-timeline-row="UserMessage"][data-message-id="${inboxID}"]`)
+    if (delivery === "queue") {
+      const queued = view.rows.filter({ hasText: followUp })
+      await expect(queued).toBeVisible()
+      await expect(pending).toHaveCount(0)
+      await expect(thinking).toHaveCount(0)
+      await queued.hover()
+      await queued.getByRole("button", { name: "Steer", exact: true }).click()
+      await expect.poll(() => mock.changes).toEqual([{ inboxID, action: "steer" }])
+    }
+    await expect(view.rows).toHaveCount(0)
+    await expect(pending).toContainText(followUp)
+    await expect(thinking).toHaveCount(0)
+
+    // The next assistant step still belongs to U1: U2 has been admitted, not delivered.
+    mock.emit("session.step.started", { sessionID, assistantMessageID: assistantID, agent: "build", model })
+    for (const tool of [
+      { id: "tool_queue_read", name: "read", input: { path: "src/queue.ts" } },
+      { id: "tool_queue_grep", name: "grep", input: { pattern: "retry", path: "src" } },
+    ]) {
+      const ref = { sessionID, assistantMessageID: assistantID, id: tool.id }
+      mock.emit("session.tool.input.started", { ...ref, name: tool.name })
+      mock.emit("session.tool.input.ended", { ...ref, text: JSON.stringify(tool.input) })
+      mock.emit("session.tool.called", { ...ref, input: tool.input, executed: true })
+      mock.emit("session.tool.success", {
+        ...ref,
+        content: [{ type: "text", text: "Inspection complete." }],
+        executed: true,
+      })
+    }
+    mock.emit("session.step.ended", {
+      sessionID,
+      assistantMessageID: assistantID,
+      finish: "tool-calls",
+      cost: 0,
+      tokens: { input: 100, output: 20, reasoning: 0, cache: { read: 0, write: 0 } },
+    })
+    const tools = page.locator('[data-timeline-part-ids="tool_queue_read,tool_queue_grep"]')
+    await expect(tools).toBeVisible()
+    await expect(tools).toHaveText(/^Used\s*2 Read, Grep$/)
+    await expect(tools.locator('[data-slot="basic-tool-tool-title"]')).toHaveText("2 Read, Grep")
+    await expect(thinking).toHaveCount(0)
+    await expect(pending).toBeVisible()
+    expect(mock.rows.map((row) => ({ id: row.id, delivery: row.delivery }))).toEqual([
+      { id: inboxID, delivery: "steer" },
+    ])
+    await transcript.screenshot({ path: testInfo.outputPath("pending-steer.png") })
+
+    // Soft assertions let delivery run too, even when the pending ordering regresses.
+    await expect.soft(tools.or(pending)).toHaveText([/^Used\s*2 Read, Grep$/, /U2: Also check the retry path\./])
+    await expect
+      .soft(transcript.locator('[data-timeline-row="AssistantPart"]').filter({ has: tools }))
+      .toHaveAttribute("data-message-id", userID)
+    await expect
+      .configure({ soft: true })
+      .poll(async () => {
+        const boxes = await Promise.all([tools.boundingBox(), pending.boundingBox()])
+        return boxes.every((box) => box !== null) && boxes[0]!.y + boxes[0]!.height <= boxes[1]!.y
+      })
+      .toBe(true)
+
+    mock.rows.splice(0, 1)
+    mock.emit("session.inbox.delivered", { sessionID, inboxID })
+    await expect(thinking).toHaveCount(0)
+    await expect(pending).toHaveCount(1)
+    await expect(transcript.locator('[data-timeline-row="UserMessage"]')).toHaveCount(2)
+    await expect(transcript.locator('[data-timeline-row="AssistantPart"]').filter({ has: tools })).toHaveAttribute(
+      "data-message-id",
+      userID,
+    )
+
+    const later = { sessionID, assistantMessageID: "msg_queue_follow_up_assistant" }
+    mock.emit("session.step.started", { ...later, agent: "build", model })
+    mock.emit("session.text.started", { ...later, ordinal: 0 })
+    mock.emit("session.text.ended", { ...later, ordinal: 0, text: "A3: Now checking the retry path for U2." })
+    const response = transcript
+      .locator('[data-timeline-row="AssistantPart"]')
+      .filter({ hasText: "A3: Now checking the retry path for U2." })
+    await expect(response).toHaveAttribute("data-message-id", inboxID)
+    await expect(thinking).toHaveCount(0)
+    await expect(tools.or(pending).or(response)).toHaveText([
+      /^Used\s*2 Read, Grep$/,
+      /U2: Also check the retry path\./,
+      /A3: Now checking the retry path for U2\./,
+    ])
+  })
+}

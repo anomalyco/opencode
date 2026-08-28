@@ -1,5 +1,7 @@
 import type { GenerateApi, PluginApi } from "@opencode-ai/client/promise/api"
+import type { Location } from "@opencode-ai/schema/location"
 import type { PluginOptions } from "../options.js"
+import type { VcsDiscovery } from "../vcs.js"
 import type { App } from "../app.js"
 import type { AgentDomain } from "./agent.js"
 import type { AISDKDomain } from "./aisdk.js"
@@ -20,6 +22,7 @@ import type { WebSearchDomain } from "./websearch.js"
 
 export interface Context {
   readonly app: App
+  readonly location: Location.Info
   readonly options: PluginOptions
   readonly agent: AgentDomain
   readonly aisdk: AISDKDomain
@@ -46,6 +49,7 @@ export type Cleanup = () => Promise<void> | void
 export interface Plugin {
   readonly id: string
   readonly tui?: boolean
+  readonly vcs?: VcsDiscovery
   readonly setup: (context: Context) => Promise<Cleanup | void> | Cleanup | void
 }
 

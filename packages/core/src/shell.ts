@@ -134,8 +134,8 @@ const layer = () =>
         Effect.gen(function* () {
           for (const session of sessions.values()) {
             if (session.timeoutFiber) yield* Fiber.interrupt(session.timeoutFiber)
-            // Unblock waiters still pending at teardown; succeed is a no-op once already resolved.
-            yield* Deferred.fail(session.done, new NotFoundError({ id: Shell.ID.make(session.info.id) }))
+            // Teardown interrupts pending commands; it is not a terminal command failure.
+            yield* Deferred.interrupt(session.done)
           }
           sessions.clear()
           exitOrder.length = 0

@@ -10,7 +10,7 @@ const timing = {
   stopPollInterval: 5,
 }
 
-export function accelerate<A extends object, B>(ensure: (options: A) => B) {
+export function accelerate<A extends object, B>(ensure: (options?: A) => B) {
   return (options: A) => ensure(withEnsureTiming(options, timing))
 }
 

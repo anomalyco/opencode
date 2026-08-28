@@ -223,6 +223,7 @@ describe("Npm.add", () => {
     ).toBeTruthy()
   })
 
+  // Several real Git installs and refreshes exceed Bun's default timeout on Windows.
   test("refreshes mutable Git packages once per service lifetime and preserves pinned or cached installs", async () => {
     await using tmp = await tmpdir()
     const fixture = await createGitFixture(tmp.path)
@@ -262,7 +263,7 @@ describe("Npm.add", () => {
       return yield* npm.add(mutable, { refresh: true })
     }).pipe(Effect.scoped, Effect.provide(npmLayer(cache)), Effect.runPromise)
     expect(await Bun.file(path.join(offline.directory, "index.js")).text()).toContain('root: "second"')
-  })
+  }, 30_000)
 })
 
 describe("Npm.resolve", () => {

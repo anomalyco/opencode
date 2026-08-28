@@ -72,6 +72,19 @@ setup(ctx) {
 }
 ```
 
+`ctx.location` describes the location where this plugin instance is loaded. It
+includes `directory`, optional `workspaceID`, and `project` metadata (`id`,
+`directory`, and `canonical`). It is available in both Promise and Effect plugins.
+This is the plugin instance's location, not the location of every session it can
+access or event it receives.
+
+```ts
+setup(ctx) {
+  console.log(ctx.location.directory)
+  console.log(ctx.location.project.canonical)
+}
+```
+
 ### Options
 
 Pass plugin options with the object form in `opencode.json(c)`.
@@ -488,25 +501,14 @@ interface IntegrationDraft {
 
 ### MCP
 
-List MCP servers or change their connection state.
+List MCP servers and their current connection state.
 
 ```ts
 const servers = await ctx.mcp.list()
-await ctx.mcp.connect({ server: "docs" })
-await ctx.mcp.disconnect({ server: "docs" })
 ```
 
-Add or remove a server through the connected API.
-
-```ts
-await ctx.mcp.add({
-  server: "docs",
-  config: { type: "remote", url: "https://mcp.example.com" },
-})
-await ctx.mcp.remove({ server: "legacy" })
-```
-
-Register a transform to inspect, set, update, or remove server configuration.
+Plugins manage MCP servers only through transforms. Use `draft.set` to add or replace a server, `draft.update` to
+change its configuration, and `draft.remove` to remove it. Inspect configuration with `draft.list` and `draft.get`.
 
 ```ts
 await ctx.mcp.transform((draft) => {
@@ -520,7 +522,10 @@ await ctx.mcp.transform((draft) => {
 })
 ```
 
-Reload MCP configuration after external state used by a transform changes.
+Set `disabled: true` in a transform to disable a server and disconnect it, or `disabled: false` to enable it and allow
+OpenCode to connect. OpenCode reconciles server lifecycle from the transformed configuration.
+
+Call `reload()` after external state used by a transform changes to reapply transforms and reconcile the servers.
 
 ```ts
 await ctx.mcp.reload()
@@ -534,10 +539,6 @@ Schemas: [`Mcp.Server`](/api#schema-Mcp.Server), [`Mcp.LocalConfigEncoded`](/api
 ```ts
 interface MCPContext {
   list(input?: McpListInput, requestOptions?: RequestOptions): Promise<McpListOutput>
-  add(input: McpAddInput, requestOptions?: RequestOptions): Promise<void>
-  remove(input: McpRemoveInput, requestOptions?: RequestOptions): Promise<void>
-  connect(input: McpConnectInput, requestOptions?: RequestOptions): Promise<void>
-  disconnect(input: McpDisconnectInput, requestOptions?: RequestOptions): Promise<void>
   transform(callback: (draft: MCPDraft) => void): Promise<Registration>
   reload(): Promise<void>
 }
@@ -783,10 +784,12 @@ interface StorageScanResult {
 
 ### Tools
 
-Register tools with a transform.
+Register, update, and remove tools with a transform. The callback is synchronous, including in Promise plugins; load external
+data before registering or reloading. OpenCode replays active transforms in registration order on a fresh draft.
+For the same effective tool name, a later valid registration overrides an earlier one.
 
 ```ts
-await ctx.tool.transform((draft) => {
+const registration = await ctx.tool.transform((draft) => {
   draft.add({
     name: "greeting",
     description: "Create a greeting",
@@ -805,6 +808,43 @@ await ctx.tool.transform((draft) => {
 })
 ```
 
+Call `reload()` after changing source data captured by the callback. Reload replays the active transforms without
+changing their order; it does not rerun plugin setup.
+
+```ts
+await ctx.tool.reload()
+```
+
+Use `list()` and `get()` to inspect tools currently in the draft. Tools have an `id` containing their effective name,
+and `get()` returns `undefined` when that ID is not present. Use `update` and `remove` with the effective tool name,
+including its namespace (`acme_greeting` above). Dots in
+namespaces and unsupported characters in tool names become `_`. Missing names are ignored; creating a tool requires
+`add` with a complete definition. Updates preserve the name and namespace. Assign new schemas or options to replace
+them rather than mutating nested values. Invalid updates are logged and leave the previous definition intact.
+
+```ts
+await ctx.tool.transform((draft) => {
+  draft.update("acme_greeting", (tool) => {
+    tool.description = "Greet the user by name"
+  })
+  draft.remove("acme_obsolete")
+})
+```
+
+Updates and removals replay in order with additions, including after MCP catalog refreshes. Disposing their
+registration removes those changes and rebuilds from the remaining transforms.
+
+Dispose a registration to remove its transform and rebuild from the remaining transforms, revealing any earlier
+definition it overrode. Disposal is idempotent, and unloading the plugin also disposes its registrations.
+
+```ts
+await registration.dispose()
+```
+
+Each model request captures a tool snapshot. Reload and disposal affect future snapshots, not the definitions or
+executors already captured by an existing request. Executors that close over mutable plugin data still observe
+that data; capture a value inside the transform when it must remain tied to that definition.
+
 #### Reference
 
 Schemas: [`Tool.Content`](/api#schema-Tool.Content), [`Tool.TextContent`](/api#schema-Tool.TextContent),
@@ -813,10 +853,15 @@ Schemas: [`Tool.Content`](/api#schema-Tool.Content), [`Tool.TextContent`](/api#s
 ```ts
 interface ToolContext {
   transform(callback: (draft: ToolDraft) => void): Promise<Registration>
+  reload(): Promise<void>
 }
 
 interface ToolDraft {
+  list(): readonly (ToolInfo & { readonly id: string })[]
+  get(id: string): (ToolInfo & { readonly id: string }) | undefined
   add(tool: ToolInfo): void
+  update(id: string, update: (tool: Types.Mutable<ToolInfo>) => void): void
+  remove(id: string): void
 }
 ```
 
@@ -966,21 +1011,81 @@ await registration.dispose()
 
 ### Sessions
 
-Modify assembled system instructions, messages, or tools immediately before model dispatch.
+Intercept incoming user prompts before attachment and skill resolution and durable inbox admission:
+
+```ts
+await ctx.session.hook("prompt", (event) => {
+  event.prompt.text = event.prompt.text.replaceAll("company-secret", "[redacted]")
+  event.prompt.files ??= []
+  event.prompt.files.push({ uri: "file:///project/policy.md" })
+  event.metadata = { ...event.metadata, source: "company-policy" }
+  event.delivery = "queue"
+})
+```
+
+The hook receives an owned, mutable draft with `text`, `files`, agent mentions (`agents`), and selected `skills`, plus
+`metadata` and `delivery` (`"steer"` by default, or `"queue"`). Files and skills added by hooks use the normal resolution
+and validation path. If you rewrite text, update or remove attachment `mention` offsets that no longer match it. Agent
+mentions do not switch the session's active agent. Session and message IDs are readonly and cannot redirect admission.
+
+Hooks run in registration order after the session's location plugins are ready. Edits become the canonical persisted user
+input; unlike `context`, `prompt` does not run on each model call. Commands that submit through `session.prompt` also run
+this hook. Synthetic messages, shell messages, and compaction/move controls do not. Prompt hooks cannot be scoped by model
+provider because admission is separate from model resolution. Use an unscoped registration.
+
+Retries of an ID already pending or delivered return the original admission without rerunning hooks or resolving the
+retried payload. Concurrent submissions can run hooks more than once before either admission commits, but only the first
+successful admission wins. Keep hooks retry-safe; they are not an exactly-once side-effect boundary. A failed or interrupted
+preparation admits no prompt. This hook transforms input and does not expose a typed rejection API.
+
+Modify assembled system instructions, messages, tools, generation settings, or provider options immediately before model
+dispatch.
 
 ```ts
 await ctx.session.hook("context", (event) => {
-  event.system.push("Keep the review focused on correctness.")
+  event.system.push({ text: "Keep the review focused on correctness." })
   delete event.tools.write
+  event.generation.temperature = 0.2
+  event.generation.maxTokens = 8_000
 })
 ```
+
+`generation` and `providerOptions` start as empty request-override objects for each context hook invocation, not resolved
+model settings. Hooks run in registration order and see earlier hooks' overrides. During compilation, request overrides
+take precedence over model defaults, which take precedence over route defaults. Provider option records merge recursively;
+arrays and scalar values replace earlier values. Deleting an override or setting it to `undefined` falls back to defaults;
+it does not remove a configured default. This precedence applies to semantic generation and provider options; explicit raw
+HTTP body overlays are applied after protocol lowering and can override the resulting fields.
+
+These changes affect only the outgoing model call, not persisted session history or configuration. Context hooks also run
+for subsequent calls such as tool-driven continuations, but do not run for title or compaction requests.
+
+Provider options use the selected protocol's semantic option names, not raw HTTP body fields. Scope provider-specific
+settings to the matching provider. For example, OpenAI Responses uses `reasoningEffort`:
+
+```ts
+await ctx.session.hook(
+  "context",
+  (event) => {
+    event.providerOptions.reasoningEffort = "high"
+  },
+  { providerID: "openai" },
+)
+```
+
+`maxTokens` is the semantic output-token limit. Generation settings are supported only where the selected protocol and
+model support them; for example, Gemini supports `topK`, while OpenAI Responses does not expose it.
 
 Modify model request settings and optionally scope the hook to one provider.
 
 ```ts
-await ctx.session.hook("model.request", (event) => {
-  event.headers["x-plugin"] = "review"
-}, { providerID: "anthropic" })
+await ctx.session.hook(
+  "model.request",
+  (event) => {
+    event.headers["x-plugin"] = "review"
+  },
+  { providerID: "anthropic" },
+)
 ```
 
 Modify native provider requests or responses. Their bodies are one-shot streams; clone or replace a body before reading
@@ -1002,18 +1107,41 @@ await ctx.session.hook("http.response", (event) => {
 #### Reference
 
 ```ts
+import type { SessionPrompt } from "@opencode-ai/plugin/promise/session"
+
 interface SessionHooks {
+  prompt: SessionPrompt
   context: SessionContextHook
   "model.request": SessionModelRequestHook
   "http.request": SessionHttpRequestHook
   "http.response": SessionHttpResponseHook
 }
 
+interface SessionContextHook {
+  readonly sessionID: string
+  readonly agent: string
+  readonly model: { providerID: string; id: string; variant?: string }
+  system: SystemPart[]
+  messages: Message[]
+  tools: Record<string, { description: string; input: JsonSchema }>
+  generation: {
+    maxTokens?: number
+    temperature?: number
+    topP?: number
+    topK?: number
+    frequencyPenalty?: number
+    presencePenalty?: number
+    seed?: number
+    stop?: string[]
+  }
+  providerOptions: Record<string, unknown>
+}
+
 interface SessionHookContext {
   hook<Name extends keyof SessionHooks>(
     name: Name,
     callback: (event: SessionHooks[Name]) => Promise<void> | void,
-    options?: { providerID?: string },
+    options?: Name extends "prompt" ? never : { providerID?: string },
   ): Promise<Registration>
 }
 ```

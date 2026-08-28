@@ -157,6 +157,7 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
       title: forkTitle(parent.title ?? undefined),
       agent: parent.agent,
       model: parent.model,
+      metadata: parent.metadata,
       version: parent.version,
       cost: 0,
       tokens_input: 0,
@@ -446,6 +447,7 @@ const layer = Layer.effectDiscard(
             title: event.data.title,
             agent: event.data.agent,
             model: event.data.model,
+            metadata: event.data.metadata,
             version: event.data.version,
             time_created: event.created,
             time_updated: event.created,
@@ -581,6 +583,7 @@ const layer = Layer.effectDiscard(
         .run()
         .pipe(Effect.orDie)
     })
+    yield* bus.project(SessionEvent.MessageContentUpdated, (event) => run(db, event))
     yield* bus.project(SessionEvent.UsageRecorded, (event) => applyUsage(db, event.data.sessionID, event.data))
     yield* bus.project(SessionEvent.Forked, (event) => projectFork(db, event))
     yield* bus.project(SessionEvent.InboxDelivered, (event) =>
@@ -659,6 +662,7 @@ const layer = Layer.effectDiscard(
     yield* bus.project(SessionEvent.Shell.Started, (event) => run(db, event))
     yield* bus.project(SessionEvent.Shell.Ended, (event) => run(db, event))
     yield* bus.project(SessionEvent.Step.Started, (event) => run(db, event))
+    yield* bus.project(SessionEvent.Step.Streamed, (event) => run(db, event))
     yield* bus.project(SessionEvent.Step.Ended, (event) =>
       Effect.gen(function* () {
         yield* run(db, event)

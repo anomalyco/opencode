@@ -72,6 +72,7 @@ const run = Effect.fnUntraced(function* (events: ReadonlyArray<SessionEvent.Agen
       },
       tool: {
         transform: () => Effect.die("unused tool.transform"),
+        reload: () => Effect.die("unused tool.reload"),
         hook: (name, callback) => {
           if (name === "execute.after") {
             // Hook names and callbacks are correlated, but TypeScript does not narrow this generic registration API.
@@ -123,6 +124,8 @@ const request = (agent: Agent.ID, messages: Array<Message>): SessionContext => (
   system: [],
   messages,
   tools: {},
+  generation: {},
+  providerOptions: {},
 })
 
 type ToolErrorEvent = Extract<ToolHooks["execute.after"], { readonly status: "error" }>

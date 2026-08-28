@@ -2,7 +2,7 @@ import { expect, test, type Page, type Route } from "@playwright/test"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { currentSession } from "../utils/mock-server"
 
-const serverA = "http://127.0.0.1:4096"
+const serverA = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
 const serverB = "http://127.0.0.1:4097"
 const sessionA = session("ses_server_a", "C:/server-a", "Server A session")
 const sessionB = session("ses_server_b", "/home/server-b", "Server B session")
@@ -51,7 +51,7 @@ function session(id: string, directory: string, title: string) {
 }
 
 async function mockServers(page: Page) {
-  await page.route("**/*", async (route) => {
+  await page.route("**/api/**", async (route) => {
     const url = new URL(route.request().url())
     if (url.origin !== serverA && url.origin !== serverB) return route.fallback()
     const current = url.origin === serverA ? sessionA : sessionB

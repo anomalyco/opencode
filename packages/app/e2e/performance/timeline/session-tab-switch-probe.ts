@@ -25,7 +25,7 @@ async function installSessionSwitchProbe(
     let running = true
     const reviewLevels: Record<string, string> = {
       panel: "#review-panel",
-    tabs: '#review-panel [data-component="tabs"]',
+      tabs: '#review-panel [data-component="tabs"]',
       body: '#review-panel [data-slot="session-review-v2-body"]',
       review: '#review-panel [data-component="session-review-v2"]',
       preview: '#review-panel [data-slot="session-review-v2-preview"]',
@@ -37,7 +37,6 @@ async function installSessionSwitchProbe(
       if (!running || started === undefined) return
       setTimeout(() => {
         if (!running || started === undefined) return
-        const observedAtMs = performance.now() - started
         const reviewPanel = document.querySelector<HTMLElement>("#review-panel")
         const reviewFile = reviewPanel?.querySelector('[data-component="file"][data-mode="diff"]')
         const initialReviewFile = initialReviewNodes.file
@@ -63,26 +62,30 @@ async function installSessionSwitchProbe(
         )
         if (root) {
           const view = root.getBoundingClientRect()
-          const visible = [...root.querySelectorAll<HTMLElement>("[data-message-id]")]
-            .filter((element) => {
-              const rect = element.getBoundingClientRect()
-              return rect.bottom > view.top && rect.top < view.bottom
-            })
-            .map((element) => element.dataset.messageId!)
-          const hasVisibleRows = [...root.querySelectorAll<HTMLElement>("[data-timeline-key]")].some((element) => {
+          const inViewport = (element: HTMLElement) => {
+            if (!element.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) return false
             const rect = element.getBoundingClientRect()
-            return rect.bottom > view.top && rect.top < view.bottom
-          })
+            const clip = element.closest<HTMLElement>("[data-timeline-key]")?.getBoundingClientRect() ?? view
+            return (
+              Math.min(rect.bottom, clip.bottom, view.bottom) > Math.max(rect.top, clip.top, view.top) &&
+              Math.min(rect.right, clip.right, view.right) > Math.max(rect.left, clip.left, view.left)
+            )
+          }
+          const visible = [...root.querySelectorAll<HTMLElement>("[data-message-id]")]
+            .filter(inViewport)
+            .map((element) => element.dataset.messageId!)
+          const hasVisibleRows = [...root.querySelectorAll<HTMLElement>("[data-timeline-key]")].some(inViewport)
           const requiredPartVisible = requiredPartID
             ? [...root.querySelectorAll<HTMLElement>("[data-timeline-part-id]")].some((element) => {
                 if (element.dataset.timelinePartId !== requiredPartID) return false
-                const rect = element.getBoundingClientRect()
-                return rect.width > 0 && rect.height > 0 && rect.bottom > view.top && rect.top < view.bottom
+                if (!element.textContent?.trim()) return false
+                if (element.querySelector('[data-component="markdown"]:not([data-markdown-ready])')) return false
+                return inViewport(element)
               })
             : undefined
           const spacer = root.querySelector<HTMLElement>('[data-timeline-row="bottom-spacer"]')?.getBoundingClientRect()
           samples.push({
-            observedAtMs,
+            observedAtMs: performance.now() - started,
             destination: visible.filter((id) => destination.has(id)),
             source: visible.filter((id) => source.has(id)),
             hasVisibleRows,
@@ -94,7 +97,7 @@ async function installSessionSwitchProbe(
           })
         } else {
           samples.push({
-            observedAtMs,
+            observedAtMs: performance.now() - started,
             destination: [],
             source: [],
             hasVisibleRows: false,
@@ -107,23 +110,25 @@ async function installSessionSwitchProbe(
         requestAnimationFrame(sample)
       }, 0)
     }
-    document.addEventListener(
-      "click",
-      (event) => {
-        const link = event.target instanceof Element ? event.target.closest("a") : undefined
-        if (link?.getAttribute("href") !== href) return
-        started = performance.now()
-        for (const [name, selector] of Object.entries(reviewLevels)) {
-          initialReviewNodes[name] = document.querySelector(selector)
-        }
-        requestAnimationFrame(sample)
-      },
-      { capture: true, once: true },
-    )
+    const start = (event: MouseEvent) => {
+      if (started !== undefined || event.button !== 0) return
+      const link = event.target instanceof Element ? event.target.closest("a") : undefined
+      if (link?.getAttribute("href") !== href) return
+      started = performance.now()
+      for (const [name, selector] of Object.entries(reviewLevels)) {
+        initialReviewNodes[name] = document.querySelector(selector)
+      }
+      requestAnimationFrame(sample)
+    }
+    // Tabs activate on mousedown; click alone misses the synchronous navigation work.
+    document.addEventListener("mousedown", start, true)
+    document.addEventListener("click", start, true)
     ;(window as Window & { __sessionSwitchProbe?: SessionSwitchProbe }).__sessionSwitchProbe = {
       samples,
       stop: () => {
         running = false
+        document.removeEventListener("mousedown", start, true)
+        document.removeEventListener("click", start, true)
       },
     }
   }, input)

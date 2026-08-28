@@ -7,7 +7,6 @@ import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { AlibabaPlugin } from "@opencode-ai/core/plugin/provider/alibaba"
 import { CoherePlugin } from "@opencode-ai/core/plugin/provider/cohere"
 import { GatewayPlugin } from "@opencode-ai/core/plugin/provider/gateway"
-import { GroqPlugin } from "@opencode-ai/core/plugin/provider/groq"
 import { MistralPlugin } from "@opencode-ai/core/plugin/provider/mistral"
 import { PerplexityPlugin } from "@opencode-ai/core/plugin/provider/perplexity"
 import { VenicePlugin } from "@opencode-ai/core/plugin/provider/venice"
@@ -21,7 +20,6 @@ const providers = [
   { id: "alibaba", plugin: AlibabaPlugin, package: "@ai-sdk/alibaba", provider: "alibaba.chat" },
   { id: "cohere", plugin: CoherePlugin, package: "@ai-sdk/cohere", provider: "cohere.chat" },
   { id: "gateway", plugin: GatewayPlugin, package: "@ai-sdk/gateway", provider: "gateway" },
-  { id: "groq", plugin: GroqPlugin, package: "@ai-sdk/groq", provider: "groq.chat" },
   { id: "mistral", plugin: MistralPlugin, package: "@ai-sdk/mistral", provider: "mistral.chat" },
   { id: "perplexity", plugin: PerplexityPlugin, package: "@ai-sdk/perplexity", provider: "perplexity" },
   { id: "venice", plugin: VenicePlugin, package: "venice-ai-sdk-provider", provider: "custom-provider.chat" },

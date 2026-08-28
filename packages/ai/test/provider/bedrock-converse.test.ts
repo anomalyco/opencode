@@ -491,6 +491,59 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
+  it.effect("ignores late tool deltas after contentBlockStop", () =>
+    Effect.gen(function* () {
+      const body = eventStreamBody(
+        [
+          "contentBlockStart",
+          {
+            contentBlockIndex: 0,
+            start: { toolUse: { toolUseId: "tool_1", name: "lookup" } },
+          },
+        ],
+        ["contentBlockDelta", { contentBlockIndex: 0, delta: { toolUse: { input: '{"query":"weather"}' } } }],
+        ["contentBlockStop", { contentBlockIndex: 0 }],
+        ["contentBlockDelta", { contentBlockIndex: 0, delta: { toolUse: { input: '{"late":true}' } } }],
+        ["messageStop", { stopReason: "tool_use" }],
+      )
+      const response = yield* LLMClient.generate(baseRequest).pipe(Effect.provide(fixedBytes(body)))
+
+      expect(response.toolCalls).toEqual([
+        { type: "tool-call", id: "tool_1", name: "lookup", input: { query: "weather" } },
+      ])
+      expect(response.events.filter((event) => event.type === "tool-input-delta")).toEqual([
+        {
+          type: "tool-input-delta",
+          id: "tool_1",
+          name: "lookup",
+          text: '{"query":"weather"}',
+          input: { query: "weather" },
+        },
+      ])
+    }),
+  )
+
+  it.effect("rejects tool deltas without contentBlockStart", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.generate(baseRequest).pipe(
+        Effect.provide(
+          fixedBytes(
+            eventStreamBody(
+              ["contentBlockDelta", { contentBlockIndex: 0, delta: { toolUse: { input: "{}" } } }],
+              ["messageStop", { stopReason: "tool_use" }],
+            ),
+          ),
+        ),
+        Effect.flip,
+      )
+
+      expect(error).toMatchObject({
+        reason: { _tag: "InvalidProviderOutput" },
+        message: "Bedrock Converse tool delta is missing its tool call",
+      })
+    }),
+  )
+
   it.effect("recovers incomplete tool input at finalization", () =>
     Effect.gen(function* () {
       const body = eventStreamBody(
@@ -531,6 +584,104 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
+  for (const signature of [undefined, "", "   "]) {
+    for (const cache of ["none", "auto"] as const) {
+      it.effect(`demotes unsigned reasoning to text (${JSON.stringify(signature)}, cache: ${cache})`, () =>
+        Effect.gen(function* () {
+          const prepared = yield* compileRequest(
+            LLM.request({
+              model,
+              messages: [
+                Message.user("Think"),
+                Message.assistant([
+                  {
+                    type: "reasoning",
+                    text: "Partial thought",
+                    providerMetadata: signature === undefined ? undefined : { bedrock: { signature } },
+                    cache: new CacheHint({ type: "ephemeral" }),
+                  },
+                ]),
+                Message.user("Continue"),
+              ],
+              cache,
+            }),
+          )
+          expect(prepared.body.messages[1]).toEqual({
+            role: "assistant",
+            content: [{ text: "Partial thought" }, { cachePoint: { type: "default" } }],
+          })
+        }),
+      )
+    }
+  }
+
+  it.effect("omits empty unsigned reasoning without leaving an empty or cache-only assistant", () =>
+    Effect.gen(function* () {
+      const cache = new CacheHint({ type: "ephemeral" })
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.user("Think"),
+            Message.assistant([
+              { type: "reasoning", text: "", cache },
+              { type: "reasoning", text: "  ", providerMetadata: { bedrock: { signature: "" } }, cache },
+            ]),
+            Message.user([{ type: "text", text: "Continue", cache }]),
+          ],
+          cache: "none",
+        }),
+      )
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "user",
+          content: [{ text: "Think" }, { text: "Continue" }, { cachePoint: { type: "default" } }],
+        },
+      ])
+    }),
+  )
+
+  it.effect("demotes foreign reasoning while preserving signed, redacted, text, and tool blocks", () =>
+    Effect.gen(function* () {
+      const cache = new CacheHint({ type: "ephemeral" })
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([
+              { type: "reasoning", text: "Foreign thought", providerMetadata: { anthropic: { signature: "old" } } },
+              {
+                type: "reasoning",
+                text: "Signed thought",
+                providerMetadata: { bedrock: { signature: "sig_1" } },
+                cache,
+              },
+              { type: "reasoning", text: "", encrypted: "sig_2", cache },
+              { type: "reasoning", text: "", providerMetadata: { bedrock: { redactedData: "cmVkYWN0ZWQ=" } }, cache },
+              { type: "text", text: "Checking" },
+              ToolCallPart.make({ id: "call_1", name: "lookup", input: {} }),
+            ]),
+          ],
+          tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
+          cache: "none",
+        }),
+      )
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "assistant",
+          content: [
+            { text: "Foreign thought" },
+            { reasoningContent: { reasoningText: { text: "Signed thought", signature: "sig_1" } } },
+            { reasoningContent: { reasoningText: { text: "", signature: "sig_2" } } },
+            { reasoningContent: { redactedContent: "cmVkYWN0ZWQ=" } },
+            { text: "Checking" },
+            { toolUse: { toolUseId: "call_1", name: "lookup", input: {} } },
+          ],
+        },
+      ])
+    }),
+  )
+
   it.effect("preserves streamed reasoning signatures for continuation lowering", () =>
     Effect.gen(function* () {
       const body = eventStreamBody(
@@ -564,6 +715,57 @@ describe("Bedrock Converse route", () => {
         {
           role: "assistant",
           content: [{ reasoningContent: { reasoningText: { text: "Let me think.", signature: "sig_1" } } }],
+        },
+      ])
+    }),
+  )
+
+  it.effect("round-trips reassigned provider reasoning and usage metadata in its own namespace", () =>
+    Effect.gen(function* () {
+      const compatible = model.route.with({ provider: "custom-bedrock" }).model({ id: model.id })
+      const redactedData = "cmVkYWN0ZWQtdGhpbmtpbmc="
+      const response = yield* LLMClient.generate(LLMRequest.update(baseRequest, { model: compatible })).pipe(
+        Effect.provide(
+          fixedBytes(
+            eventStreamBody(
+              ["messageStart", { role: "assistant" }],
+              ["contentBlockDelta", { contentBlockIndex: 0, delta: { reasoningContent: { text: "Let me think." } } }],
+              ["contentBlockDelta", { contentBlockIndex: 0, delta: { reasoningContent: { signature: "custom_sig" } } }],
+              ["contentBlockStop", { contentBlockIndex: 0 }],
+              [
+                "contentBlockDelta",
+                { contentBlockIndex: 1, delta: { reasoningContent: { redactedContent: redactedData } } },
+              ],
+              ["contentBlockStop", { contentBlockIndex: 1 }],
+              ["messageStop", { stopReason: "end_turn" }],
+              ["metadata", { usage: { inputTokens: 5, outputTokens: 2, totalTokens: 7 } }],
+            ),
+          ),
+        ),
+      )
+
+      expect(response.message.content).toEqual([
+        {
+          type: "reasoning",
+          text: "Let me think.",
+          providerMetadata: { "custom-bedrock": { signature: "custom_sig" } },
+        },
+        { type: "reasoning", text: "", providerMetadata: { "custom-bedrock": { redactedData } } },
+      ])
+      expect(response.usage?.providerMetadata).toEqual({
+        "custom-bedrock": { inputTokens: 5, outputTokens: 2, totalTokens: 7 },
+      })
+
+      const prepared = yield* compileRequest(
+        LLM.request({ model: compatible, messages: [response.message], cache: "none" }),
+      )
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "assistant",
+          content: [
+            { reasoningContent: { reasoningText: { text: "Let me think.", signature: "custom_sig" } } },
+            { reasoningContent: { redactedContent: redactedData } },
+          ],
         },
       ])
     }),
@@ -738,19 +940,32 @@ describe("Bedrock Converse route", () => {
       ])
       const error = yield* LLMClient.generate(baseRequest).pipe(Effect.provide(fixedBytes(body)), Effect.flip)
 
-      expect(error.reason).toMatchObject({ _tag: "UnknownProvider", message: "A future provider failure" })
+      expect(error).toMatchObject({ reason: { _tag: "UnknownProvider" }, message: "A future provider failure" })
     }),
   )
 
   it.effect("classifies throttlingException as a rate limit", () =>
     Effect.gen(function* () {
+      const payload = { message: "Slow down", details: { opaque: [1, 2] }, trace: "outer", p: "padding" }
       const body = concat([
         eventFrame("messageStart", { role: "assistant" }),
-        exceptionFrame("throttlingException", { message: "Slow down" }),
+        exceptionFrame("throttlingException", payload),
       ])
       const error = yield* LLMClient.generate(baseRequest).pipe(Effect.provide(fixedBytes(body)), Effect.flip)
 
-      expect(error.reason).toMatchObject({ _tag: "RateLimit", message: "Slow down" })
+      expect(error).toMatchObject({ reason: { _tag: "RateLimit" }, message: "Slow down" })
+      expect(JSON.parse(error.reason.body ?? "")).toEqual({
+        headers: {
+          ":message-type": { type: "string", value: "exception" },
+          ":exception-type": { type: "string", value: "throttlingException" },
+          ":content-type": { type: "string", value: "application/json" },
+        },
+        body: JSON.stringify(payload),
+      })
+      expect(error.reason.http).toMatchObject({
+        status: 200,
+        headers: { "content-type": "application/vnd.amazon.eventstream" },
+      })
     }),
   )
 
@@ -763,10 +978,9 @@ describe("Bedrock Converse route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({
-        _tag: "InvalidRequest",
+      expect(error).toMatchObject({
+        reason: { _tag: "InvalidRequest", classification: "context-overflow" },
         message: "Input is too long for requested model",
-        classification: "context-overflow",
       })
     }),
   )
@@ -785,7 +999,7 @@ describe("Bedrock Converse route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({ _tag: "ProviderInternal", message: "Upstream model failed" })
+      expect(error).toMatchObject({ reason: { _tag: "ProviderInternal" }, message: "Upstream model failed" })
     }),
   )
 
@@ -796,10 +1010,32 @@ describe("Bedrock Converse route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({
-        _tag: "InvalidProviderOutput",
+      expect(error).toMatchObject({
+        reason: { _tag: "InvalidProviderOutput" },
         message: "BadStream: Stream failed",
       })
+      expect(JSON.parse(error.reason.body ?? "")).toMatchObject({
+        headers: { ":error-code": { value: "BadStream" } },
+        body: "",
+      })
+    }),
+  )
+
+  it.effect("retains malformed AWS payloads with headers and decode cause", () =>
+    Effect.gen(function* () {
+      const headers = {
+        ":message-type": { type: "string" as const, value: "event" },
+        ":event-type": { type: "string" as const, value: "messageStart" },
+      }
+      const body = '{"malformed":'
+      const error = yield* LLMClient.generate(baseRequest).pipe(
+        Effect.provide(fixedBytes(codec.encode({ headers, body: utf8Encoder.encode(body) }))),
+        Effect.flip,
+      )
+      expect(error.reason._tag).toBe("InvalidProviderOutput")
+      expect(JSON.parse(error.reason.body ?? "")).toEqual({ headers, body })
+      expect(error.reason.cause).toBeInstanceOf(Error)
+      expect(error.reason.http?.status).toBe(200)
     }),
   )
 

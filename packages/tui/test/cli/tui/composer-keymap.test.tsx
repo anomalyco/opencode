@@ -96,7 +96,7 @@ async function renderComposer(
         <ConfigProvider config={createTuiResolvedConfig({ keybinds })}>
           <Keymap.Provider>
             <ClientProvider api={createApi(calls.fetch)}>
-              <DataProvider>
+              <DataProvider directory={process.cwd()}>
                 <LocationProvider>
                   <RouteProvider initialRoute={{ type: "session", sessionID: "parent" }}>
                     <ThemeProvider mode="dark" source={{ discover: async () => ({}) }}>

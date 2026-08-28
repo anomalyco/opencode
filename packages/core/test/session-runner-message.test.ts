@@ -984,7 +984,7 @@ Recent work
     )
 
     expect(messages[0]?.content).toEqual([
-      { type: "text", text: "Visible thought" },
+      { type: "reasoning", text: "Visible thought" },
       {
         type: "tool-call",
         id: "hosted-old-model",

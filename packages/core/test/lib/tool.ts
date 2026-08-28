@@ -4,7 +4,7 @@ import { SessionMessage } from "@opencode-ai/core/session/message"
 import { toSessionError } from "@opencode-ai/core/session/to-session-error"
 import type { SessionError } from "@opencode-ai/schema/session-error"
 import { Tool } from "@opencode-ai/core/tool"
-import type { Context as PluginContext } from "@opencode-ai/plugin/effect/plugin"
+import type { Context } from "@opencode-ai/plugin/effect/plugin"
 import { Effect, type Scope } from "effect"
 import { host } from "../plugin/host"
 
@@ -52,7 +52,7 @@ export function waitForCodeModeTool(
 export const registerToolPlugin = <R>(
   plugin: {
     readonly id: string
-    readonly effect: (context: PluginContext) => Effect.Effect<void, never, R>
+    readonly effect: (context: Context) => Effect.Effect<void, never, R>
   },
   overrides: Parameters<typeof host>[0] = {},
 ): Effect.Effect<void, never, R | Tool.Service | Scope.Scope> =>
@@ -64,10 +64,8 @@ export const registerToolPlugin = <R>(
         hook: () => Effect.succeed({ dispose: Effect.void }),
       },
       tool: {
-        transform: (callback) =>
-          tools
-            .transform((draft) => callback({ add: (tool) => draft.add(tool) }))
-            .pipe(Effect.orDie, Effect.as({ dispose: Effect.void })),
+        transform: tools.transform,
+        reload: tools.reload,
         hook: () => Effect.die("registerToolPlugin does not support tool hooks"),
       },
     })

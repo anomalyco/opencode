@@ -784,6 +784,10 @@ describe("SessionProjector", () => {
         .pipe(Effect.orDie)
 
       const service = yield* Bus.Service
+      yield* service.publish(SessionEvent.Step.Streamed, {
+        sessionID,
+        assistantMessageID: endedID,
+      })
       yield* service.publish(SessionEvent.Step.Ended, {
         sessionID,
         assistantMessageID: endedID,
@@ -824,7 +828,7 @@ describe("SessionProjector", () => {
         cost: Money.USD.make(1),
         tokens: { input: 2, output: 3, reasoning: 4, cache: { read: 5, write: 6 } },
         snapshot: { end: "snap_ended", files: ["src/ended.ts"] },
-        time: { completed: created },
+        time: { streamed: created, completed: created },
       })
       expect(messages[1]).toMatchObject({
         type: "assistant",

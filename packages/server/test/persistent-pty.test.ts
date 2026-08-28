@@ -1,12 +1,11 @@
 import { existsSync } from "node:fs"
 import fs from "node:fs/promises"
-import { createHash } from "node:crypto"
 import os from "node:os"
 import path from "node:path"
 import { expect } from "bun:test"
 import { PersistentPty } from "@opencode-ai/schema/persistent-pty"
 import { Session } from "@opencode-ai/schema/session"
-import { Effect, Schema } from "effect"
+import { Effect, Exit, Schema, Scope } from "effect"
 import { HttpServer } from "effect/unstable/http"
 import { it } from "../../core/test/lib/effect"
 import { ServerProcess } from "../src/process"
@@ -17,141 +16,287 @@ const smoke = existsSync(binary) ? it.live : it.live.skip
 smoke(
   "creates two persistent terminals for one session through the client API",
   () =>
-    Effect.acquireUseRelease(
-      Effect.promise(async () => {
-        const environment = {
-          binary: process.env.OPENCODE_PTY_BIN,
-          runtime: process.env.OPENCODE_PTY_RUNTIME_DIR,
-          xdg: process.env.XDG_RUNTIME_DIR,
+    Effect.gen(function* () {
+      const fixture = yield* testDirectory("xdg")
+      const server = yield* ServerProcess.start<never, never>({
+        hostname: "127.0.0.1",
+        port: 0,
+        password: "secret",
+        app: { version: "test-version" },
+        database: { path: fixture.database },
+        fs: { filewatcher: false },
+      })
+      const base = HttpServer.formatAddress(server.address)
+      const sessionID = Session.ID.make("ses_persistent_pty_test")
+      expect(existsSync(fixture.directory)).toBeFalse()
+      expect(yield* request(base, "POST", "/api/experimental/persistent-pty/handoff")).toEqual({
+        handoff: null,
+      })
+      expect((yield* request(base, "GET", `/api/experimental/session/${sessionID}/terminal`)).data).toEqual([])
+      expect(existsSync(fixture.directory)).toBeFalse()
+      const defaults = {
+        args: [],
+        cwd: fixture.root,
+        title: "default shell",
+        env: { SHELL: "/missing/client/zsh" },
+      }
+      const createPath = `/api/experimental/session/${sessionID}/terminal`
+      const terminal = Schema.decodeUnknownSync(PersistentPty.Info)(
+        (yield* request(base, "POST", createPath, defaults)).data,
+      )
+      expect(terminal.command).toBe("/bin/sh")
+      expect(terminal.cwd).toBe(fixture.root)
+      expect(terminal.cwd).not.toBe(process.cwd())
+      yield* request(base, "DELETE", `/api/experimental/persistent-pty/${terminal.id}`)
+      const root = Schema.decodeUnknownSync(PersistentPty.Info)(
+        (yield* request(base, "POST", createPath, {
+          args: ["-c", "printf 'root-cwd:%s\\n' \"$PWD\"; cat"],
+          title: "root directory",
+          env: {},
+        })).data,
+      )
+      expect(root.cwd).toBe(path.parse(fixture.root).root)
+      expect(root.cwd).not.toBe(process.cwd())
+      expect(yield* waitForText(base, root.id, `root-cwd:${root.cwd}`)).toContain(`root-cwd:${root.cwd}`)
+      yield* request(base, "DELETE", `/api/experimental/persistent-pty/${root.id}`)
+      const events = yield* Effect.promise(() => openEventStream(base))
+      const first = Schema.decodeUnknownSync(PersistentPty.Info)(
+        (yield* request(base, "POST", `/api/experimental/session/${sessionID}/terminal`, {
+          command: "/usr/bin/env",
+          args: ["/bin/sh", "-c", "stty -echo; printf terminal-one; cat"],
+          cwd: process.cwd(),
+          title: "first",
+          env: {},
+        })).data,
+      )
+      expect(first.command).toBe("/usr/bin/env")
+      expect(first.args).toEqual(["/bin/sh", "-c", "stty -echo; printf terminal-one; cat"])
+      expect(first.cwd).toBe(process.cwd())
+      expect(yield* Effect.promise(() => events.next("persistent-pty.added"))).toMatchObject({
+        data: { sessionID, terminal: { id: first.id } },
+      })
+      expect(first.size).toEqual({ cols: 80, rows: 24 })
+      const directories = yield* Effect.promise(() => fs.readdir(fixture.directory))
+      expect(directories).toHaveLength(1)
+      expect(directories[0]).toMatch(/^[0-9a-f-]{36}$/)
+      if (!directories[0]) throw new Error("Missing daemon directory")
+      expect(existsSync(path.join(fixture.directory, directories[0], "service.json"))).toBeTrue()
+      const second = Schema.decodeUnknownSync(PersistentPty.Info)(
+        (yield* request(base, "POST", `/api/experimental/session/${sessionID}/terminal`, {
+          command: "/bin/sh",
+          args: ["-c", "printf terminal-two; sleep 30"],
+          cwd: process.cwd(),
+          title: "second",
+          env: {},
+        })).data,
+      )
+
+      const terminals = Schema.decodeUnknownSync(Schema.Array(PersistentPty.Info))(
+        (yield* request(base, "GET", `/api/experimental/session/${sessionID}/terminal`)).data,
+      )
+      expect(terminals.map((terminal) => terminal.id).sort()).toEqual([first.id, second.id].sort())
+      expect(yield* waitForText(base, first.id, "terminal-one")).toContain("terminal-one")
+      expect(yield* waitForText(base, second.id, "terminal-two")).toContain("terminal-two")
+      yield* Effect.promise(() => verifySharedControl(base, first.id))
+      const snapshot = yield* request(base, "GET", `/api/experimental/persistent-pty/${first.id}/snapshot`)
+      if (
+        !isRecord(snapshot.data) ||
+        typeof snapshot.data.checkpoint !== "string" ||
+        !isRecord(snapshot.data.info) ||
+        !isRecord(snapshot.data.info.output) ||
+        typeof snapshot.data.info.output.tail !== "number"
+      )
+        throw new Error("Persistent PTY snapshot response was invalid")
+      expect(Buffer.from(snapshot.data.checkpoint, "base64").byteLength).toBeGreaterThan(0)
+      expect(snapshot.data.info.output.tail).toBeGreaterThan(0)
+
+      const ticket = yield* request(
+        base,
+        "POST",
+        `/api/experimental/persistent-pty/${first.id}/connect-token`,
+        undefined,
+        {
+          "x-opencode-ticket": "1",
+        },
+      )
+      if (!isRecord(ticket.data) || typeof ticket.data.ticket !== "string") throw new Error("Invalid connect ticket")
+      const connectTicket = ticket.data.ticket
+      yield* request(base, "DELETE", `/api/experimental/persistent-pty/${first.id}`)
+      yield* Effect.promise(async () => {
+        const url = new URL(`/api/experimental/persistent-pty/${first.id}/connect`, base)
+        url.searchParams.set("ticket", "invalid")
+        expect((await fetch(url)).status).toBe(403)
+        url.protocol = "ws:"
+        url.searchParams.set("ticket", connectTicket)
+        const socket = new WebSocket(url)
+        try {
+          const closed = await new Promise<CloseEvent>((resolve, reject) => {
+            const timeout = setTimeout(() => reject(new Error("Removed terminal socket did not close")), 5_000)
+            socket.addEventListener("close", (event) => {
+              clearTimeout(timeout)
+              resolve(event)
+            })
+            socket.addEventListener("error", () => {
+              clearTimeout(timeout)
+              reject(new Error("Valid ticket should upgrade before the missing terminal is reported"))
+            })
+          })
+          expect(closed.code).toBe(4404)
+          expect(closed.reason).toBe("terminal unavailable")
+        } finally {
+          socket.close()
         }
-        const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-pty-server-test-"))
-        const database = path.join(root, "opencode.db")
-        const runtime = path.join(root, "runtime")
-        process.env.OPENCODE_PTY_BIN = binary
-        delete process.env.OPENCODE_PTY_RUNTIME_DIR
-        process.env.XDG_RUNTIME_DIR = runtime
-        return {
-          database,
-          directory: path.join(
-            runtime,
-            "opencode-pty",
-            createHash("sha256").update(database).digest("hex").slice(0, 16),
-          ),
-          environment,
-          root,
-        }
-      }),
-      (fixture) =>
-        Effect.gen(function* () {
-          const server = yield* ServerProcess.start<never, never>({
-            hostname: "127.0.0.1",
-            port: 0,
-            password: "secret",
-            app: { version: "test-version" },
-            database: { path: fixture.database },
-            fs: { filewatcher: false },
-          })
-          const base = HttpServer.formatAddress(server.address)
-          const sessionID = Session.ID.make("ses_persistent_pty_test")
-          const events = yield* Effect.promise(() => openEventStream(base))
-          expect(existsSync(path.join(fixture.directory, "service.json"))).toBeFalse()
-          expect((yield* request(base, "GET", `/api/experimental/session/${sessionID}/terminal`)).data).toEqual([])
-          expect(existsSync(path.join(fixture.directory, "service.json"))).toBeFalse()
-          const first = Schema.decodeUnknownSync(PersistentPty.Info)(
-            (yield* request(base, "POST", `/api/experimental/session/${sessionID}/terminal`, {
-              command: "/bin/sh",
-              args: ["-c", "stty -echo; printf terminal-one; cat"],
-              cwd: process.cwd(),
-              title: "first",
-              env: {},
-            })).data,
-          )
-          expect(yield* Effect.promise(() => events.next("persistent-pty.added"))).toMatchObject({
-            data: { sessionID, terminal: { id: first.id } },
-          })
-          expect(first.size).toEqual({ cols: 80, rows: 24 })
-          expect(existsSync(path.join(fixture.directory, "service.json"))).toBeTrue()
-          const second = Schema.decodeUnknownSync(PersistentPty.Info)(
-            (yield* request(base, "POST", `/api/experimental/session/${sessionID}/terminal`, {
-              command: "/bin/sh",
-              args: ["-c", "printf terminal-two; sleep 30"],
-              cwd: process.cwd(),
-              title: "second",
-              env: {},
-            })).data,
-          )
+      })
+      expect(yield* Effect.promise(() => events.next("persistent-pty.removed"))).toMatchObject({
+        data: { sessionID, ptyID: first.id },
+      })
+      yield* request(base, "DELETE", `/api/experimental/persistent-pty/${second.id}`)
+      expect((yield* request(base, "GET", `/api/experimental/session/${sessionID}/terminal`)).data).toEqual([])
 
-          const terminals = Schema.decodeUnknownSync(Schema.Array(PersistentPty.Info))(
-            (yield* request(base, "GET", `/api/experimental/session/${sessionID}/terminal`)).data,
-          )
-          expect(terminals.map((terminal) => terminal.id).sort()).toEqual([first.id, second.id].sort())
-          expect(yield* waitForText(base, first.id, "terminal-one")).toContain("terminal-one")
-          expect(yield* waitForText(base, second.id, "terminal-two")).toContain("terminal-two")
-          yield* Effect.promise(() => verifySharedControl(base, first.id))
-          const snapshot = yield* request(base, "GET", `/api/experimental/persistent-pty/${first.id}/snapshot`)
-          if (
-            !isRecord(snapshot.data) ||
-            typeof snapshot.data.checkpoint !== "string" ||
-            !isRecord(snapshot.data.info) ||
-            !isRecord(snapshot.data.info.output) ||
-            typeof snapshot.data.info.output.tail !== "number"
-          )
-            throw new Error("Persistent PTY snapshot response was invalid")
-          expect(Buffer.from(snapshot.data.checkpoint, "base64").byteLength).toBeGreaterThan(0)
-          expect(snapshot.data.info.output.tail).toBeGreaterThan(0)
+      yield* request(base, "POST", "/api/experimental/persistent-pty/shutdown")
 
-          yield* request(base, "DELETE", `/api/experimental/persistent-pty/${first.id}`)
-          expect(yield* Effect.promise(() => events.next("persistent-pty.removed"))).toMatchObject({
-            data: { sessionID, ptyID: first.id },
-          })
-          yield* request(base, "DELETE", `/api/experimental/persistent-pty/${second.id}`)
-          expect((yield* request(base, "GET", `/api/experimental/session/${sessionID}/terminal`)).data).toEqual([])
+      const unattended = Schema.decodeUnknownSync(PersistentPty.Info)(
+        (yield* request(base, "POST", `/api/experimental/session/${sessionID}/terminal`, {
+          command: "/bin/sh",
+          args: ["-c", "exit 7"],
+          cwd: process.cwd(),
+          title: "unattended",
+          env: {},
+        })).data,
+      )
+      yield* waitForStatus(base, unattended.id, "exited")
+      expect((yield* request(base, "GET", `/api/experimental/session/${sessionID}/terminal`)).data).toMatchObject([
+        { id: unattended.id, status: "exited" },
+      ])
+      yield* request(base, "DELETE", `/api/experimental/persistent-pty/${unattended.id}`)
 
-          yield* request(base, "POST", "/api/experimental/persistent-pty/shutdown")
-
-          const unattended = Schema.decodeUnknownSync(PersistentPty.Info)(
-            (yield* request(base, "POST", `/api/experimental/session/${sessionID}/terminal`, {
-              command: "/bin/sh",
-              args: ["-c", "exit 7"],
-              cwd: process.cwd(),
-              title: "unattended",
-              env: {},
-            })).data,
-          )
-          yield* waitForStatus(base, unattended.id, "exited")
-          expect((yield* request(base, "GET", `/api/experimental/session/${sessionID}/terminal`)).data).toMatchObject([
-            { id: unattended.id, status: "exited" },
-          ])
-          yield* request(base, "DELETE", `/api/experimental/persistent-pty/${unattended.id}`)
-
-          const visible = Schema.decodeUnknownSync(PersistentPty.Info)(
-            (yield* request(base, "POST", `/api/experimental/session/${sessionID}/terminal`, {
-              command: "/bin/sh",
-              args: ["-c", "read value"],
-              cwd: process.cwd(),
-              title: "visible",
-              env: {},
-            })).data,
-          )
-          yield* attachAndExit(base, visible.id)
-          yield* waitForTerminals(base, sessionID, [])
-          yield* Effect.promise(() => events.close())
-        }),
-      (fixture) =>
-        Effect.promise(async () => {
-          await Bun.spawn([binary, "stop"], {
-            env: { ...process.env, OPENCODE_PTY_RUNTIME_DIR: fixture.directory },
-            stdout: "ignore",
-            stderr: "ignore",
-          }).exited
-          await fs.rm(fixture.root, { recursive: true, force: true })
-          restore("OPENCODE_PTY_BIN", fixture.environment.binary)
-          restore("OPENCODE_PTY_RUNTIME_DIR", fixture.environment.runtime)
-          restore("XDG_RUNTIME_DIR", fixture.environment.xdg)
-        }),
-    ),
+      const visible = Schema.decodeUnknownSync(PersistentPty.Info)(
+        (yield* request(base, "POST", `/api/experimental/session/${sessionID}/terminal`, {
+          command: "/bin/sh",
+          args: ["-c", "read value"],
+          cwd: process.cwd(),
+          title: "visible",
+          env: {},
+        })).data,
+      )
+      yield* attachAndExit(base, visible.id)
+      yield* waitForTerminals(base, sessionID, [])
+      yield* Effect.promise(() => events.close())
+    }),
   20_000,
 )
+
+smoke(
+  "isolates servers sharing a database and preserves terminals only through explicit restart handoff",
+  () =>
+    Effect.gen(function* () {
+      const fixture = yield* testDirectory("override")
+      const scope = yield* Scope.Scope
+      const originalScope = yield* Scope.fork(scope)
+      const options = {
+        hostname: "127.0.0.1",
+        port: 0,
+        password: "secret",
+        app: { version: "test-version" },
+        database: { path: fixture.database },
+        fs: { filewatcher: false },
+      }
+      const original = yield* ServerProcess.start<never, never>(options).pipe(
+        Effect.provideService(Scope.Scope, originalScope),
+      )
+      const base = HttpServer.formatAddress(original.address)
+      const sessionID = Session.ID.make("ses_persistent_pty_restart")
+      const first = Schema.decodeUnknownSync(PersistentPty.Info)(
+        (yield* request(base, "POST", `/api/experimental/session/${sessionID}/terminal`, {
+          command: "/bin/sh",
+          args: ["-c", "stty -echo; printf before-restart; exec cat"],
+          cwd: process.cwd(),
+          title: "survivor",
+          env: {},
+        })).data,
+      )
+      expect(yield* waitForText(base, first.id, "before-restart")).toContain("before-restart")
+
+      const independent = yield* ServerProcess.start<never, never>(options)
+      const otherBase = HttpServer.formatAddress(independent.address)
+      expect((yield* request(otherBase, "GET", `/api/experimental/session/${sessionID}/terminal`)).data).toEqual([])
+
+      const handoff = Schema.decodeUnknownSync(PersistentPty.Handoff)(
+        (yield* request(base, "POST", "/api/experimental/persistent-pty/handoff")).handoff,
+      )
+      const registration = Schema.decodeUnknownSync(Schema.Struct({ pid: Schema.Number }))(
+        yield* Effect.promise(() => Bun.file(path.join(handoff.directory, "service.json")).json()),
+      )
+      yield* Scope.close(originalScope, Exit.void)
+      expect(process.kill(registration.pid, 0)).toBeTrue()
+      expect(process.kill(first.pid, 0)).toBeTrue()
+
+      const replacementScope = yield* Scope.fork(scope)
+      const replacement = yield* ServerProcess.start<never, never>({ ...options, pty: { handoff } }).pipe(
+        Effect.provideService(Scope.Scope, replacementScope),
+      )
+      const replacementBase = HttpServer.formatAddress(replacement.address)
+      expect(
+        (yield* request(replacementBase, "GET", `/api/experimental/session/${sessionID}/terminal`)).data,
+      ).toMatchObject([{ id: first.id, pid: first.pid }])
+      expect(yield* waitForText(replacementBase, first.id, "before-restart")).toContain("before-restart")
+
+      yield* Scope.close(replacementScope, Exit.void)
+      yield* waitForExit(registration.pid)
+      yield* waitForExit(first.pid)
+      expect(existsSync(path.join(handoff.directory, "service.json"))).toBeFalse()
+    }),
+  30_000,
+)
+
+function testDirectory(mode: "xdg" | "override") {
+  return Effect.acquireRelease(
+    Effect.promise(async () => {
+      const environment = {
+        binary: process.env.OPENCODE_PTY_BIN,
+        runtime: process.env.OPENCODE_PTY_RUNTIME_DIR,
+        xdg: process.env.XDG_RUNTIME_DIR,
+        shell: process.env.SHELL,
+      }
+      const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-pty-server-test-"))
+      const runtime = path.join(root, "runtime")
+      process.env.OPENCODE_PTY_BIN = binary
+      delete process.env.OPENCODE_PTY_RUNTIME_DIR
+      process.env.XDG_RUNTIME_DIR = runtime
+      process.env.SHELL = "/bin/sh"
+      if (mode === "override") process.env.OPENCODE_PTY_RUNTIME_DIR = runtime
+      return {
+        database: path.join(root, "opencode.db"),
+        directory: mode === "override" ? runtime : path.join(runtime, "opencode-pty"),
+        environment,
+        root,
+      }
+    }),
+    (fixture) =>
+      Effect.promise(async () => {
+        await fs.rm(fixture.root, { recursive: true, force: true })
+        restore("OPENCODE_PTY_BIN", fixture.environment.binary)
+        restore("OPENCODE_PTY_RUNTIME_DIR", fixture.environment.runtime)
+        restore("XDG_RUNTIME_DIR", fixture.environment.xdg)
+        restore("SHELL", fixture.environment.shell)
+      }),
+  )
+}
+
+function waitForExit(pid: number) {
+  return Effect.promise(async () => {
+    for (let attempt = 0; attempt < 100; attempt++) {
+      try {
+        process.kill(pid, 0)
+      } catch (error) {
+        if (isRecord(error) && error.code === "ESRCH") return
+        throw error
+      }
+      await Bun.sleep(20)
+    }
+    throw new Error(`Process ${pid} survived its server scope`)
+  })
+}
 
 function request(base: string, method: string, pathname: string, body?: unknown, headers?: Record<string, string>) {
   return Effect.tryPromise({

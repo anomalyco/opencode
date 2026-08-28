@@ -8,9 +8,12 @@ import type {
 } from "@opencode-ai/client/promise"
 import { Option, Schema } from "effect"
 import { createMemo, type Accessor } from "solid-js"
+import { currentContentDefaultOpen } from "../message/current-tool-state"
 import { TimelineRow, type PartGroup, type PartRef, type TimelineRowMap } from "./timeline-row"
 
 export { TimelineRow, type PartGroup, type PartRef, type TimelineRowMap }
+
+export type ReasoningMode = "hidden" | "compact" | "full"
 
 type Notice = Exclude<SessionMessageInfo, { type: "user" | "assistant" | "shell" }>
 type Entry = { type: "assistant"; message: SessionMessageAssistant } | { type: "notice"; message: Notice }
@@ -18,13 +21,14 @@ type Content = SessionMessageAssistant["content"][number]
 type GroupRow = Extract<TimelineRow.TimelineRow, { _tag: "AssistantPart" }>
 type PriorGroup = { index: number; row: GroupRow }
 
-const contextTools = new Set(["read", "glob", "grep", "list"])
 const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
 
 export type TimelineProjectionInput = {
   sessionMessages: SessionMessageInfo[]
   status: SessionStatus
-  showReasoningSummaries: boolean
+  reasoningMode: ReasoningMode
+  shellToolDefaultOpen?: boolean
+  editToolDefaultOpen?: boolean
   pendingUserMessageIDs?: ReadonlySet<string>
   previousRows?: TimelineRow.TimelineRow[]
 }
@@ -33,9 +37,11 @@ export function createTimelineProjection(input: TimelineProjectionInput) {
   const sessionMessageByID = new Map(input.sessionMessages.map((message) => [message.id, message] as const))
   const projection = Timeline.constructSessionMessageRows(
     input.sessionMessages,
-    input.showReasoningSummaries,
+    input.reasoningMode !== "hidden",
     input.status,
     input.pendingUserMessageIDs,
+    input.shellToolDefaultOpen ?? false,
+    input.editToolDefaultOpen ?? false,
   )
   const rows = reuseTimelineRows(input.previousRows, projection.rows)
   const rowByKey = new Map(rows.map((row) => [TimelineRow.key(row), row] as const))
@@ -66,7 +72,9 @@ export function createTimelineProjection(input: TimelineProjectionInput) {
 export function createReactiveTimelineProjection(input: {
   sessionMessages: Accessor<SessionMessageInfo[]>
   status: Accessor<SessionStatus>
-  showReasoningSummaries: Accessor<boolean>
+  reasoningMode: Accessor<ReasoningMode>
+  shellToolDefaultOpen?: Accessor<boolean>
+  editToolDefaultOpen?: Accessor<boolean>
   pendingUserMessageIDs?: Accessor<ReadonlySet<string>>
 }) {
   const sessionMessageByID = createMemo(
@@ -77,9 +85,11 @@ export function createReactiveTimelineProjection(input: {
   const projection = createMemo(() =>
     Timeline.constructSessionMessageRows(
       input.sessionMessages(),
-      input.showReasoningSummaries(),
+      input.reasoningMode() !== "hidden",
       input.status(),
       input.pendingUserMessageIDs?.(),
+      input.shellToolDefaultOpen?.() ?? false,
+      input.editToolDefaultOpen?.() ?? false,
     ),
   )
   const activeMessageID = createMemo(() => projection().activeMessageID)
@@ -128,6 +138,8 @@ export namespace Timeline {
     showReasoning: boolean,
     status: SessionStatus,
     pendingUserMessageIDs?: ReadonlySet<string>,
+    shellToolDefaultOpen = false,
+    editToolDefaultOpen = false,
   ) {
     type Turn = {
       id: string
@@ -204,6 +216,8 @@ export namespace Timeline {
             showReasoning,
             status,
             turn.id === activeMessageID,
+            shellToolDefaultOpen,
+            editToolDefaultOpen,
           )
         }),
       ],
@@ -218,47 +232,58 @@ export namespace Timeline {
     showReasoning: boolean,
     status: SessionStatus,
     isActive: boolean,
+    shellToolDefaultOpen = false,
+    editToolDefaultOpen = false,
   ) {
     const rows: TimelineRow.TimelineRow[] = []
     const assistantMessages = entries.flatMap((entry) => (entry.type === "assistant" ? [entry.message] : []))
     const lastAssistant = assistantMessages.at(-1)
     const previousUserMessage = index > 0
     const compaction = entries.some((entry) => entry.type === "notice" && entry.message.type === "compaction")
-    const delegating = assistantMessages.some((message) =>
-      message.content.some(
-        (content) =>
-          content.type === "tool" &&
-          content.name === "subagent" &&
-          (content.state.status === "streaming" || content.state.status === "running"),
-      ),
-    )
+    const lastContent = lastAssistant?.content.at(-1)
+    const thinking =
+      showReasoning &&
+      isActive &&
+      status.type === "busy" &&
+      lastAssistant?.time.completed === undefined &&
+      !lastAssistant?.error &&
+      !lastAssistant?.retry &&
+      lastContent?.type === "reasoning" &&
+      lastContent.time?.completed === undefined
 
     if (previousUserMessage) rows.push(new TimelineRow.TurnGap({ userMessageID: turnID }))
     if (userMessage) rows.push(new TimelineRow.UserMessage({ userMessageID: turnID }))
 
     let assistantGroupIndex = 0
+    let previousAssistantTool = false
     // An assistant message can produce several rows because its content parts are
     // rendered separately. Notices end a segment so none of those rows cross it.
     const appendAssistantSegment = (messages: SessionMessageAssistant[]) => {
       const refs = messages.flatMap((message, messageIndex) =>
         contentEntries(message)
-          .filter((entry) => renderable(entry.content, showReasoning))
+          .filter((entry) => renderable(entry.content, showReasoning) && !(thinking && entry.content === lastContent))
           .map((entry) => ({ messageID: message.id, messageIndex, partID: entry.id, content: entry.content })),
       )
       const interruptedAt = messages.findIndex((message) => isInterrupted(message.error))
       const before = interruptedAt < 0 ? refs : refs.filter((ref) => ref.messageIndex <= interruptedAt)
       const after = interruptedAt < 0 ? [] : refs.filter((ref) => ref.messageIndex > interruptedAt)
-      const appendGroups = (items: typeof refs) =>
-        groupContent(items).forEach((group) => {
+      const appendGroups = (items: typeof refs) => {
+        let offset = 0
+        groupContent(items, shellToolDefaultOpen, editToolDefaultOpen).forEach((group) => {
+          const tool = group.type !== "part" || items[offset]?.content.type !== "text"
+          offset += group.type === "part" ? 1 : group.refs.length
           rows.push(
             new TimelineRow.AssistantPart({
               userMessageID: turnID,
               group,
               previousAssistantPart: assistantGroupIndex > 0,
+              spacing: assistantGroupIndex > 0 ? (previousAssistantTool && tool ? "tool" : "content") : undefined,
             }),
           )
           assistantGroupIndex += 1
+          previousAssistantTool = tool
         })
+      }
 
       appendGroups(before)
       if (interruptedAt >= 0) {
@@ -288,22 +313,13 @@ export namespace Timeline {
     })
     appendAssistantSegment(assistantSegment)
 
-    if (
-      isActive &&
-      status.type === "busy" &&
-      !lastAssistant?.error &&
-      !lastAssistant?.retry &&
-      !delegating &&
-      (showReasoning
-        ? !assistantMessages.some((message) => message.content.some((content) => renderable(content, true)))
-        : true)
-    ) {
-      const heading = assistantMessages
-        .flatMap((message) => message.content)
-        .map((content) => (content.type === "reasoning" && content.text ? reasoningHeading(content.text) : undefined))
-        .find((value): value is string => !!value)
-
-      rows.push(new TimelineRow.Thinking({ userMessageID: turnID, reasoningHeading: heading }))
+    if (thinking && lastAssistant) {
+      rows.push(
+        new TimelineRow.Thinking({
+          userMessageID: turnID,
+          ref: { messageID: lastAssistant.id, partID: contentEntries(lastAssistant).at(-1)!.id },
+        }),
+      )
     }
 
     return rows
@@ -444,6 +460,7 @@ function stabilizeGroupKey(
   return new TimelineRow.AssistantPart({
     userMessageID: row.userMessageID,
     previousAssistantPart: row.previousAssistantPart,
+    spacing: row.spacing,
     group: { ...row.group, key: existing.row.group.key },
   })
 }
@@ -462,13 +479,24 @@ function renderable(content: Content, showReasoning: boolean) {
   return true
 }
 
-function groupContent(items: { messageID: string; partID: string; content: Content }[]): PartGroup[] {
+function groupContent(
+  items: { messageID: string; partID: string; content: Content }[],
+  shellToolDefaultOpen: boolean,
+  editToolDefaultOpen: boolean,
+): PartGroup[] {
   const groups: PartGroup[] = []
-  let adjacent: { type: "context" | "patch" | "edit"; refs: PartRef[] } | undefined
+  let adjacent: { type: "context" | "patch" | "edit"; refs: PartRef[]; tools: boolean } | undefined
   const flush = () => {
     const current = adjacent
     const first = current?.refs[0]
     if (!first) return
+    if (!current.tools) {
+      groups.push(
+        ...current.refs.map((ref) => ({ type: "part" as const, key: `part:${ref.messageID}:${ref.partID}`, ref })),
+      )
+      adjacent = undefined
+      return
+    }
     groups.push({
       type: current.type === "context" ? "context" : "file",
       key:
@@ -482,16 +510,20 @@ function groupContent(items: { messageID: string; partID: string; content: Conte
 
   items.forEach((item) => {
     const type =
-      item.content.type === "tool" && contextTools.has(item.content.name) && !hasLoadedFiles(item.content)
-        ? "context"
-        : item.content.type === "tool" && item.content.name === "patch" && item.content.state.status !== "error"
-          ? "patch"
-          : item.content.type === "tool" && item.content.name === "edit" && item.content.state.status !== "error"
-            ? "edit"
-            : undefined
+      item.content.type === "tool"
+        ? toolGroupType(
+            item.content,
+            shellToolDefaultOpen,
+            editToolDefaultOpen,
+            adjacent?.type === "context" && adjacent.tools,
+          )
+        : item.content.type === "reasoning"
+          ? "context"
+          : undefined
     if (type) {
       if (adjacent?.type !== type) flush()
-      adjacent ??= { type, refs: [] }
+      adjacent ??= { type, refs: [], tools: false }
+      adjacent.tools ||= item.content.type === "tool"
       adjacent.refs.push({ messageID: item.messageID, partID: item.partID })
       return
     }
@@ -506,13 +538,39 @@ function groupContent(items: { messageID: string; partID: string; content: Conte
   return groups
 }
 
+function toolGroupType(
+  content: Extract<Content, { type: "tool" }>,
+  shellExpanded: boolean,
+  editExpanded: boolean,
+  hasContextGroup: boolean,
+) {
+  if (content.name === "question" || hasLoadedFiles(content)) return undefined
+  if (content.state.status === "error") {
+    if ((content.name === "shell" || content.name === "execute") && shellExpanded) return undefined
+    if ((content.name === "edit" || content.name === "write" || content.name === "patch") && editExpanded)
+      return undefined
+    return "context"
+  }
+  if (
+    !hasContextGroup &&
+    (content.state.status !== "completed" ||
+      ("metadata" in content.state && content.state.metadata?.status === "running")) &&
+    (content.name === "shell" || content.name === "execute" || content.name === "subagent")
+  )
+    return undefined
+  if (currentContentDefaultOpen(content, shellExpanded, editExpanded) !== true) return "context"
+  if (content.name === "patch") return "patch"
+  if (content.name === "edit") return "edit"
+  return undefined
+}
+
 function hasLoadedFiles(content: Extract<Content, { type: "tool" }>) {
   if (content.name !== "read" || content.state.status !== "completed") return false
   const loaded = content.state.metadata?.loaded
   return Array.isArray(loaded) && loaded.some((path) => typeof path === "string")
 }
 
-function reasoningHeading(text: string): string | undefined {
+export function reasoningHeading(text: string): string | undefined {
   const markdown = text.replace(/\r\n?/g, "\n")
   const html = markdown.match(/<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/i)
   if (html?.[1]) {

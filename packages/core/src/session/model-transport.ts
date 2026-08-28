@@ -10,7 +10,7 @@ import {
   type WebSocketConnection,
   type WebSocketConnector,
 } from "@opencode-ai/ai/route"
-import { AIError, TransportReason, type TransportOperation } from "@opencode-ai/ai"
+import { AIError, AIErrorReason, TransportError, type TransportOperation } from "@opencode-ai/ai"
 import { Hash } from "@opencode-ai/util/hash"
 import { Cause, Clock, Context, Effect, Fiber, Layer, Metric, Queue, Scope, Semaphore, Stream } from "effect"
 import { Socket } from "effect/unstable/socket"
@@ -41,7 +41,6 @@ interface Channel {
   readonly openedAt: number
   active?: Active
   closing: boolean
-  poisoned: boolean
   checkpoint?: ChannelCheckpoint
   pending?: { readonly token: object; readonly checkpoint: ChannelCheckpoint }
   reader?: Fiber.Fiber<unknown, unknown>
@@ -63,38 +62,29 @@ export interface Interface {
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionModelTransport") {}
 
 const transportError = (
-  method: string,
   message: string,
   input: {
     readonly operation: TransportOperation
     readonly url?: string
     readonly code?: string
-    readonly phase?: TransportReason["phase"]
-    readonly delivery?: TransportReason["delivery"]
+    readonly phase?: TransportError["phase"]
+    readonly delivery?: TransportError["delivery"]
   },
 ) =>
   new AIError({
-    module: "SessionModelTransport",
-    method,
-    reason: new TransportReason({ message, transport: "websocket", ...input }),
+    reason: new TransportError({ message, transport: "websocket", ...input }),
   })
 
 const annotate = (
   error: AIError,
-  input: { readonly phase: TransportReason["phase"]; readonly delivery: TransportReason["delivery"] },
+  input: { readonly phase: TransportError["phase"]; readonly delivery: TransportError["delivery"] },
 ) => {
   if (error.reason._tag !== "Transport") return error
   return new AIError({
-    module: error.module,
-    method: error.method,
-    reason: new TransportReason({
-      message: error.reason.message,
-      transport: error.reason.transport,
-      operation: error.reason.operation,
-      code: error.reason.code,
-      url: error.reason.url,
-      http: error.reason.http,
-      recovery: error.reason.recovery,
+    reason: new TransportError({
+      ...error.reason,
+      message: error.message,
+      cause: error.reason.cause,
       ...input,
     }),
   })
@@ -135,7 +125,7 @@ export const makeLayer = (connector: WebSocketConnector) =>
           Queue.failCauseUnsafe(
             channel.active.queue,
             Cause.fail(
-              transportError("close", "Session WebSocket closed", {
+              transportError("Session WebSocket closed", {
                 operation: "read",
                 code: "close",
                 phase: "close",
@@ -159,7 +149,6 @@ export const makeLayer = (connector: WebSocketConnector) =>
         channel: Channel,
         error: AIError,
       ) {
-        channel.poisoned = true
         if (owner.channel === channel) owner.channel = undefined
         if (channel.closing) return
         channel.closing = true
@@ -184,7 +173,7 @@ export const makeLayer = (connector: WebSocketConnector) =>
             )
             if (owner.closed) {
               yield* connection.close
-              return yield* transportError("open", "Session WebSocket owner closed while connecting", {
+              return yield* transportError("Session WebSocket owner closed while connecting", {
                 operation: "request",
                 code: "owner-closed",
                 phase: "connect",
@@ -196,7 +185,6 @@ export const makeLayer = (connector: WebSocketConnector) =>
               connection,
               openedAt: yield* Clock.currentTimeMillis,
               closing: false,
-              poisoned: false,
             }
             owner.channel = channel
             channel.reader = yield* connection.messages.pipe(
@@ -204,7 +192,7 @@ export const makeLayer = (connector: WebSocketConnector) =>
                 Effect.gen(function* () {
                   const active = channel.active
                   if (!active)
-                    return yield* transportError("receive", "WebSocket data arrived without an active exchange", {
+                    return yield* transportError("WebSocket data arrived without an active exchange", {
                       url: exchange.connect.url,
                       operation: "read",
                       code: "idle-data",
@@ -212,14 +200,14 @@ export const makeLayer = (connector: WebSocketConnector) =>
                     })
                   active.lifecycle.delivery = "provider-observed"
                   if (typeof message !== "string")
-                    return yield* transportError("receive", "Unsupported binary WebSocket frame", {
+                    return yield* transportError("Unsupported binary WebSocket frame", {
                       url: exchange.connect.url,
                       operation: "read",
                       code: "message",
                       phase: "receive",
                     })
                   if (Queue.offerUnsafe(active.queue, message)) return undefined
-                  return yield* transportError("receive", "Session WebSocket inbound queue overflow", {
+                  return yield* transportError("Session WebSocket inbound queue overflow", {
                     url: exchange.connect.url,
                     operation: "read",
                     code: "queue-overflow",
@@ -271,7 +259,7 @@ export const makeLayer = (connector: WebSocketConnector) =>
         lifecycle: { delivery: Delivery },
       ) {
         if (owner.closed)
-          return yield* transportError("start", "Session WebSocket owner is closed", {
+          return yield* transportError("Session WebSocket owner is closed", {
             operation: "request",
             code: "owner-closed",
             phase: "queue",
@@ -283,13 +271,11 @@ export const makeLayer = (connector: WebSocketConnector) =>
         const current = owner.channel
         const rotateAfterMs = exchange.connect.rotateAfterMs ?? ROTATE_AFTER_MS
         const rotation = current
-          ? current.poisoned
-            ? "poisoned"
-            : current.affinity !== key
-              ? "affinity"
-              : now - current.openedAt >= rotateAfterMs
-                ? "age"
-                : undefined
+          ? current.affinity !== key
+            ? "affinity"
+            : now - current.openedAt >= rotateAfterMs
+              ? "age"
+              : undefined
           : undefined
         if (current && rotation) {
           yield* Effect.logDebug("session websocket rotating", {
@@ -349,7 +335,14 @@ export const makeLayer = (connector: WebSocketConnector) =>
           Effect.result,
         )
         if (sent._tag === "Failure") {
-          const failure = sent.failure
+          const failure = new AIError({
+            reason: AIErrorReason.make({
+              ...sent.failure.reason,
+              message: sent.failure.message,
+              cause: sent.failure.reason.cause,
+              http: sent.failure.reason.http ?? channel.connection.http,
+            }),
+          })
           const notSent = failure.reason._tag === "Transport" && failure.reason.delivery === "not-sent"
           yield* closeChannel(owner, channel)
           if (notSent) {
@@ -363,13 +356,12 @@ export const makeLayer = (connector: WebSocketConnector) =>
 
         let terminal: ChannelObservation | undefined
         const token = {}
-        let staged: ChannelCheckpoint | undefined
         const frames = Stream.fromQueue(active.queue).pipe(
           Stream.timeoutOrElse({
             duration: IDLE_TIMEOUT,
             orElse: () =>
               Stream.fail(
-                transportError("receive", "Timed out waiting for WebSocket data", {
+                transportError("Timed out waiting for WebSocket data", {
                   url: exchange.connect.url,
                   operation: "read",
                   code: "idle-timeout",
@@ -384,7 +376,7 @@ export const makeLayer = (connector: WebSocketConnector) =>
               if (!observationTerminal(observation)) return
               terminal = observation
               lifecycle.delivery = "terminal"
-              staged = observation.type === "completed" ? observation.checkpoint : undefined
+              const staged = observation.type === "completed" ? observation.checkpoint : undefined
               if (staged) channel.pending = { token, checkpoint: staged }
               if (observation.type !== "completed" || !staged) channel.checkpoint = undefined
             }),
@@ -407,14 +399,14 @@ export const makeLayer = (connector: WebSocketConnector) =>
               channel.checkpoint = undefined
               channel.pending = undefined
               const error = terminal
-                ? transportError("receive", "WebSocket data arrived after the terminal event", {
+                ? transportError("WebSocket data arrived after the terminal event", {
                     url: exchange.connect.url,
                     operation: "read",
                     code: "idle-data",
                     phase: "receive",
                     delivery: "accepted",
                   })
-                : transportError("execute", "Session WebSocket exchange did not reach a terminal event", {
+                : transportError("Session WebSocket exchange did not reach a terminal event", {
                     url: exchange.connect.url,
                     operation: "read",
                     code: "incomplete",
@@ -450,27 +442,30 @@ export const makeLayer = (connector: WebSocketConnector) =>
           channel.checkpoint = channel.pending.checkpoint
           channel.pending = undefined
         })
-        return { frames, complete }
+        return { frames, complete, http: channel.connection.http }
       })
 
       const bind = (sessionID: SessionSchema.ID): WebSocketChannelExecutor => ({
         execute: (exchange) => {
           const owner = state(sessionID)
           const lifecycle = { delivery: "queued" as Delivery }
-          let complete = Effect.void
+          let execution: WebSocketChannelExecution | undefined
           return Effect.succeed({
+            get http() {
+              return execution?.http
+            },
             frames: Stream.unwrap(
               Effect.acquireRelease(owner.lock.take(1), () => owner.lock.release(1), { interruptible: true }).pipe(
                 Effect.andThen(start(owner, exchange, lifecycle)),
-                Effect.tap((execution) =>
+                Effect.tap((started) =>
                   Effect.sync(() => {
-                    complete = execution.complete
+                    execution = started
                   }),
                 ),
-                Effect.map((execution) => execution.frames),
+                Effect.map((started) => started.frames),
               ),
             ),
-            complete: Effect.suspend(() => complete),
+            complete: Effect.suspend(() => execution?.complete ?? Effect.void),
           })
         },
       })

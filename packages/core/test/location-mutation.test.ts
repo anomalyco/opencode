@@ -6,16 +6,25 @@ import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Location } from "@opencode-ai/core/location"
 import { LocationMutation } from "@opencode-ai/core/location-mutation"
 import { AbsolutePath } from "@opencode-ai/core/schema"
+import { Global } from "@opencode-ai/util/global"
 import { tmpdir } from "./fixture/tmpdir"
 import { location } from "./fixture/location"
 import { it } from "./lib/effect"
 
-function provide(directory: string) {
+function provide(directory: string, projectDirectory = directory) {
   return Effect.provide(
     LayerNode.compile(LocationMutation.node, [
       [
         Location.node,
-        Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
+        Layer.succeed(
+          Location.Service,
+          Location.Service.of(
+            location(
+              { directory: AbsolutePath.make(directory) },
+              { projectDirectory: AbsolutePath.make(projectDirectory) },
+            ),
+          ),
+        ),
       ],
     ]),
   )
@@ -72,6 +81,30 @@ describe("LocationMutation", () => {
           resource: path.join(root, "*").replaceAll("\\", "/"),
         })
       }).pipe(provide(directory)),
+    ),
+  )
+
+  it.live("allows a relative path outside the Location but inside the project worktree", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const active = path.join(directory, "packages", "opencode")
+        yield* Effect.promise(() => fs.mkdir(active, { recursive: true }))
+        const target = yield* (yield* LocationMutation.Service).resolve({ path: "../../README.md" })
+        expect(target).toMatchObject({
+          absolute: path.join(directory, "README.md"),
+          resource: "../../README.md",
+        })
+        expect(target.externalDirectory).toBeUndefined()
+      }).pipe(provide(path.join(directory, "packages", "opencode"), directory)),
+    ),
+  )
+
+  it.live("does not treat a filesystem-root project sentinel as an internal boundary", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const target = yield* (yield* LocationMutation.Service).resolve({ path: "../outside.txt" })
+        expect(target.externalDirectory).toBeDefined()
+      }).pipe(provide(directory, path.parse(directory).root)),
     ),
   )
 
@@ -196,4 +229,53 @@ describe("LocationMutation", () => {
       path: "README.md",
     })
   })
+
+  test("expands a leading tilde against the home directory", () => {
+    const home = path.resolve("/Users/aiden")
+    expect(LocationMutation.resolvePath("/project", "~", home)).toBe(home)
+    expect(LocationMutation.resolvePath("/project", "~/notes.md", home)).toBe(path.resolve(home, "notes.md"))
+    expect(LocationMutation.resolvePath("/project", "~draft.md", home)).toBe(path.resolve("/project", "~draft.md"))
+    expect(LocationMutation.resolvePath("/project", "~\\notes.md", home)).toBe(
+      process.platform === "win32" ? path.resolve(home, "notes.md") : path.resolve("/project", "~\\notes.md"),
+    )
+  })
+
+  test.each([
+    ["/c/Users/aiden/notes.md", "C:/Users/aiden/notes.md"],
+    ["/C:/Users/aiden/notes.md", "C:/Users/aiden/notes.md"],
+    ["/cygdrive/c/Users/aiden/notes.md", "C:/Users/aiden/notes.md"],
+    ["/mnt/c/Users/aiden/notes.md", "C:/Users/aiden/notes.md"],
+  ])("normalizes Windows shell drive path %s before resolution", (input, windows) => {
+    expect(LocationMutation.resolvePath("/project", input)).toBe(
+      process.platform === "win32" ? path.resolve(windows) : path.resolve(input),
+    )
+  })
+
+  it.live("resolves a tilde path as an external home target", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const target = yield* (yield* LocationMutation.Service).resolve({ path: "~/notes.md" })
+        const absolute = path.resolve(Global.Path.home, "notes.md")
+        expect(target).toMatchObject({
+          absolute,
+          resource: absolute.replaceAll("\\", "/"),
+        })
+        expect(target.externalDirectory).toMatchObject({
+          directory: Global.Path.home,
+          resource: path.join(Global.Path.home, "*").replaceAll("\\", "/"),
+        })
+      }).pipe(provide(directory)),
+    ),
+  )
+
+  it.live("treats a tilde path as in-location when the location is home", () =>
+    Effect.gen(function* () {
+      const target = yield* (yield* LocationMutation.Service).resolve({ path: "~/notes.md" })
+      expect(target).toMatchObject({
+        absolute: path.resolve(Global.Path.home, "notes.md"),
+        resource: "notes.md",
+      })
+      expect(target.externalDirectory).toBeUndefined()
+    }).pipe(provide(Global.Path.home)),
+  )
 })

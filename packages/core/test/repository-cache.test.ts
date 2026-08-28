@@ -1,10 +1,9 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, setDefaultTimeout } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { pathToFileURL } from "url"
 import { Effect, Layer } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Global } from "@opencode-ai/util/global"
 import { Repository } from "@opencode-ai/core/repository"
 import { RepositoryCache } from "@opencode-ai/core/repository-cache"
@@ -13,6 +12,9 @@ import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(Layer.empty)
+
+// Cold Git setup and cloning can exceed Bun's five-second default on Windows.
+setDefaultTimeout(15_000)
 
 describe("RepositoryCache", () => {
   it.live("replaces a stale cache directory before cloning", () =>

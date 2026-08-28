@@ -11,6 +11,10 @@
   "globalPassThroughEnv": ["CI", "OPENCODE_DISABLE_SHARE"],
   "tasks": {
     "typecheck": {},
+    "test:components": {
+      "outputs": [],
+      "cache": false
+    },
     "@opencode-ai/enterprise#typecheck": {
       "dependsOn": ["@opencode-ai/core#typecheck"]
     },
@@ -46,6 +50,10 @@
       "outputs": []
     },
     "@opencode-ai/tui#test": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
+    "@opencode-ai/latex#test": {
       "dependsOn": ["^build"],
       "outputs": []
     },
