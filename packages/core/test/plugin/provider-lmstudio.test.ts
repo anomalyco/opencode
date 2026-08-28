@@ -9,7 +9,7 @@ import { LMStudioPlugin, make } from "@opencode-ai/core/plugin/provider/lmstudio
 import { ProviderPlugins } from "@opencode-ai/core/plugin/provider"
 import { Provider } from "@opencode-ai/core/provider"
 import { Document, Event, Info } from "@opencode-ai/schema/config"
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { Duration, Effect, Layer, Schema } from "effect"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
@@ -38,12 +38,10 @@ function eventually<A>(
 }
 
 describe("LMStudioPlugin", () => {
-  it.effect("is registered as a built-in provider plugin", () =>
-    Effect.sync(() => {
-      expect(LMStudioPlugin.id).toBe("opencode.provider.lmstudio")
-      expect(ProviderPlugins.map((item) => item.id)).toContain("opencode.provider.lmstudio")
-    }),
-  )
+  test("is registered as a built-in provider plugin", () => {
+    expect(LMStudioPlugin.id).toBe("opencode.provider.lmstudio")
+    expect(ProviderPlugins.map((item) => item.id)).toContain("opencode.provider.lmstudio")
+  })
 
   it.live("discovers local language models with their capabilities and effective context", () =>
     Effect.acquireUseRelease(
