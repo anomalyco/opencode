@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { Content } from "@opencode-ai/schema/tool"
 import { Effect, Schema, Stream } from "effect"
 import {
@@ -277,65 +277,61 @@ describe("LLMClient tools", () => {
     }),
   )
 
-  it.effect("models canonical tool files with URIs", () =>
-    Effect.sync(() => {
-      const decode = Schema.decodeUnknownSync(Content)
+  test("models canonical tool files with URIs", () => {
+    const decode = Schema.decodeUnknownSync(Content)
 
-      expect(decode({ type: "file", uri: "data:image/png;base64,AAAA", mime: "image/png" })).toEqual({
-        type: "file",
-        uri: "data:image/png;base64,AAAA",
-        mime: "image/png",
-      })
-      expect(decode({ type: "file", uri: "https://example.test/image.png", mime: "image/png" })).toEqual({
-        type: "file",
-        uri: "https://example.test/image.png",
-        mime: "image/png",
-      })
-      expect(decode({ type: "file", uri: "file:///tmp/image.png", mime: "image/png" })).toEqual({
-        type: "file",
-        uri: "file:///tmp/image.png",
-        mime: "image/png",
-      })
-    }),
-  )
+    expect(decode({ type: "file", uri: "data:image/png;base64,AAAA", mime: "image/png" })).toEqual({
+      type: "file",
+      uri: "data:image/png;base64,AAAA",
+      mime: "image/png",
+    })
+    expect(decode({ type: "file", uri: "https://example.test/image.png", mime: "image/png" })).toEqual({
+      type: "file",
+      uri: "https://example.test/image.png",
+      mime: "image/png",
+    })
+    expect(decode({ type: "file", uri: "file:///tmp/image.png", mime: "image/png" })).toEqual({
+      type: "file",
+      uri: "file:///tmp/image.png",
+      mime: "image/png",
+    })
+  })
 
-  it.effect("preserves canonical tool file URIs", () =>
-    Effect.sync(() => {
-      expect(
-        ToolOutput.toResultValue(
-          ToolOutput.make({}, [{ type: "file", uri: "data:image/png;base64,AAAA", mime: "image/png" }]),
-        ),
-      ).toEqual({
-        type: "content",
-        value: [{ type: "file", uri: "data:image/png;base64,AAAA", mime: "image/png" }],
-      })
-      expect(
-        ToolOutput.toResultValue(
-          ToolOutput.make({}, [{ type: "file", uri: "https://example.test/image.png", mime: "image/png" }]),
-        ),
-      ).toEqual({
+  test("preserves canonical tool file URIs", () => {
+    expect(
+      ToolOutput.toResultValue(
+        ToolOutput.make({}, [{ type: "file", uri: "data:image/png;base64,AAAA", mime: "image/png" }]),
+      ),
+    ).toEqual({
+      type: "content",
+      value: [{ type: "file", uri: "data:image/png;base64,AAAA", mime: "image/png" }],
+    })
+    expect(
+      ToolOutput.toResultValue(
+        ToolOutput.make({}, [{ type: "file", uri: "https://example.test/image.png", mime: "image/png" }]),
+      ),
+    ).toEqual({
+      type: "content",
+      value: [{ type: "file", uri: "https://example.test/image.png", mime: "image/png" }],
+    })
+    expect(
+      ToolOutput.toResultValue(
+        ToolOutput.make({}, [{ type: "file", uri: "file:///tmp/image.png", mime: "image/png" }]),
+      ),
+    ).toEqual({
+      type: "content",
+      value: [{ type: "file", uri: "file:///tmp/image.png", mime: "image/png" }],
+    })
+    expect(
+      ToolOutput.fromResultValue({
         type: "content",
         value: [{ type: "file", uri: "https://example.test/image.png", mime: "image/png" }],
-      })
-      expect(
-        ToolOutput.toResultValue(
-          ToolOutput.make({}, [{ type: "file", uri: "file:///tmp/image.png", mime: "image/png" }]),
-        ),
-      ).toEqual({
-        type: "content",
-        value: [{ type: "file", uri: "file:///tmp/image.png", mime: "image/png" }],
-      })
-      expect(
-        ToolOutput.fromResultValue({
-          type: "content",
-          value: [{ type: "file", uri: "https://example.test/image.png", mime: "image/png" }],
-        }),
-      ).toEqual({
-        structured: {},
-        content: [{ type: "file", uri: "https://example.test/image.png", mime: "image/png" }],
-      })
-    }),
-  )
+      }),
+    ).toEqual({
+      structured: {},
+      content: [{ type: "file", uri: "https://example.test/image.png", mime: "image/png" }],
+    })
+  })
 
   it.effect("settles projected URL files as canonical tool results", () =>
     Effect.gen(function* () {
@@ -364,24 +360,22 @@ describe("LLMClient tools", () => {
     }),
   )
 
-  it.effect("derives typed output schemas and preserves dynamic output schemas", () =>
-    Effect.sync(() => {
-      const [typed] = toDefinitions({ get_weather })
-      const schema = { type: "object", properties: { result: { type: "string" } } } as const
-      const [dynamic] = toDefinitions({
-        dynamic: Tool.make({ description: "Dynamic tool.", jsonSchema: { type: "object" }, outputSchema: schema }),
-      })
+  test("derives typed output schemas and preserves dynamic output schemas", () => {
+    const [typed] = toDefinitions({ get_weather })
+    const schema = { type: "object", properties: { result: { type: "string" } } } as const
+    const [dynamic] = toDefinitions({
+      dynamic: Tool.make({ description: "Dynamic tool.", jsonSchema: { type: "object" }, outputSchema: schema }),
+    })
 
-      expect(typed?.outputSchema).toMatchObject({
-        type: "object",
-        properties: { condition: { type: "string" } },
-        required: ["temperature", "condition"],
-        additionalProperties: false,
-      })
-      expect(Reflect.get(Reflect.get(typed?.outputSchema ?? {}, "properties") as object, "temperature")).toBeDefined()
-      expect(dynamic?.outputSchema).toEqual(schema)
-    }),
-  )
+    expect(typed?.outputSchema).toMatchObject({
+      type: "object",
+      properties: { condition: { type: "string" } },
+      required: ["temperature", "condition"],
+      additionalProperties: false,
+    })
+    expect(Reflect.get(Reflect.get(typed?.outputSchema ?? {}, "properties") as object, "temperature")).toBeDefined()
+    expect(dynamic?.outputSchema).toEqual(schema)
+  })
 
   it.effect("preserves content tool results from dynamic tools", () =>
     Effect.gen(function* () {

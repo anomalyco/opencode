@@ -100,6 +100,7 @@ const layer = Layer.effect(
               title: input.data.info.title,
               agent: input.data.info.agent,
               model: input.data.info.model,
+              metadata: input.data.info.metadata,
             },
             {
               location: input.location,
@@ -178,6 +179,10 @@ function sanitize(data: Data): Data {
     info: {
       ...data.info,
       title: data.info.title === undefined ? undefined : redact("session-title", data.info.id, data.info.title),
+      metadata:
+        data.info.metadata && Object.keys(data.info.metadata).length > 0
+          ? { redacted: `session-metadata:${data.info.id}` }
+          : data.info.metadata,
       location: {
         ...data.info.location,
         directory: AbsolutePath.make(`/${redact("session-directory", data.info.id, data.info.location.directory)}`),
