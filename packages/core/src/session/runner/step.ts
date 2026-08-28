@@ -224,10 +224,15 @@ export const make = Effect.gen(function* () {
             })
         }
 
+        // After durable output, recovery continues instead of replaying: the
+        // partial assistant message is already persisted history. Any failure
+        // the pre-output gate would retry is continued here, plus interrupted
+        // streams, whose read failures may carry delivery states the retry
+        // policy rejects for full resends.
         if (
           llmFailure &&
           llmError &&
-          isInterruptedStream(llmFailure) &&
+          (isInterruptedStream(llmFailure) || SessionRunnerRetry.isRetryable(llmFailure)) &&
           record.outputStarted &&
           tools.declines.length === 0 &&
           !tools.interrupted

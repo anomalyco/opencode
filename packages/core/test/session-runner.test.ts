@@ -11,6 +11,7 @@ import {
   InvalidProviderOutputError,
   InvalidRequestError,
   RateLimitError,
+  UnknownProviderError,
 } from "@opencode-ai/ai"
 import * as OpenAIChat from "@opencode-ai/ai/protocols/openai-chat"
 import { TestLLM } from "@opencode-ai/ai/testing"
@@ -848,18 +849,19 @@ function* verifyEphemeralDeltas(s: Scenario, kind: FragmentKind) {
 function* verifyPartialFlushOnFailure(s: Scenario, kind: FragmentKind) {
   const prompt = `Fail after ${kind}`
   const fixture = fragmentFixture(kind, fragmentID(kind, "partial"), ["Partial"])
-  const failure = providerUnavailable()
+  // A non-retryable failure keeps the step terminal so the flushed fragments settle durably.
+  const failure = invalidRequest()
   yield* s.admit(prompt)
   yield* s.llm.push(TestLLM.failAfter(failure, ...fixture.partialEvents))
 
   expect(yield* s.resume.pipe(Effect.flip)).toBe(failure)
   expect(yield* s.context).toMatchObject([
     Expected.user(prompt),
-    Expected.assistant({ finish: "error", error: { type: "provider.transport", message: "Provider unavailable" } }, [
+    Expected.assistant({ finish: "error", error: { type: "provider.invalid-request", message: "Invalid request" } }, [
       kind === "tool input"
         ? Expected.failedTool(
             { id: fragmentID(kind, "partial") },
-            { error: { type: "provider.transport", message: "Provider unavailable" } },
+            { error: { type: "provider.invalid-request", message: "Invalid request" } },
           )
         : fixture.expectedContent,
     ]),
@@ -3942,7 +3944,8 @@ describe("SessionRunnerLLM", () => {
 
   scenario("awaits started local tools before surfacing provider stream failure", function* (s) {
     yield* s.admit("Settle before failing")
-    const failure = providerUnavailable()
+    // Non-retryable so the step settles terminally instead of continuing after tool output.
+    const failure = invalidRequest()
     const tools = yield* s.blockTools()
     yield* s.llm.push(
       TestLLM.failAfter(
@@ -4492,6 +4495,74 @@ describe("SessionRunnerLLM", () => {
     expect(yield* s.context).toMatchObject([
       { type: "user" },
       Expected.assistant({ finish: "error" }, [Expected.text("Partial")]),
+      { type: "synthetic", text: INCOMPLETE_STREAM_CONTINUATION },
+      Expected.assistant({ finish: "stop" }, [Expected.text(" continuation")]),
+    ])
+  })
+
+  scenario("continues after a mid-stream rate limit honoring retry-after", function* (s) {
+    yield* s.admit("Continue after rate limit")
+    yield* s.llm.push(
+      TestLLM.failAfter(
+        rateLimited(5_000),
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.textStart({ id: "rate-limited-partial" }),
+        LLMEvent.textDelta({ id: "rate-limited-partial", text: "Partial" }),
+      ),
+    )
+    yield* s.llm.push(TestLLM.text(" continuation", "rate-limit-continuation"))
+
+    const run = yield* s.resume.pipe(Effect.forkChild)
+    yield* s.llm.wait(1)
+    yield* TestClock.adjust("4999 millis")
+    expect(s.requests).toHaveLength(1)
+    yield* TestClock.adjust("1 millis")
+    yield* Fiber.join(run)
+
+    expect(s.requests).toHaveLength(2)
+    expect(s.requests[1]?.messages.at(-2)).toMatchObject({
+      role: "assistant",
+      content: [{ type: "text", text: "Partial" }],
+    })
+    expect(s.requests[1]?.messages.at(-1)).toMatchObject({
+      role: "user",
+      content: [{ type: "text", text: INCOMPLETE_STREAM_CONTINUATION }],
+    })
+    expect(yield* recordedEventTypes(sessionID)).toContain("session.retry.scheduled.1")
+    expect(yield* s.context).toMatchObject([
+      Expected.user("Continue after rate limit"),
+      Expected.assistant({ finish: "error", error: { type: "provider.rate-limit" } }, [Expected.text("Partial")]),
+      { type: "synthetic", text: INCOMPLETE_STREAM_CONTINUATION },
+      Expected.assistant({ finish: "stop" }, [Expected.text(" continuation")]),
+    ])
+  })
+
+  scenario("continues after an unrecognized mid-stream provider failure", function* (s) {
+    const failure = new AIError({ reason: new UnknownProviderError({ message: "Provider returned error" }) })
+    yield* s.admit("Continue after unknown failure")
+    yield* s.llm.push(
+      TestLLM.failAfter(
+        failure,
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.textStart({ id: "unknown-failure-partial" }),
+        LLMEvent.textDelta({ id: "unknown-failure-partial", text: "Partial" }),
+      ),
+    )
+    yield* s.llm.push(TestLLM.text(" continuation", "unknown-failure-continuation"))
+
+    const run = yield* s.resume.pipe(Effect.forkChild)
+    yield* s.llm.wait(1)
+    yield* TestClock.adjust("2400 millis")
+    yield* Fiber.join(run)
+
+    expect(s.requests).toHaveLength(2)
+    expect(s.requests[1]?.messages.at(-1)).toMatchObject({
+      role: "user",
+      content: [{ type: "text", text: INCOMPLETE_STREAM_CONTINUATION }],
+    })
+    expect(yield* s.context).toMatchObject([
+      Expected.user("Continue after unknown failure"),
+      Expected.assistant({ finish: "error", error: { type: "provider.unknown" } }, [Expected.text("Partial")]),
       { type: "synthetic", text: INCOMPLETE_STREAM_CONTINUATION },
       Expected.assistant({ finish: "stop" }, [Expected.text(" continuation")]),
     ])
@@ -5254,7 +5325,8 @@ describe("SessionRunnerLLM", () => {
   })
 
   scenario("durably fails a hosted tool left unresolved by a raw provider stream failure", function* (s) {
-    const failure = providerUnavailable()
+    // Non-retryable so the step settles terminally instead of continuing after tool output.
+    const failure = invalidRequest()
     yield* s.llm.push(
       Stream.concat(
         Stream.fromIterable([LLMEvent.stepStart({ index: 0 }), hostedCall("call-hosted-raw-failure", "effect")]),
@@ -5278,7 +5350,7 @@ describe("SessionRunnerLLM", () => {
     yield* replaySessionProjection(sessionID)
     expect(yield* s.context).toMatchObject([
       Expected.user("Fail hosted tool on raw failure"),
-      Expected.assistant({ finish: "error", error: { type: "provider.transport", message: "Provider unavailable" } }, [
+      Expected.assistant({ finish: "error", error: { type: "provider.invalid-request", message: "Invalid request" } }, [
         Expected.failedTool({ id: "call-hosted-raw-failure" }, {}),
       ]),
     ])
