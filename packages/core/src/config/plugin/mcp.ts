@@ -1,11 +1,11 @@
-export * as ConfigMCPPlugin from "./mcp.js"
+export * as ConfigMcpPlugin from "./mcp.js"
 
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Document, type Entry } from "@opencode-ai/schema/config"
-import { Mcp } from "@opencode-ai/schema/mcp"
+import type { ServerConfig } from "@opencode-ai/schema/mcp"
 import { Effect, Stream } from "effect"
 import { Config } from "../../config.js"
-import { MCP } from "../../mcp/index.js"
+import { Mcp } from "../../mcp/index.js"
 
 export const Plugin = define({
   id: "opencode.config.mcp",
@@ -18,7 +18,7 @@ export const register = Effect.fn("ConfigMCPPlugin.register")(function* (
   events: Stream.Stream<{ readonly type: string }, unknown>,
 ) {
   const config = yield* Config.Service
-  const mcp = yield* MCP.Service
+  const mcp = yield* Mcp.Service
   const loaded = { entries: [] as Entry[] }
 
   yield* events.pipe(
@@ -43,7 +43,7 @@ export const register = Effect.fn("ConfigMCPPlugin.register")(function* (
       {},
       ...documents.flatMap((entry) => (entry.info.mcp?.timeout ? [entry.info.mcp.timeout] : [])),
     )
-    const servers = new Map<string, Mcp.ServerConfig>()
+    const servers = new Map<string, ServerConfig>()
     for (const document of documents) {
       for (const [name, server] of Object.entries(document.info.mcp?.servers ?? {})) {
         servers.set(name, { ...server, timeout: { ...timeout, ...server.timeout } })
