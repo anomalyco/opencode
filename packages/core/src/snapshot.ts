@@ -133,36 +133,34 @@ const layer = Layer.effect(
 
     const compare = Effect.fnUntraced(function* (operation: "files" | "diff", input: CompareInput) {
       const repo = yield* repository.pipe(Effect.mapError((cause) => failure(operation, cause)))
+      const comparison = {
+        repository: repo.snapshotRepository,
+        from: Git.TreeID.make(input.from),
+        to: Git.TreeID.make(input.to),
+      }
+      const files = yield* git.tree.files(comparison).pipe(Effect.mapError((cause) => failure(operation, cause)))
+      const ignored = yield* git.index
+        .ignored({ repository: repo.source, paths: files })
+        .pipe(Effect.mapError((cause) => failure(operation, cause)))
       return {
-        source: repo.source,
-        input: {
-          repository: repo.snapshotRepository,
-          from: Git.TreeID.make(input.from),
-          to: Git.TreeID.make(input.to),
-        },
+        input: comparison,
+        files,
+        ignored,
       }
     })
 
     const files = Effect.fn("Snapshot.files")(function* (input: CompareInput) {
       const comparison = yield* compare("files", input)
-      const files = yield* git.tree.files(comparison.input).pipe(Effect.mapError((cause) => failure("files", cause)))
-      const ignored = yield* git.index
-        .ignored({ repository: comparison.source, paths: files })
-        .pipe(Effect.mapError((cause) => failure("files", cause)))
-      return files.filter((file) => !ignored.has(file))
+      return comparison.files.filter((file) => !comparison.ignored.has(file))
     })
 
     const diff = Effect.fn("Snapshot.diff")(function* (input: DiffInput) {
       const comparison = yield* compare("diff", input)
-      const files = yield* git.tree.files(comparison.input).pipe(Effect.mapError((cause) => failure("diff", cause)))
-      const ignored = yield* git.index
-        .ignored({ repository: comparison.source, paths: files })
-        .pipe(Effect.mapError((cause) => failure("diff", cause)))
       return yield* git.tree
         .diff({
           ...comparison.input,
           context: input.context,
-          paths: (input.paths ?? files).filter((file) => !ignored.has(file)),
+          paths: (input.paths ?? comparison.files).filter((file) => !comparison.ignored.has(file)),
         })
         .pipe(Effect.mapError((cause) => failure("diff", cause)))
     })

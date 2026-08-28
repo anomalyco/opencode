@@ -7,6 +7,7 @@ import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { CloudflareAIGatewayPlugin } from "@opencode-ai/core/plugin/provider/cloudflare-ai-gateway"
 import { Provider } from "@opencode-ai/core/provider"
+import { withEnv } from "../fixture/env"
 import { Integration } from "@opencode-ai/core/integration"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
@@ -15,31 +16,9 @@ const it = testEffect(PluginTestLayer)
 
 const addPlugin = Effect.fn(function* () {
   const plugin = yield* Plugin.Service
-  const aisdk = yield* AISDK.Service
   const host = yield* PluginHost.make(plugin)
   yield* CloudflareAIGatewayPlugin.effect(host)
 })
-
-function withEnv<A, E, R>(vars: Record<string, string | undefined>, fx: () => Effect.Effect<A, E, R>) {
-  return Effect.acquireUseRelease(
-    Effect.sync(() => {
-      const previous = Object.fromEntries(Object.keys(vars).map((key) => [key, process.env[key]]))
-      Object.entries(vars).forEach(([key, value]) => {
-        if (value === undefined) delete process.env[key]
-        else process.env[key] = value
-      })
-      return previous
-    }),
-    fx,
-    (previous) =>
-      Effect.sync(() => {
-        Object.entries(previous).forEach(([key, value]) => {
-          if (value === undefined) delete process.env[key]
-          else process.env[key] = value
-        })
-      }),
-  )
-}
 
 const aiGatewayCalls: Record<string, unknown>[] = []
 const unifiedCalls: string[] = []
@@ -108,9 +87,8 @@ describe("CloudflareAIGatewayPlugin", () => {
     withEnv({ CLOUDFLARE_ACCOUNT_ID: undefined, CLOUDFLARE_GATEWAY_ID: undefined }, () =>
       Effect.gen(function* () {
         yield* addPlugin()
-        expect(
-          (yield* (yield* Integration.Service).get(Integration.ID.make("cloudflare-ai-gateway")))?.methods,
-        ).toContainEqual({
+        const integrations = yield* Integration.Service
+        expect((yield* integrations.get(Integration.ID.make("cloudflare-ai-gateway")))?.methods).toContainEqual({
           type: "key",
           label: "Gateway API token",
           form: [
@@ -132,7 +110,6 @@ describe("CloudflareAIGatewayPlugin", () => {
       },
       () =>
         Effect.gen(function* () {
-          const plugin = yield* Plugin.Service
           const aisdk = yield* AISDK.Service
           yield* addPlugin()
           const result = yield* aisdk.runSDK({
@@ -153,7 +130,6 @@ describe("CloudflareAIGatewayPlugin", () => {
     withEnv(cloudflareEnv(), () =>
       Effect.gen(function* () {
         resetCalls()
-        const plugin = yield* Plugin.Service
         const aisdk = yield* AISDK.Service
         yield* addPlugin()
 
@@ -198,7 +174,6 @@ describe("CloudflareAIGatewayPlugin", () => {
     withEnv(cloudflareEnv(), () =>
       Effect.gen(function* () {
         resetCalls()
-        const plugin = yield* Plugin.Service
         const aisdk = yield* AISDK.Service
         yield* addPlugin()
 
@@ -228,7 +203,6 @@ describe("CloudflareAIGatewayPlugin", () => {
     withEnv(cloudflareEnv(), () =>
       Effect.gen(function* () {
         resetCalls()
-        const plugin = yield* Plugin.Service
         const aisdk = yield* AISDK.Service
         yield* addPlugin()
 
@@ -266,7 +240,6 @@ describe("CloudflareAIGatewayPlugin", () => {
       () =>
         Effect.gen(function* () {
           resetCalls()
-          const plugin = yield* Plugin.Service
           const aisdk = yield* AISDK.Service
           yield* addPlugin()
 
@@ -298,7 +271,6 @@ describe("CloudflareAIGatewayPlugin", () => {
     withEnv(cloudflareEnv({ CLOUDFLARE_API_TOKEN: undefined, CF_AIG_TOKEN: "cf-aig-token" }), () =>
       Effect.gen(function* () {
         resetCalls()
-        const plugin = yield* Plugin.Service
         const aisdk = yield* AISDK.Service
         yield* addPlugin()
 
@@ -321,7 +293,6 @@ describe("CloudflareAIGatewayPlugin", () => {
     withEnv(cloudflareEnv({ CLOUDFLARE_ACCOUNT_ID: undefined, CLOUDFLARE_GATEWAY_ID: undefined }), () =>
       Effect.gen(function* () {
         resetCalls()
-        const plugin = yield* Plugin.Service
         const aisdk = yield* AISDK.Service
         yield* addPlugin()
 
@@ -345,7 +316,6 @@ describe("CloudflareAIGatewayPlugin", () => {
     withEnv(cloudflareEnv({ CLOUDFLARE_API_TOKEN: undefined, CF_AIG_TOKEN: undefined }), () =>
       Effect.gen(function* () {
         resetCalls()
-        const plugin = yield* Plugin.Service
         const aisdk = yield* AISDK.Service
         yield* addPlugin()
 
@@ -375,7 +345,6 @@ describe("CloudflareAIGatewayPlugin", () => {
       () =>
         Effect.gen(function* () {
           resetCalls()
-          const plugin = yield* Plugin.Service
           const aisdk = yield* AISDK.Service
           const catalog = yield* Catalog.Service
           yield* catalog.transform((catalog) =>
@@ -384,9 +353,11 @@ describe("CloudflareAIGatewayPlugin", () => {
             }),
           )
           yield* addPlugin()
-          expect(
-            (yield* (yield* Integration.Service).get(Integration.ID.make("cloudflare-ai-gateway")))?.methods,
-          ).toContainEqual({ type: "key", label: "Gateway API token" })
+          const integrations = yield* Integration.Service
+          expect((yield* integrations.get(Integration.ID.make("cloudflare-ai-gateway")))?.methods).toContainEqual({
+            type: "key",
+            label: "Gateway API token",
+          })
 
           const result = yield* aisdk.runSDK({
             model: Model.Info.make({
@@ -408,7 +379,6 @@ describe("CloudflareAIGatewayPlugin", () => {
     withEnv(cloudflareEnv(), () =>
       Effect.gen(function* () {
         resetCalls()
-        const plugin = yield* Plugin.Service
         const aisdk = yield* AISDK.Service
         yield* addPlugin()
 
@@ -440,7 +410,6 @@ describe("CloudflareAIGatewayPlugin", () => {
     withEnv(cloudflareEnv(), () =>
       Effect.gen(function* () {
         resetCalls()
-        const plugin = yield* Plugin.Service
         const aisdk = yield* AISDK.Service
         yield* addPlugin()
 
