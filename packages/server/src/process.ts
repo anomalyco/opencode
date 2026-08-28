@@ -98,7 +98,12 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
           const address = bound.server.address()
           if (address === null || typeof address === "string") return []
           const host = address.family === "IPv6" ? `[${address.address}]` : address.address
-          return ServerInfo.connectionURLs(`http://${host}:${address.port}`, hostname)
+          return [
+            ...new Set([
+              ...(options.additionalUrls ?? []),
+              ...ServerInfo.connectionURLs(`http://${host}:${address.port}`, hostname),
+            ]),
+          ]
         },
       ).pipe(Layer.provideMerge(NodeHttpServer.layerHttpServices)),
       applicationScope,

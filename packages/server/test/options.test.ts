@@ -21,6 +21,14 @@ test("accepts optional app metadata", () => {
   })
 })
 
+test("accepts additional server URLs", () => {
+  expect(
+    Option.getOrThrow(
+      decode({ additionalUrls: ["https://primary.example.com", "https://secondary.example.com"] }),
+    ).additionalUrls,
+  ).toEqual(["https://primary.example.com", "https://secondary.example.com"])
+})
+
 test("accepts durable event persistence configuration", () => {
   expect(Option.getOrThrow(decode({ events: { persist: true } })).events).toEqual({ persist: true })
 })
