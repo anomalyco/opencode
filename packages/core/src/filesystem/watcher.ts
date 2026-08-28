@@ -7,16 +7,16 @@ import { FileSystem } from "@opencode-ai/schema/filesystem"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { Cause, Context, Effect, Layer, PubSub, RcMap, Schema, Stream } from "effect"
 import { lazy } from "../util/lazy.js"
-import { watch as watchFileSystem } from "node:fs"
+import { watch } from "node:fs"
 import path from "path"
 import loadBinding from "./watcher-binding.js"
 
 const SUBSCRIBE_TIMEOUT_MS = 10_000
 export const Event = { Updated: FileSystem.Event.Changed }
 
-const watcher = lazy((): typeof import("@parcel/watcher") | undefined => {
+const watcher = lazy((): typeof ParcelWatcher | undefined => {
   try {
-    return createWrapper(loadBinding()) as typeof import("@parcel/watcher")
+    return createWrapper(loadBinding()) as typeof ParcelWatcher
   } catch {
     return
   }
@@ -192,7 +192,7 @@ export const nativeLayer = Layer.succeed(
       if (input.type === "file") {
         return Effect.sync(() => {
           const directory = path.dirname(input.target)
-          const subscription = watchFileSystem(directory, { recursive: false }, (_event, file) => {
+          const subscription = watch(directory, { recursive: false }, (_event, file) => {
             if (file && path.resolve(directory, file.toString()) !== input.target) return
             input.publish({ path: input.target, type: "update" } satisfies Update)
           })
@@ -218,7 +218,7 @@ export function configured(options?: Options) {
 export const node = configured()
 
 function subscribeDirectory(
-  native: typeof import("@parcel/watcher") | undefined,
+  native: typeof ParcelWatcher | undefined,
   backend: ParcelWatcher.BackendType | undefined,
   directory: string,
   ignore: readonly string[],

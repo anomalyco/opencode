@@ -13,6 +13,7 @@ import {
   Hash,
   Layer,
   LayerMap,
+  Option,
   RcMap,
   Schema,
   Stream,
@@ -42,7 +43,7 @@ import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { tmpdir } from "./fixture/tmpdir"
 import { tempGlobalLayer } from "./fixture/global"
 import { testEffect } from "./lib/effect"
-import { toolDefinitions, waitForTool } from "./lib/tool"
+import { toolDefinitions } from "./lib/tool"
 import { Database } from "../src/database/database"
 import { Bus } from "../src/bus"
 import { Reference } from "../src/reference"
@@ -517,7 +518,8 @@ describe("LocationServiceMap", () => {
           )
           const plugins = yield* Effect.gen(function* () {
             const plugins = yield* Plugin.Service
-            yield* (yield* PluginSupervisor.Service).flush
+            const supervisor = yield* PluginSupervisor.Service
+            yield* supervisor.flush
             return yield* plugins.list()
           }).pipe(
             Effect.scoped,
@@ -674,14 +676,21 @@ describe("LocationServiceMap", () => {
             expect(Equal.equals(absent, present)).toBe(false)
             if (process.platform === "win32") expect(absent.directory).not.toBe(present.directory)
 
+            expect(yield* locations.contextEffectOption(absent)).toEqual(Option.none())
+            expect(Array.from(yield* RcMap.keys(locations.rcMap))).toHaveLength(0)
+
             const first = yield* locations.contextEffect(absent)
             expect(yield* locations.contextEffect(present)).toBe(first)
+            expect(Option.getOrThrow(yield* locations.contextEffectOption(absent))).toBe(first)
+            expect(Option.getOrThrow(yield* locations.contextEffectOption(present))).toBe(first)
             expect(Array.from(yield* RcMap.keys(locations.rcMap))).toEqual([
               Location.Ref.make({ directory, workspaceID: undefined }),
             ])
 
             // Invalidating with the shape opposite to the one that booted must evict.
             yield* locations.invalidate(present)
+            expect(yield* locations.contextEffectOption(absent)).toEqual(Option.none())
+            expect(yield* locations.contextEffectOption(present)).toEqual(Option.none())
             expect(Array.from(yield* RcMap.keys(locations.rcMap))).toHaveLength(0)
           }),
         ),
@@ -701,25 +710,9 @@ describe("LocationServiceMap", () => {
               yield* Reference.Service
               const catalog = yield* Catalog.Service
               yield* catalog.transform((editor) => editor.provider.update(providerID, () => {}))
+              const supervisor = yield* PluginSupervisor.Service
+              yield* supervisor.flush
               const registry = yield* Tool.Service
-              // Tool plugins register during the forked PluginSupervisor boot; wait for
-              // every expected tool rather than relying on batch ordering.
-              yield* Effect.forEach(
-                [
-                  "edit",
-                  "glob",
-                  "grep",
-                  "question",
-                  "read",
-                  "shell",
-                  "skill",
-                  "subagent",
-                  "webfetch",
-                  "websearch",
-                  "write",
-                ],
-                (name) => waitForTool(registry, name),
-              )
               return {
                 providers: yield* catalog.provider.all(),
                 tools: yield* toolDefinitions(registry),
@@ -950,7 +943,8 @@ describe("LocationServiceMap", () => {
           })
           yield* plugins.activate([{ ...reviewer, version: "1" }])
 
-          expect(yield* (yield* Agent.Service).get(Agent.ID.make("reviewer"))).toMatchObject({
+          const agents = yield* Agent.Service
+          expect(yield* agents.get(Agent.ID.make("reviewer"))).toMatchObject({
             description: "Reviews code",
             mode: "subagent",
           })
