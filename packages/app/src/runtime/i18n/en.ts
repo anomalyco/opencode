@@ -1158,6 +1158,10 @@ export const dict = {
   "session.delete.title": "Delete session",
   "session.delete.confirm": 'Delete session "{{name}}"?',
   "session.delete.button": "Delete session",
+  "session.locationUnavailable.title": "Working directory unavailable",
+  "session.locationUnavailable.description": "This session is read-only until you move it to another directory.",
+  "session.locationUnavailable.action": "Move session",
+  "session.locationUnavailable.pickerTitle": "Choose a new working directory",
 
   "workspace.new": "New workspace",
   "common.viewAll": "View all",

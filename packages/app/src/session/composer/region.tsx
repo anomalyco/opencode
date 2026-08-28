@@ -4,7 +4,7 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { isScrollKeyTarget, scrollKey, scrollKeyOwner } from "@opencode-ai/ui/scroll-view"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { useNavigate } from "@solidjs/router"
-import { createEffect, on, onMount } from "solid-js"
+import { createEffect, on, onMount, Show } from "solid-js"
 import { Composer } from "@/composer/composer"
 import { createComposerModel, type ComposerModel } from "@/composer/model"
 import { useComposerState } from "@/composer/persistence"
@@ -32,6 +32,7 @@ import { SessionQueuePanel } from "./queue-panel"
 import { resolveSessionComposerSelection } from "./selection"
 import { createSessionRequestModel } from "../requests/model"
 import { useSettings } from "@/settings/model"
+import { SessionLocationUnavailable } from "./location-unavailable"
 
 export function createActiveSessionRegion(input: {
   session: SessionModel
@@ -220,6 +221,7 @@ export function ActiveSessionComposerRegion(props: {
   onResponseSubmit: () => void
 }) {
   const settings = useSettings()
+  const location = useWorkspaceLocation()
   const region = createSessionComposerRegionController({
     state: props.model.region.state,
     parentID: props.session.data.parentID,
@@ -248,12 +250,19 @@ export function ActiveSessionComposerRegion(props: {
     <SessionComposerRegion
       controller={region}
       composer={
-        <div class="relative">
-          <SessionQueuePanel queue={queue} />
-          <div class="relative z-10">
-            <Composer model={composer} borderUnderlay accentSubmit={props.accentSubmit} />
-          </div>
-        </div>
+        <Show
+          when={location().error && !location().current}
+          fallback={
+            <div class="relative">
+              <SessionQueuePanel queue={queue} />
+              <div class="relative z-10">
+                <Composer model={composer} borderUnderlay accentSubmit={props.accentSubmit} />
+              </div>
+            </div>
+          }
+        >
+          <SessionLocationUnavailable sessionID={requireSessionID(props.session)} />
+        </Show>
       }
     />
   )
