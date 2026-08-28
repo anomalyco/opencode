@@ -314,6 +314,7 @@ export namespace Step {
       assistantMessageID: SessionMessage.ID,
       agent: Agent.ID,
       model: Model.Ref,
+      providerStateRoute: SessionMessage.ProviderStateRoute.pipe(optional),
       snapshot: Snapshot.ID.pipe(optional),
     },
   })

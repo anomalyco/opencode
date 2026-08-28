@@ -662,6 +662,7 @@ export type SessionLogOutput =
             readonly assistantMessageID: SessionMessage.ID
             readonly agent: Agent.ID
             readonly model: Model.Ref
+            readonly providerStateRoute?: "openai-api" | "openai-chatgpt-codex" | undefined
             readonly snapshot?: (string & Brand.Brand<"Snapshot.ID">) | undefined
           }
         }

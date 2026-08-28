@@ -69,6 +69,27 @@ const complete = (bus: Bus.Interface, sessionID: Session.ID, messageID: SessionM
   })
 
 describe("Session.updateMessage", () => {
+  it.effect("persists the OpenAI opaque-state route with its assistant message", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const bus = yield* Bus.Service
+      const created = yield* session.create({ location })
+      const messageID = SessionMessage.ID.create()
+
+      yield* bus.publish(SessionEvent.Step.Started, {
+        sessionID: created.id,
+        assistantMessageID: messageID,
+        agent: Agent.defaultID,
+        model: { id: Model.ID.make("gpt-5.5"), providerID: Provider.ID.openai },
+        providerStateRoute: "openai-chatgpt-codex",
+      })
+
+      expect(yield* session.message({ sessionID: created.id, messageID })).toMatchObject({
+        providerStateRoute: "openai-chatgpt-codex",
+      })
+    }),
+  )
+
   it.effect("replaces assistant content through a durable projected event", () =>
     Effect.gen(function* () {
       const session = yield* Session.Service

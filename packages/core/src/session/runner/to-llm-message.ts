@@ -1,7 +1,15 @@
-import { Message, ToolCallPart, ToolResultPart, type ContentPart, type ProviderMetadata } from "@opencode-ai/ai"
+import {
+  type LanguageModel,
+  Message,
+  ToolCallPart,
+  ToolResultPart,
+  type ContentPart,
+  type ProviderMetadata,
+} from "@opencode-ai/ai"
 import { Option, Schema } from "effect"
 import { fileURLToPath } from "url"
 import type { Model } from "../../model.js"
+import { Provider } from "../../provider.js"
 import { SessionMessage } from "../message.js"
 import type { FileAttachment } from "@opencode-ai/schema/prompt"
 
@@ -100,6 +108,13 @@ const providerMetadata = (
   state: Record<string, unknown> | undefined,
 ): ProviderMetadata | undefined => (state === undefined ? undefined : { [provider]: state })
 
+export const providerStateRoute = (model: LanguageModel): SessionMessage.ProviderStateRoute | undefined => {
+  if (String(model.provider) !== String(Provider.ID.openai)) return
+  return model.route.endpoint.baseURL === "https://chatgpt.com/backend-api/codex"
+    ? "openai-chatgpt-codex"
+    : "openai-api"
+}
+
 const toolInput = (tool: SessionMessage.AssistantTool) =>
   tool.state.status === "streaming"
     ? Option.getOrElse(decodeToolInput(tool.state.input), () => tool.state.input)
@@ -142,10 +157,20 @@ const toolResult = (tool: SessionMessage.AssistantTool, providerMetadata: Provid
   }
 }
 
-const assistant = (message: SessionMessage.Assistant, model: Model.Ref, providerMetadataKey: string) => {
+const assistant = (
+  message: SessionMessage.Assistant,
+  model: Model.Ref,
+  providerMetadataKey: string,
+  currentProviderStateRoute: SessionMessage.ProviderStateRoute | undefined,
+) => {
   const sameProvider = String(message.model.providerID) === String(model.providerID)
   const sameModel = sameProvider && String(message.model.id) === String(model.id)
-  const reuseProviderMetadata = sameModel && message.error === undefined
+  // A ChatGPT OAuth-to-OpenAI API-key switch retains the catalog model but changes
+  // endpoints, so OpenAI item IDs and encrypted reasoning cannot cross routes.
+  const compatibleProviderStateRoute =
+    String(message.model.providerID) !== String(Provider.ID.openai) ||
+    message.providerStateRoute === currentProviderStateRoute
+  const reuseProviderMetadata = sameModel && compatibleProviderStateRoute && message.error === undefined
   const content = message.content.flatMap((item): ContentPart[] => {
     if (item.type === "text")
       return [
@@ -175,7 +200,10 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
     // replay it.
     const reuseToolProviderMetadata =
       reuseProviderMetadata ||
-      (sameModel && item.executed === true && (item.state.status === "completed" || item.state.status === "error"))
+      (sameModel &&
+        compatibleProviderStateRoute &&
+        item.executed === true &&
+        (item.state.status === "completed" || item.state.status === "error"))
     const call = toolCall(
       item,
       reuseToolProviderMetadata ? providerMetadata(providerMetadataKey, item.providerState) : undefined,
@@ -191,7 +219,7 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
       item,
       reuseToolProviderMetadata
         ? providerMetadata(providerMetadataKey, item.providerResultState ?? item.providerState)
-        : sameProvider && item.providerResultState !== undefined
+        : sameProvider && compatibleProviderStateRoute && item.providerResultState !== undefined
           ? providerMetadata(providerMetadataKey, item.providerResultState)
           : undefined,
     )
@@ -221,7 +249,12 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
   ]
 }
 
-function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMetadataKey: string): Message[] {
+function toLLMMessage(
+  message: SessionMessage.Info,
+  model: Model.Ref,
+  providerMetadataKey: string,
+  providerStateRoute: SessionMessage.ProviderStateRoute | undefined,
+): Message[] {
   switch (message.type) {
     case "agent-switched":
     case "model-switched":
@@ -269,7 +302,7 @@ function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMe
         }),
       ]
     case "assistant":
-      return assistant(message, model, providerMetadataKey)
+      return assistant(message, model, providerMetadataKey, providerStateRoute)
     case "compaction":
       if (message.status !== "completed") return []
       return [
@@ -298,4 +331,5 @@ export const toLLMMessages = (
   messages: readonly SessionMessage.Info[],
   model: Model.Ref,
   providerMetadataKey: string = model.providerID,
-) => messages.flatMap((message) => toLLMMessage(message, model, providerMetadataKey))
+  currentProviderStateRoute: SessionMessage.ProviderStateRoute | undefined = undefined,
+) => messages.flatMap((message) => toLLMMessage(message, model, providerMetadataKey, currentProviderStateRoute))

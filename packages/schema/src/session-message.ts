@@ -39,6 +39,9 @@ export const ProviderState = Schema.Record(Schema.String, Schema.Unknown).annota
 })
 export type ProviderState = typeof ProviderState.Type
 
+export const ProviderStateRoute = Schema.Literals(["openai-api", "openai-chatgpt-codex"])
+export type ProviderStateRoute = typeof ProviderStateRoute.Type
+
 export interface AgentSelected extends Schema.Schema.Type<typeof AgentSelected> {}
 export const AgentSelected = Schema.Struct({
   ...Base,
@@ -213,6 +216,7 @@ export const Assistant = Schema.Struct({
   type: Schema.tag("assistant"),
   agent: Agent.ID,
   model: Model.Ref,
+  providerStateRoute: ProviderStateRoute.pipe(optional),
   content: AssistantContent.pipe(Schema.Array),
   snapshot: Schema.Struct({
     start: Snapshot.ID.pipe(optional),
