@@ -65,6 +65,7 @@ OpenCode Go 的工作方式与 OpenCode 中的其他提供商一样。
 - **MiniMax M2.7**
 - **Muse Spark 1.2 Contributor** ([仅限部分地区](https://ai.developer.meta.com/legal/geographic-use-policy))
 - **Qwen3.8 Max**
+- **Qwen3.8 Flash**
 - **Qwen3.7 Max**
 - **Qwen3.7 Plus**
 - **Qwen3.6 Plus**
@@ -107,6 +108,7 @@ OpenCode Go 包含以下限制：
 | MiniMax M2.7                 | 3,400           | 8,500      | 17,000     |
 | Muse Spark 1.2 Contributor   | 45,300          | 113,300    | 226,600    |
 | Qwen3.8 Max                  | 160             | 400        | 810        |
+| Qwen3.8 Flash                | 5,400           | 13,500     | 27,000     |
 | Qwen3.7 Max                  | 340             | 840        | 1,690      |
 | Qwen3.7 Plus                 | 4,300           | 10,800     | 21,600     |
 | Qwen3.6 Plus                 | 3,300           | 8,200      | 16,300     |
@@ -133,6 +135,7 @@ OpenCode Go 包含以下限制：
 - MiniMax M2.7 — 每次请求 300 个输入 token，55,000 个缓存 token，125 个输出 token
 - Muse Spark 1.2 Contributor — 每次请求 620 个输入 token，71,400 个缓存 token，300 个输出 token
 - Qwen3.8 Max — 每次请求 420 个输入 token，66,000 个缓存 token，200 个输出 token
+- Qwen3.8 Flash — 估算每次请求 600 个输入 token，58,000 个缓存读取 token，200 个输出 token；不计缓存写入
 - Qwen3.7 Max — 每次请求 420 个输入 token，66,000 个缓存 token，200 个输出 token
 - Qwen3.7 Plus — 每次请求 500 个输入 token，57,000 个缓存 token，190 个输出 token
 - Qwen3.6 Plus — 每次请求 500 个输入 token，57,000 个缓存 token，190 个输出 token
@@ -161,6 +164,7 @@ OpenCode Go 包含以下限制：
 | MiniMax M2.5                            | $0.30  | $1.20  | $0.06     | $0.375   | $60      |
 | Muse Spark 1.2 Contributor              | $0.10  | $0.20  | $0.002    | -        | $60      |
 | Qwen3.8 Max                             | $2.00  | $6.00  | $0.25     | $2.50    | $15      |
+| Qwen3.8 Flash                           | $0.15  | $0.47  | $0.016    | $0.20    | $30      |
 | Qwen3.7 Max                             | $2.50  | $7.50  | $0.50     | $3.125   | $60      |
 | Qwen3.7 Plus (≤ 256K tokens)            | $0.40  | $1.60  | $0.04     | $0.50    | $60      |
 | Qwen3.7 Plus (> 256K tokens)            | $1.20  | $4.80  | $0.12     | $1.50    | $60      |
@@ -232,6 +236,7 @@ OpenCode Go 包含以下限制：
 | MiniMax M2.5                 | minimax-m2.5                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Muse Spark 1.2 Contributor   | muse-spark-1.2-contributor   | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | Qwen3.8 Max                  | qwen3.8-max                  | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Qwen3.8 Flash                | qwen3.8-flash                | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.7 Max                  | qwen3.7-max                  | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.7 Plus                 | qwen3.7-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus                 | qwen3.6-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
@@ -268,6 +273,7 @@ https://opencode.ai/zen/go/v1/models
 | MiMo-V2.5-Pro                | 不使用   | 0 天     |
 | MiMo-V2.5                    | 不使用   | 0 天     |
 | Qwen3.8 Max                  | 不使用   | 0 天     |
+| Qwen3.8 Flash                | 不使用   | 0 天     |
 | Qwen3.7 Max                  | 不使用   | 0 天     |
 | Qwen3.7 Plus                 | 不使用   | 0 天     |
 | Qwen3.6 Plus                 | 不使用   | 0 天     |

@@ -75,6 +75,7 @@ Den nåværende listen over modeller inkluderer:
 - **MiniMax M2.7**
 - **Muse Spark 1.2 Contributor** ([begrensede regioner](https://ai.developer.meta.com/legal/geographic-use-policy))
 - **Qwen3.8 Max**
+- **Qwen3.8 Flash**
 - **Qwen3.7 Max**
 - **Qwen3.7 Plus**
 - **Qwen3.6 Plus**
@@ -117,6 +118,7 @@ Tabellen nedenfor gir et estimert antall forespørsler basert på typiske bruksm
 | MiniMax M2.7                 | 3,400                    | 8,500                | 17,000                 |
 | Muse Spark 1.2 Contributor   | 45,300                   | 113,300              | 226,600                |
 | Qwen3.8 Max                  | 160                      | 400                  | 810                    |
+| Qwen3.8 Flash                | 5,400                    | 13,500               | 27,000                 |
 | Qwen3.7 Max                  | 340                      | 840                  | 1,690                  |
 | Qwen3.7 Plus                 | 4,300                    | 10,800               | 21,600                 |
 | Qwen3.6 Plus                 | 3,300                    | 8,200                | 16,300                 |
@@ -141,6 +143,7 @@ Estimatene er basert på observerte forespørselsmønstre:
 - MiniMax M2.7 — 300 input, 55 000 bufret, 125 output-tokens per forespørsel
 - Muse Spark 1.2 Contributor — 620 input, 71 400 bufret, 300 output-tokens per forespørsel
 - Qwen3.8 Max — 420 input, 66 000 bufret, 200 output-tokens per forespørsel
+- Qwen3.8 Flash — estimert forespørselsmønster: 600 inndata-tokener, 58 000 tokener lest fra hurtigbufferen og 200 utdata-tokener per forespørsel; hurtigbufferskriving er ikke inkludert
 - Qwen3.7 Max — 420 input, 66 000 bufret, 200 output-tokens per forespørsel
 - Qwen3.7 Plus — 500 input, 57 000 bufret, 190 output-tokens per forespørsel
 - Qwen3.6 Plus — 500 input, 57 000 bufret, 190 output-tokens per forespørsel
@@ -171,6 +174,7 @@ Estimatene er også basert på følgende priser per 1M tokens og den månedlige 
 | MiniMax M2.5                            | $0.30  | $1.20  | $0.06       | $0.375       | $60  |
 | Muse Spark 1.2 Contributor              | $0.10  | $0.20  | $0.002      | -            | $60  |
 | Qwen3.8 Max                             | $2.00  | $6.00  | $0.25       | $2.50        | $15  |
+| Qwen3.8 Flash                           | $0.15  | $0.47  | $0.016      | $0.20        | $30  |
 | Qwen3.7 Max                             | $2.50  | $7.50  | $0.50       | $3.125       | $60  |
 | Qwen3.7 Plus (≤ 256K tokens)            | $0.40  | $1.60  | $0.04       | $0.50        | $60  |
 | Qwen3.7 Plus (> 256K tokens)            | $1.20  | $4.80  | $0.12       | $1.50        | $60  |
@@ -244,6 +248,7 @@ Du kan også få tilgang til Go-modeller gjennom følgende API-endepunkter.
 | MiniMax M2.5                 | minimax-m2.5                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Muse Spark 1.2 Contributor   | muse-spark-1.2-contributor   | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | Qwen3.8 Max                  | qwen3.8-max                  | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Qwen3.8 Flash                | qwen3.8-flash                | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.7 Max                  | qwen3.7-max                  | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.7 Plus                 | qwen3.7-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus                 | qwen3.6-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
@@ -282,6 +287,7 @@ https://opencode.ai/zen/go/v1/models
 | MiMo-V2.5-Pro                | Brukes ikke   | 0 dager         |
 | MiMo-V2.5                    | Brukes ikke   | 0 dager         |
 | Qwen3.8 Max                  | Brukes ikke   | 0 dager         |
+| Qwen3.8 Flash                | Brukes ikke   | 0 dager         |
 | Qwen3.7 Max                  | Brukes ikke   | 0 dager         |
 | Qwen3.7 Plus                 | Brukes ikke   | 0 dager         |
 | Qwen3.6 Plus                 | Brukes ikke   | 0 dager         |
