@@ -352,6 +352,44 @@ describe("Project.resolve", () => {
     }),
   )
 
+  it.live("keeps the canonical project directory when opening another clone", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      const main = path.join(tmp.path, "repo")
+      const clone = path.join(tmp.path, "other-clone")
+      const linked = path.join(tmp.path, "linked")
+      yield* Effect.promise(async () => {
+        await fs.mkdir(main)
+        await initRepo(main, { commit: true, remote: "git@github.com:owner/repo.git" })
+        await $`git clone --no-hardlinks ${main} ${clone}`.quiet()
+        await $`git remote set-url origin https://github.com/owner/repo.git`.cwd(clone).quiet()
+        await $`git worktree add ${linked} -b linked`.cwd(main).quiet()
+      })
+      const project = yield* Project.Service
+      const bus = yield* Bus.Service
+      const initial = yield* project.resolve(abs(main))
+      const updates: Project.Info[] = []
+      yield* bus.subscribe(ProjectSchema.Event.Updated).pipe(
+        Stream.runForEach((event) => Effect.sync(() => updates.push(event.data))),
+        Effect.forkScoped({ startImmediately: true }),
+      )
+
+      for (const directory of [clone, linked, main, clone]) {
+        const resolved = yield* project.resolve(abs(directory))
+        expect(resolved.id).toBe(initial.id)
+        expect(resolved.directory).toBe(abs(directory))
+        expect(resolved.canonical).toBe(abs(directory === clone ? clone : main))
+        expect((yield* project.list()).find((item) => item.id === initial.id)?.canonical).toBe(abs(main))
+      }
+      yield* Effect.yieldNow
+
+      expect(updates).toEqual([])
+    }),
+  )
+
   it.live("returns git global for repo with no commits and no remote", () =>
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireRelease(
