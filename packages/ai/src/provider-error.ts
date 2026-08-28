@@ -66,12 +66,10 @@ const SERVER_CODES = new Set([
   "internalserverexception",
   "modelstreamerrorexception",
   "overloaded_error",
-  "resource_exhausted",
   "server_error",
   "server_is_overloaded",
-  "service_unavailable",
-  "serviceunavailableexception",
   "slow_down",
+  "serviceunavailableexception",
 ])
 const INVALID_REQUEST_CODES = new Set(["invalid_prompt", "invalid_request_error", "validationexception"])
 const RATE_LIMIT_TEXT = /rate increased too quickly|rate[-_\s]?limit|too[_\s]?many[_\s]?requests/i
@@ -140,7 +138,7 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
     input.status === 408 ||
     input.status === 409 ||
     (input.status !== undefined && input.status >= 500) ||
-    codes.some((code) => SERVER_CODES.has(code))
+    codes.some((code) => SERVER_CODES.has(code) || code.includes("exhausted") || code.includes("unavailable"))
   )
     return new ProviderInternalError({
       ...details,
