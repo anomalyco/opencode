@@ -63,6 +63,18 @@ describe("shell", () => {
     expect(zsh.at(-1)).toBe("/tmp")
   })
 
+  test("builds PowerShell command args per executable type", () => {
+    const command = 'echo "first"\necho "second"'
+    expect(Shell.powershellCommand("C:/tools/pwsh.exe", command)).toEqual(["-Command", command])
+    expect(Shell.args("/tools/pwsh", command, "/tmp")).toEqual(["-NoProfile", "-Command", command])
+
+    for (const shell of ["C:/tools/pwsh.cmd", "C:/tools/powershell.BAT"]) {
+      const args = Shell.powershellCommand(shell, command)
+      expect(args[0]).toBe("-EncodedCommand")
+      expect(Buffer.from(args[1], "base64").toString("utf-16le")).toBe(command)
+    }
+  })
+
   if (process.platform === "win32") {
     test("rejects blacklisted shells case-insensitively", async () => {
       await withShell("NU.EXE", async () => {
