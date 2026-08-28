@@ -60,6 +60,13 @@ export const WireResponse = Schema.Union([
     cursor_y: Schema.Number,
   }),
   Schema.Struct({
+    type: Schema.Literal("rows"),
+    terminal: WireTerminal,
+    lines: Schema.Array(Schema.String),
+    cursor_x: Schema.Number,
+    cursor_y: Schema.Number,
+  }),
+  Schema.Struct({
     type: Schema.Literal("attached"),
     terminal: WireTerminal,
     role: Schema.Literals(["controller", "observer"]),

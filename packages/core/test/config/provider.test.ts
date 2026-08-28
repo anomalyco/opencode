@@ -5,8 +5,10 @@ import { Effect, Schema, Stream } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Config } from "@opencode-ai/core/config"
 import { ConfigProviderPlugin } from "@opencode-ai/core/config/plugin/provider"
+import { ConfigNormalize } from "@opencode-ai/core/config/normalize"
 import { Integration } from "@opencode-ai/core/integration"
 import { Model } from "@opencode-ai/core/model"
+import { ModelResolver } from "@opencode-ai/core/model-resolver"
 import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { Provider } from "@opencode-ai/core/provider"
@@ -149,6 +151,170 @@ describe("ConfigProviderPlugin.Plugin", () => {
         input: ["text", "image"],
         output: ["text"],
       })
+    }),
+  )
+
+  for (const scenario of [
+    { name: "omitted capabilities", legacy: {}, overrides: {} },
+    {
+      name: "input-only modalities",
+      legacy: { modalities: { input: ["text", "image", "pdf"] } },
+      overrides: { input: ["text", "image", "pdf"] },
+    },
+    {
+      name: "output-only modalities",
+      legacy: { modalities: { output: ["audio"] } },
+      overrides: { output: ["audio"] },
+    },
+    { name: "enabled tools", legacy: { tool_call: true }, overrides: { tools: true } },
+    { name: "disabled tools", legacy: { tool_call: false }, overrides: { tools: false } },
+    {
+      name: "explicit empty modalities",
+      legacy: { modalities: { input: [], output: [] } },
+      overrides: { input: [], output: [] },
+    },
+    {
+      name: "fully specified capabilities",
+      legacy: { tool_call: false, modalities: { input: ["audio"], output: ["text"] } },
+      overrides: { tools: false, input: ["audio"], output: ["text"] },
+    },
+  ]) {
+    it.effect(`uses native model defaults for migrated ${scenario.name}`, () =>
+      Effect.gen(function* () {
+        const catalog = yield* Catalog.Service
+        const providerID = Provider.ID.make("custom")
+        const result = ConfigNormalize.normalize({ provider: { custom: { models: { migrated: scenario.legacy } } } })
+        if (result.type !== "normalized") throw new Error("Expected normalized config")
+        expect(result.diagnostics).toEqual([])
+
+        yield* addPlugin([
+          new Document({
+            type: "document",
+            info: decode({ providers: { custom: { models: { native: {} } } } }),
+          }),
+          new Document({ type: "document", info: decode(result.encoded) }),
+        ])
+
+        const native = required(yield* catalog.model.get(providerID, Model.ID.make("native")))
+        const migrated = required(yield* catalog.model.get(providerID, Model.ID.make("migrated")))
+        expect(migrated).toEqual({
+          ...native,
+          id: migrated.id,
+          modelID: migrated.id,
+          name: migrated.id,
+          capabilities: { ...native.capabilities, ...scenario.overrides },
+        })
+      }),
+    )
+  }
+
+  for (const scenario of [
+    {
+      name: "provider package and request defaults",
+      legacy: {
+        npm: "@ai-sdk/openai",
+        api: "https://proxy.example/v1",
+        options: { headers: { "x-provider": "default" }, body: { store: false } },
+        models: { chat: {} },
+      },
+      native: {
+        package: "aisdk:@ai-sdk/openai",
+        settings: { baseURL: "https://proxy.example/v1" },
+        headers: { "x-provider": "default" },
+        body: { store: false },
+        models: { chat: {} },
+      },
+    },
+    {
+      name: "model package, limits, costs, and variant overrides",
+      legacy: {
+        npm: "@ai-sdk/openai",
+        api: "https://proxy.example/v1",
+        models: {
+          chat: {
+            id: "vendor/chat",
+            name: "Custom chat",
+            provider: { npm: "@ai-sdk/anthropic", api: "https://model.example/v1" },
+            limit: { context: 100000, input: 80000, output: 16000 },
+            cost: { input: 1, output: 2, cache_read: 0.1, cache_write: 0.2 },
+            options: { temperature: 0.2 },
+            variants: { high: { effort: "high" } },
+          },
+        },
+      },
+      native: {
+        package: "aisdk:@ai-sdk/openai",
+        settings: { baseURL: "https://proxy.example/v1" },
+        models: {
+          chat: {
+            modelID: "vendor/chat",
+            name: "Custom chat",
+            package: "aisdk:@ai-sdk/anthropic",
+            settings: { baseURL: "https://model.example/v1", temperature: 0.2 },
+            limit: { context: 100000, input: 80000, output: 16000 },
+            cost: { input: 1, output: 2, cache: { read: 0.1, write: 0.2 } },
+            variants: [{ id: "high", settings: { effort: "high" } }],
+          },
+        },
+      },
+    },
+    {
+      name: "zero costs and omitted cache costs",
+      legacy: { models: { chat: { cost: { input: 0, output: 0 } } } },
+      native: { models: { chat: { cost: { input: 0, output: 0 } } } },
+    },
+  ]) {
+    it.effect(`matches native configuration for migrated ${scenario.name}`, () =>
+      Effect.gen(function* () {
+        const catalog = yield* Catalog.Service
+        const result = ConfigNormalize.normalize({ provider: { legacy: scenario.legacy } })
+        if (result.type !== "normalized") throw new Error("Expected normalized config")
+        expect(result.diagnostics).toEqual([])
+
+        yield* addPlugin([
+          new Document({ type: "document", info: decode({ providers: { native: scenario.native } }) }),
+          new Document({ type: "document", info: decode(result.encoded) }),
+        ])
+
+        const native = required(yield* catalog.model.get(Provider.ID.make("native"), Model.ID.make("chat")))
+        const migrated = required(yield* catalog.model.get(Provider.ID.make("legacy"), Model.ID.make("chat")))
+        expect({ ...migrated, providerID: native.providerID }).toEqual(native)
+        for (const variant of native.variants) {
+          const expected = yield* ModelResolver.withVariant(native, variant.id)
+          const actual = yield* ModelResolver.withVariant(migrated, variant.id)
+          expect({ ...actual, providerID: expected.providerID }).toEqual(expected)
+        }
+      }),
+    )
+  }
+
+  it.effect("preserves existing catalog metadata when migrated fields are omitted", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const providerID = Provider.ID.make("custom")
+      const modelID = Model.ID.make("chat")
+      yield* catalog.transform((draft) => {
+        draft.model.update(providerID, modelID, (model) => {
+          model.package = "aisdk:@ai-sdk/anthropic"
+          model.settings = { baseURL: "https://catalog.example/v1" }
+          model.capabilities = { tools: false, input: ["audio"], output: ["audio"] }
+          model.limit = { context: 100000, input: 80000, output: 16000 }
+          model.cost = [
+            {
+              input: Money.USDPerMillionTokens.make(1),
+              output: Money.USDPerMillionTokens.make(2),
+              cache: { read: Money.USDPerMillionTokens.zero, write: Money.USDPerMillionTokens.zero },
+            },
+          ]
+          model.variants = [{ id: Model.VariantID.make("high"), settings: { effort: "high" } }]
+        })
+      })
+      const before = required(yield* catalog.model.get(providerID, modelID))
+      const result = ConfigNormalize.normalize({ provider: { custom: { models: { chat: {} } } } })
+      if (result.type !== "normalized") throw new Error("Expected normalized config")
+      expect(result.diagnostics).toEqual([])
+      yield* addPlugin([new Document({ type: "document", info: decode(result.encoded) })])
+      expect(yield* catalog.model.get(providerID, modelID)).toEqual(before)
     }),
   )
 
