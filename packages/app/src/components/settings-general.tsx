@@ -348,6 +348,35 @@ export const SettingsGeneral: Component = () => {
         </SettingsRow>
 
         <SettingsRow
+          title="Auto-Drive"
+          description="Automatically continue executing when the model proposes next steps or asks to proceed upon turn completion."
+        >
+          <div data-action="settings-auto-drive">
+            <Switch
+              checked={settings.general.autoDrive()}
+              onChange={(checked) => settings.general.setAutoDrive(checked)}
+            />
+          </div>
+        </SettingsRow>
+
+        <Show when={settings.general.autoDrive()}>
+          <SettingsRow
+            title="Auto-Drive Prompt"
+            description="Prompt content sent to the model for automatic continuation."
+          >
+            <div class="w-72" data-action="settings-auto-drive-prompt">
+              <TextField
+                value={settings.general.autoDrivePrompt()}
+                onChange={(value) => settings.general.setAutoDrivePrompt(value)}
+                placeholder="Please proceed with the next step."
+                variant="normal"
+                size="small"
+              />
+            </div>
+          </SettingsRow>
+        </Show>
+
+        <SettingsRow
           title={language.t("settings.general.row.reasoningSummaries.title")}
           description={language.t("settings.general.row.reasoningSummaries.description")}
         >

@@ -20,6 +20,16 @@ export const Plugin = define({
         command.description = "review changes [commit|branch|pr], defaults to uncommitted"
         command.subtask = true
       })
+      draft.update("autodrive", (command) => {
+        command.template =
+          "Please execute the following task with Auto-Drive enabled. Continuously execute subsequent steps, code modifications, and test verifications until fully finished without stopping mid-way for confirmation.\n\nTask:\n$ARGUMENTS"
+        command.description = "autonomous Auto-Drive continuous execution mode"
+      })
+      draft.update("auto-drive", (command) => {
+        command.template =
+          "Please execute the following task with Auto-Drive enabled. Continuously execute subsequent steps, code modifications, and test verifications until fully finished without stopping mid-way for confirmation.\n\nTask:\n$ARGUMENTS"
+        command.description = "autonomous Auto-Drive continuous execution mode"
+      })
     })
   }),
 })

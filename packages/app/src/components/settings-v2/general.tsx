@@ -334,6 +334,34 @@ export const SettingsGeneralV2: Component<{
         <ShellSetting controller={shell} />
 
         <SettingsRowV2
+          title="Auto-Drive"
+          description="Automatically continue executing when the model proposes next steps or asks to proceed upon turn completion."
+        >
+          <div data-action="settings-auto-drive">
+            <Switch
+              checked={settings.general.autoDrive()}
+              onChange={(checked) => settings.general.setAutoDrive(checked)}
+            />
+          </div>
+        </SettingsRowV2>
+
+        <Show when={settings.general.autoDrive()}>
+          <SettingsRowV2
+            title="Auto-Drive Prompt"
+            description="Prompt content sent to the model for automatic continuation."
+          >
+            <div class="w-72" data-action="settings-auto-drive-prompt">
+              <TextInputV2
+                value={settings.general.autoDrivePrompt()}
+                onInput={(event) => settings.general.setAutoDrivePrompt(event.currentTarget.value)}
+                placeholder="Please proceed with the next step."
+                appearance="base"
+              />
+            </div>
+          </SettingsRowV2>
+        </Show>
+
+        <SettingsRowV2
           title={language.t("settings.general.row.reasoningSummaries.title")}
           description={language.t("settings.general.row.reasoningSummaries.description")}
         >

@@ -86,6 +86,22 @@ const layer = Layer.effect(
         subtask: true,
         hints: hints(PROMPT_REVIEW),
       }
+      commands["autodrive"] = {
+        name: "autodrive",
+        description: "autonomous Auto-Drive continuous execution mode",
+        source: "command",
+        template:
+          "Please execute the following task with Auto-Drive enabled. Continuously execute subsequent steps, code modifications, and test verifications until fully finished without stopping mid-way for confirmation.\n\nTask:\n$ARGUMENTS",
+        hints: ["$ARGUMENTS"],
+      }
+      commands["auto-drive"] = {
+        name: "auto-drive",
+        description: "autonomous Auto-Drive continuous execution mode",
+        source: "command",
+        template:
+          "Please execute the following task with Auto-Drive enabled. Continuously execute subsequent steps, code modifications, and test verifications until fully finished without stopping mid-way for confirmation.\n\nTask:\n$ARGUMENTS",
+        hints: ["$ARGUMENTS"],
+      }
 
       for (const [name, command] of Object.entries(cfg.command ?? {})) {
         commands[name] = {
