@@ -1054,17 +1054,25 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
       events.push(...result.events)
     }
 
-    if (finishReason !== undefined && state.finishReason === undefined && Object.keys(pendingTools).length > 0)
+    const contentFiltered = finishReason?.normalized === "content-filter"
+    if (
+      finishReason !== undefined &&
+      !contentFiltered &&
+      state.finishReason === undefined &&
+      Object.keys(pendingTools).length
+    )
       return yield* ProviderShared.eventError(
         ADAPTER,
         "OpenAI Chat tool call delta is missing id or name",
         ProviderShared.encodeJson(event),
       )
 
-    // Finalize accumulated tool inputs eagerly when finish_reason arrives so
-    // valid calls and malformed local calls settle independently.
+    // A content filter terminates the response without confirming pending tool calls.
     const finished =
-      finishReason !== undefined && state.finishReason === undefined && Object.keys(tools).length > 0
+      finishReason !== undefined &&
+      !contentFiltered &&
+      state.finishReason === undefined &&
+      Object.keys(tools).length > 0
         ? yield* ToolStream.finishAll(ADAPTER, tools)
         : undefined
 

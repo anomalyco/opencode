@@ -1460,6 +1460,62 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("does not finalize streamed tool calls when content is filtered", () =>
+    Effect.gen(function* () {
+      const body = sseEvents(
+        deltaChunk({
+          tool_calls: [{ index: 0, id: "call_1", function: { name: "lookup", arguments: '{"query":"weather"' } }],
+        }),
+        deltaChunk({}, "content_filter"),
+      )
+      const response = yield* LLMClient.generate(
+        LLMRequest.update(request, {
+          tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
+        }),
+      ).pipe(Effect.provide(fixedResponse(body)))
+
+      expect(response.events).toEqual([
+        { type: "step-start", index: 0 },
+        {
+          type: "tool-input-start",
+          id: "call_1",
+          name: "lookup",
+          providerExecuted: undefined,
+          providerMetadata: undefined,
+        },
+        {
+          type: "tool-input-delta",
+          id: "call_1",
+          name: "lookup",
+          text: '{"query":"weather"',
+          input: { query: "weather" },
+        },
+        {
+          type: "step-finish",
+          index: 0,
+          reason: { normalized: "content-filter", raw: "content_filter" },
+          usage: undefined,
+          providerMetadata: undefined,
+        },
+        { type: "finish", reason: { normalized: "content-filter", raw: "content_filter" }, usage: undefined },
+      ])
+      expect(response.toolCalls).toEqual([])
+
+      const missingIdentity = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              deltaChunk({ tool_calls: [{ index: 0, id: "call_2", function: { arguments: "{}" } }] }),
+              deltaChunk({}, "content_filter"),
+            ),
+          ),
+        ),
+      )
+      expect(missingIdentity.finishReason).toEqual({ normalized: "content-filter", raw: "content_filter" })
+      expect(missingIdentity.toolCalls).toEqual([])
+    }),
+  )
+
   it.effect("ignores empty identity fields on later tool call deltas", () =>
     Effect.gen(function* () {
       const body = sseEvents(
