@@ -141,5 +141,5 @@ it.live("updates completed assistant message content through the session HTTP AP
       _tag: "ConflictError",
       resource: state.assistant,
     })
-  }).pipe(Effect.scoped),
+  }),
 )

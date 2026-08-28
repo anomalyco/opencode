@@ -6,7 +6,7 @@ import { Context, Effect, Fiber, type JsonSchema, Layer, Semaphore, Stream } fro
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Bus } from "../bus.js"
 
-import { MCP } from "../mcp/index.js"
+import { Mcp } from "../mcp/index.js"
 import { Permission } from "../permission.js"
 import { Tool } from "../tool.js"
 
@@ -26,12 +26,12 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Mc
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const mcp = yield* MCP.Service
+    const mcp = yield* Mcp.Service
     const tools = yield* Tool.Service
     const bus = yield* Bus.Service
     const permission = yield* Permission.Service
     const lock = Semaphore.makeUnsafe(1)
-    let discovered: MCP.Tool[] = []
+    let discovered: Mcp.Tool[] = []
 
     // Register once after initial discovery; only subsequent updates need a debounced reload.
     const initial = yield* lock
@@ -134,5 +134,5 @@ export const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Tool.node, MCP.node, Bus.node, Permission.node],
+  deps: [Tool.node, Mcp.node, Bus.node, Permission.node],
 })

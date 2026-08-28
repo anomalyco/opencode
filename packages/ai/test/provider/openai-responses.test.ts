@@ -2750,6 +2750,227 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("concludes reasoning at implicit summary boundaries", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(
+        LLMRequest.update(request, { providerOptions: { store: false } }),
+      ).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              {
+                type: "response.output_item.added",
+                item: { type: "reasoning", id: "rs_1", encrypted_content: null },
+              },
+              { type: "response.reasoning_summary_part.added", item_id: "rs_1", summary_index: 0 },
+              { type: "response.reasoning_summary_text.delta", item_id: "rs_1", summary_index: 0, delta: "First" },
+              // The next part is enough to conclude the previous one even when
+              // its done event is delayed.
+              { type: "response.reasoning_summary_part.added", item_id: "rs_1", summary_index: 1 },
+              { type: "response.reasoning_summary_part.done", item_id: "rs_1", summary_index: 0 },
+              { type: "response.reasoning_summary_text.delta", item_id: "rs_1", summary_index: 1, delta: "Second" },
+              { type: "response.reasoning_summary_part.done", item_id: "rs_1", summary_index: 1 },
+              // Some compatible providers begin the next part with its first delta.
+              { type: "response.reasoning_summary_text.delta", item_id: "rs_1", summary_index: 2, delta: "Third" },
+              {
+                type: "response.output_item.done",
+                item: { type: "reasoning", id: "rs_1", encrypted_content: "encrypted-state" },
+              },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.reasoning).toBe("FirstSecondThird")
+      expect(response.events.filter((event) => event.type.startsWith("reasoning-"))).toEqual([
+        {
+          type: "reasoning-start",
+          id: "rs_1:0",
+          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: null } },
+        },
+        { type: "reasoning-delta", id: "rs_1:0", text: "First", providerMetadata: undefined },
+        { type: "reasoning-end", id: "rs_1:0", providerMetadata: { openai: { itemId: "rs_1" } } },
+        {
+          type: "reasoning-start",
+          id: "rs_1:1",
+          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: null } },
+        },
+        { type: "reasoning-delta", id: "rs_1:1", text: "Second", providerMetadata: undefined },
+        {
+          type: "reasoning-end",
+          id: "rs_1:1",
+          providerMetadata: { openai: { itemId: "rs_1" } },
+        },
+        {
+          type: "reasoning-start",
+          id: "rs_1:2",
+          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: null } },
+        },
+        { type: "reasoning-delta", id: "rs_1:2", text: "Third", providerMetadata: undefined },
+        {
+          type: "reasoning-end",
+          id: "rs_1:2",
+          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
+        },
+      ])
+    }),
+  )
+
+  it.effect("rejects a reasoning item that starts before the previous item ends", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "response.output_item.added", item: { type: "reasoning", id: "rs_1" } },
+              { type: "response.reasoning_summary_text.delta", item_id: "rs_1", summary_index: 0, delta: "First" },
+              { type: "response.output_item.added", item: { type: "reasoning", id: "rs_2" } },
+            ),
+          ),
+        ),
+        Effect.flip,
+      )
+
+      expect(error.reason._tag).toBe("InvalidProviderOutput")
+      expect(error.message).toContain("started reasoning before the previous item ended")
+    }),
+  )
+
+  it.effect("concludes text at implicit message boundaries", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              // An item that never streams text is untracked at the boundary too.
+              { type: "response.output_item.added", item: { type: "message", id: "msg_0" } },
+              { type: "response.output_item.added", item: { type: "message", id: "msg_1" } },
+              { type: "response.output_text.delta", item_id: "msg_1", delta: "First" },
+              // The previous message's done event is missing; the next message
+              // item is the boundary for its open text.
+              { type: "response.output_item.added", item: { type: "message", id: "msg_2" } },
+              // Late deltas for concluded or untracked messages must stay no-ops.
+              { type: "response.output_text.delta", item_id: "msg_1", delta: " late" },
+              { type: "response.output_text.delta", item_id: "msg_0", delta: " stale" },
+              { type: "response.output_text.delta", item_id: "msg_2", delta: "Second" },
+              { type: "response.output_item.done", item: { type: "message", id: "msg_2" } },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.text).toBe("FirstSecond")
+      expect(response.events.filter((event) => event.type.startsWith("text-"))).toMatchObject([
+        { type: "text-start", id: "msg_1" },
+        { type: "text-delta", id: "msg_1", text: "First" },
+        { type: "text-end", id: "msg_1" },
+        { type: "text-start", id: "msg_2" },
+        { type: "text-delta", id: "msg_2", text: "Second" },
+        { type: "text-end", id: "msg_2" },
+      ])
+    }),
+  )
+
+  it.effect("opens the tool lifecycle for a done-only function call", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              // No output_item.added: the call arrives only as a completed item.
+              {
+                type: "response.output_item.done",
+                item: {
+                  type: "function_call",
+                  id: "fc_1",
+                  call_id: "call_1",
+                  name: "lookup",
+                  arguments: '{"query":"weather"}',
+                },
+              },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.events.filter((event) => event.type.startsWith("tool-"))).toMatchObject([
+        { type: "tool-input-start", id: "call_1", name: "lookup" },
+        { type: "tool-input-end", id: "call_1", name: "lookup" },
+        { type: "tool-call", id: "call_1", name: "lookup", input: { query: "weather" } },
+      ])
+      expect(response.finishReason.normalized).toBe("tool-calls")
+    }),
+  )
+
+  it.effect("ignores duplicate item boundary events", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "response.output_item.added", item: { type: "reasoning", id: "rs_1" } },
+              // Duplicate added for a known item is not overlap and must no-op.
+              { type: "response.output_item.added", item: { type: "reasoning", id: "rs_1" } },
+              { type: "response.reasoning_summary_text.delta", item_id: "rs_1", summary_index: 0, delta: "Think" },
+              { type: "response.output_item.done", item: { type: "reasoning", id: "rs_1" } },
+              { type: "response.output_item.done", item: { type: "reasoning", id: "rs_1" } },
+              {
+                type: "response.output_item.added",
+                item: { type: "function_call", id: "fc_1", call_id: "call_1", name: "lookup", arguments: "" },
+              },
+              {
+                type: "response.output_item.added",
+                item: { type: "function_call", id: "fc_1", call_id: "call_1", name: "lookup", arguments: "" },
+              },
+              { type: "response.function_call_arguments.delta", item_id: "fc_1", delta: '{"query":"weather"}' },
+              {
+                type: "response.output_item.done",
+                item: {
+                  type: "function_call",
+                  id: "fc_1",
+                  call_id: "call_1",
+                  name: "lookup",
+                  arguments: '{"query":"weather"}',
+                },
+              },
+              {
+                type: "response.output_item.done",
+                item: {
+                  type: "function_call",
+                  id: "fc_1",
+                  call_id: "call_1",
+                  name: "lookup",
+                  arguments: '{"query":"weather"}',
+                },
+              },
+              // Duplicates that drop the item id still resolve the same call.
+              {
+                type: "response.output_item.done",
+                item: { type: "function_call", call_id: "call_1", name: "lookup", arguments: '{"query":"weather"}' },
+              },
+              {
+                type: "response.output_item.added",
+                item: { type: "function_call", call_id: "call_1", name: "lookup", arguments: "" },
+              },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.reasoning).toBe("Think")
+      expect(response.events.filter((event) => event.type === "reasoning-start")).toHaveLength(1)
+      expect(response.events.filter((event) => event.type === "reasoning-end")).toHaveLength(1)
+      expect(response.events.filter((event) => event.type === "tool-input-start")).toHaveLength(1)
+      expect(response.events.filter(LLMEvent.is.toolCall)).toEqual([
+        expect.objectContaining({ id: "call_1", input: { query: "weather" } }),
+      ])
+    }),
+  )
+
   it.effect("reconciles reasoning summaries that arrive only as finals", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(

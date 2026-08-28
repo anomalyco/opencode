@@ -25,6 +25,7 @@ for (const viewport of [
     const mock = await openDraft(page)
     const pending = await submitPending(page, mock)
 
+    expect(mock.worktreeRequests).toEqual([expect.objectContaining({ from: directory })])
     await expect(pending.message).toBeInViewport()
     await expect(pending.shimmer).toBeInViewport()
     await testInfo.attach("creating-worktree", {
@@ -184,6 +185,7 @@ test("restores the draft after closing and revisiting a pending session that fai
 async function openDraft(page: Page, options?: { failSessionCreate?: boolean }) {
   const worktree = Promise.withResolvers<{ status: number; json: { directory?: string; message?: string } }>()
   const calls: string[] = []
+  const worktreeRequests: Record<string, unknown>[] = []
   const creates: Record<string, unknown>[] = []
   const prompts: { sessionID: string; body: Record<string, unknown> }[] = []
   const project = {
@@ -216,7 +218,10 @@ async function openDraft(page: Page, options?: { failSessionCreate?: boolean }) 
   page.on("request", (request) => {
     if (request.method() !== "POST") return
     const path = new URL(request.url()).pathname
-    if (path === `/api/worktree/${projectID}`) calls.push("worktree")
+    if (path === `/api/worktree/${projectID}`) {
+      calls.push("worktree")
+      worktreeRequests.push(request.postDataJSON())
+    }
     if (path === "/api/session") calls.push("session")
     if (/^\/api\/session\/[^/]+\/prompt$/.test(path)) calls.push("prompt")
   })
@@ -274,7 +279,7 @@ async function openDraft(page: Page, options?: { failSessionCreate?: boolean }) 
   await page.getByRole("menuitem", { name: "New workspace", exact: true }).click()
   await expect(page.getByRole("button", { name: "New workspace", exact: true })).toBeVisible()
   await expect(page.locator('[data-component="composer-editor"]')).toBeEditable()
-  return { worktree, calls, creates, prompts }
+  return { worktree, worktreeRequests, calls, creates, prompts }
 }
 
 async function submitPending(page: Page, mock: Awaited<ReturnType<typeof openDraft>>) {

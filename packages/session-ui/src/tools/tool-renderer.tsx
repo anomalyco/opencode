@@ -20,7 +20,6 @@ import { useFileComponent } from "@opencode-ai/ui/context/file"
 import { type UiI18n, useI18n } from "@opencode-ai/ui/context/i18n"
 import { BasicTool, GenericTool } from "../components/basic-tool"
 import { Accordion } from "@opencode-ai/ui/accordion"
-import { Badge } from "@opencode-ai/ui/badge"
 import { StickyAccordionHeader } from "@opencode-ai/ui/sticky-accordion-header"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
@@ -503,10 +502,10 @@ export function CurrentContextToolGroup(props: {
     ].join(", "),
   )
   const label = createMemo(() => {
-    const tools = names()
-    const text = i18n.t("ui.messagePart.tools.used", { tools })
-    const index = text.indexOf(tools)
-    return { text, before: text.slice(0, index).trim(), after: text.slice(index + tools.length).trim() }
+    const title = `${tools().length} ${names()}`
+    const text = i18n.t("ui.messagePart.tools.used", { tools: title })
+    const index = text.indexOf(title)
+    return { text, title, before: text.slice(0, index).trim(), after: text.slice(index + title.length).trim() }
   })
   const items = createMemo(() =>
     props.parts.reduce<(SessionMessageAssistantTool[] | (SessionMessageAssistantReasoning & { id: string }))[]>(
@@ -564,11 +563,10 @@ export function CurrentContextToolGroup(props: {
               <Show when={label().before}>
                 {(before) => <span data-slot="context-tool-group-prefix">{before()}</span>}
               </Show>
-              <span data-slot="basic-tool-tool-title">{names()}</span>
+              <span data-slot="basic-tool-tool-title">{label().title}</span>
               <Show when={label().after}>
                 {(after) => <span data-slot="context-tool-group-prefix">{after()}</span>}
               </Show>
-              <Badge>{tools().length}</Badge>
             </span>
           </div>
         }
