@@ -1,10 +1,11 @@
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
 import { testRender } from "@opentui/solid"
-import { onMount } from "solid-js"
-import { DialogOpen, DialogOpenKey, loadDialogOpen } from "../../../src/component/dialog-open"
+import { createSignal, onMount } from "solid-js"
+import type { SessionInfo } from "@opencode-ai/client"
+import { DialogOpen, DialogOpenKey } from "../../../src/component/dialog-open"
 import { ConfigProvider } from "../../../src/config"
-import { ClientProvider, useClient } from "../../../src/context/client"
+import { ClientProvider } from "../../../src/context/client"
 import { DataProvider, useData } from "../../../src/context/data"
 import { Keymap } from "../../../src/context/keymap"
 import { LocationProvider, useLocation } from "../../../src/context/location"
@@ -131,7 +132,7 @@ test("shows the current project and opens its root", async () => {
   }
 })
 
-test("waits for sessions before showing the populated picker", async () => {
+test("shows projects while sessions refresh and preserves the selected project", async () => {
   let resolveSessions!: (response: Response) => void
   const sessions = new Promise<Response>((resolve) => (resolveSessions = resolve))
   const fixture = await renderOpen((url) => {
@@ -157,8 +158,9 @@ test("waits for sessions before showing the populated picker", async () => {
   })
 
   try {
-    await fixture.app.renderOnce()
-    expect(fixture.app.captureCharFrame()).not.toContain("Search sessions and projects")
+    await fixture.app.waitForFrame((frame) => frame.includes("Second project") && frame.includes("Refreshing"))
+    expect(fixture.app.captureCharFrame()).toContain("Search sessions and projects")
+    fixture.app.mockInput.pressArrow("down")
 
     resolveSessions(
       json({
@@ -177,12 +179,128 @@ test("waits for sessions before showing the populated picker", async () => {
       }),
     )
     await fixture.app.waitForFrame((frame) => frame.includes("Recent session") && frame.includes("Second project"))
-    fixture.app.mockInput.pressArrow("down")
-    fixture.app.mockInput.pressArrow("down")
     fixture.app.mockInput.pressEnter()
     await fixture.app.waitFor(() => fixture.route.data.type === "home")
 
     expect(fixture.route.data).toEqual({ type: "home", location: { directory: "/tmp/opencode/second" } })
+  } finally {
+    await fixture.dispose()
+  }
+})
+
+const recentSession = {
+  id: "ses_recent",
+  projectID: "proj_recent",
+  cost: 0,
+  tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+  time: { created: 1, updated: 2 },
+  title: "Recent session",
+  location: { directory: "/fixture" },
+}
+
+test("sessions remain selectable while projects are still loading", async () => {
+  const projects = Promise.withResolvers<Response>()
+  const fixture = await renderOpen((url) => {
+    if (url.pathname === "/api/session") return json({ data: [recentSession], cursor: {} })
+    if (url.pathname === "/api/project") return projects.promise
+    return undefined
+  })
+  try {
+    await fixture.app.waitForFrame((frame) => frame.includes("Recent session") && frame.includes("Refreshing"))
+    fixture.app.mockInput.pressEnter()
+    await fixture.app.waitFor(() => fixture.route.data.type === "session")
+    expect(fixture.route.data).toEqual({ type: "session", sessionID: recentSession.id })
+  } finally {
+    projects.resolve(json([]))
+    await fixture.dispose()
+  }
+})
+
+test("shows hydrated sessions immediately without waiting for either read", async () => {
+  const sessions = Promise.withResolvers<Response>()
+  const projects = Promise.withResolvers<Response>()
+  const fixture = await renderOpen(
+    (url) => {
+      if (url.pathname === "/api/session") return sessions.promise
+      if (url.pathname === "/api/project") return projects.promise
+      return undefined
+    },
+    ({ data }) => data.session.remember(recentSession),
+  )
+  try {
+    await fixture.app.waitForFrame((frame) => frame.includes("Recent session") && frame.includes("Refreshing"))
+    fixture.app.mockInput.pressEnter()
+    await fixture.app.waitFor(() => fixture.route.data.type === "session")
+    expect(fixture.route.data).toEqual({ type: "session", sessionID: recentSession.id })
+  } finally {
+    sessions.resolve(json({ data: [], cursor: {} }))
+    projects.resolve(json([]))
+    await fixture.dispose()
+  }
+})
+
+test("keeps the previous recent list usable when reopening fails to refresh", async () => {
+  let requests = 0
+  const fixture = await renderOpen((url) => {
+    if (url.pathname === "/api/session")
+      return requests++ === 0
+        ? json({ data: [recentSession], cursor: {} })
+        : new Response("Unavailable", { status: 503 })
+    return undefined
+  })
+  try {
+    await fixture.app.waitForFrame((frame) => frame.includes("Recent session") && !frame.includes("Refreshing"))
+    fixture.app.mockInput.pressEscape()
+    await fixture.app.waitForFrame((frame) => !frame.includes("Recent session"))
+    fixture.open()
+    await fixture.app.waitForFrame((frame) => frame.includes("Could not refresh sessions"))
+    expect(fixture.app.captureCharFrame()).toContain("Recent session")
+    fixture.app.mockInput.pressEnter()
+    await fixture.app.waitFor(() => fixture.route.data.type === "session")
+    expect(fixture.route.data).toEqual({ type: "session", sessionID: recentSession.id })
+  } finally {
+    await fixture.dispose()
+  }
+})
+
+test("shows an initial loading shell instead of reporting an empty list", async () => {
+  const sessions = Promise.withResolvers<Response>()
+  const projects = Promise.withResolvers<Response>()
+  const fixture = await renderOpen((url) => {
+    if (url.pathname === "/api/session") return sessions.promise
+    if (url.pathname === "/api/project") return projects.promise
+    return undefined
+  })
+  try {
+    await fixture.app.waitForFrame(
+      (frame) => frame.includes("Search sessions and projects") && frame.includes("Refreshing"),
+    )
+    expect(fixture.app.captureCharFrame()).not.toContain("No items available")
+    await fixture.app.mockInput.typeText("missing")
+    await fixture.app.waitForFrame((frame) => frame.includes("Searching sessions and projects"))
+    expect(fixture.app.captureCharFrame()).not.toContain("No matches")
+    sessions.resolve(json({ data: [], cursor: {} }))
+    projects.resolve(json([]))
+    await fixture.app.waitForFrame((frame) => frame.includes("No matches") && !frame.includes("Refreshing"))
+  } finally {
+    sessions.resolve(json({ data: [], cursor: {} }))
+    projects.resolve(json([]))
+    await fixture.dispose()
+  }
+})
+
+test("reports both refresh failures while keeping hydrated sessions usable", async () => {
+  const fixture = await renderOpen(
+    (url) => {
+      if (url.pathname === "/api/session" || url.pathname === "/api/project")
+        return new Response("Unavailable", { status: 503 })
+      return undefined
+    },
+    ({ data }) => data.session.remember(recentSession),
+  )
+  try {
+    await fixture.app.waitForFrame((frame) => frame.includes("Could not refresh sessions and projects"))
+    expect(fixture.app.captureCharFrame()).toContain("Recent session")
   } finally {
     await fixture.dispose()
   }
@@ -291,20 +409,21 @@ async function renderOpen(
   let location!: ReturnType<typeof useLocation>
   let data!: ReturnType<typeof useData>
   let storage!: ReturnType<typeof useStorage>
+  let open!: () => void
 
   function Probe() {
     const dialog = useDialog()
-    const client = useClient()
+    const [sessions, setSessions] = createSignal<SessionInfo[]>([])
     route = useRoute()
     location = useLocation()
     data = useData()
     storage = useStorage()
-    onMount(
-      () =>
-        void Promise.all([beforeOpen?.({ data, location }), loadDialogOpen(data, client)]).then(([, sessions]) =>
-          dialog.replace(() => <DialogOpen sessions={sessions} />, undefined, { key: DialogOpenKey, size: "large" }),
-        ),
-    )
+    open = () =>
+      dialog.replace(() => <DialogOpen sessions={sessions()} onLoad={setSessions} />, undefined, {
+        key: DialogOpenKey,
+        size: "large",
+      })
+    onMount(() => void Promise.resolve(beforeOpen?.({ data, location })).then(open))
     return null
   }
 
@@ -344,6 +463,7 @@ async function renderOpen(
 
   return {
     app,
+    open: () => open(),
     get route() {
       return route
     },

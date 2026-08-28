@@ -8,6 +8,102 @@ import path from "node:path"
 import { createEventStream, createFetch, directory, json } from "./fixture/tui-client"
 import { tmpdir } from "./fixture/fixture"
 
+test.each([100, 44])("Ctrl-O is immediate, dismissible, and prunes cached deletions at width %s", async (width) => {
+  const setup = await createTestRenderer({ width, height: 30, useThread: false, kittyKeyboard: true })
+  setup.renderer.start()
+  const ready = Promise.withResolvers<void>()
+  const requested = Promise.withResolvers<void>()
+  const response = Promise.withResolvers<Response>()
+  const refresh = Promise.withResolvers<Response>()
+  const events = createEventStream()
+  const cachedSession = {
+    id: "ses_cached",
+    title: "Cached session",
+    projectID: "proj_fixture",
+    location: { directory: "/fixture" },
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    time: { created: 1, updated: 2 },
+  }
+  let requests = 0
+  const calls = createFetch((url) => {
+    if (url.pathname === "/api/session") {
+      requests++
+      requested.resolve()
+      if (requests === 1) return response.promise
+      if (requests === 2 || requests > 3) return refresh.promise.then((response) => response.clone())
+      return json({ data: [cachedSession], cursor: {} })
+    }
+    if (url.pathname === "/api/project")
+      return json([
+        {
+          id: "proj_fixture",
+          canonical: "/fixture",
+          name: "Fixture project",
+          time: { created: 1, updated: 2 },
+          sandboxes: [],
+        },
+      ])
+    return undefined
+  }, events)
+  const server = Bun.serve({ port: 0, fetch: (request) => calls.fetch(request) })
+  try {
+    const { run } = await import("../src/app")
+    const task = Effect.runPromise(
+      run({
+        app: { name: "test", version: "test", channel: "test" },
+        server: { endpoint: { url: server.url.toString() } },
+        config: { get: async () => ({ animations: false }), update: async () => ({}) },
+        packages: { resolve: async () => undefined },
+        terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: ready.resolve }),
+        args: {},
+        log: () => {},
+      }).pipe(Effect.provide(AppNodeBuilder.build(Global.node)), Effect.provide(FileSystem.layerNoop({}))),
+    )
+    await ready.promise
+    await setup.waitForFrame((frame) => frame.includes("commands"))
+    setup.mockInput.pressKey("o", { ctrl: true })
+    await requested.promise
+    await setup.renderOnce()
+    expect(setup.captureCharFrame()).toContain("Fixture project")
+    expect(setup.captureCharFrame()).toContain("Refreshing")
+    setup.mockInput.pressKey("o", { ctrl: true })
+    expect(requests).toBe(1)
+    setup.mockInput.pressEscape()
+    await setup.waitForFrame((frame) => !frame.includes("Fixture project"))
+    response.resolve(json({ data: [{ ...cachedSession, id: "ses_disposed", title: "Disposed response" }], cursor: {} }))
+    await setup.renderOnce()
+    expect(setup.captureCharFrame()).not.toContain("Fixture project")
+    setup.mockInput.pressKey("o", { ctrl: true })
+    await setup.waitForFrame((frame) => frame.includes("Refreshing"))
+    expect(setup.captureCharFrame()).not.toContain("Disposed")
+    setup.mockInput.pressEscape()
+    await setup.waitForFrame((frame) => !frame.includes("Fixture project"))
+    setup.mockInput.pressKey("o", { ctrl: true })
+    await setup.waitForFrame((frame) => frame.includes("Cached"))
+    events.emit({
+      id: "evt_deleted",
+      created: 1,
+      type: "session.deleted",
+      durable: { aggregateID: "ses_cached", seq: 1, version: 2 },
+      data: { sessionID: "ses_cached" },
+    })
+    await setup.waitForFrame((frame) => !frame.includes("Cached"))
+    setup.mockInput.pressEscape()
+    await setup.waitForFrame((frame) => !frame.includes("Fixture project"))
+    setup.mockInput.pressKey("o", { ctrl: true })
+    await setup.waitForFrame((frame) => frame.includes("Refreshing"))
+    expect(setup.captureCharFrame()).not.toContain("Cached")
+    setup.renderer.destroy()
+    await task
+  } finally {
+    response.resolve(json({ data: [], cursor: {} }))
+    refresh.resolve(json({ data: [], cursor: {} }))
+    if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+    await server.stop()
+  }
+})
+
 test("SIGHUP clears title and disposes scoped resources once", async () => {
   const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
   const titles: string[] = []
