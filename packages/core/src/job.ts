@@ -213,7 +213,7 @@ export const make = Effect.gen(function* () {
         return [{ info: snapshot(next), done: job.done, scope: job.scope }, new Map(jobs).set(id, next)]
       }),
     )
-    if (result.info && result.done) yield* Deferred.succeed(result.done, result.info).pipe(Effect.ignore)
+    if (result.info && result.done) yield* Deferred.succeed(result.done, result.info)
     if (result.scope) {
       yield* Scope.close(result.scope, Exit.void).pipe(Effect.forkIn(state.scope, { startImmediately: true }))
     }
@@ -346,8 +346,7 @@ export const make = Effect.gen(function* () {
         return [{ info: snapshot(next), backgrounded: job.backgrounded }, new Map(jobs).set(id, next)]
       }),
     )
-    if (result.info && result.backgrounded)
-      yield* Deferred.succeed(result.backgrounded, result.info).pipe(Effect.ignore)
+    if (result.info && result.backgrounded) yield* Deferred.succeed(result.backgrounded, result.info)
     return result.info
   })
 
@@ -396,7 +395,7 @@ export const make = Effect.gen(function* () {
         return [{ info: snapshot(next), done: job.done, scope: job.scope }, new Map(jobs).set(id, next)]
       }),
     )
-    if (result.info && result.done) yield* Deferred.succeed(result.done, result.info).pipe(Effect.ignore)
+    if (result.info && result.done) yield* Deferred.succeed(result.done, result.info)
     if (result.scope) yield* Scope.close(result.scope, Exit.void)
     return result.info
   })

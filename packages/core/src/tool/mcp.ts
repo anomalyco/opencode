@@ -72,6 +72,7 @@ export const layer = Layer.effect(
                         server: tool.server,
                         name: tool.name,
                         args: (input ?? {}) as Record<string, unknown>,
+                        sessionID: context.sessionID,
                       })
                       .pipe(
                         Effect.catchTags({
