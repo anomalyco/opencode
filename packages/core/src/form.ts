@@ -108,6 +108,7 @@ export const layer = Layer.effect(
           Exit.isSuccess(exit) && exit.value.state.status === "pending" ? Duration.infinity : RETENTION,
       },
     )
+    const settling = new Set<ID>()
 
     const requireEntry = Effect.fn("Form.requireEntry")((id: ID) =>
       Cache.getSuccess(forms, id).pipe(
@@ -175,16 +176,24 @@ export const layer = Layer.effect(
         Effect.gen(function* () {
           const entry = yield* requireEntry(input.id)
           if (entry.state.status !== "pending") return yield* new AlreadySettledError({ id: input.id })
+          if (settling.has(input.id)) return yield* new AlreadySettledError({ id: input.id })
+          settling.add(input.id)
           const invalid = validateAnswer(entry.form.fields, input.answer)
-          if (invalid) return yield* new InvalidAnswerError({ id: input.id, message: invalid })
+          if (invalid) {
+            settling.delete(input.id)
+            return yield* new InvalidAnswerError({ id: input.id, message: invalid })
+          }
           const next: TerminalState = { status: "answered", answer: input.answer }
-          yield* bus.publish(Form.Event.Replied, {
-            id: input.id,
-            sessionID: entry.form.sessionID,
-            answer: input.answer,
-          })
+          yield* bus
+            .publish(Form.Event.Replied, {
+              id: input.id,
+              sessionID: entry.form.sessionID,
+              answer: input.answer,
+            })
+            .pipe(Effect.onError(() => Effect.sync(() => settling.delete(input.id))))
           yield* Cache.set(forms, input.id, { ...entry, state: next })
           yield* Deferred.succeed(entry.deferred, next)
+          settling.delete(input.id)
         }),
       ),
     )
@@ -194,10 +203,15 @@ export const layer = Layer.effect(
         Effect.gen(function* () {
           const entry = yield* requireEntry(id)
           if (entry.state.status !== "pending") return yield* new AlreadySettledError({ id })
+          if (settling.has(id)) return yield* new AlreadySettledError({ id })
+          settling.add(id)
           const next: TerminalState = { status: "cancelled" }
-          yield* bus.publish(Form.Event.Cancelled, { id, sessionID: entry.form.sessionID })
+          yield* bus
+            .publish(Form.Event.Cancelled, { id, sessionID: entry.form.sessionID })
+            .pipe(Effect.onError(() => Effect.sync(() => settling.delete(id))))
           yield* Cache.set(forms, id, { ...entry, state: next })
           yield* Deferred.succeed(entry.deferred, next)
+          settling.delete(id)
         }),
       ),
     )

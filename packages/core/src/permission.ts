@@ -127,6 +127,7 @@ const layer = Layer.effect(
     const saved = yield* PermissionSaved.Service
     const hooks = yield* PluginHooks.Service
     const pending = new Map<ID, Pending>()
+    const settling = new Set<ID>()
 
     yield* Effect.addFinalizer(() =>
       Effect.forEach(pending.values(), (item) => Deferred.fail(item.deferred, new DeclinedError()), {
@@ -256,11 +257,15 @@ const layer = Layer.effect(
         Effect.gen(function* () {
           const existing = pending.get(input.requestID)
           if (!existing) return yield* new NotFoundError({ requestID: input.requestID })
-          yield* bus.publish(Permission.Event.Replied, {
-            sessionID: existing.request.sessionID,
-            requestID: existing.request.id,
-            reply: input.reply,
-          })
+          if (settling.has(input.requestID)) return yield* new NotFoundError({ requestID: input.requestID })
+          settling.add(input.requestID)
+          yield* bus
+            .publish(Permission.Event.Replied, {
+              sessionID: existing.request.sessionID,
+              requestID: existing.request.id,
+              reply: input.reply,
+            })
+            .pipe(Effect.onError(() => Effect.sync(() => settling.delete(input.requestID))))
 
           if (input.reply === "reject") {
             yield* Deferred.fail(
@@ -268,15 +273,21 @@ const layer = Layer.effect(
               input.message ? new CorrectedError({ feedback: input.message }) : new DeclinedError(),
             )
             pending.delete(input.requestID)
+            settling.delete(input.requestID)
             for (const [id, item] of pending) {
               if (item.request.sessionID !== existing.request.sessionID) continue
-              yield* bus.publish(Permission.Event.Replied, {
-                sessionID: item.request.sessionID,
-                requestID: item.request.id,
-                reply: "reject",
-              })
+              if (settling.has(id)) continue
+              settling.add(id)
+              yield* bus
+                .publish(Permission.Event.Replied, {
+                  sessionID: item.request.sessionID,
+                  requestID: item.request.id,
+                  reply: "reject",
+                })
+                .pipe(Effect.onError(() => Effect.sync(() => settling.delete(id))))
               yield* Deferred.fail(item.deferred, new DeclinedError())
               pending.delete(id)
+              settling.delete(id)
             }
             return
           }
@@ -290,10 +301,12 @@ const layer = Layer.effect(
           }
           yield* Deferred.succeed(existing.deferred, undefined)
           pending.delete(input.requestID)
+          settling.delete(input.requestID)
           if (input.reply !== "always" || !existing.request.save?.length) return
 
           const rememberedRules = yield* savedRules()
           for (const [id, item] of pending) {
+            if (settling.has(id)) continue
             const rules = yield* configured(item.request.sessionID, item.agent).pipe(
               Effect.catchTag("Session.NotFoundError", () => Effect.undefined),
             )
@@ -306,13 +319,17 @@ const layer = Layer.effect(
               )
             )
               continue
-            yield* bus.publish(Permission.Event.Replied, {
-              sessionID: item.request.sessionID,
-              requestID: item.request.id,
-              reply: "always",
-            })
+            settling.add(id)
+            yield* bus
+              .publish(Permission.Event.Replied, {
+                sessionID: item.request.sessionID,
+                requestID: item.request.id,
+                reply: "always",
+              })
+              .pipe(Effect.onError(() => Effect.sync(() => settling.delete(id))))
             yield* Deferred.succeed(item.deferred, undefined)
             pending.delete(id)
+            settling.delete(id)
           }
         }),
       ),
