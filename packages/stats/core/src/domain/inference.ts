@@ -462,13 +462,16 @@ function retentionPeriods(periodStart: Date, periodEnd: Date) {
 }
 
 function statModelSql(model: string, providerModel: string) {
-  return `COALESCE(NULLIF(regexp_replace(CASE
+  const normalized = `regexp_replace(CASE
       WHEN lower(${model}) = 'big-pickle' THEN regexp_replace(NULLIF(${providerModel}, ''), '^.*/', '')
-${Object.entries(MODEL_NAME_ALIASES)
-  .map(([from, to]) => `      WHEN lower(${model}) = ${sqlString(from)} THEN ${sqlString(to)}`)
-  .join("\n")}
       ELSE ${model}
-    END, '(-free|:free|:global)+$', ''), ''), 'unknown')`
+    END, '(-free|:free|:global)+$', '')`
+  return `COALESCE(NULLIF(CASE
+${Object.entries(MODEL_NAME_ALIASES)
+  .map(([from, to]) => `      WHEN lower(${normalized}) = ${sqlString(from)} THEN ${sqlString(to)}`)
+  .join("\n")}
+      ELSE ${normalized}
+    END, ''), 'unknown')`
 }
 
 function freeTierSql(tier: string, model: string) {
