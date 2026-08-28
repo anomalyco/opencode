@@ -355,10 +355,7 @@ describe("ConfigAgentPlugin.Plugin", () => {
   )
 
   it.live("loads legacy file-based agents from config directories", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ).pipe(
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
           yield* Effect.promise(async () => {
@@ -433,10 +430,7 @@ Use native v2 fields.`,
 
   for (const testCase of sourceCases()) {
     it.effect(`rebuilds agents when a source file is ${testCase.name}`, () =>
-      Effect.acquireRelease(
-        Effect.promise(() => tmpdir()),
-        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-      ).pipe(
+      Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
         Effect.flatMap((tmp) =>
           Effect.gen(function* () {
             const directory = path.join(tmp.path, testCase.source)
@@ -471,10 +465,7 @@ Use native v2 fields.`,
   }
 
   it.effect("coalesces updates inside the debounce window into one rebuild", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ).pipe(
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
           const directory = path.join(tmp.path, "agents")
@@ -511,10 +502,7 @@ Use native v2 fields.`,
   )
 
   it.effect("ignores updates outside agent source directories", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ).pipe(
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
           const directory = path.join(tmp.path, "agents")
