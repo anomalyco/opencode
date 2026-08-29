@@ -287,6 +287,24 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
           assistantMessage.parts.push({
             type: "step-start",
           })
+        // Media the model generated itself (Gemini image models). Replay it so
+        // follow-up turns can edit the image instead of starting from scratch.
+        // Strip it under stripMedia (compaction/overflow) like other media.
+        if (part.type === "file" && isMedia(part.mime)) {
+          if (options?.stripMedia) {
+            assistantMessage.parts.push({
+              type: "text",
+              text: `[Generated ${part.mime}]`,
+            })
+          } else {
+            assistantMessage.parts.push({
+              type: "file",
+              url: part.url,
+              mediaType: part.mime,
+              filename: part.filename,
+            })
+          }
+        }
         if (part.type === "tool") {
           toolNames.add(part.tool)
           if (part.state.status === "completed") {

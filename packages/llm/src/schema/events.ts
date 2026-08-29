@@ -197,6 +197,19 @@ export const Finish = Schema.Struct({
 }).annotate({ identifier: "LLM.Event.Finish" })
 export type Finish = Schema.Schema.Type<typeof Finish>
 
+/**
+ * A complete media block emitted by the provider — currently images returned by
+ * Gemini image models as `inlineData`. Unlike text and reasoning, media arrives
+ * whole rather than as deltas, so there is no start/delta/end triple.
+ */
+export const File = Schema.Struct({
+  type: Schema.tag("file"),
+  mediaType: Schema.String,
+  data: Schema.String,
+  providerMetadata: Schema.optional(ProviderMetadata),
+}).annotate({ identifier: "LLM.Event.File" })
+export type File = Schema.Schema.Type<typeof File>
+
 export const ProviderErrorEvent = Schema.Struct({
   type: Schema.tag("provider-error"),
   message: Schema.String,
@@ -220,6 +233,7 @@ const llmEventTagged = Schema.Union([
   ToolCall,
   ToolResult,
   ToolError,
+  File,
   StepFinish,
   Finish,
   ProviderErrorEvent,
@@ -262,6 +276,7 @@ export const LLMEvent = Object.assign(llmEventTagged, {
       output: input.output === undefined ? undefined : ToolOutput.make(input.output.structured, input.output.content),
     }),
   toolError: (input: WithID<ToolError, ToolCallID>) => ToolError.make({ ...input, id: toolCallID(input.id) }),
+  file: File.make,
   stepFinish: (input: WithUsage<StepFinish>) =>
     StepFinish.make({
       ...input,
@@ -287,6 +302,7 @@ export const LLMEvent = Object.assign(llmEventTagged, {
     toolCall: llmEventTagged.guards["tool-call"],
     toolResult: llmEventTagged.guards["tool-result"],
     toolError: llmEventTagged.guards["tool-error"],
+    file: llmEventTagged.guards.file,
     stepFinish: llmEventTagged.guards["step-finish"],
     finish: llmEventTagged.guards.finish,
     providerError: llmEventTagged.guards["provider-error"],
