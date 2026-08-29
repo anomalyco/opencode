@@ -21,7 +21,7 @@ import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionRunner } from "@opencode-ai/core/session/runner/index"
 import { SessionInboxTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
-import { Context, Deferred, Effect, Exit, Fiber, Layer, LayerMap, Scope } from "effect"
+import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, LayerMap, Scope } from "effect"
 import { eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 
@@ -885,6 +885,49 @@ describe("SessionRestart background recovery", () => {
         { payload: { text: expect.stringContaining("Recovered result"), metadata: { state: "completed" } } },
       ])
       expect(yield* restarted.pendingBackground).toEqual([])
+    }),
+  )
+
+  it.effect("retains a subagent completion marker when synthetic admission conflicts", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+      const jobs = yield* Job.Service
+      const sessions = yield* Session.Service
+      const parent = Session.ID.make("ses_completion_conflict_parent")
+      const child = Session.ID.make("ses_completion_conflict_child")
+      yield* seedSessions(database, [parent])
+      yield* seedSessions(database, [child], { parent_id: parent })
+      yield* jobs.start({
+        id: child,
+        type: "subagent",
+        recovery: {
+          kind: "subagent",
+          parentSessionID: parent,
+          childSessionID: child,
+          agent: "explore",
+          description: "Completed inspection",
+        },
+        run: Effect.succeed("Recovered result"),
+      })
+      yield* jobs.wait({ id: child })
+      yield* jobs.background(child)
+      const marker = (yield* jobs.pendingBackground)[0]
+      if (!marker) return yield* Effect.die("background record missing")
+      yield* SessionInbox.admit(database.db, bus, {
+        id: marker.notificationID,
+        sessionID: parent,
+        item: { type: "user", payload: { text: "User input" }, delivery: "steer" },
+      })
+
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(scope, () => Effect.die("Admission must not wake the parent"))
+      const exit = yield* Context.get(context, SessionRestart.Service).resumeSuspendedSessions.pipe(Effect.exit)
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBeInstanceOf(Session.SyntheticConflictError)
+      expect(yield* jobs.pendingBackground).toEqual([marker])
+      expect(yield* sessions.inbox(parent)).toMatchObject([{ type: "user", payload: { text: "User input" } }])
     }),
   )
 

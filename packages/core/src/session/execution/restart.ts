@@ -9,6 +9,7 @@ import { SessionEvent } from "../event.js"
 import { SessionExecution } from "../execution.js"
 import { SessionSchema } from "../schema.js"
 import { SessionStore } from "../store.js"
+import { SubagentCompletion } from "../subagent-completion.js"
 
 const CONTINUE_AFTER_SERVER_RESTART =
   "The server restarted while you were working. Continue from where you left off without repeating completed work."
@@ -143,29 +144,12 @@ export const layer = (options?: Options) =>
         }
 
         const notify = Effect.fnUntraced(function* (result: Pick<Job.Background, "status" | "output" | "error">) {
-          if (result.status === "running") return
-          const text =
-            result.status === "completed"
-              ? (result.output ?? "Subagent completed without a text response.")
-              : result.status === "error"
-                ? (result.error ?? "Subagent failed")
-                : "Subagent cancelled"
-          yield* sessions
-            .synthetic({
-              id: background.notificationID,
-              sessionID: recovery.parentSessionID,
-              ...(suspended.has(recovery.parentSessionID) ? { resume: false } : {}),
-              description: recovery.description,
-              text: `<subagent sessionID="${recovery.childSessionID}" state="${result.status}" description="${recovery.description}">\n${text}\n</subagent>`,
-              metadata: {
-                source: "subagent",
-                childID: recovery.childSessionID,
-                agent: recovery.agent,
-                state: result.status,
-              },
-            })
-            .pipe(Effect.orDie)
-          yield* jobs.completeBackground(background.notificationID)
+          yield* SubagentCompletion.deliver(sessions, jobs, {
+            ...result,
+            recovery,
+            notificationID: background.notificationID,
+            resume: suspended.has(recovery.parentSessionID) ? false : undefined,
+          }).pipe(Effect.orDie)
         })
 
         if (background.status !== "running") {
