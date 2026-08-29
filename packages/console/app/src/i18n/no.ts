@@ -254,9 +254,9 @@ export const dict = {
   "zen.privacy.exceptionsLink": "følgende unntak",
 
   "go.title": "OpenCode Go | Rimelige kodemodeller for alle",
-  "go.banner.text": "DeepSeek V4 Flash får 2x bruksgrense i en begrenset periode",
+  "go.banner.text": "GLM-5.3-Flash får 2x bruksgrense i en begrenset periode",
   "go.meta.description":
-    "Go starter på $5 for den første måneden, deretter $10/måned, med sjenerøse bruksgrenser og pålitelig tilgang til ledende kodemodeller.",
+    "Go koster $10/måned, med sjenerøse bruksgrenser og pålitelig tilgang til ledende kodemodeller.",
   "go.hero.title": "Rimelige kodemodeller for alle",
   "go.hero.body":
     "Go bringer agent-koding til programmerere over hele verden. Med rause grenser og pålitelig tilgang til de mest kapable åpen kildekode-modellene, kan du bygge med kraftige agenter uten å bekymre deg for kostnader eller tilgjengelighet.",
@@ -265,13 +265,13 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "Abonner på Go",
   "go.cta.price": "$10/måned",
-  "go.cta.promo": "$5 første måned",
-  "go.pricing.body":
-    "Bruk med hvilken som helst agent. $5 første måned, deretter $10/måned. Fyll på kreditt ved behov. Avslutt når som helst.",
+  "go.pricing.body": "Bruk med hvilken som helst agent. $10/måned. Fyll på kreditt ved behov. Avslutt når som helst.",
   "go.graph.free": "Gratis",
   "go.graph.freePill": "Big Pickle og gratis modeller",
   "go.graph.go": "Go",
   "go.graph.label": "Forespørsler per 5 timer",
+  "go.graph.limitedRegions": "begrensede regioner",
+  "go.graph.limitedTime": "begrenset periode",
   "go.graph.usageLimits": "Bruksgrenser",
   "go.graph.aria": "Forespørsler per 5t: {{free}} vs {{go}}",
 
@@ -298,21 +298,20 @@ export const dict = {
   "go.testimonials.frank.quote": "Jeg skulle ønske jeg fortsatt var hos Nvidia.",
   "go.problem.title": "Hvilket problem løser Go?",
   "go.problem.body":
-    "Vi fokuserer på å bringe OpenCode-opplevelsen til så mange som mulig. OpenCode Go er et rimelig abonnement: $5 for den første måneden, deretter $10/måned. Det gir sjenerøse grenser og pålitelig tilgang til de mest kapable åpen kildekode-modellene.",
+    "Vi fokuserer på å bringe OpenCode-opplevelsen til så mange som mulig. OpenCode Go er et rimelig abonnement til $10/måned. Det gir sjenerøse grenser og pålitelig tilgang til de mest kapable åpen kildekode-modellene.",
   "go.problem.subtitle": " ",
   "go.problem.item1": "Rimelig abonnementspris",
   "go.problem.item2": "Rause grenser og pålitelig tilgang",
   "go.problem.item3": "Bygget for så mange programmerere som mulig",
   "go.problem.item4": "Et kuratert modellutvalg testet for agent-koding",
   "go.how.title": "Hvordan Go fungerer",
-  "go.how.body":
-    "Go starter på $5 for den første måneden, deretter $10/måned. Du kan bruke det med OpenCode eller hvilken som helst agent.",
+  "go.how.body": "Go koster $10/måned. Du kan bruke det med OpenCode eller hvilken som helst agent.",
   "go.how.step1.title": "Opprett en konto",
   "go.how.step1.beforeLink": "følg",
   "go.how.step1.link": "oppsettsinstruksjonene",
   "go.how.step2.title": "Abonner på Go",
-  "go.how.step2.link": "$5 første måned",
-  "go.how.step2.afterLink": "deretter $10/måned med sjenerøse grenser",
+  "go.how.step2.link": "$10/måned",
+  "go.how.step2.afterLink": "med sjenerøse grenser",
   "go.how.step3.title": "Begynn å kode",
   "go.how.step3.body": "med pålitelig tilgang til åpen kildekode-modeller",
   "go.privacy.title": "Personvernet ditt er viktig for oss",
@@ -329,11 +328,11 @@ export const dict = {
   "go.faq.a2": "Go inkluderer modellene nedenfor, med høye grenser og pålitelig tilgang.",
   "go.faq.q3": "Er Go det samme som Zen?",
   "go.faq.a3":
-    "Nei. Zen er betaling etter bruk, mens Go starter på $5 for den første måneden, deretter $10/måned, med sjenerøse grenser og pålitelig tilgang til et kuratert modellutvalg.",
+    "Nei. Zen er betaling etter bruk, mens Go koster $10/måned, med sjenerøse grenser og pålitelig tilgang til et kuratert modellutvalg.",
   "go.faq.q4": "Hva koster Go?",
   "go.faq.a4.p1.beforePricing": "Go koster",
-  "go.faq.a4.p1.pricingLink": "$5 første måned",
-  "go.faq.a4.p1.afterPricing": "deretter $10/måned med sjenerøse grenser.",
+  "go.faq.a4.p1.pricingLink": "$10/måned",
+  "go.faq.a4.p1.afterPricing": "med sjenerøse grenser.",
   "go.faq.a4.p2.beforeAccount": "Du kan administrere abonnementet ditt i din",
   "go.faq.a4.p2.accountLink": "konto",
   "go.faq.a4.p3": "Avslutt når som helst.",
@@ -346,6 +345,7 @@ export const dict = {
   "go.faq.a5.used": "Brukes",
   "go.faq.a5.notUsed": "Brukes ikke",
   "go.faq.a5.noAgreement": "Ingen avtale",
+  "go.faq.a5.notZdr": "Ikke ZDR",
   "go.faq.a5.grokRetention":
     "ZDR deaktiverer viktige API-funksjoner som er avhengige av lagrede data, inkludert den tilstandsbaserte Responses API, Files and Collections og Batch API.",
   "go.faq.a5.gptRetention":
@@ -353,6 +353,8 @@ export const dict = {
   "go.faq.a5.learnMore": "Les mer",
   "go.faq.a5.deepseekRetention":
     "ZDR-avtalen fornyes månedlig. Den gjeldende avtalen er gyldig til og med 31. august 2026.",
+  "go.faq.a5.museRetention":
+    "Kraftig rabatterte tokenpriser i bytte mot tillatelse til å bruke ledetekstene og fullføringene dine til å trene fremtidige Meta-modeller.",
 
   "go.faq.a5.beforeExceptions":
     "Go-modeller hostes i USA. Leverandører følger en policy om null oppbevaring og bruker ikke dataene dine til modelltrening, med",
@@ -393,6 +395,9 @@ export const dict = {
   "zen.api.error.modelDisabled": "Modellen er deaktivert",
   "zen.api.error.regionNotAllowed":
     "Den nyeste versjonen av denne modellen er bare tilgjengelig som en tjeneste driftet i Kina og krever at du uttrykkelig samtykker: {{consoleGoUrl}}",
+  "zen.api.error.countryNotAllowed": "Denne modellen er ikke tilgjengelig i landet ditt.",
+  "zen.api.error.trainingNotAllowed":
+    "Denne modellen samler inn data som brukes til å forbedre modellens kvalitet, og krever at du uttrykkelig samtykker: {{consoleGoUrl}}",
   "zen.api.error.trialEnded":
     "Den gratis kampanjen for {{model}} er avsluttet. Du kan fortsette å bruke modellen ved å abonnere på OpenCode Go - {{link}}",
 
@@ -665,23 +670,32 @@ export const dict = {
   "workspace.lite.time.fewSeconds": "noen få sekunder",
   "workspace.lite.subscription.message": "Du abonnerer på OpenCode Go.",
   "workspace.lite.subscription.manage": "Administrer abonnement",
-  "workspace.lite.subscription.rollingUsage": "Løpende bruk",
+  "workspace.lite.subscription.rollingUsage": "5-timers bruk",
+  "workspace.lite.subscription.rollingQuota": "5-timers kvote",
   "workspace.lite.subscription.weeklyUsage": "Ukentlig bruk",
+  "workspace.lite.subscription.weeklyQuota": "Ukentlig kvote",
   "workspace.lite.subscription.monthlyUsage": "Månedlig bruk",
+  "workspace.lite.subscription.monthlyQuota": "Månedlig kvote",
   "workspace.lite.subscription.resetsIn": "Nullstilles om",
+  "workspace.lite.subscription.showDetails": "Vis detaljer",
+  "workspace.lite.subscription.hideDetails": "Skjul detaljer",
+  "workspace.lite.subscription.model": "Modell",
+  "workspace.lite.subscription.contribution": "%",
+  "workspace.lite.subscription.total": "Totalt",
   "workspace.lite.subscription.useBalance": "Bruk din tilgjengelige saldo etter å ha nådd bruksgrensene",
   "workspace.lite.subscription.selectProvider":
     'Velg "OpenCode Go" som leverandør i opencode-konfigurasjonen din for å bruke Go-modeller.',
   "workspace.lite.providers.title": "Leverandører",
   "workspace.lite.providers.description": "Kontroller hvilke leverandører som brukes til ruting.",
+  "workspace.lite.providers.allowTraining": "Tillat modeller som trener på forespørselsdata",
   "workspace.lite.providers.useChina": "Aktiver modeller hostet i Kina",
   "workspace.lite.black.message":
     "Du abonnerer for øyeblikket på OpenCode Black eller står på venteliste. Vennligst avslutt abonnementet først hvis du vil bytte til Go.",
   "workspace.lite.other.message":
     "Et annet medlem i dette arbeidsområdet abonnerer allerede på OpenCode Go. Kun ett medlem per arbeidsområde kan abonnere.",
   "workspace.lite.promo.description":
-    "OpenCode Go starter på {{price}}, deretter $10/måned, og gir pålitelig tilgang til populære åpne kodingsmodeller med sjenerøse bruksgrenser.",
-  "workspace.lite.promo.price": "$5 for den første måneden",
+    "OpenCode Go koster {{price}} og gir pålitelig tilgang til populære åpne kodingsmodeller med sjenerøse bruksgrenser.",
+  "workspace.lite.promo.price": "$10/måned",
   "workspace.lite.promo.modelsTitle": "Hva som er inkludert",
   "workspace.lite.promo.footer":
     "Planen er primært utviklet for internasjonale brukere og gir stabil global tilgang. Priser og bruksgrenser kan endres etter hvert som vi lærer av tidlig bruk og tilbakemeldinger.",
