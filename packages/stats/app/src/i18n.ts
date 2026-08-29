@@ -233,7 +233,6 @@ const en = {
   "model.averageTokensSession": "Average tokens / session",
   "model.cacheRatio": "Cache Ratio",
   "model.inputTokens": "input tokens",
-  "model.geoDescription": "OpenCode model tokens used by country.",
   "model.noGeoTitle": "No geo data",
   "model.noGeoDescription": "No OpenCode geo rows matched this model.",
   "model.peersDescription": "Nearby models by recent OpenCode token volume.",

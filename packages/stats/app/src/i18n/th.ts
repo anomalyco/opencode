@@ -216,7 +216,6 @@ export const dict = {
   "model.tokensSession": "Token / เซสชัน",
   "model.cacheRatio": "อัตราแคช",
   "model.inputTokens": "input token",
-  "model.geoDescription": "token ของโมเดล OpenCode ที่ใช้แยกตามประเทศ",
   "model.noGeoTitle": "ไม่มีข้อมูลภูมิศาสตร์",
   "model.noGeoDescription": "ไม่มีแถวภูมิศาสตร์ของ OpenCode ที่ตรงกับโมเดลนี้",
   "model.peersDescription": "โมเดลใกล้เคียงตามปริมาณ token ล่าสุดของ OpenCode",

@@ -217,7 +217,6 @@ export const dict = {
   "model.tokensSession": "トークン / セッション",
   "model.cacheRatio": "キャッシュ比率",
   "model.inputTokens": "入力トークン",
-  "model.geoDescription": "国別のOpenCodeモデルのトークン使用量。",
   "model.noGeoTitle": "地域データがありません",
   "model.noGeoDescription": "このモデルに一致するOpenCode地域行はありません。",
   "model.peersDescription": "最近のOpenCodeトークン量が近いモデル。",

@@ -216,7 +216,6 @@ export const dict = {
   "model.tokensSession": "토큰 / 세션",
   "model.cacheRatio": "캐시 비율",
   "model.inputTokens": "입력 토큰",
-  "model.geoDescription": "국가별 OpenCode 모델 토큰 사용량입니다.",
   "model.noGeoTitle": "지역 데이터 없음",
   "model.noGeoDescription": "이 모델과 일치하는 OpenCode 지역 행이 없습니다.",
   "model.peersDescription": "최근 OpenCode 토큰 볼륨이 가까운 모델입니다.",

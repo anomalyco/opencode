@@ -216,7 +216,6 @@ export const dict = {
   "model.tokensSession": "Token / Oturum",
   "model.cacheRatio": "Önbellek Oranı",
   "model.inputTokens": "giriş tokenları",
-  "model.geoDescription": "Ülkeye göre kullanılan OpenCode model tokenları.",
   "model.noGeoTitle": "Coğrafi veri yok",
   "model.noGeoDescription": "Bu modelle eşleşen OpenCode coğrafi satırı yok.",
   "model.peersDescription": "Son OpenCode token hacmine göre yakındaki modeller.",

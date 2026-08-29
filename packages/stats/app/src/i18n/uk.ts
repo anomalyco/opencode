@@ -216,7 +216,6 @@ export const dict = {
   "model.tokensSession": "Токени / сеанс",
   "model.cacheRatio": "Частка кешу",
   "model.inputTokens": "вхідні токени",
-  "model.geoDescription": "Токени моделі OpenCode, використані за країнами.",
   "model.noGeoTitle": "Немає геоданих",
   "model.noGeoDescription": "Жодні географічні рядки OpenCode не відповідали цій моделі.",
   "model.peersDescription": "Близькі моделі за нещодавнім обсягом токенів OpenCode.",

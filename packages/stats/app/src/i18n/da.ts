@@ -214,7 +214,6 @@ export const dict = {
   "model.tokensSession": "Tokens / session",
   "model.cacheRatio": "Cacheandel",
   "model.inputTokens": "inputtokens",
-  "model.geoDescription": "OpenCode-modeltokens brugt efter land.",
   "model.noGeoTitle": "Ingen geodata",
   "model.noGeoDescription": "Ingen OpenCode-georækker matchede denne model.",
   "model.peersDescription": "Nærliggende modeller efter seneste OpenCode-tokenvolumen.",

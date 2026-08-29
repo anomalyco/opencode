@@ -253,7 +253,7 @@ export const dict = {
   "zen.privacy.exceptionsLink": "following exceptions",
 
   "go.title": "OpenCode Go | Low cost coding models for everyone",
-  "go.banner.text": "Ox Alpha Free is available on Go for a limited time",
+  "go.banner.text": "GLM-5.3-Flash gets 2× usage limits for a limited time",
   "go.meta.description": "Go costs $10/month, with generous usage limits and reliable access to leading coding models.",
   "go.hero.title": "Low cost coding models for everyone",
   "go.hero.body":
@@ -267,7 +267,7 @@ export const dict = {
   "go.graph.free": "Free",
   "go.graph.freePill": "Big Pickle and free models",
   "go.graph.go": "Go",
-  "go.graph.label": "Requests per 5 hour",
+  "go.graph.label": "Requests / 5 hours",
   "go.graph.limitedRegions": "limited regions",
   "go.graph.limitedTime": "limited time",
   "go.graph.tick": "{{n}}x",

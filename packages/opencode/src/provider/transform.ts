@@ -208,11 +208,10 @@ function normalizeMessages(
             return part.text !== ""
           }
           if (part.type === "reasoning") {
-            return (
-              part.text.trim().length > 0 ||
-              part.providerOptions?.bedrock?.signature != null ||
-              part.providerOptions?.bedrock?.redactedData != null
-            )
+            // Match what the SDK can replay before assigning cache points. Otherwise
+            // unsigned reasoning can leave an empty or cache-point-only message.
+            const metadata = part.providerOptions?.[model.providerID] ?? part.providerOptions?.bedrock
+            return metadata?.signature != null || metadata?.redactedContent != null || metadata?.redactedData != null
           }
           return true
         })

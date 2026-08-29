@@ -17,6 +17,7 @@ import { WorkspaceTable } from "@opencode-ai/console-core/schema/workspace.sql.j
 import { UserTable } from "@opencode-ai/console-core/schema/user.sql.js"
 import { AuthTable } from "@opencode-ai/console-core/schema/auth.sql.js"
 import { Identifier } from "@opencode-ai/console-core/identifier.js"
+import { isAllowedAuthorizationRedirect } from "./auth-redirect.js"
 
 type Env = {
   AuthStorage: KVNamespace
@@ -41,6 +42,17 @@ const MY_THEME: Theme = {
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext) {
+    const requestURL = new URL(request.url)
+    if (requestURL.pathname === "/authorize") {
+      const redirectURI = requestURL.searchParams.get("redirect_uri")
+      if (
+        redirectURI !== null &&
+        !isAllowedAuthorizationRedirect(requestURL.searchParams.get("client_id") ?? "", redirectURI)
+      ) {
+        return new Response("Unauthorized client", { status: 400 })
+      }
+    }
+
     const result = await issuer({
       theme: MY_THEME,
       providers: {
@@ -102,6 +114,7 @@ export default {
         namespace: env.AuthStorage,
       }),
       subjects,
+      allow: ({ clientID, redirectURI }) => Promise.resolve(isAllowedAuthorizationRedirect(clientID, redirectURI)),
       async success(ctx, response) {
         console.log(response)
 

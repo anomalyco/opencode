@@ -213,7 +213,6 @@ export const dict = {
   "model.tokensSession": "الرموز / الجلسة",
   "model.cacheRatio": "نسبة التخزين المؤقت",
   "model.inputTokens": "رموز الإدخال",
-  "model.geoDescription": "رموز نموذج OpenCode المستخدمة حسب البلد.",
   "model.noGeoTitle": "لا توجد بيانات جغرافية",
   "model.noGeoDescription": "لم تطابق أي صفوف جغرافية في OpenCode هذا النموذج.",
   "model.peersDescription": "نماذج قريبة حسب حجم رموز OpenCode الأخير.",

@@ -216,7 +216,6 @@ export const dict = {
   "model.tokensSession": "Tokens / sessão",
   "model.cacheRatio": "Taxa de cache",
   "model.inputTokens": "tokens de entrada",
-  "model.geoDescription": "Tokens do modelo OpenCode usados por país.",
   "model.noGeoTitle": "Sem dados geográficos",
   "model.noGeoDescription": "Nenhuma linha geográfica do OpenCode correspondeu a este modelo.",
   "model.peersDescription": "Modelos próximos por volume recente de tokens do OpenCode.",

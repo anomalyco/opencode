@@ -215,7 +215,6 @@ export const dict = {
   "model.tokensSession": "Token / 工作階段",
   "model.cacheRatio": "快取比例",
   "model.inputTokens": "輸入 token",
-  "model.geoDescription": "按國家/地區統計的 OpenCode 模型 token 使用量。",
   "model.noGeoTitle": "無地理數據",
   "model.noGeoDescription": "沒有符合此模型的 OpenCode 地理列。",
   "model.peersDescription": "按近期 OpenCode token 用量排列的相近模型。",
