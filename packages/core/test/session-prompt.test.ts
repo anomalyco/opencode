@@ -10,6 +10,7 @@ import { Agent } from "@opencode-ai/core/agent"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
+import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Bus } from "@opencode-ai/core/bus"
 import { EventTable } from "@opencode-ai/core/event/sql"
 import { Location } from "@opencode-ai/schema/location"
@@ -21,6 +22,7 @@ import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
 import { SessionMessage } from "@opencode-ai/core/session/message"
+import { SessionPrompt } from "@opencode-ai/core/session/prompt"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionRevert } from "@opencode-ai/core/session/revert"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
@@ -33,6 +35,7 @@ import { Image } from "@opencode-ai/core/image"
 import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { Snapshot } from "@opencode-ai/core/snapshot"
+import { Skill } from "@opencode-ai/core/skill"
 import { testEffect } from "./lib/effect"
 
 const executionCalls: Session.ID[] = []
@@ -68,17 +71,24 @@ const locations = makeGlobalNode({
     Effect.gen(function* () {
       const database = yield* Database.Service
       const bus = yield* Bus.Service
-      const shared = Layer.merge(Layer.succeed(Database.Service, database), Layer.succeed(Bus.Service, bus))
+      const fs = yield* FSUtil.Service
+      const shared = Layer.mergeAll(
+        Layer.succeed(Database.Service, database),
+        Layer.succeed(Bus.Service, bus),
+        Layer.succeed(FSUtil.Service, fs),
+      )
       return yield* LayerMap.make(
         (_ref: Location.Ref) =>
           // These operations resolve Location services lazily and must wait for plugin-projected state.
           // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
           Layer.suspend(() => {
             let ready = false
-            return SessionRevert.layer.pipe(
+            return Layer.merge(SessionRevert.layer, SessionPrompt.layer).pipe(
               Layer.provideMerge(
                 Layer.mergeAll(
-                  LayerNode.compile(PluginHooks.node),
+                  LayerNode.compile(LayerNode.group([PluginHooks.node, Skill.node]), [
+                    [Bus.node, Layer.succeed(Bus.Service, bus)],
+                  ]),
                   Layer.mock(Image.Service, {
                     normalize: (_resource, content) =>
                       ready
@@ -106,7 +116,7 @@ const locations = makeGlobalNode({
       )
     }),
   ),
-  deps: [Database.node, Bus.node],
+  deps: [Database.node, Bus.node, FSUtil.node],
 })
 const it = testEffect(
   AppNodeBuilder.build(

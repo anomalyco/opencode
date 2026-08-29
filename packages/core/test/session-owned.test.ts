@@ -1,9 +1,13 @@
 import { describe, expect } from "bun:test"
 import { and, eq } from "drizzle-orm"
-import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer } from "effect"
+import { Cause, Context, DateTime, Deferred, Effect, Exit, Fiber, Layer } from "effect"
+import { Agent } from "@opencode-ai/schema/agent"
 import { Event } from "@opencode-ai/schema/event"
 import { Location } from "@opencode-ai/schema/location"
+import { Model } from "@opencode-ai/schema/model"
+import { Money } from "@opencode-ai/schema/money"
 import { Project } from "@opencode-ai/schema/project"
+import { Provider } from "@opencode-ai/schema/provider"
 import { ID, Info, Output } from "@opencode-ai/schema/shell"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { FSUtil } from "@opencode-ai/util/fs-util"
@@ -21,11 +25,13 @@ import { SessionEvent } from "../src/session/event.js"
 import { SessionExecution } from "../src/session/execution.js"
 import { SessionInbox } from "../src/session/inbox.js"
 import { SessionMessage } from "../src/session/message.js"
+import { SessionPrompt } from "../src/session/prompt.js"
 import { SessionProjector } from "../src/session/projector.js"
 import { SessionRevert } from "../src/session/revert.js"
 import { SessionRunCoordinator } from "../src/session/run-coordinator.js"
 import { SessionSchema } from "../src/session/schema.js"
 import { Session } from "../src/session/session.js"
+import { SessionTable } from "../src/session/sql.js"
 import { SessionStore } from "../src/session/store.js"
 import { Shell } from "../src/shell.js"
 import { Skill } from "../src/skill.js"
@@ -61,6 +67,7 @@ const setup = Effect.fnUntraced(function* (options?: {
   const database = yield* Database.Service
   const bus = yield* Bus.Service
   const store = yield* SessionStore.Service
+  const fs = yield* FSUtil.Service
   yield* database.db
     .insert(ProjectTable)
     .values({ id: Project.ID.global, worktree: source.directory, sandboxes: [] })
@@ -110,7 +117,7 @@ const setup = Effect.fnUntraced(function* (options?: {
   )
   const servicesFor = (ref: Location.Ref): Layer.Layer<Session.Services> => {
     locations.push(ref)
-    return SessionRevert.layer.pipe(
+    return Layer.merge(SessionRevert.layer, SessionPrompt.layer).pipe(
       Layer.provideMerge(
         Layer.mergeAll(
           services,
@@ -122,17 +129,85 @@ const setup = Effect.fnUntraced(function* (options?: {
           }),
         ),
       ),
-      Layer.provide(Layer.merge(Layer.succeed(Database.Service, database), Layer.succeed(Bus.Service, bus))),
+      Layer.provide(
+        Layer.mergeAll(
+          Layer.succeed(Database.Service, database),
+          Layer.succeed(Bus.Service, bus),
+          Layer.succeed(FSUtil.Service, fs),
+        ),
+      ),
       Layer.fresh,
     )
   }
   const sessions = yield* Session.make(servicesFor).pipe(
+    Effect.satisfiesServicesType<
+      Bus.Service | SessionStore.Service | SessionExecution.Service | SessionInbox.Service
+    >(),
     Effect.provideService(SessionExecution.Service, options?.execution ?? execution),
   )
   return { sessions, hooks, locations, flushes, wakes, db: database.db, bus, store }
 })
 
 describe("Session-owned handles", () => {
+  it.live("owns state changes and message editing without caller services or Location acquisition", () =>
+    Effect.gen(function* () {
+      const fixture = yield* setup()
+      const handle = fixture.sessions.forSession(sessionID)
+      const model = { id: Model.ID.make("test-model"), providerID: Provider.ID.make("test-provider") }
+      const messageID = SessionMessage.ID.create()
+      yield* fixture.bus.publish(SessionEvent.Step.Started, {
+        sessionID,
+        assistantMessageID: messageID,
+        agent: Agent.ID.make("build"),
+        model: { ...model, id: Model.ID.make("initial-model") },
+      })
+      yield* fixture.bus.publish(SessionEvent.Step.Ended, {
+        sessionID,
+        assistantMessageID: messageID,
+        finish: "stop",
+        cost: Money.USD.zero,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      })
+      yield* fixture.db
+        .update(SessionTable)
+        .set({ time_idle: 0 })
+        .where(eq(SessionTable.id, sessionID))
+        .run()
+        .pipe(Effect.orDie)
+      const { rename, switchAgent, switchModel, view, message, updateMessage } = handle
+
+      yield* Effect.gen(function* () {
+        yield* rename({ title: "Renamed" })
+        yield* switchAgent({ agent: Agent.ID.make("review") })
+        yield* switchModel({ model })
+        yield* switchModel({ model })
+        yield* view({ idle: 0 })
+        yield* view({ idle: 0 })
+        const content = [SessionMessage.AssistantText.make({ type: "text", text: "Edited" })]
+        expect((yield* updateMessage({ messageID, content })).content).toEqual(content)
+        expect(yield* message(messageID)).toMatchObject({ type: "assistant", content })
+      }).pipe(Effect.satisfiesServicesType<never>(), Effect.setContext(Context.empty()))
+
+      const session = yield* handle.get()
+      expect(session).toMatchObject({ title: "Renamed", agent: "review", model })
+      expect(session.time.viewed && DateTime.toEpochMillis(session.time.viewed)).toBe(0)
+      expect(yield* fixture.sessions.forSession(otherID).message(messageID)).toBeUndefined()
+      expect((yield* fixture.sessions.forSession(otherID).get()).title).toBe("Owned session")
+      expect(fixture.locations).toEqual([])
+      expect(fixture.wakes).toEqual([])
+      const events = yield* fixture.db
+        .select()
+        .from(EventTable)
+        .where(eq(EventTable.aggregate_id, sessionID))
+        .all()
+        .pipe(Effect.orDie)
+      expect(events.filter((event) => event.type === Bus.versionedType(SessionEvent.Viewed.type, 1))).toHaveLength(1)
+      expect(
+        events.filter((event) => event.type === Bus.versionedType(SessionEvent.ModelSelected.type, 1)),
+      ).toHaveLength(1)
+    }),
+  )
+
   it.live("acquires Location only for new prompt preparation and persists before waking", () =>
     Effect.gen(function* () {
       const fixture = yield* setup()
@@ -528,6 +603,54 @@ describe("Session-owned handles", () => {
   )
 })
 
+describe("SessionPrompt construction", () => {
+  it.live("captures preparation dependencies without admitting input and checks readiness on every call", () =>
+    Effect.gen(function* () {
+      const fixture = yield* setup()
+      const calls: string[] = []
+      yield* fixture.hooks.register("session", "prompt", (event) =>
+        Effect.sync(() => {
+          calls.push("hook")
+          event.prompt.text += " prepared"
+        }),
+      )
+      const { prepare } = yield* SessionPrompt.Service.pipe(
+        Effect.provide(
+          SessionPrompt.layer.pipe(
+            Layer.provide(
+              Layer.mergeAll(
+                Layer.succeed(PluginHooks.Service, fixture.hooks),
+                Layer.succeed(PluginSupervisor.Service, {
+                  flush: Effect.sync(() => {
+                    calls.push("ready")
+                  }),
+                }),
+                Layer.mock(Image.Service, {}),
+                Layer.mock(Skill.Service, {}),
+              ),
+            ),
+          ),
+        ),
+      )
+      expect(calls).toEqual([])
+      const input = { text: "Original", files: [{ uri: new URL("./session-owned.test.ts", import.meta.url).href }] }
+      const request = { sessionID, messageID: SessionMessage.ID.create(), input }
+      const items = yield* Effect.forEach([0, 1], () => prepare(request)).pipe(
+        Effect.satisfiesServicesType<never>(),
+        Effect.setContext(Context.empty()),
+      )
+
+      expect(calls).toEqual(["ready", "hook", "ready", "hook"])
+      expect(items[0]).toEqual(items[1])
+      expect(items[0]).toMatchObject({ type: "user", payload: { text: "Original prepared" }, delivery: "steer" })
+      expect(items[0]?.payload.files?.[0]?.mime).toBe("text/plain")
+      expect(input.text).toBe("Original")
+      expect(yield* fixture.sessions.forSession(sessionID).inbox()).toEqual([])
+      expect(fixture.wakes).toEqual([])
+    }),
+  )
+})
+
 describe("SessionRevert construction", () => {
   it.live("captures dependencies without work, then checks readiness on every stage and clear", () =>
     Effect.gen(function* () {
@@ -611,11 +734,12 @@ describe("SessionInbox command contracts", () => {
   it.live("captures the host dependencies for detached commands", () =>
     Effect.gen(function* () {
       const fixture = yield* setup()
-      const { admit, reconcile, admitCompaction, cancel, steer, queue } = yield* SessionInbox.Service
+      const { list, admit, reconcile, admitCompaction, cancel, steer, queue } = yield* SessionInbox.Service
       const other = yield* SessionInbox.make()
       expect(yield* SessionInbox.list(fixture.db, sessionID)).toEqual([])
 
       yield* Effect.gen(function* () {
+        expect(yield* list(sessionID)).toEqual([])
         const user = yield* admit({
           id: SessionMessage.ID.create(),
           sessionID,
@@ -634,6 +758,7 @@ describe("SessionInbox command contracts", () => {
         )
         expect(compaction).toEqual(duplicate)
         yield* cancel({ id: compaction.id, sessionID })
+        expect(yield* list(sessionID)).toEqual([])
       }).pipe(Effect.satisfiesServicesType<never>(), Effect.setContext(Context.empty()))
 
       expect(yield* SessionInbox.list(fixture.db, sessionID)).toEqual([])

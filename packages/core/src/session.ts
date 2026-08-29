@@ -19,7 +19,6 @@ import { AbsolutePath, PositiveInt, RelativePath } from "./schema.js"
 import { Agent } from "@opencode-ai/schema/agent"
 import { App } from "./app.js"
 import { Slug } from "./util/slug.js"
-import { upsertProject } from "./project/sql.js"
 import path from "path"
 import { fromRow } from "./session/info.js"
 import { SessionRunner } from "./session/runner/index.js"
@@ -33,6 +32,10 @@ import {
   ForkEmptyError,
   InboxConflictError,
   MessageDecodeError,
+  MessageIncompleteError,
+  MessageNotAssistantError,
+  MessageNotFoundError,
+  MessageToolIncompleteError,
   NotFoundError,
   PromptConflictError,
   SkillNotFoundError,
@@ -45,7 +48,6 @@ import { SessionInbox } from "./session/inbox.js"
 import { InstructionState } from "./session/instruction-state.js"
 import { SessionGenerate } from "./session/generate.js"
 import { Snapshot } from "./snapshot.js"
-import { SessionRevert } from "./session/revert.js"
 import { Session } from "./session/session.js"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { PluginSupervisor } from "./plugin/supervisor-service.js"
@@ -118,32 +120,15 @@ export {
   CompactionConflictError,
   InboxConflictError,
   MessageDecodeError,
+  MessageIncompleteError,
+  MessageNotAssistantError,
+  MessageNotFoundError,
+  MessageToolIncompleteError,
   NotFoundError,
   PromptConflictError,
   SkillNotFoundError,
   SyntheticConflictError,
 }
-export class MessageNotAssistantError extends Schema.TaggedError<MessageNotAssistantError>()(
-  "Session.MessageNotAssistantError",
-  {
-    sessionID: SessionSchema.ID,
-    messageID: SessionMessage.ID,
-  },
-) {}
-export class MessageIncompleteError extends Schema.TaggedError<MessageIncompleteError>()(
-  "Session.MessageIncompleteError",
-  {
-    sessionID: SessionSchema.ID,
-    messageID: SessionMessage.ID,
-  },
-) {}
-export class MessageToolIncompleteError extends Schema.TaggedError<MessageToolIncompleteError>()(
-  "Session.MessageToolIncompleteError",
-  {
-    sessionID: SessionSchema.ID,
-    messageID: SessionMessage.ID,
-  },
-) {}
 type InboxItemRef = { readonly sessionID: SessionSchema.ID; readonly inboxID: SessionMessage.ID }
 
 export class DestinationNotFoundError extends Schema.TaggedError<DestinationNotFoundError>()(
@@ -160,8 +145,6 @@ export class DestinationUnavailableError extends Schema.TaggedError<DestinationU
   "Session.DestinationUnavailableError",
   { directory: AbsolutePath },
 ) {}
-export const MessageNotFoundError = SessionRevert.MessageNotFoundError
-export type MessageNotFoundError = SessionRevert.MessageNotFoundError
 
 export interface Interface {
   readonly list: (input?: ListInput) => Effect.Effect<{
@@ -191,19 +174,9 @@ export interface Interface {
     sessionID: SessionSchema.ID
     messageID: SessionMessage.ID
   }) => Effect.Effect<SessionMessage.Info | undefined>
-  readonly updateMessage: (input: {
-    readonly sessionID: SessionSchema.ID
-    readonly messageID: SessionMessage.ID
-    readonly content: readonly SessionMessage.AssistantContent[]
-  }) => Effect.Effect<
-    SessionMessage.Assistant,
-    | NotFoundError
-    | MessageNotFoundError
-    | BusyError
-    | MessageNotAssistantError
-    | MessageIncompleteError
-    | MessageToolIncompleteError
-  >
+  readonly updateMessage: (
+    input: Parameters<Session.Handle["updateMessage"]>[0] & { readonly sessionID: SessionSchema.ID },
+  ) => ReturnType<Session.Handle["updateMessage"]>
   readonly context: (
     sessionID: SessionSchema.ID,
   ) => Effect.Effect<SessionMessage.Info[], NotFoundError | MessageDecodeError>
@@ -319,7 +292,6 @@ const layer = Layer.effect(
       )
     })
     const isDurableSessionEvent = Schema.is(SessionEvent.Durable)
-    const persistProject = (project: Project.Resolved) => upsertProject(db, project).pipe(Effect.orDie)
 
     const result = Service.of({
       create: Effect.fn("Session.create")(function* (input) {
@@ -332,7 +304,6 @@ const layer = Layer.effect(
         if (location === undefined)
           return yield* Effect.die(new Error("Session.create requires either location or an existing parentID"))
         const project = yield* projects.resolve(location.directory)
-        yield* persistProject(project)
         const projected = yield* bus
           .publish(
             SessionEvent.Created,
@@ -426,18 +397,7 @@ const layer = Layer.effect(
         if (input.variables !== undefined) yield* environments.set(input.sessionID, input.variables)
         return yield* environments.get(input.sessionID)
       }),
-      view: Effect.fn("Session.view")(function* (input) {
-        const row = yield* db
-          .select({ idle: SessionTable.time_idle, viewed: SessionTable.time_viewed })
-          .from(SessionTable)
-          .where(eq(SessionTable.id, input.sessionID))
-          .get()
-          .pipe(Effect.orDie)
-        if (!row) return yield* new NotFoundError({ sessionID: input.sessionID })
-        if (row.idle === null || input.idle > row.idle || (row.viewed !== null && row.viewed >= input.idle))
-          return yield* Effect.void
-        yield* bus.publish(SessionEvent.Viewed, { sessionID: input.sessionID, idle: input.idle })
-      }),
+      view: (input) => sessions.forSession(input.sessionID).view(input),
       remove: Effect.fn("Session.remove")(function* (sessionID) {
         const session = yield* result.get(sessionID)
         yield* execution.interrupt(sessionID)
@@ -527,33 +487,8 @@ const layer = Layer.effect(
           SessionHistory.decodeMessageRow,
         )
       }),
-      message: Effect.fn("Session.message")(function* (input) {
-        const stored = yield* store.message(input.messageID)
-        return stored?.sessionID === input.sessionID ? stored.message : undefined
-      }),
-      updateMessage: Effect.fn("Session.updateMessage")(function* (input) {
-        const ref = { sessionID: input.sessionID, messageID: input.messageID }
-        yield* result.get(ref.sessionID)
-        if ((yield* execution.active).has(ref.sessionID)) return yield* new BusyError({ sessionID: ref.sessionID })
-        const message = yield* result.message(ref)
-        if (!message) return yield* new MessageNotFoundError(ref)
-        if (message.type !== "assistant") return yield* new MessageNotAssistantError(ref)
-        if (!message.time.completed) return yield* new MessageIncompleteError(ref)
-        if (
-          input.content.some(
-            (content) =>
-              content.type === "tool" && (content.state.status === "streaming" || content.state.status === "running"),
-          )
-        )
-          return yield* new MessageToolIncompleteError(ref)
-        yield* bus.publish(SessionEvent.MessageContentUpdated, {
-          ...ref,
-          content: Schema.encodeSync(Schema.Array(SessionMessage.AssistantContent))(input.content),
-        })
-        const updated = yield* result.message(ref)
-        if (updated?.type !== "assistant") return yield* new MessageNotFoundError(ref)
-        return updated
-      }),
+      message: (input) => sessions.forSession(input.sessionID).message(input.messageID),
+      updateMessage: (input) => sessions.forSession(input.sessionID).updateMessage(input),
       context: Effect.fn("Session.context")(function* (sessionID) {
         yield* result.get(sessionID)
         return yield* store.context(sessionID)
@@ -622,35 +557,9 @@ const layer = Layer.effect(
             .resume(input.sessionID)
             .pipe(Effect.ignore, Effect.forkIn(scope, { startImmediately: true }), Effect.asVoid)
       }),
-      switchAgent: Effect.fn("Session.switchAgent")(function* (input) {
-        const session = yield* result.get(input.sessionID)
-        yield* bus.publish(SessionEvent.AgentSelected, {
-          sessionID: input.sessionID,
-          agent: input.agent,
-          previous: session.agent,
-        })
-      }),
-      switchModel: Effect.fn("Session.switchModel")(function* (input) {
-        const session = yield* result.get(input.sessionID)
-        if (
-          session.model?.providerID === input.model.providerID &&
-          session.model.id === input.model.id &&
-          (session.model.variant ?? "default") === (input.model.variant ?? "default")
-        )
-          return
-        yield* bus.publish(SessionEvent.ModelSelected, {
-          sessionID: input.sessionID,
-          model: input.model,
-          previous: session.model,
-        })
-      }),
-      rename: Effect.fn("Session.rename")(function* (input) {
-        yield* result.get(input.sessionID)
-        yield* bus.publish(SessionEvent.Renamed, {
-          sessionID: input.sessionID,
-          title: input.title,
-        })
-      }),
+      switchAgent: (input) => sessions.forSession(input.sessionID).switchAgent(input),
+      switchModel: (input) => sessions.forSession(input.sessionID).switchModel(input),
+      rename: (input) => sessions.forSession(input.sessionID).rename(input),
       move: Effect.fn("Session.move")(function* (input) {
         const current = yield* result.get(input.sessionID)
         const value = input.directory.trim()
@@ -676,7 +585,6 @@ const layer = Layer.effect(
             )
           }),
         )
-        yield* persistProject(project)
         const item = SessionInbox.Item.make({
           type: "move",
           payload,

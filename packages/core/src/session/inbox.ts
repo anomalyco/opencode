@@ -259,7 +259,15 @@ export const make = Effect.fn("SessionInbox.make")(function* () {
     ),
   )
 
-  return { reconcile, admit, admitCompaction, cancel, steer, queue }
+  return {
+    list: (sessionID: SessionSchema.ID) => list(db, sessionID),
+    reconcile,
+    admit,
+    admitCompaction,
+    cancel,
+    steer,
+    queue,
+  }
 })
 
 export const layer = Layer.effect(Service, make())

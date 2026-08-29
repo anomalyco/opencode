@@ -21,7 +21,7 @@ import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { Effect, Layer, LayerMap, Stream } from "effect"
 import { testEffect } from "./lib/effect"
-import { globalProjectLayer } from "./lib/project"
+import { globalProjectNode } from "./lib/project"
 
 const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
 const model = LanguageModel.make({
@@ -66,7 +66,7 @@ const it = testEffect(
     LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionStore.node, Session.node]),
     [
       [LocationServiceMap.node, locations],
-      [Project.node, globalProjectLayer],
+      [Project.node, globalProjectNode],
       [SessionExecution.node, SessionExecution.noopLayer],
     ],
   ),

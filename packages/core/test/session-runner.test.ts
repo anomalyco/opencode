@@ -81,7 +81,7 @@ import { TestClock } from "effect/testing"
 import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { asc, desc, eq, sql } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
-import { promptLocationLayer } from "./fixture/prompt-location"
+import { promptLocationNode } from "./fixture/prompt-location"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import { Expected } from "./lib/session-message"
 import { permissionLayer } from "./lib/permission"
@@ -484,7 +484,7 @@ const layer = Layer.unwrap(
       [
         ...replacements,
         [Bus.node, Bus.configured({ persist: true })],
-        [LocationServiceMap.node, promptLocationLayer],
+        [LocationServiceMap.node, promptLocationNode],
         [Catalog.node, promptCatalog],
         [SessionExecution.node, execution],
       ],
