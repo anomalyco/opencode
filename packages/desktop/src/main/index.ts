@@ -193,7 +193,10 @@ const main = Effect.gen(function* () {
   app.commandLine.appendSwitch("proxy-bypass-list", "<-loopback>")
   const features = app.commandLine.getSwitchValue("enable-features")
   app.commandLine.appendSwitch("enable-features", features ? `${jsCallStackFeature},${features}` : jsCallStackFeature)
-  if (!app.isPackaged) app.commandLine.appendSwitch("remote-debugging-port", "9222")
+  if (!app.isPackaged) {
+    const debugPort = process.env.OPENCODE_REMOTE_DEBUGGING_PORT ?? "9223"
+    app.commandLine.appendSwitch("remote-debugging-port", debugPort)
+  }
 
   if (!app.requestSingleInstanceLock()) {
     app.quit()
