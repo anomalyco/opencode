@@ -38,6 +38,7 @@ const it = testEffect(
           SessionExecution.Service,
           SessionExecution.Service.of({
             active: Effect.sync(() => active),
+            isActive: (sessionID) => Effect.sync(() => active.has(sessionID)),
             resume: () => Effect.void,
             wake: () => Effect.void,
             interrupt: () => Effect.succeed(false),
@@ -215,16 +216,53 @@ describe("Session.updateMessage", () => {
       )
 
       yield* complete(bus, created.id, messageID)
-      const unfinished = SessionMessage.AssistantTool.make({
-        type: "tool",
-        id: "call_unfinished",
-        name: "read",
-        state: { status: "streaming", input: "" },
-        time: { created: created.time.created },
-      })
-      expect(
-        yield* Effect.flip(session.updateMessage({ sessionID: created.id, messageID, content: [unfinished] })),
-      ).toEqual(new Session.MessageToolIncompleteError({ sessionID: created.id, messageID }))
+      yield* Effect.forEach(
+        [
+          SessionMessage.ToolStateStreaming.make({ status: "streaming", input: "" }),
+          SessionMessage.ToolStateRunning.make({ status: "running", input: {}, metadata: {} }),
+        ],
+        Effect.fnUntraced(function* (state) {
+          const unfinished = SessionMessage.AssistantTool.make({
+            type: "tool",
+            id: "call_unfinished",
+            name: "read",
+            state,
+            time: { created: created.time.created },
+          })
+          expect(
+            yield* Effect.flip(session.updateMessage({ sessionID: created.id, messageID, content: [unfinished] })),
+          ).toEqual(new Session.MessageToolIncompleteError({ sessionID: created.id, messageID }))
+        }),
+      )
+    }),
+  )
+
+  it.effect("accepts completed and failed tool content", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const bus = yield* Bus.Service
+      const created = yield* session.create({ location })
+      const messageID = SessionMessage.ID.create()
+      yield* start(bus, created.id, messageID)
+      yield* complete(bus, created.id, messageID)
+      const content = [
+        SessionMessage.ToolStateCompleted.make({
+          status: "completed",
+          input: {},
+          content: [{ type: "text", text: "result" }],
+        }),
+        SessionMessage.ToolStateError.make({ status: "error", input: {}, error: { type: "tool", message: "failed" } }),
+      ].map((state) =>
+        SessionMessage.AssistantTool.make({
+          type: "tool",
+          id: `call_${state.status}`,
+          name: "read",
+          state,
+          time: { created: created.time.created },
+        }),
+      )
+
+      expect((yield* session.updateMessage({ sessionID: created.id, messageID, content })).content).toEqual(content)
     }),
   )
 

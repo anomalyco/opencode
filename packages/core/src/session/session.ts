@@ -65,18 +65,12 @@ export const make = Effect.fn("Session.make")(function* (servicesFor: (ref: Loca
   ) {
     const ref = { sessionID, messageID: input.messageID }
     yield* get(sessionID)
-    if ((yield* execution.active).has(sessionID)) return yield* new BusyError({ sessionID })
+    if (yield* execution.isActive(sessionID)) return yield* new BusyError({ sessionID })
     const current = yield* message(sessionID, input.messageID)
     if (!current) return yield* new MessageNotFoundError(ref)
     if (current.type !== "assistant") return yield* new MessageNotAssistantError(ref)
     if (!current.time.completed) return yield* new MessageIncompleteError(ref)
-    if (
-      input.content.some(
-        (content) =>
-          content.type === "tool" && (content.state.status === "streaming" || content.state.status === "running"),
-      )
-    )
-      return yield* new MessageToolIncompleteError(ref)
+    if (input.content.some(isUnfinishedTool)) return yield* new MessageToolIncompleteError(ref)
     yield* bus.publish(SessionEvent.MessageContentUpdated, {
       ...ref,
       content: Schema.encodeSync(Schema.Array(SessionMessage.AssistantContent))(input.content),
@@ -325,14 +319,14 @@ export const make = Effect.fn("Session.make")(function* (servicesFor: (ref: Loca
     input: { messageID: SessionMessage.ID; files?: boolean },
   ) {
     const session = yield* get(sessionID)
-    if ((yield* execution.active).has(sessionID)) return yield* new BusyError({ sessionID })
+    if (yield* execution.isActive(sessionID)) return yield* new BusyError({ sessionID })
     return yield* SessionRevert.Service.use((revert) =>
       revert.stage({ session, messageID: input.messageID, files: input.files }),
     ).pipe(Effect.provide(servicesFor(session.location)))
   })
   const clear = Effect.fn("Session.revert.clear")(function* (sessionID: SessionSchema.ID) {
     const session = yield* get(sessionID)
-    if ((yield* execution.active).has(sessionID)) return yield* new BusyError({ sessionID })
+    if (yield* execution.isActive(sessionID)) return yield* new BusyError({ sessionID })
     yield* SessionRevert.Service.use((revert) => revert.clear(session)).pipe(
       Effect.provide(servicesFor(session.location)),
     )
@@ -340,7 +334,7 @@ export const make = Effect.fn("Session.make")(function* (servicesFor: (ref: Loca
   })
   const commit = Effect.fn("Session.revert.commit")(function* (sessionID: SessionSchema.ID) {
     const session = yield* get(sessionID)
-    if ((yield* execution.active).has(sessionID)) return yield* new BusyError({ sessionID })
+    if (yield* execution.isActive(sessionID)) return yield* new BusyError({ sessionID })
     return yield* SessionRevert.commit(bus, session)
   })
   const revert = { stage, clear, commit }
@@ -417,6 +411,10 @@ export const make = Effect.fn("Session.make")(function* (servicesFor: (ref: Loca
 })
 
 export type Handle = ReturnType<Effect.Success<ReturnType<typeof make>>["forSession"]>
+
+function isUnfinishedTool(content: SessionMessage.AssistantContent) {
+  return content.type === "tool" && (content.state.status === "streaming" || content.state.status === "running")
+}
 
 function missingShellOutput() {
   const output = "Shell command output is no longer available."

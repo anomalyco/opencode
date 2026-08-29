@@ -92,6 +92,8 @@ describe("SessionExecution lifecycle", () => {
           : Deferred.succeed(interruptedRunning, undefined).pipe(Effect.andThen(Effect.never)),
       )
       const execution = Context.get(context, SessionExecution.Service)
+      const completedActive = execution.isActive(completed)
+      expect(yield* completedActive).toBe(false)
       yield* execution.resume(interrupted).pipe(Effect.forkScoped)
       const completing = yield* execution.resume(completed).pipe(Effect.forkIn(scope))
       yield* Deferred.await(interruptedRunning)
@@ -99,17 +101,22 @@ describe("SessionExecution lifecycle", () => {
 
       // The write-ahead claim exists WHILE the turns run — no shutdown hook involved.
       expect(yield* claims(database)).toEqual({ [interrupted]: true, [completed]: true })
+      expect(yield* completedActive).toBe(true)
+      expect(yield* execution.isActive(interrupted)).toBe(true)
 
       // A drain that finishes on its own releases its claim.
       yield* Deferred.succeed(release, undefined)
       yield* Fiber.join(completing)
       yield* execution.awaitIdle(completed)
       expect((yield* claims(database))[completed]).toBe(false)
+      expect(yield* completedActive).toBe(false)
+      expect(yield* execution.isActive(interrupted)).toBe(true)
 
       // Teardown interruption (graceful twin of an unclean death) preserves the claim
       // for the next server start.
       yield* Scope.close(scope, Exit.void)
       expect((yield* claims(database))[interrupted]).toBe(true)
+      expect(yield* execution.isActive(interrupted)).toBe(false)
     }),
   )
 
@@ -146,6 +153,7 @@ describe("SessionExecution lifecycle", () => {
 
       expect(yield* execution.interrupt(sessionID)).toBeFalse()
       expect(yield* execution.active).not.toContain(sessionID)
+      expect(yield* execution.isActive(sessionID)).toBe(false)
     }),
   )
 

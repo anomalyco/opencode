@@ -26,6 +26,7 @@ it.live("updates completed assistant message content through the session HTTP AP
         const bus = yield* Bus.Service
         return SessionExecution.Service.of({
           active: Effect.sync(() => state.active),
+          isActive: (sessionID) => Effect.sync(() => state.active.has(sessionID)),
           resume: () => Effect.void,
           wake: (sessionID) =>
             Effect.gen(function* () {

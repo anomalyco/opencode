@@ -18,6 +18,8 @@ import { SessionInbox } from "./inbox.js"
 export interface Interface {
   /** Snapshots active execution owned by this process. */
   readonly active: Effect.Effect<ReadonlySet<SessionSchema.ID>>
+  /** Checks process-local ownership, including interruption cleanup and terminal settlement. */
+  readonly isActive: (sessionID: SessionSchema.ID) => Effect.Effect<boolean>
   /** Starts execution while idle or joins the active execution. */
   readonly resume: (sessionID: SessionSchema.ID) => Effect.Effect<void, SessionRunner.RunError>
   /** Registers newly recorded work. Repeated wakeups may coalesce. */
@@ -142,6 +144,7 @@ export const layer = Layer.effect(
 
     return Service.of({
       active: coordinator.active,
+      isActive: coordinator.isActive,
       interrupt: (sessionID, options) =>
         Effect.gen(function* () {
           const interrupted = yield* coordinator.interrupt(sessionID, "user")
@@ -178,6 +181,7 @@ export const noopLayer = Layer.succeed(
   Service,
   Service.of({
     active: Effect.succeed(new Set()),
+    isActive: () => Effect.succeed(false),
     resume: () => Effect.void,
     wake: () => Effect.void,
     interrupt: () => Effect.succeed(false),
