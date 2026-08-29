@@ -2,10 +2,12 @@ import { readFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import { join } from "node:path"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import { which } from "@opencode-ai/core/util/which"
 import type { Hooks } from "@opencode-ai/plugin"
 import type { Provider } from "@opencode-ai/sdk/v2"
 import { Effect, Schema } from "effect"
 import { OAUTH_DUMMY_KEY } from "../auth"
+import { Process } from "../util/process"
 
 const AZURE_COGNITIVE_SERVICES_SCOPE = "https://cognitiveservices.azure.com/.default"
 const AZURE_FOUNDRY_SCOPE = "https://ai.azure.com/.default"
@@ -44,16 +46,11 @@ const decodeAzureDeployments = Schema.decodeUnknownPromise(
   ),
 )
 
-type AzureCommand = {
-  quiet(): AzureCommand
-  json(): Promise<unknown>
-}
-
-type AzureShell = (strings: TemplateStringsArray, ...values: string[]) => AzureCommand
+type AzureCommand = (args: string[]) => Promise<unknown>
 type AzureAccount = { readonly name: string; readonly resourceGroup: string }
 
-export async function AzureAuthPlugin(input: { $: AzureShell }): Promise<Hooks> {
-  const available = Boolean(Bun.which("az", { PATH: process.env.PATH }))
+export async function AzureAuthPlugin(): Promise<Hooks> {
+  const available = Boolean(which("az"))
   // Avoid launching Azure CLI on unrelated commands just because the executable is installed.
   const signedIn = available
     ? await readFile(join(process.env.AZURE_CONFIG_DIR ?? join(homedir(), ".azure"), "azureProfile.json"), "utf8")
@@ -63,17 +60,15 @@ export async function AzureAuthPlugin(input: { $: AzureShell }): Promise<Hooks> 
     : false
   const accounts =
     !process.env.AZURE_RESOURCE_NAME && !process.env.AZURE_RESOURCE_GROUP && signedIn
-      ? await input.$`az cognitiveservices account list --output json --only-show-errors`
-          .quiet()
-          .json()
+      ? await runAzure(["cognitiveservices", "account", "list", "--output", "json", "--only-show-errors"])
           .then(decodeAzureAccounts)
           .catch(() => [])
       : []
-  return createAzureAuthHooks(input.$, fetch, accounts, available)
+  return createAzureAuthHooks(runAzure, fetch, accounts, available)
 }
 
 export function createAzureAuthHooks(
-  shell: AzureShell,
+  run: AzureCommand,
   request: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> = fetch,
   accounts: readonly AzureAccount[] = [],
   available = true,
@@ -84,7 +79,7 @@ export function createAzureAuthHooks(
     if (cached && cached.expires - Date.now() > AZURE_TOKEN_REFRESH_BUFFER) return cached.token
 
     const result = await decodeAzureCliToken(
-      await shell`az account get-access-token --scope ${scope} --output json`.quiet().json(),
+      await run(["account", "get-access-token", "--scope", scope, "--output", "json"]),
     )
     const expires = result.expires_on !== undefined ? result.expires_on * 1000 : Date.parse(result.expiresOn ?? "")
     if (!Number.isFinite(expires)) throw new Error("Azure CLI returned an invalid token expiration")
@@ -135,7 +130,7 @@ export function createAzureAuthHooks(
         if (context.auth?.type !== "oauth") return provider.models
         const resource = context.auth.accountId
         if (!resource) return {}
-        return discoverAzureModels(provider.models, resource, shell).catch((error: unknown) => {
+        return discoverAzureModels(provider.models, resource, run).catch((error: unknown) => {
           Effect.runSync(
             Effect.logWarning("Azure model discovery failed", {
               resource,
@@ -205,21 +200,36 @@ export function createAzureAuthHooks(
   return hooks
 }
 
-async function discoverAzureModels(models: Provider["models"], resourceName: string, shell: AzureShell) {
+async function runAzure(args: string[]): Promise<unknown> {
+  const result = await Process.run([which("az") ?? "az", ...args])
+  return JSON.parse(result.stdout.toString())
+}
+
+async function discoverAzureModels(models: Provider["models"], resourceName: string, run: AzureCommand) {
   const resourceGroup = process.env.AZURE_RESOURCE_GROUP
   const account = resourceGroup
     ? { name: resourceName, resourceGroup }
     : (
         await decodeAzureAccounts(
-          await shell`az cognitiveservices account list --output json --only-show-errors`.quiet().json(),
+          await run(["cognitiveservices", "account", "list", "--output", "json", "--only-show-errors"]),
         )
       ).find((account) => account.name.toLowerCase() === resourceName.toLowerCase())
   if (!account) throw new Error(`Azure resource "${resourceName}" was not found in the active subscription`)
 
   const deployments = await decodeAzureDeployments(
-    await shell`az cognitiveservices account deployment list --name ${account.name} --resource-group ${account.resourceGroup} --output json --only-show-errors`
-      .quiet()
-      .json(),
+    await run([
+      "cognitiveservices",
+      "account",
+      "deployment",
+      "list",
+      "--name",
+      account.name,
+      "--resource-group",
+      account.resourceGroup,
+      "--output",
+      "json",
+      "--only-show-errors",
+    ]),
   )
   const found = new Map<string, Provider["models"][string]>()
   deployments.forEach((deployment) => {
