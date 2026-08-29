@@ -13,6 +13,7 @@ import {
   Hash,
   Layer,
   LayerMap,
+  Option,
   RcMap,
   Schema,
   Stream,
@@ -517,7 +518,8 @@ describe("LocationServiceMap", () => {
           )
           const plugins = yield* Effect.gen(function* () {
             const plugins = yield* Plugin.Service
-            yield* (yield* PluginSupervisor.Service).flush
+            const supervisor = yield* PluginSupervisor.Service
+            yield* supervisor.flush
             return yield* plugins.list()
           }).pipe(
             Effect.scoped,
@@ -674,14 +676,21 @@ describe("LocationServiceMap", () => {
             expect(Equal.equals(absent, present)).toBe(false)
             if (process.platform === "win32") expect(absent.directory).not.toBe(present.directory)
 
+            expect(yield* locations.contextEffectOption(absent)).toEqual(Option.none())
+            expect(Array.from(yield* RcMap.keys(locations.rcMap))).toHaveLength(0)
+
             const first = yield* locations.contextEffect(absent)
             expect(yield* locations.contextEffect(present)).toBe(first)
+            expect(Option.getOrThrow(yield* locations.contextEffectOption(absent))).toBe(first)
+            expect(Option.getOrThrow(yield* locations.contextEffectOption(present))).toBe(first)
             expect(Array.from(yield* RcMap.keys(locations.rcMap))).toEqual([
               Location.Ref.make({ directory, workspaceID: undefined }),
             ])
 
             // Invalidating with the shape opposite to the one that booted must evict.
             yield* locations.invalidate(present)
+            expect(yield* locations.contextEffectOption(absent)).toEqual(Option.none())
+            expect(yield* locations.contextEffectOption(present)).toEqual(Option.none())
             expect(Array.from(yield* RcMap.keys(locations.rcMap))).toHaveLength(0)
           }),
         ),
@@ -934,7 +943,8 @@ describe("LocationServiceMap", () => {
           })
           yield* plugins.activate([{ ...reviewer, version: "1" }])
 
-          expect(yield* (yield* Agent.Service).get(Agent.ID.make("reviewer"))).toMatchObject({
+          const agents = yield* Agent.Service
+          expect(yield* agents.get(Agent.ID.make("reviewer"))).toMatchObject({
             description: "Reviews code",
             mode: "subagent",
           })

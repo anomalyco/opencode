@@ -83,26 +83,25 @@ export const Plugin = define({
           ),
         )
 
-      const refresh = Effect.fn("ConfigInstructionPlugin.refresh")(function* (file?: string) {
-        yield* lock.withPermit(
-          Effect.gen(function* () {
-            const sources = yield* Effect.all({
-              global: isolate("global", globalSource()),
-              project: isolate("project", projectSource()),
-            })
-            loaded.current =
-              Array.isArray(sources.global) && Array.isArray(sources.project)
-                ? { type: "available", files: [...sources.global, ...sources.project] }
-                : { type: "unavailable" }
-            if (!file) return
-            yield* Effect.logDebug("instructions rescanned", {
-              file,
-              instructions:
-                loaded.current.type === "available" ? loaded.current.files.map((item) => item.path) : "unavailable",
-            })
-          }),
-        )
-      })
+      const refresh = Effect.fn("ConfigInstructionPlugin.refresh")(
+        function* (file?: string) {
+          const sources = yield* Effect.all({
+            global: isolate("global", globalSource()),
+            project: isolate("project", projectSource()),
+          })
+          loaded.current =
+            Array.isArray(sources.global) && Array.isArray(sources.project)
+              ? { type: "available", files: [...sources.global, ...sources.project] }
+              : { type: "unavailable" }
+          if (!file) return
+          yield* Effect.logDebug("instructions rescanned", {
+            file,
+            instructions:
+              loaded.current.type === "available" ? loaded.current.files.map((item) => item.path) : "unavailable",
+          })
+        },
+        (effect, ..._args: [file?: string]) => lock.withPermit(effect),
+      )
 
       yield* Stream.fromPubSub(changes).pipe(
         Stream.runForEach((file) => refresh(file).pipe(Effect.andThen(discovery.reload()))),

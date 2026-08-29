@@ -105,6 +105,7 @@ for (const fixture of [
           agent: Agent.defaultID,
           model,
           prepared: {
+            retry: () => Effect.void,
             request: LLM.request({ model: model.model, prompt: "Run one tool", toolChoice: fixture.toolChoice }),
             options: {},
             executeTool: () =>
@@ -113,6 +114,8 @@ for (const fixture of [
                 return { content: "Completed tool" }
               }),
           },
+          retry: (_cause, _error, retry) =>
+            Effect.succeed(retry ? { retry: true, attempt: 2, delay: 0 } : { retry: false }),
           recoverContinuation: true,
           recoverOverflow: Effect.succeed(false),
         })

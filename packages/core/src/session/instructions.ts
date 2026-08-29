@@ -1,7 +1,7 @@
 export * as SessionInstructions from "./instructions.js"
 
 import { relative } from "path"
-import { Context, DateTime, Effect, Layer, Option, Ref, Schema } from "effect"
+import { Context, Effect, Layer, Option, Ref, Schema } from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Bus } from "../bus.js"
 import { FSUtil } from "@opencode-ai/util/fs-util"

@@ -16,6 +16,7 @@ import { emptyMcpLayer } from "../fixture/mcp"
 import { location } from "../fixture/location"
 import { testEffect } from "../lib/effect"
 import { host } from "./host"
+import PROMPT_INITIALIZE from "../../src/plugin/command/initialize.txt"
 import PROMPT_REVIEW from "../../src/plugin/command/review.txt"
 
 const directory = AbsolutePath.make("/repo/packages/app")
@@ -40,7 +41,11 @@ describe("CommandPlugin.Plugin", () => {
   it.effect("registers built-in init and review commands", () =>
     Effect.gen(function* () {
       const command = yield* Command.Service
-      const prompts: { text: string; files?: readonly { readonly uri: string }[] }[] = []
+      const prompts: {
+        text: string
+        files?: readonly { readonly uri: string }[]
+        delivery?: "steer" | "queue"
+      }[] = []
       yield* CommandPlugin.Plugin.effect(
         host({
           command: {
@@ -51,7 +56,7 @@ describe("CommandPlugin.Plugin", () => {
           session: {
             prompt: (input) =>
               Effect.sync(() => {
-                prompts.push({ text: input.text, files: input.files })
+                prompts.push({ text: input.text, files: input.files, delivery: input.delivery })
                 return SessionInbox.User.make({
                   id: SessionMessage.ID.make("msg_test"),
                   sessionID: input.sessionID,
@@ -86,10 +91,50 @@ describe("CommandPlugin.Plugin", () => {
           delivery: "queue",
         },
       })
+      yield* command.execute({
+        name: "review",
+        invocation: {
+          sessionID: Session.ID.make("ses_test"),
+          prompt: { text: "  branch $& $$ $` $'  " },
+          delivery: "steer",
+        },
+      })
+      yield* command.execute({
+        name: "init",
+        invocation: {
+          sessionID: Session.ID.make("ses_test"),
+          prompt: { text: "" },
+          delivery: "steer",
+        },
+      })
+      yield* command.execute({
+        name: "review",
+        invocation: {
+          sessionID: Session.ID.make("ses_test"),
+          prompt: { text: "   " },
+          delivery: "steer",
+        },
+      })
       expect(prompts).toEqual([
         {
-          text: expect.stringContaining("extra context"),
+          text: PROMPT_INITIALIZE.replace("${path}", project).replaceAll("$ARGUMENTS", "extra context"),
           files: [{ uri: "file:///tmp/context.md" }],
+          delivery: "queue",
+        },
+        {
+          text: PROMPT_REVIEW.replace("${path}", project).replaceAll("$ARGUMENTS", () => "branch $& $$ $` $'"),
+          files: undefined,
+          delivery: "steer",
+        },
+        {
+          text: PROMPT_INITIALIZE.replace("${path}", project).replaceAll("$ARGUMENTS", ""),
+          files: undefined,
+          delivery: "steer",
+        },
+        {
+          text: PROMPT_REVIEW.replace("${path}", project).replaceAll("$ARGUMENTS", ""),
+          files: undefined,
+          delivery: "steer",
         },
       ])
     }),

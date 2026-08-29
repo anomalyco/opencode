@@ -157,6 +157,29 @@ describe("util.effect-flock", () => {
   )
 
   it.live(
+    "advances the heartbeat timestamp while the lock is held",
+    Effect.gen(function* () {
+      const flock = yield* EffectFlock.Service
+      const tmp = yield* Effect.promise(() => fs.mkdtemp(path.join(os.tmpdir(), "eflock-test-")))
+      const dir = path.join(tmp, "locks")
+      const heartbeat = path.join(lock(dir, "eflock:heartbeat"), "heartbeat")
+      yield* Effect.addFinalizer(() => Effect.promise(() => fs.rm(tmp, { recursive: true, force: true })))
+
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          yield* flock.acquire("eflock:heartbeat", dir, { staleMs: 300 })
+          yield* Effect.sleep(150)
+          const first = yield* Effect.promise(() => fs.stat(heartbeat))
+          yield* Effect.sleep(250)
+          const second = yield* Effect.promise(() => fs.stat(heartbeat))
+
+          expect(second.mtimeMs).toBeGreaterThan(first.mtimeMs)
+        }),
+      )
+    }),
+  )
+
+  it.live(
     "breaks stale lock dirs",
     Effect.gen(function* () {
       const flock = yield* EffectFlock.Service

@@ -292,18 +292,13 @@ function normalizeMcpTimeout(
     invalid(path, diagnostics)
     return
   }
-  const recognized = ["startup", "catalog", "execution"].filter((key) => own(value, key))
+  const recognized = Object.entries(ConfigMCP.Timeout.fields).filter(([key]) => own(value, key))
   if (Object.keys(value).length && !recognized.length) {
     invalid(path, diagnostics)
     return
   }
-  recognized.forEach((key) => {
-    const leaf = decodeEncoded(
-      ConfigMCP.Timeout.fields[key as keyof typeof ConfigMCP.Timeout.fields],
-      value[key],
-      [...path, key],
-      diagnostics,
-    )
+  recognized.forEach(([key, field]) => {
+    const leaf = decodeEncoded(field, value[key], [...path, key], diagnostics)
     if (leaf === undefined) return
     overlay(timeout, key, leaf, [...path, key], diagnostics)
   })

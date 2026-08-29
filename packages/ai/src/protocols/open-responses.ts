@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect"
+import { Effect, Option, Schema } from "effect"
 import type { Content } from "@opencode-ai/schema/tool"
 import { HttpTransport } from "../route/transport/index.js"
 import { Protocol } from "../route/protocol.js"
@@ -845,6 +845,21 @@ const onOutputTextDone = (state: ParserState, event: Event, id: string): StepRes
   return [{ ...state, lifecycle: Lifecycle.textEnd(state.lifecycle, events, id) }, events]
 }
 
+const decodeMessagePart = Schema.decodeUnknownOption(
+  Schema.Union([OpenResponsesOutputText, Schema.Struct({ type: Schema.tag("refusal"), refusal: Schema.String })]),
+)
+
+const decodeSummaryPart = Schema.decodeUnknownOption(OpenResponsesReasoningSummaryText)
+
+const decodeReasoningPart = Schema.decodeUnknownOption(
+  Schema.Struct({ type: Schema.tag("reasoning_text"), text: Schema.String }),
+)
+
+const joinReasoningText = (parts: ReadonlyArray<string | undefined>) => {
+  if (!parts.some((part) => part !== undefined && part.length > 0)) return undefined
+  return parts.filter((part) => part !== undefined).join("\n\n")
+}
+
 export const outputItemID = (state: ParserState, event: Event) =>
   event.output_index === undefined ? event.item_id : (state.outputItems[event.output_index] ?? event.item_id)
 
@@ -1065,24 +1080,33 @@ const onFunctionCallArgumentsDelta = Effect.fn("OpenResponses.onFunctionCallArgu
   return [{ ...state, lifecycle, tools: result.tools }, events] satisfies StepResult
 })
 
-const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (state: ParserState, event: Event) {
-  const item = event.item
+const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
+  state: ParserState,
+  item: Event["item"],
+) {
   if (!item) return [state, NO_EVENTS] satisfies StepResult
 
   if (item.type === "message" && item.id !== undefined) {
+    const message = state.message?.id === item.id ? state.message : undefined
     const itemPhase = messagePhase(item.phase)
-    const phase = itemPhase === undefined && state.message?.id === item.id ? state.message.phase : itemPhase
+    const phase = itemPhase === undefined ? message?.phase : itemPhase
+    const parts: ReadonlyArray<unknown> = Array.isArray(item.content) ? item.content : []
+    const content: string[] = []
+    for (const part of parts) {
+      const decoded = Option.getOrUndefined(decodeMessagePart(part))
+      if (!decoded) continue
+      content.push(decoded.type === "output_text" ? decoded.text : decoded.refusal)
+    }
+    const text = content.length > 0 ? content.join("") : undefined
+    const metadata = providerMetadata(state, { itemId: item.id, ...(phase === undefined ? {} : { phase }) })
     const events: LLMEvent[] = []
+    const lifecycle =
+      message && text ? Lifecycle.textStart(state.lifecycle, events, item.id, metadata) : state.lifecycle
     return [
       {
         ...state,
-        lifecycle: Lifecycle.textEnd(
-          state.lifecycle,
-          events,
-          item.id,
-          providerMetadata(state, { itemId: item.id, ...(phase === undefined ? {} : { phase }) }),
-        ),
-        message: state.message?.id === item.id ? undefined : state.message,
+        lifecycle: Lifecycle.textEnd(lifecycle, events, item.id, metadata, text),
+        message: message ? undefined : state.message,
       },
       events,
     ] satisfies StepResult
@@ -1137,17 +1161,33 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
   }
 
   if (isReasoningItem(item)) {
-    const events: LLMEvent[] = []
+    if (state.reasoningItems[item.id]?.open === false) return [state, NO_EVENTS] satisfies StepResult
     const metadata = reasoningMetadata(state, item)
+    const summaryParts: ReadonlyArray<unknown> = Array.isArray(item.summary) ? item.summary : []
+    const summary: Array<string | undefined> = []
+    for (const part of summaryParts) {
+      const decoded = Option.getOrUndefined(decodeSummaryPart(part))
+      // Keep missing entries so the array still matches the provider's summary indexes.
+      summary.push(decoded?.text)
+    }
+    const reasoningParts: ReadonlyArray<unknown> = Array.isArray(item.content) ? item.content : []
+    const content: string[] = []
+    for (const part of reasoningParts) {
+      const decoded = Option.getOrUndefined(decodeReasoningPart(part))
+      if (decoded) content.push(decoded.text)
+    }
+    const itemText = joinReasoningText(summary) ?? joinReasoningText(content)
+    const events: LLMEvent[] = []
     const reasoningItem = state.reasoningItems[item.id]
     if (reasoningItem) {
-      if (!reasoningItem.open) return [state, NO_EVENTS] satisfies StepResult
-      const lifecycle = Object.entries(reasoningItem.summaryParts)
-        .filter((entry) => entry[1] === "active" || entry[1] === "can-conclude")
-        .reduce(
-          (lifecycle, entry) => Lifecycle.reasoningEnd(lifecycle, events, `${item.id}:${entry[0]}`, metadata),
-          state.lifecycle,
-        )
+      const fragments = Object.entries(reasoningItem.summaryParts)
+      let lifecycle = state.lifecycle
+      for (const [index, status] of fragments) {
+        if (status === "concluded") continue
+        // Do not repeat earlier summaries that were already emitted as separate fragments.
+        const finalText = fragments.length === 1 ? itemText : summary[Number(index)]
+        lifecycle = Lifecycle.reasoningEnd(lifecycle, events, `${item.id}:${index}`, metadata, finalText || undefined)
+      }
       return [
         {
           ...state,
@@ -1167,7 +1207,13 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
     if (!state.lifecycle.reasoning.has(item.id)) {
       const lifecycle = Lifecycle.stepStart(state.lifecycle, events)
       events.push(LLMEvent.reasoningStart({ id: item.id, providerMetadata: metadata }))
-      events.push(LLMEvent.reasoningEnd({ id: item.id, providerMetadata: metadata }))
+      events.push(
+        LLMEvent.reasoningEnd({
+          id: item.id,
+          providerMetadata: metadata,
+          text: itemText,
+        }),
+      )
       return [
         {
           ...state,
@@ -1195,32 +1241,24 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
 })
 
 const onResponseFinish = Effect.fn("OpenResponses.onResponseFinish")(function* (state: ParserState, event: Event) {
-  const reconciled =
-    event.type === "response.completed"
-      ? yield* Effect.reduce(
-          event.response?.output ?? [],
-          () => [state, NO_EVENTS] satisfies StepResult,
-          ([current, events], item) => {
-            const id = item.id ?? (item.type === "function_call" ? item.call_id : undefined)
-            if (
-              id === undefined ||
-              ((item.type !== "function_call" || !current.tools[id]) &&
-                (item.type !== "reasoning" || !current.reasoningItems[id]?.open))
-            )
-              return Effect.succeed([current, events] satisfies StepResult)
-            return onOutputItemDone(current, { type: "response.output_item.done", item }).pipe(
-              Effect.map(([next, emitted]) => [next, [...events, ...emitted]] satisfies StepResult),
-            )
-          },
-        )
-      : ([state, NO_EVENTS] satisfies StepResult)
-  const current = reconciled[0]
+  let current = state
+  const events: LLMEvent[] = []
+  if (event.type === "response.completed") {
+    for (const item of event.response?.output ?? []) {
+      const id = item.id ?? (item.type === "function_call" ? item.call_id : undefined)
+      if (id === undefined) continue
+      if (item.type !== "function_call" || !current.tools[id]) continue
+      const [next, emitted] = yield* onOutputItemDone(current, item)
+      current = next
+      events.push(...emitted)
+    }
+  }
   // Some compatible providers omit output_item.done even after completing the response.
   const pending =
     event.type === "response.completed"
       ? yield* ToolStream.finishAll(current.id, current.tools)
       : { tools: current.tools, events: NO_EVENTS }
-  const events: LLMEvent[] = [...reconciled[1], ...pending.events]
+  events.push(...pending.events)
   const hasFunctionCall =
     pending.events.some((event) => LLMEvent.is.toolCall(event) || LLMEvent.is.toolInputError(event)) ||
     current.hasFunctionCall
@@ -1346,7 +1384,7 @@ export const step = (state: ParserState, input: Event) => {
   if (event.type === "response.output_item.done") {
     if (event.item?.type === "message" && event.item.id === undefined)
       return ProviderShared.eventError(state.id, `${event.type} message is missing id`)
-    return onOutputItemDone(state, event)
+    return onOutputItemDone(state, event.item)
   }
   if (event.type === "response.completed" || event.type === "response.incomplete") return onResponseFinish(state, event)
   if (event.type === "response.failed") return providerFailure(event, `${state.name} response failed`)

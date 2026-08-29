@@ -129,7 +129,7 @@ describe("Open Responses basic-item lifecycles", () => {
     }),
   )
 
-  it.effect("preserves done-only encrypted reasoning without replaying its summary or late events", () =>
+  it.effect("preserves done-only reasoning text and encryption without replaying late events", () =>
     Effect.gen(function* () {
       const item = {
         type: "reasoning",
@@ -157,6 +157,7 @@ describe("Open Responses basic-item lifecycles", () => {
         {
           type: "reasoning-end",
           id: "rs_1",
+          text: "Not streamed",
           providerMetadata: { "openai-compatible": { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
         },
       ])
@@ -301,7 +302,7 @@ describe("Open Responses basic-item lifecycles", () => {
     )
   })
 
-  it.effect("recovers pending items in completed output order with terminal encrypted metadata", () =>
+  it.effect("recovers pending calls without reconciling terminal reasoning", () =>
     Effect.gen(function* () {
       const events = yield* collect(
         {
@@ -326,11 +327,6 @@ describe("Open Responses basic-item lifecycles", () => {
       )
       expect(events.slice(5, -2)).toEqual([
         {
-          type: "reasoning-end",
-          id: "rs_1:0",
-          providerMetadata: { "openai-compatible": { itemId: "rs_1", reasoningEncryptedContent: "terminal-state" } },
-        },
-        {
           type: "tool-input-end",
           id: "call_1",
           name: "lookup",
@@ -341,8 +337,10 @@ describe("Open Responses basic-item lifecycles", () => {
           id: "call_1",
           name: "lookup",
           input: { query: "final" },
+          providerExecuted: undefined,
           providerMetadata: { "openai-compatible": { itemId: "fc_1" } },
         },
+        { type: "reasoning-end", id: "rs_1:0" },
       ])
     }),
   )

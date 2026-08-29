@@ -287,7 +287,7 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
     batches(ids.map((row) => row.id)),
     (batch) =>
       db
-        .select({ created: EventTable.created, data: EventTable.data })
+        .select({ data: EventTable.data })
         .from(EventTable)
         .where(
           and(

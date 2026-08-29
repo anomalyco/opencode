@@ -37,7 +37,7 @@ import { testEffect } from "./lib/effect"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import { promptLocationNode } from "./fixture/prompt-location"
 import { globalProjectNode } from "./lib/project"
-import { tmpdir } from "./fixture/tmpdir"
+import { tmpdirScoped } from "./fixture/tmpdir"
 
 const it = testEffect(
   AppNodeBuilder.build(
@@ -67,6 +67,17 @@ const liveIt = testEffect(
     ],
   ),
 )
+const projectIt = testEffect(
+  AppNodeBuilder.build(
+    LayerNode.group([Database.node, Bus.node, Project.node, SessionProjector.node, SessionStore.node, Session.node]),
+    [
+      [Bus.node, Bus.configured({ persist: true })],
+      // Project adoption needs plain-prompt admission, not live plugin/provider startup.
+      [LocationServiceMap.node, promptLocationNode],
+      [SessionExecution.node, SessionExecution.noopLayer],
+    ],
+  ),
+)
 const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
 const id = Session.ID.create()
 
@@ -85,10 +96,7 @@ const assertCreateInputTypes = (session: Session.Interface) => {
 void assertCreateInputTypes
 
 function withTmp<A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>) {
-  return Effect.acquireRelease(
-    Effect.promise(() => tmpdir()),
-    (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-  ).pipe(Effect.flatMap((tmp) => f(tmp.path)))
+  return tmpdirScoped().pipe(Effect.flatMap((tmp) => f(tmp.path)))
 }
 
 describe("Session.create", () => {
@@ -119,7 +127,7 @@ describe("Session.create", () => {
     ),
   )
 
-  liveIt.live("follows the directory's project identity established after creation", () =>
+  projectIt.live("follows the directory's project identity established after creation", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
         const session = yield* Session.Service
@@ -956,10 +964,7 @@ describe("Session.create", () => {
         data: event.data,
       }))
 
-      const tmp = yield* Effect.acquireRelease(
-        Effect.promise(() => tmpdir()),
-        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-      )
+      const tmp = yield* tmpdirScoped()
       const targetLayer = AppNodeBuilder.build(
         LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionStore.node]),
         [

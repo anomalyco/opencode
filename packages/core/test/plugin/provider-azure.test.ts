@@ -2,7 +2,6 @@ import { chmod } from "node:fs/promises"
 import { Agent } from "@opencode-ai/core/agent"
 import { AISDK } from "@opencode-ai/core/aisdk"
 import { describe, expect } from "bun:test"
-import type { LanguageModelV3 } from "@ai-sdk/provider"
 import { Effect, Schedule } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Credential } from "@opencode-ai/core/credential"
@@ -17,6 +16,7 @@ import { Location } from "@opencode-ai/core/location"
 import { Session } from "@opencode-ai/core/session"
 import { State } from "@opencode-ai/core/state"
 import { AppProcess } from "@opencode-ai/util/process"
+import { fakeSelectorSdk } from "../fixture/selector"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
@@ -24,7 +24,6 @@ const it = testEffect(PluginTestLayer)
 
 const addPlugin = Effect.fn(function* () {
   const plugin = yield* Plugin.Service
-  const aisdk = yield* AISDK.Service
   const host = yield* PluginHost.make(plugin)
   yield* AzurePlugin.effect(host)
 })
@@ -118,26 +117,13 @@ const azureCredential = Effect.gen(function* () {
     }),
   })
 })
-
-function fakeSelectorSdk(calls: string[]) {
-  const make = (method: string) => (id: string) => {
-    calls.push(`${method}:${id}`)
-    return { modelId: id, provider: method, specificationVersion: "v3" } as unknown as LanguageModelV3
-  }
-  return {
-    responses: make("responses"),
-    messages: make("messages"),
-    chat: make("chat"),
-    languageModel: make("languageModel"),
-  }
-}
-
 describe("AzurePlugin", () => {
   it.effect("registers a resource name form when the environment does not provide one", () =>
     withEnv({ AZURE_RESOURCE_NAME: undefined, AZURE_COGNITIVE_SERVICES_RESOURCE_NAME: undefined }, () =>
       Effect.gen(function* () {
         yield* addPlugin()
-        expect((yield* (yield* Integration.Service).get(Integration.ID.make("azure")))?.methods).toContainEqual({
+        const integrations = yield* Integration.Service
+        expect((yield* integrations.get(Integration.ID.make("azure")))?.methods).toContainEqual({
           type: "key",
           label: "API key",
           form: [
@@ -562,13 +548,8 @@ describe("AzurePlugin", () => {
       Effect.gen(function* () {
         const catalog = yield* Catalog.Service
         yield* catalog.transform((catalog) => {
-          const azure = Provider.Info.make({
-            ...Provider.Info.empty(Provider.ID.azure),
-            package: Provider.aisdk("@ai-sdk/azure"),
-            settings: { resourceName: "from-config" },
-          })
-          catalog.provider.update(azure.id, (item) => {
-            item.package = azure.package
+          catalog.provider.update(Provider.ID.azure, (item) => {
+            item.package = Provider.aisdk("@ai-sdk/azure")
             item.settings = { resourceName: "from-config" }
           })
           catalog.provider.update(Provider.ID.openai, () => {})
@@ -585,13 +566,8 @@ describe("AzurePlugin", () => {
       Effect.gen(function* () {
         const catalog = yield* Catalog.Service
         yield* catalog.transform((catalog) => {
-          const azure = Provider.Info.make({
-            ...Provider.Info.empty(Provider.ID.azure),
-            package: Provider.aisdk("@ai-sdk/azure"),
-            settings: { resourceName: "" },
-          })
-          catalog.provider.update(azure.id, (item) => {
-            item.package = azure.package
+          catalog.provider.update(Provider.ID.azure, (item) => {
+            item.package = Provider.aisdk("@ai-sdk/azure")
             item.settings = { resourceName: "" }
           })
         })
@@ -606,13 +582,8 @@ describe("AzurePlugin", () => {
       Effect.gen(function* () {
         const catalog = yield* Catalog.Service
         yield* catalog.transform((catalog) => {
-          const azure = Provider.Info.make({
-            ...Provider.Info.empty(Provider.ID.azure),
-            package: Provider.aisdk("@ai-sdk/azure"),
-            settings: { resourceName: "   " },
-          })
-          catalog.provider.update(azure.id, (item) => {
-            item.package = azure.package
+          catalog.provider.update(Provider.ID.azure, (item) => {
+            item.package = Provider.aisdk("@ai-sdk/azure")
             item.settings = { resourceName: "   " }
           })
         })
@@ -625,7 +596,6 @@ describe("AzurePlugin", () => {
   it.effect("allows configured baseURL without resourceName", () =>
     withEnv({ AZURE_RESOURCE_NAME: undefined }, () =>
       Effect.gen(function* () {
-        const plugin = yield* Plugin.Service
         const aisdk = yield* AISDK.Service
         const catalog = yield* Catalog.Service
         yield* catalog.transform((catalog) =>
@@ -634,7 +604,8 @@ describe("AzurePlugin", () => {
           }),
         )
         yield* addPlugin()
-        expect((yield* (yield* Integration.Service).get(Integration.ID.make("azure")))?.methods).toContainEqual({
+        const integrations = yield* Integration.Service
+        expect((yield* integrations.get(Integration.ID.make("azure")))?.methods).toContainEqual({
           type: "key",
           label: "API key",
         })
@@ -722,7 +693,6 @@ describe("AzurePlugin", () => {
 
   it.effect("selects chat only for completion URLs", () =>
     Effect.gen(function* () {
-      const plugin = yield* Plugin.Service
       const aisdk = yield* AISDK.Service
       const calls: string[] = []
       yield* addPlugin()
@@ -741,7 +711,6 @@ describe("AzurePlugin", () => {
 
   it.effect("selects chat from per-call useCompletionUrls", () =>
     Effect.gen(function* () {
-      const plugin = yield* Plugin.Service
       const aisdk = yield* AISDK.Service
       const calls: string[] = []
       yield* addPlugin()
@@ -760,7 +729,6 @@ describe("AzurePlugin", () => {
 
   it.effect("ignores model useCompletionUrls when per-call option is unset", () =>
     Effect.gen(function* () {
-      const plugin = yield* Plugin.Service
       const aisdk = yield* AISDK.Service
       const calls: string[] = []
       yield* addPlugin()
@@ -780,7 +748,6 @@ describe("AzurePlugin", () => {
 
   it.effect("uses the legacy Azure selector order and provider guard", () =>
     Effect.gen(function* () {
-      const plugin = yield* Plugin.Service
       const aisdk = yield* AISDK.Service
       const calls: string[] = []
       yield* addPlugin()
@@ -809,7 +776,6 @@ describe("AzurePlugin", () => {
 
   it.effect("falls back through the legacy Azure selector order", () =>
     Effect.gen(function* () {
-      const plugin = yield* Plugin.Service
       const aisdk = yield* AISDK.Service
       const calls: string[] = []
       const make = (method: string) => (id: string) => {
