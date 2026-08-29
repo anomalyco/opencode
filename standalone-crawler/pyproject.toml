@@ -12,6 +12,7 @@ license = { text = "BSD-3-Clause" }
 dependencies = [
     "scrapling[fetchers]==0.4.14",
     "pydantic>=2.6",
+    "ddgs>=9.0.0",
 ]
 
 [project.optional-dependencies]

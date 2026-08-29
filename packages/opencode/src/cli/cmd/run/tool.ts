@@ -31,7 +31,7 @@ import type { SkillTool } from "@/tool/skill"
 import type { TaskTool } from "@/tool/task"
 import type { TodoWriteTool } from "@/tool/todo"
 import type { WebFetchTool } from "@/tool/webfetch"
-import { webSearchProviderLabel, type WebSearchTool } from "@/tool/websearch"
+import type { WebSearchTool } from "@/tool/websearch"
 import type { WriteTool } from "@/tool/write"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import * as Locale from "@/util/locale"
@@ -356,7 +356,7 @@ function runEdit(p: ToolProps<typeof EditTool>): ToolInline {
 }
 
 function runWebSearch(p: ToolProps<typeof WebSearchTool>): ToolInline {
-  const title = webSearchProviderLabel(p.metadata.provider)
+  const title = "DuckDuckGo Search"
   return {
     icon: "◈",
     title: p.input.query ? `${title} "${p.input.query}"` : title,
@@ -908,7 +908,7 @@ function scrollWebfetchStart(p: ToolProps<typeof WebFetchTool>): string {
 }
 
 function scrollWebSearchStart(p: ToolProps<typeof WebSearchTool>): string {
-  const title = webSearchProviderLabel(p.metadata.provider)
+  const title = "DuckDuckGo Search"
   const query = p.input.query ?? ""
   if (!query) {
     return `◈ ${title}`
@@ -995,7 +995,7 @@ function permWebfetch(p: ToolPermissionProps<typeof WebFetchTool>): ToolPermissi
 
 function permWebSearch(p: ToolPermissionProps<typeof WebSearchTool>): ToolPermissionInfo {
   const query = p.input.query || ""
-  const title = webSearchProviderLabel(p.metadata.provider)
+  const title = "DuckDuckGo Search"
   return {
     icon: "◈",
     title: query ? `${title} "${query}"` : title,

@@ -3,6 +3,7 @@ import { CliError } from "../effect-cmd"
 import { UI } from "../ui"
 import fs from "fs/promises"
 import path from "path"
+import { CRAWL_DISABLED_MESSAGE, isCrawlEnabled } from "./scrape-state"
 
 export function sanitizeFolderName(name: string): string {
   return name
@@ -61,6 +62,9 @@ export const firecrawlScrapeHandler = Effect.fn("Cli.firecrawl.scrape")(function
   provider: "firecrawl" | "auto"
   cookie?: string
 }) {
+  if (!isCrawlEnabled()) {
+    return yield* new CliError({ message: CRAWL_DISABLED_MESSAGE })
+  }
   const apiKey = loadApiKey()
   if (!apiKey) {
     return yield* new CliError({
@@ -185,6 +189,9 @@ export const firecrawlCrawlHandler = Effect.fn("Cli.firecrawl.crawl")(function* 
   provider: "firecrawl" | "auto"
   cookie?: string
 }) {
+  if (!isCrawlEnabled()) {
+    return yield* new CliError({ message: CRAWL_DISABLED_MESSAGE })
+  }
   const apiKey = loadApiKey()
   if (!apiKey) {
     return yield* new CliError({

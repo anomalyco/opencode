@@ -28,15 +28,10 @@ export class Service extends ConfigService.Service<Service>()("@opencode/Runtime
     broad: bool("OPENCODE_DISABLE_CLAUDE_CODE"),
     direct: bool("OPENCODE_DISABLE_CLAUDE_CODE_SKILLS"),
   }).pipe(Config.map((flags) => flags.broad || flags.direct)),
-  enableExa: Config.all({
-    experimental,
-    enabled: bool("OPENCODE_ENABLE_EXA"),
-    legacy: bool("OPENCODE_EXPERIMENTAL_EXA"),
-  }).pipe(Config.map((flags) => flags.experimental || flags.enabled || flags.legacy)),
-  enableParallel: Config.all({
-    enabled: bool("OPENCODE_ENABLE_PARALLEL"),
-    legacy: bool("OPENCODE_EXPERIMENTAL_PARALLEL"),
-  }).pipe(Config.map((flags) => flags.enabled || flags.legacy)),
+  // Web search is now backed by DuckDuckGo (free, no API key required).
+  // Legacy Exa/Parallel flags are kept as no-ops for config compatibility.
+  enableExa: Config.succeed(false),
+  enableParallel: Config.succeed(false),
   enableExperimentalModels: bool("OPENCODE_ENABLE_EXPERIMENTAL_MODELS"),
   enableQuestionTool: bool("OPENCODE_ENABLE_QUESTION_TOOL"),
   experimentalReferences: enabledByExperimental("OPENCODE_EXPERIMENTAL_REFERENCES"),

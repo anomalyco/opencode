@@ -1,14 +1,52 @@
 import { Effect, Schema } from "effect"
-import { HttpClient } from "effect/unstable/http"
 import * as Tool from "./tool"
-import * as McpWebSearch from "./mcp-websearch"
 import DESCRIPTION from "./websearch.txt"
-import { checksum } from "@opencode-ai/core/util/encode"
-import { InstallationVersion } from "@opencode-ai/core/installation/version"
-import { RuntimeFlags } from "@/effect/runtime-flags"
+import path from "path"
+
+// ---------------------------------------------------------------------------
+// Rate limiter – sliding-window token bucket
+// ---------------------------------------------------------------------------
+
+const RATE_LIMIT_WINDOW_MS = 60_000 // 1 minute
+const RATE_LIMIT_MAX = 20           // max requests per window
+const RATE_LIMIT_MIN_GAP_MS = 2_000 // minimum gap between requests
+
+const timestamps: number[] = []
+
+function acquireSearchSlot(): { ok: boolean; retryAfterMs?: number } {
+  const now = Date.now()
+
+  // Purge entries outside the window
+  while (timestamps.length > 0 && timestamps[0] <= now - RATE_LIMIT_WINDOW_MS) {
+    timestamps.shift()
+  }
+
+  // Check minimum gap since last request
+  if (timestamps.length > 0) {
+    const last = timestamps[timestamps.length - 1]
+    const gap = now - last
+    if (gap < RATE_LIMIT_MIN_GAP_MS) {
+      return { ok: false, retryAfterMs: RATE_LIMIT_MIN_GAP_MS - gap }
+    }
+  }
+
+  // Check window capacity
+  if (timestamps.length >= RATE_LIMIT_MAX) {
+    const oldest = timestamps[0]
+    const retryAfterMs = oldest + RATE_LIMIT_WINDOW_MS - now
+    return { ok: false, retryAfterMs: Math.max(retryAfterMs, RATE_LIMIT_MIN_GAP_MS) }
+  }
+
+  timestamps.push(now)
+  return { ok: true }
+}
+
+// ---------------------------------------------------------------------------
+// Tool parameters
+// ---------------------------------------------------------------------------
 
 export const Parameters = Schema.Struct({
-  query: Schema.String.annotate({ description: "Websearch query" }),
+  query: Schema.String.annotate({ description: "Search query" }),
   numResults: Schema.optional(Schema.Number).annotate({
     description: "Number of search results to return (default: 8)",
   }),
@@ -24,120 +62,139 @@ export const Parameters = Schema.Struct({
   }),
 })
 
-const WebSearchProviderSchema = Schema.Literals(["exa", "parallel"])
-export type WebSearchProvider = Schema.Schema.Type<typeof WebSearchProviderSchema>
+// ---------------------------------------------------------------------------
+// DuckDuckGo search via Python subprocess
+// ---------------------------------------------------------------------------
 
-export function selectWebSearchProvider(sessionID: string, flags = { exa: false, parallel: false }): WebSearchProvider {
-  const override = process.env.OPENCODE_WEBSEARCH_PROVIDER
-  if (override === "exa" || override === "parallel") return override
-  if (flags.parallel) return "parallel"
-  if (flags.exa) return "exa"
-
-  return Number.parseInt(checksum(sessionID) ?? "0", 36) % 2 === 0 ? "exa" : "parallel"
+interface DdgResult {
+  title: string
+  url: string
+  snippet: string
 }
 
-export function webSearchProviderLabel(provider: unknown) {
-  if (provider === "parallel") return "Parallel Web Search"
-  if (provider === "exa") return "Exa Web Search"
-  return "Web Search"
+interface DdgResponse {
+  results: DdgResult[]
+  query: string
+  provider: string
+  error?: string
 }
 
-export function webSearchModelName(extra: Tool.Context["extra"]) {
-  const model = extra?.model
-  if (!model || typeof model !== "object") return undefined
-  const api = "api" in model && model.api && typeof model.api === "object" ? model.api : undefined
-  const apiID = api && "id" in api && typeof api.id === "string" ? api.id : undefined
-  const id = "id" in model && typeof model.id === "string" ? model.id : undefined
-  return (apiID ?? id)?.slice(0, 100)
+function getScriptPath(): string {
+  return path.resolve(import.meta.dirname, "../../../../standalone-crawler/duckduckgo_search.py")
 }
 
-function parallelAuthHeaders() {
-  const headers = { "User-Agent": `opencode/${InstallationVersion}` }
-  if (!process.env.PARALLEL_API_KEY) return headers
-  return { ...headers, Authorization: `Bearer ${process.env.PARALLEL_API_KEY}` }
-}
-
-function callProvider(
-  http: HttpClient.HttpClient,
-  provider: WebSearchProvider,
-  params: Schema.Schema.Type<typeof Parameters>,
-  ctx: Tool.Context,
-) {
-  if (provider === "parallel") {
-    return McpWebSearch.call(
-      http,
-      McpWebSearch.PARALLEL_URL,
-      "web_search",
-      McpWebSearch.ParallelSearchArgs,
-      {
-        objective: params.query,
-        search_queries: [params.query],
-        session_id: ctx.sessionID,
-        model_name: webSearchModelName(ctx.extra),
-      },
-      "25 seconds",
-      parallelAuthHeaders(),
-    )
+function formatResults(response: DdgResponse): string {
+  if (response.error) {
+    return `Search error: ${response.error}`
+  }
+  if (response.results.length === 0) {
+    return "No search results found. Please try a different query."
   }
 
-  return McpWebSearch.call(
-    http,
-    McpWebSearch.EXA_URL,
-    "web_search_exa",
-    McpWebSearch.SearchArgs,
-    {
-      query: params.query,
-      type: params.type || "auto",
-      numResults: params.numResults || 8,
-      livecrawl: params.livecrawl || "fallback",
-      contextMaxCharacters: params.contextMaxCharacters,
-    },
-    "25 seconds",
-  )
+  const lines: string[] = []
+  for (const r of response.results) {
+    lines.push(`## ${r.title}`)
+    lines.push(`URL: ${r.url}`)
+    if (r.snippet) lines.push(`${r.snippet}`)
+    lines.push("")
+  }
+  return lines.join("\n").trim()
 }
+
+async function runSearch(
+  query: string,
+  maxResults: number,
+  type?: string,
+): Promise<DdgResponse> {
+  const script = getScriptPath()
+  const args = ["python", script, query, "--max-results", String(maxResults)]
+  if (type === "fast") {
+    args.push("--time-period", "w")
+  } else if (type === "deep") {
+    args.push("--time-period", "m")
+  }
+
+  const proc = Bun.spawn(args, { stdout: "pipe", stderr: "pipe" })
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ])
+
+  if (exitCode !== 0) {
+    const errMsg = stderr.trim() || `DuckDuckGo search exited with code ${exitCode}`
+    return {
+      results: [],
+      query,
+      provider: "duckduckgo",
+      error: errMsg,
+    }
+  }
+
+  try {
+    return JSON.parse(stdout) as DdgResponse
+  } catch {
+    return {
+      results: [],
+      query,
+      provider: "duckduckgo",
+      error: "Search returned invalid response",
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Tool definition
+// ---------------------------------------------------------------------------
 
 export const WebSearchTool = Tool.define(
   "websearch",
-  Effect.gen(function* () {
-    const http = yield* HttpClient.HttpClient
-    const flags = yield* RuntimeFlags.Service
-
-    return {
-      get description() {
-        return DESCRIPTION.replace("{{year}}", new Date().getFullYear().toString())
-      },
-      parameters: Parameters,
-      execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
-        Effect.gen(function* () {
-          const provider = selectWebSearchProvider(ctx.sessionID, {
-            exa: flags.enableExa,
-            parallel: flags.enableParallel,
-          })
-          const title = webSearchProviderLabel(provider)
-          yield* ctx.metadata({ title: `${title} "${params.query}"`, metadata: { provider } })
-
-          yield* ctx.ask({
-            permission: "websearch",
-            patterns: [params.query],
-            always: ["*"],
-            metadata: {
-              query: params.query,
-              numResults: params.numResults,
-              livecrawl: params.livecrawl,
-              type: params.type,
-              contextMaxCharacters: params.contextMaxCharacters,
-              provider,
-            },
-          })
-
-          const result = yield* callProvider(http, provider, params, ctx)
-
+  Effect.succeed({
+    get description() {
+      return DESCRIPTION.replace("{{year}}", new Date().getFullYear().toString())
+    },
+    parameters: Parameters,
+    execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
+      Effect.gen(function* () {
+        // Rate-limit gate before any network request
+        const slot = acquireSearchSlot()
+        if (!slot.ok) {
+          const waitSec = Math.ceil((slot.retryAfterMs ?? 2000) / 1000)
           return {
-            output: result ?? "No search results found. Please try a different query.",
-            title: `${title}: ${params.query}`,
-            metadata: { provider },
+            output: `Search rate limit reached. Please wait ${waitSec} seconds before searching again.`,
+            title: "DuckDuckGo Search",
+            metadata: { provider: "duckduckgo" as const },
           }
-        }).pipe(Effect.orDie),
-    }
+        }
+
+        yield* ctx.ask({
+          permission: "websearch",
+          patterns: [params.query],
+          always: ["*"],
+          metadata: {
+            query: params.query,
+            numResults: params.numResults,
+            provider: "duckduckgo",
+          },
+        })
+
+        const maxResults = params.numResults ?? 8
+        const response = yield* Effect.tryPromise({
+          try: () => runSearch(params.query, maxResults, params.type),
+          catch: (e) => new Error(`DuckDuckGo search failed: ${e instanceof Error ? e.message : String(e)}`),
+        })
+
+        const output = formatResults(response)
+
+        // Truncate context if contextMaxCharacters is set
+        const maxChars = params.contextMaxCharacters ?? 10_000
+        const truncated = output.length > maxChars ? output.slice(0, maxChars) + "\n\n[truncated]" : output
+
+        return {
+          output: truncated,
+          title: `DuckDuckGo: ${params.query}`,
+          metadata: { provider: "duckduckgo" as const },
+        }
+      }).pipe(Effect.orDie),
   }),
 )
