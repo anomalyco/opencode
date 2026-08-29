@@ -141,25 +141,22 @@ WITH normalized AS (
   FROM filtered
   WHERE activity_week IN (${cohortDates})
   GROUP BY activity_week, user_key, provider, model
-), ranked_models AS (
+), user_totals AS (
   SELECT
     cohort_date,
     user_key,
-    provider,
-    model,
-    model_requests,
-    SUM(model_requests) OVER (PARTITION BY cohort_date, user_key) AS total_requests,
-    ROW_NUMBER() OVER (
-      PARTITION BY cohort_date, user_key
-      ORDER BY model_requests DESC, model ASC
-    ) AS model_rank
+    SUM(model_requests) AS total_requests,
+    MAX(model_requests) AS max_model_requests
   FROM model_usage
+  GROUP BY cohort_date, user_key
 ), primary_models AS (
-  SELECT cohort_date, user_key, provider, model
-  FROM ranked_models
-  WHERE model_rank = 1
-    AND total_requests >= 10
-    AND CAST(model_requests AS double) / NULLIF(total_requests, 0) >= 0.8
+  SELECT model_usage.cohort_date, model_usage.user_key, model_usage.provider, model_usage.model
+  FROM model_usage
+  INNER JOIN user_totals ON model_usage.cohort_date = user_totals.cohort_date
+    AND model_usage.user_key = user_totals.user_key
+    AND model_usage.model_requests = user_totals.max_model_requests
+  WHERE user_totals.total_requests >= 10
+    AND CAST(model_usage.model_requests AS double) / NULLIF(user_totals.total_requests, 0) >= 0.8
 ), returned AS (
   SELECT
     ${returnCohortSql} AS cohort_date,
@@ -465,13 +462,16 @@ function retentionPeriods(periodStart: Date, periodEnd: Date) {
 }
 
 function statModelSql(model: string, providerModel: string) {
-  return `COALESCE(NULLIF(regexp_replace(CASE
+  const normalized = `regexp_replace(CASE
       WHEN lower(${model}) = 'big-pickle' THEN regexp_replace(NULLIF(${providerModel}, ''), '^.*/', '')
-${Object.entries(MODEL_NAME_ALIASES)
-  .map(([from, to]) => `      WHEN lower(${model}) = ${sqlString(from)} THEN ${sqlString(to)}`)
-  .join("\n")}
       ELSE ${model}
-    END, '(-free|:free|:global)+$', ''), ''), 'unknown')`
+    END, '(-free|:free|:global)+$', '')`
+  return `COALESCE(NULLIF(CASE
+${Object.entries(MODEL_NAME_ALIASES)
+  .map(([from, to]) => `      WHEN lower(${normalized}) = ${sqlString(from)} THEN ${sqlString(to)}`)
+  .join("\n")}
+      ELSE ${normalized}
+    END, ''), 'unknown')`
 }
 
 function freeTierSql(tier: string, model: string) {
