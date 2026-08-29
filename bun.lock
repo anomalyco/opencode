@@ -190,7 +190,6 @@
         "@typescript/native-preview": "catalog:",
         "@webgpu/types": "0.1.54",
         "typescript": "catalog:",
-        "vite-plugin-solid": "catalog:",
         "wrangler": "4.50.0",
       },
     },

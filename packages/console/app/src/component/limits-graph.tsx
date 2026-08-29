@@ -116,7 +116,6 @@ export function LimitsGraph(props: { href: string }) {
       aria-label={i18n.t("go.graph.label")}
       data-visible={visible() ? "" : undefined}
       data-boosted={boosted() ? "" : undefined}
-      data-stage={boosted() ? "bonus" : visible() ? "base" : "waiting"}
       ref={root}
       onAnimationStart={(event) => {
         if (!(event.target instanceof SVGElement) || event.animationName !== "go-graph-reveal") return
@@ -153,38 +152,30 @@ export function LimitsGraph(props: { href: string }) {
             <For each={graph}>
               {(m, i) => (
                 <>
-                  <g
+                  <rect
                     data-animate="bar"
                     data-model={m.id}
                     data-stage-end={i() === graph.length - 1 ? "" : undefined}
                     style={{ "--d": m.d }}
-                  >
-                    <rect
-                      x={left}
-                      y={gy(i()) - bh / 2}
-                      width={Math.max(0, ("infinite" in m ? infiniteX : x(ratio(m.baseReq ?? m.req))) - left)}
-                      height={bh}
-                      data-bar
-                      data-kind={"infinite" in m ? "infinite" : "go"}
-                      data-model={m.id}
-                    />
-                  </g>
+                    x={left}
+                    y={gy(i()) - bh / 2}
+                    width={Math.max(0, ("infinite" in m ? infiniteX : x(ratio(m.baseReq ?? m.req))) - left)}
+                    height={bh}
+                    data-bar
+                    data-kind={"infinite" in m ? "infinite" : "go"}
+                  />
                   {m.baseReq && (
-                    <g
+                    <rect
                       data-animate="bonus"
                       data-model={m.id}
                       style={{ "--bonus-delay": `${bonuses.indexOf(m) * 60}ms` }}
-                    >
-                      <rect
-                        x={x(ratio(m.baseReq)) + 2}
-                        y={gy(i()) - bh / 2}
-                        width={Math.max(0, x(ratio(m.req)) - x(ratio(m.baseReq)) - 2)}
-                        height={bh}
-                        data-bar
-                        data-kind="promo"
-                        data-model={m.id}
-                      />
-                    </g>
+                      x={x(ratio(m.baseReq)) + 2}
+                      y={gy(i()) - bh / 2}
+                      width={Math.max(0, x(ratio(m.req)) - x(ratio(m.baseReq)) - 2)}
+                      height={bh}
+                      data-bar
+                      data-kind="promo"
+                    />
                   )}
                 </>
               )}
