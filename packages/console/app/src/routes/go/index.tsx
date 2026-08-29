@@ -60,7 +60,7 @@ function LimitsGraph(props: { href: string }) {
     const observer = new IntersectionObserver(
       (entries) => {
         const entry = entries[0]
-        if (!entry?.isIntersecting) return
+        if (!entry?.isIntersecting || entry.intersectionRatio < 0.35) return
         setVisible(true)
         observer.disconnect()
       },
@@ -147,15 +147,19 @@ function LimitsGraph(props: { href: string }) {
           style={{ height: `${h}px` }}
         >
           <g data-slot="grid">
-            <For each={ticks}>{(t) => <line x1={x(t)} y1={top} x2={x(t)} y2={h - bottom} data-grid />}</For>
+            <For each={ticks}>
+              {(t, i) => (
+                <line x1={x(t)} y1={h - bottom} x2={x(t)} y2={top} data-grid style={{ "--d": `${i() * 100}ms` }} />
+              )}
+            </For>
           </g>
 
-          <line x1={left} y1={top} x2={left} y2={h - bottom} data-stub />
+          <line x1={left} y1={h - bottom} x2={left} y2={top} data-stub />
 
           <g data-slot="bars">
             <For each={graph}>
               {(m, i) => (
-                <g data-model={m.id} style={{ "--d": m.d } as any}>
+                <g data-animate="bar" data-model={m.id} style={{ "--d": m.d }}>
                   <rect
                     x={left}
                     y={gy(i()) - bh / 2}
@@ -191,7 +195,11 @@ function LimitsGraph(props: { href: string }) {
         <div data-slot="xlabels" aria-hidden="true">
           <For each={shown}>
             {(t) => (
-              <span data-xlabel data-tick={t} style={{ "--x": px(x(t)), "--y": ty } as any}>
+              <span
+                data-xlabel
+                data-tick={t}
+                style={{ "--x": px(x(t)), "--y": ty, "--d": `${ticks.indexOf(t) * 100}ms` }}
+              >
                 {i18n.t("go.graph.tick", { n: t })}
               </span>
             )}
@@ -207,9 +215,7 @@ function LimitsGraph(props: { href: string }) {
                 data-model={m.id}
                 data-edge={"edge" in m ? "" : undefined}
                 data-infinite={"infinite" in m ? "" : undefined}
-                style={
-                  { "--x": px("infinite" in m ? infiniteX : x(ratio(m.req))), "--y": py(gy(i())), "--d": m.d } as any
-                }
+                style={{ "--x": px("infinite" in m ? infiniteX : x(ratio(m.req))), "--y": py(gy(i())), "--d": m.d }}
               >
                 <span data-value>{"infinite" in m ? "∞" : m.req.toLocaleString()}</span>
                 <span data-name>{m.name}</span>
