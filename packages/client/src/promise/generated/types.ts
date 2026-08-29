@@ -214,6 +214,7 @@ export type GenerateTextResponse = { data: { text: string } }
 
 export type ProviderInfo = {
   id: string
+  canonical?: string
   integrationID?: string
   name: string
   activation: "auto" | "enabled" | "disabled"
@@ -1816,6 +1817,7 @@ export type ModelInfo = {
   id: string
   modelID: string
   providerID: string
+  canonical?: string
   family?: string
   name: string
   compatibility?: ModelCompatibility
@@ -1993,6 +1995,7 @@ export type ConfigEntry =
         warming?: boolean | { prompt?: string; interval?: string; duration?: string }
         providers?: {
           [x: string]: {
+            canonical?: string
             name?: string
             env?: Array<string>
             package?: string

@@ -87,6 +87,43 @@ it.effect("keys language models by package and flattened overlays", () =>
   }),
 )
 
+it.effect("uses canonical names and metadata without merging connection cache partitions", () =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    const loaded: string[] = []
+    yield* aisdk.hook.sdk((event) => {
+      loaded.push(`${event.model.providerID}:${event.options.name}`)
+      event.sdk = createOpenAICompatible({
+        ...event.options,
+        name: String(event.options.name),
+        baseURL: String(event.options.baseURL),
+      })
+    })
+    const input = {
+      ...model("@ai-sdk/openai-compatible", { baseURL: "https://proxy.example/v1", reasoningEffort: "high" }),
+      providerID: Provider.ID.make("work"),
+      canonical: Provider.ID.openai,
+    }
+    const first = yield* aisdk.language(input)
+    const second = yield* aisdk.language({ ...input, providerID: Provider.ID.make("personal") })
+    const plain = yield* aisdk.language({ ...input, canonical: undefined })
+
+    expect(yield* aisdk.language(input)).toBe(first)
+    expect(first).not.toBe(second)
+    expect(first).not.toBe(plain)
+    expect(first).toMatchObject({ modelId: "api-model", provider: "openai.chat" })
+    expect(plain.provider).toBe("work.chat")
+    expect(loaded).toEqual(["work:openai", "personal:openai", "work:work"])
+
+    const resolved = yield* aisdk.model(input)
+    expect(resolved).toMatchObject({ id: "api-model", provider: "openai" })
+    expect(resolved.route).toMatchObject({ provider: "openai", providerMetadataKey: "openai" })
+    expect(resolved.route.model({ id: "another-model" })).toMatchObject({ provider: "openai" })
+    const prepared = yield* compileRequest(LLM.request({ model: resolved, prompt: "Hello" }))
+    expect(prepared.body.providerOptions).toEqual({ openai: { reasoningEffort: "high" } })
+  }),
+)
+
 it.effect("projects request settings, headers, and body overlays", () =>
   Effect.gen(function* () {
     const aisdk = yield* AISDK.Service

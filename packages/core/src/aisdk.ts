@@ -119,7 +119,7 @@ function wrapSSE(res: Response, ms: number, ctl: AbortController) {
 function prepareOptions(model: Info, pkg: string) {
   const projected = mapBodyToProviderOptions(model, pkg)
   const options: Record<string, any> = {
-    name: model.providerID,
+    name: model.canonical ?? model.providerID,
     ...(model.settings ?? {}),
     headers: model.headers,
     body: projected.body,
@@ -249,6 +249,7 @@ export const locationLayer = Layer.effect(
       language: Effect.fn("AISDK.language")(function* (model) {
         const key = cacheKey({
           providerID: model.providerID,
+          canonical: model.canonical,
           id: model.id,
           modelID: model.modelID,
           package: model.package,
@@ -269,6 +270,7 @@ export const locationLayer = Layer.effect(
         const options = prepareOptions(model, packageName)
         const sdkKey = cacheKey({
           providerID: model.providerID,
+          canonical: model.canonical,
           package: packageName,
           settings: model.settings,
           headers: model.headers,
@@ -301,10 +303,11 @@ export const locationLayer = Layer.effect(
 function modelFromLanguage(info: Info, language: LanguageModelV3) {
   const packageName = Provider.packageName(info.package!)
   const projected = mapBodyToProviderOptions(info, packageName)
-  const optionKey = providerOptionKey(packageName, info.providerID)
+  const providerID = info.canonical ?? info.providerID
+  const optionKey = providerOptionKey(packageName, providerID)
   const route: AnyRoute = {
     id: `ai-sdk:${packageName}`,
-    provider: ProviderID.make(info.providerID),
+    provider: ProviderID.make(providerID),
     providerMetadataKey: optionKey,
     protocol: "ai-sdk",
     endpoint: Endpoint.path("/", { baseURL: "https://ai-sdk.local" }),
@@ -331,13 +334,13 @@ function modelFromLanguage(info: Info, language: LanguageModelV3) {
     },
     with: () => route,
     model: (input) =>
-      LanguageModel.make({ ...input, provider: "provider" in input ? input.provider : info.providerID, route }),
+      LanguageModel.make({ ...input, provider: "provider" in input ? input.provider : providerID, route }),
     prepareTransport: (body) => Effect.succeed(body),
     streamPrepared: (prepared) => streamLanguage(language, prepared as LanguageModelV3CallOptions),
   }
   return LanguageModel.make({
     id: info.modelID ?? info.id,
-    provider: info.providerID,
+    provider: providerID,
     route,
     compatibility: info.compatibility,
   })
