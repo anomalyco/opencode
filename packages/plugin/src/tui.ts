@@ -385,8 +385,22 @@ export type TuiSlots = {
   }
 }
 
+export type PluginEvent = {
+  type: string
+  properties: unknown
+}
+
+/**
+ * Event handler for `api.event.on`. Known server event types narrow to their
+ * SDK shape; custom types emitted by server plugins (e.g. `plugin.<pluginID>.<name>`)
+ * arrive as {@link PluginEvent}.
+ */
+export type PluginEventHandler<Type extends string> = (
+  event: Type extends Event["type"] ? Extract<Event, { type: Type }> : PluginEvent,
+) => void
+
 export type TuiEventBus = {
-  on: <Type extends Event["type"]>(type: Type, handler: (event: Extract<Event, { type: Type }>) => void) => () => void
+  on: <Type extends Event["type"] | string>(type: Type, handler: PluginEventHandler<Type>) => () => void
 }
 
 export type TuiDispose = () => void | Promise<void>

@@ -5,8 +5,10 @@ import type {
   PluginModule,
   WorkspaceAdaptor as PluginWorkspaceAdaptor,
 } from "@opencode-ai/plugin"
+import z from "zod"
 import { Config } from "../config/config"
 import { Bus } from "../bus"
+import { BusEvent } from "../bus/bus-event"
 import { Log } from "../util/log"
 import { createOpencodeClient } from "@opencode-ai/sdk"
 import { Flag } from "../flag/flag"
@@ -147,6 +149,11 @@ export namespace Plugin {
             },
             get serverUrl(): URL {
               return Server.url ?? new URL("http://localhost:4096")
+            },
+            event: {
+              emit(type, properties) {
+                void Bus.publish(BusEvent.define(type, z.unknown()), properties)
+              },
             },
             // @ts-expect-error
             $: typeof Bun === "undefined" ? undefined : Bun.$,

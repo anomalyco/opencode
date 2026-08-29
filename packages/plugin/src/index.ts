@@ -63,6 +63,13 @@ export type PluginInput = {
     register(type: string, adaptor: WorkspaceAdaptor): void
   }
   serverUrl: URL
+  /**
+   * Emit custom events on the bus. TUI plugins subscribe via
+   * `api.event.on(...)`. Namespace types as `plugin.<pluginID>.<name>`.
+   */
+  event: {
+    emit(type: string, properties: unknown): void
+  }
   $: BunShell
 }
 

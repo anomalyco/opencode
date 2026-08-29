@@ -1,4 +1,5 @@
 import type { Event } from "@opencode-ai/sdk/v2"
+import type { PluginEvent, PluginEventHandler } from "@opencode-ai/plugin/tui"
 import { useProject } from "./project"
 import { useSDK } from "./sdk"
 
@@ -27,10 +28,11 @@ export function useEvent() {
     })
   }
 
-  function on<T extends Event["type"]>(type: T, handler: (event: Extract<Event, { type: T }>) => void) {
+  function on<T extends Event["type"] | string>(type: T, handler: PluginEventHandler<T>) {
+    const fn = handler as (event: PluginEvent) => void
     return subscribe((event) => {
       if (event.type !== type) return
-      handler(event as Extract<Event, { type: T }>)
+      fn(event as PluginEvent)
     })
   }
 

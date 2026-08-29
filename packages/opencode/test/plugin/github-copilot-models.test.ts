@@ -129,6 +129,9 @@ test("remaps fallback oauth model urls to the enterprise host", async () => {
       register() {},
     },
     serverUrl: new URL("https://example.com"),
+    event: {
+      emit() {},
+    },
     $: {} as never,
   })
 
