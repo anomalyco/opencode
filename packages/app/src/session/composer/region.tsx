@@ -216,7 +216,6 @@ export type ActiveSessionRegionModel = ReturnType<typeof createActiveSessionRegi
 export function ActiveSessionComposerRegion(props: {
   model: ActiveSessionRegionModel
   session: SessionModel
-  accentSubmit: boolean
   onResponseSubmit: () => void
 }) {
   const settings = useSettings()
@@ -251,7 +250,7 @@ export function ActiveSessionComposerRegion(props: {
         <div class="relative">
           <SessionQueuePanel queue={queue} />
           <div class="relative z-10">
-            <Composer model={composer} borderUnderlay accentSubmit={props.accentSubmit} />
+            <Composer model={composer} borderUnderlay />
           </div>
         </div>
       }

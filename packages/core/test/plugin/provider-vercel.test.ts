@@ -14,7 +14,6 @@ const it = testEffect(PluginTestLayer)
 
 const addPlugin = Effect.fn(function* () {
   const plugin = yield* Plugin.Service
-  const aisdk = yield* AISDK.Service
   const host = yield* PluginHost.make(plugin)
   yield* VercelPlugin.effect(host)
 })
@@ -54,7 +53,6 @@ describe("VercelPlugin", () => {
 
   it.effect("creates @ai-sdk/vercel SDKs for custom provider IDs", () =>
     Effect.gen(function* () {
-      const plugin = yield* Plugin.Service
       const aisdk = yield* AISDK.Service
       yield* addPlugin()
       const event = yield* aisdk.runSDK({

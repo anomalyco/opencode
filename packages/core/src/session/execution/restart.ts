@@ -9,6 +9,7 @@ import { SessionEvent } from "../event.js"
 import { SessionExecution } from "../execution.js"
 import { SessionSchema } from "../schema.js"
 import { SessionStore } from "../store.js"
+import { SubagentCompletion } from "../subagent-completion.js"
 
 const CONTINUE_AFTER_SERVER_RESTART =
   "The server restarted while you were working. Continue from where you left off without repeating completed work."
@@ -98,6 +99,7 @@ export const layer = (options?: Options) =>
       const recoverShell = Effect.fnUntraced(function* (
         background: Job.Background,
         recovery: Extract<Job.Recovery, { kind: "shell" }>,
+        suspended: ReadonlySet<SessionSchema.ID>,
       ) {
         const state = background.status === "running" ? "cancelled" : background.status
         const text =
@@ -121,7 +123,7 @@ export const layer = (options?: Options) =>
               shellID: recovery.shellID,
               state,
             },
-            resume: false,
+            ...(suspended.has(recovery.sessionID) ? { resume: false } : {}),
           })
           .pipe(
             Effect.catchTag("Session.NotFoundError", () => Effect.void),
@@ -142,29 +144,12 @@ export const layer = (options?: Options) =>
         }
 
         const notify = Effect.fnUntraced(function* (result: Pick<Job.Background, "status" | "output" | "error">) {
-          if (result.status === "running") return
-          const text =
-            result.status === "completed"
-              ? (result.output ?? "Subagent completed without a text response.")
-              : result.status === "error"
-                ? (result.error ?? "Subagent failed")
-                : "Subagent cancelled"
-          yield* sessions
-            .synthetic({
-              id: background.notificationID,
-              sessionID: recovery.parentSessionID,
-              ...(suspended.has(recovery.parentSessionID) ? { resume: false } : {}),
-              description: recovery.description,
-              text: `<subagent sessionID="${recovery.childSessionID}" state="${result.status}" description="${recovery.description}">\n${text}\n</subagent>`,
-              metadata: {
-                source: "subagent",
-                childID: recovery.childSessionID,
-                agent: recovery.agent,
-                state: result.status,
-              },
-            })
-            .pipe(Effect.orDie)
-          yield* jobs.completeBackground(background.notificationID)
+          yield* SubagentCompletion.deliver(sessions, jobs, {
+            ...result,
+            recovery,
+            notificationID: background.notificationID,
+            resume: suspended.has(recovery.parentSessionID) ? false : undefined,
+          }).pipe(Effect.orDie)
         })
 
         if (background.status !== "running") {
@@ -203,7 +188,6 @@ export const layer = (options?: Options) =>
         yield* jobs.background(background.id)
         yield* jobs.wait({ id: background.id }).pipe(
           Effect.flatMap((result) => (result.info ? notify(result.info) : Effect.void)),
-          Effect.ignore,
           Effect.forkIn(scope),
         )
       })
@@ -211,23 +195,25 @@ export const layer = (options?: Options) =>
       return Service.of({
         resumeSuspendedSessions: Effect.gen(function* () {
           const active = yield* execution.active
-          // Early notices wait for root recovery's accounting, including roots that exhaust their budget.
-          const suspended = new Set((yield* store.listSuspended()).filter((sessionID) => !active.has(sessionID)))
           const pending = yield* jobs.pendingBackground
-          yield* store.releaseChildClaims(
-            pending.flatMap((background) =>
-              background.status === "running" && background.recovery.kind === "subagent"
-                ? [background.recovery.childSessionID]
-                : [],
-            ),
+          const children = pending.flatMap((background) =>
+            background.status === "running" && background.recovery.kind === "subagent"
+              ? [background.recovery.childSessionID]
+              : [],
           )
+          // Early notices wait for recovery's accounting, including Sessions that exhaust their budget.
+          const suspended = new Set(
+            [...(yield* store.listSuspended()), ...children].filter((sessionID) => !active.has(sessionID)),
+          )
+          yield* store.releaseChildClaims(children)
           yield* Effect.forEach(
-            pending,
+            // Admit shell outcomes before a recovered child can start its first model request.
+            pending.toSorted((a, b) => Number(a.recovery.kind === "subagent") - Number(b.recovery.kind === "subagent")),
             Effect.fnUntraced(function* (background) {
               if ((yield* jobs.get(background.id))?.status === "running") return
               const recovery = background.recovery
               yield* recovery.kind === "shell"
-                ? recoverShell(background, recovery)
+                ? recoverShell(background, recovery, suspended)
                 : recoverSubagent(background, recovery, suspended)
             }),
             { discard: true },

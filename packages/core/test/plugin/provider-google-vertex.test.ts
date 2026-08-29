@@ -7,7 +7,7 @@ import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { GoogleVertexPlugin } from "@opencode-ai/core/plugin/provider/google-vertex"
 import { Provider } from "@opencode-ai/core/provider"
-import type { LanguageModelV3 } from "@ai-sdk/provider"
+import { fakeSelectorSdk } from "../fixture/selector"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
@@ -46,19 +46,6 @@ function withEnv<A, E, R>(vars: Record<string, string | undefined>, effect: () =
         }),
       ),
   )
-}
-
-function fakeSelectorSdk(calls: string[]) {
-  const make = (method: string) => (id: string) => {
-    calls.push(`${method}:${id}`)
-    return { modelId: id, provider: method, specificationVersion: "v3" } as unknown as LanguageModelV3
-  }
-  return {
-    responses: make("responses"),
-    messages: make("messages"),
-    chat: make("chat"),
-    languageModel: make("languageModel"),
-  }
 }
 
 void mock.module("@ai-sdk/google-vertex", () => ({
@@ -253,7 +240,7 @@ describe("GoogleVertexPlugin", () => {
       () =>
         Effect.gen(function* () {
           const catalog = yield* Catalog.Service
-          yield* catalog.transform((catalog) =>
+          yield* catalog.transform((catalog) => {
             catalog.provider.update(Provider.ID.make("google-vertex"), (provider) => {
               provider.package = Provider.aisdk("@ai-sdk/openai-compatible")
               provider.settings = {
@@ -262,16 +249,19 @@ describe("GoogleVertexPlugin", () => {
                   "https://${GOOGLE_VERTEX_ENDPOINT}/v1/projects/${GOOGLE_VERTEX_PROJECT}/locations/${GOOGLE_VERTEX_LOCATION}",
               }
               provider.settings = { ...provider.settings, project: "config-project", location: "global" }
-            }),
-          )
+            })
+            catalog.model.update(Provider.ID.make("google-vertex"), Model.ID.make("gemini"), () => {})
+          })
           yield* addPlugin()
           const provider = required(yield* catalog.provider.get(Provider.ID.make("google-vertex")))
+          const model = required(yield* catalog.model.get(Provider.ID.make("google-vertex"), Model.ID.make("gemini")))
           expect(provider.settings?.project).toBe("config-project")
           expect(provider.settings?.location).toBe("global")
           expect(provider).toMatchObject({
             package: "aisdk:@ai-sdk/openai-compatible",
             settings: { baseURL: "https://aiplatform.googleapis.com/v1/projects/config-project/locations/global" },
           })
+          expect(model.settings).toEqual(provider.settings)
         }),
     ),
   )
@@ -376,7 +366,7 @@ describe("GoogleVertexPlugin", () => {
     }),
   )
 
-  it.effect("keeps Google auth fetch for OpenAI-compatible Vertex endpoints", () =>
+  it.effect("wraps an injected transport with Google auth for OpenAI-compatible Vertex endpoints", () =>
     Effect.gen(function* () {
       googleAuthOptions.length = 0
       const fetchCalls: { input: Parameters<typeof fetch>[0]; init?: RequestInit }[] = []
@@ -393,31 +383,21 @@ describe("GoogleVertexPlugin", () => {
           })
         }),
       )
-      const originalFetch = fetch
-      ;(globalThis as typeof globalThis & { fetch: typeof fetch }).fetch = (async (
-        input: Parameters<typeof fetch>[0],
-        init?: RequestInit,
-      ) => {
-        fetchCalls.push({ input, init })
-        return new Response("ok")
-      }) as typeof fetch
-      yield* Effect.acquireUseRelease(
-        Effect.void,
-        () =>
-          aisdk.runSDK({
-            model: Model.Info.make({
-              ...Model.Info.default(Provider.ID.make("google-vertex"), Model.ID.make("gemini")),
-              modelID: Model.ID.make("gemini"),
-              package: "aisdk:@ai-sdk/openai-compatible",
-            }),
-            package: "@ai-sdk/openai-compatible",
-            options: { name: "google-vertex" },
-          }),
-        () =>
-          Effect.sync(() => {
-            ;(globalThis as typeof globalThis & { fetch: typeof fetch }).fetch = originalFetch
-          }),
-      )
+      yield* aisdk.runSDK({
+        model: Model.Info.make({
+          ...Model.Info.default(Provider.ID.make("google-vertex"), Model.ID.make("gemini")),
+          modelID: Model.ID.make("gemini"),
+          package: "aisdk:@ai-sdk/openai-compatible",
+        }),
+        package: "@ai-sdk/openai-compatible",
+        options: {
+          name: "google-vertex",
+          fetch: async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+            fetchCalls.push({ input, init })
+            return new Response("ok")
+          },
+        },
+      })
       const vertexCalls = fetchCalls.filter((call) => call.input === "https://vertex.example")
       expect(vertexCalls).toHaveLength(1)
       expect(googleAuthOptions).toEqual([{ scopes: ["https://www.googleapis.com/auth/cloud-platform"] }])

@@ -1,7 +1,5 @@
 import { describe, expect } from "bun:test"
 import { DateTime, Effect, Fiber, Layer, LayerMap, Schema, Stream } from "effect"
-import { mkdtemp, rm } from "fs/promises"
-import { tmpdir } from "os"
 import path from "path"
 import { pathToFileURL } from "url"
 import { eq } from "drizzle-orm"
@@ -30,6 +28,7 @@ import { Image } from "@opencode-ai/core/image"
 import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { Snapshot } from "@opencode-ai/core/snapshot"
+import { tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
 const executionCalls: Session.ID[] = []
@@ -78,8 +77,7 @@ const locations = Layer.effect(
             Layer.mock(Snapshot.Service, {
               capture: () =>
                 ready ? Effect.undefined : Effect.die(new Error("Snapshot used before plugins were ready")),
-              restore: () =>
-                ready ? Effect.void : Effect.die(new Error("Snapshot used before plugins were ready")),
+              restore: () => (ready ? Effect.void : Effect.die(new Error("Snapshot used before plugins were ready"))),
             }),
             Layer.succeed(
               PluginSupervisor.Service,
@@ -172,8 +170,9 @@ const assistantRow = (id: SessionMessage.ID, seq: number) => {
 describe("Session.prompt", () => {
   it.effect("exposes the execution registry", () =>
     Effect.gen(function* () {
+      const session = yield* Session.Service
       activeSessions.add(sessionID)
-      expect(Array.from(yield* (yield* Session.Service).active)).toEqual([sessionID])
+      expect(Array.from(yield* session.active)).toEqual([sessionID])
     }).pipe(Effect.ensuring(Effect.sync(() => activeSessions.clear()))),
   )
 
@@ -403,11 +402,8 @@ describe("Session.prompt", () => {
     Effect.gen(function* () {
       yield* setup
       const session = yield* Session.Service
-      const directory = yield* Effect.acquireRelease(
-        Effect.promise(() => mkdtemp(path.join(tmpdir(), "opencode-session-prompt-"))),
-        (directory) => Effect.promise(() => rm(directory, { recursive: true, force: true })),
-      )
-      const source = path.join(directory, "image.png")
+      const directory = yield* tmpdirScoped("opencode-session-prompt-")
+      const source = path.join(directory.path, "image.png")
       const bytes = Buffer.from(
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
         "base64",
@@ -557,7 +553,7 @@ describe("Session.prompt", () => {
       yield* session.resume(sessionID)
 
       expect(yield* session.messages({ sessionID })).toEqual([])
-      expect(yield* admitted(message.id)).not.toHaveProperty("promotedSeq")
+      expect((yield* session.inbox(sessionID)).map((item) => item.id)).toEqual([message.id])
       expect(executionCalls).toEqual([sessionID])
       expect(wakeCalls).toEqual([])
     }),

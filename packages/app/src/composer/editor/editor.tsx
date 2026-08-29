@@ -37,7 +37,6 @@ export type ComposerMode = "normal" | "shell"
 
 export type ComposerEditorProps = {
   controller: ComposerEditorModel
-  accentSubmit?: boolean
   disabled?: boolean
   readOnly?: boolean
   borderUnderlay?: boolean
@@ -265,7 +264,6 @@ export function ComposerEditor(props: ComposerEditorProps) {
             mode={state.mode}
             stopping={view.submit.stopping()}
             disabled={!props.controller.canSubmit()}
-            accent={props.accentSubmit}
             sendLabel={i18n.t("ui.promptInput.send")}
             stopLabel={i18n.t("ui.promptInput.stop")}
             onSubmit={() => props.controller.submit()}
@@ -751,7 +749,6 @@ export function ComposerEditorSubmitButton(props: {
   mode: ComposerMode
   stopping: boolean
   disabled: boolean
-  accent?: boolean
   sendLabel: string
   stopLabel: string
   onSubmit: () => void
@@ -770,16 +767,10 @@ export function ComposerEditorSubmitButton(props: {
         tabIndex={props.mode === "normal" ? undefined : -1}
         icon={<Icon name={props.stopping ? "stop" : props.mode === "shell" ? "arrow-undo-down" : "arrow-up"} />}
         variant="contrast"
-        class="size-7 rounded-md p-[6px] shadow-[var(--v2-elevation-button-contrast)] disabled:opacity-50"
-        classList={{
-          "text-v2-text-text-contrast": !!props.accent && !props.stopping && !props.disabled,
-          "text-v2-icon-icon-muted": !props.accent || props.stopping || props.disabled,
-        }}
+        class="size-7 rounded-md p-[6px] text-v2-icon-icon-muted shadow-[var(--v2-elevation-button-contrast)] disabled:opacity-50"
         style={{
           "background-image":
-            props.accent && !props.stopping && !props.disabled
-              ? "linear-gradient(180deg,var(--v2-alpha-light-20) 0%,var(--v2-alpha-light-0) 100%),linear-gradient(90deg,var(--v2-background-bg-accent) 0%,var(--v2-background-bg-accent) 100%)"
-              : "linear-gradient(180deg,var(--v2-alpha-light-20) 0%,var(--v2-alpha-light-0) 100%),linear-gradient(90deg,var(--v2-background-bg-contrast) 0%,var(--v2-background-bg-contrast) 100%)",
+            "linear-gradient(180deg,var(--v2-alpha-light-20) 0%,var(--v2-alpha-light-0) 100%),linear-gradient(90deg,var(--v2-background-bg-contrast) 0%,var(--v2-background-bg-contrast) 100%)",
         }}
         aria-label={props.stopping ? props.stopLabel : props.sendLabel}
         onClick={(event) => {

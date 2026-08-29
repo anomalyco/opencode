@@ -406,7 +406,7 @@ describe("Open Responses-compatible route", () => {
     })
 
     routings.forEach((routing) => {
-      it.effect(`preserves reasoning summary boundaries and terminal metadata with ${routing.name}`, () =>
+      it.effect(`preserves reasoning summary boundaries without terminal reconciliation with ${routing.name}`, () =>
         Effect.gen(function* () {
           const address = { item_id: routing.item_id, output_index: routing.output_index }
           const response = yield* LLMClient.generate(request).pipe(
@@ -444,21 +444,18 @@ describe("Open Responses-compatible route", () => {
               type: "reasoning",
               text: "Second.",
               providerMetadata: {
-                "openai-compatible": { itemId: routing.id, reasoningEncryptedContent: "final-state" },
+                "openai-compatible": { itemId: routing.id, reasoningEncryptedContent: null },
               },
             },
           ])
           expect(response.events.filter(LLMEvent.is.reasoningEnd)).toEqual([
-            expect.objectContaining({
+            {
+              type: "reasoning-end",
               id: `${routing.id}:0`,
+              text: undefined,
               providerMetadata: { "openai-compatible": { itemId: routing.id } },
-            }),
-            expect.objectContaining({
-              id: `${routing.id}:1`,
-              providerMetadata: {
-                "openai-compatible": { itemId: routing.id, reasoningEncryptedContent: "final-state" },
-              },
-            }),
+            },
+            { type: "reasoning-end", id: `${routing.id}:1` },
           ])
         }),
       )
@@ -671,7 +668,7 @@ describe("Open Responses-compatible route", () => {
     }),
   )
 
-  it.effect("preserves terminal reasoning metadata when item completion is missing", () =>
+  it.effect("ignores terminal reasoning output when item completion is missing", () =>
     Effect.gen(function* () {
       const model = configure({
         apiKey: "test-key",
@@ -697,8 +694,9 @@ describe("Open Responses-compatible route", () => {
         ),
       )
 
-      expect(response.events.find((event) => event.type === "reasoning-end")).toMatchObject({
-        providerMetadata: { "openai-compatible": { itemId: "rs_raw", reasoningEncryptedContent: "raw-state" } },
+      expect(response.events.find((event) => event.type === "reasoning-end")).toEqual({
+        type: "reasoning-end",
+        id: "rs_raw:0",
       })
     }),
   )
