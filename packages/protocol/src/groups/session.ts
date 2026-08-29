@@ -223,6 +223,21 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         ),
     )
     .add(
+      HttpApiEndpoint.post("session.resume", "/api/session/:sessionID/resume", {
+        params: { sessionID: Session.ID },
+        success: HttpApiSchema.NoContent,
+        error: [SessionNotFoundError, ServiceUnavailableError],
+      })
+        .middleware(sessionLocationMiddleware)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "v2.session.resume",
+            summary: "Resume session",
+            description: "Resume an existing session from recorded history.",
+          }),
+        ),
+    )
+    .add(
       HttpApiEndpoint.post("session.compact", "/api/session/:sessionID/compact", {
         params: { sessionID: Session.ID },
         success: HttpApiSchema.NoContent,

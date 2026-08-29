@@ -33,13 +33,8 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import * as DateTime from "effect/DateTime"
 import { eq } from "drizzle-orm"
 import { resetDatabase } from "../fixture/db"
-import {
-  disposeAllInstances,
-  provideInstanceEffect,
-  reloadInstance,
-  TestInstance,
-  tmpdirScoped,
-} from "../fixture/fixture"
+import { disposeAllInstances, provideInstanceEffect, TestInstance, tmpdirScoped } from "../fixture/fixture"
+import { cliIt } from "../lib/cli-process"
 import { TestLLMServer } from "../lib/llm-server"
 import { testProviderConfig } from "../lib/test-provider"
 import { pollWithTimeout, testEffect } from "../lib/effect"
@@ -433,100 +428,149 @@ describe("session HttpApi", () => {
     }).pipe(Effect.provide(TestLLMServer.layer), Effect.provide(AppNodeBuilder.build(CrossSpawnSpawner.node))),
   )
 
-  it.live("resumes an existing session after the process restarts without creating a user message", () =>
-    Effect.gen(function* () {
-      const llm = yield* TestLLMServer
-      const directory = yield* tmpdirScoped({
-        git: true,
-        config: { ...testProviderConfig(llm.url), permission: { "*": "allow" } },
-      })
-      const headers = { "x-opencode-directory": directory, "content-type": "application/json" }
-      const prompt = "Resume this session after restart"
-      const created = yield* requestJson<{ data: { id: string } }>("/api/session", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          model: { providerID: "test", id: "test-model" },
-          location: { directory },
-        }),
-      })
-      const sessionID = created.data.id
+  cliIt.live(
+    "resumes an existing session after the process restarts without creating a user message",
+    ({ home, llm, opencode }) =>
+      Effect.gen(function* () {
+        const env = {
+          OPENCODE_PURE: "0",
+          OPENCODE_CONFIG_CONTENT: JSON.stringify({
+            ...testProviderConfig(llm.url),
+            permission: { "*": "allow" },
+          }),
+        }
+        const configDirectory = path.join(home, ".config", "opencode")
+        yield* Effect.promise(() => mkdir(configDirectory, { recursive: true }))
+        yield* Effect.promise(() =>
+          Bun.write(path.join(configDirectory, "opencode.json"), env.OPENCODE_CONFIG_CONTENT),
+        )
+        const start = () => opencode.serve({ env })
+        const api = (base: string, path: string, init?: RequestInit) =>
+          Effect.promise(() => fetch(new URL(path, base), init))
+        const body = <T>(response: Response) => Effect.promise(() => response.json() as Promise<T>)
+        const headers = { "x-opencode-directory": home, "content-type": "application/json" }
+        const prompt = "Resume this session after restart"
+        const server = yield* start()
+        yield* pollWithTimeout(
+          api(server.url, "/api/model", { headers }).pipe(
+            Effect.flatMap(body<{ data: { id: string; providerID: string }[] }>),
+            Effect.map((response) =>
+              response.data.find((model) => model.providerID === "test" && model.id === "test-model"),
+            ),
+          ),
+          "server did not load its configured model",
+          "10 seconds",
+        )
+        const createdResponse = yield* api(server.url, "/api/session", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            model: { providerID: "test", id: "test-model" },
+            location: { directory: home },
+          }),
+        })
+        expect(createdResponse.status).toBe(200)
+        const created = yield* body<{ data: { id: string } }>(createdResponse)
+        const sessionID = created.data.id
 
-      expect(
-        (
-          yield* request(`/api/session/${sessionID}/prompt`, {
+        expect(
+          (yield* api(server.url, `/api/session/${sessionID}/prompt`, {
             method: "POST",
             headers,
             body: JSON.stringify({ prompt: { text: prompt }, resume: false }),
-          })
-        ).status,
-      ).toBe(200)
+          })).status,
+        ).toBe(200)
 
-      yield* llm.fail("Provider unavailable")
-      expect((yield* request(`/api/session/${sessionID}/resume`, { method: "POST", headers })).status).toBe(503)
+        yield* llm.fail("Provider unavailable")
+        expect((yield* api(server.url, `/api/session/${sessionID}/resume`, { method: "POST", headers })).status).toBe(
+          503,
+        )
 
-      yield* reloadInstance({ directory })
-      yield* llm.tool("question", {
-        questions: [
-          {
-            header: "Continue",
-            question: "Continue the imported session?",
-            options: [{ label: "Continue", description: "Resume from the recorded history" }],
-          },
-        ],
-      })
-      yield* llm.text("Resumed after restart")
+        server.kill()
+        yield* Effect.promise(() => server.exited)
+        const restarted = yield* start()
+        yield* pollWithTimeout(
+          api(restarted.url, "/api/model", { headers }).pipe(
+            Effect.flatMap(body<{ data: { id: string; providerID: string }[] }>),
+            Effect.map((response) =>
+              response.data.find((model) => model.providerID === "test" && model.id === "test-model"),
+            ),
+          ),
+          "restarted process did not reload its configured model",
+          "10 seconds",
+        )
+        yield* llm.tool("question", {
+          questions: [
+            {
+              header: "Continue",
+              question: "Continue the imported session?",
+              options: [{ label: "Continue", description: "Resume from the recorded history" }],
+            },
+          ],
+        })
+        yield* llm.text("Resumed after restart")
 
-      const resumed = yield* request(`/api/session/${sessionID}/resume`, { method: "POST", headers }).pipe(
-        Effect.forkChild,
-      )
-      const pending = yield* pollWithTimeout(
-        requestJson<{ data: { id: string }[] }>(`/api/session/${sessionID}/question`, { headers }).pipe(
-          Effect.map((response) => response.data[0]),
-        ),
-        "resumed session did not ask its question",
-        "10 seconds",
-      )
-      expect(
-        (
-          yield* request(`/api/session/${sessionID}/question/${pending.id}/reply`, {
+        const resumed = yield* api(restarted.url, `/api/session/${sessionID}/resume`, {
+          method: "POST",
+          headers,
+        }).pipe(Effect.forkChild)
+        const pending = yield* Effect.raceFirst(
+          pollWithTimeout(
+            api(restarted.url, `/api/session/${sessionID}/question`, { headers }).pipe(
+              Effect.flatMap(body<{ data: { id: string }[] }>),
+              Effect.map((response) => response.data[0]),
+            ),
+            "resumed session did not ask its question",
+            "10 seconds",
+          ),
+          Fiber.join(resumed).pipe(
+            Effect.flatMap((response) =>
+              Effect.promise(() => response.text()).pipe(
+                Effect.flatMap((text) =>
+                  Effect.fail(new Error(`session resume returned ${response.status} before asking: ${text}`)),
+                ),
+              ),
+            ),
+          ),
+        )
+        expect(
+          (yield* api(restarted.url, `/api/session/${sessionID}/question/${pending.id}/reply`, {
             method: "POST",
             headers,
             body: JSON.stringify({ answers: [["Continue"]] }),
-          })
-        ).status,
-      ).toBe(204)
-      expect((yield* Fiber.join(resumed)).status).toBe(204)
+          })).status,
+        ).toBe(204)
+        expect((yield* Fiber.join(resumed)).status).toBe(204)
 
-      const context = yield* requestJson<{ data: SessionMessage.Message[] }>(
-        `/api/session/${sessionID}/context`,
-        { headers },
-      )
-      expect(context.data.filter((message) => message.type === "user").map((message) => message.text)).toEqual([
-        prompt,
-      ])
-      expect(context.data.at(-1)).toMatchObject({
-        type: "assistant",
-        finish: "stop",
-        content: [{ type: "text", text: "Resumed after restart" }],
-      })
-
-      const requestUserTexts = (input: Record<string, unknown>) => {
-        if (!Array.isArray(input.messages)) return []
-        return input.messages.flatMap((message) => {
-          if (!message || typeof message !== "object" || !("role" in message) || message.role !== "user") return []
-          if (!("content" in message)) return []
-          if (typeof message.content === "string") return [message.content]
-          if (!Array.isArray(message.content)) return []
-          return message.content.flatMap((part) =>
-            part && typeof part === "object" && "text" in part && typeof part.text === "string" ? [part.text] : [],
-          )
+        const context = yield* api(restarted.url, `/api/session/${sessionID}/context`, { headers }).pipe(
+          Effect.flatMap(body<{ data: SessionMessage.Message[] }>),
+        )
+        expect(context.data.filter((message) => message.type === "user").map((message) => message.text)).toEqual([
+          prompt,
+        ])
+        expect(context.data.at(-1)).toMatchObject({
+          type: "assistant",
+          finish: "stop",
+          content: [{ type: "text", text: "Resumed after restart" }],
         })
-      }
-      const sessionRequests = (yield* llm.inputs).map(requestUserTexts).filter((texts) => texts.includes(prompt))
-      expect(sessionRequests).toHaveLength(3)
-      expect(sessionRequests).toEqual([[prompt], [prompt], [prompt]])
-    }).pipe(Effect.provide(TestLLMServer.layer), Effect.provide(AppNodeBuilder.build(CrossSpawnSpawner.node))),
+
+        const requestUserTexts = (input: Record<string, unknown>) => {
+          if (!Array.isArray(input.messages)) return []
+          return input.messages.flatMap((message) => {
+            if (!message || typeof message !== "object" || !("role" in message) || message.role !== "user") return []
+            if (!("content" in message)) return []
+            if (typeof message.content === "string") return [message.content]
+            if (!Array.isArray(message.content)) return []
+            return message.content.flatMap((part) =>
+              part && typeof part === "object" && "text" in part && typeof part.text === "string" ? [part.text] : [],
+            )
+          })
+        }
+        const sessionRequests = (yield* llm.inputs).map(requestUserTexts).filter((texts) => texts.includes(prompt))
+        expect(sessionRequests).toHaveLength(3)
+        expect(sessionRequests).toEqual([[prompt], [prompt], [prompt]])
+      }),
+    60_000,
   )
 
   it.instance(

@@ -17,6 +17,8 @@ import type {
   SessionsSwitchModelOutput,
   SessionsPromptInput,
   SessionsPromptOutput,
+  SessionsResumeInput,
+  SessionsResumeOutput,
   SessionsCompactInput,
   SessionsCompactOutput,
   SessionsWaitInput,
@@ -379,6 +381,17 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ).then((value) => value.data),
+      resume: (input: SessionsResumeInput, requestOptions?: RequestOptions) =>
+        request<SessionsResumeOutput>(
+          {
+            method: "POST",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/resume`,
+            successStatus: 204,
+            declaredStatuses: [404, 503, 400, 401],
+            empty: true,
+          },
+          requestOptions,
+        ),
       compact: (input: SessionsCompactInput, requestOptions?: RequestOptions) =>
         request<SessionsCompactOutput>(
           {
