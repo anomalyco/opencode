@@ -9,7 +9,6 @@ import { AppProcess } from "@opencode-ai/util/process"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { File } from "./file.js"
 import { KeyedMutex } from "./effect/keyed-mutex.js"
-import { GitReview } from "./git-review.js"
 
 export class Repository extends Schema.Class<Repository>("Git.Repository")({
   worktree: AbsolutePath,
@@ -641,21 +640,6 @@ const layer = Layer.effect(
       directory: AbsolutePath
       ref?: string
     }) {
-      const current = !input.ref || input.ref === "HEAD" ? yield* branch(input.repository) : undefined
-      const source = input.ref && input.ref !== "HEAD" ? input.ref : current ? `refs/heads/${current}` : undefined
-      const named = source
-        ? yield* GitReview.namedRef(proc, input.repository.worktree, source).pipe(
-            Effect.mapError(
-              (cause) =>
-                new WorktreeError({
-                  operation: "create",
-                  directory: input.directory,
-                  message: "Could not resolve worktree source",
-                  cause,
-                }),
-            ),
-          )
-        : undefined
       yield* worktreeRun(
         "create",
         input.repository,
@@ -663,28 +647,7 @@ const layer = Layer.effect(
         input.directory,
       )
       const repository = yield* discover(input.directory)
-      if (repository) {
-        const commit = named ? yield* head(repository) : undefined
-        if (named && !commit)
-          return yield* new WorktreeError({
-            operation: "create",
-            directory: input.directory,
-            message: "Could not resolve the worktree starting commit",
-          })
-        if (named && commit)
-          yield* GitReview.write(fs, repository.gitDirectory, { creation: { ref: named.ref, commit } }).pipe(
-            Effect.mapError(
-              (cause) =>
-                new WorktreeError({
-                  operation: "create",
-                  directory: input.directory,
-                  message: "Could not remember worktree source",
-                  cause,
-                }),
-            ),
-          )
-        return repository
-      }
+      if (repository) return repository
       return yield* new WorktreeError({
         operation: "create",
         directory: input.directory,

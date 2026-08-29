@@ -20,7 +20,7 @@ export type BranchList = typeof BranchList.Type
 export const Base = Schema.Struct({
   name: Schema.String,
   ref: Schema.String,
-  source: Schema.Literals(["worktree", "reflog", "default"]),
+  source: Schema.Literals(["reflog", "default"]),
 }).annotate({ identifier: "Vcs.Base" })
 export interface Base extends Schema.Schema.Type<typeof Base> {}
 

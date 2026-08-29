@@ -47,7 +47,7 @@ export const VcsGroup = HttpApiGroup.make("server.vcs")
           identifier: "v2.vcs.base",
           summary: "VCS review base",
           description:
-            "Infer a local review base from worktree creation, branch creation history, or the current default branch. Returns null before the first commit or when the provider lacks base metadata; ambiguous Git history requires an explicit base on diff requests.",
+            "Infer a local review base from named branch creation history, or the repository default only when currently on that branch. Returns null before the first commit or when the provider lacks base metadata; ambiguous Git history requires an explicit base on diff requests.",
         }),
       ),
   )

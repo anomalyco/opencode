@@ -6,8 +6,6 @@ import { ChildProcess } from "effect/unstable/process"
 import { FileDiff } from "@opencode-ai/schema/file-diff"
 import { Base, BranchList, FileStatus, Info, Mode } from "@opencode-ai/schema/vcs"
 import { AppProcess } from "@opencode-ai/util/process"
-import { FSUtil } from "@opencode-ai/util/fs-util"
-import { GitReview } from "../../git-review.js"
 import { Location } from "../../location.js"
 import type { Adapter, BranchOptions, DiffOptions } from "../../vcs.js"
 import { DiffError } from "../../vcs.js"
@@ -28,8 +26,7 @@ export const Plugin = define({
     if (location.vcs?.type !== "git") return
 
     const processes = yield* AppProcess.Service
-    const fs = yield* FSUtil.Service
-    const adapter = make(processes, fs, {
+    const adapter = make(processes, {
       directory: location.directory,
       worktree: location.project.directory,
     })
@@ -53,10 +50,10 @@ export const Plugin = define({
  * batched through one `git diff` invocation where possible and capped by
  * per-file and total byte budgets, falling back to empty patches when capped.
  */
-function make(proc: AppProcess.Interface, fs: FSUtil.Interface, input: { directory: string; worktree: string }) {
+function make(proc: AppProcess.Interface, input: { directory: string; worktree: string }) {
   // Listing commands scope pathspecs to the requested directory; per-file
   // commands run from the worktree root because git lists root-relative paths.
-  const ctx: Ctx = { git: makeGit(proc, fs), directory: input.directory, worktree: input.worktree }
+  const ctx: Ctx = { git: makeGit(proc), directory: input.directory, worktree: input.worktree }
 
   return {
     info: Effect.fn("VcsGit.info")(function* () {
@@ -168,7 +165,7 @@ const kind = (code: string): Kind => {
 
 const nuls = (text: string) => text.split("\0").filter(Boolean)
 
-function makeGit(proc: AppProcess.Interface, fs: FSUtil.Interface) {
+function makeGit(proc: AppProcess.Interface) {
   const run = Effect.fnUntraced(
     function* (args: string[], opts: { cwd: string; maxOutputBytes?: number }) {
       const result = yield* proc.run(
@@ -268,70 +265,52 @@ function makeGit(proc: AppProcess.Interface, fs: FSUtil.Interface) {
     return (yield* run(["merge-base", "--is-ancestor", commit, ref], { cwd })).exitCode === 0
   })
 
-  const reflog = Effect.fnUntraced(function* (cwd: string, ref: string) {
-    return (yield* lines(["reflog", "show", "--max-count=256", "--date=raw", "--format=%H%x00%gD%x00%gs", ref], {
+  const namedRef = Effect.fnUntraced(function* (cwd: string, input: string) {
+    // Creation hints must identify a branch, not HEAD, an object ID, or a revision expression.
+    if (input === "HEAD" || input.endsWith("/HEAD") || /[~^:@{}\s]/.test(input)) return
+    const ref = (yield* text(["rev-parse", "--symbolic-full-name", "--verify", "--end-of-options", input], {
       cwd,
-    })).flatMap((line) => {
-      const match = /^([a-f0-9]+)\0[^\0]+@\{([^}]+)\}\0(.+)$/.exec(line)
-      return match ? [{ commit: match[1], at: match[2], message: match[3] }] : []
-    })
+    })).trim()
+    if (!/^refs\/(heads|remotes)\/.+/.test(ref) || ref.endsWith("/HEAD") || !(yield* resolve(cwd, ref))) return
+    return { name: ref.replace(/^refs\/heads\//, "").replace(/^refs\/remotes\/[^/]+\//, ""), ref }
   })
 
-  const base = Effect.fn("VcsGit.base")(
-    function* (cwd: string) {
-      if (!(yield* hasHead(cwd))) return null
-      const current = yield* branch(cwd)
-      const directory = (yield* text(["rev-parse", "--absolute-git-dir"], { cwd })).trim()
-      if (!directory) return yield* new DiffError({ message: "Unable to find Git review metadata" })
-      const metadata = yield* GitReview.read(fs, directory)
-      const history = current ? yield* reflog(cwd, `refs/heads/${current}`) : []
-      const renamed = history.some((entry) => entry.message.startsWith("Branch: renamed "))
-      const creation = renamed ? undefined : history.find((entry) => entry.message.startsWith("branch: Created from "))
-      const origin = creation?.message.slice("branch: Created from ".length)
-      const record = metadata.creation
-      // A branch born elsewhere at the same commit must not inherit this worktree's origin.
-      const checkout =
-        record && current && creation?.commit === record.commit && origin === "HEAD"
-          ? (yield* reflog(cwd, "HEAD")).findLast(
-              (entry) => entry.message.startsWith("checkout: moving from ") && entry.message.endsWith(` to ${current}`),
-            )
-          : undefined
-      const hint =
-        record &&
-        (!current ||
-          (checkout?.at === creation?.at &&
-            checkout?.commit === record.commit &&
-            checkout.message === `checkout: moving from ${record.commit} to ${current}`))
-          ? { ...record, source: "worktree" as const }
-          : creation && origin
-            ? { ref: origin, commit: creation.commit, source: "reflog" as const }
-            : undefined
-      if (hint) {
-        const candidate = yield* GitReview.namedRef(proc, cwd, hint.ref)
-        const self =
-          candidate &&
-          current &&
-          (candidate.ref === `refs/heads/${current}` ||
-            candidate.ref.replace(/^refs\/remotes\/[^/]+\//, "") === current)
-        if (
-          candidate &&
-          !self &&
-          (yield* ancestor(cwd, hint.commit, "HEAD")) &&
-          (yield* ancestor(cwd, hint.commit, candidate.ref))
-        ) {
-          return { name: candidate.name, ref: candidate.ref, source: hint.source } satisfies Base
-        }
+  const base = Effect.fn("VcsGit.base")(function* (cwd: string) {
+    if (!(yield* hasHead(cwd))) return null
+    const current = yield* branch(cwd)
+    if (!current) return yield* new DiffError({ message: "Choose a review base" })
+    const history = (yield* lines(
+      ["reflog", "show", "--max-count=256", "--format=%H%x00%gs", `refs/heads/${current}`],
+      {
+        cwd,
+      },
+    )).flatMap((line) => {
+      const match = /^([a-f0-9]+)\0(.+)$/.exec(line)
+      return match ? [{ commit: match[1], message: match[2] }] : []
+    })
+    const renamed = history.some((entry) => entry.message.startsWith("Branch: renamed "))
+    const creation = renamed ? undefined : history.find((entry) => entry.message.startsWith("branch: Created from "))
+    const origin = creation?.message.slice("branch: Created from ".length)
+    if (creation && origin) {
+      const candidate = yield* namedRef(cwd, origin)
+      const self =
+        candidate &&
+        (candidate.ref === `refs/heads/${current}` || candidate.ref.replace(/^refs\/remotes\/[^/]+\//, "") === current)
+      if (
+        candidate &&
+        !self &&
+        (yield* ancestor(cwd, creation.commit, "HEAD")) &&
+        (yield* ancestor(cwd, creation.commit, candidate.ref))
+      ) {
+        return { ...candidate, source: "reflog" } satisfies Base
       }
-      const root = current ? yield* defaultBranch(cwd) : undefined
-      if (!root || current !== root.name) return yield* new DiffError({ message: "Choose a review base" })
-      const candidate = yield* GitReview.namedRef(proc, cwd, root.ref)
-      if (!candidate) return yield* new DiffError({ message: "The default review base is unavailable" })
-      return { name: root.name, ref: candidate.ref, source: "default" } satisfies Base
-    },
-    Effect.mapError((cause) =>
-      cause instanceof DiffError ? cause : new DiffError({ message: "Unable to read the local review base" }),
-    ),
-  )
+    }
+    const root = yield* defaultBranch(cwd)
+    if (!root || current !== root.name) return yield* new DiffError({ message: "Choose a review base" })
+    const candidate = yield* namedRef(cwd, root.ref)
+    if (!candidate) return yield* new DiffError({ message: "The default review base is unavailable" })
+    return { name: root.name, ref: candidate.ref, source: "default" } satisfies Base
+  })
 
   const hasHead = Effect.fn("VcsGit.hasHead")(function* (cwd: string) {
     const result = yield* run(["rev-parse", "--verify", "HEAD"], { cwd })

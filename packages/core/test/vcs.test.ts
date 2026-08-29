@@ -657,7 +657,7 @@ describe("Vcs", () => {
     ),
   )
 
-  it.live("infers a creation ref instead of Git config or an unrelated remote default", () =>
+  it.live("reviews every feature commit and local changes against inferred v2, not the unrelated default", () =>
     withGit((directory) =>
       Effect.gen(function* () {
         yield* Effect.promise(async () => {
@@ -673,14 +673,33 @@ describe("Vcs", () => {
           await $`git config branch.feature.opencode-merge-base refs/remotes/origin/dev`.cwd(directory).quiet()
           await fs.writeFile(path.join(directory, "feature.txt"), "feature\n")
           await commitAll(directory, "feature")
+          await fs.writeFile(path.join(directory, "second.txt"), "second\n")
+          await commitAll(directory, "second")
+          await fs.writeFile(path.join(directory, "third.txt"), "third\n")
+          await commitAll(directory, "third")
+          await fs.writeFile(path.join(directory, "untracked.txt"), "local\n")
         })
         const vcs = yield* Vcs.Service
         const config = yield* Effect.promise(() => fs.readFile(path.join(directory, ".git/config"), "utf8"))
-        expect(yield* vcs.base()).toEqual({ name: "v2", ref: "refs/remotes/origin/v2", source: "reflog" })
-        expect((yield* vcs.diff("committed", { base: "refs/remotes/origin/v2" })).map((row) => row.file)).toEqual([
+        const base = yield* vcs.base()
+        expect(base).toEqual({ name: "v2", ref: "refs/remotes/origin/v2", source: "reflog" })
+        expect((yield* vcs.diff("committed", { base: base?.ref })).map((row) => row.file)).toEqual([
           "feature.txt",
+          "second.txt",
+          "third.txt",
         ])
-        expect((yield* vcs.diff("committed")).map((row) => row.file)).toEqual(["feature.txt", "v2.txt"])
+        expect((yield* vcs.diff("branch", { base: base?.ref })).map((row) => row.file)).toEqual([
+          "feature.txt",
+          "second.txt",
+          "third.txt",
+          "untracked.txt",
+        ])
+        expect((yield* vcs.diff("committed")).map((row) => row.file)).toEqual([
+          "feature.txt",
+          "second.txt",
+          "third.txt",
+          "v2.txt",
+        ])
         expect(yield* Effect.promise(() => fs.readFile(path.join(directory, ".git/config"), "utf8"))).toBe(config)
         expect(
           yield* Effect.promise(() => Bun.file(path.join(directory, ".git/opencode-review.json")).exists()),
@@ -733,7 +752,7 @@ describe("Vcs", () => {
     ),
   )
 
-  it.live("remembers OpenCode worktree origins without leaking to another branch", () =>
+  it.live("creates detached worktrees without review metadata and requires an explicit base without a named hint", () =>
     withGit((directory) =>
       Effect.gen(function* () {
         yield* Effect.promise(async () => {
@@ -745,7 +764,6 @@ describe("Vcs", () => {
           await fs.writeFile(path.join(directory, "v2.txt"), "v2\n")
           await commitAll(directory, "v2")
           await $`git update-ref refs/remotes/origin/v2 HEAD`.cwd(directory).quiet()
-          await $`git branch reused HEAD`.cwd(directory).quiet()
         })
         const git = yield* Git.Service
         const repository = yield* git.repo.discover(AbsolutePath.make(directory))
@@ -755,10 +773,10 @@ describe("Vcs", () => {
           directory: AbsolutePath.make(path.join(directory, "linked")),
           ref: "origin/v2",
         })
-        const metadata = yield* Effect.promise(() =>
-          Bun.file(path.join(linked.gitDirectory, "opencode-review.json")).json(),
-        )
-        expect(metadata).toEqual({ creation: { ref: "refs/remotes/origin/v2", commit: expect.any(String) } })
+        expect(yield* git.history.branch(linked)).toBeUndefined()
+        expect(
+          yield* Effect.promise(() => Bun.file(path.join(linked.gitDirectory, "opencode-review.json")).exists()),
+        ).toBeFalse()
         yield* Effect.gen(function* () {
           const vcs = yield* Vcs.Service
           const context = host()
@@ -766,38 +784,24 @@ describe("Vcs", () => {
             ...context,
             vcs: { ...context.vcs, transform: vcs.transform, reload: vcs.reload },
           })
-          expect(yield* vcs.base()).toEqual({ name: "v2", ref: "refs/remotes/origin/v2", source: "worktree" })
+          expect(yield* vcs.base().pipe(Effect.flip)).toMatchObject({ message: "Choose a review base" })
+          expect(yield* vcs.diff("committed", { base: "origin/v2" })).toEqual([])
+          expect((yield* vcs.diff("committed", { base: "origin/dev" })).map((row) => row.file)).toEqual(["v2.txt"])
           yield* Effect.promise(() => $`git checkout -b child`.cwd(linked.worktree).quiet())
-          expect((yield* vcs.base())?.source).toBe("worktree")
-          expect((yield* vcs.diff("committed", { base: "origin/dev" })).map((row) => row.file)).toEqual(["v2.txt"])
-          expect((yield* vcs.base())?.source).toBe("worktree")
-          yield* Effect.promise(() => $`git checkout reused`.cwd(linked.worktree).quiet())
           expect(yield* vcs.base().pipe(Effect.flip)).toMatchObject({ message: "Choose a review base" })
-          yield* Effect.promise(() => $`git checkout --detach origin/v2`.cwd(linked.worktree).quiet())
-          expect((yield* vcs.base())?.source).toBe("worktree")
-          expect((yield* vcs.diff("committed", { base: "origin/dev" })).map((row) => row.file)).toEqual(["v2.txt"])
-        }).pipe(provide(linked.worktree, { git: true }))
-        yield* Effect.gen(function* () {
-          const vcs = yield* Vcs.Service
-          const context = host()
-          yield* VcsGitPlugin.Plugin.effect({
-            ...context,
-            vcs: { ...context.vcs, transform: vcs.transform, reload: vcs.reload },
-          })
-          expect(yield* vcs.base()).toEqual({ name: "v2", ref: "refs/remotes/origin/v2", source: "worktree" })
-          yield* Effect.promise(() => $`git checkout reused`.cwd(linked.worktree).quiet())
-          expect(yield* vcs.base().pipe(Effect.flip)).toMatchObject({ message: "Choose a review base" })
+          yield* Effect.promise(() => $`git checkout -b named origin/v2`.cwd(linked.worktree).quiet())
+          expect(yield* vcs.base()).toEqual({ name: "v2", ref: "refs/remotes/origin/v2", source: "reflog" })
         }).pipe(provide(linked.worktree, { git: true }))
         expect(
-          yield* Effect.promise(() => Bun.file(path.join(linked.gitDirectory, "opencode-review.json")).json()),
-        ).toEqual(metadata)
+          yield* Effect.promise(() => Bun.file(path.join(linked.gitDirectory, "opencode-review.json")).exists()),
+        ).toBeFalse()
         const fromHead = yield* git.worktree.create({
           repository,
           directory: AbsolutePath.make(path.join(directory, "from-head")),
         })
         expect(
-          yield* Effect.promise(() => Bun.file(path.join(fromHead.gitDirectory, "opencode-review.json")).json()),
-        ).toMatchObject({ creation: { ref: "refs/heads/main" } })
+          yield* Effect.promise(() => Bun.file(path.join(fromHead.gitDirectory, "opencode-review.json")).exists()),
+        ).toBeFalse()
         const detached = yield* git.worktree.create({
           repository: fromHead,
           directory: AbsolutePath.make(path.join(directory, "detached-source")),

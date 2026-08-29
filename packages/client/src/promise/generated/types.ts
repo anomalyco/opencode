@@ -419,7 +419,7 @@ export type WorkspaceDestroyResult = { destroyed: boolean }
 
 export type VcsBranch = { current?: string; default?: string }
 
-export type VcsBase = { name: string; ref: string; source: "worktree" | "reflog" | "default" }
+export type VcsBase = { name: string; ref: string; source: "reflog" | "default" }
 
 export type VcsFileStatus = {
   file: string

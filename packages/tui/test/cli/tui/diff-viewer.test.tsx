@@ -345,8 +345,9 @@ test.each(["branch", "committed", "working"] as const)(
   },
 )
 
-test("an unknown base can be selected to recover combined review", async () => {
+test.each(["branch", "committed"] as const)("an ambiguous base never requests a guessed %s diff", async (source) => {
   const viewer = await renderDiffViewer([], {
+    source,
     height: 30,
     kittyKeyboard: true,
     baseResponse: async () => json({ message: "choose a base" }, { status: 503 }),
@@ -364,9 +365,9 @@ test("an unknown base can be selected to recover combined review", async () => {
     viewer.app.mockInput.pressKey("HOME")
     viewer.app.mockInput.pressArrow("down")
     viewer.app.mockInput.pressEnter()
-    await viewer.app.waitForFrame((frame) => frame.includes("All · vs release") && frame.includes("const first"))
-    expect(viewer.vcsDiffInput()).toMatchObject({ mode: "branch", base: "release" })
-    expect(viewer.settings().diffs?.source).toBeUndefined()
+    await viewer.app.waitForFrame((frame) => frame.includes("vs release") && frame.includes("const first"))
+    expect(viewer.vcsDiffInput()).toMatchObject({ mode: source, base: "release" })
+    expect(viewer.settings().diffs?.source).toBe(source)
     expect(viewer.baseRequests).toHaveLength(1)
   } finally {
     viewer.app.renderer.destroy()
