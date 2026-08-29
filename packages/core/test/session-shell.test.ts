@@ -19,6 +19,7 @@ import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { Shell } from "@opencode-ai/core/shell"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { location } from "./fixture/location"
 import { tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
@@ -190,6 +191,68 @@ describe("Session.shell", () => {
       ).toEqual([secondEvent.data.shell.id, firstEvent.data.shell.id])
       expect(fixture.control.wakes).toEqual([])
       expect(fixture.control.drains).toEqual([])
+    }),
+  )
+
+  it.live("routes shell completion to the moved Session while retaining output from its original Location", () =>
+    Effect.gen(function* () {
+      const fixture = yield* setup
+      const destination = Location.Ref.make({ directory: AbsolutePath.make((yield* tmpdirScoped()).path) })
+      const command = yield* gate(fixture.tmp.path, "moved")
+      const caller = yield* fixture.session
+        .shell({ sessionID: fixture.created.id, command: command.command })
+        .pipe(Effect.forkScoped)
+      yield* command.started
+      const event = yield* started(fixture.session, fixture.created.id, command.command)
+
+      const bus = yield* Bus.Service
+      const Done = Bus.ephemeral({ type: "test.shell.move.done", schema: {} })
+      const readers = yield* Effect.forEach([fixture.created.location, destination], (ref) =>
+        bus.subscribe([SessionEvent.Shell.Ended, SessionEvent.InboxEnqueued, Done]).pipe(
+          Stream.takeUntil((event) => event.type === Done.type),
+          Stream.runCollect,
+          Effect.provideService(Location.Service, location(ref)),
+          Effect.forkScoped({ startImmediately: true }),
+        ),
+      )
+      // This fixture's runner does not drain move requests; project the actual move event instead.
+      yield* bus.publish(SessionEvent.Moved, {
+        sessionID: fixture.created.id,
+        location: destination,
+        projectID: fixture.created.projectID,
+      })
+      expect((yield* fixture.session.get(fixture.created.id)).location).toEqual(destination)
+      yield* command.release
+      yield* Fiber.join(caller).pipe(Effect.timeout("5 seconds"))
+      yield* bus.publish(Done, {})
+
+      const events = yield* Effect.forEach(readers, (reader) => Fiber.join(reader).pipe(Effect.timeout("5 seconds")))
+      expect(events.map((items) => items.map((event) => event.type))).toEqual([
+        [Done.type],
+        ["session.shell.ended", "session.inbox.enqueued", Done.type],
+      ])
+      expect(events[1][0]).toMatchObject({
+        data: { output: { output: expect.stringContaining("moved finished") } },
+      })
+      expect(
+        (yield* fixture.session.messages({ sessionID: fixture.created.id })).find((message) => message.type === "shell"),
+      ).toMatchObject({
+        shellID: event.data.shell.id,
+        status: "exited",
+        exit: 0,
+        output: { output: expect.stringContaining("moved finished") },
+      })
+      const inbox = yield* fixture.session.inbox(fixture.created.id)
+      expect(inbox).toHaveLength(1)
+      expect(inbox[0]).toMatchObject({
+        type: "synthetic",
+        payload: {
+          text: expect.stringContaining("moved finished"),
+          metadata: { shellID: event.data.shell.id, state: "completed" },
+        },
+      })
+      expect(inbox[0]).not.toHaveProperty("payload.description")
+      expect(fixture.control.wakes).toEqual([])
     }),
   )
 

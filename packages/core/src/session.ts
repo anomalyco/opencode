@@ -715,11 +715,13 @@ const layer = Layer.effect(
         const session = yield* result.get(input.sessionID)
         // The server owns completion recording even if the submitting client disconnects.
         const running = yield* Effect.gen(function* () {
-          const plugins = yield* PluginSupervisor.Service
-          yield* plugins.flush
-          const shell = yield* Shell.Service
-          const config = yield* Config.Service
-          const started = yield* shell
+          // Resolve shell services here without pinning Session events to this Location after a move.
+          const local = yield* Effect.gen(function* () {
+            const plugins = yield* PluginSupervisor.Service
+            yield* plugins.flush
+            return { shell: yield* Shell.Service, config: yield* Config.Service }
+          }).pipe(Effect.provide(locations.get(session.location)))
+          const started = yield* local.shell
             .create({
               command: input.command,
               cwd: session.location.directory,
@@ -746,17 +748,17 @@ const layer = Layer.effect(
             },
             { id: input.id },
           )
-          const terminal = yield* shell
+          const terminal = yield* local.shell
             .wait(started.id)
             .pipe(Effect.catchTag("Shell.NotFoundError", () => Effect.succeed(synthesizeTerminalShellInfo(started))))
-          const output = yield* shell
+          const output = yield* local.shell
             .output(started.id, { limit: SHELL_MAX_CAPTURE_BYTES })
             .pipe(Effect.catchTag("Shell.NotFoundError", () => Effect.succeed(missingShellOutput())))
           const capture = yield* ShellOutput.capture({
-            shell,
+            shell: local.shell,
             id: started.id,
             file: started.file,
-            limits: Config.latest(yield* config.entries(), "tool_output"),
+            limits: Config.latest(yield* local.config.entries(), "tool_output"),
           }).pipe(Effect.catchTag("Shell.NotFoundError", () => Effect.succeed(missingShellOutput())))
           yield* bus.publish(SessionEvent.Shell.Ended, {
             sessionID: input.sessionID,
@@ -788,7 +790,7 @@ const layer = Layer.effect(
               Effect.catchTag("Session.NotFoundError", () => Effect.void),
               Effect.orDie,
             )
-        }).pipe(Effect.provide(locations.get(session.location)), Effect.forkIn(scope, { startImmediately: true }))
+        }).pipe(Effect.forkIn(scope, { startImmediately: true }))
         yield* Fiber.join(running)
       }),
       skill: Effect.fn("Session.skill")(function* (input) {
