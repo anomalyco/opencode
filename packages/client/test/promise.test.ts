@@ -36,6 +36,85 @@ test("exposes every standard HTTP API group", () => {
   ])
   expect(Object.keys(client.files)).toEqual(["list", "find"])
   expect(Object.keys(client.ptys)).toEqual(["list", "create", "get", "update", "remove"])
+  expect(Object.keys(client.sessions)).toContain("attachment")
+})
+
+test("sessions.attachment uploads blobs as multipart", async () => {
+  const requests: Request[] = []
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    headers: { authorization: "Basic token" },
+    fetch: async (input, init) => {
+      requests.push(new Request(input, init))
+      return Response.json({
+        data: {
+          id: "att_test",
+          uri: "opencode://attachment/att_test",
+          name: "archive.zip",
+          mime: "application/octet-stream",
+          size: 4,
+        },
+      })
+    },
+  })
+
+  const result = await client.sessions.attachment({
+    sessionID: "ses_test",
+    file: new Blob([Uint8Array.of(0, 1, 2, 3)]),
+    name: "archive.zip",
+  })
+
+  expect(result).toEqual({
+    id: "att_test",
+    uri: "opencode://attachment/att_test",
+    name: "archive.zip",
+    mime: "application/octet-stream",
+    size: 4,
+  })
+  expect(requests[0]?.url).toBe("http://localhost:3000/api/session/ses_test/attachment")
+  expect(requests[0]?.headers.get("authorization")).toBe("Basic token")
+  expect(requests[0]?.headers.get("content-type")).toStartWith("multipart/form-data; boundary=")
+  const form = await requests[0]?.formData()
+  const file = form?.get("file")
+  expect(file).toBeInstanceOf(File)
+  if (!(file instanceof File)) throw new Error("Expected multipart file")
+  expect(file.name).toBe("archive.zip")
+})
+
+test("sessions.attachment streams multipart bodies and preserves typed quota errors", async () => {
+  const requests: Request[] = []
+  const bodies: string[] = []
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async (input, init) => {
+      const request = new Request(input, init)
+      requests.push(request)
+      bodies.push(await request.text())
+      return Response.json(
+        {
+          _tag: "PayloadTooLargeError",
+          message: "Attachment exceeds the file storage limit",
+          scope: "file",
+          maximumBytes: 25 * 1024 * 1024,
+        },
+        { status: 413 },
+      )
+    },
+  })
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(Uint8Array.of(1, 2, 3))
+      controller.close()
+    },
+  })
+
+  await expect(
+    client.sessions.attachment({ sessionID: "ses_test", file: stream, name: "data.bin" }),
+  ).rejects.toMatchObject({
+    _tag: "PayloadTooLargeError",
+    message: "Attachment exceeds the file storage limit",
+  })
+  expect(bodies[0]).toContain('filename="data.bin"')
 })
 
 test("sessions.get returns the wire projection", async () => {

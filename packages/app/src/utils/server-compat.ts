@@ -19,11 +19,11 @@ import type {
 type LegacyClient = OpencodeClient
 type LegacyFor = (directory?: string) => LegacyClient
 type CompatibleSessionApi = Omit<
-  SessionApi,
+  ServerApi["session"],
   "prompt" | "command" | "shell" | "compact" | "rename" | "archive" | "remove"
 > & {
   prompt: (input: SessionPromptInput & LegacyPrompt) => Promise<SessionPromptOutput>
-  command: (input: SessionCommandInput) => Promise<SessionCommandOutput>
+  command: (input: ManagedFiles<SessionCommandInput>) => Promise<SessionCommandOutput>
   shell: (input: SessionShellInput & LegacyPrompt) => Promise<SessionShellOutput>
   compact: (input: SessionCompactInput & { model?: LegacyPrompt["model"] }) => Promise<SessionCompactOutput>
   rename: (input: Parameters<SessionApi["rename"]>[0] & LegacyLocation) => ReturnType<SessionApi["rename"]>
@@ -35,6 +35,13 @@ type CompatiblePermissionApi = Omit<ServerApi["permission"], "reply"> & {
     input: Parameters<ServerApi["permission"]["reply"]>[0] & { location?: { directory?: string } },
   ) => ReturnType<ServerApi["permission"]["reply"]>
 }
+type ManagedFile = {
+  uri: string
+  name?: string
+  mime?: string
+  description?: string
+  mention?: { start: number; end: number; text: string }
+}
 export type CompatibleApi = Omit<ServerApi, "session" | "permission"> & {
   readonly session: CompatibleSessionApi
   readonly permission: CompatiblePermissionApi
@@ -44,6 +51,10 @@ type LegacyPrompt = {
   model?: { providerID: string; modelID: string }
   variant?: string
   legacyParts?: (TextPartInput | FilePartInput | AgentPartInput)[]
+  files?: ReadonlyArray<ManagedFile>
+}
+type ManagedFiles<T extends { files?: ReadonlyArray<{ uri: string }> }> = Omit<T, "files"> & {
+  files?: ReadonlyArray<ManagedFile>
 }
 type LegacyLocation = { directory?: string }
 type CompatibleInput = {
