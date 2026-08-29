@@ -1160,11 +1160,35 @@ const layer = Layer.effect(
 
           if (
             lastFinished &&
-            lastFinished.summary !== true &&
-            (yield* compaction.isOverflow({ tokens: lastFinished.tokens, model }))
+            lastFinished.summary !== true
           ) {
-            yield* compaction.create({ sessionID, agent: lastUser.agent, model: lastUser.model, auto: true })
-            continue
+            // Auto-compaction must be driven by the CUMULATIVE token usage of the
+            // whole context, not by the last single message. `isOverflow` compares
+            // the supplied count against `usable(model)`, which for large-context
+            // models equals `model.limit.context - maxOutputTokens` (e.g. 256000 -
+            // 64000 = 192000 for hy3). A single assistant message is only ~20k
+            // tokens, so passing just `lastFinished.tokens` never reaches that
+            // threshold and compaction never fires. Sum every message's tokens so the
+            // check reflects total context size and triggers before the window fills.
+            const cumulativeTokens = msgs.reduce<SessionV1.Assistant["tokens"]>(
+              (acc, m) => {
+                const t = (m as { tokens?: SessionV1.Assistant["tokens"] }).tokens
+                if (!t) return acc
+                acc.input += t.input ?? 0
+                acc.output += t.output ?? 0
+                acc.reasoning += t.reasoning ?? 0
+                acc.cache.read += t.cache?.read ?? 0
+                acc.cache.write += t.cache?.write ?? 0
+                acc.total =
+                  acc.input + acc.output + acc.reasoning + acc.cache.read + acc.cache.write
+                return acc
+              },
+              { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 }, total: 0 },
+            )
+            if (yield* compaction.isOverflow({ tokens: cumulativeTokens, model })) {
+              yield* compaction.create({ sessionID, agent: lastUser.agent, model: lastUser.model, auto: true })
+              continue
+            }
           }
 
           const agent = yield* agents.get(lastUser.agent)
