@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process"
+import { getDeterministicPath } from "./deterministic-env.js"
 
 export type ServiceContender = {
   readonly child: ChildProcess
@@ -15,10 +16,21 @@ export function spawnServiceContender(
   args: ReadonlyArray<string>,
   env?: Readonly<Record<string, string | undefined>>,
 ): ServiceContender {
+  // Make PATH deterministic across reconnect election: whichever client wins
+  // should not determine the service's global PATH. Use the login shell's
+  // PATH (cached, bounded) and only fall back to the client's PATH.
+  // Explicit env.PATH from the caller (e.g., tests) is still respected.
+  const deterministicPath = getDeterministicPath()
+  const baseEnv: Record<string, string | undefined> = { ...process.env, ...env }
+  const hasExplicitPath = env !== undefined && ("PATH" in env || "Path" in (env as Record<string, unknown>))
+  if (deterministicPath !== undefined && !hasExplicitPath) {
+    baseEnv.PATH = deterministicPath
+    if (process.platform === "win32") (baseEnv as Record<string, string | undefined>).Path = deterministicPath
+  }
   const child = spawn(command, args, {
     detached: true,
     stdio: ["ignore", "ignore", "pipe"],
-    env: { ...process.env, ...env },
+    env: baseEnv,
   })
   let error: Error | undefined
   let closed = false
