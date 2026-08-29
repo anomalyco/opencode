@@ -469,7 +469,6 @@ const mapFinishReason = (reason: string): FinishReason => {
   if (reason === "max_tokens" || reason === "model_context_window_exceeded") return "length"
   if (reason === "tool_use") return "tool-calls"
   if (reason === "content_filtered" || reason === "guardrail_intervened") return "content-filter"
-  if (reason === "malformed_model_output" || reason === "malformed_tool_use") return "error"
   return "unknown"
 }
 
@@ -624,6 +623,15 @@ const step = (state: ParserState, event: BedrockEvent) =>
     }
 
     if (event.messageStop) {
+      if (
+        event.messageStop.stopReason === "malformed_model_output" ||
+        event.messageStop.stopReason === "malformed_tool_use"
+      )
+        return yield* ProviderShared.eventError(
+          ADAPTER,
+          `Bedrock Converse stopped with ${event.messageStop.stopReason}`,
+          ProviderShared.encodeJson(event),
+        )
       return [
         {
           ...state,

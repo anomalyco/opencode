@@ -1,11 +1,12 @@
 import { EventStreamCodec } from "@smithy/eventstream-codec"
 import { fromUtf8, toUtf8 } from "@smithy/util-utf8"
 import { describe, expect } from "bun:test"
-import { Effect } from "effect"
+import { Effect, Ref, Stream } from "effect"
 import {
   CacheHint,
   GenerationOptions,
   LLM,
+  LLMEvent,
   LLMRequest,
   Message,
   ToolCallPart,
@@ -385,19 +386,39 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
-  it.effect("maps truncation and malformed output stop reasons", () =>
+  it.effect("maps model context window exhaustion to length", () =>
     Effect.gen(function* () {
-      const reasons = [
-        ["model_context_window_exceeded", "length"],
-        ["malformed_model_output", "error"],
-        ["malformed_tool_use", "error"],
-      ] as const
+      const response = yield* LLMClient.generate(baseRequest).pipe(
+        Effect.provide(fixedBytes(eventStreamBody(["messageStop", { stopReason: "model_context_window_exceeded" }]))),
+      )
 
-      for (const [raw, normalized] of reasons) {
-        const response = yield* LLMClient.generate(baseRequest).pipe(
-          Effect.provide(fixedBytes(eventStreamBody(["messageStop", { stopReason: raw }]))),
+      expect(response.finishReason).toEqual({
+        normalized: "length",
+        raw: "model_context_window_exceeded",
+      })
+    }),
+  )
+
+  it.effect("fails malformed output stop reasons", () =>
+    Effect.gen(function* () {
+      for (const reason of ["malformed_model_output", "malformed_tool_use"] as const) {
+        const events = yield* Ref.make<ReadonlyArray<LLMEvent>>([])
+        const error = yield* LLMClient.stream(baseRequest).pipe(
+          Stream.tap((event) => Ref.update(events, (current) => [...current, event])),
+          Stream.runDrain,
+          Effect.provide(fixedBytes(eventStreamBody(["messageStop", { stopReason: reason }]))),
+          Effect.flip,
         )
-        expect(response.finishReason).toEqual({ normalized, raw })
+
+        expect(error).toMatchObject({
+          reason: { _tag: "InvalidProviderOutput" },
+          message: `Bedrock Converse stopped with ${reason}`,
+        })
+        expect(JSON.parse(error.reason.body ?? "")).toMatchObject({
+          headers: { ":event-type": { value: "messageStop" } },
+          body: JSON.stringify({ stopReason: reason }),
+        })
+        expect((yield* Ref.get(events)).some((event) => event.type === "finish")).toBeFalse()
       }
     }),
   )
