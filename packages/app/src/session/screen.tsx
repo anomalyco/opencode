@@ -145,12 +145,7 @@ export function SessionScreen(props: { session: SessionModel }) {
 
       <Show when={!review.mobile.changes() ? session.identity.params.id : undefined} keyed>
         {(_id) => (
-          <ActiveSessionComposerRegion
-            model={composer}
-            session={session}
-            accentSubmit={session.workspace.current()}
-            onResponseSubmit={timeline.actions.resume}
-          />
+          <ActiveSessionComposerRegion model={composer} session={session} onResponseSubmit={timeline.actions.resume} />
         )}
       </Show>
       <Show when={!!session.identity.params.id && mobileTabsBottom()}>
