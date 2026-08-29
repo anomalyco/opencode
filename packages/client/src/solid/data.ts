@@ -750,7 +750,8 @@ export function createData(config: CreateDataInput) {
             command: event.data.shell.command,
             status: event.data.shell.status,
             exit: event.data.shell.exit,
-            metadata: event.metadata,
+            metadata:
+              event.data.shell.metadata.background === true ? { ...event.metadata, background: true } : event.metadata,
             time: { created: event.created },
           })
         })

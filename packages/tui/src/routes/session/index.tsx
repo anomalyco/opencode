@@ -2329,26 +2329,22 @@ function RevertMessage(props: {
 }
 
 function ShellMessage(props: { message: Extract<SessionMessageInfo, { type: "shell" }> }) {
-  const theme = useTheme("elevated")
-  const output = createMemo(() => stripAnsi(props.message.output?.output.trim() ?? ""))
+  const error = createMemo(() => {
+    if (props.message.status === "killed") return "Command cancelled"
+    if (props.message.status === "timeout") return "Command timed out"
+    if (props.message.exit !== undefined && props.message.exit !== 0)
+      return `Command exited with code ${props.message.exit}`
+  })
 
   return (
-    <box
-      width="100%"
-      border={["left"]}
-      paddingTop={1}
-      paddingBottom={1}
-      paddingLeft={2}
-      gap={1}
-      backgroundColor={theme.background.default}
-      customBorderChars={SplitBorder.customBorderChars}
-      borderColor={theme.background.default}
-    >
-      <text fg={theme.text.default}>$ {props.message.command}</text>
-      <Show when={output()}>
-        <text fg={theme.text.subdued}>{output()}</text>
-      </Show>
-    </box>
+    <ShellDisplay
+      shellID={props.message.shellID}
+      command={props.message.command}
+      status={props.message.status === "running" ? "running" : "completed"}
+      background={props.message.metadata?.background === true}
+      output={props.message.output?.output}
+      error={error()}
+    />
   )
 }
 
@@ -3178,22 +3174,47 @@ function BlockToolContent(props: BlockToolProps & { borderColor: RGBA }) {
 const SHELL_DISPLAY_LIMIT = 1024 * 1024
 
 function Shell(props: ToolProps) {
+  return (
+    <ShellDisplay
+      part={props.part}
+      shellID={stringValue(props.metadata.shellID)}
+      command={stringValue(props.input.command)}
+      workdir={stringValue(props.input.workdir)}
+      status={props.part.state.status}
+      background={Boolean(stringValue(props.metadata.shellID)) && props.part.state.status !== "running"}
+      output={stringValue(props.metadata.shellID) ? undefined : props.output}
+    />
+  )
+}
+
+function ShellDisplay(props: {
+  part?: SessionMessageAssistantTool
+  shellID?: string
+  command?: string
+  workdir?: string
+  status: SessionMessageAssistantTool["state"]["status"]
+  background?: boolean
+  output?: string
+  error?: string
+}) {
   const theme = useTheme()
   const ctx = use()
   const client = useClient()
   const data = useData()
   const pathFormatter = usePathFormatter()
+  // A Session can move while its shell is still running in the original Location.
+  const location = data.shell.get(props.shellID ?? "")?.location ?? data.session.get(ctx.sessionID)?.location
   const permission = useToolPermission(() => props.part)
   const color = createMemo(() => (permission() ? theme.text.feedback.warning.default : theme.text.default))
-  const shellID = createMemo(() => stringValue(props.metadata.shellID))
-  const background = createMemo(() => Boolean(shellID()) && props.part.state.status !== "running")
+  const shellID = () => props.shellID
+  const background = () => props.background
   const backgroundRunning = createMemo(() => {
     const id = shellID()
     return Boolean(id && data.shell.get(id))
   })
-  const isRunning = createMemo(() => props.part.state.status === "running" || backgroundRunning())
-  const command = createMemo(() => stringValue(props.input.command))
-  const workdir = createMemo(() => pathFormatter.format(stringValue(props.input.workdir)))
+  const isRunning = createMemo(() => props.status === "running" || backgroundRunning())
+  const command = () => props.command
+  const workdir = createMemo(() => pathFormatter.format(props.workdir))
   const [expanded, setExpanded] = createSignal(false)
   const [backgroundOutput, setBackgroundOutput] = createSignal("")
   const [outputTruncated, setOutputTruncated] = createSignal(false)
@@ -3209,7 +3230,6 @@ function Shell(props: ToolProps) {
       return
     }
     loading = true
-    const location = data.session.get(ctx.sessionID)?.location
     do {
       const response = await client.api.shell
         .output({
@@ -3256,14 +3276,14 @@ function Shell(props: ToolProps) {
     onCleanup(() => clearInterval(interval))
   })
   const output = createMemo(() => {
-    if (props.part.state.status === "streaming") return ""
+    if (props.status === "streaming") return ""
     if (shellID()) {
       if (background() && !expanded()) return ""
-      const text = backgroundOutput().trim()
+      if (props.status === "completed" && props.output !== undefined) return stripAnsi(props.output.trim())
+      const text = stripAnsi((backgroundOutput() || props.output || "").trim())
       return outputTruncated() ? `[earlier output omitted]\n${text}` : text
     }
-    const content = toolDisplayContent(props.part.state)[0]
-    return stripAnsi(content?.type === "text" ? content.text.trim() : "")
+    return stripAnsi(props.output?.trim() ?? "")
   })
   const maxLines = 10
   const maxChars = createMemo(() => maxLines * Math.max(20, ctx.width - 6))
@@ -3290,7 +3310,7 @@ function Shell(props: ToolProps) {
         <Show
           when={command()}
           fallback={
-            isRunning() || props.part.state.status === "streaming" ? (
+            isRunning() || props.status === "streaming" ? (
               <Spinner color={color()}>Writing command…</Spinner>
             ) : (
               <text fg={theme.text.subdued}>Writing command…</text>
@@ -3306,6 +3326,9 @@ function Shell(props: ToolProps) {
         </Show>
         <Show when={background()}>
           <StatusBadge>Background</StatusBadge>
+        </Show>
+        <Show when={props.error}>
+          <text fg={theme.text.feedback.error.default}>{props.error}</text>
         </Show>
       </box>
     </BlockTool>

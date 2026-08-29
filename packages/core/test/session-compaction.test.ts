@@ -27,6 +27,7 @@ import { Location } from "@opencode-ai/core/location"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Money } from "@opencode-ai/schema/money"
 import { Skill } from "@opencode-ai/schema/skill"
+import { Shell } from "@opencode-ai/schema/shell"
 import { DateTime, Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { asc, eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
@@ -300,6 +301,42 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
       { type: Bus.versionedType(SessionEvent.UsageRecorded.type, 1) },
       { type: Bus.versionedType(SessionEvent.Compaction.Ended.type, 1) },
     ])
+  }),
+)
+
+it.effect("compaction uses the completion notification instead of the background shell display record", () =>
+  Effect.gen(function* () {
+    requests = []
+    const compaction = yield* SessionCompaction.Service
+    const modelRequests = yield* SessionModelRequest.Service
+    const session = yield* insertSession(Session.ID.make("ses_shell_compaction"))
+    yield* compaction.compactManual({
+      session,
+      resolveModel: () => Effect.succeed(resolved),
+      prepare: modelRequests.prepare,
+      inputID: SessionMessage.ID.create(),
+      messages: [
+        SessionMessage.Shell.make({
+          id: SessionMessage.ID.create(),
+          type: "shell",
+          shellID: Shell.ID.make("sh_background"),
+          status: "exited",
+          command: "pwd",
+          metadata: { background: true },
+          output: { output: "display-only-output", cursor: 19, size: 19, truncated: false },
+          time: { created: DateTime.makeUnsafe(0), completed: DateTime.makeUnsafe(1) },
+        }),
+        SessionMessage.Synthetic.make({
+          id: SessionMessage.ID.create(),
+          type: "synthetic",
+          text: "User shell pwd completed: /project",
+          time: { created: DateTime.makeUnsafe(2) },
+        }),
+      ],
+    })
+    expect(requests).toHaveLength(1)
+    expect(JSON.stringify(requests[0]?.messages)).toContain("User shell pwd completed: /project")
+    expect(JSON.stringify(requests[0]?.messages)).not.toContain("display-only-output")
   }),
 )
 

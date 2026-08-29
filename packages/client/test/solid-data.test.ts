@@ -666,6 +666,36 @@ test("ignores activity snapshots from an older connection", async () => {
   }
 })
 
+test("projects background user shell metadata from durable shell data", () => {
+  const setup = activityFixture(() => Response.json({ data: {} }))
+  try {
+    setup.emit({
+      id: "evt_user_shell",
+      created: 1,
+      type: "session.shell.started",
+      durable: { aggregateID: "ses_refresh", seq: 1, version: 1 },
+      data: {
+        sessionID: "ses_refresh",
+        shell: {
+          id: "sh_user",
+          status: "running",
+          command: "pwd",
+          cwd: "/project",
+          shell: "/bin/sh",
+          file: "/project/shell.out",
+          metadata: { sessionID: "ses_refresh", background: true },
+          time: { started: 1 },
+        },
+      },
+    })
+    expect(setup.data.session.message.list("ses_refresh")).toMatchObject([
+      { type: "shell", shellID: "sh_user", status: "running", metadata: { background: true } },
+    ])
+  } finally {
+    setup.dispose()
+  }
+})
+
 function activityFixture(read: () => Response | Promise<Response>) {
   const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
   const api = OpenCode.make({

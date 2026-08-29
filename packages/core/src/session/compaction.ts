@@ -164,7 +164,9 @@ const serialize = (message: SessionMessage.Info) => {
   if (message.type === "synthetic") return `[Synthetic context]: ${message.text}`
   if (message.type === "skill") return `[Skill activated: ${message.name}]\n${message.text}`
   if (message.type === "shell")
-    return `[Shell]: ${message.command}\n${truncateToolOutput(message.output?.output ?? "")}`
+    return message.metadata?.background === true
+      ? ""
+      : `[Shell]: ${message.command}\n${truncateToolOutput(message.output?.output ?? "")}`
   return ""
 }
 

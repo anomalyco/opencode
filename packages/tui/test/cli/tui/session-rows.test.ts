@@ -152,9 +152,7 @@ test("assigns stable IDs to tool rows for direct navigation", () => {
       { type: "text", text: "Starting a shell" },
       { type: "tool", id: "shell-1", name: "shell", state: pending(), time: { created: 2 } },
     ]),
-    assistant("assistant-2", [
-      { type: "tool", id: "shell-2", name: "shell", state: pending(), time: { created: 3 } },
-    ]),
+    assistant("assistant-2", [{ type: "tool", id: "shell-2", name: "shell", state: pending(), time: { created: 3 } }]),
   ]
   const rows = reduceSessionRows(messages)
   const boundaries = messageBoundaryIDs(rows, messages)
@@ -223,6 +221,32 @@ test("finds background tool launch rows for completion navigation", () => {
   expect(backgroundToolRowIndex(rows, messages, { source: "shell", id: "sh_first" }, "completion-2")).toBe(0)
   expect(backgroundToolRowIndex(rows, messages, { source: "subagent", id: "child-1" }, "completion-1")).toBe(1)
   expect(backgroundToolRowIndex(rows, messages, { source: "subagent", id: "child-1" }, "completion-2")).toBe(3)
+})
+
+test("finds user shell rows for completion navigation", () => {
+  const messages: SessionMessageInfo[] = [
+    {
+      id: "shell-message",
+      type: "shell",
+      shellID: "sh_user",
+      command: "pwd",
+      status: "exited",
+      time: { created: 0 },
+    },
+    {
+      id: "completion",
+      type: "synthetic",
+      text: "Shell finished",
+      description: "pwd",
+      metadata: { source: "shell", shellID: "sh_user", state: "completed" },
+      time: { created: 1 },
+    },
+  ]
+  const rows = reduceSessionRows(messages)
+
+  expect(backgroundToolRowIndex(rows, messages, { source: "shell", id: "sh_user" }, "completion")).toBe(0)
+  expect(backgroundToolRowIndex(rows, messages, { source: "shell", id: "sh_other" }, "completion")).toBe(-1)
+  expect(rows.map((row) => sessionRowID(row))).toEqual(["shell-message", "completion"])
 })
 
 test("groups exploration parts across assistant messages until a delimiter", () => {

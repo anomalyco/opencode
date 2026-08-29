@@ -13,7 +13,7 @@ import { SessionSchema } from "../../session/schema.js"
 import { Shell } from "../../shell.js"
 import { ShellParse } from "../../shell/parse.js"
 import { ShellSelect } from "../../shell/select.js"
-import { ToolOutput } from "../../tool-output.js"
+import { ShellOutput } from "../../shell/output.js"
 
 export const name = "shell"
 export const DEFAULT_TIMEOUT_MS = 2 * 60 * 1_000
@@ -229,29 +229,14 @@ export const Plugin = {
               )
               yield* context.progress({ shellID: info.id })
 
-              const captureShell = Effect.fnUntraced(function* () {
-                const configured = Config.latest(yield* config.entries(), "tool_output")
-                const maxLines = configured?.max_lines ?? ToolOutput.MAX_LINES
-                const maxBytes = configured?.max_bytes ?? ToolOutput.MAX_BYTES
-                const latest = yield* shell.output(info.id, { cursor: Number.MAX_SAFE_INTEGER })
-                const page = yield* shell.output(info.id, {
-                  cursor: Math.max(0, latest.size - maxBytes),
-                  limit: maxBytes,
-                })
-                const lines = page.output.split("\n")
-                if (page.output.endsWith("\n")) lines.pop()
-                const truncated = latest.size > maxBytes || lines.length > maxLines
-                const output = lines.length > maxLines ? lines.slice(-maxLines).join("\n") : page.output
-                const notice = truncated ? `\n\n[output truncated; full output saved to: ${info.file}]` : ""
-                return {
-                  output: `${output || "(no output)"}${notice}`,
-                  truncated,
-                }
-              })
-
               const settleShell = Effect.fnUntraced(function* () {
                 const final = yield* shell.wait(info.id)
-                const capture = yield* captureShell()
+                const capture = yield* ShellOutput.capture({
+                  shell,
+                  id: info.id,
+                  file: info.file,
+                  limits: Config.latest(yield* config.entries(), "tool_output"),
+                })
 
                 // `exit` is optionalKey in the Output schema; a present-but-undefined key
                 // fails output encoding, so omit it when the process has no exit code.
