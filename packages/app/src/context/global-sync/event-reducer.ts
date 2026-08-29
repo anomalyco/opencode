@@ -155,7 +155,7 @@ export function applyDirectoryEvent(input: {
             draft.splice(result.index, 1)
           }),
         )
-        cleanupSessionCaches(input.setStore, info.id, input.setSessionTodo)
+        // Caches survive archiving so open tabs keep rendering the session.
         if (info.parentID) break
         input.setStore("sessionTotal", (value) => Math.max(0, value - 1))
         break

@@ -1,6 +1,5 @@
 import { useNavigate } from "@solidjs/router"
 import { produce } from "solid-js/store"
-import { notifySessionTabsRemoved } from "@/components/titlebar-session-events"
 import { useLanguage } from "@/context/language"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
@@ -37,14 +36,11 @@ export function useSessionArchive() {
     navigate(`/${params.dir}/session`)
   }
 
+  // Archive is a data operation only — open tabs keep rendering the session. Only deletion navigates.
   const archive = async (sessionID: string) => {
     const session = sync().session.get(sessionID)
     if (!session) return
     if ((await sdk().protocol) !== "v1") return
-
-    const sessions = sync().data.session ?? []
-    const index = sessions.findIndex((s) => s.id === sessionID)
-    const nextSession = index === -1 ? undefined : (sessions[index + 1] ?? sessions[index - 1])
 
     await sdk()
       .client.session.update({ sessionID, directory: sdk().directory, time: { archived: Date.now() } })
@@ -55,9 +51,6 @@ export function useSessionArchive() {
             if (index !== -1) draft.session.splice(index, 1)
           }),
         )
-        sync().session.evict(sessionID)
-        navigateAfterRemoval(sessionID, session.parentID, nextSession?.id)
-        notifySessionTabsRemoved({ directory: sdk().directory, sessionIDs: [sessionID] })
       })
       .catch((err) => {
         showToast({
