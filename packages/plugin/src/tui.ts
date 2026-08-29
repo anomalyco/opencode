@@ -397,6 +397,7 @@ export type TuiState = {
   lsp: () => ReadonlyArray<TuiSidebarLspItem>
   mcp: () => ReadonlyArray<TuiSidebarMcpItem>
   scrollToMessage: (messageID: string) => boolean
+  scrollToBottom: () => boolean
 }
 
 type TuiBindingLookupView = {

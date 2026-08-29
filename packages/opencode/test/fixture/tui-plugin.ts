@@ -105,6 +105,7 @@ type Opts = {
     lsp?: HostPluginApi["state"]["lsp"]
     mcp?: HostPluginApi["state"]["mcp"]
     scrollToMessage?: HostPluginApi["state"]["scrollToMessage"]
+    scrollToBottom?: HostPluginApi["state"]["scrollToBottom"]
   }
   theme?: {
     selected?: string
@@ -327,6 +328,7 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
       lsp: opts.state?.lsp ?? (() => []),
       mcp: opts.state?.mcp ?? (() => []),
       scrollToMessage: opts.state?.scrollToMessage ?? (() => false),
+      scrollToBottom: opts.state?.scrollToBottom ?? (() => false),
     },
     theme: {
       get current() {

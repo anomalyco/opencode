@@ -163,6 +163,9 @@ function stateApi(sync: ReturnType<typeof useSync>): TuiPluginApi["state"] {
     scrollToMessage(messageID) {
       return sessionScroll.scrollToMessage(messageID)
     },
+    scrollToBottom() {
+      return sessionScroll.scrollToBottom()
+    },
   }
 }
 

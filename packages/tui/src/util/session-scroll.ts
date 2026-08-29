@@ -17,4 +17,10 @@ export const sessionScroll = {
     if (!current) return false
     return scrollToMessageID(current.scroll, messageID)
   },
+  scrollToBottom(): boolean {
+    const current = target
+    if (!current || current.scroll.isDestroyed) return false
+    current.scroll.scrollTo(current.scroll.scrollHeight)
+    return true
+  },
 }
