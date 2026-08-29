@@ -56,31 +56,33 @@ yield* opencode.events.subscribe().pipe(
 )
 ```
 
-## Register plugins
+## Customize
 
-Register Effect plugins through the embedded host. Their registrations remain scoped to the host.
+Customize your OpenCode instance by registering Effect plugins. Use the embedded
+host to customize agents, models, tools, and other behavior:
 
 ```ts
 import { Plugin } from "@opencode-ai/plugin/effect"
 import { Effect } from "effect"
 
 const plugin = Plugin.define({
-  id: "example",
+  id: "customize-agent",
   effect: (ctx) =>
     Effect.gen(function* () {
-      const storage = ctx.storage
-      yield* storage.set("embedded", true)
+      const agent = ctx.agent
+      yield* agent.transform((agents) => {
+        agents.update("build", (agent) => {
+          agent.description = "Builds features and fixes bugs for our team"
+        })
+      })
     }),
 })
 
 yield* opencode.plugin(plugin)
 ```
 
-See the [Effect plugins guide](/build/plugins/effect) for the complete plugin context.
-
-```ts
-yield* opencode.plugin.list()
-```
+See the [full Effect plugins documentation](/build/plugins/effect) for plugin
+hooks, transforms, tools, and the complete plugin context.
 
 ## Layer
 

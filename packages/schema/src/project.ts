@@ -8,7 +8,9 @@ import { ProjectID } from "./project-id.js"
 export const ID = ProjectID
 export type ID = typeof ID.Type
 
-export const Vcs = Schema.Literals(["git", "hg"]).annotate({ identifier: "Project.Vcs" })
+export const Vcs = Schema.String.check(Schema.isPattern(/^[a-z][a-z0-9._-]*$/)).annotate({
+  identifier: "Project.Vcs",
+})
 export const Current = Schema.Struct({
   id: ID,
   directory: AbsolutePath,
@@ -45,6 +47,14 @@ export const Info = Schema.Struct({
   sandboxes: Schema.Array(Schema.String),
 }).annotate({ identifier: "Project" })
 export interface Info extends Schema.Schema.Type<typeof Info> {}
+
+export const UpdateInput = Schema.Struct({
+  projectID: ID,
+  name: optional(Schema.String),
+  icon: optional(Icon),
+  commands: optional(Commands),
+}).annotate({ identifier: "Project.UpdateInput" })
+export interface UpdateInput extends Schema.Schema.Type<typeof UpdateInput> {}
 
 const Updated = ephemeral({ type: "project.updated", schema: Info.fields })
 export const Event = { Updated, Definitions: inventory(Updated) }

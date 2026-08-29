@@ -6,13 +6,13 @@ import { useGlobal } from "@/runtime/server/runtime"
 import { ServerConnection } from "@/runtime/server/registry"
 import { SessionPanelFrame, SessionRouteFrame } from "@/session/session-frame"
 import { LayoutProvider } from "@/shell/state/layout"
+import { SettingsSurfaceProvider } from "@/settings/surface"
 import Shell from "@/shell/shell"
 import { requireServerKey } from "./session"
 
 export const File = lazy(() => import("@opencode-ai/session-ui/file").then((module) => ({ default: module.File })))
-const loadDraftRoute = () => Promise.all([import("@/new-session/route"), File.preload()]).then(([module]) => module)
 const loadSessionRoute = () => Promise.all([import("@/session/route"), File.preload()]).then(([module]) => module)
-const DraftRoute = lazy(() => loadDraftRoute().then((module) => ({ default: module.DraftRoute })))
+const DraftRoute = lazy(() => import("@/new-session/route").then((module) => ({ default: module.DraftRoute })))
 const TargetSessionRouteContent = lazy(() =>
   loadSessionRoute().then((module) => ({ default: module.TargetSessionRouteContent })),
 )
@@ -35,7 +35,7 @@ export function AppRoutes() {
           <SessionRouteFrame>
             <Suspense
               fallback={
-                <div class="flex min-h-0 flex-1 p-2">
+                <div class="flex min-h-0 flex-1 px-2 pb-2 pt-[var(--shell-top-inset,8px)]">
                   <SessionPanelFrame raised />
                 </div>
               }
@@ -69,7 +69,9 @@ function TargetServerRoute(props: ParentProps) {
 function AppLayout(props: ParentProps) {
   return (
     <LayoutProvider>
-      <Shell>{props.children}</Shell>
+      <SettingsSurfaceProvider>
+        <Shell>{props.children}</Shell>
+      </SettingsSurfaceProvider>
     </LayoutProvider>
   )
 }

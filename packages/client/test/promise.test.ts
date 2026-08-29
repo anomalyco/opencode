@@ -26,8 +26,8 @@ test("exposes every standard HTTP API group", () => {
     "skill",
     "event",
     "pty",
+    "experimental",
     "shell",
-    "question",
     "reference",
     "worktree",
     "workspace",
@@ -47,11 +47,13 @@ test("exposes every standard HTTP API group", () => {
   expect(Object.keys(client.integration.command)).toEqual(["connect", "status", "cancel"])
   expect(Object.keys(client.websearch)).toEqual(["providers", "query"])
   expect(Object.keys(client.file)).toEqual(["read", "list", "find"])
-  expect(Object.keys(client.vcs)).toEqual(["get", "status", "diff"])
+  expect(Object.keys(client.vcs)).toEqual(["get", "base", "status", "branches", "diff"])
   expect(Object.keys(client.pty)).toEqual(["list", "create", "get", "update", "remove", "connect"])
   expect(Object.keys(client.pty.connect)).toEqual(["token"])
+  expect(Object.keys(client.experimental)).toEqual(["persistentPty"])
+  expect(client.experimental.persistentPty.read).toBeFunction()
   expect(Object.keys(client.shell)).toEqual(["list", "create", "get", "timeout", "output", "remove"])
-  expect(Object.keys(client.project)).toEqual(["list", "current"])
+  expect(Object.keys(client.project)).toEqual(["list", "update", "current"])
   expect(Object.keys(client.worktree)).toEqual(["list", "create", "remove", "refresh"])
 })
 
@@ -80,6 +82,69 @@ test("config.get returns ordered config entries for a location", async () => {
   expect(await client.config.get({ location: { directory: "/tmp/project" } })).toEqual(entries)
   expect(request?.method).toBe("GET")
   expect(request?.url).toBe("http://localhost:3000/api/config?location%5Bdirectory%5D=%2Ftmp%2Fproject")
+})
+
+test("vcs.base and committed diffs preserve location and explicit base on the wire", async () => {
+  const requests: Request[] = []
+  const location = { directory: "/repo", project: { id: "global", directory: "/repo", canonical: "/repo" } }
+  const base = { name: "release", ref: "refs/remotes/origin/release", source: "reflog" }
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      requests.push(request)
+      return Response.json({ location, data: new URL(request.url).pathname.endsWith("/base") ? base : [] })
+    },
+  })
+  expect(await client.vcs.base({ location: { directory: "/repo" } })).toEqual({ location, data: base })
+  expect(
+    await client.vcs.diff({ location: { directory: "/repo" }, mode: "committed", base: base.ref, context: 1 }),
+  ).toEqual({ location, data: [] })
+  expect(new URL(requests[0].url).pathname).toBe("/api/vcs/base")
+  const query = new URL(requests[1].url).searchParams
+  expect(query.get("location[directory]")).toBe("/repo")
+  expect(query.get("mode")).toBe("committed")
+  expect(query.get("base")).toBe(base.ref)
+  expect(query.get("context")).toBe("1")
+})
+
+test("vcs.diff exposes unavailable comparisons as errors, not empty diffs", async () => {
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async () =>
+      Response.json(
+        { _tag: "ServiceUnavailableError", service: "vcs", message: "No review base available" },
+        { status: 503 },
+      ),
+  })
+  await expect(client.vcs.diff({ mode: "committed" })).rejects.toMatchObject({
+    _tag: "ServiceUnavailableError",
+    service: "vcs",
+    message: "No review base available",
+  })
+})
+
+test("project.update uses the global project contract", async () => {
+  let request: Request | undefined
+  const project = {
+    id: "proj_test",
+    canonical: "/tmp/project",
+    commands: { start: "bun install" },
+    time: { created: 1, updated: 2 },
+    sandboxes: [],
+  }
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async (input, init) => {
+      request = input instanceof Request ? input : new Request(input, init)
+      return Response.json(project)
+    },
+  })
+
+  expect(await client.project.update({ projectID: "proj_test", commands: { start: "bun install" } })).toEqual(project)
+  expect(request?.method).toBe("PATCH")
+  expect(request?.url).toBe("http://localhost:3000/api/project/proj_test")
+  expect(await request?.json()).toEqual({ commands: { start: "bun install" } })
 })
 
 test("generate.text uses the locationless public contract", async () => {
@@ -163,6 +228,24 @@ test("experimental wellknown integration add uses the public HTTP contract", asy
     "http://localhost:3000/api/experimental/integration/wellknown?location%5Bdirectory%5D=%2Ftmp%2Fproject",
   )
   expect(await request?.json()).toEqual({ url: "https://example.com" })
+})
+
+test("credential.activate uses the public HTTP contract", async () => {
+  let request: Request | undefined
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async (input, init) => {
+      request = input instanceof Request ? input : new Request(input, init)
+      return new Response(null, { status: 204 })
+    },
+  })
+
+  await client.credential.activate({ credentialID: "cred_work", location: { directory: "/tmp/project" } })
+
+  expect(request?.method).toBe("POST")
+  expect(request?.url).toBe(
+    "http://localhost:3000/api/credential/cred_work/activate?location%5Bdirectory%5D=%2Ftmp%2Fproject",
+  )
 })
 
 test("integration connections optionally submit a form answer", async () => {
@@ -471,6 +554,115 @@ test("event.subscribe exposes the Promise event stream wire projection", async (
 
   expect(events).toEqual([{ id: "evt_connected", created: 0, type: "server.connected", data: {} }, modelSwitchedEvent])
   expect(events[1]?.type === "session.model.selected" && events[1].created).toBe(1_717_171_717_000)
+})
+
+// Moved from packages/app/e2e/regression/session-timeline-transport.spec.ts
+test("event.subscribe keeps one request open while delivering multiple events", async () => {
+  const requests: Request[] = []
+  const events = [
+    { id: "evt_first", created: 1, type: "server.connected", data: {} },
+    { id: "evt_second", created: 2, type: "server.connected", data: {} },
+  ]
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async (input, init) => {
+      requests.push(input instanceof Request ? input : new Request(input, init))
+      return new Response(events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join(""), {
+        headers: { "content-type": "text/event-stream" },
+      })
+    },
+  })
+  const received = []
+  for await (const event of client.event.subscribe()) received.push(event)
+  expect(received).toEqual(events)
+  expect(requests).toHaveLength(1)
+})
+
+// Moved from packages/app/e2e/regression/session-timeline-transport.spec.ts
+test("event.subscribe delivers every event from one stream chunk", async () => {
+  const events = Array.from({ length: 4 }, (_, index) => ({
+    id: `evt_burst_${index}`,
+    created: index,
+    type: "server.connected",
+    data: {},
+  }))
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async () =>
+      new Response(new TextEncoder().encode(events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("")), {
+        headers: { "content-type": "text/event-stream" },
+      }),
+  })
+  const received = []
+  for await (const event of client.event.subscribe()) received.push(event)
+  expect(received).toEqual(events)
+  expect(new Set(received.map((event) => event.id)).size).toBe(4)
+})
+
+// Moved from packages/app/e2e/regression/session-timeline-transport.spec.ts
+test("event.subscribe parses split JSON and a split multibyte code point", async () => {
+  const event = {
+    id: "evt_split",
+    created: 1,
+    type: "server.connected",
+    data: { text: "split snowman \u2603\u2603\u2603" },
+  }
+  const encoded = new TextEncoder().encode(`data: ${JSON.stringify(event)}\n\n`)
+  const multibyte = encoded.indexOf(new TextEncoder().encode("\u2603")[0]!)
+  const boundaries = [9, multibyte + 1, multibyte + 2, encoded.length]
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async () =>
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            boundaries.forEach((end, index) =>
+              controller.enqueue(encoded.slice(index ? boundaries[index - 1] : 0, end)),
+            )
+            controller.close()
+          },
+        }),
+        { headers: { "content-type": "text/event-stream" } },
+      ),
+  })
+  await expect(client.event.subscribe()[Symbol.asyncIterator]().next()).resolves.toEqual({ done: false, value: event })
+})
+
+// Moved from packages/app/e2e/regression/session-timeline-transport.spec.ts
+test("event.subscribe ignores server heartbeat comments", async () => {
+  const event = { id: "evt_sentinel", created: 1, type: "server.connected", data: {} }
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async () =>
+      new Response(`: heartbeat\n\ndata: ${JSON.stringify(event)}\n\n: heartbeat\n\n`, {
+        headers: { "content-type": "text/event-stream" },
+      }),
+  })
+  const received = []
+  for await (const item of client.event.subscribe()) received.push(item)
+  expect(received).toEqual([event])
+})
+
+// Moved from packages/app/e2e/regression/session-timeline-transport.spec.ts
+test("event transport passes through ordinary health requests", async () => {
+  const requests: string[] = []
+  const event = { id: "evt_connected", created: 1, type: "server.connected", data: {} }
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      requests.push(new URL(request.url).pathname)
+      if (new URL(request.url).pathname === "/api/event") {
+        return new Response(`data: ${JSON.stringify(event)}\n\n`, {
+          headers: { "content-type": "text/event-stream" },
+        })
+      }
+      return Response.json({ healthy: true, version: "2.0.0", pid: 1 })
+    },
+  })
+  await expect(client.event.subscribe()[Symbol.asyncIterator]().next()).resolves.toEqual({ done: false, value: event })
+  await expect(client.health.get()).resolves.toEqual({ healthy: true, version: "2.0.0", pid: 1 })
+  expect(requests).toEqual(["/api/event", "/api/health"])
 })
 
 test("event.subscribe terminates on malformed Promise SSE data", async () => {

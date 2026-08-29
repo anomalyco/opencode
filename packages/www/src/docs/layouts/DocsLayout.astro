@@ -54,7 +54,18 @@ const canonical = new URL(Astro.url.pathname, "https://opencode.ai").href
             </aside>
             <main id="docs-content">
               <article class="prose" data-pagefind-body data-pagefind-meta={`title:${Astro.props.title}`}>
-                <h1>{Astro.props.title}</h1>
+                <h1>
+                  {Astro.props.title}
+                  <button type="button" aria-label="Copy page as Markdown" data-copy-markdown data-pagefind-ignore>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                      <rect x="8" y="8" width="13" height="13" rx="2" />
+                      <path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3" />
+                    </svg>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                      <path d="m5 12 4 4L19 6" />
+                    </svg>
+                  </button>
+                </h1>
                 <slot />
               </article>
             </main>
@@ -80,6 +91,22 @@ const canonical = new URL(Astro.url.pathname, "https://opencode.ai").href
 
       addHeadingAnchors()
       document.addEventListener("astro:page-load", addHeadingAnchors)
+    </script>
+    <script>
+      document.addEventListener("click", async (event) => {
+        if (!(event.target instanceof Element)) return
+        const button = event.target.closest<HTMLButtonElement>("[data-copy-markdown]")
+        if (!button) return
+        button.dataset.copied = "true"
+        button.setAttribute("aria-label", "Copied")
+        window.setTimeout(() => {
+          delete button.dataset.copied
+          button.setAttribute("aria-label", "Copy page as Markdown")
+        }, 1500)
+        const response = await fetch(window.location.href, { headers: { Accept: "text/markdown" } })
+        if (!response.ok) return
+        await navigator.clipboard.writeText(await response.text())
+      })
     </script>
   </body>
 </html>

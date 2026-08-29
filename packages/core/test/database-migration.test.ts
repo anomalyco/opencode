@@ -8,6 +8,7 @@ import { Effect, Layer } from "effect"
 import { sql } from "drizzle-orm"
 import { DatabaseMigration } from "@opencode-ai/core/database/migration"
 import { migrations } from "@opencode-ai/core/database/migration.gen"
+import workspaceNameMigration from "@opencode-ai/core/database/migration/20260410174513_workspace-name"
 import { Database } from "@opencode-ai/core/database/database"
 import { tmpdir } from "./fixture/tmpdir"
 import type { SqlClient } from "effect/unstable/sql/SqlClient"
@@ -35,6 +36,68 @@ const run = <A, E>(
 const makeDb = EffectDrizzleSqlite.makeWithDefaults()
 
 describe("DatabaseMigration", () => {
+  test("defaults missing workspace names while preserving legacy workspace data", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(sql`
+          CREATE TABLE workspace (
+            id text PRIMARY KEY,
+            type text NOT NULL,
+            branch text,
+            directory text,
+            extra text,
+            project_id text NOT NULL
+          )
+        `)
+        yield* db.run(sql`
+          INSERT INTO workspace (id, type, branch, directory, extra, project_id)
+          VALUES ('wrk_legacy', 'remote', 'main', '/repo', '{}', 'proj_legacy')
+        `)
+
+        yield* DatabaseMigration.applyOnly(db, [workspaceNameMigration])
+
+        expect(yield* db.get(sql`SELECT id, name, branch, directory, extra FROM workspace`)).toEqual({
+          id: "wrk_legacy",
+          name: "",
+          branch: "main",
+          directory: "/repo",
+          extra: "{}",
+        })
+      }),
+    )
+  })
+
+  test("imports unnamed legacy Drizzle journal entries by their actual migration timestamps", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(sql`CREATE TABLE __drizzle_migrations (id integer PRIMARY KEY, hash text, created_at integer)`)
+        yield* db.run(sql`
+          INSERT INTO __drizzle_migrations (hash, created_at)
+          VALUES ('', ${Date.UTC(2026, 3, 10, 17, 45, 13)})
+        `)
+
+        yield* DatabaseMigration.applyOnly(db, [workspaceNameMigration])
+
+        expect(yield* db.all(sql`SELECT id FROM migration`)).toEqual([{ id: "20260410174513_workspace-name" }])
+      }),
+    )
+  })
+
+  test("rejects unknown legacy Drizzle journal timestamps instead of guessing completed migrations", async () => {
+    await expect(
+      run(
+        Effect.gen(function* () {
+          const db = yield* makeDb
+          yield* db.run(sql`CREATE TABLE __drizzle_migrations (id integer PRIMARY KEY, hash text, created_at integer)`)
+          yield* db.run(sql`INSERT INTO __drizzle_migrations (hash, created_at) VALUES ('', 1234567890000)`)
+          yield* DatabaseMigration.applyOnly(db, [workspaceNameMigration])
+        }),
+      ),
+    ).rejects.toThrow("does not match any known migration")
+  })
+
   test("serializes concurrent embedded initialization for one database path", async () => {
     await using tmp = await tmpdir()
     const filename = path.join(tmp.path, "embedded.sqlite")
@@ -322,6 +385,9 @@ describe("DatabaseMigration", () => {
     const content = JSON.stringify({
       openai: { type: "oauth", refresh: "refresh", access: "access", expires: 123, accountId: "account" },
       anthropic: { type: "api", key: "legacy-key", metadata: { region: "us" } },
+      google: { type: "api", key: "google-key", metadata: { region: "us" } },
+      "github-copilot": { type: "oauth", refresh: "refresh", access: "access", expires: 123 },
+      "custom-provider": { type: "api", key: "custom-key" },
       "https://example.com/": { type: "wellknown", key: "TOKEN", token: "wellknown-key" },
       invalid: { type: "unknown" },
     })
@@ -339,6 +405,7 @@ describe("DatabaseMigration", () => {
 
         yield* db.run(sql`DELETE FROM migration WHERE id = ${legacyCredentialsMigration.id}`)
         yield* DatabaseMigration.applyOnly(db, [legacyCredentialsMigration])
+        yield* DatabaseMigration.applyOnly(db, [legacyCredentialsMigration])
 
         expect(yield* db.all(sql`SELECT integration_id, label, value FROM credential ORDER BY integration_id`)).toEqual(
           [
@@ -348,13 +415,34 @@ describe("DatabaseMigration", () => {
               value: JSON.stringify({ type: "key", key: "current-key" }),
             },
             {
+              integration_id: "custom-provider",
+              label: "API key",
+              value: JSON.stringify({ type: "key", key: "custom-key" }),
+            },
+            {
+              integration_id: "github-copilot",
+              label: "OAuth",
+              value: JSON.stringify({
+                type: "oauth",
+                methodID: "device",
+                refresh: "refresh",
+                access: "access",
+                expires: 123,
+              }),
+            },
+            {
+              integration_id: "google",
+              label: "API key",
+              value: JSON.stringify({ type: "key", key: "google-key", metadata: { region: "us" } }),
+            },
+            {
               integration_id: "https://example.com",
-              label: "default",
+              label: "API key",
               value: JSON.stringify({ type: "key", key: "wellknown-key" }),
             },
             {
               integration_id: "openai",
-              label: "default",
+              label: "OAuth",
               value: JSON.stringify({
                 type: "oauth",
                 methodID: "chatgpt-browser",

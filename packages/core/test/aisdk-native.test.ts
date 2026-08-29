@@ -14,7 +14,6 @@ describe("AISDKNative", () => {
         reasoningEffort: "xhigh",
         reasoningSummary: "auto",
         include: ["reasoning.encrypted_content"],
-        instructions: "Follow the repository instructions.",
         truncation: "auto",
       }),
     ).toEqual({
@@ -26,7 +25,6 @@ describe("AISDKNative", () => {
           reasoningEffort: "xhigh",
           reasoningSummary: "auto",
           include: ["reasoning.encrypted_content"],
-          instructions: "Follow the repository instructions.",
           truncation: "auto",
         },
         organization: "org",
@@ -61,6 +59,33 @@ describe("AISDKNative", () => {
         },
       },
     })
+  })
+
+  test("maps Cerebras, DeepInfra, Groq, and Together AI settings, headers, and reasoning options to native providers", () => {
+    for (const name of ["cerebras", "deepinfra", "groq", "togetherai"]) {
+      expect(
+        map(`@ai-sdk/${name}`, {
+          apiKey: "secret",
+          baseURL: `https://${name}.example/v1`,
+          headers: { "x-provider": name },
+          name: "custom-provider",
+          reasoningEffort: "high",
+          customOption: { enabled: true },
+        }),
+      ).toEqual({
+        package: `@opencode-ai/ai/providers/${name}`,
+        settings: {
+          apiKey: "secret",
+          baseURL: `https://${name}.example/v1`,
+          providerOptions: { reasoningEffort: "high", customOption: { enabled: true } },
+        },
+        headers: { "x-provider": name },
+      })
+      expect(map(`@ai-sdk/${name}`, {})).toEqual({
+        package: `@opencode-ai/ai/providers/${name}`,
+        settings: {},
+      })
+    }
   })
 
   test("maps Google Vertex settings to the native provider", () => {
@@ -197,9 +222,11 @@ describe("AISDKNative", () => {
       },
       headers: { "x-test": "value" },
     })
-    expect(map("@ai-sdk/amazon-bedrock/mantle", settings, "openai.gpt-oss-safeguard-20b")?.package).toBe(
-      "@opencode-ai/ai/providers/amazon-bedrock/mantle/chat",
-    )
+    for (const modelID of ["openai.gpt-oss-safeguard-20b", "openai.gpt-oss-safeguard-120b"]) {
+      expect(map("@ai-sdk/amazon-bedrock/mantle", settings, modelID)?.package).toBe(
+        "@opencode-ai/ai/providers/amazon-bedrock/mantle/chat",
+      )
+    }
     expect(
       map(
         "@ai-sdk/amazon-bedrock/mantle",

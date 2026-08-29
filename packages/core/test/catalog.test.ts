@@ -84,7 +84,8 @@ describe("Catalog", () => {
 
     return Effect.gen(function* () {
       const catalog = yield* Catalog.Service
-      yield* (yield* Integration.Service).transform((editor) => editor.update(integrationID, () => {}))
+      const integrations = yield* Integration.Service
+      yield* integrations.transform((editor) => editor.update(integrationID, () => {}))
       yield* catalog.transform((editor) =>
         editor.provider.update(providerID, (provider) => {
           provider.integrationID = integrationID
@@ -92,7 +93,8 @@ describe("Catalog", () => {
       )
       expect(yield* catalog.provider.available()).toEqual([])
 
-      yield* (yield* Credential.Service).create({
+      const credentials = yield* Credential.Service
+      yield* credentials.create({
         integrationID,
         value: Credential.Key.make({ type: "key", key: "secret" }),
       })
@@ -112,7 +114,8 @@ describe("Catalog", () => {
 
     return Effect.gen(function* () {
       const catalog = yield* Catalog.Service
-      yield* (yield* Integration.Service).transform((editor) => editor.update(integrationID, () => {}))
+      const integrations = yield* Integration.Service
+      yield* integrations.transform((editor) => editor.update(integrationID, () => {}))
       yield* catalog.transform((editor) =>
         editor.provider.update(providerID, (provider) => {
           provider.integrationID = integrationID

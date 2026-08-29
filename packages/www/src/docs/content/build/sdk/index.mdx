@@ -50,25 +50,31 @@ for await (const event of opencode.events.subscribe()) {
 Pass an `AbortSignal` through the generated request options, or leave an
 iteration to cancel its response body.
 
-## Register plugins
+## Customize
 
-Pass initial Promise plugins to `OpenCode.create()`. Embedded plugins use the
-same discovery and Location-scoped activation path as configured plugins.
+Customize your OpenCode instance by registering plugins. Pass plugins to
+`OpenCode.create()` to customize agents, models, tools, and other behavior when
+the embedded host starts:
 
 ```ts
-const plugin = {
-  id: "example",
+import { Plugin } from "@opencode-ai/plugin"
+import { OpenCode } from "@opencode-ai/sdk"
+
+const plugin = Plugin.define({
+  id: "customize-agent",
   async setup(ctx) {
     await ctx.agent.transform((agents) => {
-      // Modify the Location's agent catalog.
+      agents.update("build", (agent) => {
+        agent.description = "Builds features and fixes bugs for our team"
+      })
     })
   },
-}
+})
 
 await using opencode = await OpenCode.create({ plugins: [plugin] })
 ```
 
 Call `await opencode.plugin(plugin)` to register another plugin after startup.
 
-See the [Plugins guide](/build/plugins) for the plugin context and available
-hooks.
+See the [full plugins documentation](/build/plugins) for plugin hooks,
+transforms, tools, and the complete plugin context.

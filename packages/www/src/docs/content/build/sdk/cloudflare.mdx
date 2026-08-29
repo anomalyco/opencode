@@ -46,16 +46,6 @@ constructor(state: DurableObjectState) {
 }
 ```
 
-Configuration is a typed JavaScript object, and plugins are imported values bundled with the Worker.
-
-```ts
-await OpenCodeWorkerd.create({
-  storage: state.storage,
-  config: { default_agent: "build" },
-  plugins: [myPlugin],
-})
-```
-
 Wrangler selects OpenCode's Workerd-safe implementations through the `workerd` package condition. Cloudflare may evict
 a Durable Object without running cleanup, so correctness does not depend on `close()` being called.
 
@@ -65,17 +55,33 @@ a Durable Object without running cleanup, so correctness does not depend on `clo
 }
 ```
 
-## Effect
+## Customize
 
-Use the Effect-native entrypoint from `@opencode-ai/sdk/workerd/effect`.
+Customize your OpenCode instance by registering plugins bundled with your
+Worker. Pass plugins to `OpenCodeWorkerd.create()` to customize agents, models,
+tools, and other behavior:
 
 ```ts
-import { OpenCodeWorkerd } from "@opencode-ai/sdk/workerd/effect"
-import { Effect } from "effect"
+import { Plugin } from "@opencode-ai/plugin"
+import { OpenCodeWorkerd } from "@opencode-ai/sdk/workerd"
 
-const program = Effect.scoped(
-  Effect.gen(function* () {
-    return yield* OpenCodeWorkerd.create({ storage: state.storage })
-  }),
-)
+const plugin = Plugin.define({
+  id: "customize-agent",
+  async setup(ctx) {
+    await ctx.agent.transform((agents) => {
+      agents.update("build", (agent) => {
+        agent.description = "Builds features and fixes bugs for our team"
+      })
+    })
+  },
+})
+
+await OpenCodeWorkerd.create({
+  storage: state.storage,
+  config: { default_agent: "build" },
+  plugins: [plugin],
+})
 ```
+
+See the [full plugins documentation](/build/plugins) for plugin hooks,
+transforms, tools, and the complete plugin context.

@@ -10,6 +10,7 @@ import { EventTable } from "@opencode-ai/core/event/sql"
 import { SessionCompaction } from "@opencode-ai/core/session/compaction"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionMessage } from "@opencode-ai/core/session/message"
+import { SessionModelRequest } from "@opencode-ai/core/session/model-request"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { SessionTable } from "@opencode-ai/core/session/sql"
@@ -19,10 +20,14 @@ import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { App } from "@opencode-ai/core/app"
 import { Agent } from "@opencode-ai/core/agent"
+import { Model } from "@opencode-ai/core/model"
+import { Provider } from "@opencode-ai/core/provider"
 import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { Location } from "@opencode-ai/core/location"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Money } from "@opencode-ai/schema/money"
+import { Skill } from "@opencode-ai/schema/skill"
+import { Shell } from "@opencode-ai/schema/shell"
 import { DateTime, Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { asc, eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
@@ -72,9 +77,6 @@ const resolved = SessionRunnerModel.resolved(model, {
   cost,
   limit: { context: 200_000, output: 32_000 },
 })
-const models = Layer.mock(SessionRunnerModel.Service)({
-  resolve: () => Effect.succeed(resolved),
-})
 const it = testEffect(
   AppNodeBuilder.build(
     LayerNode.group([
@@ -84,11 +86,11 @@ const it = testEffect(
       SessionStore.node,
       PluginHooks.node,
       SessionCompaction.node,
+      SessionModelRequest.node,
     ]),
     [
       [Bus.node, Bus.configured({ persist: true })],
       [llmClient, client],
-      [SessionRunnerModel.node, models],
     ],
   ),
 )
@@ -142,6 +144,13 @@ test("compaction prompt requires the checkpoint headings in order", () => {
   expect(prompt).toContain("immediate concrete action")
   expect(prompt).toContain("next action if known")
   expect(prompt).toContain("Keep every section, even when empty.")
+})
+
+test("compaction points an existing summary to the following history", () => {
+  const prompt = SessionCompaction.buildPrompt({ previousSummary: "Previous summary", context: ["Recent history"] })
+
+  expect(prompt.split("\n", 1)[0]).toBe("Update the anchored summary below using the conversation history below.")
+  expect(prompt).not.toContain("conversation history above")
 })
 
 it.effect("auto compaction reserves a buffer below the prompt ceiling", () =>
@@ -231,9 +240,17 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
       id: SessionMessage.ID.create(),
       type: "user" as const,
       text: "Manual compaction should include this short conversation.",
+      skills: [
+        {
+          id: Skill.ID.make("effect"),
+          name: Skill.Name.make("Effect"),
+          text: "Use Effect services and generators.",
+        },
+      ],
       time: { created: DateTime.makeUnsafe(0) },
     }
     const session = yield* insertSession(sessionID, { parent_id: parentID })
+    const modelRequests = yield* SessionModelRequest.Service
 
     const delta = yield* bus
       .subscribe(SessionEvent.Compaction.Delta)
@@ -242,7 +259,27 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
     expect(
       yield* compaction.compactManual({
         session,
-        messages: [userMessage],
+        resolveModel: () => Effect.succeed(resolved),
+        prepare: modelRequests.prepare,
+        messages: [
+          userMessage,
+          SessionMessage.Shell.make({
+            id: SessionMessage.ID.create(),
+            type: "shell",
+            shellID: Shell.ID.make("sh_background"),
+            status: "exited",
+            command: "pwd",
+            metadata: { background: true },
+            output: { output: "display-only-output", cursor: 19, size: 19, truncated: false },
+            time: { created: DateTime.makeUnsafe(0), completed: DateTime.makeUnsafe(1) },
+          }),
+          SessionMessage.Synthetic.make({
+            id: SessionMessage.ID.create(),
+            type: "synthetic",
+            text: "User shell pwd completed: /project",
+            time: { created: DateTime.makeUnsafe(2) },
+          }),
+        ],
         inputID: SessionMessage.ID.make("msg_manual_compaction"),
       }),
     ).toEqual({ status: "completed" })
@@ -261,6 +298,9 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
     })
     expect(requests[0]?.generation).toBeUndefined()
     expect(JSON.stringify(requests[0]?.messages)).toContain("Manual compaction should include this short conversation.")
+    expect(JSON.stringify(requests[0]?.messages)).toContain("Use Effect services and generators.")
+    expect(JSON.stringify(requests[0]?.messages)).toContain("User shell pwd completed: /project")
+    expect(JSON.stringify(requests[0]?.messages)).not.toContain("display-only-output")
     expect(yield* store.context(sessionID)).toMatchObject([
       { type: "compaction", reason: "manual", summary: "manual summary", recent: "" },
     ])
@@ -284,6 +324,54 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
   }),
 )
 
+it.effect("manual compaction records model resolution failures without calling the model", () =>
+  Effect.gen(function* () {
+    requests = []
+    const compaction = yield* SessionCompaction.Service
+    const store = yield* SessionStore.Service
+    const sessionID = Session.ID.make("ses_manual_resolution_failure")
+    const session = yield* insertSession(sessionID)
+    const modelRequests = yield* SessionModelRequest.Service
+    const inputID = SessionMessage.ID.make("msg_manual_resolution_failure")
+
+    expect(
+      yield* compaction.compactManual({
+        session,
+        resolveModel: () =>
+          Effect.fail(
+            new SessionRunnerModel.ModelUnavailableError({
+              providerID: Provider.ID.make("test"),
+              modelID: Model.ID.make("missing"),
+            }),
+          ),
+        prepare: modelRequests.prepare,
+        messages: [
+          {
+            id: SessionMessage.ID.create(),
+            type: "user",
+            text: "Summarize this conversation.",
+            time: { created: DateTime.makeUnsafe(0) },
+          },
+        ],
+        inputID,
+      }),
+    ).toEqual({
+      status: "failed",
+      error: { type: "provider.no-route", message: "Model unavailable: test/missing" },
+    })
+    expect(requests).toHaveLength(0)
+    expect(yield* store.context(sessionID)).toMatchObject([
+      {
+        id: inputID,
+        type: "compaction",
+        status: "failed",
+        reason: "manual",
+        error: { type: "provider.no-route", message: "Model unavailable: test/missing" },
+      },
+    ])
+  }),
+)
+
 it.effect("forked session compaction reuses the fork root prompt cache key", () =>
   Effect.gen(function* () {
     requests = []
@@ -294,9 +382,12 @@ it.effect("forked session compaction reuses the fork root prompt cache key", () 
       fork_session_id: rootID,
       fork_boundary: { type: "before", messageID: SessionMessage.ID.create() },
     })
+    const modelRequests = yield* SessionModelRequest.Service
     expect(
       yield* compaction.compactManual({
         session,
+        resolveModel: () => Effect.succeed(resolved),
+        prepare: modelRequests.prepare,
         messages: [
           {
             id: SessionMessage.ID.create(),
@@ -327,9 +418,12 @@ it.effect("keeps session context hooks away from compaction requests", () =>
       }),
     )
     const session = yield* insertSession(Session.ID.make("ses_hook_compaction"))
+    const modelRequests = yield* SessionModelRequest.Service
     expect(
       yield* compaction.compactManual({
         session,
+        resolveModel: () => Effect.succeed(resolved),
+        prepare: modelRequests.prepare,
         messages: [
           {
             id: SessionMessage.ID.create(),

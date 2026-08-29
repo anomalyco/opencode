@@ -18,7 +18,7 @@ import { ConfigFormatterPlugin } from "../config/plugin/formatter.js"
 import { ConfigImagePlugin } from "../config/plugin/image.js"
 import { ConfigInstructionPlugin } from "../config/plugin/instruction.js"
 import { ConfigLocationWatcherPlugin } from "../config/plugin/location-watcher.js"
-import { ConfigMCPPlugin } from "../config/plugin/mcp.js"
+import { ConfigMcpPlugin } from "../config/plugin/mcp.js"
 import { ConfigProviderPlugin } from "../config/plugin/provider.js"
 import { ConfigPolicyPlugin } from "../config/plugin/policy.js"
 import { ConfigReferencePlugin } from "../config/plugin/reference.js"
@@ -44,7 +44,7 @@ import { KV } from "../kv.js"
 import { Location } from "../location.js"
 import { LocationMutation } from "../location-mutation.js"
 import { ModelsDev } from "../models-dev.js"
-import { MCP } from "../mcp/index.js"
+import { Mcp } from "../mcp/index.js"
 import { Npm } from "@opencode-ai/util/npm"
 import { Permission } from "../permission.js"
 import { Reference } from "../reference.js"
@@ -78,13 +78,15 @@ import { AgentPlugin } from "./agent.js"
 import { CommandPlugin } from "./command.js"
 import { PlanPlugin } from "./plan.js"
 import { ModelsDevPlugin } from "./models-dev.js"
-import { MCPCodeModeExclusionPlugin } from "./mcp-codemode-exclusion.js"
+import { McpCodeModeExclusionPlugin } from "./mcp-codemode-exclusion.js"
 import { ProviderPlugins } from "./provider.js"
 import { WebSearchPlugins } from "./websearch/index.js"
 import { PluginRuntime } from "./runtime.js"
 import { SkillPlugin } from "./skill.js"
+import { VcsHgPlugin } from "./vcs/hg.js"
 import { SystemPromptPlugin } from "./system-prompt.js"
 import { VariantPlugin } from "./variant.js"
+import { VcsGitPlugin } from "./vcs/git.js"
 import { WarmingPlugin } from "./warming.js"
 import { WellKnownPlugin } from "../wellknown/plugin.js"
 
@@ -112,7 +114,7 @@ const services = Effect.fn("PluginInternal.services")(function* () {
   const location = yield* Location.Service
   const locationMutation = yield* LocationMutation.Service
   const models = yield* ModelsDev.Service
-  const mcp = yield* MCP.Service
+  const mcp = yield* Mcp.Service
   const npm = yield* Npm.Service
   const permission = yield* Permission.Service
   const runtime = yield* PluginRuntime.Service
@@ -156,7 +158,7 @@ const services = Effect.fn("PluginInternal.services")(function* () {
     Context.make(Location.Service, location),
     Context.make(LocationMutation.Service, locationMutation),
     Context.make(ModelsDev.Service, models),
-    Context.make(MCP.Service, mcp),
+    Context.make(Mcp.Service, mcp),
     Context.make(Npm.Service, npm),
     Context.make(Permission.Service, permission),
     Context.make(PluginRuntime.Service, runtime),
@@ -207,7 +209,7 @@ export const requirements = LayerNode.group([
   Location.node,
   LocationMutation.node,
   ModelsDev.node,
-  MCP.node,
+  Mcp.node,
   Npm.node,
   Permission.node,
   PluginRuntime.node,
@@ -232,13 +234,15 @@ export const requirements = LayerNode.group([
 export type InternalPlugin = Plugin<Requirements | Scope.Scope>
 
 const pre = [
-  ConfigMCPPlugin.Plugin,
-  MCPCodeModeExclusionPlugin.Plugin,
+  ConfigMcpPlugin.Plugin,
+  McpCodeModeExclusionPlugin.Plugin,
   WellKnownPlugin.Plugin,
+  VcsGitPlugin.Plugin,
   AgentPlugin.Plugin,
   PlanPlugin.Plugin,
   CommandPlugin.Plugin,
   SkillPlugin.Plugin,
+  VcsHgPlugin.Plugin,
   ...SystemPromptPlugin.Plugins,
   ModelsDevPlugin,
   ...ProviderPlugins,
@@ -283,6 +287,7 @@ export const list = Effect.fn("PluginInternal.list")(function* () {
     plugins.map(
       (plugin): Plugin => ({
         id: plugin.id,
+        vcs: plugin.vcs,
         effect: (host) => plugin.effect(host).pipe(Effect.provide(context)),
       }),
     )

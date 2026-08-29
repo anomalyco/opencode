@@ -18,6 +18,8 @@ import { canonical, DirectoryUnavailableError } from "./worktree/directory.js"
 import { WorktreeGit } from "./worktree/git.js"
 import type { EffectDrizzleSqlite } from "./database/drizzle.js"
 import { ProjectTable } from "./project/sql.js"
+import { AppProcess } from "@opencode-ai/util/process"
+import { ChildProcess } from "effect/unstable/process"
 
 export { DirectoryUnavailableError } from "./worktree/directory.js"
 
@@ -87,6 +89,7 @@ export type Error =
   | DirectoryUnavailableError
   | InvalidDirectoryError
   | StrategyUnavailableError
+  | AppProcess.AppProcessError
   | Git.WorktreeError
 
 export interface Strategy {
@@ -94,6 +97,7 @@ export interface Strategy {
   readonly create: (input: {
     sourceDirectory: AbsolutePath
     directory: AbsolutePath
+    branch?: string
   }) => Effect.Effect<Info, Git.WorktreeError | DirectoryUnavailableError>
   readonly remove: (input: {
     directory: AbsolutePath
@@ -147,6 +151,7 @@ const layer = Layer.effect(
     const fs = yield* FSUtil.Service
     const db = (yield* Database.Service).db
     const bus = yield* Bus.Service
+    const processService = yield* AppProcess.Service
 
     const changed = Effect.fnUntraced(function* (projectID: ProjectSchema.ID, update: boolean) {
       if (update) yield* bus.publish(Event.Updated, { projectID })
@@ -251,6 +256,7 @@ const layer = Layer.effect(
       const result = yield* selected.create({
         directory: worktreeDirectory,
         sourceDirectory,
+        branch: input.branch,
       })
       yield* changed(
         input.projectID,
@@ -260,6 +266,30 @@ const layer = Layer.effect(
           strategy: input.strategy,
         }),
       )
+      const project = yield* db
+        .select({ commands: ProjectTable.commands })
+        .from(ProjectTable)
+        .where(eq(ProjectTable.id, input.projectID))
+        .get()
+        .pipe(Effect.orDie)
+      const command = project?.commands?.start?.trim()
+      if (command) {
+        const windows = process.platform === "win32"
+        yield* processService
+          .run(
+            ChildProcess.make(windows ? command : "bash", windows ? [] : ["-lc", command], {
+              cwd: result.directory,
+              env: {
+                OPENCODE_WORKTREE_BASE: sourceDirectory,
+                OPENCODE_WORKTREE_PATH: result.directory,
+              },
+              extendEnv: true,
+              stdin: "ignore",
+              shell: windows,
+            }),
+          )
+          .pipe(Effect.flatMap(AppProcess.requireSuccess))
+      }
       return result
     })
 
@@ -304,10 +334,10 @@ const layer = Layer.effect(
         Effect.map((sets) => new Map(sets.flat(2).map((item) => [item.directory, item] as const)).values().toArray()),
       )
       const removed = checked.filter((item) => !item.exists).map((item) => item.directory)
-      const result = yield* db
+      const changes = yield* db
         .transaction((tx) =>
           Effect.all({
-            updated: Effect.forEach(discovered, (item) =>
+            updated: Effect.filter(discovered, (item) =>
               ops.create(
                 {
                   projectID: input.projectID,
@@ -316,15 +346,11 @@ const layer = Layer.effect(
                 },
                 tx,
               ),
-            ),
-            removed: Effect.forEach(removed, (directory) => ops.remove(input.projectID, directory, tx)),
+            ).pipe(Effect.map((items) => items.map((item) => item.directory))),
+            removed: Effect.filter(removed, (directory) => ops.remove(input.projectID, directory, tx)),
           }),
         )
         .pipe(Effect.orDie)
-      const changes = {
-        updated: discovered.filter((_, index) => result.updated[index]).map((item) => item.directory),
-        removed: removed.filter((_, index) => result.removed[index]),
-      }
       yield* changed(input.projectID, changes.updated.length > 0 || changes.removed.length > 0)
       return changes
     })
@@ -342,7 +368,7 @@ const layer = Layer.effect(
 export const node = makeGlobalNode({
   service: Service,
   layer: layer,
-  deps: [FSUtil.node, Git.node, Bus.node, Database.node],
+  deps: [FSUtil.node, Git.node, Bus.node, Database.node, AppProcess.node],
 })
 
 export const refreshNode = makeLocationNode({

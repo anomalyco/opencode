@@ -1,0 +1,738 @@
+import { existsSync } from "node:fs"
+import fs from "node:fs/promises"
+import os from "node:os"
+import path from "node:path"
+import { expect } from "bun:test"
+import { PersistentPty } from "@opencode-ai/schema/persistent-pty"
+import { Session } from "@opencode-ai/schema/session"
+import { Effect, Exit, Schema, Scope } from "effect"
+import { HttpServer } from "effect/unstable/http"
+import { OpenCode } from "../../client/src/promise/index"
+import { it } from "../../core/test/lib/effect"
+import { ServerProcess } from "../src/process"
+
+const binary = process.env.OPENCODE_PTY_BIN ?? "/root/projects/opencode-pty/target/debug/opencode-pty"
+const smoke = existsSync(binary) ? it.live : it.live.skip
+
+smoke(
+  "reads the latest controlled terminal with optional physical line counts through the SDK",
+  () =>
+    Effect.gen(function* () {
+      const fixture = yield* testDirectory("xdg")
+      const server = yield* ServerProcess.start<never, never>({
+        hostname: "127.0.0.1",
+        port: 0,
+        password: "secret",
+        app: { version: "test-version" },
+        database: { path: fixture.database },
+        fs: { filewatcher: false },
+      })
+      const base = HttpServer.formatAddress(server.address)
+      const client = OpenCode.make({ baseUrl: base, headers: { authorization: `Basic ${btoa("opencode:secret")}` } })
+      const sessionID = "ses_terminal_read"
+      expect(yield* Effect.promise(() => client.experimental.persistentPty.read({ sessionID }))).toBeNull()
+      expect(existsSync(fixture.directory)).toBeFalse()
+      yield* Effect.promise(async () => {
+        for (const lines of ["0", "-1", "1.5", "65536", "nope"]) {
+          const response = await fetch(`${base}/api/experimental/session/${sessionID}/terminal/read?lines=${lines}`, {
+            headers: { authorization: `Basic ${btoa("opencode:secret")}` },
+          })
+          expect(response.status).toBe(400)
+          await response.arrayBuffer()
+        }
+      })
+      expect(existsSync(fixture.directory)).toBeFalse()
+      const first = yield* Effect.promise(() =>
+        client.experimental.persistentPty.create({
+          sessionID,
+          command: "/bin/sh",
+          args: ["-c", "stty -echo; seq 1 20; exec cat"],
+          cwd: fixture.root,
+          title: "first",
+          env: {},
+          size: { cols: 40, rows: 4 },
+        }),
+      )
+      const second = yield* Effect.promise(() =>
+        client.experimental.persistentPty.create({
+          sessionID,
+          command: "/bin/sh",
+          args: ["-c", "printf second; exec cat"],
+          cwd: fixture.root,
+          title: "second",
+          env: {},
+        }),
+      )
+      expect(yield* waitForText(base, first.id, "20")).toContain("1\n2\n")
+      expect(yield* Effect.promise(() => client.experimental.persistentPty.read({ sessionID }))).toBeNull()
+      const controller = yield* Effect.acquireRelease(
+        Effect.promise(() => openTerminalSocket(base, first.id, "read-first")),
+        (connection) => Effect.sync(() => connection.socket.close()),
+      )
+      const observer = yield* Effect.acquireRelease(
+        Effect.promise(() => openTerminalSocket(base, second.id, "read-second", "observer")),
+        (connection) => Effect.sync(() => connection.socket.close()),
+      )
+      const current = yield* Effect.promise(() => client.experimental.persistentPty.read({ sessionID }))
+      if (!current) throw new Error("Expected the controller's terminal to be selected")
+      expect(current).toEqual({
+        ptyID: first.id,
+        title: "first",
+        cwd: fixture.root,
+        foregroundProcess: current.foregroundProcess,
+        screen: { text: "18\n19\n20\n", cols: 40, rows: 4, cursor: { x: 0, y: 3 } },
+      })
+      expect(current.foregroundProcess === null || typeof current.foregroundProcess === "string").toBeTrue()
+      expect(yield* Effect.promise(() => client.experimental.persistentPty.read({ sessionID: "ses_other" }))).toBeNull()
+      yield* Effect.promise(() => client.experimental.persistentPty.snapshot({ ptyID: second.id }))
+      for (const lines of [2, 6, 65535]) {
+        const value = yield* Effect.promise(() => client.experimental.persistentPty.read({ sessionID, lines }))
+        expect(value?.ptyID).toBe(first.id)
+        expect(value?.screen.rows).toBe(4)
+        const expected = Array.from({ length: 20 }, (_, index) => String(index + 1))
+          .concat("")
+          .slice(-lines)
+        expect(value?.screen.text.split("\n")).toEqual(expected)
+      }
+      observer.socket.send(controlFrame(30, 3))
+      expect((yield* Effect.promise(() => waitForRead(client, sessionID, second.id))).screen.rows).toBe(3)
+      yield* Effect.promise(() =>
+        client.experimental.persistentPty.update({
+          ptyID: first.id,
+          attachmentID: "read-first",
+          size: { cols: 42, rows: 5 },
+        }),
+      )
+      expect((yield* Effect.promise(() => client.experimental.persistentPty.read({ sessionID })))?.ptyID).toBe(first.id)
+      observer.socket.send(controlFrame(30, 3))
+      yield* Effect.promise(() => waitForRead(client, sessionID, second.id))
+      controller.socket.send(inputFrame(40, 4, "typed\n"))
+      yield* Effect.promise(() => waitForSocketOutput([controller], "typed"))
+      expect((yield* Effect.promise(() => waitForRead(client, sessionID, first.id))).screen.text).toContain("typed")
+      const takeover = yield* Effect.acquireRelease(
+        Effect.promise(() => openTerminalSocket(base, second.id, "read-takeover")),
+        (connection) => Effect.sync(() => connection.socket.close()),
+      )
+      expect((yield* Effect.promise(() => client.experimental.persistentPty.read({ sessionID })))?.ptyID).toBe(
+        second.id,
+      )
+      takeover.socket.close()
+      yield* Effect.promise(() => client.experimental.persistentPty.remove({ ptyID: first.id }))
+      expect((yield* Effect.promise(() => client.experimental.persistentPty.read({ sessionID })))?.ptyID).toBe(
+        second.id,
+      )
+      yield* Effect.promise(() => client.experimental.persistentPty.remove({ ptyID: second.id }))
+      expect(yield* Effect.promise(() => client.experimental.persistentPty.read({ sessionID }))).toBeNull()
+      yield* Effect.promise(() => client.experimental.persistentPty.shutdown())
+      expect(yield* Effect.promise(() => client.experimental.persistentPty.read({ sessionID }))).toBeNull()
+    }),
+  20_000,
+)
+
+async function waitForRead(client: ReturnType<typeof OpenCode.make>, sessionID: string, ptyID: string) {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const result = await client.experimental.persistentPty.read({ sessionID })
+    if (result?.ptyID === ptyID) return result
+    await Bun.sleep(20)
+  }
+  throw new Error(`Terminal ${ptyID} did not become current for ${sessionID}`)
+}
+
+smoke(
+  "creates two persistent terminals for one session through the client API",
+  () =>
+    Effect.gen(function* () {
+      const fixture = yield* testDirectory("xdg")
+      const server = yield* ServerProcess.start<never, never>({
+        hostname: "127.0.0.1",
+        port: 0,
+        password: "secret",
+        app: { version: "test-version" },
+        database: { path: fixture.database },
+        fs: { filewatcher: false },
+      })
+      const base = HttpServer.formatAddress(server.address)
+      const sessionID = Session.ID.make("ses_persistent_pty_test")
+      expect(existsSync(fixture.directory)).toBeFalse()
+      expect(yield* request(base, "POST", "/api/experimental/persistent-pty/handoff")).toEqual({
+        handoff: null,
+      })
+      expect((yield* request(base, "GET", `/api/experimental/session/${sessionID}/terminal`)).data).toEqual([])
+      expect(existsSync(fixture.directory)).toBeFalse()
+      const defaults = {
+        args: [],
+        cwd: fixture.root,
+        title: "default shell",
+        env: { SHELL: "/missing/client/zsh" },
+      }
+      const createPath = `/api/experimental/session/${sessionID}/terminal`
+      const terminal = Schema.decodeUnknownSync(PersistentPty.Info)(
+        (yield* request(base, "POST", createPath, defaults)).data,
+      )
+      expect(terminal.command).toBe("/bin/sh")
+      expect(terminal.cwd).toBe(fixture.root)
+      expect(terminal.cwd).not.toBe(process.cwd())
+      yield* request(base, "DELETE", `/api/experimental/persistent-pty/${terminal.id}`)
+      const root = Schema.decodeUnknownSync(PersistentPty.Info)(
+        (yield* request(base, "POST", createPath, {
+          args: ["-c", "printf 'root-cwd:%s\\n' \"$PWD\"; cat"],
+          title: "root directory",
+          env: {},
+        })).data,
+      )
+      expect(root.cwd).toBe(path.parse(fixture.root).root)
+      expect(root.cwd).not.toBe(process.cwd())
+      expect(yield* waitForText(base, root.id, `root-cwd:${root.cwd}`)).toContain(`root-cwd:${root.cwd}`)
+      yield* request(base, "DELETE", `/api/experimental/persistent-pty/${root.id}`)
+      const events = yield* Effect.promise(() => openEventStream(base))
+      const first = Schema.decodeUnknownSync(PersistentPty.Info)(
+        (yield* request(base, "POST", `/api/experimental/session/${sessionID}/terminal`, {
+          command: "/usr/bin/env",
+          args: ["/bin/sh", "-c", "stty -echo; printf terminal-one; cat"],
+          cwd: process.cwd(),
+          title: "first",
+          env: {},
+        })).data,
+      )
+      expect(first.command).toBe("/usr/bin/env")
+      expect(first.args).toEqual(["/bin/sh", "-c", "stty -echo; printf terminal-one; cat"])
+      expect(first.cwd).toBe(process.cwd())
+      expect(yield* Effect.promise(() => events.next("persistent-pty.added"))).toMatchObject({
+        data: { sessionID, terminal: { id: first.id } },
+      })
+      expect(first.size).toEqual({ cols: 80, rows: 24 })
+      const directories = yield* Effect.promise(() => fs.readdir(fixture.directory))
+      expect(directories).toHaveLength(1)
+      expect(directories[0]).toMatch(/^[0-9a-f-]{36}$/)
+      if (!directories[0]) throw new Error("Missing daemon directory")
+      expect(existsSync(path.join(fixture.directory, directories[0], "service.json"))).toBeTrue()
+      const second = Schema.decodeUnknownSync(PersistentPty.Info)(
+        (yield* request(base, "POST", `/api/experimental/session/${sessionID}/terminal`, {
+          command: "/bin/sh",
+          args: ["-c", "printf terminal-two; sleep 30"],
+          cwd: process.cwd(),
+          title: "second",
+          env: {},
+        })).data,
+      )
+
+      const terminals = Schema.decodeUnknownSync(Schema.Array(PersistentPty.Info))(
+        (yield* request(base, "GET", `/api/experimental/session/${sessionID}/terminal`)).data,
+      )
+      expect(terminals.map((terminal) => terminal.id).sort()).toEqual([first.id, second.id].sort())
+      expect(yield* waitForText(base, first.id, "terminal-one")).toContain("terminal-one")
+      expect(yield* waitForText(base, second.id, "terminal-two")).toContain("terminal-two")
+      yield* Effect.promise(() => verifySharedControl(base, first.id))
+      const snapshot = yield* request(base, "GET", `/api/experimental/persistent-pty/${first.id}/snapshot`)
+      if (
+        !isRecord(snapshot.data) ||
+        typeof snapshot.data.checkpoint !== "string" ||
+        !isRecord(snapshot.data.info) ||
+        !isRecord(snapshot.data.info.output) ||
+        typeof snapshot.data.info.output.tail !== "number"
+      )
+        throw new Error("Persistent PTY snapshot response was invalid")
+      expect(Buffer.from(snapshot.data.checkpoint, "base64").byteLength).toBeGreaterThan(0)
+      expect(snapshot.data.info.output.tail).toBeGreaterThan(0)
+
+      const ticket = yield* request(
+        base,
+        "POST",
+        `/api/experimental/persistent-pty/${first.id}/connect-token`,
+        undefined,
+        {
+          "x-opencode-ticket": "1",
+        },
+      )
+      if (!isRecord(ticket.data) || typeof ticket.data.ticket !== "string") throw new Error("Invalid connect ticket")
+      const connectTicket = ticket.data.ticket
+      yield* request(base, "DELETE", `/api/experimental/persistent-pty/${first.id}`)
+      yield* Effect.promise(async () => {
+        const url = new URL(`/api/experimental/persistent-pty/${first.id}/connect`, base)
+        url.searchParams.set("ticket", "invalid")
+        expect((await fetch(url)).status).toBe(403)
+        url.protocol = "ws:"
+        url.searchParams.set("ticket", connectTicket)
+        const socket = new WebSocket(url)
+        try {
+          const closed = await new Promise<CloseEvent>((resolve, reject) => {
+            const timeout = setTimeout(() => reject(new Error("Removed terminal socket did not close")), 5_000)
+            socket.addEventListener("close", (event) => {
+              clearTimeout(timeout)
+              resolve(event)
+            })
+            socket.addEventListener("error", () => {
+              clearTimeout(timeout)
+              reject(new Error("Valid ticket should upgrade before the missing terminal is reported"))
+            })
+          })
+          expect(closed.code).toBe(4404)
+          expect(closed.reason).toBe("terminal unavailable")
+        } finally {
+          socket.close()
+        }
+      })
+      expect(yield* Effect.promise(() => events.next("persistent-pty.removed"))).toMatchObject({
+        data: { sessionID, ptyID: first.id },
+      })
+      yield* request(base, "DELETE", `/api/experimental/persistent-pty/${second.id}`)
+      expect((yield* request(base, "GET", `/api/experimental/session/${sessionID}/terminal`)).data).toEqual([])
+
+      yield* request(base, "POST", "/api/experimental/persistent-pty/shutdown")
+
+      const unattended = Schema.decodeUnknownSync(PersistentPty.Info)(
+        (yield* request(base, "POST", `/api/experimental/session/${sessionID}/terminal`, {
+          command: "/bin/sh",
+          args: ["-c", "exit 7"],
+          cwd: process.cwd(),
+          title: "unattended",
+          env: {},
+        })).data,
+      )
+      yield* waitForStatus(base, unattended.id, "exited")
+      expect((yield* request(base, "GET", `/api/experimental/session/${sessionID}/terminal`)).data).toMatchObject([
+        { id: unattended.id, status: "exited" },
+      ])
+      yield* request(base, "DELETE", `/api/experimental/persistent-pty/${unattended.id}`)
+
+      const visible = Schema.decodeUnknownSync(PersistentPty.Info)(
+        (yield* request(base, "POST", `/api/experimental/session/${sessionID}/terminal`, {
+          command: "/bin/sh",
+          args: ["-c", "read value"],
+          cwd: process.cwd(),
+          title: "visible",
+          env: {},
+        })).data,
+      )
+      yield* attachAndExit(base, visible.id)
+      yield* waitForTerminals(base, sessionID, [])
+      yield* Effect.promise(() => events.close())
+    }),
+  20_000,
+)
+
+smoke(
+  "isolates servers sharing a database and preserves terminals only through explicit restart handoff",
+  () =>
+    Effect.gen(function* () {
+      const fixture = yield* testDirectory("override")
+      const scope = yield* Scope.Scope
+      const originalScope = yield* Scope.fork(scope)
+      const options = {
+        hostname: "127.0.0.1",
+        port: 0,
+        password: "secret",
+        app: { version: "test-version" },
+        database: { path: fixture.database },
+        fs: { filewatcher: false },
+      }
+      const original = yield* ServerProcess.start<never, never>(options).pipe(
+        Effect.provideService(Scope.Scope, originalScope),
+      )
+      const base = HttpServer.formatAddress(original.address)
+      const sessionID = Session.ID.make("ses_persistent_pty_restart")
+      const first = Schema.decodeUnknownSync(PersistentPty.Info)(
+        (yield* request(base, "POST", `/api/experimental/session/${sessionID}/terminal`, {
+          command: "/bin/sh",
+          args: ["-c", "stty -echo; printf before-restart; exec cat"],
+          cwd: process.cwd(),
+          title: "survivor",
+          env: {},
+        })).data,
+      )
+      expect(yield* waitForText(base, first.id, "before-restart")).toContain("before-restart")
+      yield* Effect.acquireRelease(
+        Effect.promise(() => openTerminalSocket(base, first.id, "before-restart")),
+        (connection) => Effect.sync(() => connection.socket.close()),
+      )
+      expect((yield* request(base, "GET", `/api/experimental/session/${sessionID}/terminal/read`)).data).toMatchObject({
+        ptyID: first.id,
+      })
+
+      const independent = yield* ServerProcess.start<never, never>(options)
+      const otherBase = HttpServer.formatAddress(independent.address)
+      expect((yield* request(otherBase, "GET", `/api/experimental/session/${sessionID}/terminal`)).data).toEqual([])
+      expect((yield* request(otherBase, "GET", `/api/experimental/session/${sessionID}/terminal/read`)).data).toBeNull()
+
+      const handoff = Schema.decodeUnknownSync(PersistentPty.Handoff)(
+        (yield* request(base, "POST", "/api/experimental/persistent-pty/handoff")).handoff,
+      )
+      const registration = Schema.decodeUnknownSync(Schema.Struct({ pid: Schema.Number }))(
+        yield* Effect.promise(() => Bun.file(path.join(handoff.directory, "service.json")).json()),
+      )
+      yield* Scope.close(originalScope, Exit.void)
+      expect(process.kill(registration.pid, 0)).toBeTrue()
+      expect(process.kill(first.pid, 0)).toBeTrue()
+
+      const replacementScope = yield* Scope.fork(scope)
+      const replacement = yield* ServerProcess.start<never, never>({ ...options, pty: { handoff } }).pipe(
+        Effect.provideService(Scope.Scope, replacementScope),
+      )
+      const replacementBase = HttpServer.formatAddress(replacement.address)
+      expect(
+        (yield* request(replacementBase, "GET", `/api/experimental/session/${sessionID}/terminal`)).data,
+      ).toMatchObject([{ id: first.id, pid: first.pid }])
+      expect(yield* waitForText(replacementBase, first.id, "before-restart")).toContain("before-restart")
+      expect(
+        (yield* request(replacementBase, "GET", `/api/experimental/session/${sessionID}/terminal/read`)).data,
+      ).toBeNull()
+
+      yield* Scope.close(replacementScope, Exit.void)
+      yield* waitForExit(registration.pid)
+      yield* waitForExit(first.pid)
+      expect(existsSync(path.join(handoff.directory, "service.json"))).toBeFalse()
+    }),
+  30_000,
+)
+
+function testDirectory(mode: "xdg" | "override") {
+  return Effect.acquireRelease(
+    Effect.promise(async () => {
+      const environment = {
+        binary: process.env.OPENCODE_PTY_BIN,
+        runtime: process.env.OPENCODE_PTY_RUNTIME_DIR,
+        xdg: process.env.XDG_RUNTIME_DIR,
+        shell: process.env.SHELL,
+      }
+      const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-pty-server-test-"))
+      const runtime = path.join(root, "runtime")
+      process.env.OPENCODE_PTY_BIN = binary
+      delete process.env.OPENCODE_PTY_RUNTIME_DIR
+      process.env.XDG_RUNTIME_DIR = runtime
+      process.env.SHELL = "/bin/sh"
+      if (mode === "override") process.env.OPENCODE_PTY_RUNTIME_DIR = runtime
+      return {
+        database: path.join(root, "opencode.db"),
+        directory: mode === "override" ? runtime : path.join(runtime, "opencode-pty"),
+        environment,
+        root,
+      }
+    }),
+    (fixture) =>
+      Effect.promise(async () => {
+        await fs.rm(fixture.root, { recursive: true, force: true })
+        restore("OPENCODE_PTY_BIN", fixture.environment.binary)
+        restore("OPENCODE_PTY_RUNTIME_DIR", fixture.environment.runtime)
+        restore("XDG_RUNTIME_DIR", fixture.environment.xdg)
+        restore("SHELL", fixture.environment.shell)
+      }),
+  )
+}
+
+function waitForExit(pid: number) {
+  return Effect.promise(async () => {
+    for (let attempt = 0; attempt < 100; attempt++) {
+      try {
+        process.kill(pid, 0)
+      } catch (error) {
+        if (isRecord(error) && error.code === "ESRCH") return
+        throw error
+      }
+      await Bun.sleep(20)
+    }
+    throw new Error(`Process ${pid} survived its server scope`)
+  })
+}
+
+function request(base: string, method: string, pathname: string, body?: unknown, headers?: Record<string, string>) {
+  return Effect.tryPromise({
+    try: async () => {
+      const response = await fetch(new URL(pathname, base), {
+        method,
+        headers: {
+          authorization: `Basic ${btoa("opencode:secret")}`,
+          ...headers,
+          ...(body === undefined ? {} : { "content-type": "application/json" }),
+        },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      })
+      if (!response.ok) throw new Error(`${method} ${pathname} failed (${response.status}): ${await response.text()}`)
+      if (response.status === 204) return {}
+      const value: unknown = await response.json()
+      if (!isRecord(value)) throw new Error(`${method} ${pathname} returned a non-object response`)
+      return value
+    },
+    catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
+  })
+}
+
+async function openEventStream(base: string) {
+  const response = await fetch(new URL("/api/event", base), {
+    headers: { authorization: `Basic ${btoa("opencode:secret")}` },
+  })
+  if (!response.ok || !response.body) throw new Error(`Persistent PTY event stream failed (${response.status})`)
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let pending = ""
+  return {
+    async next(type: string) {
+      while (true) {
+        const boundary = pending.indexOf("\n\n")
+        if (boundary !== -1) {
+          const frame = pending.slice(0, boundary)
+          pending = pending.slice(boundary + 2)
+          const data = frame
+            .split("\n")
+            .find((line) => line.startsWith("data: "))
+            ?.slice(6)
+          if (!data) continue
+          const event: unknown = JSON.parse(data)
+          if (isRecord(event) && event.type === type) return event
+          continue
+        }
+        const chunk = await reader.read()
+        if (chunk.done) throw new Error(`Persistent PTY event stream closed before ${type}`)
+        pending += decoder.decode(chunk.value, { stream: true })
+      }
+    },
+    close: () => reader.cancel(),
+  }
+}
+
+function waitForText(base: string, ptyID: string, expected: string) {
+  return Effect.tryPromise({
+    try: async () => {
+      for (let attempt = 0; attempt < 40; attempt++) {
+        const response = await Effect.runPromise(
+          request(base, "GET", `/api/experimental/persistent-pty/${ptyID}/snapshot`),
+        )
+        if (isRecord(response.data) && typeof response.data.text === "string" && response.data.text.includes(expected))
+          return response.data.text
+        await Bun.sleep(50)
+      }
+      throw new Error(`Persistent PTY snapshot did not contain ${expected}`)
+    },
+    catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
+  })
+}
+
+function waitForStatus(base: string, ptyID: string, status: string) {
+  return Effect.tryPromise({
+    try: async () => {
+      for (let attempt = 0; attempt < 40; attempt++) {
+        const response = await Effect.runPromise(request(base, "GET", `/api/experimental/persistent-pty/${ptyID}`))
+        if (isRecord(response.data) && response.data.status === status) return
+        await Bun.sleep(50)
+      }
+      throw new Error(`Persistent PTY ${ptyID} did not reach status ${status}`)
+    },
+    catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
+  })
+}
+
+function attachAndExit(base: string, ptyID: string) {
+  return Effect.tryPromise({
+    try: async () => {
+      const response = await Effect.runPromise(
+        request(base, "POST", `/api/experimental/persistent-pty/${ptyID}/connect-token`, undefined, {
+          "x-opencode-ticket": "1",
+        }),
+      )
+      if (!isRecord(response.data) || typeof response.data.ticket !== "string")
+        throw new Error("Persistent PTY connect token response was invalid")
+      const url = new URL(`/api/experimental/persistent-pty/${ptyID}/connect`, base)
+      url.protocol = "ws:"
+      url.searchParams.set("ticket", response.data.ticket)
+      await new Promise<void>((resolve, reject) => {
+        const socket = new WebSocket(url)
+        const timeout = setTimeout(() => {
+          socket.close()
+          reject(new Error("Persistent PTY did not exit while attached"))
+        }, 5_000)
+        socket.addEventListener("message", (event) => {
+          if (typeof event.data !== "string") return
+          const message: unknown = JSON.parse(event.data)
+          if (!isRecord(message)) return
+          if (message.type === "attached") socket.send(new Uint8Array([4]))
+          if (message.type !== "exited") return
+          clearTimeout(timeout)
+          socket.close()
+          resolve()
+        })
+        socket.addEventListener("error", () => {
+          clearTimeout(timeout)
+          reject(new Error("Persistent PTY WebSocket failed"))
+        })
+      })
+    },
+    catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
+  })
+}
+
+async function verifySharedControl(base: string, ptyID: string) {
+  const first = await openTerminalSocket(base, ptyID, "first")
+  const second = await openTerminalSocket(base, ptyID, "second", "observer")
+  try {
+    first.socket.send(controlFrame(90, 25))
+    first.socket.send(inputFrame(90, 25, "from-first\n"))
+    await waitForSocketOutput([first, second], "from-first")
+
+    second.socket.send(inputFrame(70, 20, "from-second\n"))
+    await waitForSocketOutput([first, second], "from-second")
+
+    await waitForForegroundProcess([first, second], "cat")
+
+    for (const character of "printf abc | rev\n") second.socket.send(inputFrame(70, 20, character))
+    await waitForSocketOutput([first, second], "printf abc | rev")
+
+    second.socket.send(inputFrame(70, 20, "x".repeat(1024)))
+    second.socket.send(inputFrame(70, 20, "after-burst\n"))
+    await waitForSocketOutput([first, second], "after-burst")
+    expect(first.closed).toBeFalse()
+    expect(second.closed).toBeFalse()
+    expect(first.resizes).toBeGreaterThan(0)
+    expect(second.resizes).toBeGreaterThan(0)
+    expect(first.output).not.toContain("\0")
+    expect(second.output).not.toContain("\0")
+  } finally {
+    first.socket.close()
+    second.socket.close()
+  }
+}
+
+async function openTerminalSocket(
+  base: string,
+  ptyID: string,
+  attachmentID: string,
+  role: "controller" | "observer" = "controller",
+) {
+  const response = await Effect.runPromise(
+    request(base, "POST", `/api/experimental/persistent-pty/${ptyID}/connect-token`, undefined, {
+      "x-opencode-ticket": "1",
+    }),
+  )
+  if (!isRecord(response.data) || typeof response.data.ticket !== "string")
+    throw new Error("Persistent PTY connect token response was invalid")
+  const url = new URL(`/api/experimental/persistent-pty/${ptyID}/connect`, base)
+  url.protocol = "ws:"
+  url.searchParams.set("ticket", response.data.ticket)
+  url.searchParams.set("attachment_id", attachmentID)
+  url.searchParams.set("role", role)
+  url.searchParams.set("takeover", "true")
+  url.searchParams.set("input_protocol", "1")
+  const state = {
+    socket: new WebSocket(url),
+    output: "",
+    closed: false,
+    resizes: 0,
+    foregroundProcess: null as string | null,
+  }
+  state.socket.binaryType = "arraybuffer"
+  await new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error("Persistent PTY WebSocket did not attach")), 5_000)
+    let attached = false
+    state.socket.addEventListener("message", (event) => {
+      if (event.data instanceof ArrayBuffer) {
+        state.output += new TextDecoder().decode(event.data)
+        return
+      }
+      if (typeof event.data !== "string") return
+      const message: unknown = JSON.parse(event.data)
+      if (!isRecord(message)) return
+      if (message.type === "resized") {
+        if (typeof message.checkpoint !== "string") {
+          clearTimeout(timeout)
+          reject(new Error("Persistent PTY resize omitted its checkpoint"))
+          return
+        }
+        state.resizes++
+        return
+      }
+      if (message.type === "foreground_process_changed") {
+        state.foregroundProcess = typeof message.process === "string" ? message.process : null
+        return
+      }
+      if (message.type === "attached") {
+        if (message.inputProtocol === 1) {
+          if (isRecord(message.info) && typeof message.info.foregroundProcess === "string")
+            state.foregroundProcess = message.info.foregroundProcess
+          attached = true
+          return
+        }
+        clearTimeout(timeout)
+        reject(new Error("Persistent PTY WebSocket did not negotiate framed input"))
+        return
+      }
+      if (message.type !== "replay_complete" || !attached) return
+      clearTimeout(timeout)
+      resolve()
+    })
+    state.socket.addEventListener("close", () => {
+      state.closed = true
+    })
+    state.socket.addEventListener("error", () => {
+      clearTimeout(timeout)
+      reject(new Error("Persistent PTY WebSocket failed"))
+    })
+  })
+  return state
+}
+
+async function waitForForegroundProcess(
+  sockets: Array<{ foregroundProcess: string | null; closed: boolean }>,
+  expected: string,
+) {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    if (sockets.every((socket) => socket.foregroundProcess === expected)) return
+    if (sockets.some((socket) => socket.closed)) throw new Error("Persistent PTY observer disconnected")
+    await Bun.sleep(20)
+  }
+  throw new Error(
+    `Persistent PTY sockets did not both report ${expected}: ${JSON.stringify(sockets.map((socket) => socket.foregroundProcess))}`,
+  )
+}
+
+function inputFrame(cols: number, rows: number, input: string) {
+  const data = new TextEncoder().encode(input)
+  const frame = new Uint8Array(5 + data.byteLength)
+  const view = new DataView(frame.buffer)
+  frame[0] = 1
+  view.setUint16(1, cols)
+  view.setUint16(3, rows)
+  frame.set(data, 5)
+  return frame
+}
+
+function controlFrame(cols: number, rows: number) {
+  const frame = new Uint8Array(5)
+  const view = new DataView(frame.buffer)
+  view.setUint16(1, cols)
+  view.setUint16(3, rows)
+  return frame
+}
+
+async function waitForSocketOutput(sockets: Array<{ output: string; closed: boolean }>, expected: string) {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    if (sockets.every((socket) => socket.output.includes(expected))) return
+    if (sockets.some((socket) => socket.closed)) throw new Error("Persistent PTY observer disconnected")
+    await Bun.sleep(20)
+  }
+  throw new Error(
+    `Persistent PTY sockets did not both receive ${expected}: ${JSON.stringify(sockets.map((socket) => socket.output))}`,
+  )
+}
+
+function waitForTerminals(base: string, sessionID: string, expected: unknown[]) {
+  return Effect.tryPromise({
+    try: async () => {
+      for (let attempt = 0; attempt < 40; attempt++) {
+        const response = await Effect.runPromise(
+          request(base, "GET", `/api/experimental/session/${sessionID}/terminal`),
+        )
+        if (JSON.stringify(response.data) === JSON.stringify(expected)) return
+        await Bun.sleep(50)
+      }
+      throw new Error(`Persistent PTYs for ${sessionID} did not reconcile`)
+    },
+    catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
+  })
+}
+
+function restore(key: string, value: string | undefined) {
+  if (value === undefined) delete process.env[key]
+  if (value !== undefined) process.env[key] = value
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}

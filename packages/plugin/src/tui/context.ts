@@ -476,6 +476,7 @@ export interface Context {
   readonly data: Data
   readonly attention: Attention
   readonly theme: ResolvedTheme
+  readonly themeMode: "dark" | "light"
   readonly markdown: {
     registerCodeBlockRenderer(language: string, render: MarkdownCodeBlockRenderer): () => void
   }

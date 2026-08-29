@@ -132,7 +132,7 @@ function computeMainPath(diagram: StateDiagram): string[] {
         const toParent = statesById.get(transition.to)?.parentId
         return Boolean(fromParent && toParent && fromParent !== toParent)
       }) ??
-      (path.length === 1 && candidates.length === 1 ? candidates[0] : undefined)
+      (candidates.length === 1 ? candidates[0] : undefined)
     if (!next) break
     path.push(next.to)
     visited.add(next.to)
@@ -419,6 +419,7 @@ function expandCompositeBoundsForInternalRouting(diagram: StateDiagram, layout: 
         innermostCommonCompositeId(transition, statesById, compositesById) === composite.id,
     )
     const endpointOccurrences = new Map<string, number>()
+    const hasNestedComposite = diagram.composites.some((candidate) => candidate.parentId === composite.id)
     const sideRoutes = internal.filter((transition) => {
       const from = layout.bounds.get(transition.from)
       const to = layout.bounds.get(transition.to)
@@ -428,7 +429,14 @@ function expandCompositeBoundsForInternalRouting(diagram: StateDiagram, layout: 
       endpointOccurrences.set(key, occurrence + 1)
       const fromParent = statesById.get(transition.from)?.parentId
       const toParent = statesById.get(transition.to)?.parentId
-      return occurrence > 0 || from.centerY > to.centerY || fromParent !== toParent
+      return (
+        occurrence > 0 ||
+        (from.centerY > to.centerY && (!hasNestedComposite || from.left - 1 <= bound.left)) ||
+        (fromParent !== toParent &&
+          (from.centerX !== to.centerX ||
+            statesById.get(transition.from)?.kind !== "state" ||
+            statesById.get(transition.to)?.kind !== "state"))
+      )
     })
     if (sideRoutes.length === 0) continue
     const childRight = Math.max(

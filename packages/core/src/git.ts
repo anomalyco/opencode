@@ -109,6 +109,7 @@ export interface Interface {
     readonly create: (input: {
       repository: Repository
       directory: AbsolutePath
+      ref?: string
     }) => Effect.Effect<Repository, WorktreeError>
     readonly remove: (input: {
       repository: Repository
@@ -176,7 +177,7 @@ const layer = Layer.effect(
       if (!dotgit) return undefined
 
       const cwd = path.dirname(dotgit)
-      const result = yield* run(cwd, proc)(["rev-parse", "--git-dir", "--git-common-dir", "--show-toplevel"])
+      const result = yield* run(cwd, proc, ["rev-parse", "--git-dir", "--git-common-dir", "--show-toplevel"])
       const [gitDir, commonDir, topLevel] = result.text.split(/\r?\n/)
       if (!gitDir || !commonDir) return undefined
 
@@ -188,13 +189,13 @@ const layer = Layer.effect(
     })
 
     const remote = Effect.fn("Git.remote.get")(function* (repository: Repository, name = "origin") {
-      const result = yield* run(repository.worktree, proc)(["remote", "get-url", name])
+      const result = yield* run(repository.worktree, proc, ["remote", "get-url", name])
       if (result.exitCode !== 0) return undefined
       return result.text.trim() || undefined
     })
 
     const roots = Effect.fn("Git.history.rootCommits")(function* (repository: Repository) {
-      const result = yield* run(repository.worktree, proc)(["rev-list", "--max-parents=0", "HEAD"])
+      const result = yield* run(repository.worktree, proc, ["rev-list", "--max-parents=0", "HEAD"])
       if (result.exitCode !== 0) return []
       return result.text
         .split("\n")
@@ -204,13 +205,13 @@ const layer = Layer.effect(
     })
 
     const head = Effect.fn("Git.history.head")(function* (repository: Repository) {
-      const result = yield* run(repository.worktree, proc)(["rev-parse", "HEAD"])
+      const result = yield* run(repository.worktree, proc, ["rev-parse", "HEAD"])
       if (result.exitCode !== 0) return undefined
       return result.text.trim() || undefined
     })
 
     const branch = Effect.fn("Git.history.branch")(function* (repository: Repository) {
-      const result = yield* run(repository.worktree, proc)(["symbolic-ref", "--quiet", "--short", "HEAD"])
+      const result = yield* run(repository.worktree, proc, ["symbolic-ref", "--quiet", "--short", "HEAD"])
       if (result.exitCode !== 0) return undefined
       return result.text.trim() || undefined
     })
@@ -219,7 +220,7 @@ const layer = Layer.effect(
       repository: Repository,
       remoteName = "origin",
     ) {
-      const result = yield* run(repository.worktree, proc)(["symbolic-ref", `refs/remotes/${remoteName}/HEAD`])
+      const result = yield* run(repository.worktree, proc, ["symbolic-ref", `refs/remotes/${remoteName}/HEAD`])
       if (result.exitCode !== 0) return undefined
       return result.text.trim().replace(new RegExp(`^refs/remotes/${remoteName}/`), "") || undefined
     })
@@ -229,10 +230,7 @@ const layer = Layer.effect(
       directory: AbsolutePath,
       args: string[],
     ) {
-      const result = yield* execute(
-        directory,
-        proc,
-      )(args).pipe(
+      const result = yield* execute(directory, proc, args).pipe(
         Effect.mapError((cause) => new OperationError({ operation, directory, message: cause.message, cause })),
       )
       if (result.exitCode === 0) return
@@ -397,22 +395,16 @@ const layer = Layer.effect(
         ],
         { concurrency: 2 },
       )
-      const candidates = Array.from(new Set([...tracked, ...untracked]))
+      const candidates = Array.from(new Set([...tracked, ...untracked])).map((file) => RelativePath.make(file))
       if (!candidates.length) return { skipped: [] }
-      const ignored = input.ignores
-        ? new Set(
-            (yield* repositoryOperation("refresh", input.ignores, ["check-ignore", "--no-index", "--stdin", "-z"], {
-              stdin: candidates.join("\0") + "\0",
-            }).pipe(Effect.orElseSucceed(() => ({ text: "", stderr: "" })))).text
-              .split("\0")
-              .filter(Boolean),
-          )
-        : new Set<string>()
-      const allowed = candidates.filter((item) => !ignored.has(item))
+      const excluded = input.ignores
+        ? yield* ignored({ repository: input.ignores, paths: candidates })
+        : new Set<RelativePath>()
+      const allowed = candidates.filter((item) => !excluded.has(item))
       const maximum = input.maximumUntrackedFileBytes
       const skipped = maximum
         ? (yield* Effect.forEach(
-            untracked.filter((item) => allowed.includes(item)),
+            untracked.filter((item) => allowed.includes(RelativePath.make(item))),
             (item) =>
               fs.stat(path.join(input.repository.worktree, item)).pipe(
                 Effect.map((info) =>
@@ -423,8 +415,8 @@ const layer = Layer.effect(
             { concurrency: 8 },
           )).filter((item): item is RelativePath => item !== undefined)
         : []
-      const stage = allowed.filter((item) => !skipped.includes(RelativePath.make(item)))
-      const remove = [...ignored, ...skipped]
+      const stage = allowed.filter((item) => !skipped.includes(item))
+      const remove = [...excluded, ...skipped]
       if (remove.length)
         yield* repositoryOperation(
           "refresh",
@@ -506,9 +498,11 @@ const layer = Layer.effect(
       from: TreeID
       to: TreeID
     }) {
+      // Undo needs both paths of a rename, not only its destination.
       return (yield* repositoryOperation("list_files", input.repository, [
         "diff",
         "--name-only",
+        "--no-renames",
         "-z",
         input.from,
         input.to,
@@ -644,11 +638,12 @@ const layer = Layer.effect(
     const worktreeCreate = Effect.fn("Git.worktree.create")(function* (input: {
       repository: Repository
       directory: AbsolutePath
+      ref?: string
     }) {
       yield* worktreeRun(
         "create",
         input.repository,
-        ["worktree", "add", "--detach", input.directory, "HEAD"],
+        ["worktree", "add", "--detach", "--", input.directory, input.ref ?? "HEAD"],
         input.directory,
       )
       const repository = yield* discover(input.directory)
@@ -713,31 +708,29 @@ interface Result {
   readonly stderr: string
 }
 
-function run(cwd: string, proc: AppProcess.Interface) {
-  return (args: string[]) =>
-    execute(cwd, proc)(args).pipe(Effect.orElseSucceed(() => ({ exitCode: 1, text: "", stderr: "" })))
+function run(cwd: string, proc: AppProcess.Interface, args: string[]) {
+  return execute(cwd, proc, args).pipe(Effect.orElseSucceed(() => ({ exitCode: 1, text: "", stderr: "" })))
 }
 
-function execute(cwd: string, proc: AppProcess.Interface) {
-  return (args: string[]) =>
-    proc
-      .run(
-        ChildProcess.make("git", args, {
-          cwd,
-          extendEnv: true,
-          stdin: "ignore",
-        }),
-      )
-      .pipe(
-        Effect.map(
-          (result) =>
-            ({
-              exitCode: result.exitCode,
-              text: result.stdout.toString("utf8"),
-              stderr: result.stderr.toString("utf8"),
-            }) satisfies Result,
-        ),
-      )
+function execute(cwd: string, proc: AppProcess.Interface, args: string[]) {
+  return proc
+    .run(
+      ChildProcess.make("git", args, {
+        cwd,
+        extendEnv: true,
+        stdin: "ignore",
+      }),
+    )
+    .pipe(
+      Effect.map(
+        (result) =>
+          ({
+            exitCode: result.exitCode,
+            text: result.stdout.toString("utf8"),
+            stderr: result.stderr.toString("utf8"),
+          }) satisfies Result,
+      ),
+    )
 }
 
 function resolvePath(cwd: string, value: string) {

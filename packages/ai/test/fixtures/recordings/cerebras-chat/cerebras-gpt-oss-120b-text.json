@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "metadata": {
+    "provider": "cerebras",
+    "route": "cerebras-chat",
+    "transport": "http",
+    "model": "gpt-oss-120b",
+    "tags": ["prefix:cerebras-chat", "provider:cerebras", "text", "golden"],
+    "name": "cerebras-chat/cerebras-gpt-oss-120b-text",
+    "recordedAt": "2026-08-25T23:55:27.619Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.cerebras.ai/v1/chat/completions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"gpt-oss-120b\",\"messages\":[{\"role\":\"system\",\"content\":\"You are concise.\"},{\"role\":\"user\",\"content\":\"Reply exactly with: Hello!\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"max_tokens\":256}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream; charset=utf-8"
+        },
+        "body": "data: {\"id\":\"chatcmpl-cd45cd6e-886a-433e-8ba9-caca78c1f13a\",\"choices\":[{\"delta\":{\"role\":\"assistant\"},\"index\":0}],\"created\":1787702127,\"model\":\"gpt-oss-120b\",\"system_fingerprint\":\"fp_e2cabf4999eb0aead3d1\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"id\":\"chatcmpl-cd45cd6e-886a-433e-8ba9-caca78c1f13a\",\"choices\":[{\"delta\":{\"reasoning\":\"The\"},\"index\":0}],\"created\":1787702127,\"model\":\"gpt-oss-120b\",\"system_fingerprint\":\"fp_e2cabf4999eb0aead3d1\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"id\":\"chatcmpl-cd45cd6e-886a-433e-8ba9-caca78c1f13a\",\"choices\":[{\"delta\":{\"reasoning\":\" user says: \\\"Reply exactly with: Hello!\\\" So we must output exactly\"},\"index\":0}],\"created\":1787702127,\"model\":\"gpt-oss-120b\",\"system_fingerprint\":\"fp_e2cabf4999eb0aead3d1\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"id\":\"chatcmpl-cd45cd6e-886a-433e-8ba9-caca78c1f13a\",\"choices\":[{\"delta\":{\"reasoning\":\" \\\"Hello!\\\" with no extra characters, no formatting\"},\"index\":0}],\"created\":1787702127,\"model\":\"gpt-oss-120b\",\"system_fingerprint\":\"fp_e2cabf4999eb0aead3d1\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"id\":\"chatcmpl-cd45cd6e-886a-433e-8ba9-caca78c1f13a\",\"choices\":[{\"delta\":{\"reasoning\":\". Ensure no extra spaces or new\"},\"index\":0}],\"created\":1787702127,\"model\":\"gpt-oss-120b\",\"system_fingerprint\":\"fp_e2cabf4999eb0aead3d1\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"id\":\"chatcmpl-cd45cd6e-886a-433e-8ba9-caca78c1f13a\",\"choices\":[{\"delta\":{\"reasoning\":\"lines? Probably just \\\"Hello!\\\".\"},\"index\":0}],\"created\":1787702127,\"model\":\"gpt-oss-120b\",\"system_fingerprint\":\"fp_e2cabf4999eb0aead3d1\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"id\":\"chatcmpl-cd45cd6e-886a-433e-8ba9-caca78c1f13a\",\"choices\":[{\"delta\":{\"reasoning\":\" Usually we output exactly that.\"},\"index\":0}],\"created\":1787702127,\"model\":\"gpt-oss-120b\",\"system_fingerprint\":\"fp_e2cabf4999eb0aead3d1\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"id\":\"chatcmpl-cd45cd6e-886a-433e-8ba9-caca78c1f13a\",\"choices\":[{\"delta\":{\"content\":\"Hello!\"},\"index\":0}],\"created\":1787702127,\"model\":\"gpt-oss-120b\",\"system_fingerprint\":\"fp_e2cabf4999eb0aead3d1\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"id\":\"chatcmpl-cd45cd6e-886a-433e-8ba9-caca78c1f13a\",\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}],\"created\":1787702127,\"model\":\"gpt-oss-120b\",\"system_fingerprint\":\"fp_e2cabf4999eb0aead3d1\",\"object\":\"chat.completion.chunk\",\"usage\":{\"total_tokens\":142,\"completion_tokens\":58,\"completion_tokens_details\":{\"accepted_prediction_tokens\":0,\"rejected_prediction_tokens\":0,\"reasoning_tokens\":46},\"prompt_tokens\":84,\"prompt_tokens_details\":{\"cached_tokens\":0}},\"time_info\":{\"created\":1787702127.645281,\"queue_time\":0.003817115,\"prompt_time\":0.001587193,\"completion_time\":0.029805929,\"total_time\":0.036823272705078125}}\n\ndata: [DONE]\n\n"
+      }
+    }
+  ]
+}

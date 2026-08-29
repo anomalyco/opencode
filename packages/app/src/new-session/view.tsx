@@ -48,7 +48,7 @@ export function NewSessionView(props: {
           <div class={NEW_SESSION_CONTENT_WIDTH}>
             <Wordmark class="h-auto w-full text-v2-background-bg-inverse" />
             <div class="mt-8 flex flex-col gap-8">
-              <Composer model={props.composer} accentSubmit={props.workspace.selection.workspace()} />
+              <Composer model={props.composer} />
               <Show when={props.project.empty()}>
                 <PromptProjectAddButton controller={props.project} />
               </Show>
@@ -69,9 +69,12 @@ export function NewSessionView(props: {
                       value={props.workspace.selection.value()}
                       projectRoot={props.workspace.project.root()}
                       workspaces={props.workspace.project.workspaces()}
+                      branches={props.workspace.project.branches()}
                       branch={props.workspace.bar.branch()}
                       onboarding={onboardingReady() && !onboarding.used}
                       onChange={select}
+                      onCreate={props.workspace.selection.create}
+                      onSearch={props.workspace.project.searchBranches}
                       onDone={props.composer.restoreFocus}
                       onViewAll={props.workspace.project.openAll}
                     />

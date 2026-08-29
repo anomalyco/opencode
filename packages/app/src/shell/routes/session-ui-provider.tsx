@@ -1,4 +1,5 @@
 import { DataProvider } from "@opencode-ai/session-ui/context"
+import { MarkdownProvider, type ReadMarkdownImage } from "@opencode-ai/session-ui/context/markdown"
 import { useNavigate, useParams } from "@solidjs/router"
 import { createMemo, type ParentProps } from "solid-js"
 import { useProviders } from "@/providers/catalog/providers"
@@ -6,7 +7,9 @@ import { LocalProvider } from "@/providers/models/selection"
 import type { ServerConnection } from "@/runtime/server/registry"
 import { sessionHref } from "@/shell/routes/session"
 import { useData } from "@/runtime/server/current"
+import { useServerSDK } from "@/runtime/server/client"
 import { useTabs } from "@/shell/tabs/tabs"
+import { readLocalImage } from "@/runtime/server/image"
 
 export function SessionUIProvider(
   props: ParentProps<{
@@ -17,8 +20,13 @@ export function SessionUIProvider(
   const navigate = useNavigate()
   const params = useParams()
   const data = useData()
+  const serverSDK = useServerSDK()
   const tabs = useTabs()
   const directory = () => props.directory
+  const readImage = createMemo<ReadMarkdownImage>(() => {
+    const dir = directory()
+    return (path, signal) => readLocalImage(serverSDK.api, dir, path, signal)
+  })
   const href = (sessionID: string) => sessionHref(props.server, sessionID)
   const navigateToSession = async (sessionID: string) => {
     const tab = tabs.store.find(
@@ -53,10 +61,14 @@ export function SessionUIProvider(
       data={sessionUIData()}
       directory={directory()}
       sessionID={params.id}
+      shellRunning={(id) => !!data.shell.get(id)}
+      shellOutput={(input) => serverSDK.api.shell.output(input)}
       onNavigateToSession={navigateToSession}
       onSessionHref={href}
     >
-      <LocalProvider>{props.children}</LocalProvider>
+      <MarkdownProvider readImage={readImage()}>
+        <LocalProvider>{props.children}</LocalProvider>
+      </MarkdownProvider>
     </DataProvider>
   )
 }

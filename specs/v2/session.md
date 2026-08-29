@@ -6,7 +6,7 @@ Status: **Current semantic overview.** Protocol owns public operations, Schema o
 
 `Session.prompt(...)` publishes one durable `session.inbox.enqueued` fact whose projection inserts one `session_inbox` row before advisory execution begins. An inbox item remains outside model-visible Session History until delivery. The `session.inbox.delivered` projection consumes the row and inserts a visible user or synthetic message atomically; compaction and move control items are consumed without becoming transcript messages.
 
-Reusing a Session ID adopts the existing Session. While a user or synthetic item remains pending, reusing its ID reconciles only when Session, item type, complete payload, metadata, and delivery match; conflicting reuse fails. After delivery, retry reconciliation for those message-producing items uses the projected message and does not require enqueue history or the original delivery mode. Compaction and move controls retain operation-specific conflict behavior.
+Reusing a Session ID adopts the existing Session. Reusing a user or synthetic inbox item ID is idempotent when Session and type match: the first admission wins, and retried payload, metadata, and delivery are ignored. After delivery, retry reconciliation uses the projected message and does not require enqueue history. Cross-Session and cross-type reuse fail. Compaction and move controls retain operation-specific conflict behavior.
 
 `resume` controls scheduling, not durability:
 
@@ -21,6 +21,34 @@ Delivery is explicit:
 Promoting new user input resets the selected agent's step allowance. A batch of steers resets it once.
 
 Manual compaction and Session movement use the same inbox as control items. Each request has its own inbox identity and delivery mode. A control item forms a delivery boundary so later steers do not cross it.
+
+## Session Operations Own Admission Policy
+
+Core's ID-addressed Session facade delegates prompt, synthetic, compaction, pending-input, shell, revert, execution controls, renaming, agent/model selection, viewed acknowledgements, and message lookup/editing to the ID-bound Session values in `session/session.ts`. Those operations own request idempotency, admission ordering, wake policy, and per-Session state-change rules. The facade supplies lazy Location services; the lower operations do not depend on `LocationServiceMap` or call back into the facade. Collection operations and host-infrastructure routing remain in the facade. Project resolution persists the owning Project; Session does not repeat that write.
+
+The host acquires `Session.make` once within its host `Scope`, then selects ID-bound values through `forSession`. The factory captures that Scope for shell completion recording; it must outlive individual callers. The existing facade remains the Effect service; the lower factory does not introduce a second service or a Layer per Session ID.
+
+```ts
+Effect.gen(function* () {
+  const sessions = yield* Session.make((ref) => locations.get(ref))
+  const session = sessions.forSession(sessionID)
+  yield* session.prompt({ text: "Inspect the failing tests", resume: false })
+})
+```
+
+References share operation implementations, host services, and the existing execution coordinator. A Session value retains its ID, not a cached projection or permanently selected runner. Obtaining or discarding a value does not start or interrupt execution. Admission stays independently callable while execution is active.
+
+User shell commands start immediately as background work without waiting for model execution or other user shells. They do not suppress prompt wakeups. The shell operation forks completion recording into the captured host Scope with `startImmediately: true` and joins that fiber, so caller cancellation does not cancel recording; closing the host Scope does. Shell started and ended events retain output in one shell entry. Completion and startup-failure notifications are admitted as synthetic input with `resume: false`, without waking execution. Shell services are resolved at startup, while Session events remain outside that Location context so movement does not pin them to the old Location.
+
+Location services are acquired only when an operation needs them. In particular, retry reconciliation happens before prompt preparation, so an already-admitted input skips hooks and attachment resolution. Execution continues to resolve placement independently at drain start and after movement.
+
+`servicesFor` selects instance services from the saved placement. Each instance constructs `SessionPrompt.Service`, whose `prepare` method turns submitted input into a user inbox item without admitting it, committing a revert, or waking execution. It captures FSUtil, PluginSupervisor, PluginHooks, Image, and Skill; readiness is checked before hooks on every call. Prompt keeps early retry reconciliation outside preparation and invokes preparation interruptibly in the current instance. Lower Session does not depend directly on Database or FSUtil; its Location requirements are SessionPrompt, SessionRevert, Shell, and the PluginSupervisor still used by manual shell startup.
+
+Each instance constructs its `SessionRevert.Service` through `SessionRevert.make`, capturing Database, Bus, PluginSupervisor, and Snapshot. Stage and clear check plugin readiness on each invocation and require no service provisioning inside their implementations. Session methods select the current instance for each operation, so an ID-bound Session does not retain a previous instance's snapshots after movement. Commit uses only the host's captured Bus and does not acquire an instance.
+
+`SessionInbox.Service` is host-scoped. Its node depends on Database and Bus, and its layer uses `SessionInbox.make` to capture those services and construct admission and pending-input commands that take only domain inputs. Its `list` method supplies the normal pending-input read without exposing Database to Session. `Session.make` and the facade's move admission consume the registered service rather than constructing separate command objects. The service is not Session-ID scoped and does not own execution. Its commands retain the existing shared inbox serialization lock. Standalone query helpers, transaction-facing projectors, and runner delivery retain their explicit database/Bus inputs. The layer compiler is unchanged.
+
+Inbox commands own identity and type checks and return typed `SessionInbox.LifecycleConflict` errors. Session operations translate these into their public operation-specific errors and decide whether to wake execution. The Bus/projector boundary still uses defects to abort invalid projections; Inbox translates only lifecycle conflicts, not unrelated defects. Pending-input mutation does not schedule execution itself: steering wakes after a successful mutation, while queueing and cancellation do not.
 
 ## Execution Is Process-Local
 
@@ -73,7 +101,7 @@ Before each Step, the runner estimates the complete model-visible request agains
 
 The full transcript remains durable. Active model history after the compaction boundary contains the summary and retained recent context; provider-native continuation state does not cross that boundary.
 
-If the provider reports context overflow before durable assistant output or tool execution, the runner may perform one overflow-triggered compaction and rebuild the same logical Step. A second overflow or any overflow after durable output is terminal.
+If automatic compaction is enabled and the provider reports context overflow before durable assistant output or tool execution, the runner may perform one overflow-triggered compaction and rebuild the same logical Step. A second overflow, any overflow after durable output, or an overflow when automatic compaction is disabled is terminal.
 
 ## Durable Events Are Session-Scoped
 

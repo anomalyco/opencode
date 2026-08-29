@@ -86,6 +86,8 @@ import type {
   SessionBackgroundOutput,
   SessionMessageInput,
   SessionMessageOutput,
+  SessionMessageUpdateInput,
+  SessionMessageUpdateOutput,
   SessionEnvironmentInput,
   SessionEnvironmentOutput,
   SessionViewInput,
@@ -138,9 +140,13 @@ import type {
   McpResourceCatalogOutput,
   CredentialUpdateInput,
   CredentialUpdateOutput,
+  CredentialActivateInput,
+  CredentialActivateOutput,
   CredentialRemoveInput,
   CredentialRemoveOutput,
   ProjectListOutput,
+  ProjectUpdateInput,
+  ProjectUpdateOutput,
   ProjectCurrentInput,
   ProjectCurrentOutput,
   FormRequestListInput,
@@ -192,6 +198,24 @@ import type {
   PtyRemoveOutput,
   PtyConnectTokenInput,
   PtyConnectTokenOutput,
+  ExperimentalPersistentPtyReadInput,
+  ExperimentalPersistentPtyReadOutput,
+  ExperimentalPersistentPtyListInput,
+  ExperimentalPersistentPtyListOutput,
+  ExperimentalPersistentPtyCreateInput,
+  ExperimentalPersistentPtyCreateOutput,
+  ExperimentalPersistentPtyShutdownOutput,
+  ExperimentalPersistentPtyHandoffOutput,
+  ExperimentalPersistentPtyGetInput,
+  ExperimentalPersistentPtyGetOutput,
+  ExperimentalPersistentPtyUpdateInput,
+  ExperimentalPersistentPtyUpdateOutput,
+  ExperimentalPersistentPtySnapshotInput,
+  ExperimentalPersistentPtySnapshotOutput,
+  ExperimentalPersistentPtyRemoveInput,
+  ExperimentalPersistentPtyRemoveOutput,
+  ExperimentalPersistentPtyConnectTokenInput,
+  ExperimentalPersistentPtyConnectTokenOutput,
   ShellListInput,
   ShellListOutput,
   ShellCreateInput,
@@ -220,8 +244,12 @@ import type {
   WorkspaceDestroyOutput,
   VcsGetInput,
   VcsGetOutput,
+  VcsBaseInput,
+  VcsBaseOutput,
   VcsStatusInput,
   VcsStatusOutput,
+  VcsBranchesInput,
+  VcsBranchesOutput,
   VcsDiffInput,
   VcsDiffOutput,
   DebugLocationListOutput,
@@ -336,6 +364,7 @@ const EndpointSessionCreate = (raw: RawClient["server.session"]) => (input?: Ses
         agent: input?.["agent"],
         model: input?.["model"],
         location: input?.["location"],
+        metadata: input?.["metadata"],
       },
     }).pipe(
       Effect.mapError(mapClientError),
@@ -630,6 +659,17 @@ const EndpointSessionMessage = (raw: RawClient["server.session"]) => (input: Ses
     ),
   )
 
+const EndpointSessionMessageUpdate = (raw: RawClient["server.session"]) => (input: SessionMessageUpdateInput) =>
+  preserveEffect<SessionMessageUpdateOutput>()(
+    raw["session.messageUpdate"]({
+      params: { sessionID: input["sessionID"], messageID: input["messageID"] },
+      payload: { content: input["content"] },
+    }).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((value) => value.data),
+    ),
+  )
+
 const EndpointSessionEnvironment = (raw: RawClient["server.session"]) => (input: SessionEnvironmentInput) =>
   preserveEffect<SessionEnvironmentOutput>()(
     raw["session.environment"]({
@@ -690,6 +730,7 @@ const adaptGroupSession = (raw: RawClient["server.session"]) => ({
   interrupt: EndpointSessionInterrupt(raw),
   background: EndpointSessionBackground(raw),
   message: EndpointSessionMessage(raw),
+  messageUpdate: EndpointSessionMessageUpdate(raw),
   environment: EndpointSessionEnvironment(raw),
   view: EndpointSessionView(raw),
 })
@@ -916,6 +957,14 @@ const EndpointCredentialUpdate = (raw: RawClient["server.credential"]) => (input
     }).pipe(Effect.mapError(mapClientError)),
   )
 
+const EndpointCredentialActivate = (raw: RawClient["server.credential"]) => (input: CredentialActivateInput) =>
+  preserveEffect<CredentialActivateOutput>()(
+    raw["credential.activate"]({
+      params: { credentialID: input["credentialID"] },
+      query: { location: input["location"] },
+    }).pipe(Effect.mapError(mapClientError)),
+  )
+
 const EndpointCredentialRemove = (raw: RawClient["server.credential"]) => (input: CredentialRemoveInput) =>
   preserveEffect<CredentialRemoveOutput>()(
     raw["credential.remove"]({
@@ -926,11 +975,20 @@ const EndpointCredentialRemove = (raw: RawClient["server.credential"]) => (input
 
 const adaptGroupCredential = (raw: RawClient["server.credential"]) => ({
   update: EndpointCredentialUpdate(raw),
+  activate: EndpointCredentialActivate(raw),
   remove: EndpointCredentialRemove(raw),
 })
 
 const EndpointProjectList = (raw: RawClient["server.project"]) => () =>
   preserveEffect<ProjectListOutput>()(raw["project.list"]({}).pipe(Effect.mapError(mapClientError)))
+
+const EndpointProjectUpdate = (raw: RawClient["server.project"]) => (input: ProjectUpdateInput) =>
+  preserveEffect<ProjectUpdateOutput>()(
+    raw["project.update"]({
+      params: { projectID: input["projectID"] },
+      payload: { name: input["name"], icon: input["icon"], commands: input["commands"] },
+    }).pipe(Effect.mapError(mapClientError)),
+  )
 
 const EndpointProjectCurrent = (raw: RawClient["server.project"]) => (input?: ProjectCurrentInput) =>
   preserveEffect<ProjectCurrentOutput>()(
@@ -939,6 +997,7 @@ const EndpointProjectCurrent = (raw: RawClient["server.project"]) => (input?: Pr
 
 const adaptGroupProject = (raw: RawClient["server.project"]) => ({
   list: EndpointProjectList(raw),
+  update: EndpointProjectUpdate(raw),
   current: EndpointProjectCurrent(raw),
 })
 
@@ -1179,6 +1238,116 @@ const adaptGroupPty = (raw: RawClient["server.pty"]) => ({
   connect: { token: EndpointPtyConnectToken(raw) },
 })
 
+const EndpointExperimentalPersistentPtyRead =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalPersistentPtyReadInput) =>
+    preserveEffect<ExperimentalPersistentPtyReadOutput>()(
+      raw["persistentPty.read"]({ params: { sessionID: input["sessionID"] }, query: { lines: input["lines"] } }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointExperimentalPersistentPtyList =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalPersistentPtyListInput) =>
+    preserveEffect<ExperimentalPersistentPtyListOutput>()(
+      raw["persistentPty.list"]({ params: { sessionID: input["sessionID"] } }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointExperimentalPersistentPtyCreate =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalPersistentPtyCreateInput) =>
+    preserveEffect<ExperimentalPersistentPtyCreateOutput>()(
+      raw["persistentPty.create"]({
+        params: { sessionID: input["sessionID"] },
+        payload: {
+          command: input["command"],
+          args: input["args"],
+          cwd: input["cwd"],
+          title: input["title"],
+          env: input["env"],
+          size: input["size"],
+        },
+      }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointExperimentalPersistentPtyShutdown = (raw: RawClient["server.experimental"]) => () =>
+  preserveEffect<ExperimentalPersistentPtyShutdownOutput>()(
+    raw["persistentPty.shutdown"]({}).pipe(Effect.mapError(mapClientError)),
+  )
+
+const EndpointExperimentalPersistentPtyHandoff = (raw: RawClient["server.experimental"]) => () =>
+  preserveEffect<ExperimentalPersistentPtyHandoffOutput>()(
+    raw["persistentPty.handoff"]({}).pipe(Effect.mapError(mapClientError)),
+  )
+
+const EndpointExperimentalPersistentPtyGet =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalPersistentPtyGetInput) =>
+    preserveEffect<ExperimentalPersistentPtyGetOutput>()(
+      raw["persistentPty.get"]({ params: { ptyID: input["ptyID"] } }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointExperimentalPersistentPtyUpdate =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalPersistentPtyUpdateInput) =>
+    preserveEffect<ExperimentalPersistentPtyUpdateOutput>()(
+      raw["persistentPty.update"]({
+        params: { ptyID: input["ptyID"] },
+        payload: { attachmentID: input["attachmentID"], size: input["size"] },
+      }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointExperimentalPersistentPtySnapshot =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalPersistentPtySnapshotInput) =>
+    preserveEffect<ExperimentalPersistentPtySnapshotOutput>()(
+      raw["persistentPty.snapshot"]({ params: { ptyID: input["ptyID"] } }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointExperimentalPersistentPtyRemove =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalPersistentPtyRemoveInput) =>
+    preserveEffect<ExperimentalPersistentPtyRemoveOutput>()(
+      raw["persistentPty.remove"]({ params: { ptyID: input["ptyID"] } }).pipe(Effect.mapError(mapClientError)),
+    )
+
+const EndpointExperimentalPersistentPtyConnectToken =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalPersistentPtyConnectTokenInput) =>
+    preserveEffect<ExperimentalPersistentPtyConnectTokenOutput>()(
+      raw["persistentPty.connectToken"]({
+        params: { ptyID: input["ptyID"] },
+        headers: { "x-opencode-ticket": input["x-opencode-ticket"] },
+      }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
+  persistentPty: {
+    read: EndpointExperimentalPersistentPtyRead(raw),
+    list: EndpointExperimentalPersistentPtyList(raw),
+    create: EndpointExperimentalPersistentPtyCreate(raw),
+    shutdown: EndpointExperimentalPersistentPtyShutdown(raw),
+    handoff: EndpointExperimentalPersistentPtyHandoff(raw),
+    get: EndpointExperimentalPersistentPtyGet(raw),
+    update: EndpointExperimentalPersistentPtyUpdate(raw),
+    snapshot: EndpointExperimentalPersistentPtySnapshot(raw),
+    remove: EndpointExperimentalPersistentPtyRemove(raw),
+    connectToken: EndpointExperimentalPersistentPtyConnectToken(raw),
+  },
+})
+
 const EndpointShellList = (raw: RawClient["server.shell"]) => (input?: ShellListInput) =>
   preserveEffect<ShellListOutput>()(
     raw["shell.list"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
@@ -1248,7 +1417,13 @@ const EndpointWorktreeCreate = (raw: RawClient["server.worktree"]) => (input: Wo
   preserveEffect<WorktreeCreateOutput>()(
     raw["worktree.create"]({
       params: { projectID: input["projectID"] },
-      payload: { strategy: input["strategy"], from: input["from"], directory: input["directory"], name: input["name"] },
+      payload: {
+        strategy: input["strategy"],
+        from: input["from"],
+        branch: input["branch"],
+        directory: input["directory"],
+        name: input["name"],
+      },
     }).pipe(Effect.mapError(mapClientError)),
   )
 
@@ -1295,21 +1470,35 @@ const EndpointVcsGet = (raw: RawClient["server.vcs"]) => (input?: VcsGetInput) =
     raw["vcs.get"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
+const EndpointVcsBase = (raw: RawClient["server.vcs"]) => (input?: VcsBaseInput) =>
+  preserveEffect<VcsBaseOutput>()(
+    raw["vcs.base"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
+  )
+
 const EndpointVcsStatus = (raw: RawClient["server.vcs"]) => (input?: VcsStatusInput) =>
   preserveEffect<VcsStatusOutput>()(
     raw["vcs.status"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
+const EndpointVcsBranches = (raw: RawClient["server.vcs"]) => (input?: VcsBranchesInput) =>
+  preserveEffect<VcsBranchesOutput>()(
+    raw["vcs.branches"]({
+      query: { location: input?.["location"], search: input?.["search"], limit: input?.["limit"] },
+    }).pipe(Effect.mapError(mapClientError)),
+  )
+
 const EndpointVcsDiff = (raw: RawClient["server.vcs"]) => (input: VcsDiffInput) =>
   preserveEffect<VcsDiffOutput>()(
-    raw["vcs.diff"]({ query: { location: input["location"], mode: input["mode"], context: input["context"] } }).pipe(
-      Effect.mapError(mapClientError),
-    ),
+    raw["vcs.diff"]({
+      query: { location: input["location"], mode: input["mode"], base: input["base"], context: input["context"] },
+    }).pipe(Effect.mapError(mapClientError)),
   )
 
 const adaptGroupVcs = (raw: RawClient["server.vcs"]) => ({
   get: EndpointVcsGet(raw),
+  base: EndpointVcsBase(raw),
   status: EndpointVcsStatus(raw),
+  branches: EndpointVcsBranches(raw),
   diff: EndpointVcsDiff(raw),
 })
 
@@ -1377,6 +1566,7 @@ const adaptClient = (raw: RawClient) => ({
   skill: adaptGroupSkill(raw["server.skill"]),
   event: adaptGroupEvent(raw["server.event"]),
   pty: adaptGroupPty(raw["server.pty"]),
+  experimental: adaptGroupExperimental(raw["server.experimental"]),
   shell: adaptGroupShell(raw["server.shell"]),
   reference: adaptGroupReference(raw["server.reference"]),
   worktree: adaptGroupWorktree(raw["server.worktree"]),

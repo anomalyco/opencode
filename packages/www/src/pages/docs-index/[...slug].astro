@@ -1,0 +1,21 @@
+---
+import { getCollection, type CollectionEntry } from "astro:content"
+import DocsPage from "../../docs/components/DocsPage.astro"
+
+interface Props {
+  entry: CollectionEntry<"docs">
+}
+
+export async function getStaticPaths() {
+  return (await getCollection("docs")).map((entry) => ({
+    params: {
+      slug: entry.id === "index" ? undefined : entry.id.replace(/\/index$/, ""),
+    },
+    props: { entry },
+  }))
+}
+
+export const prerender = true
+---
+
+<DocsPage entry={Astro.props.entry} />

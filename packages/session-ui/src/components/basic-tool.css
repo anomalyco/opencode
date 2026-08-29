@@ -284,19 +284,7 @@
 
 [data-component="collapsible"].tool-collapsible:not([data-rail="false"]) {
   > [data-slot="collapsible-content"] {
-    position: relative;
-    margin-inline-start: 12px;
-    padding-inline-start: 16px;
-
-    &::before {
-      content: "";
-      position: absolute;
-      inset-inline-start: 0;
-      top: 0;
-      bottom: 12px;
-      width: 0.5px;
-      background-color: var(--v2-border-border-muted, rgba(0, 0, 0, 0.08));
-    }
+    padding-inline-start: 12px;
   }
 }
 

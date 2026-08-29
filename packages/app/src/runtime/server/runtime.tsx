@@ -11,6 +11,7 @@ import type { ServerScope } from "@/runtime/server/scope"
 import { createPermissionAutoApprover } from "@/session/requests/auto-approve"
 import { createServerNotificationState } from "@/shell/notifications/notification"
 import { Persist, persisted } from "@/runtime/persistence/storage"
+import { createDesktopData } from "./data"
 
 export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext({
   name: "Global",
@@ -134,7 +135,7 @@ function createServerController(
 ) {
   const connKey = ServerConnection.key(conn)
   const sdk = createServerSdkContext(conn, scope)
-  const data = createData({
+  const source = createData({
     api: () => sdk.api,
     event: {
       on: sdk.event.on,
@@ -142,6 +143,10 @@ function createServerController(
     },
     connection: sdk.connection,
     directory: "",
+  })
+  const data = createDesktopData({
+    data: source,
+    remove: (sessionID) => sdk.api.session.remove({ sessionID }),
   })
   const sync = createServerSyncContext(sdk, data)
   createPermissionAutoApprover({ sdk, data })

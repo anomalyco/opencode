@@ -1,7 +1,8 @@
-import { createEffect, createMemo, For, Show, type JSX } from "solid-js"
+import { createEffect, createMemo, createSignal, For, Show, type JSX } from "solid-js"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
+import { createAnimatedPresence } from "@/runtime/animated-presence"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { useI18n } from "@opencode-ai/ui/context/i18n"
 import { Button } from "@opencode-ai/ui/button"
@@ -36,7 +37,6 @@ export type ComposerMode = "normal" | "shell"
 
 export type ComposerEditorProps = {
   controller: ComposerEditorModel
-  accentSubmit?: boolean
   disabled?: boolean
   readOnly?: boolean
   borderUnderlay?: boolean
@@ -45,6 +45,7 @@ export type ComposerEditorProps = {
   modelControlsVisible?: boolean
   attachKeybind?: string[]
   attachShortcut?: string
+  alternateKeybind?: string[]
 }
 
 export function ComposerEditor(props: ComposerEditorProps) {
@@ -149,7 +150,6 @@ export function ComposerEditor(props: ComposerEditorProps) {
             ref={(element) => {
               editor = element
               props.controller.setEditor(element)
-              renderComposerEditor(element, props.controller.parts())
             }}
             data-component="composer-editor"
             role="textbox"
@@ -177,10 +177,15 @@ export function ComposerEditor(props: ComposerEditorProps) {
             }}
             onKeyDown={(event) => {
               if (props.controller.onKeyDown(event)) return
+              const mod = event.metaKey || event.ctrlKey
+              if (mod && event.key === "ArrowUp" && !event.shiftKey && !event.altKey) {
+                if (view.submit.queue?.editFirst()) event.preventDefault()
+                return
+              }
               if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
                 event.preventDefault()
                 if (event.repeat) return
-                props.controller.submit()
+                props.controller.submit(mod ? { alternate: true } : undefined)
               }
             }}
             onKeyUp={updateCursor}
@@ -248,14 +253,19 @@ export function ComposerEditor(props: ComposerEditorProps) {
               </Show>
             </Show>
           </div>
+          <Show when={state.mode === "normal"}>
+            <ComposerEditorAlternateDelivery
+              controller={props.controller}
+              keybind={props.alternateKeybind ?? ["Mod", "Enter"]}
+            />
+          </Show>
           <ComposerEditorSubmitButton
             mode={state.mode}
             stopping={view.submit.stopping()}
             disabled={!props.controller.canSubmit()}
-            accent={props.accentSubmit}
             sendLabel={i18n.t("ui.promptInput.send")}
             stopLabel={i18n.t("ui.promptInput.stop")}
-            onSubmit={props.controller.submit}
+            onSubmit={() => props.controller.submit()}
             onStop={props.controller.stop}
           />
         </div>
@@ -691,11 +701,53 @@ export function ComposerEditorPopover(props: {
   )
 }
 
+// "Steer ⌘⏎" / "Queue ⌘⏎" hint next to the submit button: submits with the
+// delivery opposite to what plain Enter does. Visible only while the queue
+// exposes an alternate (turn running and composer holding a value), so it
+// disappears on its own when the current turn ends.
+function ComposerEditorAlternateDelivery(props: { controller: ComposerEditorModel; keybind: string[] }) {
+  const i18n = useI18n()
+  const view = props.controller.view
+  const action = createMemo(() => {
+    const queue = view.submit.queue
+    if (!queue || !props.controller.canSubmit()) return undefined
+    if (queue.editing()) return "steer" as const
+    return queue.alternate()
+  })
+  const [button, setButton] = createSignal<HTMLButtonElement>()
+  const presence = createAnimatedPresence(action, () => button() ?? null)
+  return (
+    <Show when={presence.present() && presence.value()} keyed>
+      {(delivery) => (
+        <Tooltip placement="top" inactive={delivery !== "steer"} value={i18n.t("ui.promptInput.steerHint")}>
+          <Button
+            ref={setButton}
+            data-action="composer-alternate-delivery"
+            type="button"
+            variant="ghost-muted"
+            size="small"
+            class="me-3 gap-1.5 px-1.5 text-v2-text-text-muted ![font-weight:530] duration-150 motion-reduce:animate-none"
+            classList={{
+              "animate-in fade-in": presence.animate() && presence.show(),
+              "animate-out fade-out fill-mode-forwards": presence.animate() && !presence.show(),
+            }}
+            onClick={() => props.controller.submit({ alternate: true })}
+          >
+            {delivery === "steer" ? i18n.t("ui.promptInput.steer") : i18n.t("ui.promptInput.queue")}
+            <span class="hidden sm:block">
+              <Keybind keys={props.keybind} variant="neutral" />
+            </span>
+          </Button>
+        </Tooltip>
+      )}
+    </Show>
+  )
+}
+
 export function ComposerEditorSubmitButton(props: {
   mode: ComposerMode
   stopping: boolean
   disabled: boolean
-  accent?: boolean
   sendLabel: string
   stopLabel: string
   onSubmit: () => void
@@ -714,16 +766,10 @@ export function ComposerEditorSubmitButton(props: {
         tabIndex={props.mode === "normal" ? undefined : -1}
         icon={<Icon name={props.stopping ? "stop" : props.mode === "shell" ? "arrow-undo-down" : "arrow-up"} />}
         variant="contrast"
-        class="size-7 rounded-md p-[6px] shadow-[var(--v2-elevation-button-contrast)] disabled:opacity-50"
-        classList={{
-          "text-v2-text-text-contrast": !!props.accent && !props.stopping && !props.disabled,
-          "text-v2-icon-icon-muted": !props.accent || props.stopping || props.disabled,
-        }}
+        class="size-7 rounded-md p-[6px] text-v2-icon-icon-muted shadow-[var(--v2-elevation-button-contrast)] disabled:opacity-50"
         style={{
           "background-image":
-            props.accent && !props.stopping && !props.disabled
-              ? "linear-gradient(180deg,var(--v2-alpha-light-20) 0%,var(--v2-alpha-light-0) 100%),linear-gradient(90deg,var(--v2-background-bg-accent) 0%,var(--v2-background-bg-accent) 100%)"
-              : "linear-gradient(180deg,var(--v2-alpha-light-20) 0%,var(--v2-alpha-light-0) 100%),linear-gradient(90deg,var(--v2-background-bg-contrast) 0%,var(--v2-background-bg-contrast) 100%)",
+            "linear-gradient(180deg,var(--v2-alpha-light-20) 0%,var(--v2-alpha-light-0) 100%),linear-gradient(90deg,var(--v2-background-bg-contrast) 0%,var(--v2-background-bg-contrast) 100%)",
         }}
         aria-label={props.stopping ? props.stopLabel : props.sendLabel}
         onClick={(event) => {

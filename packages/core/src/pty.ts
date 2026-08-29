@@ -88,233 +88,232 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Pty") {}
 
-const layer = () =>
-  Layer.effect(
-    Service,
-    Effect.gen(function* () {
-      const bus = yield* Bus.Service
-      const location = yield* Location.Service
-      const shell = yield* ShellSelect.Service
-      const context = yield* Effect.context()
-      const runFork = Effect.runForkWith(context)
-      const sessions = new Map<PtyID, Active>()
-      const exitOrder: PtyID[] = []
+const layer = Layer.effect(
+  Service,
+  Effect.gen(function* () {
+    const bus = yield* Bus.Service
+    const location = yield* Location.Service
+    const shell = yield* ShellSelect.Service
+    const context = yield* Effect.context()
+    const runFork = Effect.runForkWith(context)
+    const sessions = new Map<PtyID, Active>()
+    const exitOrder: PtyID[] = []
 
-      function notifyEnd(session: Active, event: { exitCode?: number }) {
-        for (const subscriber of session.subscribers.values()) {
-          if (!subscriber.active) {
-            subscriber.end = event
-            continue
-          }
-          try {
-            subscriber.onEnd(event)
-          } catch {}
+    function notifyEnd(session: Active, event: { exitCode?: number }) {
+      for (const subscriber of session.subscribers.values()) {
+        if (!subscriber.active) {
+          subscriber.end = event
+          continue
         }
-        session.subscribers.clear()
+        try {
+          subscriber.onEnd(event)
+        } catch {}
       }
+      session.subscribers.clear()
+    }
 
-      function teardown(session: Active) {
-        for (const listener of session.listeners) listener.dispose()
-        session.listeners.length = 0
-        if (session.info.status === "running") {
-          try {
-            session.process.kill()
-          } catch {}
-        }
-        notifyEnd(session, {})
+    function teardown(session: Active) {
+      for (const listener of session.listeners) listener.dispose()
+      session.listeners.length = 0
+      if (session.info.status === "running") {
+        try {
+          session.process.kill()
+        } catch {}
       }
+      notifyEnd(session, {})
+    }
 
-      yield* Effect.addFinalizer(() =>
-        Effect.sync(() => {
-          for (const session of sessions.values()) teardown(session)
-          sessions.clear()
-          exitOrder.length = 0
-        }),
-      )
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        for (const session of sessions.values()) teardown(session)
+        sessions.clear()
+        exitOrder.length = 0
+      }),
+    )
 
-      const requireSession = Effect.fn("Pty.requireSession")(function* (id: PtyID) {
-        const session = sessions.get(id)
-        if (!session) return yield* new NotFoundError({ ptyID: id })
-        return session
-      })
+    const requireSession = Effect.fn("Pty.requireSession")(function* (id: PtyID) {
+      const session = sessions.get(id)
+      if (!session) return yield* new NotFoundError({ ptyID: id })
+      return session
+    })
 
-      const removeSession = Effect.fnUntraced(function* (id: PtyID) {
-        const session = sessions.get(id)
-        if (!session) return
-        sessions.delete(id)
-        const index = exitOrder.indexOf(id)
-        if (index !== -1) exitOrder.splice(index, 1)
-        yield* Effect.logInfo("removing session", { id })
-        teardown(session)
-        yield* bus.publish(Pty.Event.Deleted, { id: session.info.id })
-      })
+    const removeSession = Effect.fnUntraced(function* (id: PtyID) {
+      const session = sessions.get(id)
+      if (!session) return
+      sessions.delete(id)
+      const index = exitOrder.indexOf(id)
+      if (index !== -1) exitOrder.splice(index, 1)
+      yield* Effect.logInfo("removing session", { id })
+      teardown(session)
+      yield* bus.publish(Pty.Event.Deleted, { id: session.info.id })
+    })
 
-      const remove = Effect.fn("Pty.remove")(function* (id: PtyID) {
-        yield* requireSession(id)
-        yield* removeSession(id)
-      })
+    const remove = Effect.fn("Pty.remove")(function* (id: PtyID) {
+      yield* requireSession(id)
+      yield* removeSession(id)
+    })
 
-      const list = Effect.fn("Pty.list")(function* () {
-        return Array.from(sessions.values()).map((session) => session.info)
-      })
+    const list = Effect.fn("Pty.list")(function* () {
+      return Array.from(sessions.values()).map((session) => session.info)
+    })
 
-      const get = Effect.fn("Pty.get")(function* (id: PtyID) {
-        return (yield* requireSession(id)).info
-      })
+    const get = Effect.fn("Pty.get")(function* (id: PtyID) {
+      return (yield* requireSession(id)).info
+    })
 
-      const create = Effect.fn("Pty.create")(function* (input: CreateInput) {
-        const id = PtyID.ascending()
-        const command = input.command || (yield* shell.preferred())
-        const args = ShellSelect.login(command) ? [...(input.args ?? []), "-l"] : [...(input.args ?? [])]
-        const cwd = input.cwd || location.directory
-        const env = {
-          ...process.env,
-          ...input.env,
-          TERM: "xterm-256color",
-          OPENCODE_TERMINAL: "1",
-        } as Record<string, string>
-        if (process.platform === "win32") {
-          env.LC_ALL = "C.UTF-8"
-          env.LC_CTYPE = "C.UTF-8"
-          env.LANG = "C.UTF-8"
-        }
-        yield* Effect.logInfo("creating session", { id, cmd: command, args, cwd })
-        const { spawn } = yield* Effect.promise(() => pty())
-        const proc = yield* Effect.sync(() => spawn(command, args, { name: "xterm-256color", cwd, env }))
-        const info: Info = {
-          id,
-          title: input.title || `Terminal ${id.slice(-4)}`,
-          command,
-          args,
-          cwd,
-          status: "running",
-          pid: proc.pid,
-        }
-        const session: Active = {
-          info,
-          process: proc,
-          buffer: "",
-          bufferCursor: 0,
-          cursor: 0,
-          subscribers: new Map(),
-          listeners: [],
-        }
-        sessions.set(id, session)
-        session.listeners.push(
-          proc.onData((chunk) => {
-            session.cursor += chunk.length
-            for (const [token, subscriber] of session.subscribers.entries()) {
-              if (!subscriber.active) {
-                subscriber.pending.push(chunk)
-                continue
-              }
-              try {
-                subscriber.onData(chunk)
-              } catch {
-                session.subscribers.delete(token)
-              }
+    const create = Effect.fn("Pty.create")(function* (input: CreateInput) {
+      const id = PtyID.ascending()
+      const command = input.command || (yield* shell.resolve({ priority: "config" }))
+      const args = ShellSelect.login(command) ? [...(input.args ?? []), "-l"] : [...(input.args ?? [])]
+      const cwd = input.cwd || location.directory
+      const env = {
+        ...process.env,
+        ...input.env,
+        TERM: "xterm-256color",
+        OPENCODE_TERMINAL: "1",
+      } as Record<string, string>
+      if (process.platform === "win32") {
+        env.LC_ALL = "C.UTF-8"
+        env.LC_CTYPE = "C.UTF-8"
+        env.LANG = "C.UTF-8"
+      }
+      yield* Effect.logInfo("creating session", { id, cmd: command, args, cwd })
+      const { spawn } = yield* Effect.promise(() => pty())
+      const proc = yield* Effect.sync(() => spawn(command, args, { name: "xterm-256color", cwd, env }))
+      const info: Info = {
+        id,
+        title: input.title || `Terminal ${id.slice(-4)}`,
+        command,
+        args,
+        cwd,
+        status: "running",
+        pid: proc.pid,
+      }
+      const session: Active = {
+        info,
+        process: proc,
+        buffer: "",
+        bufferCursor: 0,
+        cursor: 0,
+        subscribers: new Map(),
+        listeners: [],
+      }
+      sessions.set(id, session)
+      session.listeners.push(
+        proc.onData((chunk) => {
+          session.cursor += chunk.length
+          for (const [token, subscriber] of session.subscribers.entries()) {
+            if (!subscriber.active) {
+              subscriber.pending.push(chunk)
+              continue
             }
-            session.buffer += chunk
-            if (session.buffer.length <= BUFFER_LIMIT) return
-            const excess = session.buffer.length - BUFFER_LIMIT
-            session.buffer = session.buffer.slice(excess)
-            session.bufferCursor += excess
-          }),
-          proc.onExit(({ exitCode }) => {
-            if (session.info.status === "exited") return
-            session.info.status = "exited"
-            session.info.exitCode = exitCode
-            notifyEnd(session, { exitCode })
-            exitOrder.push(id)
-            runFork(
-              Effect.gen(function* () {
-                yield* Effect.logInfo("session exited", { id, exitCode })
-                yield* bus.publish(Pty.Event.Exited, { id, exitCode })
-                while (exitOrder.length > EXITED_LIMIT) {
-                  const oldest = exitOrder[0]
-                  if (!oldest) break
-                  yield* removeSession(oldest)
-                }
-              }),
-            )
-          }),
-        )
-        yield* bus.publish(Pty.Event.Created, { info })
-        return info
-      })
-
-      const update = Effect.fn("Pty.update")(function* (id: PtyID, input: UpdateInput) {
-        const session = yield* requireSession(id)
-        if (input.title) session.info.title = input.title
-        if (input.size && session.info.status === "running") session.process.resize(input.size.cols, input.size.rows)
-        yield* bus.publish(Pty.Event.Updated, { info: session.info })
-        return session.info
-      })
-
-      const write = Effect.fn("Pty.write")(function* (id: PtyID, data: string) {
-        const session = yield* requireSession(id)
-        if (session.info.status === "running") session.process.write(data)
-      })
-
-      const attach = Effect.fn("Pty.attach")(function* (id: PtyID, input: AttachInput) {
-        const session = yield* requireSession(id)
-        if (session.info.status !== "running") return yield* new ExitedError({ ptyID: id })
-        yield* Effect.logInfo("client attached to session", { id, directory: location.directory })
-        const token = {}
-        const subscriber: Subscriber = {
-          onData: input.onData,
-          onEnd: input.onEnd,
-          active: false,
-          detached: false,
-          pending: [],
-        }
-        session.subscribers.set(token, subscriber)
-        const start = session.bufferCursor
-        const end = session.cursor
-        const from =
-          input.cursor === -1
-            ? end
-            : typeof input.cursor === "number" && Number.isSafeInteger(input.cursor)
-              ? Math.max(0, input.cursor)
-              : 0
-        const replay = (() => {
-          if (!session.buffer || from >= end) return ""
-          const offset = Math.max(0, from - start)
-          if (offset >= session.buffer.length) return ""
-          return session.buffer.slice(offset)
-        })()
-        return {
-          replay,
-          cursor: end,
-          write: (data: string) => {
-            if (session.info.status === "running") session.process.write(data)
-          },
-          activate: () => {
-            if (subscriber.active || subscriber.detached) return
-            subscriber.active = true
             try {
-              for (const chunk of subscriber.pending) subscriber.onData(chunk)
-              subscriber.pending.length = 0
-              if (subscriber.end) subscriber.onEnd(subscriber.end)
+              subscriber.onData(chunk)
             } catch {
               session.subscribers.delete(token)
             }
-          },
-          detach: () => {
-            subscriber.detached = true
-            subscriber.pending.length = 0
-            subscriber.end = undefined
-            session.subscribers.delete(token)
-          },
-        }
-      })
+          }
+          session.buffer += chunk
+          if (session.buffer.length <= BUFFER_LIMIT) return
+          const excess = session.buffer.length - BUFFER_LIMIT
+          session.buffer = session.buffer.slice(excess)
+          session.bufferCursor += excess
+        }),
+        proc.onExit(({ exitCode }) => {
+          if (session.info.status === "exited") return
+          session.info.status = "exited"
+          session.info.exitCode = exitCode
+          notifyEnd(session, { exitCode })
+          exitOrder.push(id)
+          runFork(
+            Effect.gen(function* () {
+              yield* Effect.logInfo("session exited", { id, exitCode })
+              yield* bus.publish(Pty.Event.Exited, { id, exitCode })
+              while (exitOrder.length > EXITED_LIMIT) {
+                const oldest = exitOrder[0]
+                if (!oldest) break
+                yield* removeSession(oldest)
+              }
+            }),
+          )
+        }),
+      )
+      yield* bus.publish(Pty.Event.Created, { info })
+      return info
+    })
 
-      return Service.of({ list, get, create, update, remove, write, attach })
-    }),
-  )
+    const update = Effect.fn("Pty.update")(function* (id: PtyID, input: UpdateInput) {
+      const session = yield* requireSession(id)
+      if (input.title) session.info.title = input.title
+      if (input.size && session.info.status === "running") session.process.resize(input.size.cols, input.size.rows)
+      yield* bus.publish(Pty.Event.Updated, { info: session.info })
+      return session.info
+    })
+
+    const write = Effect.fn("Pty.write")(function* (id: PtyID, data: string) {
+      const session = yield* requireSession(id)
+      if (session.info.status === "running") session.process.write(data)
+    })
+
+    const attach = Effect.fn("Pty.attach")(function* (id: PtyID, input: AttachInput) {
+      const session = yield* requireSession(id)
+      if (session.info.status !== "running") return yield* new ExitedError({ ptyID: id })
+      yield* Effect.logInfo("client attached to session", { id, directory: location.directory })
+      const token = {}
+      const subscriber: Subscriber = {
+        onData: input.onData,
+        onEnd: input.onEnd,
+        active: false,
+        detached: false,
+        pending: [],
+      }
+      session.subscribers.set(token, subscriber)
+      const start = session.bufferCursor
+      const end = session.cursor
+      const from =
+        input.cursor === -1
+          ? end
+          : typeof input.cursor === "number" && Number.isSafeInteger(input.cursor)
+            ? Math.max(0, input.cursor)
+            : 0
+      const replay = (() => {
+        if (!session.buffer || from >= end) return ""
+        const offset = Math.max(0, from - start)
+        if (offset >= session.buffer.length) return ""
+        return session.buffer.slice(offset)
+      })()
+      return {
+        replay,
+        cursor: end,
+        write: (data: string) => {
+          if (session.info.status === "running") session.process.write(data)
+        },
+        activate: () => {
+          if (subscriber.active || subscriber.detached) return
+          subscriber.active = true
+          try {
+            for (const chunk of subscriber.pending) subscriber.onData(chunk)
+            subscriber.pending.length = 0
+            if (subscriber.end) subscriber.onEnd(subscriber.end)
+          } catch {
+            session.subscribers.delete(token)
+          }
+        },
+        detach: () => {
+          subscriber.detached = true
+          subscriber.pending.length = 0
+          subscriber.end = undefined
+          session.subscribers.delete(token)
+        },
+      }
+    })
+
+    return Service.of({ list, get, create, update, remove, write, attach })
+  }),
+)
 
 export const node = makeLocationNode({
   service: Service,
-  layer: layer(),
+  layer,
   deps: [Bus.node, Location.node, ShellSelect.node],
 })

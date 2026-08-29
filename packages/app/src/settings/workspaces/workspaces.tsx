@@ -60,6 +60,7 @@ export const SettingsWorkspaces: Component<{ activeDirectory?: string }> = (prop
 
   const projectQuery = useQuery(() => ({
     queryKey: [serverSDK.scope, "settings-workspace-projects"] as const,
+    enabled: serverSDK.connection.status() === "connected",
     queryFn: async () =>
       Promise.all(
         (await serverSDK.api.project.list()).map(async (project) => {
@@ -71,10 +72,9 @@ export const SettingsWorkspaces: Component<{ activeDirectory?: string }> = (prop
       ),
     refetchOnMount: "always",
   }))
-  const workspaces = createMemo(() => workspaceInventory(projectQuery.data ?? []))
-  const projects = createMemo(() =>
-    (projectQuery.data ?? []).filter((project) => managedWorkspaceDirectories(project).length > 0),
-  )
+  const inventory = createMemo(() => (projectQuery.isPending ? [] : (projectQuery.data ?? [])))
+  const workspaces = createMemo(() => workspaceInventory(inventory()))
+  const projects = createMemo(() => inventory().filter((project) => managedWorkspaceDirectories(project).length > 0))
   const projectName = (project: Project) => project.name || getFilename(project.worktree)
   const projectOptions = createMemo(() => [
     { id: "all", label: language.t("settings.workspaces.filter.all") },
@@ -110,18 +110,18 @@ export const SettingsWorkspaces: Component<{ activeDirectory?: string }> = (prop
       workspaceDirectories().map((directory) => String(pathKey(directory))),
     ] as const,
     queryFn: () => loadSessions(workspaceDirectories()),
-    enabled: workspaceDirectories().length > 0,
+    enabled: serverSDK.connection.status() === "connected" && workspaceDirectories().length > 0,
     refetchOnMount: "always",
   }))
-  const sessionsByWorkspace = createMemo(
-    () =>
-      new Map(
-        workspaces().map((workspace) => [
-          pathKey(workspace.directory),
-          sessionQuery.data ? sessionsForWorkspace(sessionQuery.data, workspace.directory) : [],
-        ]),
-      ),
-  )
+  const sessionsByWorkspace = createMemo(() => {
+    const sessions = sessionQuery.isPending ? [] : (sessionQuery.data ?? [])
+    return new Map(
+      workspaces().map((workspace) => [
+        pathKey(workspace.directory),
+        sessionsForWorkspace(sessions, workspace.directory),
+      ]),
+    )
+  })
   const workspaceSessions = (workspace: Workspace) => sessionsByWorkspace().get(pathKey(workspace.directory)) ?? []
   const sessionCount = (workspace: Workspace) => {
     if (sessionQuery.isPending) return language.t("session.messages.loading")
@@ -279,7 +279,9 @@ export const SettingsWorkspaces: Component<{ activeDirectory?: string }> = (prop
       <div class="settings-tab-body settings-workspaces">
         <div class="settings-workspaces-toolbar">
           <span class="settings-workspaces-count">
-            {language.plural("settings.workspaces.count", filtered().length)}
+            <Show when={!projectQuery.isPending && !projectQuery.isError}>
+              {language.plural("settings.workspaces.count", filtered().length)}
+            </Show>
           </span>
           <div class="settings-workspaces-toolbar-actions">
             <Show when={projects().length > 1}>
@@ -332,7 +334,17 @@ export const SettingsWorkspaces: Component<{ activeDirectory?: string }> = (prop
         <div class="settings-workspaces-inventory">
           <Show
             when={filtered().length > 0}
-            fallback={<div class="settings-workspaces-empty">{language.t("settings.workspaces.empty")}</div>}
+            fallback={
+              <div class="settings-workspaces-empty">
+                {language.t(
+                  projectQuery.isPending
+                    ? "common.loading"
+                    : projectQuery.isError
+                      ? "common.requestFailed"
+                      : "settings.workspaces.empty",
+                )}
+              </div>
+            }
           >
             <SettingsList>
               <For each={filtered()}>

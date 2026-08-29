@@ -31,6 +31,8 @@ describe("Skill", () => {
       })
 
       expect(yield* skill.list()).toEqual([info("review", "Second"), info("deploy", "Deploy")])
+      expect(yield* skill.get(Skill.ID.make("review"))).toEqual(info("review", "Second"))
+      expect(yield* skill.get(Skill.ID.make("missing"))).toBeUndefined()
     }),
   )
 
@@ -43,7 +45,9 @@ describe("Skill", () => {
           value.description = "Updated"
           value.id = Skill.ID.make("ignored")
         })
-        draft.update("missing", () => Effect.die("unreachable"))
+        draft.update("missing", () => {
+          throw new Error("unreachable")
+        })
         draft.add(info("deploy", "Deploy"))
         draft.remove("deploy")
       })

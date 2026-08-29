@@ -12,4 +12,12 @@ describe("Composer placeholder", () => {
   test("uses the command and context hint in normal mode", () => {
     expect(composerPlaceholder("normal", t)).toBe("ui.promptInput.placeholder.normal/@")
   })
+
+  test("uses the follow-up copy while a turn runs or prompts are queued", () => {
+    expect(composerPlaceholder("normal", t, true)).toBe("ui.promptInput.placeholder.followUp/@")
+  })
+
+  test("keeps the shell placeholder while a turn runs", () => {
+    expect(composerPlaceholder("shell", t, true)).toBe("prompt.placeholder.shell:git status")
+  })
 })

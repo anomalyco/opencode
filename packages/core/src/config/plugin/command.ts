@@ -87,7 +87,6 @@ export const Plugin = define({
                   ...input.prompt,
                   sessionID: input.sessionID,
                   text: yield* evaluateTemplate(command.template, input.prompt.text, {
-                    config,
                     location,
                     processes,
                     shell,
@@ -152,7 +151,6 @@ function evaluateTemplate(
   template: string,
   input: string,
   services: {
-    readonly config: Config.Interface
     readonly location: Location.Info
     readonly processes: AppProcess.Interface
     readonly shell: ShellSelect.Interface
@@ -176,7 +174,7 @@ function evaluateTemplate(
         : withArguments.trim()
     const matches = Array.from(text.matchAll(shellRegex))
     if (matches.length === 0) return text
-    const shell = yield* services.shell.preferred()
+    const shell = yield* services.shell.resolve({ priority: "config" })
     const outputs = yield* Effect.forEach(
       matches,
       (match) => {

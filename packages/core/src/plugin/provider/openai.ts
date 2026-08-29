@@ -301,7 +301,7 @@ export const OpenAIPlugin = define({
       { providerID: Provider.ID.openai },
     )
     const refresh = () => loading.withPermit(load().pipe(Effect.andThen(ctx.catalog.reload())))
-    yield* bus.subscribe(Integration.Event.ConnectionUpdated).pipe(
+    yield* bus.subscribe(Credential.Event.Switched).pipe(
       Stream.filter((event) => event.data.integrationID === Integration.ID.make("openai")),
       Stream.runForEach(refresh),
       Effect.forkScoped({ startImmediately: true }),

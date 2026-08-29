@@ -87,6 +87,7 @@ test("clears the terminal line with Command+Delete", async ({ page }) => {
   const terminal = page.locator('[data-component="terminal"]')
   await page.keyboard.press("Control+Backquote")
   await expect(terminal.locator("textarea")).toHaveCount(1)
+  await expect.poll(() => sendPtyOutput).toBeDefined()
 
   await page.keyboard.press("Meta+Backspace")
 

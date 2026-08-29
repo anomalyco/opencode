@@ -133,6 +133,64 @@ describe("State", () => {
     }),
   )
 
+  it.effect("discards teardown rebuilds and pending reloads while still running cleanup", () =>
+    Effect.gen(function* () {
+      let finalized = 0
+      let disposed = 0
+      const state = State.create({
+        initial: () => ({ values: [] as string[] }),
+        draft: (draft) => ({ add: (item: string) => draft.values.push(item) }),
+        finalize: () => Effect.sync(() => finalized++),
+      })
+      const scope = yield* Scope.make()
+      yield* Scope.addFinalizer(
+        scope,
+        Effect.sync(() => disposed++),
+      )
+      const registration = yield* state.transform((draft) => draft.add("value")).pipe(Scope.provide(scope))
+      expect(finalized).toBe(1)
+
+      const pending = yield* state.reload().pipe(Effect.forkChild({ startImmediately: true }))
+      yield* TestClock.adjust("250 millis")
+      yield* State.batch(Scope.close(scope, Exit.void), { flush: false })
+      expect(disposed).toBe(1)
+      expect(finalized).toBe(1)
+
+      yield* TestClock.adjust("500 millis")
+      yield* Fiber.join(pending)
+      yield* registration.dispose
+      yield* state.reload()
+      expect(finalized).toBe(1)
+    }),
+  )
+
+  it.effect("keeps teardown suppression separate from an enclosing live batch", () =>
+    Effect.gen(function* () {
+      const finalized: string[] = []
+      const closing = State.create({
+        initial: () => ({}),
+        draft: (draft) => draft,
+        finalize: () => Effect.sync(() => finalized.push("closing")),
+      })
+      const live = State.create({
+        initial: () => ({}),
+        draft: (draft) => draft,
+        finalize: () => Effect.sync(() => finalized.push("live")),
+      })
+      const scope = yield* Scope.make()
+      yield* closing.transform(() => {}).pipe(Scope.provide(scope))
+      finalized.length = 0
+
+      yield* State.batch(
+        Effect.gen(function* () {
+          yield* live.transform(() => {})
+          yield* State.batch(Scope.close(scope, Exit.void), { flush: false })
+        }),
+      )
+      expect(finalized).toEqual(["live"])
+    }),
+  )
+
   it.effect("debounces reload bursts", () =>
     Effect.gen(function* () {
       let finalized = 0

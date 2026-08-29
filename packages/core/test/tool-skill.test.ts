@@ -69,14 +69,10 @@ describe("SkillTool", () => {
                 ),
               ),
           })
-          const skills = Layer.succeed(
-            Skill.Service,
-            Skill.Service.of({
-              transform: (_transform) => Effect.die("unused"),
-              reload: () => Effect.die("unused"),
-              list: () => Effect.succeed(current),
-            }),
-          )
+          const skills = Layer.mock(Skill.Service, {
+            get: (id) => Effect.succeed(current.find((skill) => skill.id === id)),
+            list: () => Effect.succeed(current),
+          })
           const skillToolLayer = AppNodeBuilder.build(LayerNode.group([Tool.node, skillToolNode]), [
             [Permission.node, permission],
             [Skill.node, skills],

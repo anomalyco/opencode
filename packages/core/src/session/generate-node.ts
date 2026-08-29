@@ -9,7 +9,6 @@ import { SessionContext } from "./context.js"
 import { SessionGenerate } from "./generate.js"
 import { SessionHistory } from "./history.js"
 import { SessionModelRequest } from "./model-request.js"
-import { SessionRunnerModel } from "./runner/model.js"
 
 export const layer = Layer.effect(
   SessionGenerate.Service,
@@ -17,13 +16,11 @@ export const layer = Layer.effect(
     const context = yield* SessionContext.Service
     const database = yield* Database.Service
     const llm = yield* LLMClient.Service
-    const models = yield* SessionRunnerModel.Service
-    const modelRequests = yield* SessionModelRequest.Service
 
     return SessionGenerate.Service.of({
       generate: Effect.fn("SessionGenerate.generate")(function* (input) {
         const selection = yield* context.select(input.sessionID)
-        const model = yield* models.resolve(selection.session)
+        const model = yield* context.resolveModel(selection.session)
         const history = yield* SessionHistory.preview(database.db, selection.session.id, selection.instructions)
         const transcript = SessionModelRequest.baseTranscript({
           agent: selection.agent.info,
@@ -32,7 +29,7 @@ export const layer = Layer.effect(
           initial: history.initial,
           messages: history.messages,
         })
-        const prepared = yield* modelRequests.prepare({
+        const prepared = yield* context.prepare({
           scope: { session: selection.session, agentID: selection.agent.id, model, tools: selection.tools },
           transcript: {
             system: transcript.system,
@@ -59,5 +56,5 @@ export const layer = Layer.effect(
 export const node = makeLocationNode({
   service: SessionGenerate.Service,
   layer,
-  deps: [SessionContext.node, Database.node, SessionModelRequest.node, SessionRunnerModel.node, llmClient],
+  deps: [SessionContext.node, Database.node, llmClient],
 })

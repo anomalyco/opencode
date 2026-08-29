@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url"
 import { getNodeAssets } from "@opentui/core/node-assets"
 import { attentionSoundAssets, type NodeTarget, photonWasmAsset, shellParserWasmAssets } from "../src/node/target"
 import { collectFiles } from "./files"
+import { resolveOpencodePty } from "./opencode-pty"
 
 const dir = path.resolve(import.meta.dirname, "..")
 
@@ -18,6 +19,11 @@ export type NodeAsset = {
 }
 
 export async function collectNodeAssets(target: NodeTarget) {
+  const opencodePty = await resolveOpencodePty({
+    platform: target.platform,
+    arch: target.arch,
+    ...(target.platform === "linux" ? { libc: "glibc" as const } : {}),
+  })
   const ptyEntry = fileURLToPath(import.meta.resolve(target.nodePtyPackage))
   const ptyRoot = path.resolve(path.dirname(ptyEntry), "..")
   const assets: NodeAsset[] = [
@@ -41,6 +47,7 @@ export async function collectNodeAssets(target: NodeTarget) {
       key,
       source: path.resolve(dir, "../ui/src/assets/audio", path.basename(key)),
     })),
+    ...(opencodePty && target.opencodePtyAsset ? [{ key: target.opencodePtyAsset, source: opencodePty.source }] : []),
     ...(await collectFiles(ptyRoot))
       .filter((relative) => !relative.endsWith(".map") && !relative.endsWith(".pdb"))
       .map((relative) => ({

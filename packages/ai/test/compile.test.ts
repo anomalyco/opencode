@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Ref, Schema } from "effect"
 import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
-import { LLM, mergeProviderOptions } from "../src/index.js"
+import { LLM, Message, ToolCallPart, mergeProviderOptions } from "../src/index.js"
 import { AnthropicMessages, OpenAIChat } from "../src/protocols.js"
 import { Auth, LLMClient } from "../src/route.js"
 import { compileRequest } from "../src/route/client.js"
@@ -245,6 +245,73 @@ describe("request option precedence", () => {
       expect(response.text).toBe("retried")
       expect(yield* Ref.get(attempts)).toBe(2)
     }),
+  )
+
+  it.effect("sanitizes outbound JSON without an HTTP overlay", () =>
+    LLMClient.generate(
+      LLM.request({
+        model: OpenAIChat.route
+          .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
+          .model({ id: "gpt-4o-mini" }),
+        prompt: "hello \uD800 \u{1F600}",
+      }),
+    ).pipe(
+      Effect.provide(
+        dynamicResponse((input) =>
+          Effect.gen(function* () {
+            expect(decodeJson(input.text)).toMatchObject({
+              messages: [{ role: "user", content: "hello \uFFFD \u{1F600}" }],
+            })
+            return input.respond(sseEvents(deltaChunk({}, "stop")), {
+              headers: { "content-type": "text/event-stream" },
+            })
+          }),
+        ),
+      ),
+    ),
+  )
+
+  it.effect("sanitizes unpaired surrogates throughout outbound JSON", () =>
+    LLMClient.generate(
+      LLM.request({
+        model: OpenAIChat.route
+          .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
+          .model({ id: "gpt-4o-mini" }),
+        system: "system \uD800 \u{1F600}",
+        messages: [
+          Message.user("user \uDC00"),
+          Message.assistant([
+            Message.text("assistant \uD800"),
+            ToolCallPart.make({ id: "call_1", name: "lookup", input: { query: "input \uDC00" } }),
+          ]),
+          Message.tool({ id: "call_1", name: "lookup", result: { output: "result \uD800" } }),
+        ],
+        http: { body: { metadata: { "key\uD800": ["overlay \uDC00", "valid \u{1F600}"] } } },
+      }),
+    ).pipe(
+      Effect.provide(
+        dynamicResponse((input) =>
+          Effect.gen(function* () {
+            expect(decodeJson(input.text)).toMatchObject({
+              messages: [
+                { role: "system", content: "system \uFFFD \u{1F600}" },
+                { role: "user", content: "user \uFFFD" },
+                {
+                  role: "assistant",
+                  content: "assistant \uFFFD",
+                  tool_calls: [{ function: { arguments: '{"query":"input \uFFFD"}' } }],
+                },
+                { role: "tool", content: '{"output":"result \uFFFD"}' },
+              ],
+              metadata: { "key\uFFFD": ["overlay \uFFFD", "valid \u{1F600}"] },
+            })
+            return input.respond(sseEvents(deltaChunk({}, "stop")), {
+              headers: { "content-type": "text/event-stream" },
+            })
+          }),
+        ),
+      ),
+    ),
   )
 
   it.effect("applies raw body overlays after protocol lowering", () =>

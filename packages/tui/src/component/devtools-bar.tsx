@@ -86,7 +86,15 @@ export function DevToolsBar() {
   const offEscape = keymap.intercept(
     "key",
     ({ event }) => {
-      if (!panel() || event.name !== "escape") return
+      if (!panel() || keymap.mode.current() !== "base") return
+      if (event.name !== "escape" && !(event.ctrl && event.name === "c")) return
+      if (renderer.getSelection()?.getSelectedText()) {
+        if ((config.data.terminal?.copy ?? (process.platform === "win32" ? "manual" : "select")) !== "select") return
+        renderer.clearSelection()
+        event.preventDefault()
+        event.stopPropagation()
+        return
+      }
       event.preventDefault()
       event.stopPropagation()
       close()
@@ -352,7 +360,7 @@ export function DevToolsBar() {
           <PanelBox>
             <PanelTitle>Tools</PanelTitle>
             <Action onClick={() => void dump()} disabled={dumping()} hoverBackground>
-              {dumping() ? "Writing debug snapshot..." : "Write debug snapshot"}
+              {dumping() ? "Writing debug snapshot…" : "Write debug snapshot"}
             </Action>
             <Show when={dumpPath()}>
               {(file) => (

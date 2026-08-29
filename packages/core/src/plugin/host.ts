@@ -3,7 +3,7 @@ export * as PluginHost from "./host.js"
 import { Plugin } from "@opencode-ai/plugin/effect"
 import type { IntegrationMethodRegistration } from "@opencode-ai/plugin/effect/integration"
 import { EventManifest } from "@opencode-ai/schema/event-manifest"
-import { Mcp } from "@opencode-ai/schema/mcp"
+import { ServerConfig } from "@opencode-ai/schema/mcp"
 import { App } from "../app.js"
 import { Effect, Schema, Stream } from "effect"
 import { Agent } from "../agent.js"
@@ -16,7 +16,7 @@ import { Integration } from "../integration.js"
 import { KV } from "../kv.js"
 import { Location } from "../location.js"
 import { Model } from "../model.js"
-import { MCP } from "../mcp/index.js"
+import { Mcp } from "../mcp/index.js"
 import { PluginRuntime } from "./runtime.js"
 import { Provider } from "../provider.js"
 import { Reference } from "../reference.js"
@@ -24,7 +24,10 @@ import { AbsolutePath, type DeepMutable } from "../schema.js"
 import { Skill } from "../skill.js"
 import { Tool } from "../tool.js"
 import { Workspace } from "../workspace.js"
+import { Vcs } from "../vcs.js"
 import { WebSearch } from "../websearch.js"
+import { Generate } from "../generate.js"
+import { Permission } from "../permission.js"
 import { PluginHooks } from "./hooks.js"
 import type { Interface } from "../plugin.js"
 
@@ -38,12 +41,15 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
   const bus = yield* Bus.Service
   const integration = yield* Integration.Service
   const kv = yield* KV.Service
-  const mcp = yield* MCP.Service
+  const mcp = yield* Mcp.Service
   const location = yield* Location.Service
   const reference = yield* Reference.Service
   const skill = yield* Skill.Service
   const tools = yield* Tool.Service
+  const vcs = yield* Vcs.Service
   const websearch = yield* WebSearch.Service
+  const generate = yield* Generate.Service
+  const permission = yield* Permission.Service
   const hooks = yield* PluginHooks.Service
   const runtime = yield* PluginRuntime.Service
   const locationInfo = () =>
@@ -67,6 +73,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
 
   return {
     app,
+    location: locationInfo(),
     options: {},
     agent: {
       get: (input) => {
@@ -91,7 +98,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
       list: (input) => {
         const ref = locationRef(input)
         if (ref && !isCurrentLocation(ref)) return runtime.location.agent.list(ref)
-        return agents.list().pipe(Effect.map((data) => ({ location: locationInfo(), data })))
+        return response(agents.list())
       },
       reload: agents.reload,
       transform: (callback) =>
@@ -186,6 +193,14 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
     event: {
       subscribe: () => bus.subscribe().pipe(Stream.filter(EventManifest.isServer)),
     },
+    experimental: {
+      terminal: {
+        read: (input) => runtime.persistentPty.read(input.sessionID, input.lines),
+      },
+    },
+    generate: {
+      text: (input) => generate.text(input).pipe(Effect.map((text) => ({ text }))),
+    },
     integration: {
       list: () => response(integration.list()),
       get: (input) => response(integration.get(Integration.ID.make(input.integrationID))),
@@ -279,37 +294,41 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
         if (ref && !isCurrentLocation(ref)) return runtime.location.mcp.list(ref)
         return response(mcp.servers())
       },
-      add: (input) => {
-        const ref = locationRef(input)
-        if (ref && !isCurrentLocation(ref)) return runtime.location.mcp.add(ref, input.server, input.config)
-        return mcp.add(input.server, input.config)
-      },
-      remove: (input) => {
-        const ref = locationRef(input)
-        if (ref && !isCurrentLocation(ref)) return runtime.location.mcp.remove(ref, input.server)
-        return mcp.remove(input.server)
-      },
-      connect: (input) => {
-        const ref = locationRef(input)
-        if (ref && !isCurrentLocation(ref)) return runtime.location.mcp.connect(ref, input.server)
-        return mcp.connect(input.server)
-      },
-      disconnect: (input) => {
-        const ref = locationRef(input)
-        if (ref && !isCurrentLocation(ref)) return runtime.location.mcp.disconnect(ref, input.server)
-        return mcp.disconnect(input.server)
-      },
       reload: mcp.reload,
       transform: (callback) =>
         mcp.transform((draft) => {
           callback({
             list: () => draft.list().map(([name, config]) => [name, mutable(config)]),
             get: (name) => mutable(draft.get(name)),
-            set: (name, config) => draft.set(name, Schema.decodeUnknownSync(Mcp.ServerConfig)(config)),
+            set: (name, config) => draft.set(name, Schema.decodeUnknownSync(ServerConfig)(config)),
             update: draft.update,
             remove: draft.remove,
           })
         }),
+    },
+    permission: {
+      hook: (name, callback) => hooks.register("permission", name, callback),
+      list: (input) => permission.forSession(input.sessionID),
+      get: (input) =>
+        permission
+          .get(input.requestID)
+          .pipe(
+            Effect.flatMap((request) =>
+              request?.sessionID === input.sessionID
+                ? Effect.succeed(request)
+                : Effect.fail(new Error(`Permission request not found: ${input.requestID}`)),
+            ),
+          ),
+      reply: (input) =>
+        permission
+          .get(input.requestID)
+          .pipe(
+            Effect.flatMap((request) =>
+              request?.sessionID === input.sessionID
+                ? permission.reply({ requestID: input.requestID, reply: input.reply, message: input.message })
+                : Effect.fail(new Error(`Permission request not found: ${input.requestID}`)),
+            ),
+          ),
     },
     plugin: {
       list: () => response(plugin.list()),
@@ -344,15 +363,18 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
       hook: (name, callback) => hooks.register("shell", name, callback),
     },
     tool: {
-      transform: (callback) =>
-        tools
-          .transform((draft) =>
-            callback({
-              add: (tool) => draft.add(tool),
-            }),
-          )
-          .pipe(Effect.orDie, Effect.as({ dispose: Effect.void })),
+      transform: tools.transform,
+      reload: tools.reload,
       hook: (name, callback) => hooks.register("tool", name, callback),
+    },
+    vcs: {
+      get: () => response(vcs.info()),
+      base: () => response(vcs.base()),
+      branches: (input) => response(vcs.branches({ search: input?.search, limit: input?.limit })),
+      status: () => response(vcs.status()),
+      diff: (input) => response(vcs.diff(input.mode, { context: input.context, base: input.base })),
+      transform: vcs.transform,
+      reload: vcs.reload,
     },
     websearch: {
       providers: () => response(websearch.providers()),
@@ -401,12 +423,14 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
       generate: (input) => runtime.session.generate(input).pipe(Effect.map((text) => ({ text }))),
       command: runtime.session.command,
       rename: runtime.session.rename,
+      move: runtime.session.move,
       synthetic: runtime.session.synthetic,
       interrupt: (input) =>
         runtime.session
           .interrupt(input.sessionID, { continue: input.continue })
           .pipe(Effect.map((interrupted) => ({ interrupted }))),
       wait: (input) => runtime.session.wait(input.sessionID),
+      context: (input) => runtime.session.context(input.sessionID),
     },
   } satisfies Plugin.Context
 })

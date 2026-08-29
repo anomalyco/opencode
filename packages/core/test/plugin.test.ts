@@ -9,11 +9,14 @@ import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { PluginRuntime } from "@opencode-ai/core/plugin/runtime"
 import { Location } from "@opencode-ai/core/location"
+import { PersistentPty } from "@opencode-ai/core/persistent-pty"
 import { Project } from "@opencode-ai/core/project"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { Tool } from "@opencode-ai/core/tool"
+import { Vcs } from "@opencode-ai/core/vcs"
+import { Pty } from "@opencode-ai/schema/pty"
 import { testEffect } from "./lib/effect"
 import { PluginTestLayer } from "./plugin/fixture"
 
@@ -24,6 +27,82 @@ class Secret extends Context.Service<Secret, string>()("@opencode/test/PluginSec
 const versioned = <R>(plugin: EffectPlugin.Plugin<R>, version = "1") => ({ ...plugin, version })
 
 describe("Plugin", () => {
+  it.effect("routes experimental terminal reads through the runtime cell without wrapping results", () =>
+    Effect.gen(function* () {
+      const plugins = yield* Plugin.Service
+      const runtime = yield* PluginRuntime.Service
+      const cell = PluginRuntime.makeCell()
+      const host = yield* PluginHost.make(plugins).pipe(Effect.provide(PluginRuntime.layerWithCell(cell)))
+      const sessionID = Session.ID.make("ses_terminal")
+      const pending = host.experimental.terminal.read({ sessionID, lines: 3 })
+      const seen: unknown[] = []
+      const terminal = {
+        ptyID: Pty.ID.make("pty_terminal"),
+        title: "Build",
+        cwd: "/workspace",
+        foregroundProcess: null,
+        screen: { text: "one\ntwo\nthree", cols: 80, rows: 2, cursor: { x: 3, y: 1 } },
+      }
+      const error = new PersistentPty.UnavailableError({ message: "terminal daemon unavailable" })
+      cell.runtime = {
+        ...runtime,
+        persistentPty: {
+          read: (id, lines) => {
+            seen.push({ sessionID: id, lines })
+            if (id === Session.ID.make("ses_failure")) return Effect.fail(error)
+            return Effect.succeed(id === sessionID ? terminal : null)
+          },
+        },
+      }
+
+      expect(Object.keys(host.experimental)).toEqual(["terminal"])
+      expect(Object.keys(host.experimental.terminal)).toEqual(["read"])
+      expect(yield* pending).toBe(terminal)
+      expect(yield* host.experimental.terminal.read({ sessionID })).toBe(terminal)
+      expect(yield* host.experimental.terminal.read({ sessionID: Session.ID.make("ses_empty") })).toBeNull()
+      expect(
+        yield* host.experimental.terminal.read({ sessionID: Session.ID.make("ses_failure") }).pipe(Effect.flip),
+      ).toBe(error)
+      expect(seen).toEqual([
+        { sessionID, lines: 3 },
+        { sessionID, lines: undefined },
+        { sessionID: Session.ID.make("ses_empty"), lines: undefined },
+        { sessionID: Session.ID.make("ses_failure"), lines: undefined },
+      ])
+
+      cell.runtime = undefined
+      expect(Exit.isFailure(yield* pending.pipe(Effect.exit))).toBe(true)
+    }),
+  )
+
+  it.effect("exposes the current location to activated plugins", () =>
+    Effect.gen(function* () {
+      const plugins = yield* Plugin.Service
+      const location = yield* Location.Service
+      const seen: Location.Info[] = []
+      yield* plugins.activate([
+        versioned(
+          EffectPlugin.define({
+            id: "location-context",
+            effect: (ctx) =>
+              Effect.sync(() => {
+                seen.push(ctx.location)
+              }),
+          }),
+          "1",
+        ),
+      ])
+
+      expect(seen).toEqual([
+        new Location.Info({
+          directory: location.directory,
+          workspaceID: location.workspaceID,
+          project: location.project,
+        }),
+      ])
+    }),
+  )
+
   it.live("exposes public events through the plugin context", () =>
     Effect.gen(function* () {
       const plugins = yield* Plugin.Service
@@ -42,7 +121,7 @@ describe("Plugin", () => {
     }),
   )
 
-  it.effect("routes explicit MCP locations through the plugin runtime", () =>
+  it.effect("exposes MCP reads and transforms and routes explicit read locations", () =>
     Effect.gen(function* () {
       const plugins = yield* Plugin.Service
       const runtime = yield* PluginRuntime.Service
@@ -71,10 +150,6 @@ describe("Plugin", () => {
                       data: [],
                     }
                   }),
-                add: (ref) => Effect.sync(() => routed.push(`add:${ref.directory}`)),
-                remove: (ref) => Effect.sync(() => routed.push(`remove:${ref.directory}`)),
-                connect: (ref) => Effect.sync(() => routed.push(`connect:${ref.directory}`)),
-                disconnect: (ref) => Effect.sync(() => routed.push(`disconnect:${ref.directory}`)),
               },
             },
           }),
@@ -82,14 +157,70 @@ describe("Plugin", () => {
       )
       const location = { directory: target }
 
-      yield* host.mcp
-        .add({ location, server: "routed", config: { type: "local", command: ["unused"], disabled: true } })
-        .pipe(Effect.orDie)
-      yield* host.mcp.remove({ location, server: "routed" }).pipe(Effect.orDie)
-      yield* host.mcp.connect({ location, server: "routed" }).pipe(Effect.orDie)
-      yield* host.mcp.disconnect({ location, server: "routed" }).pipe(Effect.orDie)
+      expect(Object.keys(host.mcp).sort()).toEqual(["list", "reload", "transform"])
       expect((yield* host.mcp.list({ location }).pipe(Effect.orDie)).location.directory).toBe(target)
-      expect(routed).toEqual(["add:/target", "remove:/target", "connect:/target", "disconnect:/target", "list:/target"])
+      expect(routed).toEqual(["list:/target"])
+    }),
+  )
+
+  it.effect("forwards session interrupt options through the runtime cell", () =>
+    Effect.gen(function* () {
+      const plugins = yield* Plugin.Service
+      const fallback = yield* PluginRuntime.Service
+      const cell = PluginRuntime.makeCell()
+      const sessionID = Session.ID.create()
+      const calls: Array<{ sessionID: Session.ID; options: { continue?: boolean } | undefined }> = []
+      cell.runtime = {
+        ...fallback,
+        session: {
+          ...fallback.session,
+          interrupt: (id, options) =>
+            Effect.sync(() => {
+              calls.push({ sessionID: id, options })
+              return true
+            }),
+        },
+      }
+      const runtime = yield* PluginRuntime.Service.pipe(Effect.provide(PluginRuntime.layerWithCell(cell)))
+      const host = yield* PluginHost.make(plugins).pipe(Effect.provideService(PluginRuntime.Service, runtime))
+
+      expect(yield* runtime.session.interrupt(sessionID)).toBe(true)
+      expect(yield* host.session.interrupt({ sessionID, continue: true })).toEqual({ interrupted: true })
+      expect(calls).toEqual([
+        { sessionID, options: undefined },
+        { sessionID, options: { continue: true } },
+      ])
+    }),
+  )
+
+  it.effect("registers and removes scoped VCS providers", () =>
+    Effect.gen(function* () {
+      const plugins = yield* Plugin.Service
+      const vcs = yield* Vcs.Service
+      const provider = EffectPlugin.define({
+        id: "custom-vcs",
+        effect: (ctx) =>
+          ctx.vcs
+            .transform((draft) => {
+              draft.add({
+                id: "custom",
+                name: "Custom VCS",
+                info: () => Effect.succeed({ branch: { current: "feature" } }),
+                branches: () => Effect.succeed(["feature"]),
+                status: () => Effect.succeed([]),
+                diff: () => Effect.succeed([]),
+              })
+              draft.default.set("custom")
+            })
+            .pipe(Effect.asVoid),
+      })
+
+      yield* plugins.activate([versioned(provider)])
+      expect(yield* vcs.info()).toEqual({ branch: { current: "feature" } })
+      expect(yield* vcs.branches()).toEqual(["feature"])
+
+      yield* plugins.activate([])
+      expect(yield* vcs.info()).toEqual({ branch: {} })
     }),
   )
 
@@ -149,6 +280,39 @@ describe("Plugin", () => {
       expect(yield* agents.get(Agent.ID.make("configured"))).toBeUndefined()
       expect(updates).toBe(4)
       yield* unsubscribe
+    }),
+  )
+
+  it.effect("emits rebuilt state when disabling one plugin while another remains enabled", () =>
+    Effect.gen(function* () {
+      const plugins = yield* Plugin.Service
+      const agents = yield* Agent.Service
+      const bus = yield* Bus.Service
+      const definitions = ["first", "second"].map((id) =>
+        versioned(
+          EffectPlugin.define({
+            id,
+            effect: (ctx) => ctx.agent.transform((draft) => draft.update(id, () => {})),
+          }),
+        ),
+      )
+      yield* plugins.activate(definitions)
+
+      const observed: string[][] = []
+      const unsubscribe = yield* bus.listen((event) =>
+        event.type === Agent.Event.Updated.type
+          ? agents.list().pipe(
+              Effect.flatMap((items) => Effect.sync(() => observed.push(items.map((item) => item.id)))),
+              Effect.asVoid,
+            )
+          : Effect.void,
+      )
+      yield* Effect.addFinalizer(() => unsubscribe)
+
+      yield* plugins.activate(definitions.slice(1))
+      expect(yield* agents.get(Agent.ID.make("first"))).toBeUndefined()
+      expect(yield* agents.get(Agent.ID.make("second"))).toBeDefined()
+      expect(observed).toEqual([["second"]])
     }),
   )
 
@@ -214,6 +378,47 @@ describe("Plugin", () => {
         { id: Plugin.ID.make("good"), source: { type: "builtin" }, status: "active", tui: false },
         { id: Plugin.ID.make("bad"), source: { type: "builtin" }, status: "active", tui: false },
       ])
+    }),
+  )
+
+  it.effect("keeps plugins active when a tool registration is invalid", () =>
+    Effect.gen(function* () {
+      const plugins = yield* Plugin.Service
+      const tools = yield* Tool.Service
+      const agents = yield* Agent.Service
+      yield* plugins.activate([
+        {
+          id: "partial-tools",
+          version: "1",
+          effect: (ctx) =>
+            Effect.gen(function* () {
+              yield* ctx.tool.transform((draft) => {
+                const tool = {
+                  name: "healthy",
+                  description: "Healthy tool",
+                  input: Schema.Struct({}),
+                  execute: () => Effect.succeed({ content: "ok" }),
+                  options: { codemode: false },
+                }
+                draft.add({ ...tool, name: "invalid", options: { namespace: "invalid..namespace" } })
+                draft.add(tool)
+              })
+              yield* ctx.agent.transform((draft) =>
+                draft.update("configured", (agent) => {
+                  agent.description = "setup continued"
+                }),
+              )
+            }),
+        },
+      ])
+
+      expect(yield* plugins.list()).toEqual([
+        { id: Plugin.ID.make("partial-tools"), source: { type: "builtin" }, status: "active", tui: false },
+      ])
+      expect((yield* agents.get(Agent.ID.make("configured")))?.description).toBe("setup continued")
+      expect((yield* tools.snapshot()).definitions.map((tool) => tool.name)).toEqual(["healthy", "execute"])
+      yield* plugins.activate([])
+      expect((yield* tools.snapshot()).definitions.map((tool) => tool.name)).toEqual(["execute"])
     }),
   )
 
@@ -455,7 +660,7 @@ describe("Plugin", () => {
       const registry = yield* Tool.Service
       const executed: unknown[] = []
       const seen: {
-        before?: { input: unknown; inputSchema: unknown }
+        before?: { input: unknown; tool: string }
         after?: { input: unknown; status: string; content: unknown; metadata: unknown }
       } = {}
 
@@ -480,7 +685,9 @@ describe("Plugin", () => {
             yield* ctx.tool
               .hook("execute.before", (event) =>
                 Effect.sync(() => {
-                  seen.before = { input: event.input, inputSchema: event.inputSchema }
+                  expect(event).not.toHaveProperty("inputSchema")
+                  seen.before = { input: event.input, tool: event.tool }
+                  event.tool = "echo"
                   event.input = { text: "before-mutated" }
                 }),
               )
@@ -523,17 +730,12 @@ describe("Plugin", () => {
         sessionID: Session.ID.make("ses_hooks"),
         agent: Agent.ID.make("build"),
         messageID: SessionMessage.ID.make("msg_hooks"),
-        call: { type: "tool-call", id: "call-hooks", name: "echo", input: { text: "original" } },
+        call: { type: "tool-call", id: "call-hooks", name: "misspelled", input: { text: "original" } },
       })
 
       expect(seen.before).toEqual({
         input: { text: "original" },
-        inputSchema: {
-          type: "object",
-          properties: { text: { type: "string" } },
-          required: ["text"],
-          additionalProperties: false,
-        },
+        tool: "misspelled",
       })
       expect(executed).toEqual([{ text: "before-mutated" }])
       expect(seen.after).toEqual({
@@ -587,7 +789,7 @@ describe("Plugin", () => {
           sessionID: Session.ID.make("ses_hook_reject"),
           agent: Agent.ID.make("build"),
           messageID: SessionMessage.ID.make("msg_hook_reject"),
-          call: { type: "tool-call", id: "call-hook-reject", name: "echo", input: { text: "original" } },
+          call: { type: "tool-call", id: "call-hook-reject", name: "missing", input: { text: "original" } },
         })
         .pipe(Effect.flip)
 

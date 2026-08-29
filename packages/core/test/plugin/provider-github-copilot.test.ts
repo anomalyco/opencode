@@ -6,13 +6,14 @@ import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Model } from "@opencode-ai/core/model"
+import { ModelResolver } from "@opencode-ai/core/model-resolver"
 import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { copilotBaseURL, copilotFetch, GithubCopilotPlugin } from "@opencode-ai/core/plugin/provider/github-copilot"
 import { Provider } from "@opencode-ai/core/provider"
 import { Integration } from "@opencode-ai/core/integration"
-import type { LanguageModelV3 } from "@ai-sdk/provider"
+import { fakeSelectorSdk } from "../fixture/selector"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
@@ -20,7 +21,6 @@ const it = testEffect(PluginTestLayer)
 
 const addPlugin = Effect.fn(function* () {
   const plugin = yield* Plugin.Service
-  const aisdk = yield* AISDK.Service
   const host = yield* PluginHost.make(plugin)
   yield* GithubCopilotPlugin.effect(host)
 })
@@ -28,19 +28,6 @@ const addPlugin = Effect.fn(function* () {
 function required<T>(value: T | undefined): T {
   if (value === undefined) throw new Error("Expected value")
   return value
-}
-
-function fakeSelectorSdk(calls: string[]) {
-  const make = (method: string) => (id: string) => {
-    calls.push(`${method}:${id}`)
-    return { modelId: id, provider: method, specificationVersion: "v3" } as unknown as LanguageModelV3
-  }
-  return {
-    responses: make("responses"),
-    messages: make("messages"),
-    chat: make("chat"),
-    languageModel: make("languageModel"),
-  }
 }
 
 describe("GithubCopilotPlugin", () => {
@@ -56,7 +43,8 @@ describe("GithubCopilotPlugin", () => {
   it.effect("registers GitHub Copilot device OAuth", () =>
     Effect.gen(function* () {
       yield* addPlugin()
-      expect((yield* (yield* Integration.Service).get(Integration.ID.make("github-copilot")))?.methods).toContainEqual({
+      const integrations = yield* Integration.Service
+      expect((yield* integrations.get(Integration.ID.make("github-copilot")))?.methods).toContainEqual({
         id: Integration.MethodID.make("device"),
         type: "oauth",
         label: "Login with GitHub Copilot",
@@ -123,7 +111,8 @@ describe("GithubCopilotPlugin", () => {
   it.effect("adds Copilot authentication to native Anthropic requests", () =>
     Effect.gen(function* () {
       yield* addPlugin()
-      const event = yield* (yield* PluginHooks.Service).trigger("session", "http.request", {
+      const hooks = yield* PluginHooks.Service
+      const event = yield* hooks.trigger("session", "http.request", {
         sessionID: Session.ID.make("ses_test"),
         agent: Agent.ID.make("build"),
         model: Model.Ref.make({ providerID: Provider.ID.githubCopilot, id: Model.ID.make("claude-sonnet-4.5") }),
@@ -144,7 +133,8 @@ describe("GithubCopilotPlugin", () => {
   it.effect("classifies title generation as a background interaction", () =>
     Effect.gen(function* () {
       yield* addPlugin()
-      const event = yield* (yield* PluginHooks.Service).trigger("session", "http.request", {
+      const hooks = yield* PluginHooks.Service
+      const event = yield* hooks.trigger("session", "http.request", {
         sessionID: Session.ID.make("ses_title"),
         agent: Agent.ID.make("title"),
         model: Model.Ref.make({ providerID: Provider.ID.githubCopilot, id: Model.ID.make("gpt-5.4-nano") }),
@@ -157,7 +147,8 @@ describe("GithubCopilotPlugin", () => {
   it.effect("classifies compaction requests", () =>
     Effect.gen(function* () {
       yield* addPlugin()
-      const event = yield* (yield* PluginHooks.Service).trigger("session", "http.request", {
+      const hooks = yield* PluginHooks.Service
+      const event = yield* hooks.trigger("session", "http.request", {
         sessionID: Session.ID.make("ses_compaction"),
         agent: Agent.ID.make("compaction"),
         model: Model.Ref.make({ providerID: Provider.ID.githubCopilot, id: Model.ID.make("gpt-5.4") }),
@@ -169,7 +160,6 @@ describe("GithubCopilotPlugin", () => {
 
   it.effect("creates the bundled Copilot SDK for the GitHub Copilot package", () =>
     Effect.gen(function* () {
-      const plugin = yield* Plugin.Service
       const aisdk = yield* AISDK.Service
       yield* addPlugin()
       const ignored = yield* aisdk.runSDK({
@@ -198,22 +188,28 @@ describe("GithubCopilotPlugin", () => {
   it.effect("rewrites models.dev fallback models to the GitHub Copilot package", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
+      const aisdk = yield* AISDK.Service
       yield* catalog.transform((catalog) => {
         catalog.provider.update(Provider.ID.githubCopilot, () => {})
         catalog.model.update(Provider.ID.githubCopilot, Model.ID.make("gpt-5.6-sol"), (model) => {
-          model.package = "@ai-sdk/openai-compatible"
+          model.package = Provider.aisdk("@ai-sdk/openai-compatible")
         })
       })
       yield* addPlugin()
-      expect(required(yield* catalog.model.get(Provider.ID.githubCopilot, Model.ID.make("gpt-5.6-sol"))).package).toBe(
-        "@ai-sdk/github-copilot",
-      )
+      const fallback = required(yield* catalog.model.get(Provider.ID.githubCopilot, Model.ID.make("gpt-5.6-sol")))
+      expect(fallback.package).toBe(Provider.aisdk("@ai-sdk/github-copilot"))
+
+      const resolved = yield* ModelResolver.fromCatalogModel(fallback, undefined, {
+        loadPackage: () => Effect.die("Copilot must not load a native provider package"),
+        loadAISDK: (model) => aisdk.model(model),
+      })
+      expect(resolved.route.id).toBe("ai-sdk:@ai-sdk/github-copilot")
+      expect(resolved.route.providerMetadataKey).toBe("copilot")
     }),
   )
 
   it.effect("selects languageModel when responses and chat are absent", () =>
     Effect.gen(function* () {
-      const plugin = yield* Plugin.Service
       const aisdk = yield* AISDK.Service
       const calls: string[] = []
       yield* addPlugin()
@@ -232,7 +228,6 @@ describe("GithubCopilotPlugin", () => {
 
   it.effect("selects languageModel with the API model ID when responses and chat are absent", () =>
     Effect.gen(function* () {
-      const plugin = yield* Plugin.Service
       const aisdk = yield* AISDK.Service
       const calls: string[] = []
       yield* addPlugin()
@@ -251,7 +246,6 @@ describe("GithubCopilotPlugin", () => {
 
   it.effect("uses responses for gpt-5 models except gpt-5-mini", () =>
     Effect.gen(function* () {
-      const plugin = yield* Plugin.Service
       const aisdk = yield* AISDK.Service
       const calls: string[] = []
       yield* addPlugin()
@@ -312,7 +306,6 @@ describe("GithubCopilotPlugin", () => {
 
   it.effect("uses advertised Copilot endpoint metadata before model ID fallbacks", () =>
     Effect.gen(function* () {
-      const plugin = yield* Plugin.Service
       const aisdk = yield* AISDK.Service
       const calls: string[] = []
       yield* addPlugin()
@@ -342,7 +335,6 @@ describe("GithubCopilotPlugin", () => {
 
   it.effect("uses the API model ID when selecting responses or chat", () =>
     Effect.gen(function* () {
-      const plugin = yield* Plugin.Service
       const aisdk = yield* AISDK.Service
       const calls: string[] = []
       yield* addPlugin()
@@ -409,7 +401,6 @@ describe("GithubCopilotPlugin", () => {
 
   it.effect("ignores non-Copilot providers", () =>
     Effect.gen(function* () {
-      const plugin = yield* Plugin.Service
       const aisdk = yield* AISDK.Service
       const calls: string[] = []
       yield* addPlugin()

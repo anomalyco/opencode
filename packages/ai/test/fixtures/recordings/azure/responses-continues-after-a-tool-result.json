@@ -1,10 +1,7 @@
 {
   "version": 1,
   "metadata": {
-    "tags": [
-      "prefix:azure",
-      "provider:azure"
-    ],
+    "tags": ["prefix:azure", "provider:azure"],
     "name": "azure/responses-continues-after-a-tool-result",
     "recordedAt": "2026-08-23T17:21:56.397Z"
   },

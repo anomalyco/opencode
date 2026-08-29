@@ -17,6 +17,7 @@ export const route = Route.make({
   protocol: OpenResponses.protocol,
   endpoint: Endpoint.path(OpenResponses.PATH),
   transport: OpenResponses.httpTransport,
+  defaults: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
 })
 
 export * as OpenAICompatibleResponses from "./openai-compatible-responses.js"

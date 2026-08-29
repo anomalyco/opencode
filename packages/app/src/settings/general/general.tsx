@@ -4,10 +4,17 @@ import { Button } from "@opencode-ai/ui/button"
 import { Select } from "@opencode-ai/ui/select"
 import { Switch } from "@opencode-ai/ui/switch"
 import { TextInput } from "@opencode-ai/ui/text-input"
+import type { ReasoningMode } from "@opencode-ai/session-ui/timeline/projection"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useUpdaterAction } from "@/shell/updates/action"
-import { type TerminalPlacement, type WorkspaceDefaultDestination, useSettings } from "@/settings/model"
+import {
+  type FollowUpBehavior,
+  type TerminalPlacement,
+  type WorkspaceDefaultDestination,
+  useSettings,
+} from "@/settings/model"
+import { formatKeybind } from "@/shell/commands/command"
 import { ExternalLink } from "@/runtime/platform/external-link"
 import { SettingsList } from "@/settings/list"
 import { SettingsRow } from "@/settings/row"
@@ -143,6 +150,63 @@ const TerminalPlacementSetting: Component = () => {
         placement="bottom-end"
         gutter={6}
         onSelect={(option) => option && settings.general.setTerminalPlacement(option.value)}
+      />
+    </SettingsRow>
+  )
+}
+
+const FollowUpBehaviorSetting: Component = () => {
+  const language = useLanguage()
+  const settings = useSettings()
+  const options = createMemo((): { value: FollowUpBehavior; label: string }[] => [
+    { value: "queue", label: language.t("settings.general.row.followUpBehavior.queue") },
+    { value: "steer", label: language.t("settings.general.row.followUpBehavior.steer") },
+  ])
+
+  return (
+    <SettingsRow
+      title={language.t("settings.general.row.followUpBehavior.title")}
+      description={language.t("settings.general.row.followUpBehavior.description", {
+        keybind: formatKeybind("mod+enter", language.t),
+      })}
+    >
+      <Select
+        data-action="settings-follow-up-behavior"
+        options={options()}
+        current={options().find((option) => option.value === settings.general.followUpBehavior())}
+        value={(option) => option.value}
+        label={(option) => option.label}
+        placement="bottom-end"
+        gutter={6}
+        onSelect={(option) => option && settings.general.setFollowUpBehavior(option.value)}
+      />
+    </SettingsRow>
+  )
+}
+
+const ReasoningModeSetting: Component = () => {
+  const language = useLanguage()
+  const settings = useSettings()
+  const options = createMemo((): { value: ReasoningMode; label: string }[] => [
+    { value: "hidden", label: language.t("settings.general.row.reasoningMode.hidden") },
+    { value: "compact", label: language.t("settings.general.row.reasoningMode.compact") },
+    { value: "full", label: language.t("settings.general.row.reasoningMode.full") },
+  ])
+
+  return (
+    <SettingsRow
+      title={language.t("settings.general.row.reasoningMode.title")}
+      description={language.t("settings.general.row.reasoningMode.description")}
+    >
+      <Select
+        data-action="settings-reasoning-mode"
+        options={options()}
+        current={options().find((option) => option.value === settings.general.reasoningMode())}
+        value={(option) => option.value}
+        label={(option) => option.label}
+        placement="bottom-end"
+        gutter={6}
+        onSelect={(option) => option && settings.general.setReasoningMode(option.value)}
       />
     </SettingsRow>
   )
@@ -294,18 +358,9 @@ export const SettingsGeneral: Component<{
 
         <ShellSetting controller={shell} />
         <TerminalPlacementSetting />
+        <FollowUpBehaviorSetting />
 
-        <SettingsRow
-          title={language.t("settings.general.row.reasoningSummaries.title")}
-          description={language.t("settings.general.row.reasoningSummaries.description")}
-        >
-          <div data-action="settings-feed-reasoning-summaries">
-            <Switch
-              checked={settings.general.showReasoningSummaries()}
-              onChange={(checked) => settings.general.setShowReasoningSummaries(checked)}
-            />
-          </div>
-        </SettingsRow>
+        <ReasoningModeSetting />
 
         <SettingsRow
           title={language.t("settings.general.row.shellToolPartsExpanded.title")}

@@ -42,7 +42,61 @@ export function parseJSON(jsonString: string, allowPartial = Allow.ALL): unknown
   try {
     return decodeJson(input)
   } catch {}
-  return _parseJSON(input, allowPartial)
+
+  const repaired = repairJSON(input)
+  if (repaired !== input) {
+    try {
+      return decodeJson(repaired)
+    } catch {}
+  }
+
+  try {
+    return _parseJSON(input, allowPartial)
+  } catch (error) {
+    if (repaired !== input) return _parseJSON(repaired, allowPartial)
+    throw error
+  }
+}
+
+const repairJSON = (input: string) => {
+  let repaired = ""
+  let quoted = false
+
+  for (let index = 0; index < input.length; index++) {
+    const character = input[index]
+    if (!quoted) {
+      repaired += character
+      if (character === '"') quoted = true
+      continue
+    }
+
+    if (character === '"') {
+      repaired += character
+      quoted = false
+      continue
+    }
+
+    if (character === "\\") {
+      const next = input[index + 1]
+      if (next === "u" && /^[0-9a-fA-F]{4}$/.test(input.slice(index + 2, index + 6))) {
+        repaired += input.slice(index, index + 6)
+        index += 5
+        continue
+      }
+      if (next !== undefined && '"\\/bfnrtu'.includes(next)) {
+        repaired += `\\${next}`
+        index++
+        continue
+      }
+      repaired += "\\\\"
+      continue
+    }
+
+    const code = character.charCodeAt(0)
+    repaired += code <= 0x1f ? `\\u${code.toString(16).padStart(4, "0")}` : character
+  }
+
+  return repaired
 }
 
 const _parseJSON = (jsonString: string, allow: number) => {
@@ -148,7 +202,12 @@ const _parseJSON = (jsonString: string, allow: number) => {
         skipBlank()
         index++
         try {
-          object[key] = parseAny()
+          Object.defineProperty(object, key, {
+            value: parseAny(),
+            enumerable: true,
+            configurable: true,
+            writable: true,
+          })
         } catch (error) {
           if (Allow.OBJ & allow) return object
           throw error

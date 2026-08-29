@@ -127,6 +127,31 @@ describe("Snapshot", () => {
     ),
   )
 
+  testEffect(Layer.empty).live("treats fatal ignore checks as unavailable captures", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.gen(function* () {
+          const project = path.join(tmp.path, "project")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(project)
+            await Bun.write(path.join(project, "tracked.txt"), "one\n")
+            await initGit(project)
+          })
+          yield* Effect.gen(function* () {
+            const snapshot = yield* Snapshot.Service
+            expect(yield* snapshot.capture()).toBeDefined()
+            yield* Effect.promise(async () => {
+              await Bun.write(path.join(project, "tracked.txt"), "two\n")
+              await Bun.write(path.join(project, ".git", "config"), "[broken\n")
+            })
+            expect(yield* snapshot.capture()).toBeUndefined()
+          }).pipe(Effect.provide(snapshotLayer(tmp.path, project)))
+        }),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
   testEffect(Layer.empty).live("applies availability transforms", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),

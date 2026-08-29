@@ -24,7 +24,7 @@ import type { FileSystemEntry } from "@opencode-ai/client"
 import { Skill } from "@opencode-ai/schema/skill"
 import { stringWidth } from "../../util/string-width"
 import { parseFileLineRange, stripFileLineRange } from "../../prompt/parse"
-import { moveSelection, revealSelectionOffset } from "../../ui/select-controller"
+import { moveSelection, reconcileSelectionWindow, revealSelectionOffset } from "../../ui/select-controller"
 import {
   directoryAutocompleteExactValue,
   directoryAutocompleteMatches,
@@ -664,6 +664,18 @@ export function Autocomplete(props: {
     scroll.scrollBy(offset - scroll.scrollTop)
   }
 
+  function syncSelectionWindow() {
+    if (!scroll) return
+    const selected = reconcileSelectionWindow(store.selected, {
+      count: options().length,
+      limit: Math.min(height(), options().length),
+      offset: scroll.scrollTop,
+    })
+    if (selected === store.selected) return
+    setConfirming(undefined)
+    setStore("selected", selected)
+  }
+
   function select() {
     const selected = options()[store.selected]
     if (!selected) return
@@ -745,6 +757,14 @@ export function Autocomplete(props: {
         group: "Autocomplete",
         run() {
           hide()
+        },
+      },
+      {
+        id: "prompt.clear",
+        title: "Dismiss autocomplete",
+        group: "Autocomplete",
+        run() {
+          hide(true)
         },
       },
       {
@@ -866,7 +886,8 @@ export function Autocomplete(props: {
     return Math.min(10, count, Math.max(1, props.anchor().y))
   })
 
-  let scroll: ScrollBoxRenderable
+  let scroll: ScrollBoxRenderable | undefined
+  onCleanup(() => scroll?.verticalScrollBar.off("change", syncSelectionWindow))
   const scrollAcceleration = createMemo(() => getScrollAcceleration(config))
   const emptyMessage = createMemo(() => {
     const fileSearch = visibleFiles()
@@ -894,7 +915,11 @@ export function Autocomplete(props: {
       borderColor={theme.border.default}
     >
       <scrollbox
-        ref={(r: ScrollBoxRenderable) => (scroll = r)}
+        ref={(r: ScrollBoxRenderable) => {
+          scroll?.verticalScrollBar.off("change", syncSelectionWindow)
+          scroll = r
+          scroll.verticalScrollBar.on("change", syncSelectionWindow)
+        }}
         backgroundColor={theme.background.default}
         height={height()}
         scrollbarOptions={{ visible: false }}
