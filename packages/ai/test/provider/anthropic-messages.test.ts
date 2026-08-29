@@ -949,6 +949,41 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
+  it.effect("preserves terminal state across usage-only message deltas", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "message_start", message: { usage: { input_tokens: 5 } } },
+              {
+                type: "message_delta",
+                delta: { stop_reason: "end_turn", stop_sequence: "X" },
+                usage: { output_tokens: 8 },
+              },
+              { type: "message_delta", delta: {}, usage: { output_tokens: 10 } },
+              { type: "message_stop" },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.usage).toMatchObject({ inputTokens: 5, outputTokens: 10, totalTokens: 15 })
+      expect(response.finishReason).toEqual({ normalized: "stop", raw: "end_turn" })
+      expect(response.events.find((event) => event.type === "step-finish")).toMatchObject({
+        reason: { normalized: "stop", raw: "end_turn" },
+        usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+        providerMetadata: { anthropic: { stopSequence: "X" } },
+      })
+      expect(response.events.at(-1)).toMatchObject({
+        type: "finish",
+        reason: { normalized: "stop", raw: "end_turn" },
+        usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+        providerMetadata: { anthropic: { stopSequence: "X" } },
+      })
+    }),
+  )
+
   it.effect("requires message_stop before completing a streamed message", () =>
     Effect.gen(function* () {
       const error = yield* LLMClient.generate(request).pipe(
