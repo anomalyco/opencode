@@ -699,7 +699,45 @@ export const RunCommand = effectCmd({
           const sessions = new Set([sessionID])
           let error: string | undefined
 
-          for await (const event of events.stream) {
+          // session.status idle can arrive ahead of the remaining parts of an
+          // open step when event delivery lags (e.g. in containers/CI). Track
+          // open steps and keep draining until they settle rather than exiting
+          // mid-step and losing the trailing events.
+          let openSteps = 0
+          let idlePending = false
+
+          // While draining, each wait for the next event races a deadline that
+          // resets on every delivered part, so a stream that goes quiet after
+          // idle can't block exit. OPENCODE_RUN_DRAIN_TIMEOUT overrides (ms).
+          const drainTimeoutMs = () => {
+            const raw = Number(process.env.OPENCODE_RUN_DRAIN_TIMEOUT)
+            return Number.isFinite(raw) && raw > 0 ? raw : 3_000
+          }
+          const drain = { idle: false, timer: undefined as ReturnType<typeof setTimeout> | undefined }
+          async function* raced<T>(stream: AsyncIterable<T>): AsyncGenerator<T> {
+            const iterator = stream[Symbol.asyncIterator]()
+            try {
+              while (true) {
+                const pending = iterator.next()
+                const settled = drain.idle
+                  ? await Promise.race([
+                      pending,
+                      new Promise<undefined>((resolve) => {
+                        drain.timer = setTimeout(() => resolve(undefined), drainTimeoutMs())
+                      }),
+                    ])
+                  : await pending
+                clearTimeout(drain.timer)
+                if (settled === undefined || settled.done) return
+                yield settled.value
+              }
+            } finally {
+              clearTimeout(drain.timer)
+              void Promise.resolve(iterator.return?.()).catch(() => {})
+            }
+          }
+
+          for await (const event of raced(events.stream)) {
             if (event.type === "session.created" && event.properties.info.parentID) {
               if (sessions.has(event.properties.info.parentID)) sessions.add(event.properties.info.id)
             }
@@ -743,11 +781,18 @@ export const RunCommand = effectCmd({
               }
 
               if (part.type === "step-start") {
+                openSteps++
                 if (emit("step_start", { part })) continue
               }
 
               if (part.type === "step-finish") {
-                if (emit("step_finish", { part })) continue
+                openSteps = Math.max(0, openSteps - 1)
+                const drained = idlePending && openSteps <= 0
+                if (emit("step_finish", { part })) {
+                  if (drained) break
+                  continue
+                }
+                if (drained) break
               }
 
               if (part.type === "text" && part.time?.end) {
@@ -786,8 +831,16 @@ export const RunCommand = effectCmd({
                 err = String(props.error.data.message)
               }
               error = error ? error + EOL + err : err
-              if (emit("error", { error: props.error })) continue
+              // Unlike the happy path we stop as soon as an error lands instead
+              // of waiting out the drain window: the error is what the caller
+              // needs, and reporting it promptly matters more than a trailing
+              // step-finish.
+              if (emit("error", { error: props.error })) {
+                if (idlePending) break
+                continue
+              }
               UI.error(err)
+              if (idlePending) break
             }
 
             if (
@@ -795,6 +848,11 @@ export const RunCommand = effectCmd({
               event.properties.sessionID === sessionID &&
               event.properties.status.type === "idle"
             ) {
+              if (openSteps > 0) {
+                idlePending = true
+                drain.idle = true
+                continue
+              }
               break
             }
 
