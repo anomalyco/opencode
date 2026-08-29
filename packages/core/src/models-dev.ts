@@ -636,8 +636,8 @@ export const layer = (options?: Options) =>
       // population. The payload has outgrown some KV backends' per-value
       // limits (Durable Object SQLite caps values at 2 MB and api.json
       // passed it in Aug 2026); a boot without a cache hit just refetches.
-      const writeCache = Effect.fn("ModelsDev.writeCache")(function* (text: string) {
-        yield* kv.set(key, { updatedAt: Date.now(), digest: bodyDigest(text), body: text }).pipe(
+      const writeCache = Effect.fn("ModelsDev.writeCache")(function* (text: string, digest = bodyDigest(text)) {
+        yield* kv.set(key, { updatedAt: Date.now(), digest, body: text }).pipe(
           Effect.catchCauseIf(
             (cause) => !Cause.hasInterruptsOnly(cause),
             (cause) => Effect.logWarning("Failed to cache models.dev catalog", { cause }),
@@ -681,12 +681,13 @@ export const layer = (options?: Options) =>
               const stored = yield* loadFromCache()
               if (!force && stored && Date.now() - stored.updatedAt < Duration.toMillis(ttl)) return
               const text = yield* fetchApi()
+              const digest = bodyDigest(text)
               // models.dev rarely changes between polls; skip the cache write,
               // invalidation, and Refreshed event for a byte-identical body so
               // downstream catalog.updated listeners stay quiet.
-              if (!force && stored?.digest === bodyDigest(text)) return
+              if (!force && stored?.digest === digest) return
               yield* decodeCatalog(text)
-              yield* writeCache(text)
+              yield* writeCache(text, digest)
               yield* invalidate
               yield* bus.publish(ModelsDev.Event.Refreshed, {})
             }),
