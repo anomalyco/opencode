@@ -94,3 +94,126 @@ test.each(duplicateToolCases.flatMap((tools) => [{ tools }, { tools: tools.toRev
     ).toThrow("multiple tool definitions share this name")
   },
 )
+
+const duplicateHostedToolCases = [
+  { id: "openai.web_search", responseType: "web_search", args: {} },
+  { id: "openai.web_search_preview", responseType: "web_search", args: {} },
+  { id: "openai.file_search", responseType: "file_search", args: { vectorStoreIds: ["store_1"] } },
+  { id: "openai.code_interpreter", responseType: "code_interpreter", args: {} },
+  { id: "openai.image_generation", responseType: "image_generation", args: {} },
+] as const
+
+function duplicateHostedTools(testCase: (typeof duplicateHostedToolCases)[number], sameName = false) {
+  return [
+    { type: "provider" as const, id: testCase.id, name: `${testCase.responseType}_one`, args: testCase.args },
+    {
+      type: "provider" as const,
+      id: testCase.id,
+      name: sameName ? `${testCase.responseType}_one` : `${testCase.responseType}_two`,
+      args: testCase.args,
+    },
+  ]
+}
+
+test.each(
+  duplicateHostedToolCases.flatMap((testCase) =>
+    [undefined, { type: "auto" as const }, { type: "required" as const }].flatMap((toolChoice) => {
+      const tools = duplicateHostedTools(testCase)
+      return [
+        { testCase, tools, toolChoice, selection: toolChoice?.type ?? "default" },
+        { testCase, tools: tools.toReversed(), toolChoice, selection: toolChoice?.type ?? "default" },
+      ]
+    }),
+  ),
+)(
+  "rejects differently named duplicate $testCase.id responses for $selection selection",
+  ({ testCase, tools, toolChoice }) => {
+    expect(() => prepareResponsesTools({ tools, toolChoice, strictJsonSchema: false })).toThrow(
+      `ambiguous ${testCase.responseType} response for hosted tools`,
+    )
+  },
+)
+
+test.each(
+  duplicateHostedToolCases.flatMap((testCase) => {
+    const tools = duplicateHostedTools(testCase, true)
+    return [
+      { testCase, tools },
+      { testCase, tools: tools.toReversed() },
+    ]
+  }),
+)("allows duplicate $testCase.id responses with the same logical name", ({ tools }) => {
+  expect(
+    prepareResponsesTools({ tools, toolChoice: { type: "required" }, strictJsonSchema: false }).hostedTools.map(
+      (tool) => tool.name,
+    ),
+  ).toEqual([tools[0].name, tools[0].name])
+})
+
+test.each(
+  duplicateHostedToolCases.flatMap((testCase) => {
+    const tools = duplicateHostedTools(testCase)
+    return [
+      { testCase, tools },
+      { testCase, tools: tools.toReversed() },
+    ]
+  }),
+)("rejects a forced $testCase.id wire choice with multiple logical identities", ({ testCase, tools }) => {
+  expect(() =>
+    prepareResponsesTools({
+      tools,
+      toolChoice: { type: "tool", toolName: `${testCase.responseType}_one` },
+      strictJsonSchema: false,
+    }),
+  ).toThrow(`ambiguous ${tools[0].id.replace("openai.", "")} tool choice for hosted tools`)
+})
+
+test.each(
+  duplicateHostedToolCases.flatMap((testCase) => {
+    const tools = duplicateHostedTools(testCase, true)
+    return [{ tools }, { tools: tools.toReversed() }]
+  }),
+)("rejects a forced logical name shared by duplicate same-wire definitions", ({ tools }) => {
+  expect(() =>
+    prepareResponsesTools({
+      tools,
+      toolChoice: { type: "tool", toolName: tools[0].name },
+      strictJsonSchema: false,
+    }),
+  ).toThrow("multiple tool definitions share this name")
+})
+
+test.each([...duplicateHostedToolCases])("skips ambiguous $id responses when tool choice is none", (testCase) => {
+  expect(
+    prepareResponsesTools({
+      tools: duplicateHostedTools(testCase),
+      toolChoice: { type: "none" },
+      strictJsonSchema: false,
+    }).toolChoice,
+  ).toBe("none")
+})
+
+test.each([...duplicateHostedToolCases])("skips ambiguous $id responses for a uniquely forced function", (testCase) => {
+  expect(
+    prepareResponsesTools({
+      tools: [...duplicateHostedTools(testCase), { type: "function", name: "local", inputSchema: { type: "object" } }],
+      toolChoice: { type: "tool", toolName: "local" },
+      strictJsonSchema: false,
+    }).toolChoice,
+  ).toEqual({ type: "function", name: "local" })
+})
+
+test.each([{ ambiguousWebTools: duplicateHostedTools(duplicateHostedToolCases[0]) }, { ambiguousWebTools: webTools }])(
+  "validates only the selected wire choice for a forced unrelated hosted tool",
+  ({ ambiguousWebTools }) => {
+    const selected = duplicateHostedTools(duplicateHostedToolCases[2], true)[0]
+    const result = prepareResponsesTools({
+      tools: [...ambiguousWebTools, selected],
+      toolChoice: { type: "tool", toolName: selected.name },
+      strictJsonSchema: false,
+    })
+
+    expect(result.toolChoice).toEqual({ type: "file_search" })
+    expect(result.selectedHostedTool).toMatchObject({ name: selected.name, type: "file_search" })
+  },
+)

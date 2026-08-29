@@ -81,19 +81,31 @@ export function prepareResponsesTools({
   const selectedHostedTool =
     selectedTools[0]?.type === "provider" ? getResponsesHostedTool(selectedTools[0]) : undefined
 
-  const ambiguousHostedTool = hostedTools.find((tool) => {
+  const ambiguousHostedResponse =
+    toolChoice?.type === "none" || toolChoice?.type === "tool"
+      ? undefined
+      : hostedTools.find(
+          (tool) =>
+            new Set(
+              hostedTools.filter((candidate) => candidate.responseType === tool.responseType).map((item) => item.name),
+            ).size > 1,
+        )
+  if (ambiguousHostedResponse) {
     const names = new Set(
-      hostedTools.filter((candidate) => candidate.responseType === tool.responseType).map((item) => item.name),
-    )
-    return names.size > 1 && selectedHostedTool?.responseType !== tool.responseType
-  })
-  if (ambiguousHostedTool) {
-    const names = new Set(
-      hostedTools.filter((tool) => tool.responseType === ambiguousHostedTool.responseType).map((tool) => tool.name),
+      hostedTools.filter((tool) => tool.responseType === ambiguousHostedResponse.responseType).map((tool) => tool.name),
     )
     throw new UnsupportedFunctionalityError({
-      functionality: `ambiguous ${ambiguousHostedTool.responseType} response for hosted tools: ${[...names].join(", ")}`,
+      functionality: `ambiguous ${ambiguousHostedResponse.responseType} response for hosted tools: ${[...names].join(", ")}`,
     })
+  }
+
+  if (selectedHostedTool) {
+    const names = new Set(hostedTools.filter((tool) => tool.type === selectedHostedTool.type).map((tool) => tool.name))
+    if (names.size > 1) {
+      throw new UnsupportedFunctionalityError({
+        functionality: `ambiguous ${selectedHostedTool.type} tool choice for hosted tools: ${[...names].join(", ")}`,
+      })
+    }
   }
 
   const openaiTools: Array<OpenAIResponsesTool> = []

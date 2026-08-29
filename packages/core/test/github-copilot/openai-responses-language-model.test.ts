@@ -490,6 +490,20 @@ describe("doStream", () => {
     expect(fetchFn).not.toHaveBeenCalled()
   })
 
+  test("rejects an ambiguous forced wire choice before fetching or exposing a stream", async () => {
+    const fetchFn = createStreamFetch(HOSTED_TOOL_CASES[0].stream)
+    const model = createModel(fetchFn)
+
+    await expect(
+      model.doStream({
+        prompt: TEST_PROMPT,
+        tools: [hostedTool(HOSTED_TOOL_CASES[0]), { ...hostedTool(HOSTED_TOOL_CASES[0]), name: "backup_web" }],
+        toolChoice: { type: "tool", toolName: HOSTED_TOOL_CASES[0].name },
+      }),
+    ).rejects.toThrow("ambiguous web_search tool choice for hosted tools")
+    expect(fetchFn).not.toHaveBeenCalled()
+  })
+
   test("streams a shared logical name for both web variants", async () => {
     const model = createModel(createStreamFetch(HOSTED_TOOL_CASES[0].stream))
     const tools = [hostedTool(HOSTED_TOOL_CASES[0]), hostedTool(HOSTED_TOOL_CASES[1])].map((tool) => ({
