@@ -3,7 +3,7 @@ export * from "./session/schema.js"
 
 import { Cause, Effect, Layer, Schema, Context, RcMap, Stream, Scope } from "effect"
 import { ListAnchor } from "@opencode-ai/schema/session"
-import { and, asc, desc, eq, gt, isNull, like, lt, or, type SQL } from "drizzle-orm"
+import { and, asc, desc, eq, gt, isNull, lt, sql, type SQL } from "drizzle-orm"
 import { Project } from "./project.js"
 import { Workspace } from "@opencode-ai/schema/workspace"
 import { Model } from "@opencode-ai/schema/model"
@@ -419,24 +419,20 @@ const layer = Layer.effect(
         if (input.workspaceID) conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
         if ("project" in input) conditions.push(eq(SessionTable.project_id, input.project))
         if ("project" in input && input.subpath !== undefined) conditions.push(eq(SessionTable.path, input.subpath))
-        if (input.search) conditions.push(like(SessionTable.title, `%${input.search}%`))
+        if (input.search)
+          conditions.push(
+            sql`${SessionTable.title} LIKE ${`%${input.search.replace(/[\\%_]/g, "\\$&")}%`} ESCAPE ${"\\"}`,
+          )
         if (input.parentID !== undefined)
           conditions.push(
             input.parentID === null ? isNull(SessionTable.parent_id) : eq(SessionTable.parent_id, input.parentID),
           )
-        if (input.anchor) {
+        if (input.anchor)
           conditions.push(
             order === "asc"
-              ? or(
-                  gt(sortColumn, input.anchor.time),
-                  and(eq(sortColumn, input.anchor.time), gt(SessionTable.id, input.anchor.id)),
-                )!
-              : or(
-                  lt(sortColumn, input.anchor.time),
-                  and(eq(sortColumn, input.anchor.time), lt(SessionTable.id, input.anchor.id)),
-                )!,
+              ? sql`(${sortColumn}, ${SessionTable.id}) > (${input.anchor.time}, ${input.anchor.id})`
+              : sql`(${sortColumn}, ${SessionTable.id}) < (${input.anchor.time}, ${input.anchor.id})`,
           )
-        }
         const query = db
           .select()
           .from(SessionTable)

@@ -464,6 +464,69 @@ describe("Session.create", () => {
     }),
   )
 
+  it.effect("paginates sessions with matching update times in both directions", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const { db } = yield* Database.Service
+      const older = yield* session.create({ id: Session.ID.make("ses_a"), location, title: "older" })
+      const tied = yield* session.create({ id: Session.ID.make("ses_b"), location, title: "tied" })
+      const newest = yield* session.create({ id: Session.ID.make("ses_c"), location, title: "newest" })
+
+      yield* Effect.forEach(
+        [
+          { id: older.id, time: 10 },
+          { id: tied.id, time: 10 },
+          { id: newest.id, time: 20 },
+        ],
+        (item) => db.update(SessionTable).set({ time_updated: item.time }).where(eq(SessionTable.id, item.id)).run(),
+      )
+
+      expect((yield* session.list({ limit: 1, order: "desc" })).data.map((item) => item.id)).toEqual([newest.id])
+      expect(
+        (yield* session.list({
+          limit: 1,
+          order: "desc",
+          anchor: { id: newest.id, time: 20, direction: "next" },
+        })).data.map((item) => item.id),
+      ).toEqual([tied.id])
+      expect(
+        (yield* session.list({
+          limit: 1,
+          order: "desc",
+          anchor: { id: tied.id, time: 10, direction: "next" },
+        })).data.map((item) => item.id),
+      ).toEqual([older.id])
+      expect(
+        (yield* session.list({
+          limit: 1,
+          order: "desc",
+          anchor: { id: older.id, time: 10, direction: "previous" },
+        })).data.map((item) => item.id),
+      ).toEqual([tied.id])
+      expect(
+        (yield* session.list({
+          limit: 2,
+          order: "asc",
+          anchor: { id: older.id, time: 10, direction: "next" },
+        })).data.map((item) => item.id),
+      ).toEqual([tied.id, newest.id])
+    }),
+  )
+
+  it.effect("treats SQL wildcard characters in session searches literally", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      yield* Effect.forEach(
+        ["100% complete", "100 percent", "under_score", "underscore", "back\\slash", "backslash"],
+        (title) => session.create({ location, title }),
+      )
+
+      expect((yield* session.list({ search: "%" })).data.map((item) => item.title)).toEqual(["100% complete"])
+      expect((yield* session.list({ search: "_" })).data.map((item) => item.title)).toEqual(["under_score"])
+      expect((yield* session.list({ search: "\\" })).data.map((item) => item.title)).toEqual(["back\\slash"])
+    }),
+  )
+
   it.effect("filters direct child sessions by parent ID", () =>
     Effect.gen(function* () {
       const session = yield* Session.Service

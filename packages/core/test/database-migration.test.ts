@@ -19,6 +19,7 @@ import workspaceMigration from "@opencode-ai/core/database/migration/20260808023
 import executionClaimsMigration from "@opencode-ai/core/database/migration/20260811161259_execution_claim_attempts"
 import sessionInboxMigration from "@opencode-ai/core/database/migration/20260812181746_session_inbox"
 import sessionViewedStateMigration from "@opencode-ai/core/database/migration/20260819222447_session_viewed_state"
+import sessionTimeUpdatedIndexMigration from "@opencode-ai/core/database/migration/20260825110242_session_time_updated_index"
 import { Global } from "@opencode-ai/util/global"
 
 const run = <A, E>(
@@ -159,6 +160,35 @@ describe("DatabaseMigration", () => {
           idle_outcome: null,
         })
         expect(yield* db.get(sql`SELECT count(*) AS count FROM migration`)).toEqual({ count: 1 })
+      }),
+    )
+  })
+
+  test("replaces the parent index with ordered session listing indexes", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(sql`CREATE TABLE session_v2 (id text PRIMARY KEY, parent_id text, time_updated integer NOT NULL)`)
+        yield* db.run(sql`CREATE INDEX session_v2_parent_idx ON session_v2 (parent_id)`)
+
+        yield* DatabaseMigration.applyOnly(db, [sessionTimeUpdatedIndexMigration])
+
+        expect(
+          yield* db.all(sql`
+            SELECT name FROM sqlite_master
+            WHERE type = 'index' AND name LIKE 'session_v2_%'
+            ORDER BY name
+          `),
+        ).toEqual([{ name: "session_v2_parent_time_updated_id_idx" }, { name: "session_v2_time_updated_id_idx" }])
+        const plan = yield* db.all<{ detail: string }>(sql`
+          EXPLAIN QUERY PLAN
+          SELECT id FROM session_v2
+          WHERE parent_id IS NULL AND (time_updated, id) < (${10}, ${"ses_anchor"})
+          ORDER BY time_updated DESC, id DESC
+          LIMIT 50
+        `)
+        expect(plan.some((item) => item.detail.includes("session_v2_parent_time_updated_id_idx"))).toBe(true)
+        expect(plan.some((item) => item.detail.includes("TEMP B-TREE"))).toBe(false)
       }),
     )
   })
