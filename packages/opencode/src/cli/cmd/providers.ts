@@ -376,6 +376,7 @@ export const ProvidersLoginCommand = effectCmd({
       anthropic: 4,
       openrouter: 5,
       vercel: 6,
+      "fireworks-ai": 7,
     }
     const pluginProviders = resolvePluginProviders({
       hooks,
