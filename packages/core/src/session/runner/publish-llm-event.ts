@@ -3,7 +3,7 @@ import type { Agent } from "@opencode-ai/schema/agent"
 import type { Model } from "@opencode-ai/schema/model"
 import type { RelativePath } from "@opencode-ai/schema/schema"
 import type { Snapshot } from "@opencode-ai/schema/snapshot"
-import { Cause, Deferred, Effect, Fiber, Iterable, Scope, Semaphore } from "effect"
+import { Cause, Deferred, Effect, Fiber, Iterable, Option, Scope, Semaphore } from "effect"
 import { isArrayNonEmpty, isReadonlyArrayNonEmpty } from "effect/Array"
 import { Bus } from "../../bus.js"
 import { SessionEvent } from "../event.js"
@@ -76,8 +76,8 @@ const hostedContent = (result: ToolResultValue): NonEmptyContent => {
  */
 export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, input: Input, scope: Scope.Scope) => {
   const deltaBatchInterval = 100
-  const publicationFailure = Deferred.makeUnsafe<Cause.Cause<never>>()
-  const awaitPublicationFailure = Deferred.await(publicationFailure).pipe(Effect.flatMap(Effect.failCause))
+  const publicationFailure = Deferred.makeUnsafe<never>()
+  const awaitPublicationFailure = Deferred.await(publicationFailure)
   type ToolState = {
     readonly name: string
     called: boolean
@@ -156,7 +156,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
       },
       // Report before releasing the fragment lock, so end cannot overtake a failed timer.
       Effect.tapCause((cause) =>
-        Cause.hasInterruptsOnly(cause) ? Effect.void : Deferred.succeed(publicationFailure, cause),
+        Cause.hasInterruptsOnly(cause) ? Effect.void : Deferred.failCause(publicationFailure, cause),
       ),
       Effect.uninterruptible,
     )
@@ -592,8 +592,8 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
 
   return {
     awaitPublicationFailure,
-    checkPublicationFailure: Effect.suspend(() =>
-      Deferred.isDoneUnsafe(publicationFailure) ? awaitPublicationFailure : Effect.void,
+    checkPublicationFailure: Deferred.poll(publicationFailure).pipe(
+      Effect.flatMap(Option.getOrElse(() => Effect.void)),
     ),
     publish: (event: LLMEvent) => {
       if (event.type === "text-delta" || event.type === "reasoning-delta" || event.type === "tool-input-delta")
