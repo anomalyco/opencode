@@ -1981,3 +1981,20 @@ export const JuliaLS: Info = {
     }
   },
 }
+
+export const Marksman: Info = {
+  id: "marksman",
+  extensions: [".md", ".markdown"],
+  root: NearestRoot([".git", ".marksman.toml"]),
+  async spawn(root) {
+    const bin = which("marksman")
+    if (!bin) {
+      return
+    }
+    return {
+      process: spawn(bin, ["server"], {
+        cwd: root,
+      }),
+    }
+  },
+}
