@@ -303,20 +303,24 @@ test("opening the source chooser from initial Uncommitted does not resolve a bra
 })
 
 test.each(["branch", "committed", "working"] as const)(
-  "choosing a base remembers it in memory and refreshes without changing %s scope",
+  "choosing a base remembers it and refreshes only the affected %s comparison",
   async (source) => {
     const viewer = await renderDiffViewer(hunkDiff, { source, height: 30, kittyKeyboard: true })
     try {
+      viewer.commands.get("diff.mark_reviewed")!.run()
+      await viewer.app.flush()
+      expect(viewer.app.captureCharFrame()).toContain("1/1")
       await chooseSource(viewer, 3)
       await viewer.app.waitForFrame((frame) => frame.includes("Base branch") && frame.includes("origin/release"))
       expect(viewer.app.captureCharFrame()).toMatch(/●\s+v2/)
       expect(viewer.branchesRequests[0].searchParams.get("location[directory]")).toBe("/repo/session")
       expect(viewer.branchesRequests[0].searchParams.get("limit")).toBe("100")
       await viewer.app.mockInput.typeText("origin/release")
+      await Bun.sleep(160)
       await viewer.app.waitFor(() => viewer.branchesRequests.at(-1)?.searchParams.get("search") === "origin/release")
       await viewer.app.waitForFrame((frame) => frame.includes("origin/release") && !frame.includes("Loading branches"))
       viewer.app.mockInput.pressEnter()
-      await viewer.app.waitForFrame((frame) => !frame.includes("Base branch") && frame.includes("const first"))
+      await viewer.app.waitForFrame((frame) => !frame.includes("Base branch") && frame.includes("src/file.txt"))
       expect(viewer.mutationRequests).toHaveLength(0)
       expect(viewer.vcsDiffInput()).toEqual({
         location: session.location,
@@ -324,9 +328,10 @@ test.each(["branch", "committed", "working"] as const)(
         context: "12",
         ...(source === "working" ? {} : { base: "origin/release" }),
       })
-      expect(viewer.diffRequests).toHaveLength(2)
+      expect(viewer.diffRequests).toHaveLength(source === "working" ? 1 : 2)
+      expect(viewer.app.captureCharFrame()).toContain(source === "working" ? "1/1" : "0/1")
       expect(viewer.writes).toHaveLength(0)
-      viewer.commands.get("diff.mark_reviewed")!.run()
+      if (source !== "working") viewer.commands.get("diff.mark_reviewed")!.run()
       await viewer.app.flush()
       expect(viewer.app.captureCharFrame()).toContain("1/1")
       viewer.commands.get("diff.close")!.run()
@@ -334,7 +339,7 @@ test.each(["branch", "committed", "working"] as const)(
       viewer.commands.get("diff.open")!.run()
       await viewer.app.waitForFrame((frame) => frame.includes("const first"))
       expect(viewer.app.captureCharFrame()).toContain("0/1")
-      expect(viewer.diffRequests).toHaveLength(3)
+      expect(viewer.diffRequests).toHaveLength(source === "working" ? 2 : 3)
       if (source !== "working") expect(viewer.vcsDiffInput()).toMatchObject({ base: "origin/release" })
       await chooseSource(viewer, 3)
       await viewer.app.waitForFrame((frame) => /●\s+origin\/release/.test(frame))

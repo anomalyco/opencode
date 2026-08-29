@@ -293,12 +293,9 @@ function makeGit(proc: AppProcess.Interface) {
     const origin = creation?.message.slice("branch: Created from ".length)
     if (creation && origin) {
       const candidate = yield* namedRef(cwd, origin)
-      const self =
-        candidate &&
-        (candidate.ref === `refs/heads/${current}` || candidate.ref.replace(/^refs\/remotes\/[^/]+\//, "") === current)
       if (
         candidate &&
-        !self &&
+        candidate.name !== current &&
         (yield* ancestor(cwd, creation.commit, "HEAD")) &&
         (yield* ancestor(cwd, creation.commit, candidate.ref))
       ) {

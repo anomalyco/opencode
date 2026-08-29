@@ -355,7 +355,7 @@ export function fromPromise(plugin: Plugin) {
                 host.vcs.transform((draft) => {
                   callback({
                     add: (definition) => {
-                      const base = definition.base
+                      const base = definition.base?.bind(definition)
                       draft.add({
                         id: definition.id,
                         name: definition.name,

@@ -158,23 +158,11 @@ Configure diff presentation:
 | `single` | boolean                             | Shows only the selected file patch.                           |
 | `view`   | `auto`, `split`, or `unified`       | Sets the layout. `auto` chooses based on the available width. |
 
-`/diff` opens **All** by default, combining branch and local changes. Press `d` to open **Diff source** and select a scope for the open viewer:
+`branch` shows **All** (branch and local changes), `committed` shows **Committed** (branch commits only), and `working` shows **Uncommitted** (staged, unstaged, and untracked changes).
 
-| Source      | Label       | Compared contents                                                                                                 |
-| ----------- | ----------- | ----------------------------------------------------------------------------------------------------------------- |
-| `branch`    | All         | The merge base with the comparison branch to the working tree, including staged, unstaged, and untracked changes. |
-| `committed` | Committed   | The merge base with the comparison branch to `HEAD`, excluding all uncommitted changes.                           |
-| `working`   | Uncommitted | `HEAD` to the working tree, including staged, unstaged, and untracked changes.                                    |
+In `/diff`, press `d` to change the scope or choose a comparison branch from **Base**. OpenCode infers the base from local Git history when possible; otherwise it asks you to choose before loading a branch diff.
 
-The compact header shows the scope, comparison base, and reviewed/total count, such as **All · vs v2 0/4**. The fourth row in **Diff source** is **Base**, showing the known branch or **Choose...**. Select it to open **Base branch**, search local and remote-tracking branches, and choose a comparison base. Changing the base does not change the selected scope. **Uncommitted** shows **vs HEAD**; opening its source menu does not trigger a base lookup, but opening the base picker can infer a base.
-
-Without an explicit choice, Git infers the base locally from a validated named branch in the branch-creation reflog, such as `Created from origin/v2`. Inference checks at most 256 entries; it does not guess from `HEAD` or a commit hash, or scan every branch's graph. The repository default is used only when you are on that branch. Ambiguous or detached branches require a choice from **Base branch** before a branch diff is requested, rather than falling back to an unrelated default. There is no network lookup or custom worktree-origin record. A missing common ancestor is a comparison error, not a reason to try another branch.
-
-The TUI plugin remembers your selected base per location and branch, and your last scope, in memory only. Reopening `/diff` remembers both choices and loads fresh diff content; exiting the TUI clears them. These choices do not write Git config, review-selection files, or `cli.json`. The configured `diffs.source` remains the starting default for a new TUI instance. Review marks, scroll position, and patch contents are not persisted. A clean working tree never automatically changes the selected scope.
-
-When a VCS provider cannot report base metadata, the viewer displays **Base not reported**. **All** still uses the provider's branch comparison if supported; missing metadata does not change the scope to local changes. **Committed** is unavailable without a base. An unresolved Git comparison offers **Choose a base branch** rather than an empty diff; **Uncommitted** remains available for local changes. Before the first Git commit, **All** shows uncommitted files. If a selected base cannot be compared, the viewer shows an error and lets you choose another base.
-
-Committed image previews are unavailable; **Committed** never substitutes the current working-tree image.
+Your base choice for each branch and last selected scope survive closing and reopening the viewer, but reset when the TUI exits. These selections do not change `cli.json`.
 
 ## Tabs
 

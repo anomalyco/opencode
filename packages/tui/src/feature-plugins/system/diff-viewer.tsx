@@ -19,6 +19,7 @@ import { DialogSelect } from "../../ui/dialog-select"
 import { EmptyBorder } from "../../ui/border"
 import { FilePath } from "../../ui/file-path"
 import { getScrollAcceleration } from "../../util/scroll"
+import { createDebouncedSignal } from "../../util/signal"
 import { useConfig } from "../../config"
 import { locationKey } from "../../context/data"
 import { useThemes } from "../../context/theme"
@@ -113,13 +114,18 @@ function DiffViewer(props: { context: Plugin.Context }) {
     const cached = bases.get(key)
     if (cached) return cached
     const pending = props.context.client.vcs.base({ location }).then((result) => {
-      if (bases.get(key) === pending) setReportedBases((known) => new Map(known).set(key, result.data))
+      setReportedBases((known) => new Map(known).set(key, result.data))
       return result
     })
     bases.set(key, pending)
     return pending
   }
-  const diffInput = createMemo(() => ({ mode: mode(), location: location(), key: baseKey(), selected: selectedBase() }))
+  const diffInput = createMemo(() => ({
+    mode: mode(),
+    location: location(),
+    key: baseKey(),
+    selected: mode() === "working" ? undefined : selectedBase(),
+  }))
   const [diff] = createResource(diffInput, async (input) => {
     const base =
       input.mode === "working"
@@ -128,7 +134,7 @@ function DiffViewer(props: { context: Plugin.Context }) {
           ? { name: input.selected, ref: input.selected }
           : (await loadBase(input.location, input.key)).data
     if (input !== diffInput() || (input.mode === "committed" && !base)) {
-      return { input, base: null, files: [] }
+      return { base: null, files: [] }
     }
     const result = await props.context.client.vcs.diff({
       location: input.location,
@@ -136,13 +142,13 @@ function DiffViewer(props: { context: Plugin.Context }) {
       ...(base ? { base: base.ref } : {}),
       context: VCS_DIFF_CONTEXT_LINES,
     })
-    return { input, base, files: normalizeDiffs(result.data ?? []) }
+    return { base, files: normalizeDiffs(result.data ?? []) }
   })
   const sourceBase = () => {
     const ref = selectedBase()
     return ref ? { name: ref, ref } : reportedBases().get(baseKey())
   }
-  const result = () => (diff.error || diff.loading || diff()?.input !== diffInput() ? undefined : diff())
+  const result = () => (diff.error || diff.loading ? undefined : diff())
   const sourceDetail = () => {
     if (mode() === "working") return "vs HEAD"
     if (diff.error) return "Base or diff unavailable"
@@ -208,7 +214,7 @@ function DiffBaseDialog(props: {
   onSelect: (ref: string) => void
 }) {
   const theme = props.context.theme.contextual.elevated
-  const [search, setSearch] = createSignal("")
+  const [search, setSearch] = createDebouncedSignal("", 150)
   const [branches] = createResource(search, (search) =>
     props.context.client.vcs.branches({ location: props.location, search, limit: 100 }),
   )
