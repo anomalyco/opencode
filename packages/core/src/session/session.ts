@@ -66,7 +66,7 @@ export const make = Effect.fn("Session.make")(function* (servicesFor: (ref: Loca
   const store = yield* SessionStore.Service
   const execution = yield* SessionExecution.Service
   const fs = yield* FSUtil.Service
-  const admission = yield* SessionInbox.make()
+  const admission = yield* SessionInbox.Service
   const manualShellSessions = new Set<SessionSchema.ID>()
   const shellLocks = KeyedMutex.makeUnsafe<SessionSchema.ID>()
 

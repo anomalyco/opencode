@@ -1,7 +1,8 @@
 export * as SessionInbox from "./inbox.js"
 
 import { and, asc, eq, or } from "drizzle-orm"
-import { DateTime, Effect, Schema } from "effect"
+import { Context, DateTime, Effect, Layer, Schema } from "effect"
+import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import {
   Compaction,
   CompactionPayload,
@@ -141,6 +142,10 @@ const promotedFromMessage = Effect.fn("SessionInbox.promotedFromMessage")(functi
   return yield* new LifecycleConflict({ id })
 })
 
+export type Interface = Effect.Success<ReturnType<typeof make>>
+
+export class Service extends Context.Service<Service, Interface>()("@opencode/SessionInbox") {}
+
 export const make = Effect.fn("SessionInbox.make")(function* () {
   const database = yield* Database.Service
   const db = database.db
@@ -256,6 +261,10 @@ export const make = Effect.fn("SessionInbox.make")(function* () {
 
   return { reconcile, admit, admitCompaction, cancel, steer, queue }
 })
+
+export const layer = Layer.effect(Service, make())
+
+export const node = makeGlobalNode({ service: Service, layer, deps: [Database.node, Bus.node] })
 
 export const projectAdmitted = Effect.fn("SessionInbox.projectAdmitted")(function* (
   db: DatabaseService,

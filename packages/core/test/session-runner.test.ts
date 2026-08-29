@@ -460,6 +460,7 @@ const layer = Layer.unwrap(
         Form.node,
         SessionProjector.node,
         SessionStore.node,
+        SessionInbox.node,
         Agent.node,
         Catalog.node,
         Tool.node,
@@ -515,7 +516,7 @@ const insertSession = (id: Session.ID) =>
 const setup = Effect.gen(function* () {
   const { db } = yield* Database.Service
   const bus = yield* Bus.Service
-  const sessionInbox = yield* SessionInbox.make()
+  const sessionInbox = yield* SessionInbox.Service
   const agents = yield* Agent.Service
   const catalog = yield* Catalog.Service
   const hooks = yield* PluginHooks.Service

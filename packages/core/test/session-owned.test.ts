@@ -34,10 +34,20 @@ import { tempGlobalLayer } from "./fixture/global"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(
-  LayerNode.compile(LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionStore.node, FSUtil.node]), [
-    [Bus.node, Bus.configured({ persist: true })],
-    [Global.node, tempGlobalLayer],
-  ]),
+  LayerNode.compile(
+    LayerNode.group([
+      Database.node,
+      Bus.node,
+      SessionProjector.node,
+      SessionStore.node,
+      SessionInbox.node,
+      FSUtil.node,
+    ]),
+    [
+      [Bus.node, Bus.configured({ persist: true })],
+      [Global.node, tempGlobalLayer],
+    ],
+  ),
 )
 const sessionID = SessionSchema.ID.make("ses_owned")
 const otherID = SessionSchema.ID.make("ses_owned_other")
@@ -573,10 +583,35 @@ describe("SessionRevert construction", () => {
 })
 
 describe("SessionInbox command contracts", () => {
+  it.live("captures the provided Inbox service when constructing Session", () =>
+    Effect.gen(function* () {
+      const admission = yield* SessionInbox.Service
+      const cancelled: SessionMessage.ID[] = []
+      const fixture = yield* setup().pipe(
+        Effect.provideService(
+          SessionInbox.Service,
+          SessionInbox.Service.of({
+            ...admission,
+            cancel: (input) =>
+              admission.cancel(input).pipe(Effect.tap(() => Effect.sync(() => cancelled.push(input.id)))),
+          }),
+        ),
+      )
+      const handle = fixture.sessions.forSession(sessionID)
+      const pending = yield* handle.synthetic({ text: "Pending", resume: false })
+
+      yield* handle.cancelInbox(pending.id).pipe(Effect.setContext(Context.empty()))
+
+      expect(cancelled).toEqual([pending.id])
+      expect(yield* handle.inbox()).toEqual([])
+      expect(fixture.wakes).toEqual([])
+    }),
+  )
+
   it.live("captures the host dependencies for detached commands", () =>
     Effect.gen(function* () {
       const fixture = yield* setup()
-      const { admit, reconcile, admitCompaction, cancel, steer, queue } = yield* SessionInbox.make()
+      const { admit, reconcile, admitCompaction, cancel, steer, queue } = yield* SessionInbox.Service
       const other = yield* SessionInbox.make()
       expect(yield* SessionInbox.list(fixture.db, sessionID)).toEqual([])
 
@@ -609,7 +644,7 @@ describe("SessionInbox command contracts", () => {
   it.live("returns checked user and synthetic admissions and typed pending or delivered conflicts", () =>
     Effect.gen(function* () {
       const fixture = yield* setup()
-      const admission = yield* SessionInbox.make()
+      const admission = yield* SessionInbox.Service
       const user = yield* admission
         .admit({
           id: SessionMessage.ID.create(),
@@ -696,7 +731,7 @@ describe("SessionInbox command contracts", () => {
   it.live("checks the winner of concurrent admissions before returning it", () =>
     Effect.gen(function* () {
       const fixture = yield* setup()
-      const admission = yield* SessionInbox.make()
+      const admission = yield* SessionInbox.Service
       const other = yield* SessionInbox.make()
       const id = SessionMessage.ID.create()
       const requests = [
@@ -733,7 +768,7 @@ describe("SessionInbox command contracts", () => {
   it.live("exposes failed pending transitions as typed conflicts and rolls back their events", () =>
     Effect.gen(function* () {
       const fixture = yield* setup()
-      const admission = yield* SessionInbox.make()
+      const admission = yield* SessionInbox.Service
       const pending = yield* admission.admit({
         id: SessionMessage.ID.create(),
         sessionID,
@@ -777,7 +812,7 @@ describe("SessionInbox command contracts", () => {
   it.live("does not turn unrelated projector defects into conflicts", () =>
     Effect.gen(function* () {
       const fixture = yield* setup()
-      const admission = yield* SessionInbox.make()
+      const admission = yield* SessionInbox.Service
       const pending = yield* admission.admit({
         id: SessionMessage.ID.create(),
         sessionID,

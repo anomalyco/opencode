@@ -32,7 +32,7 @@ import { testEffect } from "./lib/effect"
 import { Snapshot } from "@opencode-ai/core/snapshot"
 
 const it = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SessionProjector.node]), [
+  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionInbox.node]), [
     [Bus.node, Bus.configured({ persist: true })],
   ]),
 )
@@ -87,7 +87,7 @@ describe("SessionProjector", () => {
     Effect.gen(function* () {
       const db = yield* seedSession()
       const bus = yield* Bus.Service
-      const inbox = yield* SessionInbox.make()
+      const inbox = yield* SessionInbox.Service
       const inputID = SessionMessage.ID.make("msg_manual_compaction")
       yield* inbox.admitCompaction({ id: inputID, sessionID, delivery: "queue" })
 
@@ -291,7 +291,7 @@ describe("SessionProjector", () => {
     Effect.gen(function* () {
       const db = yield* seedSession()
       const bus = yield* Bus.Service
-      const inbox = yield* SessionInbox.make()
+      const inbox = yield* SessionInbox.Service
       const id = SessionMessage.ID.make("msg_admitted")
       const admitted = yield* inbox.admit({
         id,

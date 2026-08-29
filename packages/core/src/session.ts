@@ -307,7 +307,7 @@ const layer = Layer.effect(
     const environments = yield* SessionEnvironment.Service
     const scope = yield* Scope.Scope
     const sessions = yield* Session.make((ref) => locations.get(ref))
-    const admission = yield* SessionInbox.make()
+    const admission = yield* SessionInbox.Service
     const closeTransport = Effect.fn("Session.closeTransport")(function* (session: SessionSchema.Info) {
       const location = Location.Ref.make({
         directory: session.location.directory,
@@ -753,6 +753,7 @@ export const node = makeGlobalNode({
     Project.node,
     SessionExecution.node,
     SessionStore.node,
+    SessionInbox.node,
     LocationServiceMap.node,
     SessionProjector.node,
     FSUtil.node,
