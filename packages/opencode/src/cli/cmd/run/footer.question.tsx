@@ -247,24 +247,29 @@ export function RunQuestionBody(props: {
     }
   })
 
+  let prevEditing = false
   createEffect(() => {
-    if (!state().editing || !area || area.isDestroyed) {
+    const editing = state().editing
+    if (!editing || !area || area.isDestroyed) {
+      prevEditing = editing
       return
     }
 
-    if (area.plainText !== input()) {
-      area.setText(input())
-      area.cursorOffset = input().length
-    }
-
-    queueMicrotask(() => {
-      if (!area || area.isDestroyed || !state().editing) {
-        return
+    if (!prevEditing) {
+      prevEditing = true
+      if (area.plainText !== input()) {
+        area.setText(input())
       }
 
-      area.focus()
-      area.cursorOffset = area.plainText.length
-    })
+      queueMicrotask(() => {
+        if (!area || area.isDestroyed || !state().editing) {
+          return
+        }
+
+        area.focus()
+        area.cursorOffset = area.plainText.length
+      })
+    }
   })
 
   return (
