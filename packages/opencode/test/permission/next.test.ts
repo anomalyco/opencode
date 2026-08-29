@@ -1,6 +1,7 @@
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { test, expect } from "bun:test"
 import os from "os"
+import path from "node:path"
 import { Cause, Deferred, Effect, Exit, Fiber, Layer } from "effect"
 import { EventV2Bridge } from "../../src/event-v2-bridge"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
@@ -1169,6 +1170,54 @@ it.instance(
       const exit = yield* Fiber.await(fiber)
       expect(Exit.isFailure(exit)).toBe(true)
       if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBeInstanceOf(PermissionV1.RejectedError)
+    }),
+  { git: true },
+)
+
+it.instance(
+  "ask - an absolute deny rule denies an out-of-worktree relative pattern (fail-closed)",
+  () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const outside = path.resolve(test.directory, "../secret/file.txt")
+
+      const err = yield* fail(
+        ask({
+          sessionID: SessionID.make("session_outside"),
+          permission: "edit",
+          patterns: ["../secret/file.txt"],
+          metadata: {},
+          always: [],
+          ruleset: [
+            { permission: "edit", pattern: "*", action: "allow" },
+            { permission: "edit", pattern: outside, action: "deny" },
+          ],
+        }),
+      )
+      expect(err).toBeInstanceOf(PermissionV1.DeniedError)
+    }),
+  { git: true },
+)
+
+it.instance(
+  "ask - an absolute allow rule permits an out-of-worktree relative pattern",
+  () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const outside = path.resolve(test.directory, "../daily-notes/2026-08.md")
+
+      const result = yield* ask({
+        sessionID: SessionID.make("session_outside_allow"),
+        permission: "edit",
+        patterns: ["../daily-notes/2026-08.md"],
+        metadata: {},
+        always: [],
+        ruleset: [
+          { permission: "edit", pattern: "*", action: "deny" },
+          { permission: "edit", pattern: outside, action: "allow" },
+        ],
+      })
+      expect(result).toBeUndefined()
     }),
   { git: true },
 )
