@@ -4,7 +4,7 @@ import { NodeHttpServer, NodeServices } from "@effect/platform-node"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
-import { Cause, Config, Effect, Exit, Layer } from "effect"
+import { Cause, Config, Effect, Exit, Fiber, Layer } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse, HttpRouter, HttpServer } from "effect/unstable/http"
 import { layerWebSocketConstructorGlobal } from "effect/unstable/socket/Socket"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -33,7 +33,13 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import * as DateTime from "effect/DateTime"
 import { eq } from "drizzle-orm"
 import { resetDatabase } from "../fixture/db"
-import { disposeAllInstances, provideInstanceEffect, TestInstance, tmpdirScoped } from "../fixture/fixture"
+import {
+  disposeAllInstances,
+  provideInstanceEffect,
+  reloadInstance,
+  TestInstance,
+  tmpdirScoped,
+} from "../fixture/fixture"
 import { TestLLMServer } from "../lib/llm-server"
 import { testProviderConfig } from "../lib/test-provider"
 import { pollWithTimeout, testEffect } from "../lib/effect"
@@ -424,6 +430,102 @@ describe("session HttpApi", () => {
         cwd: sessionDirectory,
         root: sessionDirectory,
       })
+    }).pipe(Effect.provide(TestLLMServer.layer), Effect.provide(AppNodeBuilder.build(CrossSpawnSpawner.node))),
+  )
+
+  it.live("resumes an existing session after the process restarts without creating a user message", () =>
+    Effect.gen(function* () {
+      const llm = yield* TestLLMServer
+      const directory = yield* tmpdirScoped({
+        git: true,
+        config: { ...testProviderConfig(llm.url), permission: { "*": "allow" } },
+      })
+      const headers = { "x-opencode-directory": directory, "content-type": "application/json" }
+      const prompt = "Resume this session after restart"
+      const created = yield* requestJson<{ data: { id: string } }>("/api/session", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          model: { providerID: "test", id: "test-model" },
+          location: { directory },
+        }),
+      })
+      const sessionID = created.data.id
+
+      expect(
+        (
+          yield* request(`/api/session/${sessionID}/prompt`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ prompt: { text: prompt }, resume: false }),
+          })
+        ).status,
+      ).toBe(200)
+
+      yield* llm.fail("Provider unavailable")
+      expect((yield* request(`/api/session/${sessionID}/resume`, { method: "POST", headers })).status).toBe(503)
+
+      yield* reloadInstance({ directory })
+      yield* llm.tool("question", {
+        questions: [
+          {
+            header: "Continue",
+            question: "Continue the imported session?",
+            options: [{ label: "Continue", description: "Resume from the recorded history" }],
+          },
+        ],
+      })
+      yield* llm.text("Resumed after restart")
+
+      const resumed = yield* request(`/api/session/${sessionID}/resume`, { method: "POST", headers }).pipe(
+        Effect.forkChild,
+      )
+      const pending = yield* pollWithTimeout(
+        requestJson<{ data: { id: string }[] }>(`/api/session/${sessionID}/question`, { headers }).pipe(
+          Effect.map((response) => response.data[0]),
+        ),
+        "resumed session did not ask its question",
+        "10 seconds",
+      )
+      expect(
+        (
+          yield* request(`/api/session/${sessionID}/question/${pending.id}/reply`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ answers: [["Continue"]] }),
+          })
+        ).status,
+      ).toBe(204)
+      expect((yield* Fiber.join(resumed)).status).toBe(204)
+
+      const context = yield* requestJson<{ data: SessionMessage.Message[] }>(
+        `/api/session/${sessionID}/context`,
+        { headers },
+      )
+      expect(context.data.filter((message) => message.type === "user").map((message) => message.text)).toEqual([
+        prompt,
+      ])
+      expect(context.data.at(-1)).toMatchObject({
+        type: "assistant",
+        finish: "stop",
+        content: [{ type: "text", text: "Resumed after restart" }],
+      })
+
+      const requestUserTexts = (input: Record<string, unknown>) => {
+        if (!Array.isArray(input.messages)) return []
+        return input.messages.flatMap((message) => {
+          if (!message || typeof message !== "object" || !("role" in message) || message.role !== "user") return []
+          if (!("content" in message)) return []
+          if (typeof message.content === "string") return [message.content]
+          if (!Array.isArray(message.content)) return []
+          return message.content.flatMap((part) =>
+            part && typeof part === "object" && "text" in part && typeof part.text === "string" ? [part.text] : [],
+          )
+        })
+      }
+      const sessionRequests = (yield* llm.inputs).map(requestUserTexts).filter((texts) => texts.includes(prompt))
+      expect(sessionRequests).toHaveLength(3)
+      expect(sessionRequests).toEqual([[prompt], [prompt], [prompt]])
     }).pipe(Effect.provide(TestLLMServer.layer), Effect.provide(AppNodeBuilder.build(CrossSpawnSpawner.node))),
   )
 
