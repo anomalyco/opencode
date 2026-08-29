@@ -27,12 +27,12 @@ const locationLayer = Layer.succeed(
   Location.Service.of(location({ directory: AbsolutePath.make(import.meta.dir) })),
 )
 const layer = AppNodeBuilder.build(LayerNode.group([Catalog.node, Integration.node, Bus.node]), [
-  [Location.node, locationLayer],
+  Location.node.replace(locationLayer),
 ])
 const it = testEffect(layer)
 const real = testEffect(PluginTestLayer)
 const models = (file: string) =>
-  AppNodeBuilder.build(ModelsDev.node, [[ModelsDev.node, ModelsDev.configured({ file, fetch: false })]])
+  AppNodeBuilder.build(ModelsDev.node, [ModelsDev.node.replace(ModelsDev.configured({ file, fetch: false }))])
 
 describe("ModelsDevPlugin", () => {
   real.effect("keeps the retained model seed unchanged across catalog replay", () =>

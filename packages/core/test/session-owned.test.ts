@@ -51,10 +51,9 @@ const it = testEffect(
       SessionInbox.node,
       FSUtil.node,
     ]),
-    [
-      [Bus.node, Bus.configured({ persist: true })],
-      [Global.node, tempGlobalLayer],
-    ],
+    {
+      replacements: [Bus.node.replace(Bus.configured({ persist: true })), Global.node.replace(tempGlobalLayer)],
+    },
   ),
 )
 const sessionID = SessionSchema.ID.make("ses_owned")

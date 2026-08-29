@@ -42,7 +42,7 @@ const http = Layer.succeed(
 export const webSearchIntegrationTest = testEffect(
   Layer.merge(
     AppNodeBuilder.build(LayerNode.group([Integration.node, Credential.node, Bus.node, Form.node, WebSearch.node]), [
-      [Config.node, Config.testLayer()],
+      Config.node.replace(Config.testLayer()),
     ]),
     http,
   ),

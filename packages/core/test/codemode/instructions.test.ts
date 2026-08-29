@@ -85,7 +85,7 @@ describe("CodeModeInstructions", () => {
       execute: () => Effect.succeed({ output: "zeta" }),
     }
     const layer = AppNodeBuilder.build(Tool.node, [
-      [Location.node, Location.boundNode({ directory: AbsolutePath.make("/project") })],
+      Location.node.replace(Location.boundNode({ directory: AbsolutePath.make("/project") })),
     ])
 
     return Effect.gen(function* () {

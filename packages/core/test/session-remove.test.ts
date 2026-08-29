@@ -39,9 +39,9 @@ const it = testEffect(
       LocationServiceMap.node,
     ]),
     [
-      [Project.node, globalProjectNode],
-      [SessionExecution.node, SessionExecution.noopLayer],
-      [SessionModelTransport.node, transport],
+      Project.node.replace(globalProjectNode),
+      SessionExecution.node.replace(SessionExecution.noopLayer),
+      SessionModelTransport.node.replace(transport),
     ],
   ),
 )

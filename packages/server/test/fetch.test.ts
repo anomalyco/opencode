@@ -255,7 +255,7 @@ it.live("creates idempotent caller-identified workspaces through the HttpApi", (
   Effect.gen(function* () {
     const handler = yield* ServerFetch.make(options, {
       overrides: [
-        [WorkspaceDriver.node, WorkspaceDriver.registryNode({ fake: workspaceDriver, other: workspaceDriver })],
+        WorkspaceDriver.node.replace(WorkspaceDriver.registryNode({ fake: workspaceDriver, other: workspaceDriver })),
       ],
     })
     const id = Workspace.ID.create()

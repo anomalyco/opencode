@@ -100,8 +100,7 @@ const withTool = <A, E, R>(
   }).pipe(
     Effect.provide(
       AppNodeBuilder.build(LayerNode.group([Tool.node, LocationMutation.node, FileMutation.node, patchToolNode]), [
-        [
-          Environment.node,
+        Environment.node.replace(
           transformEnvironmentFiles((files) => ({
             read: (target, range) =>
               Effect.sync(() => {
@@ -120,10 +119,10 @@ const withTool = <A, E, R>(
               return files.write(target, content)
             },
           })),
-        ],
-        [Location.node, activeLocation],
-        [Formatter.node, formatter],
-        [Permission.node, permission],
+        ),
+        Location.node.replace(activeLocation),
+        Formatter.node.replace(formatter),
+        Permission.node.replace(permission),
       ]),
     ),
   )

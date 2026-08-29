@@ -15,7 +15,7 @@ import { testEffect } from "./lib/effect"
 const ref = Location.Ref.make({ directory: AbsolutePath.make("/rpc-project") })
 const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([Rpc.node, Bus.node, Location.node]), [
-    [Location.node, Layer.succeed(Location.Service, location(ref))],
+    Location.node.replace(Layer.succeed(Location.Service, location(ref))),
   ]),
 )
 const Echo = Rpc.define({
@@ -200,8 +200,7 @@ describe("Rpc", () => {
         events: {},
       })
       yield* rpc.register(Failing, {
-        standard: (_input, context) =>
-          Effect.fail(context.error("missing", "Missing", { attempts: "2" })),
+        standard: (_input, context) => Effect.fail(context.error("missing", "Missing", { attempts: "2" })),
         effect: (_input, context) => Effect.fail(context.error("invalid", "Invalid", { count: 3 })),
       })
 
@@ -269,7 +268,6 @@ describe("Rpc", () => {
       expect(Exit.isFailure(yield* rpc.call(Raw.id, "count", "42").pipe(Effect.exit))).toBe(true)
       expect(Exit.isFailure(yield* rpc.call(Raw.id, "count", 0).pipe(Effect.exit))).toBe(true)
       expect(Exit.isFailure(yield* registration.events.emit("counted", { count: 0 }).pipe(Effect.exit))).toBe(true)
-
     }),
   )
 
@@ -330,10 +328,12 @@ describe("Rpc", () => {
       const bus = yield* Bus.Service
       const otherRef = Location.Ref.make({ directory: ref.directory, workspaceID: Workspace.ID.make("wrk_other") })
       const otherContext = yield* Layer.build(
-        LayerNode.compile(Rpc.node, [
-          [Bus.node, Layer.succeed(Bus.Service, bus)],
-          [Location.node, Layer.succeed(Location.Service, location(otherRef))],
-        ]).pipe(Layer.fresh),
+        LayerNode.compile(Rpc.node, {
+          replacements: [
+            Bus.node.replace(Layer.succeed(Bus.Service, bus)),
+            Location.node.replace(Layer.succeed(Location.Service, location(otherRef))),
+          ],
+        }).pipe(Layer.fresh),
       )
       const other = Context.get(otherContext, Rpc.Service)
       const first = yield* rpc.register(Echo, { echo: () => Effect.succeed("first") })

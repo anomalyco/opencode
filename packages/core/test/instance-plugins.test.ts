@@ -34,7 +34,7 @@ const instances = Layer.effect(
     (ref: Location.Ref) =>
       Instance.layer(ref, {
         plugins: path.basename(ref.directory) === "thread-a" ? [agentPlugin("thread-a-plugin", "thread-a-agent")] : [],
-        replacements: [[Global.node, tempGlobalLayer]],
+        replacements: [Global.node.replace(tempGlobalLayer)],
       }),
     { idleTimeToLive: Duration.infinity },
   ),
@@ -42,8 +42,8 @@ const instances = Layer.effect(
 
 const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node]), [
-    [Global.node, tempGlobalLayer],
-    [LocationServiceMap.node, instances],
+    Global.node.replace(tempGlobalLayer),
+    LocationServiceMap.node.replace(instances),
   ]),
 )
 

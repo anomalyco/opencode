@@ -20,7 +20,7 @@ import { testEffect } from "./lib/effect"
 
 const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node]), [
-    [Global.node, tempGlobalLayer],
+    Global.node.replace(tempGlobalLayer),
   ]),
 )
 type ConfigInput = typeof Info.Encoded

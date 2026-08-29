@@ -122,18 +122,19 @@ const nodes = LayerNode.group([
   LocationServiceMap.node,
 ])
 const replacements = [
-  [SessionExecution.node, executionNode],
-  [Global.node, tempGlobalLayer],
+  SessionExecution.node.replace(executionNode),
+  Global.node.replace(tempGlobalLayer),
 ] satisfies LayerNode.Replacements
 const productionIt = testEffect(AppNodeBuilder.build(nodes, replacements))
-const it = testEffect(AppNodeBuilder.build(nodes, [...replacements, [PluginSupervisor.node, subagentPluginSupervisor]]))
+const it = testEffect(
+  AppNodeBuilder.build(nodes, [...replacements, PluginSupervisor.node.replace(subagentPluginSupervisor)]),
+)
 const completionIt = testEffect(
   AppNodeBuilder.build(LayerNode.group([nodes, SessionRestart.node, KV.node]), [
-    [Global.node, tempGlobalLayer],
-    [PluginSupervisor.node, subagentPluginSupervisor],
-    [LayerNodePlatform.llmClient, TestLLM.testLayer({ fallback: TestLLM.text(childText, "completion") })],
-    [
-      SessionRunnerModel.node,
+    Global.node.replace(tempGlobalLayer),
+    PluginSupervisor.node.replace(subagentPluginSupervisor),
+    LayerNodePlatform.llmClient.replace(TestLLM.testLayer({ fallback: TestLLM.text(childText, "completion") })),
+    SessionRunnerModel.node.replace(
       Layer.succeed(SessionRunnerModel.Service, {
         resolve: () =>
           Effect.succeed(
@@ -147,7 +148,7 @@ const completionIt = testEffect(
             ),
           ),
       }),
-    ],
+    ),
   ]),
 )
 

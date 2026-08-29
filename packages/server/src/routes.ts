@@ -100,35 +100,33 @@ function makeRoutes<AuthError, AuthServices>(
 ) {
   const pluginRuntimeCell = PluginRuntime.makeCell()
   const standard: LayerNode.Replacements = [
-    [Database.node, Database.configured(options.database)],
-    [PersistentPty.node, PersistentPty.configured(options.pty)],
-    [Bus.node, Bus.configured({ persist: options.events?.persist })],
-    [App.node, App.configured(options.app)],
-    [ModelsDev.node, ModelsDev.configured(options.models)],
-    [Watcher.node, Watcher.configured({ enabled: options.fs?.filewatcher })],
-    [FileSystemSearch.node, FileSystemSearch.configured({ fff: options.fs?.fff })],
-    [Global.node, Global.layerWith(options.config?.directory ? { config: options.config.directory } : {})],
-    [
-      Config.node,
+    Database.node.replace(Database.configured(options.database)),
+    PersistentPty.node.replace(PersistentPty.configured(options.pty)),
+    Bus.node.replace(Bus.configured({ persist: options.events?.persist })),
+    App.node.replace(App.configured(options.app)),
+    ModelsDev.node.replace(ModelsDev.configured(options.models)),
+    Watcher.node.replace(Watcher.configured({ enabled: options.fs?.filewatcher })),
+    FileSystemSearch.node.replace(FileSystemSearch.configured({ fff: options.fs?.fff })),
+    Global.node.replace(Global.layerWith(options.config?.directory ? { config: options.config.directory } : {})),
+    Config.node.replace(
       Config.configured({
         project: options.config?.project,
         file: options.config?.file,
         content: options.config?.content,
       }),
-    ],
-    [InstructionDiscovery.node, InstructionDiscovery.configured({ project: options.config?.project })],
-    [ShellSelect.node, ShellSelect.configured({ gitbash: options.windows?.gitbash })],
-    [
-      Mcp.node,
+    ),
+    InstructionDiscovery.node.replace(InstructionDiscovery.configured({ project: options.config?.project })),
+    ShellSelect.node.replace(ShellSelect.configured({ gitbash: options.windows?.gitbash })),
+    Mcp.node.replace(
       Mcp.configured({
         clientInfo: {
           name: options.app?.name ?? "opencode",
           version: options.app?.version ?? "unknown",
         },
       }),
-    ],
-    [PluginRuntime.node, PluginRuntime.layerWithCell(pluginRuntimeCell)],
-    [PluginRuntime.providerNode, PluginRuntime.providerNodeWithCell(pluginRuntimeCell)],
+    ),
+    PluginRuntime.node.replace(PluginRuntime.layerWithCell(pluginRuntimeCell)),
+    PluginRuntime.providerNode.replace(PluginRuntime.providerNodeWithCell(pluginRuntimeCell)),
   ]
   const replacements: LayerNode.Replacements = [...standard, ...overrides]
   const serviceLayer = options.simulation

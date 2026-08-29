@@ -25,9 +25,9 @@ const it = testEffect(
   AppNodeBuilder.build(
     LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionStore.node, Session.node]),
     [
-      [Bus.node, Bus.configured({ persist: true })],
-      [Project.node, globalProjectNode],
-      [SessionExecution.node, SessionExecution.noopLayer],
+      Bus.node.replace(Bus.configured({ persist: true })),
+      Project.node.replace(globalProjectNode),
+      SessionExecution.node.replace(SessionExecution.noopLayer),
     ],
   ),
 )
@@ -186,8 +186,8 @@ describe("Session.view", () => {
       const targetLayer = AppNodeBuilder.build(
         LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionStore.node]),
         [
-          [Database.node, Database.configured({ path: path.join(tmp.path, "target.sqlite") })],
-          [Bus.node, Bus.configured({ persist: true })],
+          Database.node.replace(Database.configured({ path: path.join(tmp.path, "target.sqlite") })),
+          Bus.node.replace(Bus.configured({ persist: true })),
         ],
       )
 

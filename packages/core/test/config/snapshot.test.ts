@@ -51,8 +51,8 @@ describe("ConfigSnapshotPlugin.Plugin", () => {
           }).pipe(
             Effect.provide(
               AppNodeBuilder.build(Snapshot.node, [
-                [Location.node, Location.boundNode(Location.Ref.make({ directory: AbsolutePath.make(project) }))],
-                [Global.node, Global.layerWith({ data: tmp.path, config: path.join(tmp.path, "config") })],
+                Location.node.replace(Location.boundNode(Location.Ref.make({ directory: AbsolutePath.make(project) }))),
+                Global.node.replace(Global.layerWith({ data: tmp.path, config: path.join(tmp.path, "config") })),
               ]),
             ),
           )

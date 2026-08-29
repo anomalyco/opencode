@@ -112,7 +112,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/PersistentPty") {}
 
-export const configured = (options: Options = {}) =>
+const makeLayer = (options: Options = {}) =>
   Layer.effect(
     Service,
     Effect.gen(function* () {
@@ -361,8 +361,14 @@ export const configured = (options: Options = {}) =>
     }),
   )
 
-export const layer = configured()
-export const node = makeGlobalNode({ service: Service, layer, deps: [Bus.node, Global.node] })
+export const layer = makeLayer()
+export const configured = (options?: Options) =>
+  makeGlobalNode({
+    service: Service,
+    layer: options === undefined ? layer : makeLayer(options),
+    deps: [Bus.node, Global.node],
+  })
+export const node = configured()
 
 const request = (daemon: DaemonTransport, value: object, start = false) =>
   daemon.request(value, start).pipe(Effect.mapError(unavailable))

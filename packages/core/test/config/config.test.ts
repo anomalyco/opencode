@@ -55,12 +55,12 @@ function testLayer(
     ),
   )
   const built = AppNodeBuilder.build(LayerNode.group([Config.node, Bus.node]), [
-    [Config.node, Config.configured(options)],
-    [Location.node, locationLayer],
-    [Global.node, Global.layerWith({ config: globalDirectory, home: path.join(globalDirectory, "home") })],
-    [Credential.node, credentialNode],
-    [WellKnown.node, wellknownNode],
-    [Watcher.node, watcher],
+    Config.node.replace(Config.configured(options)),
+    Location.node.replace(locationLayer),
+    Global.node.replace(Global.layerWith({ config: globalDirectory, home: path.join(globalDirectory, "home") })),
+    Credential.node.replace(credentialNode),
+    WellKnown.node.replace(wellknownNode),
+    Watcher.node.replace(watcher),
   ])
   // Merge the watcher layer by reference so Watcher.Test resolves to the same
   // memoized instance the built graph uses.
@@ -311,16 +311,15 @@ describe("Config", () => {
           }).pipe(
             Effect.provide(
               AppNodeBuilder.build(LayerNode.group([Config.node, Bus.node]), [
-                [
-                  Location.node,
+                Location.node.replace(
                   Layer.succeed(
                     Location.Service,
                     Location.Service.of(location({ directory: AbsolutePath.make(project) })),
                   ),
-                ],
-                [Global.node, Global.layerWith({ config: global, home: path.join(global, "home") })],
-                [Credential.node, emptyCredentialNode],
-                [WellKnown.node, emptyWellknownNode],
+                ),
+                Global.node.replace(Global.layerWith({ config: global, home: path.join(global, "home") })),
+                Credential.node.replace(emptyCredentialNode),
+                WellKnown.node.replace(emptyWellknownNode),
               ]),
             ),
           )

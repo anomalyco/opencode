@@ -8,6 +8,7 @@ import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { Money } from "@opencode-ai/schema/money"
+import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { Effect, Layer } from "effect"
 import { it } from "../../core/test/lib/effect"
 import { ServerFetch } from "../src/fetch"
@@ -55,7 +56,13 @@ it.live("updates completed assistant message content through the session HTTP AP
     )
     const handler = yield* ServerFetch.make(
       { app: { version: "test-version" }, database: { path: ":memory:" }, fs: { filewatcher: false } },
-      { overrides: [[SessionExecution.node, execution]] },
+      {
+        overrides: [
+          SessionExecution.node.replace(
+            makeGlobalNode({ service: SessionExecution.Service, layer: execution, deps: [Bus.node] }),
+          ),
+        ],
+      },
     )
     const created = yield* Effect.promise(() =>
       handler(

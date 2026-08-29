@@ -98,12 +98,13 @@ Effect.gen(function* () {
   Effect.provide(Config.layer),
   Effect.provide(Updater.layer),
   Effect.provide(
-    LayerNode.compile(LayerNode.group([Global.node, AppProcess.node, Npm.node]), [
-      [
-        Global.node,
-        Global.layerWith(process.env.OPENCODE_CONFIG_DIR ? { config: process.env.OPENCODE_CONFIG_DIR } : {}),
+    LayerNode.compile(LayerNode.group([Global.node, AppProcess.node, Npm.node]), {
+      replacements: [
+        Global.node.replace(
+          Global.layerWith(process.env.OPENCODE_CONFIG_DIR ? { config: process.env.OPENCODE_CONFIG_DIR } : {}),
+        ),
       ],
-    ]),
+    }),
   ),
   Effect.provide(
     Observability.layer({

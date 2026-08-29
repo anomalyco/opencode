@@ -74,9 +74,9 @@ describe("SkillTool", () => {
             list: () => Effect.succeed(current),
           })
           const skillToolLayer = AppNodeBuilder.build(LayerNode.group([Tool.node, skillToolNode]), [
-            [Permission.node, permission],
-            [Skill.node, skills],
-            [Image.node, imagePassthrough],
+            Permission.node.replace(permission),
+            Skill.node.replace(skills),
+            Image.node.replace(imagePassthrough),
           ])
 
           return yield* Effect.gen(function* () {
