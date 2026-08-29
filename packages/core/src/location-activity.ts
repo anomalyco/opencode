@@ -30,6 +30,14 @@ export function layer(options: { readonly timeToLive?: Duration.Input; readonly 
         if (!isSessionEvent(event)) return Effect.void
         const location = event.location
         if (!location) return Effect.void
+        // Fast path: if the location is already tracked, update TTL without RcMap lookup.
+        // This avoids Effect allocation on the hot path for active locations.
+        const entryKey = key(location)
+        if (entries.has(entryKey)) {
+          entries.set(entryKey, { ref: location, expiresAt: clock.currentTimeMillisUnsafe() + timeToLive })
+          return Effect.void
+        }
+        // Slow path: new location — verify it's active in the RcMap before tracking
         return RcMap.has(locations.rcMap, location).pipe(
           Effect.flatMap((active) => (active ? touch(location) : Effect.void)),
         )
