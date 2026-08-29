@@ -70,6 +70,7 @@ function defaultRunTuiConfig(): RunTuiConfig {
   return {
     ...resolve({}, { terminalSuspend: process.platform !== "win32" }),
     diff_style: "auto",
+    show_git_branch: true,
   }
 }
 
@@ -82,6 +83,7 @@ function runTuiConfig(config: Config | undefined): RunTuiConfig {
     keybinds: config.keybinds,
     leader_timeout: config.leader_timeout,
     diff_style: config.diff_style ?? "auto",
+    show_git_branch: config.show_git_branch ?? true,
   }
 }
 

@@ -90,6 +90,10 @@ export type FooterState = {
   first: boolean
   interrupt: number
   exit: number
+  branch?: string
+  dirty?: boolean
+  isDefaultBranch?: boolean
+  hasConflicts?: boolean
 }
 
 // A partial update to FooterState. The footer merges this onto the current state.
@@ -286,7 +290,7 @@ export type QuestionReply = Parameters<OpencodeClient["question"]["reply"]>[0]
 
 export type QuestionReject = Parameters<OpencodeClient["question"]["reject"]>[0]
 
-export type RunTuiConfig = Pick<TuiConfig.Resolved, "keybinds" | "leader_timeout" | "diff_style">
+export type RunTuiConfig = Pick<TuiConfig.Resolved, "keybinds" | "leader_timeout" | "diff_style" | "show_git_branch">
 
 // Lifecycle phase of a scrollback entry. "start" opens the entry, "progress"
 // appends content (coalesced in the footer queue), "final" closes it.

@@ -8,6 +8,8 @@ export const BranchUpdated = Event.define({
   type: "vcs.branch.updated",
   schema: {
     branch: optional(Schema.String),
+    dirty: optional(Schema.Boolean),
+    has_conflicts: optional(Schema.Boolean),
   },
 })
 

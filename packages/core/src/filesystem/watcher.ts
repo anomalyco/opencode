@@ -117,7 +117,7 @@ const layer = Layer.effect(
       const vcs = resolved ? yield* fs.realPath(resolved).pipe(Effect.catch(() => Effect.succeed(resolved))) : undefined
       if (vcs && !config.includes(".git") && !config.includes(vcs) && (!resolved || !config.includes(resolved))) {
         const ignore = (yield* fs.readDirectoryEntries(vcs).pipe(Effect.catch(() => Effect.succeed([])))).flatMap(
-          (entry) => (entry.name === "HEAD" ? [] : [entry.name]),
+          (entry) => (entry.name === "HEAD" || entry.name === "index" ? [] : [entry.name]),
         )
         yield* Effect.forkScoped(subscribe(vcs, ignore))
       }

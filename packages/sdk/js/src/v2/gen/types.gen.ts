@@ -2311,6 +2311,8 @@ export type Path = {
 export type VcsInfo = {
   branch?: string
   default_branch?: string
+  dirty?: boolean
+  has_conflicts?: boolean
 }
 
 export type VcsFileStatus = {
@@ -2405,11 +2407,7 @@ export type McpStatusNeedsClientRegistration = {
 }
 
 export type McpStatus =
-  | McpStatusConnected
-  | McpStatusDisabled
-  | McpStatusFailed
-  | McpStatusNeedsAuth
-  | McpStatusNeedsClientRegistration
+  McpStatusConnected | McpStatusDisabled | McpStatusFailed | McpStatusNeedsAuth | McpStatusNeedsClientRegistration
 
 export type McpUnsupportedOAuthError = {
   error: string
@@ -5981,6 +5979,8 @@ export type VcsBranchUpdated = {
   location?: LocationRef
   data: {
     branch?: string
+    dirty?: boolean
+    has_conflicts?: boolean
   }
 }
 
@@ -6991,6 +6991,8 @@ export type EventVcsBranchUpdated = {
   type: "vcs.branch.updated"
   properties: {
     branch?: string
+    dirty?: boolean
+    has_conflicts?: boolean
   }
 }
 

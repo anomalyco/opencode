@@ -22401,6 +22401,12 @@
           },
           "default_branch": {
             "type": "string"
+          },
+          "dirty": {
+            "type": "boolean"
+          },
+          "has_conflicts": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false
@@ -33368,6 +33374,12 @@
             "properties": {
               "branch": {
                 "type": "string"
+              },
+              "dirty": {
+                "type": "boolean"
+              },
+              "has_conflicts": {
+                "type": "boolean"
               }
             },
             "additionalProperties": false
@@ -36502,6 +36514,12 @@
             "properties": {
               "branch": {
                 "type": "string"
+              },
+              "dirty": {
+                "type": "boolean"
+              },
+              "has_conflicts": {
+                "type": "boolean"
               }
             },
             "additionalProperties": false
