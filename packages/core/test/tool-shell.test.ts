@@ -31,6 +31,7 @@ import { SessionStore } from "@opencode-ai/core/session/store"
 import { Permission } from "@opencode-ai/core/permission"
 import { PermissionSaved } from "@opencode-ai/core/permission/saved"
 import { PluginRuntime } from "@opencode-ai/core/plugin/runtime"
+import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { Shell } from "@opencode-ai/core/shell"
 import { ShellSelect } from "@opencode-ai/core/shell/select"
@@ -771,6 +772,8 @@ describe("ShellTool", () => {
                   sessionID,
                   action: "shell",
                   resources: [isWindows ? "Start-Sleep -Milliseconds 100" : helloCommand],
+                  agent: toolIdentity.agent,
+                  source: { type: "tool", messageID: toolIdentity.messageID, id: "call-shell" },
                 },
               ])
               expect(assertions[0]?.save).toEqual([isWindows ? "Start-Sleep *" : "printf *"])
@@ -928,7 +931,15 @@ describe("ShellTool", () => {
           Effect.andThen(
             withSession(tmp.path, (registry) => executeTool(registry, call({ command: cwdCommand, workdir: "src" }))),
           ),
-          Effect.andThen(Effect.sync(() => expect(assertions.map((input) => input.action)).toEqual(["shell"]))),
+          Effect.andThen((settled) =>
+            Effect.sync(() => {
+              expect(settled).toMatchObject({
+                status: "error",
+                error: { message: `Working directory is not a directory: ${workdir}` },
+              })
+              expect(assertions.map((input) => input.action)).toEqual(["shell"])
+            }),
+          ),
         )
       },
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
@@ -964,23 +975,26 @@ describe("ShellTool", () => {
   )
 
   it.live(
-    "approves an external directory used by a directory-change command",
+    "deduplicates external directory approvals across workdir and directory-change commands",
     () =>
       Effect.acquireUseRelease(
         Effect.promise(() => Promise.all([tmpdir(), tmpdir()])),
         ([active, outside]) => {
-          reset()
           const command = isWindows
             ? `Set-Location -LiteralPath '${outside.path}'; (Get-Location).Path`
             : `cd '${outside.path}' && pwd`
           return withSession(active.path, (registry) =>
-            executeTool(registry, call({ command }, "call-external-cd")),
-          ).pipe(
-            Effect.andThen(
-              Effect.sync(() => {
+            Effect.forEach([{ command }, { command, workdir: outside.path }], (input) =>
+              Effect.gen(function* () {
+                reset()
+                const settled = yield* executeTool(registry, call(input, "call-external-cd"))
+                expect(settled).toMatchObject({ status: "completed" })
                 expect(assertions.map((item) => item.action)).toEqual(["external_directory", "shell"])
                 expect(assertions[0]).toMatchObject({
                   resources: [path.join(realpathSync(outside.path), "*").replaceAll("\\", "/")],
+                  sessionID,
+                  agent: toolIdentity.agent,
+                  source: { type: "tool", messageID: toolIdentity.messageID, id: "call-external-cd" },
                 })
               }),
             ),
@@ -1279,21 +1293,40 @@ describe("ShellTool", () => {
   )
 
   it.live(
-    "returns a useful timeout outcome",
+    "authorizes the hook-edited command and workdir and reports its timeout",
     () =>
       Effect.acquireUseRelease(
         Effect.promise(() => tmpdir()),
         (tmp) => {
           reset()
+          const timeout = isWindows ? 3_000 : 500
           return withSession(tmp.path, (registry) =>
-            executeTool(registry, call({ command: timeoutOutputCommand, timeout: isWindows ? 3_000 : 500 })),
+            Effect.gen(function* () {
+              const hooks = yield* PluginHooks.Service
+              yield* hooks.register("shell", "create.before", (invocation) =>
+                Effect.sync(() => {
+                  invocation.command = timeoutOutputCommand
+                  invocation.cwd = tmp.path
+                  invocation.timeout = timeout
+                }),
+              )
+              return yield* executeTool(registry, call({ command: helloCommand, workdir: "missing", timeout: 60_000 }))
+            }),
           ).pipe(
             Effect.andThen((settled) =>
               Effect.sync(() => {
                 expect(settled.metadata).toMatchObject({ timeout: true, truncated: false })
                 expect(settled.metadata).not.toHaveProperty("exit")
-                expect(settled.content?.[0]).toMatchObject(Expected.text(expect.stringContaining("before timeout")))
+                const content = settled.content?.[0]
+                expect(content?.type).toBe("text")
+                if (content?.type !== "text") throw new Error("Expected text content")
+                expect(content.text).toContain("before timeout")
+                expect(content.text).toContain(`Command exceeded timeout of ${timeout} ms.`)
                 expect(settled.content?.[1]).toMatchObject(Expected.text(expect.stringContaining("Command timed out")))
+                expect(assertions.map((input) => input.action)).toEqual(["shell"])
+                expect(assertions[0]?.resources).toEqual(
+                  isWindows ? [idleCommand] : ["printf 'before timeout'", idleCommand],
+                )
               }),
             ),
           )
