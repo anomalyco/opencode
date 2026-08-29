@@ -75,9 +75,13 @@ const layer = Layer.effectDiscard(
                 source: { type: "tool", messageID: context.assistantMessageID, callID: context.toolCallID },
               })
               const cwd = path.resolve(location.directory, input.path ?? ".")
-              const info = yield* fs.stat(cwd).pipe(Effect.catch(() => Effect.succeed(undefined)))
-              if (info === undefined)
-                return yield* new ToolFailure({ message: `Search path does not exist: ${input.path ?? "."}` })
+              yield* fs
+                .stat(cwd)
+                .pipe(
+                  Effect.catchReason("PlatformError", "NotFound", () =>
+                    Effect.fail(new ToolFailure({ message: `Search path does not exist: ${input.path ?? "."}` })),
+                  ),
+                )
               return yield* ripgrep
                 .glob({
                   cwd,
