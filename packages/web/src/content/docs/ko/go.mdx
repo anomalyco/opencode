@@ -65,12 +65,14 @@ workspace당 한 명의 멤버만 OpenCode Go를 구독할 수 있습니다.
 - **MiniMax M2.7**
 - **Muse Spark 1.2 Contributor** ([일부 지역에서만 제공](https://ai.developer.meta.com/legal/geographic-use-policy))
 - **Qwen3.8 Max**
+- **Qwen3.8 Flash**
 - **Qwen3.7 Max**
 - **Qwen3.7 Plus**
 - **Qwen3.6 Plus**
 - **DeepSeek V4 Pro**
 - **DeepSeek V4 Flash**
 - **DeepSeek V4 Flash Vision Exp**
+- **Hy4 preview**
 - **Hy3**
 
 새로운 모델을 테스트하고 추가함에 따라 이 목록은 변경될 수 있습니다.
@@ -107,12 +109,14 @@ OpenCode Go에는 다음과 같은 한도가 포함됩니다.
 | MiniMax M2.7                 | 3,400             | 8,500          | 17,000         |
 | Muse Spark 1.2 Contributor   | 45,300            | 113,300        | 226,600        |
 | Qwen3.8 Max                  | 160               | 400            | 810            |
+| Qwen3.8 Flash                | 5,400             | 13,500         | 27,000         |
 | Qwen3.7 Max                  | 340               | 840            | 1,690          |
 | Qwen3.7 Plus                 | 4,300             | 10,800         | 21,600         |
 | Qwen3.6 Plus                 | 3,300             | 8,200          | 16,300         |
 | DeepSeek V4 Pro              | 1,050             | 2,600          | 5,200          |
 | DeepSeek V4 Flash            | 7,600             | 18,900         | 37,800         |
 | DeepSeek V4 Flash Vision Exp | 3,800             | 9,450          | 18,900         |
+| Hy4 preview                  | 1,350             | 3,380          | 6,770          |
 | Hy3                          | 4,300             | 10,750         | 21,500         |
 
 이 예상치는 관찰된 요청 패턴을 기준으로 합니다.
@@ -131,9 +135,11 @@ OpenCode Go에는 다음과 같은 한도가 포함됩니다.
 - MiniMax M2.7 — 요청당 입력 300, 캐시 55,000, 출력 토큰 125
 - Muse Spark 1.2 Contributor — 요청당 입력 620, 캐시 71,400, 출력 토큰 300
 - Qwen3.8 Max — 요청당 입력 420, 캐시 66,000, 출력 토큰 200
+- Qwen3.8 Flash — 요청당 입력 600, 캐시 58,000, 출력 토큰 200
 - Qwen3.7 Max — 요청당 입력 420, 캐시 66,000, 출력 토큰 200
 - Qwen3.7 Plus — 요청당 입력 500, 캐시 57,000, 출력 토큰 190
 - Qwen3.6 Plus — 요청당 입력 500, 캐시 57,000, 출력 토큰 190
+- Hy4 preview — 요청당 입력 830, 캐시 71,500, 출력 토큰 295
 - Hy3 — 요청당 입력 830, 캐시 71,500, 출력 토큰 295
 - MiMo-V2.5 — 요청당 입력 830, 캐시 71,500, 출력 토큰 295
 - MiMo-V2.5-Pro — 요청당 입력 790, 캐시 86,000, 출력 토큰 305
@@ -161,6 +167,7 @@ OpenCode Go에는 다음과 같은 한도가 포함됩니다.
 | MiniMax M2.5                            | $0.30  | $1.20  | $0.06       | $0.375       | $60   |
 | Muse Spark 1.2 Contributor              | $0.10  | $0.20  | $0.002      | -            | $60   |
 | Qwen3.8 Max                             | $2.00  | $6.00  | $0.25       | $2.50        | $15   |
+| Qwen3.8 Flash                           | $0.15  | $0.47  | $0.016      | $0.20        | $30   |
 | Qwen3.7 Max                             | $2.50  | $7.50  | $0.50       | $3.125       | $60   |
 | Qwen3.7 Plus (≤ 256K tokens)            | $0.40  | $1.60  | $0.04       | $0.50        | $60   |
 | Qwen3.7 Plus (> 256K tokens)            | $1.20  | $4.80  | $0.12       | $1.50        | $60   |
@@ -172,6 +179,7 @@ OpenCode Go에는 다음과 같은 한도가 포함됩니다.
 | DeepSeek V4 Flash (Peak)                | $0.44  | $1.32  | $0.014      | -            | $30   |
 | DeepSeek V4 Flash Vision Exp (Off-Peak) | $0.22  | $0.66  | $0.007      | -            | $15   |
 | DeepSeek V4 Flash Vision Exp (Peak)     | $0.44  | $1.32  | $0.014      | -            | $15   |
+| Hy4 preview                             | $0.834 | $2.501 | $0.042      | -            | $30   |
 | Hy3                                     | $0.14  | $0.58  | $0.035      | -            | $60   |
 
 **DeepSeek V4 Flash / V4 Flash Vision Exp / V4 Pro:** Peak 시간은 월요일부터 금요일까지 01:00-04:00 및 06:00-10:00 UTC이며, 주말을 포함한 그 외 모든 시간은 Off-Peak입니다. [자세히 알아보기](https://api-docs.deepseek.com/quick_start/pricing/).
@@ -232,9 +240,11 @@ Go에서는 월 $10를 지불하며, 저희는 그 6배의 사용량을 제공�
 | MiniMax M2.5                 | minimax-m2.5                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Muse Spark 1.2 Contributor   | muse-spark-1.2-contributor   | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | Qwen3.8 Max                  | qwen3.8-max                  | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Qwen3.8 Flash                | qwen3.8-flash                | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.7 Max                  | qwen3.7-max                  | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.7 Plus                 | qwen3.7-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus                 | qwen3.6-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Hy4 preview                  | hy4-preview                  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Hy3                          | hy3                          | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 
 OpenCode config의 [model id](/docs/config/#models)는 `opencode-go/<model-id>` 형식을 사용합니다. 예를 들어 Kimi K3의 경우 config에서 `opencode-go/kimi-k3`를 사용하면 됩니다.
@@ -268,6 +278,7 @@ https://opencode.ai/zen/go/v1/models
 | MiMo-V2.5-Pro                | 사용되지 않음 | 0일         |
 | MiMo-V2.5                    | 사용되지 않음 | 0일         |
 | Qwen3.8 Max                  | 사용되지 않음 | 0일         |
+| Qwen3.8 Flash                | 사용되지 않음 | 0일         |
 | Qwen3.7 Max                  | 사용되지 않음 | 0일         |
 | Qwen3.7 Plus                 | 사용되지 않음 | 0일         |
 | Qwen3.6 Plus                 | 사용되지 않음 | 0일         |
@@ -277,6 +288,7 @@ https://opencode.ai/zen/go/v1/models
 | DeepSeek V4 Pro              | 사용되지 않음 | 0일         |
 | DeepSeek V4 Flash            | 사용되지 않음 | 0일         |
 | DeepSeek V4 Flash Vision Exp | 사용되지 않음 | 0일         |
+| Hy4 preview                  | 사용되지 않음 | 0일         |
 | Hy3                          | 사용되지 않음 | 0일         |
 
 - **Grok 4.6:** ZDR은 저장된 데이터에 의존하는 중요한 API 기능(상태 저장형 Responses API, Files and Collections, Batch API 포함)을 비활성화합니다. [자세히 알아보기](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
