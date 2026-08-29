@@ -26,7 +26,7 @@ Manual compaction and Session movement use the same inbox as control items. Each
 
 Core's ID-addressed Session facade delegates prompt, synthetic, compaction, pending-input, shell, revert, execution controls, renaming, agent/model selection, viewed acknowledgements, and message lookup/editing to the ID-bound Session values in `session/session.ts`. Those operations own request idempotency, admission ordering, wake policy, and per-Session state-change rules. The facade supplies lazy Location services; the lower operations do not depend on `LocationServiceMap` or call back into the facade. Collection operations and host-infrastructure routing remain in the facade. Project resolution persists the owning Project; Session does not repeat that write.
 
-The host acquires `Session.make` once, then selects ID-bound values through `forSession`. The existing facade remains the Effect service; the lower factory does not introduce a second service or a Layer per Session ID.
+The host acquires `Session.make` once within its host `Scope`, then selects ID-bound values through `forSession`. The factory captures that Scope for shell completion recording; it must outlive individual callers. The existing facade remains the Effect service; the lower factory does not introduce a second service or a Layer per Session ID.
 
 ```ts
 Effect.gen(function* () {
@@ -36,7 +36,9 @@ Effect.gen(function* () {
 })
 ```
 
-References share operation implementations, shell scheduling gates, and the existing execution coordinator. A Session value retains its ID, not a cached projection or permanently selected runner. Obtaining or discarding a value does not start or interrupt execution. Admission stays independently callable while execution is active.
+References share operation implementations, host services, and the existing execution coordinator. A Session value retains its ID, not a cached projection or permanently selected runner. Obtaining or discarding a value does not start or interrupt execution. Admission stays independently callable while execution is active.
+
+User shell commands start immediately as background work without waiting for model execution or other user shells. They do not suppress prompt wakeups. The shell operation forks completion recording into the captured host Scope with `startImmediately: true` and joins that fiber, so caller cancellation does not cancel recording; closing the host Scope does. Shell started and ended events retain output in one shell entry. Completion and startup-failure notifications are admitted as synthetic input with `resume: false`, without waking execution. Shell services are resolved at startup, while Session events remain outside that Location context so movement does not pin them to the old Location.
 
 Location services are acquired only when an operation needs them. In particular, retry reconciliation happens before prompt preparation, so an already-admitted input skips hooks and attachment resolution. Execution continues to resolve placement independently at drain start and after movement.
 

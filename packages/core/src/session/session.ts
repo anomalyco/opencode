@@ -1,15 +1,14 @@
 export * as Session from "./session.js"
 
-import { DateTime, Effect, Layer, Schema } from "effect"
+import { DateTime, Effect, Fiber, Layer, Schema, Scope } from "effect"
 import type { Agent } from "@opencode-ai/schema/agent"
 import type { Model } from "@opencode-ai/schema/model"
 import { Event } from "@opencode-ai/schema/event"
-import type { Info } from "@opencode-ai/schema/shell"
 import { Bus } from "../bus.js"
-import { KeyedMutex } from "../effect/keyed-mutex.js"
 import { Location } from "../location.js"
 import { PluginSupervisor } from "../plugin/supervisor-service.js"
 import { Shell } from "../shell.js"
+import { ShellResult } from "../shell/result.js"
 import {
   BusyError,
   CompactionConflictError,
@@ -39,16 +38,15 @@ type PromptRequest = SessionPrompt.Input & {
 }
 
 /**
- * Build once per host: `const sessions = yield* Session.make(servicesFor)`.
- * Use `sessions.forSession(id)` for handles that share gates and reload current state.
+ * Build once in the host Scope: `const sessions = yield* Session.make(servicesFor)`.
+ * Use `sessions.forSession(id)` for handles that share host services and reload current state.
  */
 export const make = Effect.fn("Session.make")(function* (servicesFor: (ref: Location.Ref) => Layer.Layer<Services>) {
   const bus = yield* Bus.Service
   const store = yield* SessionStore.Service
   const execution = yield* SessionExecution.Service
   const admission = yield* SessionInbox.Service
-  const manualShellSessions = new Set<SessionSchema.ID>()
-  const shellLocks = KeyedMutex.makeUnsafe<SessionSchema.ID>()
+  const scope = yield* Scope.Scope
 
   const get = Effect.fn("Session.get")(function* (sessionID: SessionSchema.ID) {
     const session = yield* store.get(sessionID)
@@ -177,7 +175,7 @@ export const make = Effect.fn("Session.make")(function* (servicesFor: (ref: Loca
         }).pipe(
           Effect.catchTag("SessionInbox.LifecycleConflict", () => new PromptConflictError({ sessionID, messageID })),
         )
-        if (input.resume !== false && !manualShellSessions.has(sessionID)) yield* execution.wake(sessionID)
+        if (input.resume !== false) yield* execution.wake(sessionID)
         return admitted
       }),
     ),
@@ -187,60 +185,58 @@ export const make = Effect.fn("Session.make")(function* (servicesFor: (ref: Loca
     input: { id?: Event.ID; command: string },
   ) {
     const session = yield* get(sessionID)
-    yield* shellLocks.withLock(sessionID)(
-      Effect.gen(function* () {
-        manualShellSessions.add(sessionID)
-        yield* execution.awaitIdle(sessionID)
-        const started = yield* Effect.gen(function* () {
-          const plugins = yield* PluginSupervisor.Service
-          yield* plugins.flush
-          const shell = yield* Shell.Service
-          return yield* shell
-            .create({
-              command: input.command,
-              cwd: session.location.directory,
-              timeout: 0,
-              metadata: { sessionID },
-            })
-            .pipe(Effect.orDie)
-        }).pipe(Effect.provide(servicesFor(session.location)))
-        yield* bus.publish(
-          SessionEvent.Shell.Started,
-          {
-            sessionID,
-            shell: started,
-          },
-          { id: input.id },
-        )
-        const completed = yield* Effect.gen(function* () {
-          const shell = yield* Shell.Service
-          const terminal = yield* shell.wait(started.id).pipe(
-            Effect.map((info) => ({ info, retained: true as const })),
-            Effect.catchTag("Shell.NotFoundError", () =>
-              Effect.succeed({ info: synthesizeTerminalShellInfo(started), retained: false as const }),
-            ),
-          )
-          const output = terminal.retained
-            ? yield* shell
-                .output(started.id, { limit: SHELL_MAX_CAPTURE_BYTES })
-                .pipe(Effect.catchTag("Shell.NotFoundError", () => Effect.succeed(missingShellOutput())))
-            : missingShellOutput()
-          return { shell: terminal.info, output }
-        }).pipe(Effect.provide(servicesFor(session.location)))
-        yield* bus.publish(SessionEvent.Shell.Ended, {
-          sessionID,
-          shell: completed.shell,
-          output: completed.output,
+    // The server owns completion recording even if the submitting client disconnects.
+    const running = yield* Effect.gen(function* () {
+      // Resolve shell services here without pinning Session events to this Location after a move.
+      const shell = yield* Effect.gen(function* () {
+        const plugins = yield* PluginSupervisor.Service
+        yield* plugins.flush
+        return yield* Shell.Service
+      }).pipe(Effect.provide(servicesFor(session.location)))
+      const started = yield* shell
+        .create({
+          command: input.command,
+          cwd: session.location.directory,
+          timeout: 0,
+          metadata: { sessionID, background: true },
         })
+        .pipe(
+          Effect.tapError((error) =>
+            synthetic(sessionID, {
+              text: `User shell command failed to start:\n${input.command}\n\n${error.message}`,
+              description: input.command,
+              metadata: { source: "shell", state: "error" },
+              resume: false,
+            }),
+          ),
+          Effect.orDie,
+        )
+      yield* bus.publish(
+        SessionEvent.Shell.Started,
+        {
+          sessionID,
+          shell: started,
+        },
+        { id: input.id },
+      )
+      const terminal = yield* shell.result(started)
+      const preview = yield* shell
+        .output(started.id, { limit: SHELL_MAX_CAPTURE_BYTES })
+        .pipe(Effect.catchTag("Shell.NotFoundError", () => Effect.succeed(ShellResult.unavailable)))
+      yield* bus.publish(SessionEvent.Shell.Ended, {
+        sessionID,
+        shell: terminal.info,
+        output: preview,
+      })
+      yield* synthetic(sessionID, {
+        ...ShellResult.userNotification(terminal),
+        resume: false,
       }).pipe(
-        Effect.ensuring(
-          Effect.gen(function* () {
-            manualShellSessions.delete(sessionID)
-            yield* execution.wake(sessionID)
-          }),
-        ),
-      ),
-    )
+        Effect.catchTag("Session.NotFoundError", () => Effect.void),
+        Effect.orDie,
+      )
+    }).pipe(Effect.forkIn(scope, { startImmediately: true }))
+    yield* Fiber.join(running)
   })
   const compact = Effect.fn("Session.compact")(function* (
     sessionID: SessionSchema.ID,
@@ -414,26 +410,6 @@ export type Handle = ReturnType<Effect.Success<ReturnType<typeof make>>["forSess
 
 function isUnfinishedTool(content: SessionMessage.AssistantContent) {
   return content.type === "tool" && (content.state.status === "streaming" || content.state.status === "running")
-}
-
-function missingShellOutput() {
-  const output = "Shell command output is no longer available."
-  return {
-    output,
-    cursor: Buffer.byteLength(output),
-    size: Buffer.byteLength(output),
-    truncated: false,
-  }
-}
-
-function synthesizeTerminalShellInfo(started: Info): Info {
-  return {
-    ...started,
-    // The Shell record was removed before waiters could observe it; publish a terminal
-    // boundary instead of leaving the Session shell message permanently running.
-    status: "killed",
-    time: { ...started.time, completed: Date.now() },
-  }
 }
 
 // Mirrors the shell tool's in-memory preview safety limit.

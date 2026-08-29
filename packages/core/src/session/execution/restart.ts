@@ -9,6 +9,7 @@ import { SessionEvent } from "../event.js"
 import { SessionExecution } from "../execution.js"
 import { SessionSchema } from "../schema.js"
 import { SessionStore } from "../store.js"
+import { ShellResult } from "../../shell/result.js"
 import { SubagentCompletion } from "../subagent-completion.js"
 
 const CONTINUE_AFTER_SERVER_RESTART =
@@ -116,13 +117,13 @@ export const layer = (options?: Options) =>
             id: background.notificationID,
             sessionID: recovery.sessionID,
             description: recovery.command,
-            text: `<shell id="${background.id}" state="${state}" command="${recovery.command}">\n${text}\n</shell>`,
-            metadata: {
-              source: "shell",
+            ...ShellResult.notification({
               jobID: background.id,
               shellID: recovery.shellID,
+              command: recovery.command,
               state,
-            },
+              text,
+            }),
             ...(suspended.has(recovery.sessionID) ? { resume: false } : {}),
           })
           .pipe(

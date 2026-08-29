@@ -867,6 +867,128 @@ test("shows jump to latest after scrolling one line above the final message", as
   }
 })
 
+test("completed user shell output replaces a partial live read when the final read fails", async () => {
+  await using state = await tmpdir()
+  const setup = await createTestRenderer({ width: 100, height: 30, useThread: false, kittyKeyboard: true })
+  setup.renderer.start()
+  const events = createEventStream()
+  const session = {
+    id: "ses_shell_output",
+    title: "Shell output fixture",
+    projectID: "proj_test",
+    location: { directory },
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    time: { created: 0, updated: 0 },
+  }
+  const shell = {
+    id: "sh_output",
+    command: "echo shell-output-fixture",
+    status: "running" as const,
+    cwd: directory,
+    shell: "/bin/sh",
+    file: `${directory}/shell.out`,
+    metadata: { sessionID: session.id, background: true },
+    time: { started: 1 },
+  }
+  const partial = "first live output\n"
+  const completed = `${partial}last persisted output\n`
+  let finished = false
+  let failedReads = 0
+  const calls = createFetch((url) => {
+    if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
+    if (url.pathname === `/api/session/${session.id}`) return json({ data: session })
+    if (url.pathname === `/api/session/${session.id}/message`)
+      return json({
+        data: [
+          {
+            id: "msg_shell_output",
+            type: "shell",
+            shellID: shell.id,
+            command: shell.command,
+            status: "running",
+            metadata: { background: true },
+            time: { created: 1 },
+          },
+        ],
+        cursor: {},
+      })
+    if (url.pathname === `/api/session/${session.id}/inbox` || url.pathname === `/api/session/${session.id}/permission`)
+      return json({ data: [] })
+    if (url.pathname === "/api/shell") return json({ location: { directory }, data: finished ? [] : [shell] })
+    if (url.pathname === `/api/shell/${shell.id}/output`) {
+      if (finished) {
+        failedReads++
+        return json({ message: "Shell output unavailable" }, { status: 404 })
+      }
+      return json({
+        location: { directory },
+        data: {
+          output: partial.slice(Number(url.searchParams.get("cursor") ?? 0)),
+          cursor: partial.length,
+          size: partial.length,
+          truncated: false,
+        },
+      })
+    }
+    return undefined
+  }, events)
+  const server = Bun.serve({ port: 0, fetch: (request) => calls.fetch(request) })
+
+  try {
+    const { run } = await import("../src/app")
+    const task = Effect.runPromise(
+      run({
+        app: { name: "test", version: "test", channel: "test" },
+        server: { endpoint: { url: server.url.toString() } },
+        config: {
+          get: async () => ({ animations: false, tabs: { enabled: false }, session: { sidebar: "hide" } }),
+          update: async () => ({}),
+        },
+        packages: { resolve: async () => undefined },
+        terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
+        args: { sessionID: session.id },
+        log: () => {},
+      }).pipe(Effect.provide(Global.layerWith({ state: state.path })), Effect.provide(FileSystem.layerNoop({}))),
+    )
+
+    const running = await setup.waitForFrame((frame) => frame.includes(partial.trim()))
+    expect(running).toContain(shell.command)
+    expect(running).not.toContain("Background")
+
+    finished = true
+    events.emit({
+      id: "evt_shell_exited",
+      created: 2,
+      type: "shell.exited",
+      location: { directory },
+      data: { id: shell.id, status: "exited", exit: 0 },
+    })
+    await setup.waitFor(() => failedReads > 0)
+    events.emit({
+      id: "evt_shell_ended",
+      created: 3,
+      type: "session.shell.ended",
+      durable: { aggregateID: session.id, seq: 1, version: 1 },
+      data: {
+        sessionID: session.id,
+        shell: { ...shell, status: "exited", exit: 0, time: { started: 1, completed: 2 } },
+        output: { output: completed, cursor: completed.length, size: completed.length, truncated: false },
+      },
+    })
+    const terminal = await setup.waitForFrame((frame) => frame.includes("last persisted output"))
+    expect(terminal).toContain(partial.trim())
+    expect(terminal).toContain(`$ ${shell.command}`)
+    expect(terminal).not.toContain("Background")
+
+    setup.renderer.destroy()
+    await task
+  } finally {
+    if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+    await server.stop()
+  }
+})
+
 test("new session inherits the active session model", async () => {
   const setup = await createTestRenderer({ width: 80, height: 24, useThread: false, kittyKeyboard: true })
   setup.renderer.start()

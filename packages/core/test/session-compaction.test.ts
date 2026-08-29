@@ -27,6 +27,7 @@ import { Location } from "@opencode-ai/core/location"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Money } from "@opencode-ai/schema/money"
 import { Skill } from "@opencode-ai/schema/skill"
+import { Shell } from "@opencode-ai/schema/shell"
 import { DateTime, Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { asc, eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
@@ -260,7 +261,25 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
         session,
         resolveModel: () => Effect.succeed(resolved),
         prepare: modelRequests.prepare,
-        messages: [userMessage],
+        messages: [
+          userMessage,
+          SessionMessage.Shell.make({
+            id: SessionMessage.ID.create(),
+            type: "shell",
+            shellID: Shell.ID.make("sh_background"),
+            status: "exited",
+            command: "pwd",
+            metadata: { background: true },
+            output: { output: "display-only-output", cursor: 19, size: 19, truncated: false },
+            time: { created: DateTime.makeUnsafe(0), completed: DateTime.makeUnsafe(1) },
+          }),
+          SessionMessage.Synthetic.make({
+            id: SessionMessage.ID.create(),
+            type: "synthetic",
+            text: "User shell pwd completed: /project",
+            time: { created: DateTime.makeUnsafe(2) },
+          }),
+        ],
         inputID: SessionMessage.ID.make("msg_manual_compaction"),
       }),
     ).toEqual({ status: "completed" })
@@ -280,6 +299,8 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
     expect(requests[0]?.generation).toBeUndefined()
     expect(JSON.stringify(requests[0]?.messages)).toContain("Manual compaction should include this short conversation.")
     expect(JSON.stringify(requests[0]?.messages)).toContain("Use Effect services and generators.")
+    expect(JSON.stringify(requests[0]?.messages)).toContain("User shell pwd completed: /project")
+    expect(JSON.stringify(requests[0]?.messages)).not.toContain("display-only-output")
     expect(yield* store.context(sessionID)).toMatchObject([
       { type: "compaction", reason: "manual", summary: "manual summary", recent: "" },
     ])

@@ -1,5 +1,7 @@
 /** @jsxImportSource @opentui/solid */
-import { expect, test } from "bun:test"
+import { afterAll, expect, test } from "bun:test"
+import { readdir } from "node:fs/promises"
+import path from "node:path"
 import {
   BoxRenderable,
   DiffRenderable,
@@ -19,8 +21,10 @@ import type {
   Route,
 } from "@opencode-ai/plugin/tui/context"
 import { ThemeProvider, useThemes } from "../../../src/context/theme"
-import { emptyThemeSource } from "../../fixture/fixture"
-import { ConfigProvider } from "../../../src/config"
+import { emptyThemeSource, tmpdir } from "../../fixture/fixture"
+import { StorageProvider, useStorage } from "../../../src/context/storage"
+import { TuiAppProvider } from "../../../src/context/runtime"
+import { ConfigProvider, type Info } from "../../../src/config"
 import type { TuiKeybind } from "../../../src/config/keybind"
 import { Keymap } from "../../../src/context/keymap"
 import diffViewerPlugin from "../../../src/feature-plugins/system/diff-viewer"
@@ -33,6 +37,9 @@ import { ToastProvider } from "../../../src/ui/toast"
 import { createSignal, Show } from "solid-js"
 import { diffImageFixture } from "../../fixture/diff-image"
 
+const temporary = await tmpdir()
+afterAll(() => temporary[Symbol.asyncDispose]())
+
 test("closing the diff viewer returns to the route it opened from", async () => {
   const viewer = await renderDiffViewer([])
   try {
@@ -40,13 +47,14 @@ test("closing the diff viewer returns to the route it opened from", async () => 
       type: "plugin",
       id: "opencode.diffs",
       name: "diff",
-      data: { mode: "working", sessionID: "session-1", returnRoute: startRoute },
+      data: { sessionID: "session-1", returnRoute: startRoute },
     })
     const route = viewer.current()
     expect(route.type === "plugin" ? route.data?.returnRoute : undefined).not.toBe(startRoute)
     expect(viewer.vcsDiffInput()).toEqual({
       location: { directory: "/repo/session" },
-      mode: "working",
+      mode: "branch",
+      base: "refs/heads/v2",
       context: "12",
     })
 
@@ -85,13 +93,688 @@ test("uses the active location when opened outside a session", async () => {
   try {
     expect(viewer.vcsDiffInput()).toEqual({
       location: { directory: "/repo/default" },
-      mode: "working",
+      mode: "branch",
+      base: "refs/heads/v2",
       context: "12",
     })
   } finally {
     viewer.app.renderer.destroy()
   }
 })
+
+test("base lookup is lazy until the viewer opens", async () => {
+  const viewer = await renderDiffViewer([], { open: false })
+  try {
+    expect(viewer.baseRequests).toHaveLength(0)
+    expect(viewer.diffRequests).toHaveLength(0)
+    viewer.commands.get("diff.open")!.run()
+    await viewer.app.waitForFrame((frame) => frame.includes("No changes to show"))
+    expect(viewer.baseRequests).toHaveLength(1)
+    expect(viewer.baseRequests[0].searchParams.get("location[directory]")).toBe("/repo/session")
+    expect(viewer.diffRequests).toHaveLength(1)
+    expect(viewer.vcsDiffInput()).toMatchObject({ mode: "branch", base: "refs/heads/v2" })
+  } finally {
+    viewer.app.renderer.destroy()
+  }
+})
+
+test.each([50, 160])("the source chooser selects all three scopes directly at %i columns", async (width) => {
+  const files = {
+    branch: ["committed.txt", "staged.txt", "unstaged.txt", "untracked.txt"],
+    committed: ["committed.txt"],
+    working: ["staged.txt", "unstaged.txt", "untracked.txt"],
+  }
+  const viewer = await renderDiffViewer([], {
+    width,
+    height: 30,
+    diffResponse: async (url) => {
+      const mode = url.searchParams.get("mode")
+      if (mode !== "branch" && mode !== "committed" && mode !== "working") throw new Error("Unexpected diff mode")
+      return json({
+        location: session.location,
+        data: files[mode].map((file) => ({
+          file,
+          status: "modified",
+          additions: 1,
+          deletions: 0,
+        })),
+      })
+    },
+  })
+  try {
+    expect(viewer.vcsDiffInput()).toMatchObject({ mode: "branch" })
+    for (const choice of [
+      { mode: "committed", index: 1, label: "Committed", absent: "untracked.txt" },
+      { mode: "working", index: 2, label: "Uncommitted", absent: "committed.txt" },
+      { mode: "branch", index: 0, label: "All", absent: "never-present.txt" },
+    ] as const) {
+      await chooseSource(viewer, choice.index)
+      await viewer.app.waitForFrame((frame) => frame.includes(choice.label) && !frame.includes("Loading diff"))
+      const frame = viewer.app.captureCharFrame()
+      expect(frame).toContain(files[choice.mode][0])
+      expect(frame).not.toContain(choice.absent)
+      expect(viewer.vcsDiffInput()).toMatchObject({ mode: choice.mode })
+      expect(viewer.diffRequests.at(-1)!.searchParams.get("base")).toBe(
+        choice.mode === "working" ? null : "refs/heads/v2",
+      )
+    }
+    expect(viewer.baseRequests).toHaveLength(1)
+    expect(viewer.diffRequests).toHaveLength(4)
+    expect(viewer.writes).toHaveLength(0)
+    expect(viewer.settings().diffs?.source).toBeUndefined()
+  } finally {
+    viewer.app.renderer.destroy()
+  }
+})
+
+test.each(["branch", "committed", "working"] as const)(
+  "reopening remembers the last source choice instead of the initial %s setting",
+  async (source) => {
+    const viewer = await renderDiffViewer(hunkDiff, { source, height: 30 })
+    try {
+      expect(viewer.vcsDiffInput()).toMatchObject({ mode: source })
+      expect(viewer.baseRequests).toHaveLength(source === "working" ? 0 : 1)
+      await chooseSource(viewer, source === "working" ? 1 : 2)
+      await viewer.app.waitForFrame(
+        (frame) => frame.includes(source === "working" ? "Committed" : "Uncommitted") && frame.includes("const first"),
+      )
+      expect(viewer.writes).toHaveLength(0)
+      expect(viewer.settings().diffs?.source).toBe(source)
+      viewer.commands.get("diff.close")!.run()
+      await viewer.app.flush()
+      viewer.commands.get("diff.open")!.run()
+      await viewer.app.waitForFrame((frame) => frame.includes("const first"))
+      expect(viewer.vcsDiffInput()).toMatchObject({ mode: source === "working" ? "committed" : "working" })
+      expect(viewer.baseRequests).toHaveLength(source === "working" ? 2 : 1)
+      expect(viewer.diffRequests).toHaveLength(3)
+    } finally {
+      viewer.app.renderer.destroy()
+    }
+  },
+)
+
+test("explicit route source overrides the configured default", async () => {
+  const viewer = await renderDiffViewer(hunkDiff, {
+    source: "working",
+    initialRoute: { type: "plugin", id: "opencode.diffs", name: "diff", data: { mode: "committed" } },
+  })
+  try {
+    expect(viewer.vcsDiffInput()).toMatchObject({ mode: "committed", base: "refs/heads/v2" })
+    expect(viewer.settings().diffs?.source).toBe("working")
+  } finally {
+    viewer.app.renderer.destroy()
+  }
+})
+
+test.each([50, 80, 160])(
+  "keeps scope, base, and review count on one row with a selectable base at %i columns",
+  async (width) => {
+    const viewer = await renderDiffViewer(hunkDiff, {
+      width,
+      height: 30,
+      kittyKeyboard: true,
+      base: {
+        name: "release",
+        ref: "refs/remotes/origin/release",
+        source: "reflog",
+      },
+    })
+    try {
+      const header = viewer.app.renderer.root.findDescendantById("diff-source-header")!
+      const source = viewer.app.renderer.root.findDescendantById("diff-source-switch")!
+      const count = viewer.app.renderer.root.findDescendantById("diff-review-count")!
+      expect(header.height).toBe(1)
+      expect(source.y).toBe(header.y)
+      expect(count.y).toBe(header.y)
+      expect(viewer.app.captureCharFrame().split("\n")[header.y]).toMatch(/All · vs release\s+0\/1/)
+      expect(viewer.app.captureCharFrame()).not.toContain("reviewed")
+      expect(viewer.vcsDiffInput()).toMatchObject({ base: "refs/remotes/origin/release" })
+      await viewer.app.mockMouse.click(source.x, source.y)
+      await viewer.app.waitForFrame((frame) => frame.includes("Diff source"))
+      expect(viewer.app.captureCharFrame()).toMatch(/Base\s+release/)
+      const rows = viewer.app.captureCharFrame().split("\n")
+      const first = rows.findIndex((row) => row.includes("Branch + local changes"))
+      expect(rows[first]).toMatch(/All\s+Branch \+ local changes/)
+      expect(rows[first + 1]).toMatch(/Committed\s+Branch commits only/)
+      expect(rows[first + 2]).toMatch(/Uncommitted\s+Local changes only/)
+      expect(rows[first + 3]).toMatch(/Base\s+release/)
+      expect(rows[first + 1].indexOf("Branch commits only")).toBe(rows[first].indexOf("Branch + local changes"))
+      expect(rows[first + 2].indexOf("Local changes only")).toBe(rows[first].indexOf("Branch + local changes"))
+      viewer.app.mockInput.pressEscape()
+      await viewer.app.waitForFrame((frame) => !frame.includes("Diff source"))
+      viewer.commands.get("diff.mark_reviewed")!.run()
+      await viewer.app.flush()
+      expect(viewer.app.captureCharFrame().split("\n")[header.y]).toMatch(/All · vs release\s+1\/1/)
+      await chooseSource(viewer, 2)
+      await viewer.app.waitForFrame((frame) => frame.includes("Uncommitted · vs HEAD"))
+      viewer.app.mockInput.pressKey("d")
+      await viewer.app.waitForFrame((frame) => frame.includes("Diff source"))
+      expect(viewer.app.captureCharFrame()).toMatch(/Base\s+release/)
+      expect(viewer.app.captureCharFrame()).not.toMatch(/Base\s+HEAD/)
+      expect(viewer.baseRequests).toHaveLength(1)
+    } finally {
+      viewer.app.renderer.destroy()
+    }
+  },
+)
+
+test.each([50, 80, 100, 160])(
+  "long comparison bases cannot hide the source or review count at %i columns",
+  async (width) => {
+    const viewer = await renderDiffViewer(hunkDiff, {
+      width,
+      source: "committed",
+      base: { ...baseFixture, name: "release/very-long-comparison-branch-name-that-does-not-fit-in-the-header" },
+    })
+    try {
+      const header = viewer.app.renderer.root.findDescendantById("diff-source-header")!
+      const count = viewer.app.renderer.root.findDescendantById("diff-review-count")!
+      const row = viewer.app.captureCharFrame().split("\n")[header.y]
+      expect(header.height).toBe(1)
+      expect(row).toContain("Committed · vs")
+      expect(row).toContain("0/1")
+      expect(row).not.toContain("release/very-long-comparison-branch-name-that-does-not-fit-in-the-header")
+      expect(count.y).toBe(header.y)
+      expect(count.x + count.width).toBeLessThanOrEqual(header.x + header.width)
+      const hint = viewer.app.renderer.root.findDescendantById("diff-help-shortcut")!
+      if (width < 90) {
+        expect(hint.y).toBe(header.y)
+        expect(hint.x).toBeGreaterThan(count.x + count.width)
+        expect(findScrollBox(viewer.app.renderer.root)!.viewport.y).toBeGreaterThan(header.y)
+      }
+    } finally {
+      viewer.app.renderer.destroy()
+    }
+  },
+)
+
+test("opening the source chooser from initial Uncommitted does not resolve a branch base", async () => {
+  const viewer = await renderDiffViewer(hunkDiff, { source: "working" })
+  try {
+    viewer.app.mockInput.pressKey("d")
+    await viewer.app.waitForFrame((frame) => frame.includes("Diff source"))
+    expect(viewer.app.captureCharFrame()).toContain("Uncommitted · vs HEAD")
+    expect(viewer.app.captureCharFrame()).toMatch(/Base\s+Choose\.\.\./)
+    expect(viewer.baseRequests).toHaveLength(0)
+    expect(viewer.diffRequests).toHaveLength(1)
+  } finally {
+    viewer.app.renderer.destroy()
+  }
+})
+
+test.each(["branch", "committed", "working"] as const)(
+  "choosing a base remembers it and refreshes only the affected %s comparison",
+  async (source) => {
+    const viewer = await renderDiffViewer(hunkDiff, { source, height: 30, kittyKeyboard: true })
+    try {
+      viewer.commands.get("diff.mark_reviewed")!.run()
+      await viewer.app.flush()
+      expect(viewer.app.captureCharFrame()).toContain("1/1")
+      await chooseSource(viewer, 3)
+      await viewer.app.waitForFrame((frame) => frame.includes("Base branch") && frame.includes("origin/release"))
+      expect(viewer.app.captureCharFrame()).toMatch(/●\s+v2/)
+      expect(viewer.branchesRequests[0].searchParams.get("location[directory]")).toBe("/repo/session")
+      expect(viewer.branchesRequests[0].searchParams.get("limit")).toBe("100")
+      await viewer.app.mockInput.typeText("origin/release")
+      await Bun.sleep(160)
+      await viewer.app.waitFor(() => viewer.branchesRequests.at(-1)?.searchParams.get("search") === "origin/release")
+      await viewer.app.waitForFrame((frame) => frame.includes("origin/release") && !frame.includes("Loading branches"))
+      viewer.app.mockInput.pressEnter()
+      await viewer.app.waitForFrame((frame) => !frame.includes("Base branch") && frame.includes("src/file.txt"))
+      expect(viewer.mutationRequests).toHaveLength(0)
+      expect(viewer.vcsDiffInput()).toEqual({
+        location: session.location,
+        mode: source,
+        context: "12",
+        ...(source === "working" ? {} : { base: "origin/release" }),
+      })
+      expect(viewer.diffRequests).toHaveLength(source === "working" ? 1 : 2)
+      expect(viewer.app.captureCharFrame()).toContain(source === "working" ? "1/1" : "0/1")
+      expect(viewer.writes).toHaveLength(0)
+      if (source !== "working") viewer.commands.get("diff.mark_reviewed")!.run()
+      await viewer.app.flush()
+      expect(viewer.app.captureCharFrame()).toContain("1/1")
+      viewer.commands.get("diff.close")!.run()
+      await viewer.app.flush()
+      viewer.commands.get("diff.open")!.run()
+      await viewer.app.waitForFrame((frame) => frame.includes("const first"))
+      expect(viewer.app.captureCharFrame()).toContain("0/1")
+      expect(viewer.diffRequests).toHaveLength(source === "working" ? 2 : 3)
+      if (source !== "working") expect(viewer.vcsDiffInput()).toMatchObject({ base: "origin/release" })
+      await chooseSource(viewer, 3)
+      await viewer.app.waitForFrame((frame) => /●\s+origin\/release/.test(frame))
+      expect(viewer.baseRequests).toHaveLength(1)
+    } finally {
+      viewer.app.renderer.destroy()
+    }
+  },
+)
+
+test.each(["branch", "committed"] as const)("an ambiguous base never requests a guessed %s diff", async (source) => {
+  const viewer = await renderDiffViewer([], {
+    source,
+    height: 30,
+    kittyKeyboard: true,
+    baseResponse: async () => json({ message: "choose a base" }, { status: 503 }),
+    diffResponse: async (url) =>
+      url.searchParams.get("base")
+        ? json({ location: session.location, data: hunkDiff })
+        : json({ message: "choose a base" }, { status: 503 }),
+  })
+  try {
+    expect(viewer.app.captureCharFrame()).toContain("Choose a base branch")
+    expect(viewer.app.captureCharFrame()).not.toContain("No changes to show")
+    expect(viewer.diffRequests).toHaveLength(0)
+    await chooseSource(viewer, 3)
+    await viewer.app.waitForFrame((frame) => frame.includes("Base branch") && frame.includes("origin/release"))
+    viewer.app.mockInput.pressKey("HOME")
+    viewer.app.mockInput.pressArrow("down")
+    viewer.app.mockInput.pressEnter()
+    await viewer.app.waitForFrame((frame) => frame.includes("vs release") && frame.includes("const first"))
+    expect(viewer.vcsDiffInput()).toMatchObject({ mode: source, base: "release" })
+    expect(viewer.settings().diffs?.source).toBe(source)
+    expect(viewer.baseRequests).toHaveLength(1)
+  } finally {
+    viewer.app.renderer.destroy()
+  }
+})
+
+test("base and scope choices survive reopening but not a new TUI instance", async () => {
+  const viewer = await renderDiffViewer(hunkDiff, { source: "working", height: 30, kittyKeyboard: true })
+  try {
+    await chooseSource(viewer, 3)
+    await viewer.app.waitForFrame((frame) => frame.includes("origin/release"))
+    viewer.app.mockInput.pressArrow("down")
+    viewer.app.mockInput.pressEnter()
+    await viewer.app.waitForFrame((frame) => !frame.includes("Base branch"))
+    await chooseSource(viewer, 1)
+    await viewer.app.waitForFrame((frame) => frame.includes("Committed · vs release") && frame.includes("const first"))
+    viewer.commands.get("diff.close")!.run()
+    await viewer.app.flush()
+    viewer.commands.get("diff.open")!.run()
+    await viewer.app.waitForFrame((frame) => frame.includes("Committed · vs release") && frame.includes("const first"))
+    expect(viewer.writes).toHaveLength(0)
+    expect(viewer.mutationRequests).toHaveLength(0)
+    expect(await readdir(path.join(viewer.state, "test", "tui"))).toEqual([])
+  } finally {
+    viewer.app.renderer.destroy()
+  }
+
+  const restarted = await renderDiffViewer(hunkDiff, { state: viewer.state, source: "working", height: 30 })
+  try {
+    expect(restarted.vcsDiffInput()).toMatchObject({ mode: "working" })
+    await chooseSource(restarted, 1)
+    await restarted.app.waitForFrame((frame) => frame.includes("Committed · vs v2") && frame.includes("const first"))
+    expect(restarted.vcsDiffInput()).toMatchObject({ base: "refs/heads/v2" })
+    expect(restarted.writes).toHaveLength(0)
+  } finally {
+    restarted.app.renderer.destroy()
+  }
+})
+
+test("base choices are isolated by branch within the same location", async () => {
+  const viewer = await renderDiffViewer(hunkDiff, { height: 30, kittyKeyboard: true })
+  try {
+    await chooseSource(viewer, 3)
+    await viewer.app.waitForFrame((frame) => frame.includes("origin/release"))
+    viewer.app.mockInput.pressArrow("down")
+    viewer.app.mockInput.pressEnter()
+    await viewer.app.waitForFrame((frame) => frame.includes("All · vs release") && frame.includes("const first"))
+    viewer.setBranch("other-feature")
+    await viewer.app.waitForFrame((frame) => frame.includes("All · vs v2") && frame.includes("const first"))
+    expect(viewer.vcsDiffInput()).toMatchObject({ base: "refs/heads/v2" })
+    viewer.setBranch("feature")
+    await viewer.app.waitForFrame((frame) => frame.includes("All · vs release") && frame.includes("const first"))
+    expect(viewer.vcsDiffInput()).toMatchObject({ base: "release" })
+    expect(viewer.baseRequests).toHaveLength(2)
+    expect(viewer.mutationRequests).toHaveLength(0)
+  } finally {
+    viewer.app.renderer.destroy()
+  }
+})
+
+test("an invalid comparison reports an error and allows another base choice", async () => {
+  const viewer = await renderDiffViewer(hunkDiff, {
+    height: 30,
+    kittyKeyboard: true,
+    diffResponse: async (url) =>
+      url.searchParams.get("base") === "release"
+        ? json({ message: "no common history" }, { status: 503 })
+        : json({ location: session.location, data: hunkDiff }),
+  })
+  try {
+    await chooseSource(viewer, 3)
+    await viewer.app.waitForFrame((frame) => frame.includes("origin/release"))
+    viewer.app.mockInput.pressArrow("down")
+    viewer.app.mockInput.pressEnter()
+    await viewer.app.waitForFrame((frame) => frame.includes("Base or diff unavailable"))
+    expect(viewer.app.captureCharFrame()).not.toContain("No changes to show")
+    await chooseSource(viewer, 3)
+    await viewer.app.waitForFrame((frame) => frame.includes("origin/release"))
+    viewer.app.mockInput.pressKey("HOME")
+    viewer.app.mockInput.pressEnter()
+    await viewer.app.waitForFrame((frame) => frame.includes("All · vs v2") && frame.includes("const first"))
+    expect(viewer.diffRequests).toHaveLength(3)
+    expect(viewer.vcsDiffInput()).toMatchObject({ base: "v2" })
+    expect(viewer.mutationRequests).toHaveLength(0)
+  } finally {
+    viewer.app.renderer.destroy()
+  }
+})
+
+test("base search failures are visible without changing the diff", async () => {
+  const viewer = await renderDiffViewer(hunkDiff, {
+    height: 30,
+    branchesResponse: async () => json({ message: "branches unavailable" }, { status: 503 }),
+  })
+  try {
+    await chooseSource(viewer, 3)
+    await viewer.app.waitForFrame((frame) => frame.includes("Could not load branches"))
+    expect(viewer.app.captureCharFrame()).toContain("All · vs v2")
+    expect(viewer.mutationRequests).toHaveLength(0)
+    expect(viewer.diffRequests).toHaveLength(1)
+  } finally {
+    viewer.app.renderer.destroy()
+  }
+})
+
+test("a late base lookup cannot overwrite an in-memory base choice", async () => {
+  const pending = Promise.withResolvers<Response>()
+  const viewer = await renderDiffViewer(hunkDiff, {
+    height: 30,
+    pending: true,
+    kittyKeyboard: true,
+    baseResponse: () => pending.promise,
+  })
+  try {
+    await chooseSource(viewer, 3)
+    await viewer.app.waitForFrame((frame) => frame.includes("origin/release"))
+    viewer.app.mockInput.pressArrow("down")
+    viewer.app.mockInput.pressEnter()
+    await viewer.app.waitForFrame((frame) => frame.includes("All · vs release") && frame.includes("const first"))
+    pending.resolve(json({ location: session.location, data: baseFixture }))
+    await viewer.app.flush()
+    expect(viewer.app.captureCharFrame()).toContain("All · vs release")
+    expect(viewer.diffRequests).toHaveLength(1)
+    expect(viewer.vcsDiffInput()).toMatchObject({ base: "release" })
+    expect(viewer.baseRequests).toHaveLength(1)
+    await chooseSource(viewer, 1)
+    await viewer.app.waitForFrame((frame) => frame.includes("Committed · vs release"))
+    expect(viewer.vcsDiffInput()).toMatchObject({ mode: "committed", base: "release" })
+    viewer.app.mockInput.pressKey("d")
+    await viewer.app.waitForFrame((frame) => frame.includes("Diff source"))
+    expect(viewer.app.captureCharFrame()).toMatch(/Base\s+release/)
+  } finally {
+    pending.resolve(json({ location: session.location, data: baseFixture }))
+    viewer.app.renderer.destroy()
+  }
+})
+
+test("dismissing the base picker leaves the comparison unchanged", async () => {
+  const viewer = await renderDiffViewer(hunkDiff, {
+    height: 30,
+    kittyKeyboard: true,
+  })
+  try {
+    await chooseSource(viewer, 3)
+    await viewer.app.waitForFrame((frame) => frame.includes("origin/release"))
+    viewer.app.mockInput.pressArrow("down")
+    viewer.app.mockInput.pressEscape()
+    await viewer.app.waitForFrame((frame) => !frame.includes("Base branch"))
+    viewer.app.mockInput.pressKey("d")
+    await viewer.app.waitForFrame((frame) => frame.includes("Diff source"))
+    expect(viewer.app.captureCharFrame()).toContain("Diff source")
+    expect(viewer.app.captureCharFrame()).toContain("All · vs v2")
+    expect(viewer.diffRequests).toHaveLength(1)
+  } finally {
+    viewer.app.renderer.destroy()
+  }
+})
+
+test("the base picker remembers its captured location without refreshing a moved session", async () => {
+  const viewer = await renderDiffViewer(hunkDiff, { height: 30, kittyKeyboard: true })
+  try {
+    await chooseSource(viewer, 3)
+    await viewer.app.waitForFrame((frame) => frame.includes("origin/release"))
+    viewer.setSessionLocation({ directory: "/repo/moved" })
+    await viewer.app.flush()
+    viewer.app.mockInput.pressArrow("down")
+    viewer.app.mockInput.pressEnter()
+    await viewer.app.waitForFrame((frame) => !frame.includes("Base branch"))
+    expect(viewer.mutationRequests).toHaveLength(0)
+    expect(viewer.vcsDiffInput()).toMatchObject({ location: { directory: "/repo/moved" }, base: "refs/heads/v2" })
+    expect(viewer.diffRequests).toHaveLength(2)
+    viewer.setSessionLocation(session.location)
+    await viewer.app.waitForFrame((frame) => frame.includes("All · vs release") && frame.includes("const first"))
+    expect(viewer.vcsDiffInput()).toMatchObject({ location: session.location, base: "release" })
+  } finally {
+    viewer.app.renderer.destroy()
+  }
+})
+
+test("tree, single-file, and layout preferences do not refetch base or diff", async () => {
+  const viewer = await renderDiffViewer(hunkDiff, { width: 160 })
+  try {
+    for (const command of ["diff.toggle_file_tree", "diff.single_patch", "diff.toggle_view"]) {
+      viewer.commands.get(command)!.run()
+      await viewer.app.flush()
+    }
+    expect(viewer.writes).toHaveLength(3)
+    expect(viewer.settings().diffs).toMatchObject({ tree: false, single: true, view: "unified" })
+    expect(viewer.baseRequests).toHaveLength(1)
+    expect(viewer.diffRequests).toHaveLength(1)
+  } finally {
+    viewer.app.renderer.destroy()
+  }
+})
+
+test("the remapped source chooser preserves its current selection marker", async () => {
+  const viewer = await renderDiffViewer(hunkDiff, { height: 30, keybinds: { "diff.switch_source": "x" } })
+  try {
+    viewer.app.mockInput.pressKey("d")
+    await viewer.app.flush()
+    expect(viewer.app.captureCharFrame()).not.toContain("Diff source")
+    await chooseSource(viewer, 1, "x")
+    await viewer.app.waitForFrame((frame) => frame.includes("Committed") && frame.includes("const first"))
+    viewer.app.mockInput.pressKey("x")
+    await viewer.app.waitForFrame((frame) => frame.includes("Diff source"))
+    expect(viewer.app.captureCharFrame()).toMatch(/●\s+Committed/)
+    expect(viewer.app.captureCharFrame()).toContain("Branch commits only")
+    expect(viewer.app.captureCharFrame()).toContain("Local changes only")
+    expect(viewer.app.captureCharFrame()).toMatch(/Base\s+v2/)
+    expect(viewer.writes).toHaveLength(0)
+  } finally {
+    viewer.app.renderer.destroy()
+  }
+})
+
+test("pending and failed scopes never render the previous scope's files", async () => {
+  const pending = Promise.withResolvers<Response>()
+  const viewer = await renderDiffViewer([], {
+    height: 30,
+    diffResponse: async (url) =>
+      url.searchParams.get("mode") === "committed"
+        ? pending.promise
+        : json({ location: session.location, data: hunkDiff }),
+  })
+  try {
+    expect(viewer.app.captureCharFrame()).toContain("const first")
+    await chooseSource(viewer, 1)
+    await viewer.app.waitForFrame((frame) => frame.includes("Loading diff"))
+    expect(viewer.app.captureCharFrame()).toContain("Committed")
+    expect(viewer.app.captureCharFrame()).not.toContain("src/file.txt")
+    expect(findDiffs(viewer.app.renderer.root)).toHaveLength(0)
+    pending.resolve(json({ message: "comparison failed" }, { status: 503 }))
+    await viewer.app.waitForFrame((frame) => frame.includes("Could not load diff"))
+    expect(viewer.app.captureCharFrame()).not.toContain("No changes to show")
+    expect(viewer.app.captureCharFrame()).not.toContain("src/file.txt")
+    await chooseSource(viewer, 2)
+    await viewer.app.waitForFrame((frame) => frame.includes("Uncommitted") && frame.includes("const first"))
+    expect(viewer.baseRequests).toHaveLength(1)
+  } finally {
+    pending.resolve(json({ location: session.location, data: [] }))
+    viewer.app.renderer.destroy()
+  }
+})
+
+test("late diff responses cannot replace the selected scope", async () => {
+  const pending = Promise.withResolvers<Response>()
+  const viewer = await renderDiffViewer([], {
+    height: 30,
+    diffResponse: async (url) =>
+      url.searchParams.get("mode") === "committed"
+        ? pending.promise
+        : json({ location: session.location, data: [{ ...hunkDiff[0], file: "uncommitted.txt" }] }),
+  })
+  try {
+    await chooseSource(viewer, 1)
+    await viewer.app.waitForFrame((frame) => frame.includes("Loading diff"))
+    await chooseSource(viewer, 2)
+    await viewer.app.waitForFrame((frame) => frame.includes("uncommitted.txt"))
+    pending.resolve(json({ location: session.location, data: [{ ...hunkDiff[0], file: "committed.txt" }] }))
+    await viewer.app.flush()
+    expect(viewer.app.captureCharFrame()).toContain("Uncommitted")
+    expect(viewer.app.captureCharFrame()).toContain("uncommitted.txt")
+    expect(viewer.app.captureCharFrame()).not.toMatch(/\scommitted\.txt/)
+    expect(viewer.baseRequests).toHaveLength(1)
+  } finally {
+    pending.resolve(json({ location: session.location, data: [] }))
+    viewer.app.renderer.destroy()
+  }
+})
+
+test("switching to uncommitted does not wait for or display a late base result", async () => {
+  const pending = Promise.withResolvers<Response>()
+  const viewer = await renderDiffViewer(hunkDiff, { height: 30, pending: true, baseResponse: () => pending.promise })
+  try {
+    expect(viewer.app.captureCharFrame()).toContain("Loading diff")
+    expect(viewer.diffRequests).toHaveLength(0)
+    await chooseSource(viewer, 2)
+    await viewer.app.waitForFrame((frame) => frame.includes("Uncommitted") && frame.includes("const first"))
+    pending.resolve(json({ location: session.location, data: baseFixture }))
+    await viewer.app.flush()
+    expect(viewer.app.captureCharFrame()).toContain("vs HEAD")
+    expect(viewer.app.captureCharFrame()).not.toContain("vs v2")
+    expect(viewer.diffRequests).toHaveLength(1)
+    expect(viewer.vcsDiffInput()).toMatchObject({ mode: "working" })
+  } finally {
+    pending.resolve(json({ location: session.location, data: baseFixture }))
+    viewer.app.renderer.destroy()
+  }
+})
+
+test.each([false, true])(
+  "missing base metadata preserves provider branch review (has branch changes: %s)",
+  async (changed) => {
+    const viewer = await renderDiffViewer([], {
+      base: null,
+      height: 30,
+      diffResponse: async (url) =>
+        json({
+          location: session.location,
+          data:
+            url.searchParams.get("mode") === "working"
+              ? [{ ...hunkDiff[0], file: "dirty.txt" }]
+              : changed
+                ? [{ ...hunkDiff[0], file: "branch.txt" }]
+                : [],
+        }),
+    })
+    try {
+      expect(viewer.app.captureCharFrame()).toContain("All")
+      expect(viewer.app.captureCharFrame()).toContain("Base not reported")
+      expect(viewer.app.captureCharFrame()).toContain(changed ? "branch.txt" : "No changes to show")
+      expect(viewer.app.captureCharFrame()).not.toContain("dirty.txt")
+      expect(viewer.app.captureCharFrame()).not.toContain("showing uncommitted")
+      expect(viewer.vcsDiffInput()).toEqual({ location: session.location, mode: "branch", context: "12" })
+      await chooseSource(viewer, 1)
+      await viewer.app.waitForFrame((frame) => frame.includes("Committed comparison unavailable"))
+      expect(viewer.app.captureCharFrame()).toContain("Base not reported")
+      expect(viewer.app.captureCharFrame()).not.toContain("No changes to show")
+      expect(viewer.app.captureCharFrame()).not.toContain("branch.txt")
+      expect(viewer.diffRequests).toHaveLength(1)
+      await chooseSource(viewer, 2)
+      await viewer.app.waitForFrame((frame) => frame.includes("dirty.txt"))
+      expect(viewer.app.captureCharFrame()).not.toContain("Base not reported")
+      expect(viewer.vcsDiffInput()).toEqual({ location: session.location, mode: "working", context: "12" })
+      expect(viewer.diffRequests).toHaveLength(2)
+      expect(viewer.baseRequests).toHaveLength(1)
+    } finally {
+      viewer.app.renderer.destroy()
+    }
+  },
+)
+
+test("unresolved branch comparisons report errors without switching to working", async () => {
+  const viewer = await renderDiffViewer([], {
+    base: null,
+    height: 30,
+    diffResponse: async (url) =>
+      url.searchParams.get("mode") === "branch"
+        ? json({ message: "comparison base unavailable" }, { status: 503 })
+        : json({ location: session.location, data: hunkDiff }),
+  })
+  try {
+    expect(viewer.app.captureCharFrame()).toContain("Could not load diff")
+    expect(viewer.app.captureCharFrame()).not.toContain("No changes to show")
+    expect(viewer.vcsDiffInput()).toMatchObject({ mode: "branch" })
+    expect(viewer.diffRequests).toHaveLength(1)
+    await chooseSource(viewer, 2)
+    await viewer.app.waitForFrame((frame) => frame.includes("const first"))
+    expect(viewer.vcsDiffInput()).toMatchObject({ mode: "working" })
+    expect(viewer.baseRequests).toHaveLength(1)
+  } finally {
+    viewer.app.renderer.destroy()
+  }
+})
+
+test("base lookup failures are errors rather than missing-base fallbacks", async () => {
+  const viewer = await renderDiffViewer([], {
+    height: 30,
+    baseResponse: async () => json({ message: "base failed" }, { status: 503 }),
+  })
+  try {
+    expect(viewer.app.captureCharFrame()).toContain("Could not load diff")
+    expect(viewer.app.captureCharFrame()).not.toContain("No changes to show")
+    expect(viewer.app.captureCharFrame()).not.toContain("showing uncommitted")
+    expect(viewer.diffRequests).toHaveLength(0)
+    await chooseSource(viewer, 2)
+    await viewer.app.waitForFrame((frame) => frame.includes("No changes to show"))
+    expect(viewer.vcsDiffInput()).toMatchObject({ mode: "working" })
+  } finally {
+    viewer.app.renderer.destroy()
+  }
+})
+
+test.each([undefined, "Binary files a/assets/preview.png and b/assets/preview.png differ"])(
+  "committed images never read the working-tree image (patch: %s)",
+  async (patch) => {
+    const viewer = await renderDiffViewer(
+      [{ file: "assets/preview.png", status: "modified", additions: 0, deletions: 0, patch }],
+      { source: "committed" },
+    )
+    try {
+      expect(viewer.app.captureCharFrame()).toContain("Committed image preview unavailable")
+      expect(viewer.imageReadInput()).toBeUndefined()
+      expect(viewer.app.captureCharFrame()).not.toContain("Working tree preview")
+    } finally {
+      viewer.app.renderer.destroy()
+    }
+  },
+)
+
+async function chooseSource(viewer: Awaited<ReturnType<typeof renderDiffViewer>>, index: number, key = "d") {
+  viewer.app.mockInput.pressKey(key)
+  await viewer.app.waitForFrame((frame) => /Diff source\s+esc/.test(frame))
+  viewer.app.mockInput.pressKey("HOME")
+  await viewer.app.flush()
+  for (let i = 0; i < index; i++) {
+    viewer.app.mockInput.pressArrow("down")
+    await viewer.app.flush()
+  }
+  viewer.app.mockInput.pressEnter()
+  await viewer.app.waitForFrame((frame) => !/Diff source\s+esc/.test(frame))
+}
 
 test("brackets navigate diff hunks", async () => {
   const viewer = await renderDiffViewer(hunkDiff, { height: 12 })
@@ -187,7 +870,7 @@ test.each([80, 160])("adapts navigation and modified patches at %i columns", asy
   try {
     await viewer.app.waitForFrame((frame) => frame.includes("const first"))
     expect(findDiffs(viewer.app.renderer.root)[0].view).toBe(width === 80 ? "unified" : "split")
-    expect(viewer.app.captureCharFrame().includes("0/1 reviewed")).toBe(width === 160)
+    expect(viewer.app.captureCharFrame()).toContain("0/1")
   } finally {
     viewer.app.renderer.destroy()
   }
@@ -220,12 +903,12 @@ test.each([100, 160])("shared pane edges align headings and stay fixed at %i col
     await viewer.app.flush()
     const lines = viewer.app.captureCharFrame().split("\n")
     const title = lines.findIndex((line) => line.includes("file00.txt"))
-    expect(lines.findIndex((line) => line.includes("Working tree") && line.includes("reviewed"))).toBe(title)
+    expect(lines.findIndex((line) => line.includes("All"))).toBe(title)
     const frame = viewer.app.captureSpans()
     const caps = frame.lines[title - 1].spans.filter((span) => span.width > 2)
     expect(caps).toHaveLength(2)
     caps.forEach((span) => expect(span.text.trim()).toBe(""))
-    expect(caps[0].bg).toEqual(frame.lines[title].spans.find((span) => span.text.includes("Working tree"))!.bg)
+    expect(caps[0].bg).toEqual(frame.lines[title].spans.find((span) => span.text.includes("All"))!.bg)
     expect(caps[1].bg).toEqual(frame.lines[title].spans.find((span) => span.text.includes("file00.txt"))!.bg)
     expect(title).toBe(1)
     expect(viewer.app.captureCharFrame()).not.toContain("Diff working tree")
@@ -250,7 +933,7 @@ test.each([100, 160])("shared pane edges align headings and stay fixed at %i col
     await viewer.app.flush()
     expect(viewer.app.renderer.root.findDescendantById("diff-tree-top-edge")).toBeUndefined()
     expect(viewer.app.renderer.root.findDescendantById("diff-patch-top-edge")).toBeDefined()
-    expect(viewer.app.captureCharFrame().split("\n")[title]).toContain("file01.txt")
+    expect(viewer.app.captureCharFrame().split("\n")[title + 1]).toContain("file01.txt")
   } finally {
     viewer.app.renderer.destroy()
   }
@@ -274,9 +957,7 @@ test.each(["dark", "light"] as const)("the pane edge matches the visible reviewe
       expect(edge.text.trim()).toBe("")
       expect(edge.bg).toEqual(title.bg)
       expect(edge.bg).not.toEqual(page)
-      expect(frame.lines[0].spans[0].bg).toEqual(
-        frame.lines[1].spans.find((span) => span.text.includes("Working tree"))!.bg,
-      )
+      expect(frame.lines[0].spans[0].bg).toEqual(frame.lines[1].spans.find((span) => span.text.includes("All"))!.bg)
       const bottom = frame.lines[scroll.viewport.y + 1].spans.findLast((span) => span.text.includes("▀"))
       if (!collapsed) {
         expect(bottom).toBeUndefined()
@@ -372,9 +1053,9 @@ test("compact gutter help leaves the full patch viewport available when the side
     await viewer.app.flush()
     const scroll = findScrollBox(viewer.app.renderer.root)!
     const hint = viewer.app.renderer.root.findDescendantById("diff-help-shortcut")!
-    expect(hint.y).toBe(1)
+    expect(hint.y).toBe(0)
     expect(hint.x).toBe(159)
-    expect(scroll.viewport.y).toBe(1)
+    expect(scroll.viewport.y).toBe(2)
     expect(scroll.viewport.y + scroll.viewport.height).toBe(24)
     await viewer.app.mockMouse.click(hint.x, hint.y)
     await viewer.app.waitForFrame((frame) => frame.includes("Diff shortcuts"))
@@ -387,15 +1068,15 @@ test("compact gutter help leaves the full patch viewport available when the side
     expect(viewer.app.renderer.root.findDescendantById("diff-help-shortcut")!.y).toBe(21)
     viewer.app.resize(80, 24)
     await viewer.app.flush()
-    expect(viewer.app.renderer.root.findDescendantById("diff-help-shortcut")!.y).toBe(1)
+    expect(viewer.app.renderer.root.findDescendantById("diff-help-shortcut")!.y).toBe(0)
     expect(viewer.app.renderer.root.findDescendantById("diff-help-shortcut")!.x).toBe(79)
     expect(scroll.viewport.y + scroll.viewport.height).toBe(24)
     expect(viewer.app.captureCharFrame()).not.toContain("? help")
-    expect(viewer.app.captureCharFrame().split("\n")[1].at(-1)).toBe("?")
+    expect(viewer.app.captureCharFrame().split("\n")[0].at(-1)).toBe("?")
     viewer.app.mockInput.pressKey("d")
-    await viewer.app.waitForFrame((frame) => frame.includes("Switch source"))
+    await viewer.app.waitForFrame((frame) => frame.includes("Diff source"))
     viewer.app.mockInput.pressEscape()
-    await viewer.app.waitForFrame((frame) => !frame.includes("Switch source"))
+    await viewer.app.waitForFrame((frame) => !frame.includes("Diff source"))
   } finally {
     viewer.app.renderer.destroy()
   }
@@ -706,18 +1387,18 @@ test.each([
     await viewer.app.mockMouse.click(node().x + 4, node().y, MouseButton.RIGHT)
     await viewer.app.waitForFrame((frame) => frame.includes("Mark complete"))
     expect(scroll.scrollTop).toBe(0)
-    expect(viewer.app.captureCharFrame()).toContain("0/3 reviewed")
+    expect(viewer.app.captureCharFrame()).toContain("0/3")
     viewer.app.mockInput.pressKey("n")
     viewer.app.mockInput.pressKey("m")
     await viewer.app.flush()
     expect(scroll.scrollTop).toBe(0)
-    expect(viewer.app.captureCharFrame()).toContain("0/3 reviewed")
+    expect(viewer.app.captureCharFrame()).toContain("0/3")
     const menu = viewer.app.renderer.root.findDescendantById("diff-file-menu")!
     expect(
       viewer.app.captureSpans().lines[menu.y].spans.find((span) => span.text.includes("Mark complete"))!.bg,
-    ).not.toEqual(viewer.app.captureSpans().lines[1].spans.find((span) => span.text.includes("Working tree"))!.bg)
+    ).not.toEqual(viewer.app.captureSpans().lines[1].spans.find((span) => span.text.includes("All"))!.bg)
     await viewer.app.mockMouse.click(menu.x + 1, menu.y)
-    await viewer.app.waitForFrame((frame) => frame.includes("1/3 reviewed"))
+    await viewer.app.waitForFrame((frame) => frame.includes("1/3"))
     expect(viewer.app.captureCharFrame()).toMatch(/file01\.txt\s+✓/)
     expect(viewer.app.captureCharFrame()).not.toMatch(/file00\.txt\s+✓/)
     expect(viewer.app.renderer.root.findDescendantById("diff-file-menu")).toBeUndefined()
@@ -727,7 +1408,7 @@ test.each([
     await viewer.app.mockMouse.click(node().x + 4, node().y, MouseButton.RIGHT)
     await viewer.app.waitForFrame((frame) => frame.includes("Mark incomplete"))
     viewer.app.mockInput.pressEnter()
-    await viewer.app.waitForFrame((frame) => frame.includes("0/3 reviewed"))
+    await viewer.app.waitForFrame((frame) => frame.includes("0/3"))
     expect(findDiffs(viewer.app.renderer.root)).toHaveLength(9)
     expect(scroll.scrollTop).toBe(0)
   } finally {
@@ -773,7 +1454,7 @@ test("single-file menu actions advance only when completing the current file", a
     await viewer.app.mockMouse.click(other.x + 4, other.y, MouseButton.RIGHT)
     await viewer.app.waitForFrame((frame) => frame.includes("Mark complete"))
     viewer.app.mockInput.pressEnter()
-    await viewer.app.waitForFrame((frame) => frame.includes("1/3 reviewed"))
+    await viewer.app.waitForFrame((frame) => frame.includes("1/3"))
     expect(viewer.app.renderer.root.findDescendantById("diff-file-header-0")).toBeDefined()
     expect(viewer.app.renderer.root.findDescendantById("diff-file-header-2")).toBeUndefined()
     expect(viewer.app.captureCharFrame()).toMatch(/file02\.txt\s+✓/)
@@ -781,7 +1462,7 @@ test("single-file menu actions advance only when completing the current file", a
     await viewer.app.mockMouse.click(current.x + 4, current.y, MouseButton.RIGHT)
     await viewer.app.waitForFrame((frame) => frame.includes("Mark complete"))
     viewer.app.mockInput.pressEnter()
-    await viewer.app.waitForFrame((frame) => frame.includes("2/3 reviewed") && frame.includes("const first"))
+    await viewer.app.waitForFrame((frame) => frame.includes("2/3") && frame.includes("const first"))
     expect(viewer.app.renderer.root.findDescendantById("diff-file-header-0")).toBeUndefined()
     expect(viewer.app.renderer.root.findDescendantById("diff-file-header-1")).toBeDefined()
     expect(viewer.app.captureCharFrame()).toContain("const first")
@@ -1113,21 +1794,37 @@ async function renderDiffViewer(
     onSessionTab?: () => void
     keybinds?: TuiKeybind.KeybindOverrides
     kittyKeyboard?: boolean
+    source?: "branch" | "committed" | "working"
+    base?: typeof baseFixture | null
+    open?: boolean
+    pending?: boolean
+    baseResponse?: () => Promise<Response>
+    diffResponse?: (url: URL) => Promise<Response>
+    branchesResponse?: (url: URL) => Promise<Response>
+    state?: string
   } = {},
 ) {
   const commands = new Map<string, KeymapCommand>()
   const [current, setCurrent] = createSignal<Route>(options.initialRoute ?? startRoute)
-  const currentData = () => {
-    const route = current()
-    return route.type === "plugin" ? route.data : undefined
-  }
+  const [sessionLocation, setSessionLocation] = createSignal(session.location)
+  const [branch, setBranch] = createSignal("feature")
+  const state = options.state ?? path.join(temporary.path, crypto.randomUUID())
   let renderDiff: Page["render"] | undefined
   let renderCommands: SlotClaim<"app">["render"] | undefined
   let vcsDiffInput: unknown
   let imageReadInput: unknown
   let shortcut: (command: string) => string | undefined = () => undefined
-  const config = createTuiResolvedConfig({ keybinds: options.keybinds, diffs: { single: options.single } })
+  const stored: { info: Info } = {
+    info: { keybinds: options.keybinds, diffs: { source: options.source, single: options.single } },
+  }
+  const writes: Info[] = []
+  const baseRequests: URL[] = []
+  const diffRequests: URL[] = []
+  const branchesRequests: URL[] = []
+  const mutationRequests: URL[] = []
+  const config = createTuiResolvedConfig(stored.info)
   const transport = createFetch(async (url, request) => {
+    if (request.method !== "GET") mutationRequests.push(url)
     if (url.pathname.startsWith("/api/fs/read/")) {
       const file = decodeURIComponent(url.pathname.slice("/api/fs/read/".length))
       imageReadInput = {
@@ -1138,12 +1835,32 @@ async function renderDiffViewer(
         options.readImage ? (await options.readImage(file, request.signal)).slice() : diffImageFixture,
       )
     }
+    if (url.pathname === "/api/vcs/base") {
+      baseRequests.push(url)
+      return options.baseResponse
+        ? options.baseResponse()
+        : json({ location: session.location, data: options.base === undefined ? baseFixture : options.base })
+    }
+    if (url.pathname === "/api/vcs/branches") {
+      branchesRequests.push(url)
+      return options.branchesResponse
+        ? options.branchesResponse(url)
+        : json({
+            location: session.location,
+            data: ["v2", "release", "origin/release"].filter((name) =>
+              name.includes(url.searchParams.get("search") ?? ""),
+            ),
+          })
+    }
     if (url.pathname !== "/api/vcs/diff") return
+    diffRequests.push(url)
     vcsDiffInput = {
       location: { directory: url.searchParams.get("location[directory]") },
       mode: url.searchParams.get("mode"),
       context: url.searchParams.get("context"),
+      ...(url.searchParams.has("base") ? { base: url.searchParams.get("base") } : {}),
     }
+    if (options.diffResponse) return options.diffResponse(url)
     if (options.fail) return json({ message: "boom" }, { status: 500 })
     return json({
       location: { directory: "/repo/session", project: { id: "project-1", directory: "/repo/session" } },
@@ -1170,10 +1887,14 @@ async function renderDiffViewer(
       theme = useThemes().currentTokens()
       const context = {
         options: {},
+        storage: useStorage(),
         client: createApi(transport.fetch),
         data: {
-          session: { get: () => session },
-          location: { default: () => ({ directory: "/repo/default" }) },
+          session: { get: () => ({ ...session, location: sessionLocation() }) },
+          location: {
+            default: () => ({ directory: "/repo/default" }),
+            vcs: { info: () => ({ branch: { current: branch() } }) },
+          },
         },
         get theme() {
           return theme
@@ -1217,24 +1938,42 @@ async function renderDiffViewer(
       return (
         <>
           {commandView}
-          <Show when={current().type === "plugin"}>{renderDiff?.({ data: currentData() })}</Show>
+          <Show when={current().type === "plugin" ? current() : undefined} keyed>
+            {(route) => renderDiff?.({ data: route.type === "plugin" ? route.data : undefined })}
+          </Show>
         </>
       )
     }
 
     return (
-      <TestTuiContexts>
-        <ConfigProvider config={config}>
-          <Keymap.Provider>
-            <ToastProvider>
-              <ThemeProvider mode={options.mode ?? "dark"} source={emptyThemeSource}>
-                <DialogProvider>
-                  <Content />
-                </DialogProvider>
-              </ThemeProvider>
-            </ToastProvider>
-          </Keymap.Provider>
-        </ConfigProvider>
+      <TestTuiContexts paths={{ state }}>
+        <TuiAppProvider value={{ name: "test", version: "test", channel: "test" }}>
+          <StorageProvider>
+            <ConfigProvider
+              config={config}
+              service={{
+                get: async () => stored.info,
+                update: async (update) => {
+                  const next = structuredClone(stored.info)
+                  update(next)
+                  stored.info = next
+                  writes.push(next)
+                  return next
+                },
+              }}
+            >
+              <Keymap.Provider>
+                <ToastProvider>
+                  <ThemeProvider mode={options.mode ?? "dark"} source={emptyThemeSource}>
+                    <DialogProvider>
+                      <Content />
+                    </DialogProvider>
+                  </ThemeProvider>
+                </ToastProvider>
+              </Keymap.Provider>
+            </ConfigProvider>
+          </StorageProvider>
+        </TuiAppProvider>
       </TestTuiContexts>
     )
   }
@@ -1245,9 +1984,10 @@ async function renderDiffViewer(
     kittyKeyboard: options.kittyKeyboard,
   })
   await app.waitFor(() => commands.has("diff.open"))
-  if (current().type !== "plugin") commands.get("diff.open")!.run()
-  await app.waitFor(() => commands.has("diff.close"))
-  await app.waitFor(() => vcsDiffInput !== undefined)
+  if (options.open !== false && current().type !== "plugin") commands.get("diff.open")!.run()
+  if (options.open !== false) await app.waitFor(() => commands.has("diff.close"))
+  await app.flush()
+  if (!options.pending) await app.waitForFrame((frame) => !frame.includes("Loading diff"))
   return {
     app,
     commands,
@@ -1255,10 +1995,21 @@ async function renderDiffViewer(
     shortcut: (command: string) => shortcut(command),
     vcsDiffInput: () => vcsDiffInput,
     imageReadInput: () => imageReadInput,
+    baseRequests,
+    diffRequests,
+    branchesRequests,
+    mutationRequests,
+    setSessionLocation,
+    setBranch,
+    state,
+    writes,
+    settings: () => stored.info,
   }
 }
 
 const startRoute: Route = { type: "session", sessionID: "session-1" }
+
+const baseFixture = { name: "v2", ref: "refs/heads/v2", source: "default" }
 
 const disabledDiffKeybinds = {
   "diff.down": "none",
@@ -1344,29 +2095,41 @@ test.each([100, 160])("the sidebar source picker switches VCS sources at %i colu
     expect(viewer.vcsDiffInput()).toEqual({
       location: { directory: "/repo/session" },
       mode: "branch",
+      base: "refs/heads/v2",
       context: "12",
     })
     await viewer.app.waitForFrame((frame) => frame.includes("const first"))
     await viewer.app.flush()
     const source = () => viewer.app.renderer.root.findDescendantById("diff-source-switch")!
     expect(source().y).toBe(1)
-    expect(viewer.app.captureCharFrame().split("\n")[1]).toContain("Main branch")
+    expect(viewer.app.captureCharFrame().split("\n")[1]).toContain("All")
     await viewer.app.mockMouse.click(source().x, source().y, MouseButton.RIGHT)
     await viewer.app.flush()
-    expect(viewer.app.captureCharFrame()).not.toContain("Switch source")
+    expect(viewer.app.captureCharFrame()).not.toContain("Diff source")
     await viewer.app.mockMouse.click(source().x, source().y)
-    await viewer.app.waitForFrame((frame) => frame.includes("Switch source"))
+    await viewer.app.waitForFrame((frame) => frame.includes("Diff source"))
     expect(viewer.app.renderer.getSelection()).toBeNull()
-    viewer.app.mockInput.pressArrow("up")
+    viewer.app.mockInput.pressKey("HOME")
+    viewer.app.mockInput.pressArrow("down")
+    viewer.app.mockInput.pressArrow("down")
+    await viewer.app.flush()
     viewer.app.mockInput.pressEnter()
-    await viewer.app.waitForFrame((frame) => frame.includes("Working tree") && frame.includes("const first"))
+    await viewer.app.waitForFrame((frame) => frame.includes("Uncommitted") && frame.includes("const first"))
     expect(viewer.vcsDiffInput()).toEqual({ location: { directory: "/repo/session" }, mode: "working", context: "12" })
     await viewer.app.mockMouse.click(source().x, source().y)
-    await viewer.app.waitForFrame((frame) => frame.includes("Switch source"))
-    viewer.app.mockInput.pressArrow("down")
+    await viewer.app.waitForFrame((frame) => frame.includes("Diff source"))
+    viewer.app.mockInput.pressKey("HOME")
+    await viewer.app.flush()
     viewer.app.mockInput.pressEnter()
-    await viewer.app.waitForFrame((frame) => frame.includes("Main branch") && frame.includes("const first"))
-    expect(viewer.vcsDiffInput()).toEqual({ location: { directory: "/repo/session" }, mode: "branch", context: "12" })
+    await viewer.app.waitForFrame((frame) => frame.includes("All") && frame.includes("const first"))
+    expect(viewer.vcsDiffInput()).toEqual({
+      location: { directory: "/repo/session" },
+      mode: "branch",
+      context: "12",
+      base: "refs/heads/v2",
+    })
+    expect(viewer.baseRequests).toHaveLength(1)
+    expect(viewer.writes).toHaveLength(0)
   } finally {
     viewer.app.renderer.destroy()
   }

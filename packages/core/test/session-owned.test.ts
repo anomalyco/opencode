@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { and, eq } from "drizzle-orm"
-import { Cause, Context, DateTime, Deferred, Effect, Exit, Fiber, Layer } from "effect"
+import { Cause, Context, DateTime, Deferred, Effect, Exit, Fiber, Layer, Scope } from "effect"
 import { Agent } from "@opencode-ai/schema/agent"
 import { Event } from "@opencode-ai/schema/event"
 import { Location } from "@opencode-ai/schema/location"
@@ -142,7 +142,7 @@ const setup = Effect.fnUntraced(function* (options?: {
   }
   const sessions = yield* Session.make(servicesFor).pipe(
     Effect.satisfiesServicesType<
-      Bus.Service | SessionStore.Service | SessionExecution.Service | SessionInbox.Service
+      Bus.Service | SessionStore.Service | SessionExecution.Service | SessionInbox.Service | Scope.Scope
     >(),
     Effect.provideService(SessionExecution.Service, options?.execution ?? execution),
   )
@@ -339,7 +339,7 @@ describe("Session-owned handles", () => {
     }),
   )
 
-  it.live("shares the manual-shell wake gate across same-ID handles without gating other Sessions", () =>
+  it.live("keeps prompt wakes independent of shell work across handles", () =>
     Effect.gen(function* () {
       const blocked = yield* Deferred.make<void>()
       const release = yield* Deferred.make<void>()
@@ -350,7 +350,7 @@ describe("Session-owned handles", () => {
         shell: "sh",
         file: "/project/shell.out",
         status: "running",
-        metadata: { sessionID },
+        metadata: { sessionID, background: true },
         time: { started: 0 },
       })
       const fixture = yield* setup({
@@ -361,14 +361,17 @@ describe("Session-owned handles", () => {
                 command: started.command,
                 cwd: source.directory,
                 timeout: 0,
-                metadata: { sessionID },
+                metadata: { sessionID, background: true },
               })
               return started
             }),
-          wait: () =>
+          result: () =>
             Deferred.succeed(blocked, undefined).pipe(
               Effect.andThen(Deferred.await(release)),
-              Effect.as(Info.make({ ...started, status: "exited", exit: 0, time: { started: 0, completed: 1 } })),
+              Effect.as({
+                info: Info.make({ ...started, status: "exited", exit: 0, time: { started: 0, completed: 1 } }),
+                capture: { output: "owned", truncated: false },
+              }),
             ),
           output: () => Effect.succeed(Output.make({ output: "owned", cursor: 5, size: 5, truncated: false })),
         }),
@@ -381,18 +384,25 @@ describe("Session-owned handles", () => {
 
       const admitted = yield* fixture.sessions.forSession(sessionID).prompt({ text: "Admit while the shell runs" })
       expect(yield* SessionInbox.find(fixture.db, admitted.id)).toEqual(admitted)
-      expect(fixture.wakes).toEqual([])
+      expect(fixture.wakes).toEqual([{ sessionID, pending: [admitted.id], enqueued: 1 }])
       const other = yield* fixture.sessions.forSession(otherID).prompt({ text: "Independent Session" })
-      expect(fixture.wakes).toEqual([{ sessionID: otherID, pending: [other.id], enqueued: 1 }])
+      expect(fixture.wakes).toEqual([
+        { sessionID, pending: [admitted.id], enqueued: 1 },
+        { sessionID: otherID, pending: [other.id], enqueued: 1 },
+      ])
 
       yield* Deferred.succeed(release, undefined)
       yield* Fiber.join(shell)
       expect(fixture.wakes).toEqual([
-        { sessionID: otherID, pending: [other.id], enqueued: 1 },
         { sessionID, pending: [admitted.id], enqueued: 1 },
+        { sessionID: otherID, pending: [other.id], enqueued: 1 },
       ])
       expect(yield* fixture.store.context(sessionID)).toMatchObject([
         { type: "shell", shellID: started.id, status: "exited", output: { output: "owned" } },
+      ])
+      expect(yield* fixture.sessions.forSession(sessionID).inbox()).toMatchObject([
+        { id: admitted.id, type: "user" },
+        { type: "synthetic", payload: { metadata: { source: "shell", shellID: started.id, state: "completed" } } },
       ])
     }),
   )

@@ -1292,6 +1292,7 @@ describe("ShellTool", () => {
             Effect.andThen((settled) =>
               Effect.sync(() => {
                 expect(settled.metadata).toMatchObject({ timeout: true, truncated: false })
+                expect(settled.metadata).not.toHaveProperty("exit")
                 expect(settled.content?.[0]).toMatchObject(Expected.text(expect.stringContaining("before timeout")))
                 expect(settled.content?.[1]).toMatchObject(Expected.text(expect.stringContaining("Command timed out")))
               }),
@@ -1487,6 +1488,7 @@ describe("ShellTool", () => {
               Effect.gen(function* () {
                 const info = yield* shell.create({ command: idleCommand, timeout: 0 })
                 yield* shell.remove(info.id)
+                expect((yield* shell.result(info)).capture).toBeUndefined()
                 yield* Effect.sleep(Duration.millis(10))
               }),
             )
@@ -1494,6 +1496,10 @@ describe("ShellTool", () => {
             const info = yield* shell.create({ command: helloCommand, timeout: 0 })
             const settled = yield* shell.wait(info.id).pipe(Effect.timeoutOption(Duration.seconds(2)))
             expect(settled._tag).toBe("Some")
+            expect(yield* shell.result(info)).toMatchObject({
+              info: { status: "exited", exit: 0 },
+              capture: { output: expect.stringContaining("hello"), truncated: false },
+            })
           }),
         ),
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),

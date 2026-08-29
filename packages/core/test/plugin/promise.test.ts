@@ -567,7 +567,7 @@ describe("fromPromise", () => {
     }),
   )
 
-  it.effect("registers a Promise VCS provider and forwards client reads", () =>
+  it.effect("registers a Promise VCS provider and preserves its receiver when forwarding client reads", () =>
     Effect.gen(function* () {
       const vcs = yield* Vcs.Service
       const plugin = yield* Plugin.Service
@@ -583,6 +583,11 @@ describe("fromPromise", () => {
               info: async (_input, request) => {
                 signals.push(request.signal)
                 return { branch: { current: "feature", default: "main" } }
+              },
+              async base(_input, request) {
+                expect(this.id).toBe("custom")
+                signals.push(request.signal)
+                return { name: "main", ref: "refs/heads/main", source: "default" }
               },
               branches: async (input, request) => {
                 signals.push(request.signal)
@@ -604,6 +609,7 @@ describe("fromPromise", () => {
           })
 
           expect((await ctx.vcs.get()).data.branch.current).toBe("feature")
+          expect((await ctx.vcs.base()).data).toEqual({ name: "main", ref: "refs/heads/main", source: "default" })
           expect((await ctx.vcs.branches({ search: "feat" })).data).toEqual(["feature"])
           expect((await ctx.vcs.status()).data).toHaveLength(1)
           expect((await ctx.vcs.diff({ mode: "working", context: 2 })).data[0].patch).toBe("+hello")
@@ -612,7 +618,7 @@ describe("fromPromise", () => {
 
       yield* PluginPromise.fromPromise(promisePlugin).effect(host)
       expect((yield* vcs.info()).branch.current).toBe("feature")
-      expect(signals).toHaveLength(4)
+      expect(signals).toHaveLength(5)
       expect(signals.every((signal) => signal instanceof AbortSignal)).toBeTrue()
     }),
   )

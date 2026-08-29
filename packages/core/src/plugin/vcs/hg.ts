@@ -10,6 +10,7 @@ import { FSUtil } from "@opencode-ai/util/fs-util"
 import { AppProcess } from "@opencode-ai/util/process"
 import { Location } from "../../location.js"
 import type { Adapter, DiffOptions } from "../../vcs.js"
+import { DiffError } from "../../vcs.js"
 import {
   addPatch,
   chunksByFile,
@@ -42,7 +43,7 @@ export const Plugin = define({
         info: () => adapter.info(),
         branches: (input) => adapter.branches({ search: input.search, limit: input.limit }),
         status: () => adapter.status(),
-        diff: (input) => adapter.diff(input.mode, { context: input.context }),
+        diff: (input) => adapter.diff(input.mode, { context: input.context, base: input.base }),
       })
     })
   }),
@@ -121,6 +122,11 @@ function make(
     }),
     diff: Effect.fn("VcsHg.diff")(function* (mode: Mode, options?: DiffOptions) {
       if (mode === "working") return yield* diffAgainst(undefined, options)
+      if (mode === "committed" || options?.base !== undefined) {
+        return yield* new DiffError({
+          message: "The Mercurial provider does not support committed reviews or explicit bases",
+        })
+      }
 
       const branch = yield* hg.branch()
       if (!branch || branch === "default") return []

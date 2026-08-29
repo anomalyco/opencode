@@ -345,6 +345,7 @@ export function fromPromise(plugin: Plugin) {
           },
           vcs: {
             get: adaptApiMethod(VcsEndpoints["vcs.get"], host.vcs.get),
+            base: adaptApiMethod(VcsEndpoints["vcs.base"], host.vcs.base),
             branches: adaptApiMethod(VcsEndpoints["vcs.branches"], host.vcs.branches),
             status: adaptApiMethod(VcsEndpoints["vcs.status"], host.vcs.status),
             diff: adaptApiMethod(VcsEndpoints["vcs.diff"], host.vcs.diff),
@@ -353,15 +354,18 @@ export function fromPromise(plugin: Plugin) {
               register(
                 host.vcs.transform((draft) => {
                   callback({
-                    add: (definition) =>
+                    add: (definition) => {
+                      const base = definition.base?.bind(definition)
                       draft.add({
                         id: definition.id,
                         name: definition.name,
                         info: (input) => attempt((signal) => definition.info(input, { signal })),
+                        base: base ? (input) => attempt((signal) => base(input, { signal })) : undefined,
                         branches: (input) => attempt((signal) => definition.branches(input, { signal })),
                         status: (input) => attempt((signal) => definition.status(input, { signal })),
                         diff: (input) => attempt((signal) => definition.diff(input, { signal })),
-                      }),
+                      })
+                    },
                     default: draft.default,
                   })
                 }),

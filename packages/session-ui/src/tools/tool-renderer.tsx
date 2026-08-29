@@ -1475,7 +1475,14 @@ ToolRegistry.register({
       (typeof props.metadata.shellID === "string" && data.shellRunning?.(props.metadata.shellID) === true)
     const sawStreaming = streaming()
     const [streamed, setStreamed] = createSignal("")
+    // Direct-user terminal snapshots are authoritative; agent results can describe background shells.
+    const saved = createMemo(() =>
+      props.metadata.status === "exited" || props.metadata.status === "timeout" || props.metadata.status === "killed"
+        ? props.output
+        : undefined,
+    )
     createEffect(() => {
+      if (saved() !== undefined) return
       const id = props.metadata.shellID
       const shellOutput = data.shellOutput
       if (typeof id !== "string" || !shellOutput) return
@@ -1511,7 +1518,7 @@ ToolRegistry.register({
       return ""
     }
     const output = createMemo(() =>
-      stripAnsi((typeof props.metadata.shellID === "string" && streamed()) || props.output || "").replace(
+      stripAnsi(saved() ?? ((typeof props.metadata.shellID === "string" && streamed()) || props.output || "")).replace(
         /\r\n?/g,
         "\n",
       ),
@@ -1560,7 +1567,15 @@ export function SessionShellMessage(props: {
   open?: boolean
   onOpenChange?: (open: boolean) => void
 }) {
+  const i18n = useI18n()
   const render = ToolRegistry.render("shell") ?? GenericTool
+  const error = createMemo(() => {
+    const message = props.message
+    if (message.status === "timeout") return i18n.t("ui.tool.shell.timeout")
+    if (message.status === "killed") return i18n.t("ui.tool.shell.cancelled")
+    if (message.status !== "exited" || message.exit === undefined || message.exit === 0) return
+    return i18n.t("ui.tool.shell.exit", { code: message.exit })
+  })
   return (
     <div data-component="session-shell-message" data-timeline-part-id={props.message.id}>
       <Dynamic
@@ -1568,6 +1583,7 @@ export function SessionShellMessage(props: {
         tool="shell"
         input={{ command: props.message.command }}
         metadata={{
+          shellID: props.message.shellID,
           status: props.message.status,
           exit: props.message.exit,
           truncated: props.message.output?.truncated,
@@ -1578,6 +1594,9 @@ export function SessionShellMessage(props: {
         open={props.open}
         onOpenChange={props.onOpenChange}
       />
+      <Show when={error()}>
+        {(error) => <ToolErrorCard tool="shell" error={error()} subtitle={props.message.command} />}
+      </Show>
     </div>
   )
 }

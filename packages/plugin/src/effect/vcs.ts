@@ -18,6 +18,7 @@ export interface VcsBranchesInput extends VcsScope {
 
 export interface VcsDiffInput extends VcsScope {
   readonly mode: Vcs.Mode
+  readonly base?: string
   readonly context: number
   readonly maxOutputBytes: number
 }
@@ -26,6 +27,7 @@ export interface VcsDefinition {
   readonly id: string
   readonly name: string
   readonly info: (input: VcsScope) => Effect.Effect<Vcs.Info, unknown>
+  readonly base?: (input: VcsScope) => Effect.Effect<Vcs.Base | null, unknown>
   readonly branches: (input: VcsBranchesInput) => Effect.Effect<Vcs.BranchList, unknown>
   readonly status: (input: VcsScope) => Effect.Effect<readonly Vcs.FileStatus[], unknown>
   readonly diff: (input: VcsDiffInput) => Effect.Effect<readonly FileDiff.Info[], unknown>

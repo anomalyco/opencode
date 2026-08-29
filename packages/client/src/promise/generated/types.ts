@@ -419,6 +419,8 @@ export type WorkspaceDestroyResult = { destroyed: boolean }
 
 export type VcsBranch = { current?: string; default?: string }
 
+export type VcsBase = { name: string; ref: string; source: "reflog" | "default" }
+
 export type VcsFileStatus = {
   file: string
   additions: number
@@ -6073,6 +6075,17 @@ export type VcsGetOutput = {
   data: VcsInfo
 }
 
+export type VcsBaseInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type VcsBaseOutput = {
+  location: { directory: string; workspaceID?: string; project: { id: string; directory: string; canonical: string } }
+  data: VcsBase | null
+}
+
 export type VcsStatusInput = {
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
@@ -6110,17 +6123,26 @@ export type VcsBranchesOutput = {
 export type VcsDiffInput = {
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-    readonly mode: "working" | "branch"
+    readonly mode: "working" | "branch" | "committed"
+    readonly base?: string | undefined
     readonly context?: number | undefined
   }["location"]
   readonly mode: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-    readonly mode: "working" | "branch"
+    readonly mode: "working" | "branch" | "committed"
+    readonly base?: string | undefined
     readonly context?: number | undefined
   }["mode"]
+  readonly base?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+    readonly mode: "working" | "branch" | "committed"
+    readonly base?: string | undefined
+    readonly context?: number | undefined
+  }["base"]
   readonly context?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-    readonly mode: "working" | "branch"
+    readonly mode: "working" | "branch" | "committed"
+    readonly base?: string | undefined
     readonly context?: number | undefined
   }["context"]
 }

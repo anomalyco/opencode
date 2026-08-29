@@ -9,6 +9,14 @@ import { CommandMap, Definitions } from "../src/config/v1/keybind"
 
 const decodeInfo = Schema.decodeUnknownSync(Info)
 
+test("validates the three explicit diff source defaults", () => {
+  for (const source of ["branch", "committed", "working"] as const) {
+    expect(decodeInfo({ diffs: { source } })).toEqual({ diffs: { source } })
+  }
+  expect(decodeInfo({ diffs: {} })).toEqual({ diffs: {} })
+  expect(() => decodeInfo({ diffs: { source: "auto" } })).toThrow()
+})
+
 test("validates mini replay settings", () => {
   expect(decodeInfo({ mini: { replay: false, replay_limit: 50 } })).toEqual({
     mini: { replay: false, replay_limit: 50 },
