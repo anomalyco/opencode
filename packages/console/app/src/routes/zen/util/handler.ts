@@ -47,6 +47,7 @@ import { createProviderBudgetTracker } from "./providerBudgetTracker"
 import { accumulateUsage, HOT_WORKSPACES } from "./usageBatcher"
 import { Workspace } from "@opencode-ai/console-core/workspace.js"
 import { countryFromRequest, isModelCountryRestricted } from "~/lib/request-country"
+import { isPeakPricing } from "./pricing"
 import { prepareRequestBody } from "./requestBody"
 
 type ZenData = Awaited<ReturnType<typeof ZenData.list>>
@@ -221,6 +222,7 @@ export async function handler(
             if (v === "$session") return headers.set(k, sessionId)
             if (v === "$model") return headers.set(k, model)
             if (v === "$request") return headers.set(k, requestId)
+            if (v === "$client") return headers.set(k, ocClient)
             if (v === "$project") return headers.set(k, projectId)
             if (v === "$workspace") {
               if (authInfo?.workspaceID) headers.set(k, authInfo.workspaceID)
@@ -232,19 +234,26 @@ export async function handler(
             }
             headers.set(k, v)
           })
+          if (isNewInference) {
+            headers.set("x-zen-model", model)
+          }
           headers.delete("host")
           headers.delete("content-length")
-          headers.delete("x-opencode-request")
-          if (!isNewInference) headers.delete("x-opencode-session")
-          headers.delete("x-opencode-project")
-          headers.delete("x-opencode-client")
+          if (!isNewInference) {
+            headers.delete("x-opencode-session")
+            headers.delete("x-opencode-project")
+            headers.delete("x-opencode-client")
+            headers.delete("x-opencode-request")
+            headers.delete("x-zen-model")
+          }
           return headers
         })(),
         body: reqBody,
+        duplex: "half",
         // Propagate caller disconnects to the upstream provider request so
         // abandoned Console requests do not leave orphaned inference work open.
         signal: input.request.signal,
-      })
+      } as RequestInit & { duplex: "half" })
       const isStream = res.headers.get("content-type")?.toLowerCase().includes("text/event-stream") ?? false
       logger.metric({ is_stream: isStream })
 
@@ -863,6 +872,8 @@ export async function handler(
 
     // Validate lite subscription billing
     if (opts.modelList === "lite" && authInfo.billing.lite && authInfo.lite) {
+      if (Object.values(modelInfo.cost).every((price) => price === 0)) return "lite"
+
       try {
         const consoleGoUrl = `https://opencode.ai/workspace/${authInfo.workspaceID}/go`
         const sub = authInfo.lite
@@ -992,9 +1003,8 @@ export async function handler(
     const { inputTokens, outputTokens, reasoningTokens, cacheReadTokens, cacheWrite5mTokens, cacheWrite1hTokens } =
       usageInfo
 
-    const hour = new Date().getUTCHours()
     const modelCost =
-      modelInfo.costPeak && ((hour >= 1 && hour < 4) || (hour >= 6 && hour < 10))
+      modelInfo.costPeak && isPeakPricing(new Date())
         ? modelInfo.costPeak
         : modelInfo.cost200K &&
             inputTokens + (cacheReadTokens ?? 0) + (cacheWrite5mTokens ?? 0) + (cacheWrite1hTokens ?? 0) > 200_000
@@ -1104,7 +1114,7 @@ export async function handler(
           enrichment: (() => {
             if (billingSource === "subscription") return { plan: "sub" }
             if (billingSource === "byok") return { plan: "byok" }
-            if (billingSource === "lite") return { plan: "lite" }
+            if (billingSource === "lite") return { plan: "lite", costMultiplier: modelInfo.costMultiplier }
             return undefined
           })(),
         }),

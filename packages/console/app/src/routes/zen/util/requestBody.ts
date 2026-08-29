@@ -7,38 +7,84 @@ export async function prepareRequestBody(body: ReadableStream<Uint8Array>) {
   const decoder = new TextDecoder()
   let text = ""
   let done = false
-  let searchFrom = 0
   let bom = 0
-  let match: RegExpExecArray | null = null
-  const pattern = /("model"\s*:\s*")([^"]+)"/g
+  let index = 0
+  let depth = 0
+  let stringStart = -1
+  let escaped = false
+  let phase: "key" | "colon" | "value" | "comma" = "key"
+  let key = ""
+  let found: { model: string; start: number; end: number } | undefined
 
-  while (!done && !match) {
+  const scan = () => {
+    while (index < text.length && !found) {
+      const char = text[index]
+      if (stringStart >= 0) {
+        if (escaped) escaped = false
+        else if (char === "\\") escaped = true
+        else if (char === '"') {
+          if (depth === 1 && phase === "key") {
+            key = JSON.parse(text.slice(stringStart, index + 1))
+            phase = "colon"
+          } else if (depth === 1 && phase === "value") {
+            if (key === "model") {
+              const start = bom + utf8Length(text, stringStart + 1)
+              found = {
+                model: JSON.parse(text.slice(stringStart, index + 1)),
+                start,
+                end: bom + utf8Length(text, index),
+              }
+            }
+            phase = "comma"
+          }
+          stringStart = -1
+        }
+        index++
+        continue
+      }
+
+      if (char === '"') {
+        stringStart = index++
+        continue
+      }
+      if (char === "{" || char === "[") {
+        if (depth === 1 && phase === "value") phase = "comma"
+        depth++
+        index++
+        continue
+      }
+      if (char === "}" || char === "]") {
+        depth--
+        index++
+        continue
+      }
+      if (depth !== 1) {
+        index++
+        continue
+      }
+      if (char === ":" && phase === "colon") phase = "value"
+      else if (char === "," && phase === "comma") phase = "key"
+      else if (phase === "value" && !/\s/.test(char)) phase = "comma"
+      index++
+    }
+  }
+
+  while (!done && !found) {
     const next = await reader.read()
     done = next.done
     if (!next.value) continue
     if (!chunks.length && next.value[0] === 0xef && next.value[1] === 0xbb && next.value[2] === 0xbf) bom = 3
     chunks.push(next.value)
     text += decoder.decode(next.value, { stream: true })
-    pattern.lastIndex = searchFrom
-    match = pattern.exec(text)
-    searchFrom = Math.max(0, text.length - 256)
+    scan()
   }
   if (done) {
     text += decoder.decode()
-    if (!match) {
-      pattern.lastIndex = searchFrom
-      match = pattern.exec(text)
-    }
+    scan()
   }
 
-  const found = (() => {
-    if (!match) return
-    const start = bom + utf8Length(text, match.index + match[1].length)
-    return { model: match[2], start, end: start + utf8Length(match[2], match[2].length) }
-  })()
   const preview = text.substring(0, 300)
   text = ""
-  match = null
   let used = false
 
   return {
