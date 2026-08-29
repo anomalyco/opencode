@@ -89,10 +89,8 @@ test("creates a session in a new project, connects OpenCode Go, and selects its 
   expect(connections).toEqual([{ integrationID: "opencode-go", body: { type: "api", key: "mock-go-api-key" } }])
 
   await expect(modelControl).toHaveAttribute("data-control-type", "popover")
-  await modelControl.click()
-  const goModel = page.locator('[data-option-key="opencode-go:go-model-1"]')
-  await expect(goModel).toBeVisible()
-  await goModel.click()
+  await page.getByRole("button", { name: "Select provider" }).click()
+  await page.getByRole("menuitemradio", { name: "OpenCode Go" }).click()
 
   await expect(modelControl).toContainText("Go Model 1")
 })

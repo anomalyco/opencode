@@ -30,9 +30,140 @@ export interface MockServerConfig {
   sessionStatus?: Record<string, unknown> | (() => Record<string, unknown>)
 }
 
+// route.fulfill() always closes the response as soon as it's sent — there's
+// no way to keep writing to it later. Since every reconnect is treated by the
+// client (server-sdk.tsx) as "the server may have restarted, refresh
+// everything", and reconnects under ~3s trip its exponential backoff
+// (protecting against a genuinely unstable connection storming reconnects),
+// a mock that can't hold a connection open makes every reconnect count as a
+// fast drop — the backoff climbs to its ceiling and never resets. Most tests
+// don't notice because they finish before that matters; tests that wait
+// several seconds after a server-triggered reconnect (e.g. after
+// instance.dispose()) can hang.
+//
+// installSseStream keeps a real, open stream per SSE connection by
+// overriding window.fetch in the page (same approach as installSseTransport
+// in sse-transport.ts, minus the manual test-driven send/burst/split API —
+// this one is driven automatically by config.events()/config.eventRetry). A
+// test that calls installSseTransport itself keeps full manual control:
+// this bails out without touching fetch when it detects that transport is
+// already installed.
+async function installSseStream(page: Page) {
+  await page.addInitScript(() => {
+    type BrowserTransport = Window & { __testSseTransport?: unknown; __mockSseStream?: unknown }
+    const w = window as BrowserTransport
+    if (w.__testSseTransport || w.__mockSseStream) return
+
+    const ssePaths = new Set(["/global/event", "/event", "/api/event"])
+    const encoder = new TextEncoder()
+    const connections = new Map<number, ReadableStreamDefaultController<Uint8Array>>()
+    let nextID = 0
+    const originalFetch = window.fetch.bind(window)
+
+    const write = (id: number, text: string) => {
+      const controller = connections.get(id)
+      if (!controller) return
+      controller.enqueue(encoder.encode(text))
+    }
+
+    const fetch = (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = new Request(input, init)
+      const url = new URL(request.url)
+      if (!ssePaths.has(url.pathname)) return originalFetch(request)
+
+      const id = ++nextID
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          connections.set(id, controller)
+          request.signal.addEventListener(
+            "abort",
+            () => {
+              connections.delete(id)
+              controller.error(request.signal.reason ?? new DOMException("The operation was aborted", "AbortError"))
+            },
+            { once: true },
+          )
+        },
+        cancel() {
+          connections.delete(id)
+        },
+      })
+      w.__mockSseStream && (w.__mockSseStream as { onConnect: (id: number, path: string) => void }).onConnect(id, url.pathname)
+      return Promise.resolve(
+        new Response(stream, {
+          status: 200,
+          headers: { "cache-control": "no-cache", "content-type": "text/event-stream" },
+        }),
+      )
+    }
+    Object.defineProperty(window, "fetch", { configurable: true, writable: true, value: fetch })
+    w.__mockSseStream = {
+      write,
+      // Replaced below once the Node side wires up onConnect via exposeFunction.
+      onConnect: () => {},
+    }
+  })
+}
+
 export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
   const cursors = new Map<string, string>()
   let nextCursor = 0
+  await installSseStream(page)
+  const opened = new Map<number, string>()
+  let pollTimer: ReturnType<typeof setInterval> | undefined
+  const writeToPage = (id: number, text: string) =>
+    page.evaluate(
+      ({ id, text }) => {
+        const stream = (window as unknown as { __mockSseStream?: { write: (id: number, text: string) => void } })
+          .__mockSseStream
+        stream?.write(id, text)
+      },
+      { id, text },
+    )
+  const encodeForPath = (path: string, events: unknown[]) => {
+    if (path === "/api/event") return events.map((event) => `data: ${JSON.stringify(currentEvent(event))}\n\n`).join("")
+    return events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("")
+  }
+  const initialEvent = (path: string, id: number) => {
+    const retry = config.eventRetry === undefined ? "" : `retry: ${config.eventRetry}\n\n`
+    const connected =
+      path === "/api/event"
+        ? `data: ${JSON.stringify({ id: `evt_mock_connected_${id}`, type: "server.connected", data: {} })}\n\n`
+        : path === "/global/event"
+          ? `data: ${JSON.stringify({ payload: { id: `evt_mock_connected_${id}`, type: "server.connected", properties: {} } })}\n\n`
+          : ""
+    return `${retry}${connected}`
+  }
+  await page.exposeFunction("__mockSseOnConnect", async (id: number, path: string) => {
+    opened.set(id, path)
+    await writeToPage(id, initialEvent(path, id))
+  })
+  await page.addInitScript(() => {
+    const w = window as unknown as { __mockSseStream?: { onConnect: (id: number, path: string) => void } }
+    const check = () => {
+      if (!w.__mockSseStream) {
+        requestAnimationFrame(check)
+        return
+      }
+      w.__mockSseStream.onConnect = (id: number, path: string) => {
+        void (
+          window as unknown as { __mockSseOnConnect: (id: number, path: string) => Promise<void> }
+        ).__mockSseOnConnect(id, path)
+      }
+    }
+    check()
+  })
+  if (config.events) {
+    pollTimer = setInterval(async () => {
+      if (opened.size === 0) return
+      const items = config.events?.()
+      if (!items || items.length === 0) return
+      for (const [id, path] of opened) {
+        await writeToPage(id, encodeForPath(path, items))
+      }
+    }, 20)
+    page.once("close", () => clearInterval(pollTimer))
+  }
   const staticRoutes: Record<string, unknown> = {
     "/path": {
       state: config.directory,
@@ -57,21 +188,6 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     if (url.port !== targetPort && url.port !== appPort) return route.fallback()
 
     const path = url.pathname
-    if (path === "/global/event" || path === "/event" || path === "/api/event") {
-      const events = config.events?.()
-      return sse(
-        route,
-        path === "/api/event"
-          ? [{ id: "evt_mock_connected", type: "server.connected", data: {} }, ...(events?.map(currentEvent) ?? [])]
-          : [
-              ...(path === "/global/event"
-                ? [{ payload: { id: "evt_mock_connected", type: "server.connected", properties: {} } }]
-                : []),
-              ...(events ?? []),
-            ],
-        config.eventRetry,
-      )
-    }
     if (path === "/global/health")
       return config.protocol === "v2" ? json(route, {}, undefined, 404) : json(route, { healthy: true })
     if (path === "/api/health" && config.protocol === "v2")
@@ -433,14 +549,6 @@ function json(route: Route, body: unknown, headers?: Record<string, string>, sta
       ...headers,
     },
     body: JSON.stringify(body ?? null),
-  })
-}
-
-function sse(route: Route, events?: unknown[], retry?: number) {
-  return route.fulfill({
-    status: 200,
-    contentType: "text/event-stream",
-    body: `${retry === undefined ? "" : `retry: ${retry}\n\n`}${events?.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("") || ": ok\n\n"}`,
   })
 }
 
