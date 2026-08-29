@@ -363,8 +363,18 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           selected() {
             const m = currentModel()
             if (!m) return undefined
-            const key = `${m.providerID}/${m.modelID}`
-            return modelStore.variant[key]
+            const a = agent.current()
+            const modelKey = `${m.providerID}/${m.modelID}`
+            // Manual overrides are keyed per agent+model so agents that pin
+            // different reasoning efforts on the same model stay distinct
+            // (e.g. quick=low, build=high, debug=max). Falls back to the
+            // agent's configured variant, then to no variant at all — the
+            // server then applies the agent's own variant server-side.
+            const key = a ? `${a.name}:${modelKey}` : modelKey
+            const manual = modelStore.variant[key]
+            if (manual !== undefined) return manual
+            if (a?.variant && this.list().includes(a.variant)) return a.variant
+            return undefined
           },
           current() {
             const v = this.selected()
@@ -383,7 +393,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           set(value: string | undefined) {
             const m = currentModel()
             if (!m) return
-            const key = `${m.providerID}/${m.modelID}`
+            const a = agent.current()
+            const modelKey = `${m.providerID}/${m.modelID}`
+            const key = a ? `${a.name}:${modelKey}` : modelKey
             setModelStore("variant", key, value ?? "default")
             save()
           },
