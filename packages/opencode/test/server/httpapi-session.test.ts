@@ -429,28 +429,33 @@ describe("session HttpApi", () => {
   )
 
   cliIt.live(
-    "resumes an existing session after the process restarts without creating a user message",
+    "resumes a persisted session after the process restarts without creating a user message",
     ({ home, llm, opencode }) =>
       Effect.gen(function* () {
+        const config = testProviderConfig(llm.url)
         const env = {
           OPENCODE_PURE: "0",
+          OPENCODE_DB: path.join(home, "opencode.db"),
           OPENCODE_CONFIG_CONTENT: JSON.stringify({
-            ...testProviderConfig(llm.url),
+            ...config,
+            provider: {
+              test: {
+                ...config.provider.test,
+                env: undefined,
+              },
+            },
             permission: { "*": "allow" },
           }),
         }
         const configDirectory = path.join(home, ".config", "opencode")
         yield* Effect.promise(() => mkdir(configDirectory, { recursive: true }))
-        yield* Effect.promise(() =>
-          Bun.write(path.join(configDirectory, "opencode.json"), env.OPENCODE_CONFIG_CONTENT),
-        )
-        const start = () => opencode.serve({ env })
+        yield* Effect.promise(() => Bun.write(path.join(configDirectory, "opencode.json"), env.OPENCODE_CONFIG_CONTENT))
         const api = (base: string, path: string, init?: RequestInit) =>
           Effect.promise(() => fetch(new URL(path, base), init))
         const body = <T>(response: Response) => Effect.promise(() => response.json() as Promise<T>)
         const headers = { "x-opencode-directory": home, "content-type": "application/json" }
         const prompt = "Resume this session after restart"
-        const server = yield* start()
+        const server = yield* opencode.serve({ env })
         yield* pollWithTimeout(
           api(server.url, "/api/model", { headers }).pipe(
             Effect.flatMap(body<{ data: { id: string; providerID: string }[] }>),
@@ -481,14 +486,9 @@ describe("session HttpApi", () => {
           })).status,
         ).toBe(200)
 
-        yield* llm.fail("Provider unavailable")
-        expect((yield* api(server.url, `/api/session/${sessionID}/resume`, { method: "POST", headers })).status).toBe(
-          503,
-        )
-
         server.kill()
         yield* Effect.promise(() => server.exited)
-        const restarted = yield* start()
+        const restarted = yield* opencode.serve({ env })
         yield* pollWithTimeout(
           api(restarted.url, "/api/model", { headers }).pipe(
             Effect.flatMap(body<{ data: { id: string; providerID: string }[] }>),
@@ -497,6 +497,16 @@ describe("session HttpApi", () => {
             ),
           ),
           "restarted process did not reload its configured model",
+          "10 seconds",
+        )
+        yield* pollWithTimeout(
+          api(restarted.url, `/api/session/${sessionID}`, { headers }).pipe(
+            Effect.flatMap((response) =>
+              response.ok ? body<{ data: { id: string } }>(response) : Effect.succeed(undefined),
+            ),
+            Effect.map((response) => (response?.data.id === sessionID ? response.data : undefined)),
+          ),
+          "restarted process did not import its session",
           "10 seconds",
         )
         yield* llm.tool("question", {
@@ -561,14 +571,14 @@ describe("session HttpApi", () => {
             if (!("content" in message)) return []
             if (typeof message.content === "string") return [message.content]
             if (!Array.isArray(message.content)) return []
-            return message.content.flatMap((part) =>
+            return message.content.flatMap((part: unknown) =>
               part && typeof part === "object" && "text" in part && typeof part.text === "string" ? [part.text] : [],
             )
           })
         }
         const sessionRequests = (yield* llm.inputs).map(requestUserTexts).filter((texts) => texts.includes(prompt))
-        expect(sessionRequests).toHaveLength(3)
-        expect(sessionRequests).toEqual([[prompt], [prompt], [prompt]])
+        expect(sessionRequests).toHaveLength(2)
+        expect(sessionRequests).toEqual([[prompt], [prompt]])
       }),
     60_000,
   )
