@@ -246,8 +246,6 @@ import type {
   VcsGetOutput,
   VcsBaseInput,
   VcsBaseOutput,
-  VcsSetBaseInput,
-  VcsSetBaseOutput,
   VcsStatusInput,
   VcsStatusOutput,
   VcsBranchesInput,
@@ -1477,13 +1475,6 @@ const EndpointVcsBase = (raw: RawClient["server.vcs"]) => (input?: VcsBaseInput)
     raw["vcs.base"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
-const EndpointVcsSetBase = (raw: RawClient["server.vcs"]) => (input: VcsSetBaseInput) =>
-  preserveEffect<VcsSetBaseOutput>()(
-    raw["vcs.setBase"]({ query: { location: input["location"] }, payload: { ref: input["ref"] } }).pipe(
-      Effect.mapError(mapClientError),
-    ),
-  )
-
 const EndpointVcsStatus = (raw: RawClient["server.vcs"]) => (input?: VcsStatusInput) =>
   preserveEffect<VcsStatusOutput>()(
     raw["vcs.status"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
@@ -1506,7 +1497,6 @@ const EndpointVcsDiff = (raw: RawClient["server.vcs"]) => (input: VcsDiffInput) 
 const adaptGroupVcs = (raw: RawClient["server.vcs"]) => ({
   get: EndpointVcsGet(raw),
   base: EndpointVcsBase(raw),
-  setBase: EndpointVcsSetBase(raw),
   status: EndpointVcsStatus(raw),
   branches: EndpointVcsBranches(raw),
   diff: EndpointVcsDiff(raw),

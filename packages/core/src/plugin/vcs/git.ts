@@ -40,7 +40,6 @@ export const Plugin = define({
         name: "Git",
         info: () => adapter.info(),
         base: () => adapter.base(),
-        setBase: (input) => adapter.setBase(input.ref),
         branches: (input) => adapter.branches({ search: input.search, limit: input.limit }),
         status: () => adapter.status(),
         diff: (input) => adapter.diff(input.mode, { context: input.context, base: input.base }),
@@ -67,7 +66,6 @@ function make(proc: AppProcess.Interface, fs: FSUtil.Interface, input: { directo
       return { branch: { current, default: root?.name } } satisfies Info
     }),
     base: () => ctx.git.base(ctx.directory),
-    setBase: (ref: string) => ctx.git.setBase(ctx.directory, ref),
     branches: Effect.fn("VcsGit.branches")(function* (options?: BranchOptions) {
       return yield* ctx.git.branches(ctx.directory, options)
     }),
@@ -283,27 +281,9 @@ function makeGit(proc: AppProcess.Interface, fs: FSUtil.Interface) {
     function* (cwd: string) {
       if (!(yield* hasHead(cwd))) return null
       const current = yield* branch(cwd)
-      if (current) {
-        const config = yield* run(["config", "--local", "--get", `branch.${current}.opencode-merge-base`], { cwd })
-        if (config.exitCode > 1) return yield* new DiffError({ message: "Unable to read the configured review base" })
-        if (config.exitCode === 0) {
-          const selected = yield* GitReview.namedRef(proc, cwd, config.text().trim())
-          if (!selected || !(yield* mergeBase(cwd, selected.ref)))
-            return yield* new DiffError({ message: "The configured review base is unavailable" })
-          return { name: selected.name, ref: selected.ref, source: "configured" } satisfies Base
-        }
-      }
       const directory = (yield* text(["rev-parse", "--absolute-git-dir"], { cwd })).trim()
       if (!directory) return yield* new DiffError({ message: "Unable to find Git review metadata" })
       const metadata = yield* GitReview.read(fs, directory)
-      if (!current && metadata.selection) {
-        const selected = yield* GitReview.namedRef(proc, cwd, metadata.selection.ref)
-        if (!(yield* ancestor(cwd, metadata.selection.commit, "HEAD")))
-          return yield* new DiffError({ message: "Choose a review base" })
-        if (!selected || !(yield* mergeBase(cwd, selected.ref)))
-          return yield* new DiffError({ message: "The configured review base is unavailable" })
-        return { name: selected.name, ref: selected.ref, source: "configured" } satisfies Base
-      }
       const history = current ? yield* reflog(cwd, `refs/heads/${current}`) : []
       const renamed = history.some((entry) => entry.message.startsWith("Branch: renamed "))
       const creation = renamed ? undefined : history.find((entry) => entry.message.startsWith("branch: Created from "))
@@ -350,30 +330,6 @@ function makeGit(proc: AppProcess.Interface, fs: FSUtil.Interface) {
     },
     Effect.mapError((cause) =>
       cause instanceof DiffError ? cause : new DiffError({ message: "Unable to read the local review base" }),
-    ),
-  )
-
-  const setBase = Effect.fn("VcsGit.setBase")(
-    function* (cwd: string, ref: string) {
-      const selected = yield* GitReview.namedRef(proc, cwd, ref)
-      if (!selected || !(yield* mergeBase(cwd, selected.ref)))
-        return yield* new DiffError({ message: "Select an existing branch with a common Git history" })
-      const result = { name: selected.name, ref: selected.ref, source: "configured" } satisfies Base
-      const current = yield* branch(cwd)
-      if (current) {
-        const saved = yield* run(["config", "--local", `branch.${current}.opencode-merge-base`, selected.ref], { cwd })
-        if (saved.exitCode !== 0) return yield* new DiffError({ message: "Unable to save the review base" })
-        return result
-      }
-      const directory = (yield* text(["rev-parse", "--absolute-git-dir"], { cwd })).trim()
-      const commit = yield* resolve(cwd, "HEAD")
-      if (!directory || !commit) return yield* new DiffError({ message: "Unable to find Git review metadata" })
-      const metadata = yield* GitReview.read(fs, directory)
-      yield* GitReview.write(fs, directory, { ...metadata, selection: { ref: selected.ref, commit } })
-      return result
-    },
-    Effect.mapError((cause) =>
-      cause instanceof DiffError ? cause : new DiffError({ message: "Unable to save the review base" }),
     ),
   )
 
@@ -523,7 +479,6 @@ function makeGit(proc: AppProcess.Interface, fs: FSUtil.Interface) {
     branch,
     branches,
     base,
-    setBase,
     defaultBranch,
     hasHead,
     mergeBase,

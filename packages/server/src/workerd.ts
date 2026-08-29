@@ -96,7 +96,6 @@ const vcsLayer = Layer.succeed(
   Vcs.Service,
   Vcs.Service.of({
     base: () => Effect.succeed(null),
-    setBase: () => Effect.fail(new Vcs.DiffError({ message: "No local Git repository available" })),
     transform: () => Effect.succeed({ dispose: Effect.void }),
     reload: () => Effect.void,
     info: () => Effect.succeed({ branch: {} }),

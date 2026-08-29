@@ -101,7 +101,6 @@ describe("Vcs", () => {
         expect(yield* vcs.info()).toEqual({ branch: {} })
         expect(yield* vcs.branches()).toEqual([])
         expect(yield* vcs.base()).toBeNull()
-        expect(yield* vcs.setBase("main").pipe(Effect.flip)).toMatchObject({ _tag: "Vcs.DiffError" })
         expect(yield* vcs.status()).toEqual([])
         expect(yield* vcs.diff("working")).toEqual([])
         expect(yield* vcs.diff("branch")).toEqual([])
@@ -120,9 +119,6 @@ describe("Vcs", () => {
 
         expect(yield* vcs.info()).toEqual({ branch: { current: "feature", default: "main" } })
         expect(yield* vcs.base()).toBeNull()
-        expect(yield* vcs.setBase("main").pipe(Effect.flip)).toMatchObject({
-          message: "VCS provider does not support saving a review base",
-        })
         expect(yield* vcs.branches()).toEqual(["feature", "main"])
         expect(yield* vcs.status()).toEqual([{ file: "file.txt", additions: 1, deletions: 0, status: "added" }])
         expect(yield* vcs.diff("working")).toEqual([
@@ -527,7 +523,7 @@ describe("Vcs", () => {
     ),
   )
 
-  it.live("uses the configured non-default review base without treating upstream as a parent", () =>
+  it.live("uses an explicit diff base without treating upstream or Git config as a parent", () =>
     withGit((directory) =>
       Effect.gen(function* () {
         yield* Effect.promise(async () => {
@@ -540,16 +536,15 @@ describe("Vcs", () => {
           await fs.writeFile(path.join(directory, "feature.txt"), "feature\n")
           await commitAll(directory, "feature")
           await $`git branch --set-upstream-to=release feature`.cwd(directory).quiet()
+          await $`git config branch.feature.opencode-merge-base refs/heads/release`.cwd(directory).quiet()
         })
         const vcs = yield* Vcs.Service
         expect(yield* vcs.base().pipe(Effect.flip)).toMatchObject({ message: "Choose a review base" })
-        yield* vcs.setBase("release")
-        const base = yield* vcs.base()
-        expect(base).toEqual({ name: "release", ref: "refs/heads/release", source: "configured" })
-        expect((yield* vcs.diff("committed", { base: base?.ref })).map((row) => row.file)).toEqual(["feature.txt"])
+        expect((yield* vcs.diff("committed", { base: "release" })).map((row) => row.file)).toEqual(["feature.txt"])
         expect((yield* vcs.diff("committed")).map((row) => row.file)).toEqual(["feature.txt", "release.txt"])
-        expect((yield* vcs.diff("branch", { base: base?.ref })).map((row) => row.file)).toEqual(["feature.txt"])
+        expect((yield* vcs.diff("branch", { base: "release" })).map((row) => row.file)).toEqual(["feature.txt"])
         expect((yield* vcs.diff("branch")).map((row) => row.file)).toEqual(["feature.txt", "release.txt"])
+        expect(yield* vcs.base().pipe(Effect.flip)).toMatchObject({ message: "Choose a review base" })
       }),
     ),
   )
@@ -577,7 +572,7 @@ describe("Vcs", () => {
     ),
   )
 
-  it.live("resolves a configured remote-only base without borrowing another fork's branch", () =>
+  it.live("diffs explicit remote-only bases without borrowing another fork's branch", () =>
     withGit((directory) =>
       Effect.gen(function* () {
         yield* Effect.promise(async () => {
@@ -594,29 +589,24 @@ describe("Vcs", () => {
           await commitAll(directory, "feature")
         })
         const vcs = yield* Vcs.Service
-        const base = yield* vcs.setBase("release")
-        expect(base).toEqual({ name: "release", ref: "refs/remotes/origin/release", source: "configured" })
-        expect((yield* vcs.diff("committed", { base: base?.ref })).map((row) => row.file)).toEqual(["feature.txt"])
+        expect((yield* vcs.diff("committed", { base: "refs/remotes/origin/release" })).map((row) => row.file)).toEqual([
+          "feature.txt",
+        ])
         expect((yield* vcs.diff("committed")).map((row) => row.file)).toEqual(["feature.txt", "release.txt"])
-
-        yield* vcs.setBase("refs/remotes/other/release")
-        expect(yield* vcs.base()).toEqual({
-          name: "release",
-          ref: "refs/remotes/other/release",
-          source: "configured",
-        })
+        expect((yield* vcs.diff("committed", { base: "refs/remotes/other/release" })).map((row) => row.file)).toEqual([
+          "feature.txt",
+          "release.txt",
+        ])
         yield* Effect.promise(async () => {
           await $`git update-ref -d refs/remotes/origin/release`.cwd(directory).quiet()
         })
-        expect(yield* vcs.setBase("release").pipe(Effect.flip)).toMatchObject({ _tag: "Vcs.DiffError" })
-        expect((yield* vcs.base())?.ref).toBe("refs/remotes/other/release")
-
-        yield* Effect.promise(async () => {
-          await $`git update-ref refs/remotes/origin/release HEAD`.cwd(directory).quiet()
-          await $`git remote rename origin alpha`.cwd(directory).quiet()
-          await $`git remote rename other beta`.cwd(directory).quiet()
+        expect(yield* vcs.diff("committed", { base: "refs/remotes/origin/release" }).pipe(Effect.flip)).toMatchObject({
+          _tag: "Vcs.DiffError",
         })
-        expect(yield* vcs.setBase("release").pipe(Effect.flip)).toMatchObject({ _tag: "Vcs.DiffError" })
+        expect((yield* vcs.diff("committed", { base: "refs/remotes/other/release" })).map((row) => row.file)).toEqual([
+          "feature.txt",
+          "release.txt",
+        ])
       }),
     ),
   )
@@ -655,19 +645,19 @@ describe("Vcs", () => {
         yield* vcs.transform((draft) => {
           draft.add(
             provider({
-              base: () => Effect.succeed({ name: "release", ref: "refs/heads/release", source: "configured" }),
+              base: () => Effect.succeed({ name: "release", ref: "refs/heads/release", source: "reflog" }),
               diff: () => Effect.fail(new Error("failed")),
             }),
           )
           draft.default.set("custom")
         })
-        expect((yield* vcs.base())?.source).toBe("configured")
+        expect((yield* vcs.base())?.source).toBe("reflog")
         expect(yield* vcs.diff("committed").pipe(Effect.flip)).toMatchObject({ _tag: "Vcs.DiffError" })
       }).pipe(provide(directory)),
     ),
   )
 
-  it.live("infers an explicit creation ref instead of an unrelated remote default", () =>
+  it.live("infers a creation ref instead of Git config or an unrelated remote default", () =>
     withGit((directory) =>
       Effect.gen(function* () {
         yield* Effect.promise(async () => {
@@ -680,20 +670,23 @@ describe("Vcs", () => {
           await commitAll(directory, "v2")
           await $`git update-ref refs/remotes/origin/v2 HEAD`.cwd(directory).quiet()
           await $`git checkout -b feature origin/v2`.cwd(directory).quiet()
+          await $`git config branch.feature.opencode-merge-base refs/remotes/origin/dev`.cwd(directory).quiet()
           await fs.writeFile(path.join(directory, "feature.txt"), "feature\n")
           await commitAll(directory, "feature")
         })
         const vcs = yield* Vcs.Service
         const config = yield* Effect.promise(() => fs.readFile(path.join(directory, ".git/config"), "utf8"))
         expect(yield* vcs.base()).toEqual({ name: "v2", ref: "refs/remotes/origin/v2", source: "reflog" })
-        expect(yield* Effect.promise(() => fs.readFile(path.join(directory, ".git/config"), "utf8"))).toBe(config)
-        expect(
-          yield* Effect.promise(() => Bun.file(path.join(directory, ".git/opencode-review.json")).exists()),
-        ).toBeFalse()
         expect((yield* vcs.diff("committed", { base: "refs/remotes/origin/v2" })).map((row) => row.file)).toEqual([
           "feature.txt",
         ])
         expect((yield* vcs.diff("committed")).map((row) => row.file)).toEqual(["feature.txt", "v2.txt"])
+        expect(yield* Effect.promise(() => fs.readFile(path.join(directory, ".git/config"), "utf8"))).toBe(config)
+        expect(
+          yield* Effect.promise(() => Bun.file(path.join(directory, ".git/opencode-review.json")).exists()),
+        ).toBeFalse()
+        yield* Effect.promise(() => $`git config branch.feature.opencode-merge-base missing`.cwd(directory).quiet())
+        expect(yield* vcs.base()).toEqual({ name: "v2", ref: "refs/remotes/origin/v2", source: "reflog" })
         yield* Effect.promise(() => $`git checkout -b uncertain HEAD`.cwd(directory).quiet())
         expect(yield* vcs.base().pipe(Effect.flip)).toMatchObject({ message: "Choose a review base" })
       }),
@@ -740,43 +733,7 @@ describe("Vcs", () => {
     ),
   )
 
-  it.live("remembers selection across provider reopen and branch changes, without overwriting on failure", () =>
-    withGit((directory) =>
-      Effect.gen(function* () {
-        yield* Effect.promise(async () => {
-          await fs.writeFile(path.join(directory, "base.txt"), "base\n")
-          await commitAll(directory, "initial")
-          await $`git checkout -b feature`.cwd(directory).quiet()
-        })
-        const vcs = yield* Vcs.Service
-        const selected = yield* vcs.setBase("main")
-        expect(selected).toEqual({ name: "main", ref: "refs/heads/main", source: "configured" })
-        const hash = yield* Effect.promise(() => $`git rev-parse HEAD`.cwd(directory).text())
-        for (const ref of ["missing", "HEAD", "main~0", "refs/tags/main", hash.trim()]) {
-          expect(yield* vcs.setBase(ref).pipe(Effect.flip)).toMatchObject({ _tag: "Vcs.DiffError" })
-          expect(yield* vcs.base()).toEqual(selected)
-        }
-        yield* Effect.gen(function* () {
-          const reopened = yield* Vcs.Service
-          const context = host()
-          yield* VcsGitPlugin.Plugin.effect({
-            ...context,
-            vcs: { ...context.vcs, transform: reopened.transform, reload: reopened.reload },
-          })
-          expect(yield* reopened.base()).toEqual(selected)
-        }).pipe(provide(directory, { git: true }))
-        yield* Effect.promise(() => $`git checkout -b other HEAD`.cwd(directory).quiet())
-        expect(yield* vcs.base().pipe(Effect.flip)).toMatchObject({ message: "Choose a review base" })
-        yield* Effect.promise(() => $`git checkout feature`.cwd(directory).quiet())
-        expect(yield* vcs.base()).toEqual(selected)
-        yield* Effect.promise(() => fs.writeFile(path.join(directory, ".git/config.lock"), "locked\n"))
-        expect(yield* vcs.setBase("other").pipe(Effect.flip)).toMatchObject({ _tag: "Vcs.DiffError" })
-        expect(yield* vcs.base()).toEqual(selected)
-      }),
-    ),
-  )
-
-  it.live("remembers OpenCode worktree origins and detached selections without leaking to another branch", () =>
+  it.live("remembers OpenCode worktree origins without leaking to another branch", () =>
     withGit((directory) =>
       Effect.gen(function* () {
         yield* Effect.promise(async () => {
@@ -798,6 +755,10 @@ describe("Vcs", () => {
           directory: AbsolutePath.make(path.join(directory, "linked")),
           ref: "origin/v2",
         })
+        const metadata = yield* Effect.promise(() =>
+          Bun.file(path.join(linked.gitDirectory, "opencode-review.json")).json(),
+        )
+        expect(metadata).toEqual({ creation: { ref: "refs/remotes/origin/v2", commit: expect.any(String) } })
         yield* Effect.gen(function* () {
           const vcs = yield* Vcs.Service
           const context = host()
@@ -808,14 +769,13 @@ describe("Vcs", () => {
           expect(yield* vcs.base()).toEqual({ name: "v2", ref: "refs/remotes/origin/v2", source: "worktree" })
           yield* Effect.promise(() => $`git checkout -b child`.cwd(linked.worktree).quiet())
           expect((yield* vcs.base())?.source).toBe("worktree")
-          yield* vcs.setBase("origin/dev")
-          expect((yield* vcs.base())?.source).toBe("configured")
+          expect((yield* vcs.diff("committed", { base: "origin/dev" })).map((row) => row.file)).toEqual(["v2.txt"])
+          expect((yield* vcs.base())?.source).toBe("worktree")
           yield* Effect.promise(() => $`git checkout reused`.cwd(linked.worktree).quiet())
           expect(yield* vcs.base().pipe(Effect.flip)).toMatchObject({ message: "Choose a review base" })
           yield* Effect.promise(() => $`git checkout --detach origin/v2`.cwd(linked.worktree).quiet())
           expect((yield* vcs.base())?.source).toBe("worktree")
-          yield* vcs.setBase("origin/dev")
-          expect(yield* vcs.base()).toEqual({ name: "dev", ref: "refs/remotes/origin/dev", source: "configured" })
+          expect((yield* vcs.diff("committed", { base: "origin/dev" })).map((row) => row.file)).toEqual(["v2.txt"])
         }).pipe(provide(linked.worktree, { git: true }))
         yield* Effect.gen(function* () {
           const vcs = yield* Vcs.Service
@@ -824,10 +784,13 @@ describe("Vcs", () => {
             ...context,
             vcs: { ...context.vcs, transform: vcs.transform, reload: vcs.reload },
           })
-          expect(yield* vcs.base()).toEqual({ name: "dev", ref: "refs/remotes/origin/dev", source: "configured" })
+          expect(yield* vcs.base()).toEqual({ name: "v2", ref: "refs/remotes/origin/v2", source: "worktree" })
           yield* Effect.promise(() => $`git checkout reused`.cwd(linked.worktree).quiet())
           expect(yield* vcs.base().pipe(Effect.flip)).toMatchObject({ message: "Choose a review base" })
         }).pipe(provide(linked.worktree, { git: true }))
+        expect(
+          yield* Effect.promise(() => Bun.file(path.join(linked.gitDirectory, "opencode-review.json")).json()),
+        ).toEqual(metadata)
         const fromHead = yield* git.worktree.create({
           repository,
           directory: AbsolutePath.make(path.join(directory, "from-head")),

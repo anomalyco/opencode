@@ -8,7 +8,7 @@ import { FSUtil } from "@opencode-ai/util/fs-util"
 import { optional } from "@opencode-ai/schema/schema"
 
 const Anchor = Schema.Struct({ ref: Schema.String, commit: Schema.String })
-const Metadata = Schema.Struct({ creation: optional(Anchor), selection: optional(Anchor) })
+const Metadata = Schema.Struct({ creation: optional(Anchor) })
 const filename = "opencode-review.json"
 
 export const read = Effect.fn("GitReview.read")(function* (fs: FSUtil.Interface, directory: string) {

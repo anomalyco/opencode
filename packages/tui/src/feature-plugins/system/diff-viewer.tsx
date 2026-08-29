@@ -77,6 +77,10 @@ function diffSourceLabel(mode: DiffMode) {
 function DiffViewer(props: { context: Plugin.Context }) {
   const dimensions = useTerminalDimensions()
   const config = useConfig()
+  const [memory, updateMemory] = props.context.storage.memory<{
+    source?: DiffMode
+    bases: Record<string, string>
+  }>("review", { initial: { bases: {} } })
   const params = () => {
     const route = props.context.ui.router.current()
     return (route.type === "plugin" ? route.data : undefined) as
@@ -87,7 +91,7 @@ function DiffViewer(props: { context: Plugin.Context }) {
         }
       | undefined
   }
-  const [mode, setMode] = createSignal(params()?.mode ?? config.data.diffs?.source ?? "branch")
+  const [mode, setMode] = createSignal(params()?.mode ?? memory.source ?? config.data.diffs?.source ?? "branch")
   const location = createMemo(
     () => {
       const sessionID = params()?.sessionID
@@ -98,11 +102,14 @@ function DiffViewer(props: { context: Plugin.Context }) {
     undefined,
     { equals: (a, b) => a.directory === b.directory && a.workspaceID === b.workspaceID },
   )
+  const baseKey = createMemo(() =>
+    JSON.stringify([locationKey(location()), props.context.data.location.vcs.info(location())?.branch.current]),
+  )
+  const selectedBase = () => memory.bases[baseKey()]
   // Mode changes share the same lazy base lookup until this viewer is closed.
   const bases = new Map<string, ReturnType<Plugin.Context["client"]["vcs"]["base"]>>()
   const [reportedBases, setReportedBases] = createSignal<ReadonlyMap<string, Vcs.Base | null>>(new Map())
-  const loadBase = (location: LocationRef) => {
-    const key = locationKey(location)
+  const loadBase = (location: LocationRef, key: string) => {
     const cached = bases.get(key)
     if (cached) return cached
     const pending = props.context.client.vcs.base({ location }).then((result) => {
@@ -112,25 +119,29 @@ function DiffViewer(props: { context: Plugin.Context }) {
     bases.set(key, pending)
     return pending
   }
-  const diffInput = createMemo(() => ({ mode: mode(), location: location() }))
-  const [diff, diffActions] = createResource(diffInput, async (input) => {
-    const pending = input.mode === "working" ? undefined : loadBase(input.location)
-    const base = await pending
-    if (
-      input !== diffInput() ||
-      (pending && pending !== bases.get(locationKey(input.location))) ||
-      (input.mode === "committed" && !base?.data)
-    ) {
+  const diffInput = createMemo(() => ({ mode: mode(), location: location(), key: baseKey(), selected: selectedBase() }))
+  const [diff] = createResource(diffInput, async (input) => {
+    const base =
+      input.mode === "working"
+        ? undefined
+        : input.selected
+          ? { name: input.selected, ref: input.selected }
+          : (await loadBase(input.location, input.key)).data
+    if (input !== diffInput() || (input.mode === "committed" && !base)) {
       return { input, base: null, files: [] }
     }
     const result = await props.context.client.vcs.diff({
       location: input.location,
       mode: input.mode,
-      ...(base?.data ? { base: base.data.ref } : {}),
+      ...(base ? { base: base.ref } : {}),
       context: VCS_DIFF_CONTEXT_LINES,
     })
-    return { input, base: base?.data, files: normalizeDiffs(result.data ?? []) }
+    return { input, base, files: normalizeDiffs(result.data ?? []) }
   })
+  const sourceBase = () => {
+    const ref = selectedBase()
+    return ref ? { name: ref, ref } : reportedBases().get(baseKey())
+  }
   const result = () => (diff.error || diff.loading || diff()?.input !== diffInput() ? undefined : diff())
   const sourceDetail = () => {
     if (mode() === "working") return "vs HEAD"
@@ -150,7 +161,7 @@ function DiffViewer(props: { context: Plugin.Context }) {
         error={diff.error}
         mode={mode()}
         sourceDetail={sourceDetail()}
-        sourceBase={reportedBases().get(locationKey(location()))}
+        sourceBase={sourceBase()}
         unavailable={mode() === "committed" && !!result() && !result()?.base}
         preferences={config.data.diffs}
         loadImage={(file, signal) => props.context.client.file.read({ path: file, location: location() }, { signal })}
@@ -162,21 +173,26 @@ function DiffViewer(props: { context: Plugin.Context }) {
             .catch(() => {})
         }}
         onClose={() => props.context.ui.router.navigate(params()?.returnRoute ?? { type: "home" })}
-        onSwitchSource={setMode}
+        onSwitchSource={(mode) => {
+          updateMemory((draft) => {
+            draft.source = mode
+          })
+          setMode(mode)
+        }}
         onChooseBase={() => {
           const target = { ...location() }
-          const key = locationKey(target)
-          void loadBase(target).catch(() => {})
+          const key = baseKey()
+          if (!memory.bases[key]) void loadBase(target, key).catch(() => {})
           props.context.ui.dialog.show(() => (
             <DiffBaseDialog
               context={props.context}
               location={target}
-              current={reportedBases().get(key)}
-              onSaved={(result) => {
-                bases.set(key, Promise.resolve(result))
-                setReportedBases((known) => new Map(known).set(key, result.data))
-                if (locationKey(location()) === key) void diffActions.refetch()
-              }}
+              current={memory.bases[key] ?? reportedBases().get(key)?.ref}
+              onSelect={(ref) =>
+                updateMemory((draft) => {
+                  draft.bases[key] = ref
+                })
+              }
             />
           ))
         }}
@@ -188,20 +204,14 @@ function DiffViewer(props: { context: Plugin.Context }) {
 function DiffBaseDialog(props: {
   context: Plugin.Context
   location: LocationRef
-  current?: Vcs.Base | null
-  onSaved: (result: Awaited<ReturnType<Plugin.Context["client"]["vcs"]["setBase"]>>) => void
+  current?: string
+  onSelect: (ref: string) => void
 }) {
   const theme = props.context.theme.contextual.elevated
   const [search, setSearch] = createSignal("")
-  const [saving, setSaving] = createSignal(false)
-  const [error, setError] = createSignal<string>()
   const [branches] = createResource(search, (search) =>
     props.context.client.vcs.branches({ location: props.location, search, limit: 100 }),
   )
-  let active = true
-  onCleanup(() => {
-    active = false
-  })
   const Empty = () => (
     <box paddingLeft={4} paddingRight={4}>
       <text fg={branches.error ? theme.text.feedback.error.default : theme.text.subdued}>
@@ -219,41 +229,24 @@ function DiffBaseDialog(props: {
       title="Base branch"
       placeholder="Search local and remote branches"
       skipFilter
-      current={props.current?.ref.replace(/^refs\/(heads|remotes)\//, "")}
+      current={props.current?.replace(/^refs\/(heads|remotes)\//, "")}
       onFilter={setSearch}
-      locked={saving()}
       emptyView={<Empty />}
       noMatchView={<Empty />}
-      footer={
-        <text fg={error() ? theme.text.feedback.error.default : theme.text.subdued}>
-          {error() ?? (saving() ? "Saving base..." : "Save for this branch or worktree")}
-        </text>
-      }
+      footer={<text fg={theme.text.subdued}>Remembered until the TUI exits</text>}
       options={(branches.loading || branches.error ? [] : (branches()?.data ?? [])).map((name) => ({
         title: name,
         value: name,
         onSelect() {
-          setError(undefined)
-          setSaving(true)
-          void props.context.client.vcs
-            .setBase({ location: props.location, ref: name })
-            .then((result) => {
-              if (!active) return
-              props.onSaved(result)
-              props.context.ui.dialog.clear()
-            })
-            .catch(() => {
-              if (!active) return
-              setSaving(false)
-              setError("Could not save base. Try again.")
-            })
+          props.onSelect(name)
+          props.context.ui.dialog.clear()
         },
       }))}
     />
   )
 }
 
-type DiffPreferences = { source?: DiffMode; tree?: boolean; single?: boolean; view?: "auto" | DiffView }
+type DiffPreferences = { tree?: boolean; single?: boolean; view?: "auto" | DiffView }
 
 export function DiffViewerContent(props: {
   context: Plugin.Context
@@ -262,7 +255,7 @@ export function DiffViewerContent(props: {
   error?: unknown
   mode: DiffMode
   sourceDetail?: string
-  sourceBase?: Vcs.Base | null
+  sourceBase?: Pick<Vcs.Base, "name" | "ref"> | null
   unavailable?: boolean
   navigation?: "tree" | "list"
   loadImage?: (file: string, signal: AbortSignal) => Promise<Uint8Array>
@@ -730,7 +723,6 @@ export function DiffViewerContent(props: {
             onSelect() {
               dialog.clear()
               props.onSwitchSource(option.value)
-              props.onPreferencesChange?.({ source: option.value })
             },
           })),
           ...(props.onChooseBase
@@ -1245,7 +1237,6 @@ function DiffViewerHelpDialog(props: { context: Plugin.Context; single: boolean 
 }
 
 function Commands(props: { context: Plugin.Context }) {
-  const config = useConfig()
   props.context.keymap.layer(() => ({
     mode: "global",
     commands: [
@@ -1272,7 +1263,6 @@ function Commands(props: { context: Plugin.Context }) {
             type: "plugin",
             name: ROUTE,
             data: {
-              mode: config.data.diffs?.source ?? "branch",
               sessionID: route.type === "session" ? route.sessionID : undefined,
               returnRoute,
             },

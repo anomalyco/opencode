@@ -47,7 +47,7 @@ test("exposes every standard HTTP API group", () => {
   expect(Object.keys(client.integration.command)).toEqual(["connect", "status", "cancel"])
   expect(Object.keys(client.websearch)).toEqual(["providers", "query"])
   expect(Object.keys(client.file)).toEqual(["read", "list", "find"])
-  expect(Object.keys(client.vcs)).toEqual(["get", "base", "setBase", "status", "branches", "diff"])
+  expect(Object.keys(client.vcs)).toEqual(["get", "base", "status", "branches", "diff"])
   expect(Object.keys(client.pty)).toEqual(["list", "create", "get", "update", "remove", "connect"])
   expect(Object.keys(client.pty.connect)).toEqual(["token"])
   expect(Object.keys(client.experimental)).toEqual(["persistentPty"])
@@ -87,7 +87,7 @@ test("config.get returns ordered config entries for a location", async () => {
 test("vcs.base and committed diffs preserve location and explicit base on the wire", async () => {
   const requests: Request[] = []
   const location = { directory: "/repo", project: { id: "global", directory: "/repo", canonical: "/repo" } }
-  const base = { name: "release", ref: "refs/remotes/origin/release", source: "configured" }
+  const base = { name: "release", ref: "refs/remotes/origin/release", source: "reflog" }
   const client = OpenCode.make({
     baseUrl: "http://localhost:3000",
     fetch: async (input, init) => {
@@ -122,26 +122,6 @@ test("vcs.diff exposes unavailable comparisons as errors, not empty diffs", asyn
     service: "vcs",
     message: "No review base available",
   })
-})
-
-test("vcs.setBase persists a named ref through the location-scoped PUT contract", async () => {
-  const requests: Request[] = []
-  const base = { name: "v2", ref: "refs/remotes/origin/v2", source: "configured" }
-  const client = OpenCode.make({
-    baseUrl: "http://localhost:3000",
-    fetch: async (input, init) => {
-      requests.push(input instanceof Request ? input : new Request(input, init))
-      return Response.json({
-        location: { directory: "/repo", project: { id: "global", directory: "/repo", canonical: "/repo" } },
-        data: base,
-      })
-    },
-  })
-  expect((await client.vcs.setBase({ location: { directory: "/repo" }, ref: "origin/v2" })).data).toEqual(base)
-  expect(requests[0].method).toBe("PUT")
-  expect(new URL(requests[0].url).pathname).toBe("/api/vcs/base")
-  expect(new URL(requests[0].url).searchParams.get("location[directory]")).toBe("/repo")
-  expect(await requests[0].json()).toEqual({ ref: "origin/v2" })
 })
 
 test("project.update uses the global project contract", async () => {

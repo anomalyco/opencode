@@ -32,17 +32,6 @@ export const VcsHandler = HttpApiBuilder.group(Api, "server.vcs", (handlers) =>
           }),
         ),
       )
-      .handle("vcs.setBase", (ctx) =>
-        response(
-          Effect.gen(function* () {
-            yield* flushPlugins
-            const vcs = yield* Vcs.Service
-            return yield* vcs
-              .setBase(ctx.payload.ref)
-              .pipe(Effect.mapError((error) => new ServiceUnavailableError({ service: "vcs", message: error.message })))
-          }),
-        ),
-      )
       .handle("vcs.status", () =>
         response(
           Effect.gen(function* () {

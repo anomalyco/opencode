@@ -47,24 +47,7 @@ export const VcsGroup = HttpApiGroup.make("server.vcs")
           identifier: "v2.vcs.base",
           summary: "VCS review base",
           description:
-            "Resolve a local review base from explicit selection, worktree creation, or branch creation history. Returns null before the first commit or when the provider lacks base metadata; ambiguous Git history requires an explicit selection.",
-        }),
-      ),
-  )
-  .add(
-    HttpApiEndpoint.put("vcs.setBase", "/api/vcs/base", {
-      query: LocationQuery,
-      payload: Schema.Struct({ ref: Schema.String }),
-      success: Location.response(Vcs.Base),
-      error: ServiceUnavailableError,
-    })
-      .annotateMerge(locationQueryOpenApi)
-      .annotateMerge(
-        OpenApi.annotations({
-          identifier: "v2.vcs.setBase",
-          summary: "Set VCS review base",
-          description:
-            "Remember an existing local branch or remote-tracking ref as the review base for this branch or detached worktree.",
+            "Infer a local review base from worktree creation, branch creation history, or the current default branch. Returns null before the first commit or when the provider lacks base metadata; ambiguous Git history requires an explicit base on diff requests.",
         }),
       ),
   )

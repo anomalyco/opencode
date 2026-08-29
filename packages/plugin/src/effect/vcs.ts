@@ -23,16 +23,11 @@ export interface VcsDiffInput extends VcsScope {
   readonly maxOutputBytes: number
 }
 
-export interface VcsSetBaseInput extends VcsScope {
-  readonly ref: string
-}
-
 export interface VcsDefinition {
   readonly id: string
   readonly name: string
   readonly info: (input: VcsScope) => Effect.Effect<Vcs.Info, unknown>
   readonly base?: (input: VcsScope) => Effect.Effect<Vcs.Base | null, unknown>
-  readonly setBase?: (input: VcsSetBaseInput) => Effect.Effect<Vcs.Base, unknown>
   readonly branches: (input: VcsBranchesInput) => Effect.Effect<Vcs.BranchList, unknown>
   readonly status: (input: VcsScope) => Effect.Effect<readonly Vcs.FileStatus[], unknown>
   readonly diff: (input: VcsDiffInput) => Effect.Effect<readonly FileDiff.Info[], unknown>

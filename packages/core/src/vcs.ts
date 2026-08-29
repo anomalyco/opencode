@@ -33,7 +33,6 @@ export interface BranchOptions {
 export interface Adapter {
   readonly info: () => Effect.Effect<Info>
   readonly base?: () => Effect.Effect<Base | null, DiffError>
-  readonly setBase?: (ref: string) => Effect.Effect<Base, DiffError>
   readonly branches: (options?: BranchOptions) => Effect.Effect<BranchList>
   readonly status: () => Effect.Effect<FileStatus[]>
   readonly diff: (mode: Mode, options?: DiffOptions) => Effect.Effect<FileDiff.Info[], DiffError>
@@ -41,7 +40,6 @@ export interface Adapter {
 
 export interface Interface extends Adapter, State.Transformable<VcsDraft> {
   readonly base: () => Effect.Effect<Base | null, DiffError>
-  readonly setBase: (ref: string) => Effect.Effect<Base, DiffError>
 }
 
 interface Data {
@@ -67,7 +65,6 @@ const layer = Layer.effect(
     }
     const decodeInfo = Schema.decodeUnknownEffect(Schema.toType(Info))
     const decodeBase = Schema.decodeUnknownEffect(Schema.NullOr(Base))
-    const decodeSelectedBase = Schema.decodeUnknownEffect(Base)
     const decodeBranches = Schema.decodeUnknownEffect(BranchList)
     const decodeStatus = Schema.decodeUnknownEffect(Schema.Array(FileStatus))
     const decodeDiff = Schema.decodeUnknownEffect(Schema.Array(FileDiff.Info))
@@ -98,11 +95,7 @@ const layer = Layer.effect(
               ),
         ),
       )
-    const review = <A>(
-      provider: VcsDefinition,
-      operation: "base" | "setBase" | "diff",
-      effect: Effect.Effect<A, unknown>,
-    ) =>
+    const review = <A>(provider: VcsDefinition, operation: "base" | "diff", effect: Effect.Effect<A, unknown>) =>
       effect.pipe(
         Effect.catchCause((cause) => {
           if (Cause.hasInterrupts(cause)) return Effect.failCause(cause).pipe(Effect.orDie)
@@ -114,11 +107,9 @@ const layer = Layer.effect(
                   ? error
                   : new DiffError({
                       message:
-                        operation === "setBase"
-                          ? "VCS provider could not save a review base"
-                          : operation === "base"
-                            ? "VCS provider could not resolve a review base"
-                            : "VCS provider could not produce a diff",
+                        operation === "base"
+                          ? "VCS provider could not resolve a review base"
+                          : "VCS provider could not produce a diff",
                     }),
               ),
             ),
@@ -160,16 +151,6 @@ const layer = Layer.effect(
         const provider = selected()
         if (!provider?.base) return null
         return yield* review(provider, "base", provider.base(scope).pipe(Effect.flatMap(decodeBase)))
-      }),
-      setBase: Effect.fn("Vcs.setBase")(function* (ref: string) {
-        const provider = selected()
-        if (!provider?.setBase)
-          return yield* new DiffError({ message: "VCS provider does not support saving a review base" })
-        return yield* review(
-          provider,
-          "setBase",
-          provider.setBase({ ...scope, ref }).pipe(Effect.flatMap(decodeSelectedBase)),
-        )
       }),
       branches: Effect.fn("Vcs.branches")(function* (options?: BranchOptions) {
         const provider = selected()

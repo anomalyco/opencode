@@ -21,7 +21,7 @@ it.live(
         await Bun.write(path.join(tmp.path, "file.txt"), "base\n")
         await $`git add .`.cwd(tmp.path).quiet()
         await $`git commit -m initial`.cwd(tmp.path).quiet()
-        await $`git checkout -b feature`.cwd(tmp.path).quiet()
+        await $`git checkout -b feature main`.cwd(tmp.path).quiet()
         await Bun.write(path.join(tmp.path, "file.txt"), "committed\n")
         await $`git commit -am feature`.cwd(tmp.path).quiet()
         await Bun.write(path.join(tmp.path, "file.txt"), "dirty\n")
@@ -30,33 +30,16 @@ it.live(
       const url = new URL("/api/vcs/base", server.base)
       url.searchParams.set("location[directory]", tmp.path)
       const base = yield* Effect.promise(() => fetch(url, { headers: server.headers }))
-      expect(base.status).toBe(503)
+      expect(base.status).toBe(200)
       expect(yield* Effect.promise(() => base.json())).toMatchObject({
+        data: { name: "main", ref: "refs/heads/main", source: "reflog" },
+      })
+      yield* Effect.promise(() => $`git branch -m ambiguous`.cwd(tmp.path).quiet())
+      const ambiguous = yield* Effect.promise(() => fetch(url, { headers: server.headers }))
+      expect(ambiguous.status).toBe(503)
+      expect(yield* Effect.promise(() => ambiguous.json())).toMatchObject({
         _tag: "ServiceUnavailableError",
         message: "Choose a review base",
-      })
-      const selected = yield* Effect.promise(() =>
-        fetch(url, {
-          method: "PUT",
-          headers: { ...server.headers, "content-type": "application/json" },
-          body: JSON.stringify({ ref: "main" }),
-        }),
-      )
-      expect(selected.status).toBe(200)
-      expect(yield* Effect.promise(() => selected.json())).toMatchObject({
-        data: { name: "main", ref: "refs/heads/main", source: "configured" },
-      })
-      const invalid = yield* Effect.promise(() =>
-        fetch(url, {
-          method: "PUT",
-          headers: { ...server.headers, "content-type": "application/json" },
-          body: JSON.stringify({ ref: "missing" }),
-        }),
-      )
-      expect(invalid.status).toBe(503)
-      const reopened = yield* Effect.promise(() => fetch(url, { headers: server.headers }))
-      expect(yield* Effect.promise(() => reopened.json())).toMatchObject({
-        data: { ref: "refs/heads/main", source: "configured" },
       })
       url.pathname = "/api/vcs/diff"
       url.searchParams.set("mode", "committed")
@@ -136,15 +119,5 @@ it.live("maps a failing base provider to HTTP 503 instead of null metadata", () 
       service: "vcs",
       message: "VCS provider could not resolve a review base",
     })
-    const unsupported = yield* Effect.promise(() =>
-      handler(
-        new Request(url, {
-          method: "PUT",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ ref: "main" }),
-        }),
-      ),
-    )
-    expect(unsupported.status).toBe(503)
   }),
 )

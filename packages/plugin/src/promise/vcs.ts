@@ -22,16 +22,11 @@ export interface VcsDiffInput extends VcsScope {
   readonly maxOutputBytes: number
 }
 
-export interface VcsSetBaseInput extends VcsScope {
-  readonly ref: string
-}
-
 export interface VcsDefinition {
   readonly id: string
   readonly name: string
   readonly info: (input: VcsScope, context: { readonly signal: AbortSignal }) => Promise<Vcs.Info>
   readonly base?: (input: VcsScope, context: { readonly signal: AbortSignal }) => Promise<Vcs.Base | null>
-  readonly setBase?: (input: VcsSetBaseInput, context: { readonly signal: AbortSignal }) => Promise<Vcs.Base>
   readonly branches: (input: VcsBranchesInput, context: { readonly signal: AbortSignal }) => Promise<Vcs.BranchList>
   readonly status: (input: VcsScope, context: { readonly signal: AbortSignal }) => Promise<readonly Vcs.FileStatus[]>
   readonly diff: (input: VcsDiffInput, context: { readonly signal: AbortSignal }) => Promise<readonly FileDiff.Info[]>

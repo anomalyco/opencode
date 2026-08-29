@@ -101,11 +101,11 @@ Unknown command IDs are rejected.
 
 ## Diff Viewer
 
-`/diff` initially defaults to **All**, combining branch and local changes. Press `d` (`diff.switch_source`) to open **Diff source**, then select **All** (branch + local changes), **Committed** (branch commits only), or **Uncommitted** (local changes only). The current scope is marked in the chooser. Selecting a scope updates [`diffs.source` in `cli.json`](/cli/config#diffs), so reopening remembers your last choice.
+`/diff` initially defaults to **All**, combining branch and local changes. Press `d` (`diff.switch_source`) to open **Diff source**, then select **All** (branch + local changes), **Committed** (branch commits only), or **Uncommitted** (local changes only). The current scope is marked in the chooser. The plugin remembers your last scope in memory until the TUI exits; [`diffs.source` in `cli.json`](/cli/config#diffs) sets the initial default and is not changed by the chooser.
 
 The one-row header shows the scope, base, and reviewed/total count. Select the fourth row, **Base**, to search local and remote-tracking branches and remember a base without changing scope. Opening **Diff source** from **Uncommitted** does not resolve a base just for display.
 
-Git uses a saved choice, recorded worktree-creation base, or validated named branch-creation reflog entry. When local inference is unclear, choose a base once; there is no network lookup or automatic fallback to the repository default from another branch. Saved bases belong to the Git branch or detached worktree. Reopening reloads fresh diff content without retaining review marks or scroll position. Providers without base metadata can still supply combined branch comparisons, labeled **Base not reported**. A clean working tree or missing metadata does not switch sources automatically.
+Without an explicit choice, Git uses a recorded worktree-creation base or validated named branch-creation reflog entry. When local inference is unclear, choose a base; there is no network lookup or automatic fallback to the repository default from another branch. The plugin remembers selected bases per location and branch in memory only, without writing Git config or selection files. Reopening reloads fresh diff content without retaining review marks or scroll position; exiting the TUI clears base and scope choices. Providers without base metadata can still supply combined branch comparisons, labeled **Base not reported**. A clean working tree or missing metadata does not switch sources automatically.
 
 Scrolling, paging, and start/end shortcuts always control the diff. There is no keyboard focus switch: click files to open them, click folders to expand or collapse them, and use the mouse wheel to scroll the file tree.
 

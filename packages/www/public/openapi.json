@@ -12170,126 +12170,8 @@
             }
           }
         },
-        "description": "Resolve a local review base from explicit selection, worktree creation, or branch creation history. Returns null before the first commit or when the provider lacks base metadata; ambiguous Git history requires an explicit selection.",
+        "description": "Infer a local review base from worktree creation, branch creation history, or the current default branch. Returns null before the first commit or when the provider lacks base metadata; ambiguous Git history requires an explicit base on diff requests.",
         "summary": "VCS review base"
-      },
-      "put": {
-        "tags": ["vcs"],
-        "operationId": "v2.vcs.setBase",
-        "parameters": [
-          {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
-          }
-        ],
-        "security": [],
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "location": {
-                      "$ref": "#/components/schemas/Location.InfoEncoded"
-                    },
-                    "data": {
-                      "$ref": "#/components/schemas/Vcs.Base"
-                    }
-                  },
-                  "required": ["location", "data"],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "InvalidRequestError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "UnauthorizedError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "ServiceUnavailableError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
-                }
-              }
-            }
-          }
-        },
-        "description": "Remember an existing local branch or remote-tracking ref as the review base for this branch or detached worktree.",
-        "summary": "Set VCS review base",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "ref": {
-                    "type": "string"
-                  }
-                },
-                "required": ["ref"],
-                "additionalProperties": false
-              }
-            }
-          },
-          "required": true
-        }
       }
     },
     "/api/vcs/status": {
@@ -19013,7 +18895,7 @@
           },
           "source": {
             "type": "string",
-            "enum": ["configured", "worktree", "reflog", "default"]
+            "enum": ["worktree", "reflog", "default"]
           }
         },
         "required": ["name", "ref", "source"],
