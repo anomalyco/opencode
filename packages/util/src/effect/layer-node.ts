@@ -38,11 +38,10 @@ type ListOutput<Items extends readonly AnyGraph[], A = never> = [Items] extends 
 
 type Definition =
   | { readonly kind: "group"; readonly name: string; readonly dependencies: readonly AnyGraph[] }
-  | { readonly kind: "unbound"; readonly name: string; readonly tag: Tag | undefined }
+  | { readonly kind: "unbound"; readonly name: string }
   | {
       readonly kind: "layer"
       readonly name: string
-      readonly tag: Tag | undefined
       readonly implementation: RuntimeLayer
       readonly dependencies: readonly AnyGraph[]
     }
@@ -88,19 +87,7 @@ class NodeValue<in out A, in out E, in out T extends Tag | undefined> extends Gr
       return new ReplacementValue(this, replacement)
     }
     if (!Layer.isLayer(replacement)) throw new Error("A replacement must be a node or an Effect Layer")
-    return new ReplacementValue(
-      this,
-      new ProviderNode<A, E, T>(
-        {
-          kind: "layer",
-          name: this.name,
-          tag: this.tag,
-          implementation: replacement,
-          dependencies: [],
-        },
-        this.tag,
-      ),
-    )
+    return new ReplacementValue(this, makeProvider({ name: this.name, layer: replacement, deps: [] }, this.tag))
   }
 }
 
@@ -217,7 +204,6 @@ function makeProvider<Implementation extends Layer.Any, Items extends readonly A
     {
       kind: "layer",
       name: input.service !== undefined ? input.service.key : input.name,
-      tag,
       implementation: input.layer,
       dependencies: [...input.deps],
     },
@@ -226,7 +212,7 @@ function makeProvider<Implementation extends Layer.Any, Items extends readonly A
 }
 
 export function unbound<R, Shape, const T extends Tag>(service: Context.Key<R, Shape>, tag: T): Node<R, never, T> {
-  return new NodeValue({ kind: "unbound", name: service.key, tag }, tag)
+  return new NodeValue({ kind: "unbound", name: service.key }, tag)
 }
 
 /** Ordered, associative composition. Only these roots' outputs are exposed; their dependencies remain private. */
@@ -267,7 +253,7 @@ export function compile<A, E>(root: Graph<A, E>, options: CompileOptions = {}): 
 
   const resolve = (graph: AnyGraph, inherited = false): readonly Resolved[] => {
     const definition = graph[GraphTypeId]
-    const isShared = inherited || (shared !== undefined && definition.kind !== "group" && definition.tag === shared)
+    const isShared = inherited || (shared !== undefined && graph instanceof NodeValue && graph.tag === shared)
     const resolved = isShared ? cache.shared : cache.local
     const cached = resolved.get(graph)
     if (cached) return cached
