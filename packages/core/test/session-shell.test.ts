@@ -267,6 +267,7 @@ describe("Session.shell", () => {
         })
         const completion = inbox[0]
         if (completion?.type !== "synthetic") return yield* Effect.die("Missing shell completion")
+        expect(completion.payload.description).toBeUndefined()
         expect(completion.payload.text).toContain(command)
         expect(completion.payload.text).toContain("user output")
         expect(completion.payload.text).toContain("user error")

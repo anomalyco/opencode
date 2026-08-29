@@ -358,7 +358,9 @@ export function turnDuration(message: SessionMessageAssistant, messages: Session
 export function turnTokensPerSecond(message: SessionMessageAssistant, messages: SessionMessageInfo[]) {
   const index = messages.findIndex((item) => item.id === message.id)
   const end = index === -1 ? messages.length : index + 1
-  const start = messages.slice(0, end).findLastIndex((item) => item.type === "user" || item.type === "synthetic")
+  const start = messages
+    .slice(0, end)
+    .findLastIndex((item) => item.type === "user" || item.type === "synthetic")
   const steps = messages
     .slice(start + 1, end)
     .filter((item): item is SessionMessageAssistant => item.type === "assistant")
@@ -395,7 +397,6 @@ export function messageBoundaryIDs(rows: SessionRow[], messages: SessionMessageI
 
 export function sessionRowID(row: SessionRow, boundaryID?: string) {
   if (boundaryID) return boundaryID
-  if (row.type === "message") return row.messageID
   if (row.type === "part") return `session-part:${row.ref.messageID}:${row.ref.partID}`
 }
 
@@ -408,10 +409,6 @@ export function backgroundToolRowIndex(
   const byID = new Map(messages.map((message) => [message.id, message]))
   const end = rows.findIndex((row) => row.type === "message" && row.messageID === beforeMessageID)
   return rows.slice(0, end === -1 ? rows.length : end).findLastIndex((row) => {
-    if (row.type === "message") {
-      const message = byID.get(row.messageID)
-      return target.source === "shell" && message?.type === "shell" && message.shellID === target.id
-    }
     if (row.type !== "part") return false
     if (target.source === "shell" && row.ref.partID === target.id) return true
     const message = byID.get(row.ref.messageID)

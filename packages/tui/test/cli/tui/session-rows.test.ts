@@ -223,7 +223,7 @@ test("finds background tool launch rows for completion navigation", () => {
   expect(backgroundToolRowIndex(rows, messages, { source: "subagent", id: "child-1" }, "completion-2")).toBe(3)
 })
 
-test("finds user shell rows for completion navigation", () => {
+test("keeps user shell output without rendering its internal completion notification", () => {
   const messages: SessionMessageInfo[] = [
     {
       id: "shell-message",
@@ -237,16 +237,14 @@ test("finds user shell rows for completion navigation", () => {
       id: "completion",
       type: "synthetic",
       text: "Shell finished",
-      description: "pwd",
       metadata: { source: "shell", shellID: "sh_user", state: "completed" },
       time: { created: 1 },
     },
   ]
-  const rows = reduceSessionRows(messages)
-
-  expect(backgroundToolRowIndex(rows, messages, { source: "shell", id: "sh_user" }, "completion")).toBe(0)
-  expect(backgroundToolRowIndex(rows, messages, { source: "shell", id: "sh_other" }, "completion")).toBe(-1)
-  expect(rows.map((row) => sessionRowID(row))).toEqual(["shell-message", "completion"])
+  expect(reduceSessionRows(messages)).toEqual([{ type: "message", messageID: "shell-message" }])
+  expect(reduceSessionRows(messages, new Set(["completion"]))).toEqual([
+    { type: "message", messageID: "shell-message" },
+  ])
 })
 
 test("groups exploration parts across assistant messages until a delimiter", () => {

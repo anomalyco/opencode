@@ -2341,7 +2341,6 @@ function ShellMessage(props: { message: Extract<SessionMessageInfo, { type: "she
       shellID={props.message.shellID}
       command={props.message.command}
       status={props.message.status === "running" ? "running" : "completed"}
-      background={props.message.metadata?.background === true}
       output={props.message.output?.output}
       error={error()}
     />

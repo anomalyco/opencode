@@ -952,10 +952,9 @@ test("completed user shell output replaces a partial live read when the final re
       }).pipe(Effect.provide(Global.layerWith({ state: state.path })), Effect.provide(FileSystem.layerNoop({}))),
     )
 
-    const frame = (await setup.waitForFrame((frame) => frame.includes(shell.command))).split("\n")
-    const row = frame.findIndex((line) => line.includes(shell.command))
-    await setup.mockMouse.click(frame[row].indexOf(shell.command), row)
-    await setup.waitForFrame((frame) => frame.includes(partial.trim()))
+    const running = await setup.waitForFrame((frame) => frame.includes(partial.trim()))
+    expect(running).toContain(shell.command)
+    expect(running).not.toContain("Background")
 
     finished = true
     events.emit({
@@ -980,6 +979,7 @@ test("completed user shell output replaces a partial live read when the final re
     const terminal = await setup.waitForFrame((frame) => frame.includes("last persisted output"))
     expect(terminal).toContain(partial.trim())
     expect(terminal).toContain(`$ ${shell.command}`)
+    expect(terminal).not.toContain("Background")
 
     setup.renderer.destroy()
     await task

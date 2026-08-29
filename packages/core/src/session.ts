@@ -715,32 +715,29 @@ const layer = Layer.effect(
         const session = yield* result.get(input.sessionID)
         // The server owns completion recording even if the submitting client disconnects.
         const running = yield* Effect.gen(function* () {
-          const started = yield* Effect.gen(function* () {
-            const plugins = yield* PluginSupervisor.Service
-            yield* plugins.flush
-            const shell = yield* Shell.Service
-            return yield* shell
-              .create({
-                command: input.command,
-                cwd: session.location.directory,
-                timeout: 0,
-                metadata: { sessionID: input.sessionID, background: true },
-              })
-              .pipe(
-                Effect.tapError((error) =>
-                  result
-                    .synthetic({
-                      sessionID: input.sessionID,
-                      text: `User shell command failed to start:\n${input.command}\n\n${error.message}`,
-                      description: input.command,
-                      metadata: { source: "shell", state: "error" },
-                      resume: false,
-                    })
-                    .pipe(Effect.orDie),
-                ),
-                Effect.orDie,
-              )
-          }).pipe(Effect.provide(locations.get(session.location)))
+          const plugins = yield* PluginSupervisor.Service
+          yield* plugins.flush
+          const shell = yield* Shell.Service
+          const config = yield* Config.Service
+          const started = yield* shell
+            .create({
+              command: input.command,
+              cwd: session.location.directory,
+              timeout: 0,
+              metadata: { sessionID: input.sessionID, background: true },
+            })
+            .pipe(
+              Effect.tapError((error) =>
+                result.synthetic({
+                  sessionID: input.sessionID,
+                  text: `User shell command failed to start:\n${input.command}\n\n${error.message}`,
+                  description: input.command,
+                  metadata: { source: "shell", state: "error" },
+                  resume: false,
+                }),
+              ),
+              Effect.orDie,
+            )
           yield* bus.publish(
             SessionEvent.Shell.Started,
             {
@@ -749,47 +746,41 @@ const layer = Layer.effect(
             },
             { id: input.id },
           )
-          const completed = yield* Effect.gen(function* () {
-            const shell = yield* Shell.Service
-            const config = yield* Config.Service
-            const terminal = yield* shell
-              .wait(started.id)
-              .pipe(Effect.catchTag("Shell.NotFoundError", () => Effect.succeed(synthesizeTerminalShellInfo(started))))
-            const output = yield* shell
-              .output(started.id, { limit: SHELL_MAX_CAPTURE_BYTES })
-              .pipe(Effect.catchTag("Shell.NotFoundError", () => Effect.succeed(missingShellOutput())))
-            const capture = yield* ShellOutput.capture({
-              shell,
-              id: started.id,
-              file: started.file,
-              limits: Config.latest(yield* config.entries(), "tool_output"),
-            }).pipe(Effect.catchTag("Shell.NotFoundError", () => Effect.succeed(missingShellOutput())))
-            return { shell: terminal, output, capture }
-          }).pipe(Effect.provide(locations.get(session.location)))
+          const terminal = yield* shell
+            .wait(started.id)
+            .pipe(Effect.catchTag("Shell.NotFoundError", () => Effect.succeed(synthesizeTerminalShellInfo(started))))
+          const output = yield* shell
+            .output(started.id, { limit: SHELL_MAX_CAPTURE_BYTES })
+            .pipe(Effect.catchTag("Shell.NotFoundError", () => Effect.succeed(missingShellOutput())))
+          const capture = yield* ShellOutput.capture({
+            shell,
+            id: started.id,
+            file: started.file,
+            limits: Config.latest(yield* config.entries(), "tool_output"),
+          }).pipe(Effect.catchTag("Shell.NotFoundError", () => Effect.succeed(missingShellOutput())))
           yield* bus.publish(SessionEvent.Shell.Ended, {
             sessionID: input.sessionID,
-            shell: completed.shell,
-            output: completed.output,
+            shell: terminal,
+            output,
           })
-          const state = completed.shell.status === "killed" ? "cancelled" : "completed"
+          const state = terminal.status === "killed" ? "cancelled" : "completed"
           const notice =
-            completed.shell.status === "killed"
+            terminal.status === "killed"
               ? "Command cancelled."
-              : completed.shell.status === "timeout"
+              : terminal.status === "timeout"
                 ? "Command timed out before completion."
-                : `Command exited with code ${completed.shell.exit ?? "unknown"}.`
+                : `Command exited with code ${terminal.exit ?? "unknown"}.`
           yield* result
             .synthetic({
               sessionID: input.sessionID,
-              text: `The following shell command was executed by the user:\n<shell id="${started.id}" state="${state}" command="${started.command}">\n${completed.capture.output}\n\n${notice}\n</shell>`,
-              description: started.command,
+              text: `The following shell command was executed by the user:\n<shell id="${started.id}" state="${state}" command="${started.command}">\n${capture.output}\n\n${notice}\n</shell>`,
               metadata: {
                 source: "shell",
                 shellID: started.id,
                 state,
-                truncated: completed.capture.truncated,
-                ...(completed.shell.exit !== undefined ? { exit: completed.shell.exit } : {}),
-                ...(completed.shell.status === "timeout" ? { timeout: true } : {}),
+                truncated: capture.truncated,
+                ...(terminal.exit !== undefined ? { exit: terminal.exit } : {}),
+                ...(terminal.status === "timeout" ? { timeout: true } : {}),
               },
               resume: false,
             })
@@ -797,7 +788,7 @@ const layer = Layer.effect(
               Effect.catchTag("Session.NotFoundError", () => Effect.void),
               Effect.orDie,
             )
-        }).pipe(Effect.forkIn(scope, { startImmediately: true }))
+        }).pipe(Effect.provide(locations.get(session.location)), Effect.forkIn(scope, { startImmediately: true }))
         yield* Fiber.join(running)
       }),
       skill: Effect.fn("Session.skill")(function* (input) {
