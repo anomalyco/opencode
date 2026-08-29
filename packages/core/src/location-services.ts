@@ -60,6 +60,8 @@ export const locationServices = LayerNode.group([
   SkillV2.node,
   SystemContextRegistry.node,
   SystemContextBuiltIns.node,
+  MemoryContext.node,
+  MemoryTools.node,
   LocationMutation.node,
   FileMutation.node,
   PermissionV2.node,
