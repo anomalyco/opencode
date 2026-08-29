@@ -10,6 +10,7 @@ import { Permission } from "@opencode-ai/core/permission"
 import { PermissionTable } from "@opencode-ai/core/permission/sql"
 import { PermissionSaved } from "@opencode-ai/core/permission/saved"
 import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
+import type { PermissionEvaluation } from "@opencode-ai/plugin/effect/permission"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -40,7 +41,7 @@ const it = testEffect(
   ),
 )
 
-function setup(rules: Permission.Ruleset = []) {
+function setup(rules: Permission.Ruleset = [], sessionID = Session.ID.make("ses_test")) {
   return Effect.gen(function* () {
     const { db } = yield* Database.Service
     yield* db
@@ -52,7 +53,7 @@ function setup(rules: Permission.Ruleset = []) {
     yield* db
       .insert(SessionTable)
       .values({
-        id: Session.ID.make("ses_test"),
+        id: sessionID,
         project_id: Project.ID.global,
         slug: "test",
         directory: "/project",
@@ -88,18 +89,19 @@ function assertion(input: Partial<Permission.AssertInput> = {}) {
   } satisfies Permission.AssertInput
 }
 
-function waitForRequest() {
+function waitForRequest(input: Partial<Permission.AssertInput> = {}) {
   return Effect.gen(function* () {
+    const value = assertion(input)
     const service = yield* Permission.Service
     const bus = yield* Bus.Service
     const asked = yield* Deferred.make<Permission.Request>()
-    const unsubscribe = yield* bus.listen((event) =>
-      event.type === Permission.Event.Asked.type
-        ? Deferred.succeed(asked, event.data as Permission.Request).pipe(Effect.asVoid)
-        : Effect.void,
-    )
+    const unsubscribe = yield* bus.listen((event) => {
+      if (event.type !== Permission.Event.Asked.type) return Effect.void
+      const request = event.data as Permission.Request
+      return request.id === value.id ? Deferred.succeed(asked, request).pipe(Effect.asVoid) : Effect.void
+    })
     yield* Effect.addFinalizer(() => unsubscribe)
-    const fiber = yield* service.assert(assertion()).pipe(Effect.forkScoped)
+    const fiber = yield* service.assert(value).pipe(Effect.forkScoped)
     const request = yield* Deferred.await(asked)
     return { service, fiber, request }
   })
@@ -383,6 +385,103 @@ describe("Permission", () => {
       expect(yield* saved.list()).toEqual([])
     }),
   )
+
+  for (const effect of ["ask", "deny", "allow"] as const) {
+    it.effect(`reevaluates pending requests with hooks after always: ${effect}`, () =>
+      Effect.gen(function* () {
+        yield* setup()
+        yield* setup([], Session.ID.make("ses_other"))
+        const agents = yield* Agent.Service
+        yield* agents.transform((editor) =>
+          editor.update(Agent.ID.make("reviewer"), (agent) => {
+            agent.permissions = []
+          }),
+        )
+        const context = {
+          sessionID: Session.ID.make("ses_other"),
+          agent: Agent.ID.make("reviewer"),
+          action: "read",
+          resources: ["src/protected.ts", "src/private.ts"],
+          metadata: { purpose: "protected" },
+          source: { type: "tool", messageID: "msg_other", id: "call_other" },
+        } satisfies Permission.AssertInput
+        const hooks = yield* PluginHooks.Service
+        const seen: PermissionEvaluation[] = []
+        yield* hooks.register("permission", "evaluate", (event) =>
+          Effect.sync(() => {
+            seen.push({ ...event })
+            if (event.effect === "allow") event.effect = effect
+          }),
+        )
+        const selected = yield* waitForRequest({ save: ["src/*"] })
+        const other = yield* waitForRequest({ id: Permission.ID.create("per_other"), ...context })
+        expect(yield* selected.service.list()).toEqual([selected.request, other.request])
+
+        yield* selected.service.reply({ requestID: selected.request.id, reply: "always" })
+        yield* Fiber.join(selected.fiber)
+        expect(yield* selected.service.list()).toEqual(effect === "allow" ? [] : [other.request])
+        expect(seen).toMatchObject([
+          { sessionID: selected.request.sessionID, effect: "ask" },
+          { ...context, effect: "ask" },
+          { ...context, effect: "allow" },
+        ])
+        if (effect !== "allow") {
+          expect(other.fiber.pollUnsafe()).toBeUndefined()
+          yield* other.service.reply({ requestID: other.request.id, reply: "once" })
+        }
+        yield* Fiber.join(other.fiber)
+        expect(yield* selected.service.list()).toEqual([])
+      }),
+    )
+  }
+
+  for (const guard of ["configured deny", "missing Session"] as const) {
+    it.effect(`skips pending auto-approval after always for ${guard}`, () =>
+      Effect.gen(function* () {
+        yield* setup()
+        yield* setup([], Session.ID.make("ses_other"))
+        const agents = yield* Agent.Service
+        yield* agents.transform((editor) =>
+          editor.update(Agent.ID.make("reviewer"), (agent) => {
+            agent.permissions = []
+          }),
+        )
+        const selected = yield* waitForRequest({ save: ["src/*"] })
+        const other = yield* waitForRequest({
+          id: Permission.ID.create("per_other"),
+          sessionID: Session.ID.make("ses_other"),
+          agent: Agent.ID.make("reviewer"),
+        })
+        if (guard === "configured deny") {
+          yield* agents.transform((editor) =>
+            editor.update(Agent.ID.make("reviewer"), (agent) => {
+              agent.permissions = [{ action: "read", resource: "*", effect: "deny" }]
+            }),
+          )
+        }
+        if (guard === "missing Session") {
+          const { db } = yield* Database.Service
+          yield* db.delete(SessionTable).where(eq(SessionTable.id, other.request.sessionID)).run().pipe(Effect.orDie)
+        }
+        const hooks = yield* PluginHooks.Service
+        const seen: PermissionEvaluation[] = []
+        yield* hooks.register("permission", "evaluate", (event) =>
+          Effect.sync(() => {
+            seen.push({ ...event })
+            event.effect = "allow"
+          }),
+        )
+
+        yield* selected.service.reply({ requestID: selected.request.id, reply: "always" })
+        yield* Fiber.join(selected.fiber)
+        expect(yield* selected.service.list()).toEqual([other.request])
+        expect(other.fiber.pollUnsafe()).toBeUndefined()
+        expect(seen).toEqual([])
+        yield* Fiber.interrupt(other.fiber)
+        expect(yield* selected.service.list()).toEqual([])
+      }),
+    )
+  }
 })
 
 describe("shell scanner permission impact", () => {

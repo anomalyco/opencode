@@ -5,9 +5,11 @@ import type { Context } from "@opencode-ai/plugin/effect/plugin"
 import { Effect, Schema, Scope } from "effect"
 import { Agent } from "../../agent.js"
 import { Config } from "../../config.js"
+import type { Job } from "../../job.js"
 import { PluginRuntime } from "../../plugin/runtime.js"
 import { Permission } from "../../permission.js"
 import { SessionSchema } from "../../session/schema.js"
+import { SubagentCompletion } from "../../session/subagent-completion.js"
 
 export const name = "subagent"
 
@@ -79,32 +81,15 @@ export const Plugin = {
     })
 
     const notifyWhenDone = Effect.fn("SubagentTool.notifyWhenDone")(function* (
-      parentID: SessionSchema.ID,
-      childID: SessionSchema.ID,
-      agent: string,
-      description: string,
+      recovery: Extract<Job.Recovery, { kind: "subagent" }>,
       startedAt: number,
     ) {
-      const key = `${childID}:${startedAt}`
+      const key = `${recovery.childSessionID}:${startedAt}`
       if (notifications.has(key)) return
       notifications.add(key)
       yield* Effect.gen(function* () {
-        const info = (yield* runtime.job.wait({ id: childID })).info
-        if (!info || info.status === "running") return
-        const text =
-          info.status === "completed"
-            ? (info.output ?? NO_TEXT)
-            : info.status === "error"
-              ? (info.error ?? "Subagent failed")
-              : "Subagent cancelled"
-        yield* runtime.session.synthetic({
-          ...(info.notificationID ? { id: info.notificationID } : {}),
-          sessionID: parentID,
-          text: `<subagent sessionID="${childID}" state="${info.status}" description="${description}">\n${text}\n</subagent>`,
-          description,
-          metadata: { source: "subagent", childID, agent, state: info.status },
-        })
-        if (info.notificationID) yield* runtime.job.completeBackground(info.notificationID)
+        const info = (yield* runtime.job.wait({ id: recovery.childSessionID })).info
+        if (info) yield* SubagentCompletion.deliver(runtime.session, runtime.job, { ...info, recovery })
       }).pipe(
         Effect.ensuring(Effect.sync(() => notifications.delete(key))),
         Effect.forkIn(scope, { startImmediately: true }),
@@ -232,24 +217,25 @@ export const Plugin = {
                   ),
                 )
 
+              const recovery = {
+                kind: "subagent" as const,
+                parentSessionID: context.sessionID,
+                childSessionID: child.id,
+                agent: agent.name,
+                description: input.description,
+              }
               const info = yield* runtime.job.start({
                 id: child.id,
                 type: name,
                 title: input.description,
                 metadata: {},
-                recovery: {
-                  kind: "subagent",
-                  parentSessionID: context.sessionID,
-                  childSessionID: child.id,
-                  agent: agent.name,
-                  description: input.description,
-                },
+                recovery,
                 run: runtime.session.resume(child.id).pipe(Effect.andThen(latestAssistantText(child.id))),
               })
 
               if (background) {
                 yield* runtime.job.background(info.id)
-                yield* notifyWhenDone(context.sessionID, child.id, agent.name, input.description, info.started_at)
+                yield* notifyWhenDone(recovery, info.started_at)
                 return backgroundResult(child.id)
               }
 
@@ -261,13 +247,7 @@ export const Plugin = {
                 ),
               )
               if (result?.type === "backgrounded") {
-                yield* notifyWhenDone(
-                  context.sessionID,
-                  child.id,
-                  agent.name,
-                  input.description,
-                  result.info.started_at,
-                )
+                yield* notifyWhenDone(recovery, result.info.started_at)
                 return backgroundResult(child.id)
               }
               // Failure surfaces keep the sessionID visible so the model can continue the child.

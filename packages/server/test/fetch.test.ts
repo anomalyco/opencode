@@ -132,6 +132,59 @@ it.live("serves unauthenticated and answers CORS preflight when no password is c
   }),
 )
 
+it.live("applies custom CORS origins to HTTP responses and PTY ticket checks", () =>
+  Effect.gen(function* () {
+    const handler = yield* ServerFetch.make({
+      ...options,
+      password: "secret",
+      cors: ["http://192.168.1.10:3001"],
+    })
+    yield* Effect.forEach(
+      ["http://192.168.1.10:3001", "http://localhost:3000", "https://untrusted.example.com"],
+      (origin) =>
+        Effect.gen(function* () {
+          const allowed = origin !== "https://untrusted.example.com"
+          const preflight = yield* Effect.promise(() =>
+            handler(
+              new Request("http://opencode.local/api/health", {
+                method: "OPTIONS",
+                headers: {
+                  origin,
+                  "access-control-request-method": "GET",
+                  "access-control-request-headers": "authorization",
+                },
+              }),
+            ),
+          )
+          expect(preflight.status).toBe(204)
+          expect(preflight.headers.get("access-control-allow-origin")).toBe(allowed ? origin : null)
+          expect(preflight.headers.get("access-control-allow-headers")).toBe("authorization")
+
+          const response = yield* Effect.promise(() =>
+            handler(
+              new Request("http://opencode.local/api/health", {
+                headers: { origin, authorization: `Basic ${btoa("opencode:secret")}` },
+              }),
+            ),
+          )
+          expect(response.status).toBe(200)
+          expect(response.headers.get("access-control-allow-origin")).toBe(allowed ? origin : null)
+
+          const ticket = yield* Effect.promise(() =>
+            handler(
+              new Request("http://opencode.local/api/experimental/persistent-pty/pty_missing/connect-token", {
+                method: "POST",
+                headers: { origin, authorization: `Basic ${btoa("opencode:secret")}`, "x-opencode-ticket": "1" },
+              }),
+            ),
+          )
+          // Allowed origins pass the ticket guard and reach the missing-terminal lookup.
+          expect(ticket.status).toBe(allowed ? 404 : 403)
+        }),
+    )
+  }).pipe(Effect.scoped),
+)
+
 it.live("cancels a stale OpenAI OAuth callback server before falling back", () =>
   Effect.gen(function* () {
     const requests = yield* occupy(1455, true)
