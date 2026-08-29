@@ -2,7 +2,7 @@ import type { Message, Part, PermissionRequest, QuestionRequest, SessionStatus, 
 import type { FileDiffInfo } from "@opencode-ai/client/promise"
 import type { SessionMessageInfo } from "@opencode-ai/client/promise"
 
-export const SESSION_CACHE_LIMIT = 40
+export const SESSION_CACHE_LIMIT = 10
 
 type SessionCache = {
   session_status: Record<string, SessionStatus | undefined>
