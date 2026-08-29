@@ -18,6 +18,15 @@ const media = (file: FileAttachment): ContentPart => ({
   metadata: file.description === undefined ? undefined : { description: file.description },
 })
 
+const userFile = (file: FileAttachment, paths: ReadonlyMap<string, string>): ContentPart => {
+  const path = paths.get(file.uri)
+  if (!path) return media(file)
+  return {
+    type: "text",
+    text: `Attached file: ${JSON.stringify({ name: file.name, path, mime: file.mime })}`,
+  }
+}
+
 const toolInput = (tool: SessionMessage.AssistantTool) => {
   if (tool.state.status !== "pending") return tool.state.input
   try {
@@ -112,7 +121,11 @@ const assistant = (message: SessionMessage.Assistant, model: Model) => {
   ]
 }
 
-function toLLMMessage(message: SessionMessage.Message, model: Model): Message[] {
+function toLLMMessage(
+  message: SessionMessage.Message,
+  model: Model,
+  attachmentPaths: ReadonlyMap<string, string>,
+): Message[] {
   switch (message.type) {
     case "agent-switched":
     case "model-switched":
@@ -122,7 +135,10 @@ function toLLMMessage(message: SessionMessage.Message, model: Model): Message[] 
         Message.make({
           id: message.id,
           role: "user",
-          content: [{ type: "text", text: message.text }, ...(message.files ?? []).map(media)],
+          content: [
+            { type: "text", text: message.text },
+            ...(message.files ?? []).map((file) => userFile(file, attachmentPaths)),
+          ],
           metadata: {
             ...message.metadata,
             ...(message.agents?.length ? { agents: message.agents } : {}),
@@ -167,5 +183,8 @@ ${message.recent}
 }
 
 /** Translate projected V2 Session history into canonical @opencode-ai/llm context. */
-export const toLLMMessages = (messages: readonly SessionMessage.Message[], model: Model) =>
-  messages.flatMap((message) => toLLMMessage(message, model))
+export const toLLMMessages = (
+  messages: readonly SessionMessage.Message[],
+  model: Model,
+  attachmentPaths: ReadonlyMap<string, string> = new Map(),
+) => messages.flatMap((message) => toLLMMessage(message, model, attachmentPaths))
