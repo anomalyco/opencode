@@ -21,6 +21,7 @@ export type TuiStartup = Readonly<{
 const PathsContext = createContext<TuiPaths>()
 const TerminalEnvironmentContext = createContext<TuiTerminalEnvironment>()
 const StartupContext = createContext<TuiStartup>()
+const StdinContext = createContext<NodeJS.ReadStream | undefined>()
 
 function provider<T>(context: ReturnType<typeof createContext<T>>, value: T, children: () => JSX.Element) {
   return createComponent(context.Provider, {
@@ -43,6 +44,18 @@ export function TuiStartupProvider(props: { value: TuiStartup; children: JSX.Ele
   return provider(StartupContext, props.value, () => props.children)
 }
 
+export function TuiStdinProvider(props: { value?: NodeJS.ReadStream; children: JSX.Element }) {
+  // Streams must retain their identity; provider() freezes a shallow object copy.
+  return createComponent(StdinContext.Provider, {
+    get value() {
+      return props.value
+    },
+    get children() {
+      return props.children
+    },
+  })
+}
+
 function required<T>(context: ReturnType<typeof createContext<T>>, name: string) {
   const value = useContext(context)
   if (!value) throw new Error(`${name} is missing`)
@@ -59,4 +72,8 @@ export function useTuiTerminalEnvironment() {
 
 export function useTuiStartup() {
   return required(StartupContext, "TuiStartupProvider")
+}
+
+export function useTuiStdin() {
+  return useContext(StdinContext)
 }
