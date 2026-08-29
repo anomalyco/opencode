@@ -330,18 +330,26 @@ describe("SessionProjector", () => {
         text: "synthetic context",
         metadata: { source: "projector-test" },
       })
-      yield* bus.publish(SessionEvent.Shell.Started, {
-        sessionID,
-        shell: Shell.Info.make({
-          id: Shell.ID.make("sh_projector"),
-          status: "running",
-          command: "pwd",
-          cwd: "/project",
-          shell: "/bin/sh",
-          file: "/tmp/sh_projector.out",
-          metadata: {},
-          time: { started: 0 },
-        }),
+      // Serialized events have no transient envelope metadata to supply the background marker.
+      yield* bus.replay({
+        id: Event.ID.create(),
+        created: 0,
+        aggregateID: sessionID,
+        seq: 3,
+        type: Bus.versionedType(SessionEvent.Shell.Started.type, 1),
+        data: {
+          sessionID,
+          shell: Shell.Info.make({
+            id: Shell.ID.make("sh_projector"),
+            status: "running",
+            command: "pwd",
+            cwd: "/project",
+            shell: "/bin/sh",
+            file: "/tmp/sh_projector.out",
+            metadata: { background: true },
+            time: { started: 0 },
+          }),
+        },
       })
       yield* bus.publish(SessionEvent.Shell.Ended, {
         sessionID,
@@ -421,6 +429,7 @@ describe("SessionProjector", () => {
         command: "pwd",
         status: "exited",
         exit: 0,
+        metadata: { background: true },
         output: { output: "/project", truncated: false },
         time: { completed: DateTime.makeUnsafe(0) },
       })

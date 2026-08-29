@@ -223,30 +223,6 @@ test("finds background tool launch rows for completion navigation", () => {
   expect(backgroundToolRowIndex(rows, messages, { source: "subagent", id: "child-1" }, "completion-2")).toBe(3)
 })
 
-test("keeps user shell output without rendering its internal completion notification", () => {
-  const messages: SessionMessageInfo[] = [
-    {
-      id: "shell-message",
-      type: "shell",
-      shellID: "sh_user",
-      command: "pwd",
-      status: "exited",
-      time: { created: 0 },
-    },
-    {
-      id: "completion",
-      type: "synthetic",
-      text: "Shell finished",
-      metadata: { source: "shell", shellID: "sh_user", state: "completed" },
-      time: { created: 1 },
-    },
-  ]
-  expect(reduceSessionRows(messages)).toEqual([{ type: "message", messageID: "shell-message" }])
-  expect(reduceSessionRows(messages, new Set(["completion"]))).toEqual([
-    { type: "message", messageID: "shell-message" },
-  ])
-})
-
 test("groups exploration parts across assistant messages until a delimiter", () => {
   const messages: SessionMessageInfo[] = [
     { type: "user", id: "user-1", text: "Explore", time: { created: 0 } },
@@ -430,17 +406,28 @@ test("completes exploration groups when another row follows", () => {
 
 test("hides synthetic messages without descriptions", () => {
   const messages: SessionMessageInfo[] = [
+    {
+      id: "shell-message",
+      type: "shell",
+      shellID: "sh_user",
+      command: "pwd",
+      status: "exited",
+      time: { created: 0 },
+    },
     assistant("assistant-1", [{ type: "tool", id: "read-1", name: "read", state: pending(), time: { created: 1 } }]),
     {
       type: "synthetic",
       id: "synthetic-1",
       text: "internal context",
+      metadata: { source: "shell", shellID: "sh_user", state: "completed" },
       time: { created: 2 },
     },
     assistant("assistant-2", [{ type: "tool", id: "grep-1", name: "grep", state: pending(), time: { created: 3 } }]),
   ]
 
-  expect(reduceSessionRows(messages)).toEqual([
+  const rows = reduceSessionRows(messages)
+  expect(rows).toEqual([
+    { type: "message", messageID: "shell-message" },
     {
       type: "group",
       kind: "exploration",
@@ -452,6 +439,7 @@ test("hides synthetic messages without descriptions", () => {
       ],
     },
   ])
+  expect(reduceSessionRows(messages, new Set(["synthetic-1"]))).toEqual(rows)
 })
 
 test("renders synthetic messages with descriptions", () => {

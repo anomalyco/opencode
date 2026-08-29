@@ -1,6 +1,6 @@
 import { expect, story } from "../../storybook/playwright/story"
 
-story("streams direct shell output and refreshes it on completion", async ({ mount }) => {
+story("streams user shell output and retains the saved completion", async ({ mount }) => {
   const root = await mount("current-session-terminal-work--live-user-command")
   const shell = root.locator('[data-component="session-shell-message"]')
   const output = shell.locator('[data-slot="bash-result"]')
@@ -11,14 +11,6 @@ story("streams direct shell output and refreshes it on completion", async ({ mou
   await root.getByRole("button", { name: "Complete command", exact: true }).click()
   await expect(output).toHaveText("ready\nnext line\nfinished\n")
   await expect(shell.locator('[data-kind="tool-error-card"]')).toHaveCount(0)
-})
-
-story("uses saved final output when the live reader fails after partial output", async ({ mount }) => {
-  const root = await mount("current-session-terminal-work--live-user-command", { args: { finalReadFails: true } })
-  const output = root.locator('[data-component="session-shell-message"] [data-slot="bash-result"]')
-  await expect(output).toHaveText("ready\n")
-  await root.getByRole("button", { name: "Complete command", exact: true }).click()
-  await expect(output).toHaveText("ready\nfinished\n")
 })
 
 for (const [outcome, error] of [

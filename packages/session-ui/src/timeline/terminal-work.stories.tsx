@@ -69,13 +69,9 @@ export const UserCommandCompleted = {
 }
 
 export const LiveUserCommand = {
-  args: { outcome: "exited", output: true, finalReadFails: false },
+  args: { outcome: "exited", output: true },
   argTypes: { outcome: { control: "select", options: ["exited", "nonzero", "timeout", "killed"] } },
-  render: (args: {
-    outcome: "exited" | "nonzero" | "timeout" | "killed"
-    output: boolean
-    finalReadFails: boolean
-  }) => {
+  render: (args: { outcome: "exited" | "nonzero" | "timeout" | "killed"; output: boolean }) => {
     const [message, setMessage] = createSignal<SessionMessageShell>({
       id: "msg_shell_live",
       type: "shell",
@@ -85,7 +81,6 @@ export const LiveUserCommand = {
       time: { created: 1 },
     })
     let output = args.output ? "ready\n" : ""
-    let available = true
     return (
       <section class="mx-auto flex w-full max-w-[720px] flex-col gap-4 p-6">
         <button type="button" onClick={() => (output += "next line\n")}>
@@ -95,14 +90,11 @@ export const LiveUserCommand = {
           type="button"
           onClick={() => {
             if (args.output) output += "finished\n"
-            available = !args.finalReadFails
             setMessage((value) => ({
               ...value,
               status: args.outcome === "nonzero" ? "exited" : args.outcome,
               exit: args.outcome === "nonzero" ? 1 : args.outcome === "exited" ? 0 : undefined,
-              output: args.finalReadFails
-                ? { output, cursor: output.length, size: output.length, truncated: false }
-                : undefined,
+              output: { output, cursor: output.length, size: output.length, truncated: false },
               time: { created: 1, completed: 2 },
             }))
           }}
@@ -113,7 +105,7 @@ export const LiveUserCommand = {
           directory="/workspace"
           data={{ session: [], session_status: {}, session_diff: {} }}
           shellOutput={async (input) => {
-            if (!available) throw new Error("Shell output unavailable")
+            if (message().status !== "running") throw new Error("Shell output unavailable")
             if (input.id !== "shell_live" || input.location?.directory !== "/workspace") {
               throw new Error("Unexpected shell output request")
             }
