@@ -6,6 +6,7 @@
   "scripts": {
     "typecheck": "tsgo --noEmit",
     "dev": "vite dev --host 0.0.0.0",
+    "dev:go-graph": "bun script/preview-go.ts",
     "dev:remote": "VITE_AUTH_URL=https://auth.dev.opencode.ai VITE_STRIPE_PUBLISHABLE_KEY=pk_test_51RtuLNE7fOCwHSD4mewwzFejyytjdGoSDK7CAvhbffwaZnPbNb2rwJICw6LTOXCmWO320fSNXvb5NzI08RZVkAxd00syfqrW7t bun sst shell --stage=dev bun dev",
     "build": "bun ./script/generate-sitemap.ts && vite build && bun ../../opencode/script/schema.ts ./.output/public/config.json ./.output/public/tui.json",
     "start": "vite start"
@@ -29,6 +30,7 @@
     "@upstash/redis": "1.38.0",
     "chart.js": "4.5.1",
     "nitro": "3.0.1-alpha.1",
+    "number-flow": "0.6.2",
     "solid-js": "catalog:",
     "solid-list": "0.3.0",
     "solid-stripe": "0.8.1",
@@ -40,6 +42,7 @@
     "@typescript/native-preview": "catalog:",
     "@webgpu/types": "0.1.54",
     "typescript": "catalog:",
+    "vite-plugin-solid": "catalog:",
     "wrangler": "4.50.0"
   },
   "engines": {

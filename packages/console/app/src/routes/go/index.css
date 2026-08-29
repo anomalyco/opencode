@@ -49,6 +49,15 @@
   }
 }
 
+@keyframes go-graph-bonus-heat {
+  from {
+    color: var(--color-go-3);
+  }
+  to {
+    color: var(--color-text-weak);
+  }
+}
+
 [data-page="go"] {
   --color-background: hsl(0, 20%, 99%);
   --color-background-weak: hsl(0, 8%, 97%);
@@ -499,10 +508,47 @@ body {
 
     [data-component="limit-graph"] {
       --reveal-duration: 950ms;
+      --bonus-duration: 1500ms;
+      --digit-easing: cubic-bezier(0.22, 1, 0.36, 1);
       --grid-duration: 2000ms;
+      --grid-easing: cubic-bezier(0.22, 1, 0.36, 1);
       --arrival-brightness: 1.15;
       --heat-duration: 1600ms;
       --bar-delay: 240ms;
+      /* Critically damped response, shared by the bars, labels, and rolling digits. */
+      --spring-easing: linear(
+        0,
+        0.02991,
+        0.10078,
+        0.19179,
+        0.28962,
+        0.38611,
+        0.47651,
+        0.55839,
+        0.63079,
+        0.69365,
+        0.74748,
+        0.79306,
+        0.83131,
+        0.86315,
+        0.8895,
+        0.91117,
+        0.92892,
+        0.94339,
+        0.95515,
+        0.96467,
+        0.97236,
+        0.97855,
+        0.98352,
+        0.98751,
+        0.9907,
+        0.99324,
+        0.99527,
+        0.99689,
+        0.99817,
+        0.99919,
+        1
+      );
       margin: 0 auto;
       width: calc(100% - 120px);
       max-width: calc(100% - 120px);
@@ -517,6 +563,7 @@ body {
       }
 
       [data-slot="plot"] {
+        container-type: inline-size;
         position: relative;
         overflow: visible;
         width: 100%;
@@ -579,7 +626,8 @@ body {
       }
 
       [data-slot="xlabels"] [data-xlabel],
-      [data-slot="pills"] [data-item] {
+      [data-slot="pills"] [data-label],
+      [data-bonus] {
         mask-image: linear-gradient(to right, #000 40%, transparent 60%);
         mask-size: 250% 100%;
         mask-position: 100% 0;
@@ -590,6 +638,12 @@ body {
         position: absolute;
         inset: 0;
         pointer-events: none;
+
+        [data-label] {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+        }
 
         [data-item] {
           position: absolute;
@@ -639,10 +693,16 @@ body {
         [data-value] {
           color: var(--color-text-strong);
           font-weight: 600;
+          font-variant-numeric: tabular-nums;
           white-space: nowrap;
+
+          number-flow {
+            line-height: 1;
+          }
         }
 
         [data-bonus] {
+          opacity: 0;
           color: var(--color-text-weak);
           font-size: 12px;
           font-weight: 400;
@@ -729,8 +789,8 @@ body {
         mask-clip: stroke-box;
       }
 
-      [data-animate="bar"] {
-        /* Reveal both colors together without moving their shared boundary. */
+      [data-animate="bar"],
+      [data-animate="bonus"] {
         clip-path: inset(0 100% 0 0) fill-box;
       }
 
@@ -808,7 +868,7 @@ body {
       &[data-visible] [data-grid],
       &[data-visible] [data-stub] {
         animation:
-          go-graph-grid var(--grid-duration) cubic-bezier(0.22, 1, 0.36, 1) forwards,
+          go-graph-grid var(--grid-duration) var(--grid-easing) forwards,
           go-graph-heat var(--heat-duration) linear backwards;
         animation-delay: var(--d, 0ms), calc(var(--d, 0ms) + var(--grid-duration));
       }
@@ -819,51 +879,42 @@ body {
       }
 
       &[data-visible] [data-animate="bar"] {
-        /* Critically damped response: 1 - (1 + 8t) * exp(-8t), normalized to settle at 1. */
         animation:
-          go-graph-reveal var(--reveal-duration)
-            linear(
-              0,
-              0.02991,
-              0.10078,
-              0.19179,
-              0.28962,
-              0.38611,
-              0.47651,
-              0.55839,
-              0.63079,
-              0.69365,
-              0.74748,
-              0.79306,
-              0.83131,
-              0.86315,
-              0.8895,
-              0.91117,
-              0.92892,
-              0.94339,
-              0.95515,
-              0.96467,
-              0.97236,
-              0.97855,
-              0.98352,
-              0.98751,
-              0.9907,
-              0.99324,
-              0.99527,
-              0.99689,
-              0.99817,
-              0.99919,
-              1
-            )
-            forwards,
+          go-graph-reveal var(--reveal-duration) var(--spring-easing) forwards,
           go-graph-heat var(--heat-duration) linear backwards;
         animation-delay:
           calc(var(--bar-delay) + var(--d, 0ms)), calc(var(--bar-delay) + var(--d, 0ms) + var(--reveal-duration));
       }
 
-      &[data-visible] [data-slot="pills"] [data-item] {
+      &[data-visible] [data-slot="pills"] [data-label] {
         animation: go-graph-label 400ms ease-out forwards;
         animation-delay: calc(var(--bar-delay) + var(--d, 0ms) + var(--reveal-duration) * 0.4);
+      }
+
+      &[data-boosted] [data-animate="bonus"] {
+        animation:
+          go-graph-reveal var(--bonus-duration) var(--spring-easing) forwards,
+          go-graph-heat var(--heat-duration) linear backwards;
+        animation-delay: var(--bonus-delay), calc(var(--bonus-delay) + var(--bonus-duration));
+      }
+
+      &[data-boosted] [data-slot="pills"] [data-item][data-promo] {
+        translate: var(--travel) 0;
+        transition: translate var(--bonus-duration) var(--spring-easing) var(--bonus-delay);
+
+        @media (max-width: 60rem) {
+          &[data-edge] {
+            translate: none;
+            transition: none;
+          }
+        }
+      }
+
+      &[data-boosted] [data-bonus] {
+        animation:
+          go-graph-label 400ms ease-out forwards,
+          go-graph-bonus-heat 3000ms linear backwards;
+        animation-delay: var(--bonus-delay);
       }
 
       @media (prefers-reduced-motion: reduce) {
@@ -892,7 +943,9 @@ body {
           animation: none;
         }
         [data-animate="bar"],
-        &[data-visible] [data-animate="bar"] {
+        &[data-visible] [data-animate="bar"],
+        [data-animate="bonus"],
+        &[data-boosted] [data-animate="bonus"] {
           opacity: 1;
           clip-path: none;
           animation: none;
@@ -903,11 +956,17 @@ body {
           transition: none;
         }
 
-        [data-slot="pills"] [data-item],
-        &[data-visible] [data-slot="pills"] [data-item] {
+        [data-slot="pills"] [data-label],
+        &[data-visible] [data-slot="pills"] [data-label],
+        [data-bonus],
+        &[data-boosted] [data-bonus] {
           opacity: 1;
           mask-image: none;
           animation: none;
+        }
+
+        &[data-boosted] [data-slot="pills"] [data-item][data-promo] {
+          transition: none;
         }
       }
 
@@ -998,6 +1057,12 @@ body {
           gap: 3px 8px;
           flex-wrap: wrap;
           justify-content: flex-start;
+
+          [data-label] {
+            max-width: 100%;
+            flex-wrap: wrap;
+            gap: 3px 8px;
+          }
 
           &[data-model="muse-spark-1.2-contributor"] {
             transform: translateY(11px);
