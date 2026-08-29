@@ -5,9 +5,20 @@ import { useTheme } from "../../context/theme"
 import { useTuiConfig } from "../../config"
 import { InstallationChannel, InstallationVersion } from "@opencode-ai/core/installation/version"
 import { usePluginRuntime } from "../../plugin/runtime"
+import type { Renderable } from "@opentui/core"
 
 import { getScrollAcceleration } from "../../util/scroll"
 import { WorkspaceLabel } from "../../component/workspace-label"
+
+export function disableSelectionSubtree(root: Renderable) {
+  root.selectable = false
+  const stack = [...root.getChildren()]
+  while (stack.length > 0) {
+    const node = stack.pop()!
+    node.selectable = false
+    stack.push(...node.getChildren())
+  }
+}
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const pluginRuntime = usePluginRuntime()
@@ -26,6 +37,9 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   return (
     <Show when={session()}>
       <box
+        renderBefore={function () {
+          disableSelectionSubtree(this)
+        }}
         backgroundColor={theme.backgroundPanel}
         width={42}
         height="100%"
