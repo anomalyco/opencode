@@ -18,6 +18,9 @@ import type { ShellCreateBefore } from "@opencode-ai/plugin/effect/shell"
 import { PluginHooks } from "./plugin/hooks.js"
 import { SessionEnvironment } from "./session/environment.js"
 import { SessionSchema } from "./session/schema.js"
+import { Config } from "./config.js"
+import { ToolOutput } from "./tool-output.js"
+import { ShellResult } from "./shell/result.js"
 
 export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Shell.NotFoundError", {
   id: Shell.ID,
@@ -65,6 +68,8 @@ export interface Interface {
   // Resolves once the command reaches a terminal status, returning its final Info. Fails with
   // NotFoundError if the command is unknown or is removed before it terminates.
   readonly wait: (id: Shell.ID) => Effect.Effect<Shell.Info, NotFoundError>
+  // A known shell's terminal state and bounded tail. Missing capture remains distinct from its exit status.
+  readonly result: (started: Shell.Info) => Effect.Effect<ShellResult.Result>
   // Replaces the running command's timeout from now; zero clears it.
   readonly timeout: (id: Shell.ID, duration: number) => Effect.Effect<Shell.Info, NotFoundError>
   readonly output: (id: Shell.ID, input?: Shell.OutputInput) => Effect.Effect<Shell.Output, NotFoundError>
@@ -120,6 +125,7 @@ const layer = () =>
       const environment = yield* Environment.Service
       const hooks = yield* PluginHooks.Service
       const environments = yield* SessionEnvironment.Service
+      const config = yield* Config.Service
       const context = yield* Effect.context()
       const runFork = Effect.runForkWith(context)
       const commands = new Map<Shell.ID, Active>()
@@ -215,6 +221,28 @@ const layer = () =>
           size: command.size,
           truncated: false,
         }
+      })
+
+      const result = Effect.fn("Shell.result")(function* (started: Shell.Info) {
+        const info = yield* wait(started.id).pipe(
+          Effect.catchTag("Shell.NotFoundError", () =>
+            Effect.succeed({ ...started, status: "killed" as const, time: { ...started.time, completed: Date.now() } }),
+          ),
+        )
+        const capture = yield* Effect.gen(function* () {
+          const limits = Config.latest(yield* config.entries(), "tool_output")
+          const maxLines = limits?.max_lines ?? ToolOutput.MAX_LINES
+          const maxBytes = limits?.max_bytes ?? ToolOutput.MAX_BYTES
+          const latest = yield* output(info.id, { cursor: Number.MAX_SAFE_INTEGER })
+          const page = yield* output(info.id, { cursor: Math.max(0, latest.size - maxBytes), limit: maxBytes })
+          const lines = page.output.split("\n")
+          if (page.output.endsWith("\n")) lines.pop()
+          const truncated = latest.size > maxBytes || lines.length > maxLines
+          const text = lines.length > maxLines ? lines.slice(-maxLines).join("\n") : page.output
+          const notice = truncated ? `\n\n[output truncated; full output saved to: ${info.file}]` : ""
+          return { output: `${text || "(no output)"}${notice}`, truncated }
+        }).pipe(Effect.catchTag("Shell.NotFoundError", () => Effect.succeed(undefined)))
+        return { info, capture }
       })
 
       const create = Effect.fn("Shell.create")(function* <E = never, R = never>(
@@ -382,7 +410,7 @@ const layer = () =>
         return command.info
       })
 
-      return Service.of({ create, list, get, wait, timeout, output, remove })
+      return Service.of({ create, list, get, wait, result, timeout, output, remove })
     }),
   )
 
@@ -397,6 +425,7 @@ export const node = makeLocationNode({
     Environment.node,
     PluginHooks.node,
     SessionEnvironment.node,
+    Config.node,
     cleanupNode,
   ],
 })

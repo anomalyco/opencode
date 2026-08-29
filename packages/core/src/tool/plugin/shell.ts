@@ -13,7 +13,7 @@ import { SessionSchema } from "../../session/schema.js"
 import { Shell } from "../../shell.js"
 import { ShellParse } from "../../shell/parse.js"
 import { ShellSelect } from "../../shell/select.js"
-import { ShellOutput } from "../../shell/output.js"
+import { ShellResult } from "../../shell/result.js"
 
 export const name = "shell"
 export const DEFAULT_TIMEOUT_MS = 2 * 60 * 1_000
@@ -71,11 +71,7 @@ const Output = Schema.Struct({
 type Output = typeof Output.Type
 
 const resultMessages = (output: Output) => {
-  const notice = (() => {
-    if (output.status === "running") return BACKGROUND_INSTRUCTION
-    if (output.timeout) return "Command timed out before completion."
-    if (output.exit !== undefined) return `Command exited with code ${output.exit}.`
-  })()
+  const notice = output.status === "running" ? BACKGROUND_INSTRUCTION : ShellResult.notice(output)
   return [output.output, ...(notice ? [notice] : [])]
 }
 
@@ -85,10 +81,8 @@ const toolResult = (output: Output) => {
     content: resultMessages(output).map((text) => ({ type: "text" as const, text })),
     metadata: {
       status: output.status,
-      truncated: output.truncated,
-      ...(output.exit !== undefined ? { exit: output.exit } : {}),
+      ...ShellResult.metadata(output),
       ...(output.shellID !== undefined ? { shellID: output.shellID } : {}),
-      ...(output.timeout !== undefined ? { timeout: output.timeout } : {}),
     },
   }
 }
@@ -132,21 +126,15 @@ export const Plugin = {
         yield* runtime.session.synthetic({
           ...(info.notificationID ? { id: info.notificationID } : {}),
           sessionID,
-          text: `<shell id="${id}" state="${info.status}" command="${command}">\n${text}\n</shell>`,
           description: command,
-          metadata: {
-            source: "shell",
+          ...ShellResult.notification({
             jobID: id,
             shellID,
+            command,
             state: info.status,
-            ...(output
-              ? {
-                  truncated: output.truncated,
-                  ...(output.exit !== undefined ? { exit: output.exit } : {}),
-                  ...(output.timeout !== undefined ? { timeout: output.timeout } : {}),
-                }
-              : {}),
-          },
+            text,
+            output,
+          }),
         })
         if (info.notificationID) yield* runtime.job.completeBackground(info.notificationID)
       },
@@ -229,37 +217,19 @@ export const Plugin = {
               )
               yield* context.progress({ shellID: info.id })
 
-              const settleShell = Effect.fnUntraced(function* () {
-                const final = yield* shell.wait(info.id)
-                const capture = yield* ShellOutput.capture({
-                  shell,
-                  id: info.id,
-                  file: info.file,
-                  limits: Config.latest(yield* config.entries(), "tool_output"),
-                })
-
-                // `exit` is optionalKey in the Output schema; a present-but-undefined key
-                // fails output encoding, so omit it when the process has no exit code.
-                if (final.status === "timeout") {
-                  return {
-                    ...(final.exit !== undefined ? { exit: final.exit } : {}),
-                    output: `${capture.output}\n\nCommand exceeded timeout of ${finalTimeout} ms. Retry with a larger timeout if the command is expected to take longer.`,
-                    truncated: capture.truncated,
-                    timeout: true,
-                    status: "completed" as const,
-                  }
-                }
-
+              const settled = yield* Deferred.make<Output>()
+              const run = Effect.gen(function* () {
+                const result = yield* shell.result(info)
+                if (!result.capture) return yield* new Shell.NotFoundError({ id: info.id })
+                const output = ShellResult.output(result)
                 return {
-                  ...(final.exit !== undefined ? { exit: final.exit } : {}),
-                  output: capture.output,
-                  truncated: capture.truncated,
+                  ...output,
+                  output: output.timeout
+                    ? `${output.output}\n\nCommand exceeded timeout of ${finalTimeout} ms. Retry with a larger timeout if the command is expected to take longer.`
+                    : output.output,
                   status: "completed" as const,
                 }
-              })
-
-              const settled = yield* Deferred.make<Output>()
-              const run = settleShell().pipe(
+              }).pipe(
                 Effect.tap((output) => Deferred.succeed(settled, output)),
                 Effect.map((output) => resultMessages(output).join("\n\n")),
                 Effect.onInterrupt(() => shell.remove(info.id).pipe(Effect.ignore)),

@@ -499,15 +499,21 @@ describe("SessionRestart background recovery", () => {
       yield* Context.get(context, SessionExecution.Service).awaitIdle(sessionID)
 
       expect(drained).toEqual([sessionID])
-      expect(yield* SessionInbox.list(database.db, sessionID)).toMatchObject([
+      const inbox = yield* SessionInbox.list(database.db, sessionID)
+      expect(inbox).toMatchObject([
         {
           type: "synthetic",
           payload: {
-            text: expect.stringContaining("(no output)\n\nCommand exited with code 7."),
-            metadata: { source: "shell", shellID: "sh_completed", state: "completed" },
+            text: '<shell id="call-completed-shell" state="completed" command="exit 7">\n(no output)\n\nCommand exited with code 7.\n</shell>',
           },
         },
       ])
+      expect(inbox[0]).toHaveProperty("payload.metadata", {
+        source: "shell",
+        jobID: "call-completed-shell",
+        shellID: "sh_completed",
+        state: "completed",
+      })
       expect(yield* restarted.pendingBackground).toEqual([])
     }),
   )

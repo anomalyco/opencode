@@ -50,13 +50,11 @@ import { Job } from "./job.js"
 import { Command } from "./command.js"
 import { Shell } from "./shell.js"
 import { Global } from "@opencode-ai/util/global"
-import { Shell as ShellSchema } from "@opencode-ai/schema/shell"
-import { ShellOutput } from "./shell/output.js"
+import { ShellResult } from "./shell/result.js"
 import { fileURLToPath } from "url"
 import { SessionEnvironment } from "./session/environment.js"
 import { SessionHistory } from "./session/history.js"
 import { InstructionEntry } from "./session/instruction-entry.js"
-import { Config } from "./config.js"
 
 // get project -> project.locations
 //
@@ -716,12 +714,12 @@ const layer = Layer.effect(
         // The server owns completion recording even if the submitting client disconnects.
         const running = yield* Effect.gen(function* () {
           // Resolve shell services here without pinning Session events to this Location after a move.
-          const local = yield* Effect.gen(function* () {
+          const shell = yield* Effect.gen(function* () {
             const plugins = yield* PluginSupervisor.Service
             yield* plugins.flush
-            return { shell: yield* Shell.Service, config: yield* Config.Service }
+            return yield* Shell.Service
           }).pipe(Effect.provide(locations.get(session.location)))
-          const started = yield* local.shell
+          const started = yield* shell
             .create({
               command: input.command,
               cwd: session.location.directory,
@@ -748,42 +746,19 @@ const layer = Layer.effect(
             },
             { id: input.id },
           )
-          const terminal = yield* local.shell
-            .wait(started.id)
-            .pipe(Effect.catchTag("Shell.NotFoundError", () => Effect.succeed(synthesizeTerminalShellInfo(started))))
-          const output = yield* local.shell
+          const terminal = yield* shell.result(started)
+          const preview = yield* shell
             .output(started.id, { limit: SHELL_MAX_CAPTURE_BYTES })
-            .pipe(Effect.catchTag("Shell.NotFoundError", () => Effect.succeed(missingShellOutput())))
-          const capture = yield* ShellOutput.capture({
-            shell: local.shell,
-            id: started.id,
-            file: started.file,
-            limits: Config.latest(yield* local.config.entries(), "tool_output"),
-          }).pipe(Effect.catchTag("Shell.NotFoundError", () => Effect.succeed(missingShellOutput())))
+            .pipe(Effect.catchTag("Shell.NotFoundError", () => Effect.succeed(ShellResult.unavailable)))
           yield* bus.publish(SessionEvent.Shell.Ended, {
             sessionID: input.sessionID,
-            shell: terminal,
-            output,
+            shell: terminal.info,
+            output: preview,
           })
-          const state = terminal.status === "killed" ? "cancelled" : "completed"
-          const notice =
-            terminal.status === "killed"
-              ? "Command cancelled."
-              : terminal.status === "timeout"
-                ? "Command timed out before completion."
-                : `Command exited with code ${terminal.exit ?? "unknown"}.`
           yield* result
             .synthetic({
+              ...ShellResult.userNotification(terminal),
               sessionID: input.sessionID,
-              text: `The following shell command was executed by the user:\n<shell id="${started.id}" state="${state}" command="${started.command}">\n${capture.output}\n\n${notice}\n</shell>`,
-              metadata: {
-                source: "shell",
-                shellID: started.id,
-                state,
-                truncated: capture.truncated,
-                ...(terminal.exit !== undefined ? { exit: terminal.exit } : {}),
-                ...(terminal.status === "timeout" ? { timeout: true } : {}),
-              },
               resume: false,
             })
             .pipe(
@@ -1014,26 +989,6 @@ const layer = Layer.effect(
     return result
   }),
 )
-
-function missingShellOutput() {
-  const output = "Shell command output is no longer available."
-  return {
-    output,
-    cursor: Buffer.byteLength(output),
-    size: Buffer.byteLength(output),
-    truncated: false,
-  }
-}
-
-function synthesizeTerminalShellInfo(started: ShellSchema.Info): ShellSchema.Info {
-  return {
-    ...started,
-    // The Shell record was removed before waiters could observe it; publish a terminal
-    // boundary instead of leaving the Session shell message permanently running.
-    status: "killed",
-    time: { ...started.time, completed: Date.now() },
-  }
-}
 
 const preparePrompt = Effect.fn("Session.preparePrompt")(function* (
   request: Parameters<Interface["prompt"]>[0],

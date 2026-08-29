@@ -251,12 +251,16 @@ describe("Session.shell", () => {
         expect(inbox[0]).toMatchObject({
           type: "synthetic",
           delivery: "steer",
-          payload: {
-            metadata: { source: "shell", shellID: message.shellID, state: "completed", exit, truncated: false },
-          },
         })
         const completion = inbox[0]
         if (completion?.type !== "synthetic") return yield* Effect.die("Missing shell completion")
+        expect(completion.payload.metadata).toEqual({
+          source: "shell",
+          shellID: message.shellID,
+          state: "completed",
+          exit,
+          truncated: false,
+        })
         expect(completion.payload.description).toBeUndefined()
         expect(completion.payload.text).toContain(command)
         expect(completion.payload.text).toContain("user output")
@@ -304,6 +308,7 @@ describe("Session.shell", () => {
             },
           },
         ])
+        expect(inbox[0]).not.toHaveProperty("payload.metadata.exit")
         expect(fixture.control.wakes).toEqual([])
       }),
     )
