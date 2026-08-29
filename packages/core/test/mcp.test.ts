@@ -1207,6 +1207,68 @@ test("adds, disconnects, and reconnects MCP servers at runtime", async () => {
   )
 })
 
+testEffect(Layer.empty).live(
+  "merges MCP defaults into the winning configured server without changing runtime overrides",
+  () =>
+    Effect.gen(function* () {
+      const entries = [
+        new Document({
+          type: "document",
+          info: new Info({
+            mcp: new ConfigMCP.Info({
+              timeout: { startup: 10, catalog: 20, execution: 30 },
+              servers: {
+                resources: { type: "local", command: ["earlier"], disabled: true, timeout: { execution: 90 } },
+              },
+            }),
+          }),
+        }),
+        new Document({
+          type: "document",
+          info: new Info({
+            mcp: new ConfigMCP.Info({
+              timeout: { catalog: 40 },
+              servers: {
+                resources: { type: "local", command: ["later"], disabled: true, timeout: { startup: 50 } },
+              },
+            }),
+          }),
+        }),
+      ]
+      const original = JSON.stringify(entries)
+      yield* Effect.gen(function* () {
+        const service = yield* Mcp.Service
+        const check = yield* service.transform((draft) => {
+          expect(draft.get("resources")).toEqual({
+            type: "local",
+            command: ["later"],
+            disabled: true,
+            timeout: { startup: 50, catalog: 40, execution: 30 },
+          })
+        })
+        yield* check.dispose
+        const runtime = {
+          type: "local",
+          command: ["runtime"],
+          disabled: true,
+          timeout: { catalog: 60 },
+        } satisfies ConfigMCP.Local
+        yield* service.add("resources", runtime)
+        yield* service.reload()
+        yield* service.transform((draft) => {
+          expect(draft.get("resources")).toEqual(runtime)
+        })
+      }).pipe(
+        Effect.provide(
+          resourceMcpLayer("https://unused.example", undefined, undefined, {
+            entries: () => Effect.succeed(entries),
+          }),
+        ),
+      )
+      expect(JSON.stringify(entries)).toBe(original)
+    }),
+)
+
 testEffect(resourceMcpLayer(new ConfigMCP.Local({ type: "local", command: ["unused"], disabled: true }))).live(
   "manages live MCP servers entirely through scoped transforms",
   () =>

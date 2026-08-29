@@ -437,6 +437,44 @@ describe("ReadTool", () => {
     }),
   )
 
+  it.effect("accepts PNG candidates at the exact base64 limit and skips them one byte below", () =>
+    Effect.gen(function* () {
+      const photon = yield* Effect.promise(() => import("@silvia-odwyer/photon-node"))
+      const source = new photon.PhotonImage(
+        Uint8Array.from({ length: 16 * 4 }, () => 255),
+        16,
+        1,
+      )
+      const content = {
+        uri: "file:///wide.png",
+        content: Buffer.from(source.get_bytes()).toString("base64"),
+        encoding: "base64" as const,
+        mime: "image/png",
+      }
+      source.free()
+      const image = yield* Image.Service
+
+      for (const [maxWidth, padding] of [
+        [4, "=="],
+        [5, "="],
+        [6, ""],
+      ] as const) {
+        yield* image.transform((draft) => draft.configure({ maxWidth, maxBase64Bytes: 1_024 }))
+        const candidate = yield* image.normalize("wide.png", content)
+        expect(candidate.mime).toBe("image/png")
+        expect(candidate.content.match(/=*$/)?.[0]).toBe(padding)
+
+        yield* image.transform((draft) => draft.configure({ maxBase64Bytes: candidate.content.length }))
+        expect(yield* image.normalize("wide.png", content)).toEqual(candidate)
+
+        yield* image.transform((draft) => draft.configure({ maxBase64Bytes: candidate.content.length - 1 }))
+        const smaller = yield* image.normalize("wide.png", content)
+        expect(smaller.mime).toBe("image/png")
+        expect(smaller.content.length).toBeLessThan(candidate.content.length)
+      }
+    }),
+  )
+
   it.effect("drops images that cannot fit max base64 bytes after resize attempts", () =>
     Effect.gen(function* () {
       const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="

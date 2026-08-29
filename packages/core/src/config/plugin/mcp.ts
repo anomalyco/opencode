@@ -46,12 +46,12 @@ export const register = Effect.fn("ConfigMCPPlugin.register")(function* (
     const servers = new Map<string, ServerConfig>()
     for (const document of documents) {
       for (const [name, server] of Object.entries(document.info.mcp?.servers ?? {})) {
-        servers.set(name, { ...server, timeout: { ...timeout, ...server.timeout } })
+        servers.set(name, server)
       }
     }
     for (const [name, server] of servers) {
       if (draft.get(name)) continue
-      draft.set(name, server)
+      draft.set(name, { ...server, timeout: { ...timeout, ...server.timeout } })
     }
   })
 })
