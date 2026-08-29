@@ -175,6 +175,25 @@ it.instance(
 )
 
 it.instance(
+  "skips untracked nested repositories without commits",
+  Effect.gen(function* () {
+    const tmp = yield* bootstrap()
+    const snapshot = yield* Snapshot.Service
+    const before = yield* snapshot.track()
+    expect(before).toBeTruthy()
+    yield* exec(tmp.path, ["git", "init", "tui"])
+    yield* write(`${tmp.path}/tui/nested.txt`, "nested")
+    yield* write(`${tmp.path}/added.txt`, "added")
+
+    const files = (yield* snapshot.patch(before!)).files
+
+    expect(files).toContain(fwd(tmp.path, "added.txt"))
+    expect(files.some((file) => file.includes("/tui/"))).toBe(false)
+  }),
+  { git: true },
+)
+
+it.instance(
   "binary file handling",
   withTrackedSnapshot(({ tmp, snapshot, before }) =>
     Effect.gen(function* () {
