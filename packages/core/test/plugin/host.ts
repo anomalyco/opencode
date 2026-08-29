@@ -130,6 +130,7 @@ export function host(overrides: Overrides = {}): Plugin.Context {
     },
     vcs: overrides.vcs ?? {
       base: () => Effect.die("unused vcs.base"),
+      setBase: () => Effect.die("unused vcs.setBase"),
       get: () => Effect.die("unused vcs.get"),
       branches: () => Effect.die("unused vcs.branches"),
       status: () => Effect.die("unused vcs.status"),

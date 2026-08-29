@@ -2,16 +2,15 @@ import { expect, test } from "bun:test"
 import { Schema } from "effect"
 import { Vcs } from "../src/vcs.js"
 
-test("review base preserves its stable identity and omits absent pull-request metadata", () => {
+test("review base preserves its stable identity and local provenance", () => {
   expect(Vcs.Base.ast.annotations?.identifier).toBe("Vcs.Base")
   const base = { name: "release", ref: "refs/heads/release", source: "configured" as const }
-  expect(Schema.encodeSync(Vcs.Base)({ ...base, pullRequest: undefined })).toEqual(base)
-  const pr = {
-    ...base,
-    source: "pull-request",
-    pullRequest: { number: 42, url: "https://github.com/team/repo/pull/42" },
-  } satisfies Vcs.Base
-  expect(Schema.encodeSync(Vcs.Base)(Schema.decodeUnknownSync(Vcs.Base)(pr))).toEqual(pr)
+  for (const source of ["configured", "worktree", "reflog", "default"] as const) {
+    expect(Schema.encodeSync(Vcs.Base)(Schema.decodeUnknownSync(Vcs.Base)({ ...base, source }))).toEqual({
+      ...base,
+      source,
+    })
+  }
 })
 
 test("review modes preserve shipped working and combined branch names", () => {

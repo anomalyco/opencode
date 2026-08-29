@@ -419,12 +419,7 @@ export type WorkspaceDestroyResult = { destroyed: boolean }
 
 export type VcsBranch = { current?: string; default?: string }
 
-export type VcsBase = {
-  name: string
-  ref: string
-  source: "pull-request" | "configured" | "default"
-  pullRequest?: { number: number; url: string }
-}
+export type VcsBase = { name: string; ref: string; source: "configured" | "worktree" | "reflog" | "default" }
 
 export type VcsFileStatus = {
   file: string
@@ -6089,6 +6084,18 @@ export type VcsBaseInput = {
 export type VcsBaseOutput = {
   location: { directory: string; workspaceID?: string; project: { id: string; directory: string; canonical: string } }
   data: VcsBase | null
+}
+
+export type VcsSetBaseInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+  readonly ref: { readonly ref: string }["ref"]
+}
+
+export type VcsSetBaseOutput = {
+  location: { directory: string; workspaceID?: string; project: { id: string; directory: string; canonical: string } }
+  data: VcsBase
 }
 
 export type VcsStatusInput = {

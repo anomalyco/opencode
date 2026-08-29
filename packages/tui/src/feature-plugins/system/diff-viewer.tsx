@@ -1,5 +1,5 @@
 /** @jsxImportSource @opentui/solid */
-import type { FileDiffInfo } from "@opencode-ai/client"
+import type { FileDiffInfo, LocationRef } from "@opencode-ai/client"
 import type { Vcs } from "@opencode-ai/schema/vcs"
 import { Plugin } from "@opencode-ai/plugin/tui"
 import type { KeymapCommand, Route } from "@opencode-ai/plugin/tui/context"
@@ -101,20 +101,26 @@ function DiffViewer(props: { context: Plugin.Context }) {
   // Mode changes share the same lazy base lookup until this viewer is closed.
   const bases = new Map<string, ReturnType<Plugin.Context["client"]["vcs"]["base"]>>()
   const [reportedBases, setReportedBases] = createSignal<ReadonlyMap<string, Vcs.Base | null>>(new Map())
+  const loadBase = (location: LocationRef) => {
+    const key = locationKey(location)
+    const cached = bases.get(key)
+    if (cached) return cached
+    const pending = props.context.client.vcs.base({ location }).then((result) => {
+      if (bases.get(key) === pending) setReportedBases((known) => new Map(known).set(key, result.data))
+      return result
+    })
+    bases.set(key, pending)
+    return pending
+  }
   const diffInput = createMemo(() => ({ mode: mode(), location: location() }))
-  const [diff] = createResource(diffInput, async (input) => {
-    const key = locationKey(input.location)
-    if (input.mode !== "working" && !bases.has(key)) {
-      bases.set(
-        key,
-        props.context.client.vcs.base({ location: input.location }).then((result) => {
-          setReportedBases((known) => new Map(known).set(key, result.data))
-          return result
-        }),
-      )
-    }
-    const base = input.mode === "working" ? undefined : await bases.get(key)
-    if (input !== diffInput() || (input.mode === "committed" && !base?.data)) {
+  const [diff, diffActions] = createResource(diffInput, async (input) => {
+    const pending = input.mode === "working" ? undefined : loadBase(input.location)
+    const base = await pending
+    if (
+      input !== diffInput() ||
+      (pending && pending !== bases.get(locationKey(input.location))) ||
+      (input.mode === "committed" && !base?.data)
+    ) {
       return { input, base: null, files: [] }
     }
     const result = await props.context.client.vcs.diff({
@@ -157,12 +163,97 @@ function DiffViewer(props: { context: Plugin.Context }) {
         }}
         onClose={() => props.context.ui.router.navigate(params()?.returnRoute ?? { type: "home" })}
         onSwitchSource={setMode}
+        onChooseBase={() => {
+          const target = { ...location() }
+          const key = locationKey(target)
+          void loadBase(target).catch(() => {})
+          props.context.ui.dialog.show(() => (
+            <DiffBaseDialog
+              context={props.context}
+              location={target}
+              current={reportedBases().get(key)}
+              onSaved={(result) => {
+                bases.set(key, Promise.resolve(result))
+                setReportedBases((known) => new Map(known).set(key, result.data))
+                if (locationKey(location()) === key) void diffActions.refetch()
+              }}
+            />
+          ))
+        }}
       />
     </box>
   )
 }
 
-type DiffPreferences = { tree?: boolean; single?: boolean; view?: "auto" | DiffView }
+function DiffBaseDialog(props: {
+  context: Plugin.Context
+  location: LocationRef
+  current?: Vcs.Base | null
+  onSaved: (result: Awaited<ReturnType<Plugin.Context["client"]["vcs"]["setBase"]>>) => void
+}) {
+  const theme = props.context.theme.contextual.elevated
+  const [search, setSearch] = createSignal("")
+  const [saving, setSaving] = createSignal(false)
+  const [error, setError] = createSignal<string>()
+  const [branches] = createResource(search, (search) =>
+    props.context.client.vcs.branches({ location: props.location, search, limit: 100 }),
+  )
+  let active = true
+  onCleanup(() => {
+    active = false
+  })
+  const Empty = () => (
+    <box paddingLeft={4} paddingRight={4}>
+      <text fg={branches.error ? theme.text.feedback.error.default : theme.text.subdued}>
+        {branches.loading
+          ? "Loading branches..."
+          : branches.error
+            ? "Could not load branches. Reopen the picker to try again."
+            : "No branches found"}
+      </text>
+    </box>
+  )
+
+  return (
+    <DialogSelect
+      title="Base branch"
+      placeholder="Search local and remote branches"
+      skipFilter
+      current={props.current?.ref.replace(/^refs\/(heads|remotes)\//, "")}
+      onFilter={setSearch}
+      locked={saving()}
+      emptyView={<Empty />}
+      noMatchView={<Empty />}
+      footer={
+        <text fg={error() ? theme.text.feedback.error.default : theme.text.subdued}>
+          {error() ?? (saving() ? "Saving base..." : "Save for this branch or worktree")}
+        </text>
+      }
+      options={(branches.loading || branches.error ? [] : (branches()?.data ?? [])).map((name) => ({
+        title: name,
+        value: name,
+        onSelect() {
+          setError(undefined)
+          setSaving(true)
+          void props.context.client.vcs
+            .setBase({ location: props.location, ref: name })
+            .then((result) => {
+              if (!active) return
+              props.onSaved(result)
+              props.context.ui.dialog.clear()
+            })
+            .catch(() => {
+              if (!active) return
+              setSaving(false)
+              setError("Could not save base. Try again.")
+            })
+        },
+      }))}
+    />
+  )
+}
+
+type DiffPreferences = { source?: DiffMode; tree?: boolean; single?: boolean; view?: "auto" | DiffView }
 
 export function DiffViewerContent(props: {
   context: Plugin.Context
@@ -179,6 +270,7 @@ export function DiffViewerContent(props: {
   onPreferencesChange?: (value: DiffPreferences) => void
   onClose: () => void
   onSwitchSource: (mode: DiffMode) => void
+  onChooseBase?: () => void
 }) {
   const renderer = useRenderer()
   const dimensions = useTerminalDimensions()
@@ -625,34 +717,34 @@ export function DiffViewerContent(props: {
       },
     ]
     dialog.show(() => (
-      <DialogSelect
+      <DialogSelect<DiffMode | "base">
         title="Diff source"
         skipFilter={true}
         renderFilter={false}
         current={mode()}
-        footer={
-          <Show when={props.sourceBase !== undefined}>
-            <text
-              fg={props.context.theme.contextual.elevated.text.subdued}
-              wrapMode="none"
-              truncate
-              maxWidth={Math.max(1, Math.min(54, dimensions().width - 10))}
-            >
-              {props.sourceBase
-                ? `Base  ${props.sourceBase.name}${props.sourceBase.pullRequest ? ` · PR #${props.sourceBase.pullRequest.number}` : ""}`
-                : "Base not reported"}
-            </text>
-          </Show>
-        }
-        options={options.map((option) => ({
-          ...option,
-          title: diffSourceLabel(option.value),
-          titleView: diffSourceLabel(option.value).padEnd(11),
-          onSelect() {
-            dialog.clear()
-            props.onSwitchSource(option.value)
-          },
-        }))}
+        options={[
+          ...options.map((option) => ({
+            ...option,
+            title: diffSourceLabel(option.value),
+            titleView: diffSourceLabel(option.value).padEnd(11),
+            onSelect() {
+              dialog.clear()
+              props.onSwitchSource(option.value)
+              props.onPreferencesChange?.({ source: option.value })
+            },
+          })),
+          ...(props.onChooseBase
+            ? [
+                {
+                  title: "Base",
+                  titleView: "Base".padEnd(11),
+                  value: "base" as const,
+                  description: props.sourceBase?.name ?? "Choose...",
+                  onSelect: props.onChooseBase,
+                },
+              ]
+            : []),
+        ]}
       />
     ))
   }
@@ -743,14 +835,16 @@ export function DiffViewerContent(props: {
           <Match when={!props.loading && props.error}>
             <box flexGrow={1} padding={2}>
               <text fg={theme.text.feedback.error.default}>
-                Could not load diff. Reopen the diff viewer to try again.
+                {!props.sourceBase && mode() !== "working"
+                  ? "Could not load diff. Choose a base branch from Diff source, or select Uncommitted."
+                  : "Could not load diff. Reopen the diff viewer to try again."}
               </text>
             </box>
           </Match>
           <Match when={!props.loading && props.unavailable}>
             <box flexGrow={1} padding={2}>
               <text fg={theme.text.subdued}>
-                Committed comparison unavailable without base metadata. Choose another diff source.
+                Committed comparison unavailable without base metadata. Choose a base branch from Diff source.
               </text>
             </box>
           </Match>

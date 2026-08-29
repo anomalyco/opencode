@@ -12170,8 +12170,126 @@
             }
           }
         },
-        "description": "Resolve the current branch's review base, preferring an open pull request, configured base, then repository default. May query the pull request host; other VCS reads remain local.",
+        "description": "Resolve a local review base from explicit selection, worktree creation, or branch creation history. Returns null before the first commit or when the provider lacks base metadata; ambiguous Git history requires an explicit selection.",
         "summary": "VCS review base"
+      },
+      "put": {
+        "tags": ["vcs"],
+        "operationId": "v2.vcs.setBase",
+        "parameters": [
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "location": {
+                      "$ref": "#/components/schemas/Location.InfoEncoded"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Vcs.Base"
+                    }
+                  },
+                  "required": ["location", "data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Remember an existing local branch or remote-tracking ref as the review base for this branch or detached worktree.",
+        "summary": "Set VCS review base",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ref": {
+                    "type": "string"
+                  }
+                },
+                "required": ["ref"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
       }
     },
     "/api/vcs/status": {
@@ -12526,7 +12644,7 @@
             }
           }
         },
-        "description": "Diff HEAD to the working copy (working), the base merge-base to the working copy (branch), or the base merge-base to HEAD (committed). The optional base overrides the repository default without a network lookup.",
+        "description": "Diff HEAD to the working copy (working), the base merge-base to the working copy (branch), or the base merge-base to HEAD (committed). Omitting base preserves repository-default comparison; supplying it overrides the comparison without saving it.",
         "summary": "VCS diff"
       }
     },
@@ -18895,21 +19013,7 @@
           },
           "source": {
             "type": "string",
-            "enum": ["pull-request", "configured", "default"]
-          },
-          "pullRequest": {
-            "type": "object",
-            "properties": {
-              "number": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "url": {
-                "type": "string"
-              }
-            },
-            "required": ["number", "url"],
-            "additionalProperties": false
+            "enum": ["configured", "worktree", "reflog", "default"]
           }
         },
         "required": ["name", "ref", "source"],

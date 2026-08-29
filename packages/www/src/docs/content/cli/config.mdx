@@ -150,13 +150,13 @@ Configure diff presentation:
 }
 ```
 
-| Field    | Values                              | Description                                                   |
-| -------- | ----------------------------------- | ------------------------------------------------------------- |
-| `source` | `branch`, `committed`, or `working` | Sets the default review scope. Defaults to `branch`.          |
-| `wrap`   | `word` or `none`                    | Sets line wrapping.                                           |
-| `tree`   | boolean                             | Shows the diff file tree.                                     |
-| `single` | boolean                             | Shows only the selected file patch.                           |
-| `view`   | `auto`, `split`, or `unified`       | Sets the layout. `auto` chooses based on the available width. |
+| Field    | Values                              | Description                                                          |
+| -------- | ----------------------------------- | -------------------------------------------------------------------- |
+| `source` | `branch`, `committed`, or `working` | Remembers the selected review scope. Initially defaults to `branch`. |
+| `wrap`   | `word` or `none`                    | Sets line wrapping.                                                  |
+| `tree`   | boolean                             | Shows the diff file tree.                                            |
+| `single` | boolean                             | Shows only the selected file patch.                                  |
+| `view`   | `auto`, `split`, or `unified`       | Sets the layout. `auto` chooses based on the available width.        |
 
 `/diff` opens **All** by default, combining branch and local changes. Press `d` to open **Diff source** and select a scope for the open viewer:
 
@@ -166,13 +166,13 @@ Configure diff presentation:
 | `committed` | Committed   | The merge base with the comparison branch to `HEAD`, excluding all uncommitted changes.                           |
 | `working`   | Uncommitted | `HEAD` to the working tree, including staged, unstaged, and untracked changes.                                    |
 
-The compact header shows the scope, comparison base, and reviewed/total count, such as **All · vs v2 0/4**. The **Diff source** menu shows the branch base and PR number when known, such as **Base v2 · PR #123**. **Uncommitted** shows **vs HEAD** in its header; opening its source menu does not trigger a branch-base lookup.
+The compact header shows the scope, comparison base, and reviewed/total count, such as **All · vs v2 0/4**. The fourth row in **Diff source** is **Base**, showing the known branch or **Choose...**. Select it to open **Base branch**, search local and remote-tracking branches, and save a comparison base. Changing the base does not change the selected scope. **Uncommitted** shows **vs HEAD**; opening its source menu does not trigger a base lookup, but opening the base picker can resolve the saved base.
 
-For Git, the comparison branch is resolved when a branch scope is opened: the open pull request's base via GitHub CLI (`gh`), then `branch.<current-branch>.gh-merge-base` from Git config, then the repository's default branch. Each candidate must resolve to a locally available commit ref. A missing common ancestor is a comparison error, not a reason to try another candidate. Base lookup is lazy, not part of startup or status polling, and is reused while switching scopes in the same viewer.
+Git resolves the base locally from your explicit choice, a recorded worktree-creation base, or a validated named branch in the branch-creation reflog. Reflog inference checks at most 256 entries; it does not guess from `HEAD` or a commit hash, or scan every branch's graph. The repository default is used only when you are on that branch. If the base remains unclear, choose it once from **Base branch**. There is no network lookup. A missing common ancestor is a comparison error, not a reason to try another branch.
 
-Selecting a scope does not change `cli.json`. Close and reopen `/diff` to return to `diffs.source`. To always start with uncommitted changes, set `"source": "working"`. A clean working tree never automatically changes the selected scope.
+Your selected base is remembered locally per named Git branch in `branch.<name>.opencode-merge-base`; detached worktrees use their own Git-directory metadata. Selecting **All**, **Committed**, or **Uncommitted** updates the global `diffs.source` preference in `cli.json`. Reopening `/diff` remembers both choices and loads fresh diff content. Review marks, scroll position, and patch contents are not persisted. A clean working tree never automatically changes the selected scope.
 
-When a VCS provider cannot report base metadata, the viewer displays **Base not reported**. **All** still uses the provider's branch comparison if supported; missing metadata does not change the scope to local changes. **Committed** is unavailable without base metadata. An unresolved Git comparison reports an error rather than an empty diff; choose **Uncommitted** to review local changes instead. Before the first Git commit, **All** shows uncommitted files.
+When a VCS provider cannot report base metadata, the viewer displays **Base not reported**. **All** still uses the provider's branch comparison if supported; missing metadata does not change the scope to local changes. **Committed** is unavailable without a base. An unresolved Git comparison offers **Choose a base branch** rather than an empty diff; **Uncommitted** remains available for local changes. Before the first Git commit, **All** shows uncommitted files. Failed base saves leave the picker open with an error and do not replace the current comparison.
 
 Committed image previews are unavailable; **Committed** never substitutes the current working-tree image.
 

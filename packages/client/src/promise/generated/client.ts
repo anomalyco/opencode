@@ -242,6 +242,8 @@ import type {
   VcsGetOutput,
   VcsBaseInput,
   VcsBaseOutput,
+  VcsSetBaseInput,
+  VcsSetBaseOutput,
   VcsStatusInput,
   VcsStatusOutput,
   VcsBranchesInput,
@@ -2004,6 +2006,19 @@ export function make(options: ClientOptions) {
             method: "GET",
             path: `/api/vcs/base`,
             query: { location: input?.["location"] },
+            successStatus: 200,
+            declaredStatuses: [503, 401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      setBase: (input: VcsSetBaseInput, requestOptions?: RequestOptions) =>
+        request<VcsSetBaseOutput>(
+          {
+            method: "PUT",
+            path: `/api/vcs/base`,
+            query: { location: input["location"] },
+            body: { ref: input["ref"] },
             successStatus: 200,
             declaredStatuses: [503, 401, 400],
             empty: false,

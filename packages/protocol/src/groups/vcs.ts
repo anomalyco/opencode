@@ -47,7 +47,24 @@ export const VcsGroup = HttpApiGroup.make("server.vcs")
           identifier: "v2.vcs.base",
           summary: "VCS review base",
           description:
-            "Resolve the current branch's review base, preferring an open pull request, configured base, then repository default. May query the pull request host; other VCS reads remain local.",
+            "Resolve a local review base from explicit selection, worktree creation, or branch creation history. Returns null before the first commit or when the provider lacks base metadata; ambiguous Git history requires an explicit selection.",
+        }),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.put("vcs.setBase", "/api/vcs/base", {
+      query: LocationQuery,
+      payload: Schema.Struct({ ref: Schema.String }),
+      success: Location.response(Vcs.Base),
+      error: ServiceUnavailableError,
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.vcs.setBase",
+          summary: "Set VCS review base",
+          description:
+            "Remember an existing local branch or remote-tracking ref as the review base for this branch or detached worktree.",
         }),
       ),
   )
@@ -91,7 +108,7 @@ export const VcsGroup = HttpApiGroup.make("server.vcs")
           identifier: "v2.vcs.diff",
           summary: "VCS diff",
           description:
-            "Diff HEAD to the working copy (working), the base merge-base to the working copy (branch), or the base merge-base to HEAD (committed). The optional base overrides the repository default without a network lookup.",
+            "Diff HEAD to the working copy (working), the base merge-base to the working copy (branch), or the base merge-base to HEAD (committed). Omitting base preserves repository-default comparison; supplying it overrides the comparison without saving it.",
         }),
       ),
   )

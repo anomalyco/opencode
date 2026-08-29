@@ -92,7 +92,7 @@ export const Info = Schema.Struct({
   diffs: Schema.optional(
     Schema.Struct({
       source: Schema.optional(Vcs.Mode).annotate({
-        description: "Default diff source; 'branch' includes branch and uncommitted changes",
+        description: "Remembered diff source, updated on selection; 'branch' includes branch and uncommitted changes",
       }),
       wrap: Schema.optional(Schema.Literals(["word", "none"])).annotate({
         description: "Line wrapping behavior in diff output",

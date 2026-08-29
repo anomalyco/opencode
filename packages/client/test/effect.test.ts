@@ -32,8 +32,7 @@ test("vcs.base decodes nullable review-base metadata", async () => {
   const base = {
     name: "release",
     ref: "refs/remotes/origin/release",
-    source: "pull-request",
-    pullRequest: { number: 42, url: "https://github.com/team/repo/pull/42" },
+    source: "reflog",
   }
   for (const data of [base, null]) {
     const httpClient = HttpClient.make((request) =>
