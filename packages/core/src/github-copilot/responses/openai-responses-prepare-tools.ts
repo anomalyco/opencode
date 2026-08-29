@@ -53,6 +53,8 @@ export function prepareResponsesTools({
     | { type: "function"; name: string }
     | { type: "code_interpreter" }
     | { type: "image_generation" }
+  hostedTools: ResponsesHostedTool[]
+  selectedHostedTool?: ResponsesHostedTool
   toolWarnings: SharedV3Warning[]
 } {
   // when the tools array is empty, change it to undefined to prevent errors:
@@ -61,7 +63,37 @@ export function prepareResponsesTools({
   const toolWarnings: SharedV3Warning[] = []
 
   if (tools == null) {
-    return { tools: undefined, toolChoice: undefined, toolWarnings }
+    return { tools: undefined, toolChoice: undefined, hostedTools: [], toolWarnings }
+  }
+
+  const hostedTools = tools.flatMap((tool) => {
+    if (tool.type !== "provider") return []
+    const hostedTool = getResponsesHostedTool(tool)
+    return hostedTool ? [hostedTool] : []
+  })
+  const selectedToolName = toolChoice?.type === "tool" ? toolChoice.toolName : undefined
+  const selectedTools = selectedToolName === undefined ? [] : tools.filter((tool) => tool.name === selectedToolName)
+  if (selectedTools.length > 1) {
+    throw new UnsupportedFunctionalityError({
+      functionality: `ambiguous tool choice '${selectedToolName}': multiple tool definitions share this name`,
+    })
+  }
+  const selectedHostedTool =
+    selectedTools[0]?.type === "provider" ? getResponsesHostedTool(selectedTools[0]) : undefined
+
+  const ambiguousHostedTool = hostedTools.find((tool) => {
+    const names = new Set(
+      hostedTools.filter((candidate) => candidate.responseType === tool.responseType).map((item) => item.name),
+    )
+    return names.size > 1 && selectedHostedTool?.responseType !== tool.responseType
+  })
+  if (ambiguousHostedTool) {
+    const names = new Set(
+      hostedTools.filter((tool) => tool.responseType === ambiguousHostedTool.responseType).map((tool) => tool.name),
+    )
+    throw new UnsupportedFunctionalityError({
+      functionality: `ambiguous ${ambiguousHostedTool.responseType} response for hosted tools: ${[...names].join(", ")}`,
+    })
   }
 
   const openaiTools: Array<OpenAIResponsesTool> = []
@@ -161,7 +193,7 @@ export function prepareResponsesTools({
   }
 
   if (toolChoice == null) {
-    return { tools: openaiTools, toolChoice: undefined, toolWarnings }
+    return { tools: openaiTools, toolChoice: undefined, hostedTools, selectedHostedTool, toolWarnings }
   }
 
   const type = toolChoice.type
@@ -170,13 +202,15 @@ export function prepareResponsesTools({
     case "auto":
     case "none":
     case "required":
-      return { tools: openaiTools, toolChoice: type, toolWarnings }
+      return { tools: openaiTools, toolChoice: type, hostedTools, selectedHostedTool, toolWarnings }
     case "tool": {
-      const selectedTool = tools.find((tool) => tool.name === toolChoice.toolName)
-      const hostedTool = selectedTool?.type === "provider" ? getResponsesHostedTool(selectedTool) : undefined
       return {
         tools: openaiTools,
-        toolChoice: hostedTool ? { type: hostedTool.type } : { type: "function", name: toolChoice.toolName },
+        toolChoice: selectedHostedTool
+          ? { type: selectedHostedTool.type }
+          : { type: "function", name: toolChoice.toolName },
+        hostedTools,
+        selectedHostedTool,
         toolWarnings,
       }
     }

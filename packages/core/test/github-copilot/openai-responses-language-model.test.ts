@@ -477,6 +477,62 @@ describe("doStream", () => {
     expect(events.map((event) => event.toolName)).toEqual(["preview_web", "preview_web", "preview_web"])
   })
 
+  test("rejects ambiguous web variants before fetching or exposing a stream", async () => {
+    const fetchFn = createStreamFetch(HOSTED_TOOL_CASES[0].stream)
+    const model = createModel(fetchFn)
+
+    await expect(
+      model.doStream({
+        prompt: TEST_PROMPT,
+        tools: [hostedTool(HOSTED_TOOL_CASES[0]), hostedTool(HOSTED_TOOL_CASES[1])],
+      }),
+    ).rejects.toThrow("ambiguous web_search response for hosted tools")
+    expect(fetchFn).not.toHaveBeenCalled()
+  })
+
+  test("streams a shared logical name for both web variants", async () => {
+    const model = createModel(createStreamFetch(HOSTED_TOOL_CASES[0].stream))
+    const tools = [hostedTool(HOSTED_TOOL_CASES[0]), hostedTool(HOSTED_TOOL_CASES[1])].map((tool) => ({
+      ...tool,
+      name: "web",
+    }))
+
+    const result = await model.doStream({ prompt: TEST_PROMPT, tools })
+    const events = (await readStream(result.stream)).filter((event) => "toolName" in event)
+
+    expect(events.map((event) => event.toolName)).toEqual(["web", "web", "web"])
+  })
+
+  test("uses canonical names for undeclared streamed web and computer calls", async () => {
+    const model = createModel(
+      createStreamFetch([
+        ...HOSTED_TOOL_CASES[0].stream,
+        {
+          type: "response.output_item.added",
+          output_index: 1,
+          item: { type: "computer_call", id: "computer_1", status: "in_progress" },
+        },
+        {
+          type: "response.output_item.done",
+          output_index: 1,
+          item: { type: "computer_call", id: "computer_1", status: "completed" },
+        },
+      ]),
+    )
+
+    const result = await model.doStream({ prompt: TEST_PROMPT })
+    const events = (await readStream(result.stream)).filter((event) => "toolName" in event)
+
+    expect(events.map((event) => event.toolName)).toEqual([
+      "web_search",
+      "web_search",
+      "web_search",
+      "computer_use",
+      "computer_use",
+      "computer_use",
+    ])
+  })
+
   test("streams sequential Copilot reasoning summary blocks", async () => {
     const model = createModel(
       createStreamFetch([

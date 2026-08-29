@@ -7,7 +7,6 @@ import {
   type LanguageModelV3StreamPart,
   type SharedV3ProviderMetadata,
   type SharedV3Warning,
-  UnsupportedFunctionalityError,
 } from "@ai-sdk/provider"
 import {
   combineHeaders,
@@ -27,11 +26,7 @@ import { imageGenerationOutputSchema } from "./tool/image-generation.js"
 import { convertToOpenAIResponsesInput } from "./convert-to-openai-responses-input.js"
 import { mapOpenAIResponseFinishReason } from "./map-openai-responses-finish-reason.js"
 import type { OpenAIResponsesIncludeOptions, OpenAIResponsesIncludeValue } from "./openai-responses-api-types.js"
-import {
-  getResponsesHostedTool,
-  prepareResponsesTools,
-  type ResponsesHostedTool,
-} from "./openai-responses-prepare-tools.js"
+import { prepareResponsesTools, type ResponsesHostedTool } from "./openai-responses-prepare-tools.js"
 import type { OpenAIResponsesModelId } from "./openai-responses-settings.js"
 
 const webSearchCallItem = z.object({
@@ -225,21 +220,20 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
       addInclude("message.output_text.logprobs")
     }
 
-    const hostedTools =
-      tools?.flatMap((tool) => {
-        if (tool.type !== "provider") return []
-        const hostedTool = getResponsesHostedTool(tool)
-        return hostedTool ? [hostedTool] : []
-      }) ?? []
+    const {
+      tools: openaiTools,
+      toolChoice: openaiToolChoice,
+      hostedTools,
+      selectedHostedTool,
+      toolWarnings,
+    } = prepareResponsesTools({
+      tools,
+      toolChoice,
+      strictJsonSchema,
+    })
     const getHostedToolName = (responseType: ResponsesHostedTool["responseType"]) => {
-      const names = new Set(hostedTools.filter((tool) => tool.responseType === responseType).map((tool) => tool.name))
-      const first = names.values().next()
-      if (first.done) return responseType
-      if (names.size === 1) return first.value
-      if (toolChoice?.type === "tool" && names.has(toolChoice.toolName)) return toolChoice.toolName
-      throw new UnsupportedFunctionalityError({
-        functionality: `ambiguous ${responseType} response for hosted tools: ${[...names].join(", ")}`,
-      })
+      if (selectedHostedTool?.responseType === responseType) return selectedHostedTool.name
+      return hostedTools.find((tool) => tool.responseType === responseType)?.name ?? responseType
     }
 
     if (hostedTools.some((tool) => tool.responseType === "web_search")) {
@@ -369,16 +363,6 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
       // Remove from args if not supported
       baseArgs.service_tier = undefined
     }
-
-    const {
-      tools: openaiTools,
-      toolChoice: openaiToolChoice,
-      toolWarnings,
-    } = prepareResponsesTools({
-      tools,
-      toolChoice,
-      strictJsonSchema,
-    })
 
     return {
       getHostedToolName,
