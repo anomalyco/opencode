@@ -5,7 +5,7 @@ import fs from "fs/promises"
 import path from "path"
 import { scrapeDynamic, crawlDynamic, releaseBrowser, fetchPage, validateMarkdownSize, htmlToMarkdown, sanitizeHtml, extractContentFromHtml } from "./dynamic-crawler"
 import type { DynamicCrawlResult, DynamicCrawlStats } from "./dynamic-crawler"
-import { isScrapeEnabled, SCRAPE_DISABLED_MESSAGE } from "./scrape-state"
+import { CRAWL_DISABLED_MESSAGE, isCrawlEnabled, isScrapeEnabled, SCRAPE_DISABLED_MESSAGE } from "./scrape-state"
 
 export function sanitizeFolderName(name: string): string {
   return name
@@ -104,7 +104,7 @@ export const dynamicFetchHandler = Effect.fn("Cli.dynamic.fetch")(function* (arg
 
 function cleanMarkdown(md: string): string {
   let result = md
-  
+
   // Remove notification-related patterns
   const notificationPatterns = [
     /^\d+\s*notifications?$/gm,
@@ -125,11 +125,11 @@ function cleanMarkdown(md: string): string {
     /^post\s*views?$/gm,
     /^article\s*views?$/gm,
   ]
-  
+
   for (const pattern of notificationPatterns) {
     result = result.replace(pattern, "")
   }
-  
+
   // Clean up extra whitespace
   result = result.replace(/\n{3,}/g, "\n\n")
   result = result.replace(/[ \t]{2,}/g, " ")
@@ -274,6 +274,9 @@ export const dynamicCrawlHandler = Effect.fn("Cli.dynamic.crawl")(function* (arg
   "include-external-links": boolean
   "skip-patterns": string[]
 }) {
+  if (!isCrawlEnabled()) {
+    return yield* Effect.fail(new CliError({ message: CRAWL_DISABLED_MESSAGE }))
+  }
   if (!isScrapeEnabled()) {
     return yield* Effect.fail(new CliError({ message: SCRAPE_DISABLED_MESSAGE }))
   }

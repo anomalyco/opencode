@@ -1,6 +1,7 @@
 import { Effect } from "effect"
 import { cmd } from "./cmd"
-import { effectCmd } from "../effect-cmd"
+import { effectCmd, fail } from "../effect-cmd"
+import { CRAWL_DISABLED_MESSAGE, isCrawlEnabled } from "./scrape-state"
 
 export const FirecrawlScrapeCommand = effectCmd({
   command: "scrape <url>",
@@ -48,6 +49,7 @@ export const FirecrawlScrapeCommand = effectCmd({
       }),
   handler: (args) =>
     Effect.gen(function* () {
+      if (!isCrawlEnabled()) return yield* fail(CRAWL_DISABLED_MESSAGE)
       const { firecrawlScrapeHandler } = yield* Effect.promise(() => import("./firecrawl.handler"))
       return yield* firecrawlScrapeHandler(args)
     }),
@@ -106,6 +108,7 @@ export const FirecrawlCrawlCommand = effectCmd({
       }),
   handler: (args) =>
     Effect.gen(function* () {
+      if (!isCrawlEnabled()) return yield* fail(CRAWL_DISABLED_MESSAGE)
       const { firecrawlCrawlHandler } = yield* Effect.promise(() => import("./firecrawl.handler"))
       return yield* firecrawlCrawlHandler(args)
     }),

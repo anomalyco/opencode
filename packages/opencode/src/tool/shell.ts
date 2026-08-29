@@ -608,6 +608,9 @@ export const ShellTool = Tool.define(
           parameters: prompt.parameters,
           execute: (params: Parameters, ctx: Tool.Context) =>
             Effect.gen(function* () {
+              if (/\bdynamic\s+(?:scrape|crawl)\b/i.test(params.command)) {
+                throw new Error("Do not invoke dynamic scrape or crawl commands from the TUI. Use the webfetch or crawl tool instead.")
+              }
               const instanceCtx = yield* InstanceState.context
               const cwd = params.workdir
                 ? yield* resolvePath(params.workdir, instanceCtx.directory, shell)

@@ -1,16 +1,16 @@
 import { Effect } from "effect"
 import { cmd } from "./cmd"
-import { effectCmd } from "../effect-cmd"
+import { CliError, effectCmd } from "../effect-cmd"
 import { ScrapeCommand } from "./crawl"
+import { CRAWL_DISABLED_MESSAGE, isCrawlEnabled, setCrawlState } from "./scrape-state"
 
-export const DynamicCrawlCommand = effectCmd({
-  command: "crawl <url>",
+export const DynamicCrawlCommand = cmd({
+  command: "crawl <urlOrState>",
   describe: "crawl a website using Chrome DevTools Protocol",
-  instance: false,
   builder: (yargs) =>
     yargs
-      .positional("url", {
-        describe: "starting URL to crawl",
+      .positional("urlOrState", {
+        describe: "starting URL to crawl, or on/off to enable/disable the crawling agent",
         type: "string",
         demandOption: true,
       })
@@ -80,11 +80,23 @@ export const DynamicCrawlCommand = effectCmd({
         string: true,
         default: [] as string[],
       }),
-  handler: (args) =>
-    Effect.gen(function* () {
-      const { dynamicCrawlHandler } = yield* Effect.promise(() => import("./dynamic-crawler.handler"))
-      return yield* dynamicCrawlHandler(args)
-    }),
+  async handler(args) {
+    if (args.urlOrState === "on") {
+      setCrawlState(true)
+      process.stderr.write("Crawling agent enabled.\n")
+      return
+    }
+    if (args.urlOrState === "off") {
+      setCrawlState(false)
+      process.stderr.write("Crawling agent disabled.\n")
+      return
+    }
+    // This check precedes loading the crawler implementation, so a disabled
+    // agent cannot select or initialize any crawler transport.
+    if (!isCrawlEnabled()) throw new CliError({ message: CRAWL_DISABLED_MESSAGE })
+    const { dynamicCrawlHandler } = await import("./dynamic-crawler.handler")
+    await Effect.runPromise(dynamicCrawlHandler({ ...args, url: args.urlOrState }))
+  },
 })
 
 export const DynamicFetchCommand = effectCmd({
@@ -123,10 +135,6 @@ export const DynamicCrawlerCommand = cmd({
   command: "dynamic",
   describe: "web scraping via HTTP or Chrome DevTools Protocol",
   builder: (yargs) =>
-    yargs
-      .command(DynamicFetchCommand)
-      .command(ScrapeCommand)
-      .command(DynamicCrawlCommand)
-      .demandCommand(),
+    yargs.command(DynamicFetchCommand).command(ScrapeCommand).command(DynamicCrawlCommand).demandCommand(),
   async handler() {},
 })

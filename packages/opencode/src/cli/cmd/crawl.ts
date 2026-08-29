@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, writeFileSync, readdirSync, statSync, unlinkSync
 import { join, dirname } from "path"
 import { homedir } from "os"
 import { execFile } from "child_process"
-import { isScrapeEnabled, setScrapeState, SCRAPE_DISABLED_MESSAGE } from "./scrape-state"
+import { isScrapeEnabled, setScrapeState, SCRAPE_DISABLED_MESSAGE, isCrawlEnabled, setCrawlState, CRAWL_DISABLED_MESSAGE } from "./scrape-state"
 
 
 const HTML_ENTITY_MAP: Record<string, string> = {
@@ -427,15 +427,20 @@ export const ScrapeCommand = effectCmd({
 
     if (stateOrUrl === "on") {
       setScrapeState(true)
+      setCrawlState(true)
       process.stderr.write("Scraping enabled.\n")
       return
     }
     if (stateOrUrl === "off") {
       setScrapeState(false)
+      setCrawlState(false)
       process.stderr.write("Scraping disabled.\n")
       return
     }
 
+    if (!isCrawlEnabled()) {
+      return yield* fail(CRAWL_DISABLED_MESSAGE)
+    }
     if (!isScrapeEnabled()) {
       return yield* fail(SCRAPE_DISABLED_MESSAGE)
     }

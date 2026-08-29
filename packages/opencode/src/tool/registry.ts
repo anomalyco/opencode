@@ -13,6 +13,7 @@ import { TaskTool } from "./task"
 import { Database } from "@opencode-ai/core/database/database"
 import { TodoWriteTool } from "./todo"
 import { WebFetchTool } from "./webfetch"
+import { CrawlTool } from "./crawl"
 import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
 import { SkillTool } from "./skill"
@@ -25,6 +26,7 @@ import { Schema } from "effect"
 import z from "zod"
 import { Plugin } from "../plugin"
 import { Provider } from "@/provider/provider"
+import { isCrawlEnabled, CRAWL_DISABLED_MESSAGE } from "@/cli/cmd/scrape-state"
 
 import { WebSearchTool } from "./websearch"
 import { LspTool } from "./lsp"
@@ -56,8 +58,9 @@ import { MCP } from "@/mcp"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { McpCatalog } from "@/mcp/catalog"
 
-export function webSearchEnabled(providerID: ProviderV2.ID, flags = { exa: false, parallel: false }) {
-  return providerID === ProviderV2.ID.opencode || flags.exa || flags.parallel
+// DuckDuckGo is always available (no API key required).
+export function webSearchEnabled(_providerID: ProviderV2.ID, _flags = { exa: false, parallel: false }) {
+  return true
 }
 
 type TaskDef = Tool.InferDef<typeof TaskTool>
@@ -102,6 +105,7 @@ const layer = Layer.effect(
     const lsptool = yield* LspTool
     const plan = yield* PlanExitTool
     const webfetch = yield* WebFetchTool
+    const crawl = yield* CrawlTool
     const websearch = yield* WebSearchTool
     const shell = yield* ShellTool
     const globtool = yield* GlobTool
@@ -147,6 +151,19 @@ const layer = Layer.effect(
                   directory: ctx.directory,
                   worktree: ctx.worktree,
                 }
+                // Crawl-agent enforcement: reject any crawl-related plugin tool
+                // before it can start a network request or spawn a process.
+                // research-page is excluded: it has its own isScrapeEnabled() guard
+                // and is the proper tool for research tasks that need focus context.
+                const CRAWL_TOOL_IDS = new Set(["crawler", "scrapling_crawl", "scraping_crawl", "firecrawl"])
+                if (CRAWL_TOOL_IDS.has(id) && !isCrawlEnabled()) {
+                  return {
+                    title: "Crawl",
+                    output: CRAWL_DISABLED_MESSAGE,
+                    metadata: {},
+                  }
+                }
+
                 const result = yield* Effect.promise(() => def.execute(args as any, pluginCtx))
                 const output = typeof result === "string" ? result : result.output
                 const metadata = typeof result === "string" ? {} : (result.metadata ?? {})
@@ -212,6 +229,7 @@ const layer = Layer.effect(
           write: Tool.init(writetool),
           task: Tool.init(task),
           fetch: Tool.init(webfetch),
+          crawl: Tool.init(crawl),
           todo: Tool.init(todo),
           search: Tool.init(websearch),
           skill: Tool.init(skilltool),
@@ -235,6 +253,7 @@ const layer = Layer.effect(
             tool.write,
             tool.task,
             tool.fetch,
+            tool.crawl,
             tool.todo,
             tool.search,
             tool.skill,
