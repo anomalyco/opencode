@@ -47,8 +47,15 @@ let uploadError:
   | {
       _tag: "PayloadTooLargeError"
       message: string
-      scope: "file"
+      scope: "file" | "session" | "global"
       maximumBytes: number
+    }
+  | undefined
+let uploadFailure:
+  | {
+      name: string
+      remaining: number
+      error: NonNullable<typeof uploadError>
     }
   | undefined
 
@@ -116,6 +123,11 @@ const clientFor = (directory: string) => {
         attachment: async (input: { sessionID: string; file: Blob; name?: string }) => {
           order.push("upload")
           uploads.push({ sessionID: input.sessionID, name: input.name, type: input.file.type })
+          const failure = uploadFailure
+          if (failure && failure.name === input.name && failure.remaining > 0) {
+            failure.remaining -= 1
+            throw failure.error
+          }
           if (uploadError) throw uploadError
           return {
             id: `att_${uploads.length}`,
@@ -126,6 +138,7 @@ const clientFor = (directory: string) => {
           }
         },
         command: async (input: unknown) => {
+          order.push("command")
           sentCommands.push(input)
         },
         shell: async (input: { sessionID: string; id?: string; command: string }) => {
@@ -340,6 +353,7 @@ beforeEach(() => {
   permissionServer = "server-a"
   createSessionGate = undefined
   uploadError = undefined
+  uploadFailure = undefined
   serverSessionSyncs = 0
   for (const key of Object.keys(storedSessions)) delete storedSessions[key]
 })
@@ -538,12 +552,19 @@ describe("prompt submit worktree selection", () => {
     params = { id: "session-1" }
     variant = "high"
     commands.push({ name: "review" })
-    promptValue = [{ type: "text", content: "/review staged changes", start: 0, end: 22 }]
+    const attachment = {
+      type: "image" as const,
+      id: "attachment-command",
+      filename: "notes.txt",
+      mime: "text/plain",
+      blob: { id: "blob-command", url: "data:text/plain;base64,aGVsbG8=" },
+    }
+    promptValue = [{ type: "text", content: "/review staged changes", start: 0, end: 22 }, attachment]
 
     const submit = createPromptSubmit({
       prompt,
       info: () => ({ id: "session-1" }),
-      imageAttachments: () => [],
+      imageAttachments: () => [attachment],
       commentCount: () => 0,
       autoAccept: () => false,
       mode: () => "normal",
@@ -568,9 +589,10 @@ describe("prompt submit worktree selection", () => {
         arguments: "staged changes",
         agent: "agent",
         model: { id: "model", providerID: "provider", variant: "high" },
-        files: [],
+        files: [{ uri: "opencode://attachment/att_1", name: "notes.txt", mime: "text/plain" }],
       },
     ])
+    expect(order).toEqual(["upload", "command"])
     expect(serverSessionSyncs).toBe(0)
   })
 
@@ -733,5 +755,61 @@ describe("prompt submit worktree selection", () => {
     expect(sentPrompts).toEqual([])
     expect(restoredPrompt).toEqual(original)
     expect(toasts.at(-1)?.description).toBe("Attachment exceeds the file storage limit")
+  })
+
+  test("reuses successful uploads after a partial multi-file failure", async () => {
+    params.id = "session-1"
+    const first = {
+      type: "image" as const,
+      id: "attachment-first",
+      filename: "first.txt",
+      mime: "text/plain",
+      blob: { id: "blob-first", url: "data:text/plain;base64,Zmlyc3Q=" },
+    }
+    const second = {
+      type: "image" as const,
+      id: "attachment-second",
+      filename: "second.txt",
+      mime: "text/plain",
+      blob: { id: "blob-second", url: "data:text/plain;base64,c2Vjb25k" },
+    }
+    promptValue = [{ type: "text", content: "inspect", start: 0, end: 7 }, first, second]
+    uploadFailure = {
+      name: "second.txt",
+      remaining: 1,
+      error: {
+        _tag: "PayloadTooLargeError",
+        message: "Temporary attachment quota failure",
+        scope: "session",
+        maximumBytes: 100 * 1024 * 1024,
+      },
+    }
+    const submit = createPromptSubmit({
+      prompt,
+      info: () => ({ id: "session-1" }),
+      imageAttachments: () => [first, second],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+    })
+
+    await submit.handleSubmit(new Event("submit"))
+    await Bun.sleep(0)
+    await submit.handleSubmit(new Event("submit"))
+    await Bun.sleep(0)
+
+    expect(uploads.map((upload) => upload.name)).toEqual(["first.txt", "second.txt", "second.txt"])
+    expect(promptInputs).toHaveLength(1)
+    expect(promptInputs[0]).toMatchObject({
+      files: [{ uri: "opencode://attachment/att_1" }, { uri: "opencode://attachment/att_3" }],
+    })
   })
 })

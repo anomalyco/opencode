@@ -54,22 +54,57 @@ const draftText = (prompt: Prompt) => prompt.map((part) => ("content" in part ? 
 
 const draftImages = (prompt: Prompt) => prompt.filter((part): part is ImageAttachmentPart => part.type === "image")
 
+// TODO(review): Replace retry caching with server-side batch upload or rollback when the protocol supports it.
+const uploadedAttachments = new WeakMap<
+  DirectorySDK["api"]["session"],
+  Map<string, ReturnType<DirectorySDK["api"]["session"]["attachment"]>>
+>()
+
+const uploadKey = (sessionID: string, attachment: ImageAttachmentPart) =>
+  JSON.stringify([sessionID, attachment.blob.id, attachment.filename, attachment.mime])
+
 async function uploadAttachments(
   api: DirectorySDK["api"]["session"],
   sessionID: string,
   attachments: ImageAttachmentPart[],
 ) {
+  const cache = uploadedAttachments.get(api) ?? new Map()
+  uploadedAttachments.set(api, cache)
   return Promise.all(
     attachments.map(async (attachment) => {
-      const blob = await fetch(attachment.blob.url).then((response) => response.blob())
-      const uploaded = await api.attachment({
-        sessionID,
-        file: blob.slice(0, blob.size, attachment.mime),
-        name: attachment.filename,
-      })
+      const key = uploadKey(sessionID, attachment)
+      const existing = cache.get(key)
+      const request =
+        existing ??
+        fetch(attachment.blob.url)
+          .then((response) => response.blob())
+          .then((blob) =>
+            api.attachment({
+              sessionID,
+              file: blob.slice(0, blob.size, attachment.mime),
+              name: attachment.filename,
+            }),
+          )
+          .catch((error) => {
+            cache.delete(key)
+            throw error
+          })
+      if (!existing) cache.set(key, request)
+      const uploaded = await request
       return { ...uploaded, previewUrl: attachment.blob.url }
     }),
   )
+}
+
+function clearUploadedAttachments(
+  api: DirectorySDK["api"]["session"],
+  sessionID: string,
+  attachments: ImageAttachmentPart[],
+) {
+  const cache = uploadedAttachments.get(api)
+  if (!cache) return
+  attachments.forEach((attachment) => cache.delete(uploadKey(sessionID, attachment)))
+  if (cache.size === 0) uploadedAttachments.delete(api)
 }
 
 export async function sendFollowupDraft(input: FollowupSendInput) {
@@ -120,6 +155,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
           mime: attachment.mime,
         })),
       })
+      clearUploadedAttachments(input.api, input.draft.sessionID, images)
       return true
     } catch (err) {
       setIdle()
@@ -203,6 +239,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
           : [],
       ),
     })
+    clearUploadedAttachments(input.api, input.draft.sessionID, images)
     return true
   } catch (err) {
     batch(() => {
@@ -524,8 +561,8 @@ export function createPromptSubmit(input: PromptSubmitInput) {
         const messageID = Identifier.ascending("message")
         serverSync().session.set("session_status", session.id, { type: "busy" })
         void uploadAttachments(sdk().api.session, session.id, images)
-          .then((attachments) =>
-            sdk().api.session.command({
+          .then(async (attachments) => {
+            await sdk().api.session.command({
               sessionID: session.id,
               id: messageID,
               command: commandName,
@@ -537,8 +574,9 @@ export function createPromptSubmit(input: PromptSubmitInput) {
                 name: attachment.name,
                 mime: attachment.mime,
               })),
-            }),
-          )
+            })
+            clearUploadedAttachments(sdk().api.session, session.id, images)
+          })
           .catch((err) => {
             serverSync().session.set("session_status", session.id, { type: "idle" })
             showToast({

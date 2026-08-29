@@ -1,5 +1,5 @@
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
-import { OpenCode, type OpenCodeClient } from "@opencode-ai/client/promise"
+import { ClientError, OpenCode, type OpenCodeClient } from "@opencode-ai/client/promise"
 import type { ServerConnection } from "@/context/server"
 import { decode64 } from "@/utils/base64"
 
@@ -62,6 +62,7 @@ export function createApiForServer(input: {
     ...client,
     session: {
       ...client.session,
+      // TODO(review): Remove this singular compatibility adapter when the app consumes the workspace Promise client.
       async attachment(value, options) {
         const form = new FormData()
         form.append("file", value.file, value.name ?? (value.file instanceof File ? value.file.name : "attachment"))
@@ -70,12 +71,20 @@ export function createApiForServer(input: {
         const response = await (input.fetch ?? globalThis.fetch)(
           new URL(`/api/session/${encodeURIComponent(value.sessionID)}/attachment`, input.server.url),
           { method: "POST", body: form, headers: requestHeaders, signal: options?.signal },
-        )
+        ).catch((cause) => {
+          throw new ClientError("Transport", { cause })
+        })
+        if (![200, 400, 401, 404, 413, 500].includes(response.status)) {
+          await response.body?.cancel().catch(() => undefined)
+          throw new ClientError("UnexpectedStatus", { cause: { status: response.status } })
+        }
         const result: { readonly data: AttachmentInfo } | { readonly _tag: string; readonly message: string } =
-          await response.json()
-        if (!response.ok) throw result
+          await response.json().catch((cause) => {
+            throw new ClientError("MalformedResponse", { cause })
+          })
+        if (response.status !== 200) throw result
         if ("data" in result) return result.data
-        throw new Error(`Attachment upload failed with status ${response.status}`)
+        throw new ClientError("MalformedResponse")
       },
     },
   }

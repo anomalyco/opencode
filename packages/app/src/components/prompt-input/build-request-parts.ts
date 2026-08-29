@@ -210,6 +210,7 @@ export function buildRequestParts(input: BuildRequestPartsInput) {
   })
 
   requestParts.push(...files, ...context, ...agents, ...attachments)
+  // TODO(review): Give shared draft blob URLs explicit ownership before revoking them after optimistic replacement.
   const previews = new Map(input.attachments.map((attachment) => [attachment.uri, attachment.previewUrl]))
 
   return {
