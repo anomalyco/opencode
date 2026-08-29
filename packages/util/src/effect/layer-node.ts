@@ -229,7 +229,6 @@ export interface CompileOptions {
 }
 
 type Resolved = {
-  readonly name: string
   readonly implementation: RuntimeLayer
   readonly dependencies: readonly Resolved[]
   readonly shared: boolean
@@ -271,7 +270,6 @@ export function compile<A, E>(root: Graph<A, E>, options: CompileOptions = {}): 
         return definition.dependencies.flatMap((dependency) => resolve(dependency, isShared))
       if (definition.kind === "unbound") throw new Error(`Unbound layer node: ${definition.name}`)
       const node: Resolved = {
-        name: definition.name,
         implementation: definition.implementation,
         dependencies: definition.dependencies.flatMap((dependency) => resolve(dependency, isShared)),
         shared: isShared,
@@ -283,7 +281,9 @@ export function compile<A, E>(root: Graph<A, E>, options: CompileOptions = {}): 
           existing.dependencies.length !== node.dependencies.length ||
           existing.dependencies.some((dependency, index) => dependency !== node.dependencies[index])
         ) {
-          throw new Error(`Layer ${node.name} is wired to different dependencies; use a distinct implementation Layer`)
+          throw new Error(
+            `Layer ${definition.name} is wired to different dependencies; use a distinct implementation Layer`,
+          )
         }
         return [existing]
       }
