@@ -30,6 +30,9 @@ describe("Format", () => {
           const gofmt = statuses.find((item) => item.name === "gofmt")
           expect(gofmt).toBeDefined()
           expect(gofmt!.extensions).toContain(".go")
+          const pursTidy = statuses.find((item) => item.name === "purs-tidy")
+          expect(pursTidy).toBeDefined()
+          expect(pursTidy!.extensions).toContain(".purs")
         }),
       ),
     { config: { formatter: true } },
