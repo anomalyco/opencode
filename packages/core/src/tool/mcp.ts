@@ -2,7 +2,7 @@ export * as McpTool from "./mcp.js"
 
 import { ToolFailure } from "@opencode-ai/ai"
 import { McpEvent } from "@opencode-ai/schema/mcp-event"
-import { Context, Effect, Fiber, type JsonSchema, Layer, Semaphore, Stream } from "effect"
+import { Context, Deferred, Effect, Fiber, type JsonSchema, Layer, Ref, Semaphore, Stream } from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Bus } from "../bus.js"
 
@@ -32,6 +32,10 @@ export const layer = Layer.effect(
     const permission = yield* Permission.Service
     const lock = Semaphore.makeUnsafe(1)
     let discovered: Mcp.Tool[] = []
+
+    // Track pending reconcile operations so flush waits for them.
+    let pendingReconciles = 0
+    const reconcileWaiters: Array<Deferred.Deferred<void, never>> = []
 
     // Register once after initial discovery; only subsequent updates need a debounced reload.
     const initial = yield* lock
@@ -115,6 +119,7 @@ export const layer = Layer.effect(
         }),
       )
       .pipe(Effect.forkScoped)
+
     const reconcile = lock.withPermit(
       Effect.gen(function* () {
         discovered = yield* mcp.tools()
@@ -124,10 +129,34 @@ export const layer = Layer.effect(
 
     yield* bus.subscribe(McpEvent.ToolsChanged).pipe(
       // Each read loads the whole catalog, so queued notifications need only one refresh.
-      Stream.runForEachArray(() => reconcile),
+      Stream.runForEachArray(() =>
+        Effect.gen(function* () {
+          pendingReconciles++
+          const done = Deferred.makeUnsafe<void, never>()
+          const result = yield* reconcile.pipe(Effect.exit)
+          pendingReconciles--
+          // Notify all waiters that this reconcile completed
+          for (const waiter of reconcileWaiters) {
+            yield* Deferred.done(waiter, result)
+          }
+          reconcileWaiters.length = 0
+        }),
+      ),
       Effect.forkScoped({ startImmediately: true }),
     )
-    return Service.of({ flush: Effect.asVoid(Fiber.await(initial)) })
+
+    // flush waits for initial registration AND any pending reconcile operations
+    const flush = Effect.gen(function* () {
+      yield* Fiber.await(initial)
+      // If a reconcile is in-flight, wait for it
+      if (pendingReconciles > 0) {
+        const done = Deferred.makeUnsafe<void, never>()
+        reconcileWaiters.push(done)
+        yield* Deferred.await(done)
+      }
+    })
+
+    return Service.of({ flush })
   }),
 )
 
