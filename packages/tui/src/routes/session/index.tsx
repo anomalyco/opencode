@@ -3087,6 +3087,7 @@ type BlockToolProps = {
   onClick?: () => void
   part?: SessionMessageAssistantTool
   spinner?: boolean
+  error?: string
 }
 
 function BlockTool(props: BlockToolProps) {
@@ -3103,7 +3104,9 @@ function BlockToolContent(props: BlockToolProps & { borderColor: RGBA }) {
   const ctx = use()
   const renderer = useRenderer()
   const [hover, setHover] = createSignal(false)
-  const error = createMemo(() => (props.part?.state.status === "error" ? props.part.state.error.message : undefined))
+  const error = createMemo(
+    () => props.error ?? (props.part?.state.status === "error" ? props.part.state.error.message : undefined),
+  )
   const permission = useToolPermission(() => props.part)
   return (
     <box
@@ -3206,14 +3209,11 @@ function ShellDisplay(props: {
   const location = data.shell.get(props.shellID ?? "")?.location ?? data.session.get(ctx.sessionID)?.location
   const permission = useToolPermission(() => props.part)
   const color = createMemo(() => (permission() ? theme.text.feedback.warning.default : theme.text.default))
-  const shellID = () => props.shellID
-  const background = () => props.background
   const backgroundRunning = createMemo(() => {
-    const id = shellID()
+    const id = props.shellID
     return Boolean(id && data.shell.get(id))
   })
   const isRunning = createMemo(() => props.status === "running" || backgroundRunning())
-  const command = () => props.command
   const workdir = createMemo(() => pathFormatter.format(props.workdir))
   const [expanded, setExpanded] = createSignal(false)
   const [backgroundOutput, setBackgroundOutput] = createSignal("")
@@ -3223,7 +3223,8 @@ function ShellDisplay(props: {
   let cursor = 0
   let wasRunning = false
   const loadBackgroundOutput = async (drain = false) => {
-    const id = shellID()
+    if (props.status === "completed" && props.output !== undefined) return
+    const id = props.shellID
     if (!id) return
     if (loading) {
       if (drain) drainRequested = true
@@ -3270,15 +3271,15 @@ function ShellDisplay(props: {
       return
     }
     wasRunning = true
-    if (background() && !expanded()) return
+    if (props.background && !expanded()) return
     void loadBackgroundOutput()
     const interval = setInterval(() => void loadBackgroundOutput(), 1_000)
     onCleanup(() => clearInterval(interval))
   })
   const output = createMemo(() => {
     if (props.status === "streaming") return ""
-    if (shellID()) {
-      if (background() && !expanded()) return ""
+    if (props.shellID) {
+      if (props.background && !expanded()) return ""
       if (props.status === "completed" && props.output !== undefined) return stripAnsi(props.output.trim())
       const text = stripAnsi((backgroundOutput() || props.output || "").trim())
       return outputTruncated() ? `[earlier output omitted]\n${text}` : text
@@ -3288,7 +3289,7 @@ function ShellDisplay(props: {
   const maxLines = 10
   const maxChars = createMemo(() => maxLines * Math.max(20, ctx.width - 6))
   const prefix = createMemo(() => (workdir() && workdir() !== "." ? `cd ${workdir()} && ` : ""))
-  const input = createMemo(() => (command() ? `${isRunning() ? "" : "$ "}${prefix()}${command()}` : ""))
+  const input = createMemo(() => (props.command ? `${isRunning() ? "" : "$ "}${prefix()}${props.command}` : ""))
   const content = createMemo(() => [input(), output()].filter(Boolean).join("\n\n"))
   const collapsed = createMemo(() => collapseToolOutput(content(), maxLines, maxChars()))
   const limited = createMemo(() => {
@@ -3297,7 +3298,7 @@ function ShellDisplay(props: {
   })
   const limitedInput = createMemo(() => limited().slice(0, input().length))
   const limitedOutput = createMemo(() => limited().slice(Math.min(limited().length, input().length + 2)))
-  const expandable = createMemo(() => Boolean(shellID()) || collapsed().overflow)
+  const expandable = createMemo(() => Boolean(props.shellID) || collapsed().overflow)
   const toggle = () => {
     const next = !expanded()
     setExpanded(next)
@@ -3305,10 +3306,10 @@ function ShellDisplay(props: {
   }
 
   return (
-    <BlockTool part={props.part} onClick={expandable() ? toggle : undefined}>
+    <BlockTool part={props.part} error={props.error} onClick={expandable() ? toggle : undefined}>
       <box gap={1}>
         <Show
-          when={command()}
+          when={props.command}
           fallback={
             isRunning() || props.status === "streaming" ? (
               <Spinner color={color()}>Writing command…</Spinner>
@@ -3324,11 +3325,8 @@ function ShellDisplay(props: {
             <text fg={theme.text.subdued}>{limitedOutput()}</text>
           </Show>
         </Show>
-        <Show when={background()}>
+        <Show when={props.background}>
           <StatusBadge>Background</StatusBadge>
-        </Show>
-        <Show when={props.error}>
-          <text fg={theme.text.feedback.error.default}>{props.error}</text>
         </Show>
       </box>
     </BlockTool>

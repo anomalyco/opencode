@@ -752,26 +752,19 @@ const layer = Layer.effect(
           const completed = yield* Effect.gen(function* () {
             const shell = yield* Shell.Service
             const config = yield* Config.Service
-            const terminal = yield* shell.wait(started.id).pipe(
-              Effect.map((info) => ({ info, retained: true as const })),
-              Effect.catchTag("Shell.NotFoundError", () =>
-                Effect.succeed({ info: synthesizeTerminalShellInfo(started), retained: false as const }),
-              ),
-            )
-            const output = terminal.retained
-              ? yield* shell
-                  .output(started.id, { limit: SHELL_MAX_CAPTURE_BYTES })
-                  .pipe(Effect.catchTag("Shell.NotFoundError", () => Effect.succeed(missingShellOutput())))
-              : missingShellOutput()
-            const capture = terminal.retained
-              ? yield* ShellOutput.capture({
-                  shell,
-                  id: started.id,
-                  file: started.file,
-                  limits: Config.latest(yield* config.entries(), "tool_output"),
-                }).pipe(Effect.catchTag("Shell.NotFoundError", () => Effect.succeed(missingShellOutput())))
-              : missingShellOutput()
-            return { shell: terminal.info, output, capture }
+            const terminal = yield* shell
+              .wait(started.id)
+              .pipe(Effect.catchTag("Shell.NotFoundError", () => Effect.succeed(synthesizeTerminalShellInfo(started))))
+            const output = yield* shell
+              .output(started.id, { limit: SHELL_MAX_CAPTURE_BYTES })
+              .pipe(Effect.catchTag("Shell.NotFoundError", () => Effect.succeed(missingShellOutput())))
+            const capture = yield* ShellOutput.capture({
+              shell,
+              id: started.id,
+              file: started.file,
+              limits: Config.latest(yield* config.entries(), "tool_output"),
+            }).pipe(Effect.catchTag("Shell.NotFoundError", () => Effect.succeed(missingShellOutput())))
+            return { shell: terminal, output, capture }
           }).pipe(Effect.provide(locations.get(session.location)))
           yield* bus.publish(SessionEvent.Shell.Ended, {
             sessionID: input.sessionID,

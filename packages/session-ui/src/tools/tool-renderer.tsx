@@ -1475,7 +1475,14 @@ ToolRegistry.register({
       (typeof props.metadata.shellID === "string" && data.shellRunning?.(props.metadata.shellID) === true)
     const sawStreaming = streaming()
     const [streamed, setStreamed] = createSignal("")
+    // Direct-user terminal snapshots are authoritative; agent results can describe background shells.
+    const saved = createMemo(() =>
+      props.metadata.status === "exited" || props.metadata.status === "timeout" || props.metadata.status === "killed"
+        ? props.output
+        : undefined,
+    )
     createEffect(() => {
+      if (saved() !== undefined) return
       const id = props.metadata.shellID
       const shellOutput = data.shellOutput
       if (typeof id !== "string" || !shellOutput) return
@@ -1510,16 +1517,12 @@ ToolRegistry.register({
       if (typeof props.metadata.command === "string") return props.metadata.command
       return ""
     }
-    const output = createMemo(() => {
-      // Direct-user terminal snapshots are authoritative; agent results can describe background shells.
-      const completed =
-        props.metadata.status === "exited" || props.metadata.status === "timeout" || props.metadata.status === "killed"
-      return stripAnsi(
-        completed && props.output !== undefined
-          ? props.output
-          : (typeof props.metadata.shellID === "string" && streamed()) || props.output || "",
-      ).replace(/\r\n?/g, "\n")
-    })
+    const output = createMemo(() =>
+      stripAnsi(saved() ?? ((typeof props.metadata.shellID === "string" && streamed()) || props.output || "")).replace(
+        /\r\n?/g,
+        "\n",
+      ),
+    )
     return (
       <BasicTool
         {...props}
