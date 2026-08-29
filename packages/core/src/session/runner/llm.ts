@@ -29,7 +29,6 @@ import { SessionCompaction } from "../compaction"
 import { SessionEvent } from "../event"
 import { SessionHistory } from "../history"
 import { SessionInput } from "../input"
-import { SessionMessage } from "../message"
 import { SessionSchema } from "../schema"
 import { SessionStore } from "../store"
 import { type RunError, Service } from "./index"
@@ -41,24 +40,7 @@ import { Snapshot } from "../../snapshot"
 import { makeLocationNode } from "../../effect/app-node"
 import { llmClient } from "../../effect/app-node-platform"
 import { AttachmentStore } from "../../attachment-store"
-
-const resolveAttachmentPaths = Effect.fn("SessionRunner.resolveAttachmentPaths")(function* (
-  attachments: AttachmentStore.Interface,
-  sessionID: SessionSchema.ID,
-  context: readonly SessionMessage.Message[],
-) {
-  const managed = context.flatMap((message) =>
-    message.type === "user" ? (message.files ?? []).filter((file) => AttachmentStore.isManagedURI(file.uri)) : [],
-  )
-  const resolved = yield* Effect.forEach(managed, (file) => {
-    const attachmentID = AttachmentStore.attachmentID(file.uri)
-    if (!attachmentID) return Effect.fail(new AttachmentStore.ReferenceError({ sessionID }))
-    return attachments
-      .resolve({ sessionID, attachmentID })
-      .pipe(Effect.map((attachment) => [file.uri, attachment.path] satisfies readonly [string, string]))
-  })
-  return new Map(resolved)
-})
+import { materializeAttachments } from "./attachment-materialization"
 
 /**
  * Runs one durable coding-agent Session until it settles.
@@ -217,10 +199,17 @@ const layer = Layer.effect(
       }
       const system =
         initialized ?? (yield* SessionContextEpoch.prepare(db, events, loadSystemContext(agent), session.id))
-      const model = yield* models.resolve(session)
+      const selection = yield* models.resolve(session)
+      const model = selection.model
       const entries = yield* SessionHistory.entriesForRunner(db, session.id, system.baselineSeq)
       const context = entries.map((entry) => entry.message)
-      const attachmentPaths = yield* resolveAttachmentPaths(attachments, session.id, context)
+      const materialized = yield* materializeAttachments({
+        store: attachments,
+        sessionID: session.id,
+        model,
+        inputCapabilities: selection.inputCapabilities,
+        context,
+      })
       const isLastStep = agent.info?.steps !== undefined && currentStep >= agent.info.steps
       const toolMaterialization = isLastStep ? undefined : yield* tools.materialize(agent.info?.permissions)
       const promptCacheKey = /^ses_[0-9a-f]{64}$/.test(session.id) ? session.id.slice(4) : session.id
@@ -238,7 +227,7 @@ const layer = Layer.effect(
           .filter((part): part is string => part !== undefined && part.length > 0)
           .map(SystemPart.make),
         messages: [
-          ...toLLMMessages(context, model, attachmentPaths),
+          ...toLLMMessages(context, model, materialized.attachments),
           ...(isLastStep ? [Message.assistant(MAX_STEPS_PROMPT)] : []),
         ],
         tools: toolMaterialization?.definitions ?? [],
@@ -261,6 +250,10 @@ const layer = Layer.effect(
       const publish = (event: LLMEvent, outputPaths: ReadonlyArray<string> = []) =>
         withPublication(publisher.publish(event, outputPaths))
       let overflowFailure: ProviderErrorEvent | undefined
+      // Mark immediately before provider I/O for at-most-once delivery. Attachment metadata is the smallest durable marker.
+      yield* Effect.forEach(materialized.native, (attachment) =>
+        attachments.markNativeMediaDelivered({ sessionID: session.id, attachmentID: attachment.id }),
+      )
       const providerStream = llm.stream(request).pipe(
         Stream.runForEach((event) =>
           Effect.gen(function* () {

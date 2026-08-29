@@ -10,6 +10,20 @@ import {
 import { SessionMessage } from "../message"
 import type { FileAttachment } from "../prompt"
 
+export interface NativeAttachment {
+  readonly type: "media"
+  readonly path: string
+  readonly mime: string
+  readonly data: Uint8Array
+}
+
+export interface PathAttachment {
+  readonly type: "path"
+  readonly path: string
+}
+
+export type MaterializedAttachment = PathAttachment | NativeAttachment
+
 const media = (file: FileAttachment): ContentPart => ({
   type: "media",
   mediaType: file.mime,
@@ -18,12 +32,19 @@ const media = (file: FileAttachment): ContentPart => ({
   metadata: file.description === undefined ? undefined : { description: file.description },
 })
 
-const userFile = (file: FileAttachment, paths: ReadonlyMap<string, string>): ContentPart => {
-  const path = paths.get(file.uri)
-  if (!path) return media(file)
+const userFile = (file: FileAttachment, attachments: ReadonlyMap<string, MaterializedAttachment>): ContentPart => {
+  const attachment = attachments.get(file.uri)
+  if (!attachment) return media(file)
+  if (attachment.type === "media")
+    return {
+      type: "media",
+      mediaType: attachment.mime,
+      data: attachment.data,
+      filename: attachment.path,
+    }
   return {
     type: "text",
-    text: `Attached file: ${JSON.stringify({ name: file.name, path, mime: file.mime })}`,
+    text: `Attached file: ${JSON.stringify({ name: file.name, path: attachment.path, mime: file.mime })}`,
   }
 }
 
@@ -124,7 +145,7 @@ const assistant = (message: SessionMessage.Assistant, model: Model) => {
 function toLLMMessage(
   message: SessionMessage.Message,
   model: Model,
-  attachmentPaths: ReadonlyMap<string, string>,
+  attachments: ReadonlyMap<string, MaterializedAttachment>,
 ): Message[] {
   switch (message.type) {
     case "agent-switched":
@@ -137,7 +158,7 @@ function toLLMMessage(
           role: "user",
           content: [
             { type: "text", text: message.text },
-            ...(message.files ?? []).map((file) => userFile(file, attachmentPaths)),
+            ...(message.files ?? []).map((file) => userFile(file, attachments)),
           ],
           metadata: {
             ...message.metadata,
@@ -186,5 +207,5 @@ ${message.recent}
 export const toLLMMessages = (
   messages: readonly SessionMessage.Message[],
   model: Model,
-  attachmentPaths: ReadonlyMap<string, string> = new Map(),
-) => messages.flatMap((message) => toLLMMessage(message, model, attachmentPaths))
+  attachments: ReadonlyMap<string, MaterializedAttachment> = new Map(),
+) => messages.flatMap((message) => toLLMMessage(message, model, attachments))

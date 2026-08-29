@@ -480,6 +480,7 @@ const finishEvents = (state: ParserState): ReadonlyArray<LLMEvent> => {
  */
 export const protocol = Protocol.make({
   id: ADAPTER,
+  media: ProviderShared.mediaAdmission({ image: ProviderShared.IMAGE_MIMES }),
   body: {
     schema: OpenAIChatBody,
     from: fromRequest,

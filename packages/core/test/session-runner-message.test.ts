@@ -24,7 +24,13 @@ describe("toLLMMessages", () => {
       time: { created },
     })
 
-    expect(toLLMMessages([message], model, new Map([[uri, "/managed/session/att_test/report.csv"]]))).toEqual([
+    expect(
+      toLLMMessages(
+        [message],
+        model,
+        new Map([[uri, { type: "path", path: "/managed/session/att_test/report.csv" }]]),
+      ),
+    ).toEqual([
       Message.make({
         id: id("managed"),
         role: "user",

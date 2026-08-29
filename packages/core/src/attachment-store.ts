@@ -37,6 +37,7 @@ const Metadata = Schema.Struct({
   sha256: Schema.String,
   createdAt: NonNegativeInt,
   boundMessageID: SessionMessage.ID.pipe(Schema.optional),
+  nativeMediaDeliveredAt: NonNegativeInt.pipe(Schema.optional),
 })
 type Metadata = typeof Metadata.Type
 
@@ -65,6 +66,7 @@ export type Info = Attachment.Info
 
 export interface Resolved extends Attachment.Info {
   readonly path: string
+  readonly nativeMediaDelivered: boolean
 }
 
 export interface UploadInput<E, R> {
@@ -84,6 +86,10 @@ export interface Interface {
     readonly sessionID: SessionSchema.ID
     readonly attachmentID: Attachment.ID
     readonly messageID: SessionMessage.ID
+  }) => Effect.Effect<Resolved, ReferenceError | StorageError>
+  readonly markNativeMediaDelivered: (input: {
+    readonly sessionID: SessionSchema.ID
+    readonly attachmentID: Attachment.ID
   }) => Effect.Effect<Resolved, ReferenceError | StorageError>
   readonly remove: (input: {
     readonly sessionID: SessionSchema.ID
@@ -357,6 +363,7 @@ const makeLayer = (options: { readonly limits?: Partial<Limits>; readonly now?: 
           mime: metadata.detectedMime,
           size: metadata.size,
           path: real,
+          nativeMediaDelivered: metadata.nativeMediaDeliveredAt !== undefined,
         }
       })
 
@@ -481,27 +488,43 @@ const makeLayer = (options: { readonly limits?: Partial<Limits>; readonly now?: 
 
       const resolve: Interface["resolve"] = read
 
+      const updateMetadata = Effect.fn("AttachmentStore.updateMetadata")(function* (
+        input: { readonly sessionID: SessionSchema.ID; readonly attachmentID: Attachment.ID },
+        update: (metadata: Metadata) => Metadata,
+      ) {
+        const resolved = yield* read(input)
+        const directory = attachmentDirectory(root, input.sessionID, input.attachmentID)
+        const metadata = yield* readStoredMetadata(path.join(directory, metadataName)).pipe(
+          Effect.mapError(() => new ReferenceError({ ...input })),
+        )
+        const next = update(metadata)
+        if (next === metadata) return resolved
+        yield* fs
+          .writeFileString(path.join(directory, metadataUploadName), JSON.stringify(next, null, 2), {
+            flag: "wx",
+            mode: 0o600,
+          })
+          .pipe(Effect.mapError((cause) => storage("write", cause)))
+        yield* fs
+          .rename(path.join(directory, metadataUploadName), path.join(directory, metadataName))
+          .pipe(Effect.mapError((cause) => storage("rename", cause)))
+        return { ...resolved, nativeMediaDelivered: next.nativeMediaDeliveredAt !== undefined }
+      })
+
       const bind: Interface["bind"] = (input) =>
         locks.withLock(input.sessionID)(
-          Effect.gen(function* () {
-            const resolved = yield* read(input)
-            const directory = attachmentDirectory(root, input.sessionID, input.attachmentID)
-            const metadata = yield* readStoredMetadata(path.join(directory, metadataName)).pipe(
-              Effect.mapError(() => new ReferenceError({ ...input })),
-            )
-            if (metadata.boundMessageID) return resolved
-            yield* fs
-              .writeFileString(
-                path.join(directory, metadataUploadName),
-                JSON.stringify({ ...metadata, boundMessageID: input.messageID }, null, 2),
-                { flag: "wx", mode: 0o600 },
-              )
-              .pipe(Effect.mapError((cause) => storage("write", cause)))
-            yield* fs
-              .rename(path.join(directory, metadataUploadName), path.join(directory, metadataName))
-              .pipe(Effect.mapError((cause) => storage("rename", cause)))
-            return resolved
-          }),
+          updateMetadata(input, (metadata) =>
+            metadata.boundMessageID ? metadata : { ...metadata, boundMessageID: input.messageID },
+          ),
+        )
+
+      const markNativeMediaDelivered: Interface["markNativeMediaDelivered"] = (input) =>
+        locks.withLock(input.sessionID)(
+          updateMetadata(input, (metadata) =>
+            metadata.nativeMediaDeliveredAt === undefined
+              ? { ...metadata, nativeMediaDeliveredAt: now() }
+              : metadata,
+          ),
         )
 
       const remove: Interface["remove"] = (input) =>
@@ -581,7 +604,7 @@ const makeLayer = (options: { readonly limits?: Partial<Limits>; readonly now?: 
         yield* quota.withPermit(Effect.sync(() => (state.usage = undefined)))
       })
 
-      return Service.of({ upload, resolve, bind, remove, cleanup })
+      return Service.of({ upload, resolve, bind, markNativeMediaDelivered, remove, cleanup })
     }),
   )
 

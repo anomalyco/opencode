@@ -17,6 +17,7 @@ const bytes = (size: number, value = 1) => new Uint8Array(size).fill(value)
 const stat = (target: string) => Effect.promise(() => fs.stat(target))
 const readDirectory = (target: string) => Effect.promise(() => fs.readdir(target))
 const readBytes = (target: string) => Effect.promise(() => Bun.file(target).bytes())
+const readJson = (target: string) => Effect.promise(() => Bun.file(target).json())
 const attachmentDirectoryName = (name: string) => name.startsWith("att_")
 const sequence = (length: number, offset: number) => Array.from({ length }, (_, index) => index + offset)
 const infoName = (info: AttachmentStore.Info) => info.name
@@ -258,6 +259,32 @@ describe("AttachmentStore", () => {
       }),
     ),
   )
+
+  it.live("persists native media delivery state", () => {
+    const clock = { now: 42 }
+    return withStore(
+      Effect.gen(function* () {
+        const store = yield* AttachmentStore.Service
+        const info = yield* upload(store, first, "image.png", [
+          new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+        ])
+        expect(yield* store.resolve({ sessionID: first, attachmentID: info.id })).toMatchObject({
+          nativeMediaDelivered: false,
+        })
+
+        const marked = yield* store.markNativeMediaDelivered({ sessionID: first, attachmentID: info.id })
+        expect(marked.nativeMediaDelivered).toBe(true)
+        expect(yield* store.resolve({ sessionID: first, attachmentID: info.id })).toMatchObject({
+          nativeMediaDelivered: true,
+        })
+        const metadata = yield* readJson(path.join(path.dirname(marked.path), "metadata.json"))
+        expect(metadata).toMatchObject({
+          nativeMediaDeliveredAt: 42,
+        })
+      }),
+      { now: () => clock.now },
+    )
+  })
 
   it.live("removes expired unbound uploads and preserves bound uploads", () => {
     const clock = { now: 0 }
