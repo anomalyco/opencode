@@ -117,3 +117,40 @@ serviceIt.live("refreshes changed manifests", () =>
     ({ server }) => Effect.promise(() => server.stop(true)),
   ),
 )
+
+serviceIt.live("keeps healthy origins when another is unreachable", () =>
+  Effect.acquireUseRelease(
+    Effect.sync(() =>
+      Bun.serve({
+        port: 0,
+        fetch: () => Response.json({ auth: { command: ["login"], env: "TOKEN" } }),
+      }),
+    ),
+    (server) =>
+      Effect.gen(function* () {
+        const wellknown = yield* WellKnown.Service
+        const kv = yield* KV.Service
+        // Port 1 is closed, standing in for a torn-down deployment still listed in sources.
+        yield* kv.set("wellknown:sources", ["http://127.0.0.1:1", server.url.origin])
+
+        expect((yield* wellknown.entries()).map((entry) => entry.origin)).toEqual([server.url.origin])
+        expect(wellknown.snapshot().map((entry) => entry.origin)).toEqual([server.url.origin])
+      }),
+    (server) => Effect.promise(() => server.stop(true)),
+  ),
+)
+
+serviceIt.live("keeps the last manifest when an origin becomes unreachable", () =>
+  Effect.gen(function* () {
+    const server = Bun.serve({ port: 0, fetch: () => Response.json({ auth: { command: ["login"], env: "TOKEN" } }) })
+    const wellknown = yield* WellKnown.Service
+    const kv = yield* KV.Service
+    yield* kv.set("wellknown:sources", [server.url.origin])
+    yield* wellknown.entries()
+    yield* Effect.promise(() => server.stop(true))
+
+    // A temporary outage must not drop the integration and its remote config mid-session.
+    expect(yield* wellknown.refresh()).toBe(false)
+    expect(wellknown.snapshot().map((entry) => entry.origin)).toEqual([server.url.origin])
+  }),
+)

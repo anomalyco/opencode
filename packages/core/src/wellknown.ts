@@ -111,15 +111,25 @@ const layer = Layer.effect(
       return { origin, integrationID: Integration.ID.make(origin), manifest }
     })
 
-    const load = Effect.fn("WellKnown.load")(function* () {
-      const value = yield* kv.get(sourcesKey)
-      const origins = Schema.is(Sources)(value) ? value : []
-      const current = yield* Ref.get(cache)
+    const loadEntries = Effect.fn("WellKnown.loadEntries")(function* (origins: readonly string[], reuse: boolean) {
+      const current = Ref.getUnsafe(cache)
       const entries = yield* Effect.forEach(origins, (origin) => {
         const cached = current.get(origin)
-        if (cached) return Effect.succeed(cached)
-        return loadEntry(origin)
+        if (cached && reuse) return Effect.succeed(cached)
+        // An unreachable origin keeps its last known manifest, or is skipped when nothing is
+        // cached. One torn-down deployment must not hide every other origin's integrations.
+        return loadEntry(origin).pipe(
+          Effect.catch((error) =>
+            Effect.logWarning("failed to load wellknown manifest", { origin, error }).pipe(Effect.as(cached)),
+          ),
+        )
       })
+      return entries.filter((entry): entry is Entry => entry !== undefined)
+    })
+
+    const load = Effect.fn("WellKnown.load")(function* () {
+      const value = yield* kv.get(sourcesKey)
+      const entries = yield* loadEntries(Schema.is(Sources)(value) ? value : [], true)
       yield* Ref.set(cache, new Map(entries.map((entry) => [entry.origin, entry])))
       return entries
     })
@@ -129,7 +139,7 @@ const layer = Layer.effect(
         const value = yield* kv.get(sourcesKey)
         const origins = Schema.is(Sources)(value) ? value : []
         if (!origins.length) return false
-        const entries = yield* Effect.forEach(origins, loadEntry)
+        const entries = yield* loadEntries(origins, false)
         const next = new Map(entries.map((entry) => [entry.origin, entry]))
         const changed = !isDeepStrictEqual(Ref.getUnsafe(cache), next)
         if (!changed) return false

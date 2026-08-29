@@ -10,7 +10,11 @@ export const Plugin = define({
   effect: Effect.fn(function* (ctx) {
     const bus = yield* Bus.Service
     const wellknown = yield* WellKnown.Service
-    yield* wellknown.entries().pipe(Effect.orDie)
+    // Priming the cache is best effort. Failing here would abort the plugin before it registers
+    // its transform, permanently hiding every well-known integration until the next restart.
+    yield* wellknown
+      .entries()
+      .pipe(Effect.catch((error) => Effect.logWarning("failed to load wellknown entries", { error })))
     yield* ctx.integration.transform((draft) => {
       wellknown.snapshot().forEach((entry) => {
         if (!entry.manifest.auth) return
