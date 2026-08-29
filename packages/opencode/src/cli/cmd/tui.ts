@@ -188,6 +188,13 @@ export const TuiThreadCommand = cmd({
 
     const unguard = win32InstallCtrlCGuard()
     try {
+      const prompt = await input(args.prompt)
+      if (!process.stdin.isTTY && !prompt) {
+        UI.error("TUI requires an interactive terminal when no prompt is provided; use `opencode run` instead")
+        process.exitCode = 1
+        return
+      }
+
       const { TuiConfig } = await import("@/config/tui")
       if (args.fork && !args.continue && !args.session) {
         UI.error("--fork requires --continue or --session")
@@ -227,7 +234,6 @@ export const TuiThreadCommand = cmd({
         worker.terminate()
       }
 
-      const prompt = await input(args.prompt)
       const config = await TuiConfig.get()
 
       const network = resolveNetworkOptionsNoConfig(args)
