@@ -36,8 +36,7 @@ export function useUsageExceededDialogs() {
   const sdk = useWorkspaceLocation()
   const dialog = useDialog()
   const { params } = useSessionLayout()
-  const { t, locale } = useI18n()
-  const isEnglish = () => locale() === "en"
+  const { tDynamic } = useI18n()
 
   const [goUpsellState, setGoUpsellState] = persisted(
     Persist.global("go-upsell"),
@@ -67,9 +66,9 @@ export function useUsageExceededDialogs() {
       if (action.reason === "free_tier_limit") {
         dialog.show(() => (
           <DialogUsageExceeded
-            title={isEnglish() ? action.title : t("dialog.usageExceeded.freeTier.title")}
-            description={isEnglish() ? action.message : t("dialog.usageExceeded.freeTier.description")}
-            actionLabel={isEnglish() ? action.label : t("dialog.usageExceeded.freeTier.actionLabel")}
+            title={tDynamic("dialog.usageExceeded.freeTier.title", action.title)}
+            description={tDynamic("dialog.usageExceeded.freeTier.description", action.message)}
+            actionLabel={tDynamic("dialog.usageExceeded.freeTier.actionLabel", action.label)}
             link={action.link}
             onClose={(dontShowAgain) => {
               setGoUpsellState(keys.lastSeenAt, Date.now())
@@ -87,9 +86,9 @@ export function useUsageExceededDialogs() {
       } else if (action.reason === "account_rate_limit") {
         dialog.show(() => (
           <DialogUsageExceeded
-            title={isEnglish() ? action.title : t("dialog.usageExceeded.accountRateLimit.title")}
-            description={isEnglish() ? action.message : t("dialog.usageExceeded.accountRateLimit.description")}
-            actionLabel={isEnglish() ? action.label : t("dialog.usageExceeded.accountRateLimit.actionLabel")}
+            title={tDynamic("dialog.usageExceeded.accountRateLimit.title", action.title)}
+            description={tDynamic("dialog.usageExceeded.accountRateLimit.description", action.message)}
+            actionLabel={tDynamic("dialog.usageExceeded.accountRateLimit.actionLabel", action.label)}
             link={action.link}
             onClose={(dontShowAgain) => {
               setGoUpsellState(keys.lastSeenAt, Date.now())

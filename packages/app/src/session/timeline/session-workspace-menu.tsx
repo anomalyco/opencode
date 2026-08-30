@@ -106,7 +106,7 @@ export function SessionWorkspaceMenu(props: {
               <Menu.Sub gutter={0} overlap overflowPadding={8}>
                 <Menu.SubTrigger>
                   <Icon name="workspace-isolated" />
-                  {language.t("session.new.workspace.existing").replace(/(…|\.{3})$/, "")}
+                  {language.t("session.new.workspace.existingLabel")}
                 </Menu.SubTrigger>
                 <Menu.Portal>
                   <Menu.SubContent class="max-h-[calc(100dvh-16px)] w-[200px] overflow-y-auto">

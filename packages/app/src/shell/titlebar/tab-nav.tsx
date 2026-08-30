@@ -34,6 +34,7 @@ export function TabNavItem(props: {
   hidden?: boolean
   orientation?: "horizontal" | "vertical"
 }) {
+  const language = useLanguage()
   const [editing, setEditing] = createSignal(false)
   const [titleOverflowing, setTitleOverflowing] = createSignal(false)
   let tabRoot!: HTMLDivElement
@@ -301,6 +302,7 @@ export function TabNavItem(props: {
           }}
           onClick={closeTab}
           icon={<Icon name="xmark-small" />}
+          aria-label={language.t("common.closeTab")}
         />
       </div>
     </div>

@@ -214,6 +214,8 @@ export const dict = {
 
   "provider.disconnect.toast.disconnected.title": "{{provider}} disconnected",
   "provider.disconnect.toast.disconnected.description": "{{provider}} models are no longer available.",
+  "provider.disconnect.toast.noCredentials.description": "No removable credentials found for {{provider}}.",
+  "provider.disconnect.toast.failed.description": "Failed to disconnect {{provider}}.",
 
   "model.tag.free": "Free",
   "model.tag.latest": "Latest",
@@ -572,6 +574,8 @@ export const dict = {
   "toast.session.listFailed.title": "Failed to load sessions for {{project}}",
   "toast.project.reloadFailed.title": "Failed to reload {{project}}",
   "toast.migration.failed.title": "Data migration failed",
+  "toast.migration.progress.clearingOldEvents": "Clearing old events",
+  "toast.migration.progress.migratingSessions": "Migrating sessions",
 
   "toast.update.title": "Update available",
   "toast.update.description": "A new version of OpenCode ({{version}}) is now available to install.",
@@ -672,17 +676,10 @@ export const dict = {
   "session.error.incompatible": "This server version isn't supported",
   "session.error.incompatible.description":
     "{{server}} is running OpenCode {{version}}, which isn't compatible with this app. Upgrade the server to OpenCode V2 to continue.",
-  "session.background.moveTasks": "Move {{tasks}} to background",
-  "session.background.inBackground": "Running {{tasks}} in background",
   "session.background.moveInline": "Press {{keybind}} to move running work to the background",
   "session.background.running": "Running work in background",
   "session.background.runningCount.one": "{{count}} item running in background",
   "session.background.runningCount.other": "{{count}} items running in background",
-  "session.background.combine": "{{first}} and {{second}}",
-  "session.background.shell.one": "{{count}} shell",
-  "session.background.shell.other": "{{count}} shells",
-  "session.background.subagent.one": "{{count}} subagent",
-  "session.background.subagent.other": "{{count}} subagents",
   "command.session.background": "Move to background",
   "session.queue.count.one": "{{count}} queued",
   "session.queue.count.other": "{{count}} queued",
@@ -745,6 +742,7 @@ export const dict = {
   "session.new.workspace.triggerLocal": "Local",
   "session.new.workspace.local": "Local repository",
   "session.new.workspace.existing": "Workspace…",
+  "session.new.workspace.existingLabel": "Workspace",
   "session.new.git.none": "No Git",
   "session.new.lastModified": "Last modified",
 
