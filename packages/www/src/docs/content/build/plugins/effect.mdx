@@ -12,7 +12,7 @@ bun add @opencode-ai/plugin@beta effect
 
 Export an Effect plugin from `.opencode/plugins/` to load it automatically.
 
-```ts title=".opencode/plugins/concise.ts"
+```ts title=".opencode/plugins/concise/index.ts"
 import { Plugin } from "@opencode-ai/plugin/effect"
 import { Effect } from "effect"
 
@@ -26,7 +26,7 @@ export default Plugin.define({
 })
 ```
 
-Published packages and files outside `.opencode/plugins/` use the same `plugins` configuration as other server
+Published packages and plugin directories outside `.opencode/plugins/` use the same `plugins` configuration as other server
 plugins.
 
 ```jsonc title="opencode.jsonc"
@@ -36,7 +36,7 @@ plugins.
     "opencode-acme-effect-plugin",
     "opencode-acme-effect-plugin@1.2.0",
     "@acme/opencode-effect-plugin",
-    "./plugins/local-effect.ts",
+    "./plugins/local-effect",
     {
       "package": "@acme/opencode-effect-plugin",
       "options": { "agent": "reviewer", "strict": true },
@@ -47,7 +47,7 @@ plugins.
 
 See [Configure plugins](/plugins) for enablement, package resolution, and configuration precedence.
 
-```ts title="plugins/local-effect.ts"
+```ts title="plugins/local-effect/index.ts"
 import { Plugin } from "@opencode-ai/plugin/effect"
 import { Effect } from "effect"
 
@@ -145,7 +145,7 @@ Pass options with the object form in `opencode.json(c)`.
 {
   "plugins": [
     {
-      "package": "./plugins/company-effect.ts",
+      "package": "./plugins/company-effect",
       "options": { "strict": true },
     },
   ],
@@ -154,7 +154,7 @@ Pass options with the object form in `opencode.json(c)`.
 
 Read options from `ctx.options`. Narrow unknown values before use.
 
-```ts title="plugins/company-effect.ts"
+```ts title="plugins/company-effect/index.ts"
 import { Plugin } from "@opencode-ai/plugin/effect"
 import { Effect } from "effect"
 
@@ -173,7 +173,7 @@ export default Plugin.define({
 Transforms synchronously edit a mutable draft. OpenCode applies transforms in plugin order, so later transforms see
 earlier changes. Yielding the registration keeps it in the plugin scope.
 
-```ts title="plugins/models-effect.ts"
+```ts title="plugins/models-effect/index.ts"
 import { Plugin } from "@opencode-ai/plugin/effect"
 import { Effect } from "effect"
 
@@ -194,7 +194,7 @@ export default Plugin.define({
 
 A later transform can enforce policy across the composed catalog.
 
-```ts title="plugins/model-budget-effect.ts"
+```ts title="plugins/model-budget-effect/index.ts"
 effect: (ctx) =>
   Effect.gen(function* () {
     const catalog = ctx.catalog
@@ -212,7 +212,7 @@ effect: (ctx) =>
 
 Call `reload` when external state used by a transform changes. Reload replays every transform in order.
 
-```ts title="plugins/models-effect.ts"
+```ts title="plugins/models-effect/index.ts"
 effect: (ctx) =>
   Effect.gen(function* () {
     const catalog = ctx.catalog

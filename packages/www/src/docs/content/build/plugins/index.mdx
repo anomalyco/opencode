@@ -5,7 +5,7 @@ title: "Overview"
 Plugins can modify OpenCode's behavior and add new features. To change the terminal UI, build a [CLI
 plugin](/build/plugins/cli).
 
-```ts title=".opencode/plugins/example.ts"
+```ts title=".opencode/plugins/example/index.ts"
 import { Plugin } from "@opencode-ai/plugin"
 
 export default Plugin.define({
@@ -17,7 +17,7 @@ export default Plugin.define({
 ```
 
 Plugins under `.opencode/plugins/` are loaded automatically, like the local example above. To load published packages
-or files from other locations, add them to `plugins` in `opencode.json(c)`:
+or plugin directories from other locations, add them to `plugins` in `opencode.json(c)`:
 
 ```jsonc title="opencode.jsonc"
 {
@@ -26,10 +26,10 @@ or files from other locations, add them to `plugins` in `opencode.json(c)`:
     "opencode-acme-plugin",
     "opencode-acme-plugin@1.2.0",
     "@acme/opencode-plugin",
-    "./plugins/local.ts",
-    "../shared/plugin.ts",
-    "/absolute/path/plugin.ts",
-    "file:///home/me/plugins/local.ts",
+    "./plugins/local",
+    "../shared/plugin",
+    "/absolute/path/plugin",
+    "file:///home/me/plugins/local",
     {
       "package": "@acme/opencode-plugin",
       "options": {
@@ -93,7 +93,7 @@ Pass plugin options with the object form in `opencode.json(c)`.
 {
   "plugins": [
     {
-      "package": "./plugins/company.ts",
+      "package": "./plugins/company",
       "options": {
         "strict": true,
       },
@@ -104,7 +104,7 @@ Pass plugin options with the object form in `opencode.json(c)`.
 
 Read those values from `ctx.options` during `setup`.
 
-```ts title="plugins/company.ts"
+```ts title="plugins/company/index.ts"
 import { Plugin } from "@opencode-ai/plugin"
 
 export default Plugin.define({
@@ -122,7 +122,7 @@ transforms and each builds on the changes made before it.
 
 Say we have a plugin that adds one model to the catalog.
 
-```ts title="plugins/models.ts"
+```ts title="plugins/models/index.ts"
 import { Plugin } from "@opencode-ai/plugin"
 
 export default Plugin.define({
@@ -140,7 +140,7 @@ export default Plugin.define({
 
 A later plugin can enforce a maximum output price across every model, including models added by earlier plugins.
 
-```ts title="plugins/model-budget.ts"
+```ts title="plugins/model-budget/index.ts"
 import { Plugin } from "@opencode-ai/plugin"
 
 export default Plugin.define({
@@ -162,7 +162,7 @@ export default Plugin.define({
 Now say the first plugin dynamically fetches can fetch its model list from a
 dynamic source. It can call `reload` when that list changes.
 
-```ts title="plugins/models.ts"
+```ts title="plugins/models/index.ts"
 import { Plugin } from "@opencode-ai/plugin"
 
 export default Plugin.define({

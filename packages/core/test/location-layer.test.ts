@@ -347,7 +347,7 @@ describe("LocationServiceMap", () => {
           yield* Effect.promise(() =>
             fs.writeFile(
               file,
-              JSON.stringify({ plugins: [path.join(import.meta.dir, "plugin/fixtures/config-effect-plugin.ts")] }),
+              JSON.stringify({ plugins: [path.join(import.meta.dir, "plugin/fixtures/config-effect")] }),
             ),
           )
           yield* Fiber.join(updated)
@@ -561,7 +561,7 @@ describe("LocationServiceMap", () => {
               fs.writeFile(
                 file,
                 JSON.stringify({
-                  plugins: ["-*", path.join(import.meta.dir, "plugin/fixtures/failing-plugin.ts")],
+                  plugins: ["-*", path.join(import.meta.dir, "plugin/fixtures/failing")],
                 }),
               ),
             )
@@ -572,7 +572,7 @@ describe("LocationServiceMap", () => {
             expect(yield* registry.list()).toEqual([
               {
                 id: Plugin.ID.make("failing-plugin"),
-                source: { type: "local", path: path.join(import.meta.dir, "plugin/fixtures/failing-plugin.ts") },
+                source: { type: "local", path: path.join(import.meta.dir, "plugin/fixtures/failing/index.ts") },
                 status: "failed",
                 error: expect.stringContaining("plugin failed"),
                 tui: false,

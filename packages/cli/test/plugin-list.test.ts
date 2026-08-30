@@ -19,6 +19,12 @@ test("formats server and TUI plugins in sections without builtins", () => {
           error: "broken",
           tui: false,
         },
+        {
+          id: "local.dual",
+          source: { type: "local", path: "/tmp/local/index.ts" },
+          status: "active",
+          tui: true,
+        },
       ],
       [
         { target: "tui-only", source: "configured" },
@@ -28,6 +34,7 @@ test("formats server and TUI plugins in sections without builtins", () => {
   ).toBe(
     [
       "TUI",
+      "/tmp/local (advertised)",
       "/tmp/local.ts (discovered)",
       "acme-plugin@1.0.0 (advertised)",
       "tui-only (configured)",
@@ -35,6 +42,7 @@ test("formats server and TUI plugins in sections without builtins", () => {
       "Server",
       "acme.dual (active)",
       "broken-plugin (failed)",
+      "local.dual (active)",
     ].join(EOL),
   )
 })
