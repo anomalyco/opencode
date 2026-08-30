@@ -156,12 +156,11 @@ const scan = Effect.fnUntraced(function* (
       }),
     catch: (error) => error,
   }).pipe(
-    Effect.catch((error) => {
-      if (!opts?.scope) return Effect.die(error)
-      return Effect.logError(`failed to scan ${opts.scope} skills`, { dir: root, error: error }).pipe(
+    Effect.catch((error) =>
+      Effect.logError(`failed to scan ${opts?.scope ?? "project"} skills`, { dir: root, error: error }).pipe(
         Effect.as([] as string[]),
-      )
-    }),
+      ),
+    ),
   )
 
   for (const match of matches) {
