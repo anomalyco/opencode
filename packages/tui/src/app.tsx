@@ -85,6 +85,7 @@ import { createTuiAttention } from "./attention"
 import * as TuiAudio from "./audio"
 import { win32DisableProcessedInput, win32FlushInputBuffer } from "./terminal-win32"
 import { destroyRenderer } from "./util/renderer"
+import { openableUrlAt } from "./util/hyperlink"
 import { cliErrorMessage, errorFormat } from "./util/error"
 
 registerOpencodeSpinner()
@@ -1084,6 +1085,9 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     return render({ params: route.data.data })
   })
 
+  let mouseDownX = Number.NaN
+  let mouseDownY = Number.NaN
+
   return (
     <box
       width={dimensions().width}
@@ -1091,6 +1095,8 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       flexDirection="column"
       backgroundColor={theme.background}
       onMouseDown={(evt) => {
+        mouseDownX = evt.x
+        mouseDownY = evt.y
         if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
         if (evt.button !== MouseButton.RIGHT) return
 
@@ -1098,11 +1104,21 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         evt.preventDefault()
         evt.stopPropagation()
       }}
-      onMouseUp={
-        !Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT
-          ? () => Selection.copy(renderer, toast, clipboard)
-          : undefined
-      }
+      onMouseUp={(evt) => {
+        const clicked = evt.x === mouseDownX && evt.y === mouseDownY
+        if (clicked && evt.button === MouseButton.LEFT) {
+          // Mouse capture swallows native OSC 8 activation, including in Terminal.app.
+          const url = openableUrlAt(renderer.currentRenderBuffer, evt.x, evt.y)
+          if (url) {
+            renderer.clearSelection()
+            open(url).catch(() => {})
+            return
+          }
+        }
+        if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) {
+          Selection.copy(renderer, toast, clipboard)
+        }
+      }}
     >
       <Show when={Flag.OPENCODE_SHOW_TTFD}>
         <TimeToFirstDraw />
