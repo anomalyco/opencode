@@ -2,7 +2,7 @@ export * as FileSystemSearch from "./search.js"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import path from "path"
-import { Clock, Context, Deferred, Duration, Effect, Layer, Schema, Scope } from "effect"
+import { Clock, Context, Deferred, Duration, Effect, Exit, Layer, Schema, Scope } from "effect"
 import { Fff } from "#fff"
 import fuzzysort from "fuzzysort"
 import { FileSystem } from "@opencode-ai/schema/filesystem"
@@ -117,7 +117,11 @@ export const fffLayer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const location = yield* Location.Service
-    const result = yield* Effect.try({
+    // Defer FFF initialization to a background fiber — the native fff_create_instance_with
+    // FFI call performs a synchronous filesystem scan that can block for 50+ seconds on
+    // large monorepos. By deferring it, location acquisition completes immediately and
+    // the FFF handle is populated lazily on first search.
+    const deferredResult = yield* Effect.try({
       try: () =>
         Fff.create({
           basePath: location.directory,
@@ -128,17 +132,19 @@ export const fffLayer = Layer.effect(
       catch: (cause) => cause,
     }).pipe(
       Effect.catch((error) => Effect.logWarning("failed to initialize fff", { error }).pipe(Effect.as(undefined))),
+      Effect.fork,
     )
-    if (!result?.ok) {
-      if (result) yield* Effect.logWarning("failed to initialize fff", { error: result.error })
-      return Service.of({
-        find: () => Effect.succeed([]),
-      })
-    }
-    yield* Effect.addFinalizer(() => Effect.sync(() => result.value.destroy()).pipe(Effect.ignore))
+    // Return a stub service immediately — searches will block until FFF is ready
+    const ready = Effect.gen(function* () {
+      const exit = yield* Effect.join(deferredResult)
+      if (Exit.isFailure(exit)) return undefined
+      return Exit.value(exit)
+    })
     return Service.of({
       find: (input) =>
-        Effect.sync(() => {
+        Effect.gen(function* () {
+          const result = yield* ready
+          if (!result?.ok) return []
           const options = { pageIndex: 0, pageSize: input.limit ?? 50 }
           const items = (() => {
             if (input.type === "file") {
