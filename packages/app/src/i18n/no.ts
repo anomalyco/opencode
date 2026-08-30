@@ -191,6 +191,9 @@ export const dict = {
   "command.session.unshare": "Slutt å dele sesjon",
   "command.session.unshare.description": "Slutt å dele denne sesjonen",
 
+  "command.session.export": "Eksporter sesjon",
+  "command.session.export.description": "Eksporter hele sesjonsutskriften som JSON",
+
   "palette.search.placeholder": "Søk i filer, kommandoer og sesjoner",
   "palette.search.placeholder.home": "Søk i kommandoer og sesjoner",
   "palette.empty": "Ingen resultater funnet",
@@ -470,6 +473,8 @@ export const dict = {
   "dialog.project.edit.worktree.startup.description": "Kjører etter at et nytt arbeidsområde (worktree) er opprettet.",
   "dialog.project.edit.worktree.startup.placeholder": "f.eks. bun install",
 
+  "dialog.usageExceeded.dontShowAgain": "Ikke vis igjen",
+
   "context.breakdown.title": "Kontekstfordeling",
   "context.breakdown.note":
     'Omtrentlig fordeling av inndatatokener. "Annet" inkluderer verktøydefinisjoner og overhead.',
@@ -481,6 +486,8 @@ export const dict = {
 
   "context.systemPrompt.title": "Systemprompt",
   "context.rawMessages.title": "Rå meldinger",
+
+  "context.export.session": "Eksporter sesjon",
 
   "context.stats.session": "Sesjon",
   "context.stats.messages": "Meldinger",
@@ -558,6 +565,11 @@ export const dict = {
   "toast.session.unshare.success.description": "Sesjonen deles ikke lenger!",
   "toast.session.unshare.failed.title": "Kunne ikke stoppe deling av sesjon",
   "toast.session.unshare.failed.description": "Det oppstod en feil da delingen av sesjonen skulle stoppes",
+
+  "toast.session.export.success.title": "Sesjon eksportert",
+  "toast.session.export.success.description": "Sesjonen ble lagret i {{filename}}",
+  "toast.session.export.failed.title": "Kunne ikke eksportere sesjon",
+  "toast.session.export.failed.description": "Det oppstod en feil under eksport av sesjonen",
 
   "toast.session.listFailed.title": "Kunne ikke laste sesjoner for {{project}}",
 
@@ -721,6 +733,7 @@ export const dict = {
   "common.moreOptions": "Flere alternativer",
   "common.learnMore": "Lær mer",
   "common.rename": "Gi nytt navn",
+  "common.export": "Eksporter",
   "common.reset": "Tilbakestill",
   "common.archive": "Arkiver",
   "common.delete": "Slett",
@@ -1037,6 +1050,14 @@ export const dict = {
   "debugBar.mem.label": "MEM",
   "debugBar.mem.tipUnavailable": "Brukt JS-heap kontra heap-grense. Kun Chromium.",
   "debugBar.mem.tip": "Brukt JS-heap kontra heap-grense. {{used}} av {{limit}}.",
+  "debugBar.focus.label": "FOCUS",
+  "debugBar.focus.tip": "Tving fokusstiler på alle interaktive elementer",
+  "debugBar.focus.on": "PÅ",
+  "debugBar.focus.off": "AV",
+  "debugBar.direction.label": "DIR",
+  "debugBar.direction.tip": "Tving layoutretningen for hele appen uten å endre valgt språk",
+  "debugBar.direction.ltr": "LTR",
+  "debugBar.direction.rtl": "RTL",
   "common.key.ctrl": "Ctrl",
   "common.key.alt": "Alt",
   "common.key.shift": "Shift",

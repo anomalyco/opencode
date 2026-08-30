@@ -18,6 +18,7 @@ export type UiI18nParams = Record<string, string | number | boolean>
 
 export type UiI18n = {
   locale: Accessor<string>
+  layoutLocale?: Accessor<string>
   t: (key: UiI18nKey, params?: UiI18nParams) => string
   plural: (key: UiI18nPluralKey, count: number, params?: UiI18nParams) => string
 }
@@ -60,7 +61,7 @@ const Context = createContext<UiI18n>(fallback)
 
 function UiI18nProvider(props: ParentProps<{ value: UiI18n }>) {
   return (
-    <I18nProvider locale={props.value.locale()}>
+    <I18nProvider locale={(props.value.layoutLocale ?? props.value.locale)()}>
       <Context.Provider value={props.value}>{props.children}</Context.Provider>
     </I18nProvider>
   )
