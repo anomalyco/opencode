@@ -209,4 +209,17 @@ export const dict: Record<string, string> = {
   "ui.sessionTimeline.notice.finished": "{{actor}}-ն ավարտեց",
   "ui.sessionTimeline.notice.instructionsUpdated": "Հրահանգները թարմացվել են",
   "ui.sessionTimeline.notice.restart": "Շարունակվում է վերագործարկումից հետո",
+  "ui.messagePart.tools.used": "Օգտագործվել է՝ {{tools}}",
+  "ui.promptInput.placeholder.followUp":
+    "Ավելացրեք հետագա հաղորդագրություն, {{slash}} հրամանների համար, {{at}}՝ համատեքստի համար...",
+  "ui.promptInput.steer": "Ուղղորդել",
+  "ui.promptInput.queue": "Հերթ",
+  "ui.promptInput.steerHint": "Ուղարկել առանց ընդհատելու",
+  "ui.tool.loadedSkills.one": "Բեռնվել է {{name}} հմտությունը",
+  "ui.tool.loadedSkills.other": "Բեռնվել են {{name}} հմտությունները",
+  "ui.tool.shell.exit": "Հրամանն ավարտվել է {{code}} կոդով",
+  "ui.tool.shell.timeout": "Հրամանի ժամանակը սպառվել է",
+  "ui.tool.shell.cancelled": "Հրամանը չեղարկվել է",
+  "ui.message.thought": "Միտք",
+  "ui.sessionTimeline.notice.modelSwitched": "Անցում {{model}} մոդելին",
 }

@@ -3,6 +3,18 @@ import { dict as en } from "./en"
 type Keys = keyof typeof en
 
 export const dict = {
+  "ui.messagePart.tools.used": "{{tools}} verwendet",
+  "ui.promptInput.placeholder.followUp": "Folgenachricht hinzufügen, {{slash}} für Befehle, {{at}} für Kontext…",
+  "ui.promptInput.steer": "Steuern",
+  "ui.promptInput.queue": "Warteschlange",
+  "ui.promptInput.steerHint": "Senden, ohne zu unterbrechen",
+  "ui.tool.loadedSkills.one": "Skill {{name}} geladen",
+  "ui.tool.loadedSkills.other": "Skills {{name}} geladen",
+  "ui.tool.shell.exit": "Befehl mit Code {{code}} beendet",
+  "ui.tool.shell.timeout": "Zeitüberschreitung beim Befehl",
+  "ui.tool.shell.cancelled": "Befehl abgebrochen",
+  "ui.message.thought": "Gedanke",
+  "ui.sessionTimeline.notice.modelSwitched": "Zu {{model}} gewechselt",
   "ui.sessionReview.title": "Sitzungsänderungen",
   "ui.sessionReview.title.git": "Git-Änderungen",
   "ui.sessionReview.title.branch": "Branch-Änderungen",

@@ -209,4 +209,17 @@ export const dict: Record<string, string> = {
   "ui.sessionTimeline.notice.finished": "{{actor}} დასრულდა",
   "ui.sessionTimeline.notice.instructionsUpdated": "ინსტრუქციები განახლდა",
   "ui.sessionTimeline.notice.restart": "გაგრძელება გადატვირთვის შემდეგ",
+  "ui.messagePart.tools.used": "გამოყენებულია {{tools}}",
+  "ui.promptInput.placeholder.followUp":
+    "დაამატეთ შემდგომი შეტყობინება, {{slash}} ბრძანებებისთვის, {{at}} კონტექსტისთვის...",
+  "ui.promptInput.steer": "მიმართვა",
+  "ui.promptInput.queue": "რიგი",
+  "ui.promptInput.steerHint": "გაგზავნა შეწყვეტის გარეშე",
+  "ui.tool.loadedSkills.one": "ჩაიტვირთა {{name}} უნარი",
+  "ui.tool.loadedSkills.other": "ჩაიტვირთა {{name}} უნარები",
+  "ui.tool.shell.exit": "ბრძანება დასრულდა კოდით {{code}}",
+  "ui.tool.shell.timeout": "ბრძანების დრო ამოიწურა",
+  "ui.tool.shell.cancelled": "ბრძანება გაუქმდა",
+  "ui.message.thought": "აზრი",
+  "ui.sessionTimeline.notice.modelSwitched": "გადართვა მოდელზე {{model}}",
 }

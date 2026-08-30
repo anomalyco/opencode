@@ -1,4 +1,18 @@
 export const dict = {
+  "ui.messagePart.tools.used": "Usou {{tools}}",
+  "ui.promptInput.placeholder.followUp":
+    "Adicione uma mensagem de acompanhamento, {{slash}} para comandos, {{at}} para contexto…",
+  "ui.promptInput.steer": "Orientar",
+  "ui.promptInput.queue": "Fila",
+  "ui.promptInput.steerHint": "Enviar sem interromper",
+  "ui.tool.loadedSkills.one": "Skill {{name}} carregada",
+  "ui.tool.loadedSkills.many": "Skills {{name}} carregadas",
+  "ui.tool.loadedSkills.other": "Skills {{name}} carregadas",
+  "ui.tool.shell.exit": "Comando encerrado com o código {{code}}",
+  "ui.tool.shell.timeout": "O tempo limite do comando foi excedido",
+  "ui.tool.shell.cancelled": "Comando cancelado",
+  "ui.message.thought": "Raciocínio",
+  "ui.sessionTimeline.notice.modelSwitched": "Modelo alterado para {{model}}",
   "ui.sessionReview.title": "Alterações da sessão",
   "ui.sessionReview.title.git": "Alterações do Git",
   "ui.sessionReview.title.branch": "Alterações da branch",
@@ -161,8 +175,10 @@ export const dict = {
   "ui.tool.agent.default": "Agente",
 
   "ui.common.file.one": "arquivo",
+  "ui.common.file.many": "arquivos",
   "ui.common.file.other": "arquivos",
   "ui.common.question.one": "pergunta",
+  "ui.common.question.many": "perguntas",
   "ui.common.question.other": "perguntas",
 
   "ui.common.add": "Adicionar",

@@ -211,4 +211,17 @@ export const dict: Record<string, string> = {
   "ui.question.multiHint": "འཇུག་སྤྱོད་འབད་མི་ལན་ཚུ་ཆ་མཉམ་སེལ་འཐུ་འབད།",
   "ui.question.singleHint": "ལན་གཅིག་སེལ་འཐུ་འབད།",
   "ui.question.custom.placeholder": "ཁྱོད་རའི་ལན་ཡིག་དཔར་རྐྱབས།",
+  "ui.messagePart.tools.used": "{{tools}} ལག་ལེན་འཐབ་ཡོདཔ།",
+  "ui.promptInput.placeholder.followUp":
+    "འཕྲོ་མཐུད་འཕྲིན་དོན་ཁ་སྐོང་རྐྱབས་ བརྡ་བཀོད་ཀྱི་དོན་ལུ་ {{slash}} སྐབས་དོན་གྱི་དོན་ལུ་ {{at}}...",
+  "ui.promptInput.steer": "ཁ་སྒྱུར།",
+  "ui.promptInput.queue": "བསྒུག་ཐོ་ནང་བཙུགས།",
+  "ui.promptInput.steerHint": "བར་ཆད་མ་བཏོན་པར་གཏང་།",
+  "ui.tool.loadedSkills.one": "{{name}} རིག་རྩལ་མངོན་གསལ་འབད་ཡོདཔ།",
+  "ui.tool.loadedSkills.other": "{{name}} རིག་རྩལ་ཚུ་མངོན་གསལ་འབད་ཡོདཔ།",
+  "ui.tool.shell.exit": "བརྡ་བཀོད་འདི་ {{code}} ཨང་རྟགས་དང་བཅས་མཇུག་བསྡུ་ཡོདཔ།",
+  "ui.tool.shell.timeout": "བརྡ་བཀོད་ཀྱི་དུས་ཚོད་རྫོགས་ཡོདཔ།",
+  "ui.tool.shell.cancelled": "བརྡ་བཀོད་ཆ་མེད་བཏང་ཡོདཔ།",
+  "ui.message.thought": "བསམ་བློ།",
+  "ui.sessionTimeline.notice.modelSwitched": "{{model}} དཔེ་ཚད་ལུ་སོར་ཡོདཔ།",
 }

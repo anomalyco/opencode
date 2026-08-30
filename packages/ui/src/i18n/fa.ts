@@ -209,4 +209,17 @@ export const dict: Record<string, string> = {
   "ui.sessionTimeline.notice.finished": "اجرای \u2068{{actor}}\u2069 پایان یافت",
   "ui.sessionTimeline.notice.instructionsUpdated": "دستورالعمل‌ها به‌روزرسانی شدند",
   "ui.sessionTimeline.notice.restart": "ادامه پس از راه‌اندازی مجدد",
+  "ui.messagePart.tools.used": "از \u2068{{tools}}\u2069 استفاده شد",
+  "ui.promptInput.placeholder.followUp":
+    "پیام پیگیری را اضافه کنید، \u2068{{slash}}\u2069 برای دستورات، \u2068{{at}}\u2069 برای زمینه...",
+  "ui.promptInput.steer": "هدایت",
+  "ui.promptInput.queue": "افزودن به صف",
+  "ui.promptInput.steerHint": "ارسال بدون وقفه",
+  "ui.tool.loadedSkills.one": "مهارت \u2068{{name}}\u2069 بارگیری شد",
+  "ui.tool.loadedSkills.other": "مهارت‌های \u2068{{name}}\u2069 بارگیری شدند",
+  "ui.tool.shell.exit": "فرمان با کد {{code}} پایان یافت",
+  "ui.tool.shell.timeout": "مهلت فرمان تمام شد",
+  "ui.tool.shell.cancelled": "فرمان لغو شد",
+  "ui.message.thought": "فکر",
+  "ui.sessionTimeline.notice.modelSwitched": "مدل به \u2068{{model}}\u2069 تغییر کرد",
 }

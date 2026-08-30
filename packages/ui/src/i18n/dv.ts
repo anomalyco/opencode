@@ -210,4 +210,17 @@ export const dict: Record<string, string> = {
   "ui.sessionTimeline.notice.finished": "\u2068{{actor}}\u2069 ނިންމިއެވެ",
   "ui.sessionTimeline.notice.instructionsUpdated": "އިންސްޓްރަކްޝަންތައް އަޕްޑޭޓްވެއްޖެ",
   "ui.sessionTimeline.notice.restart": "އަލުން ފެށުމަށްފަހު ކުރިއަށް ގެންދަނީ",
+  "ui.messagePart.tools.used": "\u2068{{tools}}\u2069 ބޭނުންކުރެވުނެވެ",
+  "ui.promptInput.placeholder.followUp":
+    "ފޮލޯއަޕެއް އިތުރުކުރާށެވެ، ކޮމާންޑްތަކަށް \u2068{{slash}}\u2069، ކޮންޓެކްސްޓަށް \u2068{{at}}\u2069...",
+  "ui.promptInput.steer": "މަގުދައްކާށެވެ",
+  "ui.promptInput.queue": "ކިއޫކުރާށެވެ",
+  "ui.promptInput.steerHint": "ހުއްޓުވުމެއް ނެތި ފޮނުވާށެވެ",
+  "ui.tool.loadedSkills.one": "\u2068{{name}}\u2069 ހުނަރު ލޯޑްވެއްޖެއެވެ",
+  "ui.tool.loadedSkills.other": "\u2068{{name}}\u2069 ހުނަރުތައް ލޯޑްވެއްޖެއެވެ",
+  "ui.tool.shell.exit": "ކޮމާންޑް \u2068{{code}}\u2069 ކޯޑުން ނިމުނެވެ",
+  "ui.tool.shell.timeout": "ކޮމާންޑްގެ ވަގުތު ހަމަވެއްޖެއެވެ",
+  "ui.tool.shell.cancelled": "ކޮމާންޑް ކެންސަލްކުރެވުނެވެ",
+  "ui.message.thought": "ވިސްނުން",
+  "ui.sessionTimeline.notice.modelSwitched": "\u2068{{model}}\u2069 އަށް ބަދަލުވެއްޖެއެވެ",
 }

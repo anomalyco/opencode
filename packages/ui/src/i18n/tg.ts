@@ -209,4 +209,17 @@ export const dict = {
   "ui.sessionTimeline.notice.finished": "{{actor}} анҷом ёфт",
   "ui.sessionTimeline.notice.instructionsUpdated": "Дастурҳо навсозӣ шуданд",
   "ui.sessionTimeline.notice.restart": "Идома пас аз оғози дубора",
+  "ui.messagePart.tools.used": "{{tools}} истифода шуд",
+  "ui.promptInput.placeholder.followUp":
+    "Паёми минбаъдаро илова кунед, {{slash}} барои фармонҳо, {{at}} барои контекст...",
+  "ui.promptInput.steer": "Роҳнамоӣ",
+  "ui.promptInput.queue": "Навбат",
+  "ui.promptInput.steerHint": "Бе қатъ кардан фиристед",
+  "ui.tool.loadedSkills.one": "Малакаи {{name}} бор карда шуд",
+  "ui.tool.loadedSkills.other": "Малакаҳои {{name}} бор карда шуданд",
+  "ui.tool.shell.exit": "Фармон бо рамзи {{code}} анҷом ёфт",
+  "ui.tool.shell.timeout": "Муҳлати фармон гузашт",
+  "ui.tool.shell.cancelled": "Фармон бекор карда шуд",
+  "ui.message.thought": "Андеша",
+  "ui.sessionTimeline.notice.modelSwitched": "Ба {{model}} гузашт",
 }

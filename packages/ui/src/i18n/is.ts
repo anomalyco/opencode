@@ -209,4 +209,17 @@ export const dict: Record<string, string> = {
   "ui.sessionTimeline.notice.finished": "{{actor}} lauk verki",
   "ui.sessionTimeline.notice.instructionsUpdated": "Leiðbeiningar uppfærðar",
   "ui.sessionTimeline.notice.restart": "Haldið áfram eftir endurræsingu",
+  "ui.messagePart.tools.used": "Notaði {{tools}}",
+  "ui.promptInput.placeholder.followUp":
+    "Bættu við eftirfylgnibeiðni, {{slash}} fyrir skipanir, {{at}} fyrir samhengi...",
+  "ui.promptInput.steer": "Stýra",
+  "ui.promptInput.queue": "Setja í biðröð",
+  "ui.promptInput.steerHint": "Senda án þess að rjúfa",
+  "ui.tool.loadedSkills.one": "Hlóð færnina {{name}}",
+  "ui.tool.loadedSkills.other": "Hlóð færnirnar {{name}}",
+  "ui.tool.shell.exit": "Skipun lauk með kóðanum {{code}}",
+  "ui.tool.shell.timeout": "Tímamörk skipunarinnar runnu út",
+  "ui.tool.shell.cancelled": "Hætt var við skipun",
+  "ui.message.thought": "Hugsun",
+  "ui.sessionTimeline.notice.modelSwitched": "Skipti yfir í {{model}}",
 }

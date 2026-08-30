@@ -2,6 +2,18 @@ import { dict as en } from "./en"
 type Keys = keyof typeof en
 
 export const dict: Record<Keys, string> = {
+  "ui.messagePart.tools.used": "Brukte {{tools}}",
+  "ui.promptInput.placeholder.followUp": "Legg til oppfølging, {{slash}} for kommandoer, {{at}} for kontekst…",
+  "ui.promptInput.steer": "Styr",
+  "ui.promptInput.queue": "Kø",
+  "ui.promptInput.steerHint": "Send uten å avbryte",
+  "ui.tool.loadedSkills.one": "Lastet inn {{name}}-ferdighet",
+  "ui.tool.loadedSkills.other": "Lastet inn {{name}}-ferdigheter",
+  "ui.tool.shell.exit": "Kommandoen avsluttet med kode {{code}}",
+  "ui.tool.shell.timeout": "Tidsavbrudd for kommandoen",
+  "ui.tool.shell.cancelled": "Kommandoen ble avbrutt",
+  "ui.message.thought": "Tanke",
+  "ui.sessionTimeline.notice.modelSwitched": "Byttet til {{model}}",
   "ui.sessionReview.title": "Sesjonsendringer",
   "ui.sessionReview.title.lastTurn": "Endringer i siste runde",
   "ui.sessionReview.diffStyle.unified": "Samlet",

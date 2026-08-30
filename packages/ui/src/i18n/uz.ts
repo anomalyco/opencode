@@ -212,4 +212,17 @@ export const dict: Record<string, string> = {
   "ui.sessionTimeline.notice.finished": "{{actor}} yakunlandi",
   "ui.sessionTimeline.notice.instructionsUpdated": "Ko‘rsatmalar yangilandi",
   "ui.sessionTimeline.notice.restart": "Qayta ishga tushirilgandan keyin davom etmoqda",
+  "ui.messagePart.tools.used": "{{tools}} ishlatildi",
+  "ui.promptInput.placeholder.followUp":
+    "Keyingi xabarni kiriting, buyruqlar uchun {{slash}}, kontekst uchun {{at}}...",
+  "ui.promptInput.steer": "Yo‘naltirish",
+  "ui.promptInput.queue": "Navbat",
+  "ui.promptInput.steerHint": "To‘xtatmasdan yuborish",
+  "ui.tool.loadedSkills.one": "{{name}} ko‘nikmasi yuklandi",
+  "ui.tool.loadedSkills.other": "{{name}} ko‘nikmalari yuklandi",
+  "ui.tool.shell.exit": "Buyruq {{code}} kodi bilan yakunlandi",
+  "ui.tool.shell.timeout": "Buyruq vaqti tugadi",
+  "ui.tool.shell.cancelled": "Buyruq bekor qilindi",
+  "ui.message.thought": "Fikr",
+  "ui.sessionTimeline.notice.modelSwitched": "{{model}} modeliga o‘tildi",
 }

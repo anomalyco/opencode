@@ -210,4 +210,17 @@ export const dict: Record<string, string> = {
   "ui.sessionTimeline.notice.finished": "\u2068{{actor}}\u2069 نے کم پورا کر لیا",
   "ui.sessionTimeline.notice.instructionsUpdated": "ہدایتاں اپ ڈیٹ ہو گئیاں",
   "ui.sessionTimeline.notice.restart": "دوبارہ شروع ہون پچھوں جاری اے",
+  "ui.messagePart.tools.used": "\u2068{{tools}}\u2069 ورتے گئے",
+  "ui.promptInput.placeholder.followUp":
+    "اگلا سنیہا شامل کرو، کمانڈاں لئی \u2068{{slash}}\u2069، تناظر لئی \u2068{{at}}\u2069...",
+  "ui.promptInput.steer": "رُخ دیو",
+  "ui.promptInput.queue": "قطار وچ لاؤ",
+  "ui.promptInput.steerHint": "بناں روکے گھلو",
+  "ui.tool.loadedSkills.one": "\u2068{{name}}\u2069 مہارت لوڈ ہو گئی",
+  "ui.tool.loadedSkills.other": "\u2068{{name}}\u2069 مہارتاں لوڈ ہو گئیاں",
+  "ui.tool.shell.exit": "کمانڈ \u2068{{code}}\u2069 کوڈ نال بند ہوئی",
+  "ui.tool.shell.timeout": "کمانڈ دا مقرر ویلا مُک گیا",
+  "ui.tool.shell.cancelled": "کمانڈ منسوخ ہو گئی",
+  "ui.message.thought": "خیال",
+  "ui.sessionTimeline.notice.modelSwitched": "\u2068{{model}}\u2069 تے سوئچ کیتا گیا",
 }
