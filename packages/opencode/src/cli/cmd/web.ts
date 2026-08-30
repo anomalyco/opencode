@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import { UI } from "../ui"
-import { effectCmd } from "../effect-cmd"
-import { withNetworkOptions, resolveNetworkOptions } from "../network"
+import { effectCmd, fail } from "../effect-cmd"
+import { isPortInUseError, resolveNetworkOptions, withNetworkOptions } from "../network"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import open from "open"
 import { networkInterfaces } from "os"
@@ -41,7 +41,11 @@ export const WebCommand = effectCmd({
       UI.println(UI.Style.TEXT_WARNING_BOLD + "!  OPENCODE_SERVER_PASSWORD is not set; server is unsecured.")
     }
     const opts = yield* resolveNetworkOptions(args)
-    const server = yield* Effect.promise(() => Server.listen(opts))
+    const server = yield* Effect.promise(() => Server.listen(opts)).pipe(
+      Effect.catchDefect((error) =>
+        isPortInUseError(error) ? fail(`Port ${opts.port} is already in use`) : Effect.die(error),
+      ),
+    )
     UI.empty()
     UI.println(UI.logo("  "))
     UI.empty()
