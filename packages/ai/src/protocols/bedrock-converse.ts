@@ -410,7 +410,12 @@ const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (
 const lowerSystem = (
   breakpoints: BedrockCache.Breakpoints,
   system: ReadonlyArray<LLMRequest["system"][number]>,
-): BedrockSystemBlock[] => system.flatMap((part) => textWithCache(breakpoints, part.text, part.cache))
+) => {
+  const content = system
+    .filter((part) => part.text.length > 0)
+    .flatMap((part) => textWithCache(breakpoints, part.text, part.cache))
+  return content.length === 0 ? undefined : content
+}
 
 const fromRequest = Effect.fn("BedrockConverse.fromRequest")(function* (request: LLMRequest) {
   const toolChoice = request.toolChoice ? yield* lowerToolChoice(request.toolChoice) : undefined
@@ -427,7 +432,7 @@ const fromRequest = Effect.fn("BedrockConverse.fromRequest")(function* (request:
       toolChoice,
     }
   })()
-  const system = request.system.length === 0 ? undefined : lowerSystem(breakpoints, request.system)
+  const system = lowerSystem(breakpoints, request.system)
   const messages = yield* lowerMessages(request, breakpoints)
   if (breakpoints.dropped > 0) {
     yield* Effect.logWarning(

@@ -125,6 +125,50 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
+  it.effect("omits empty initial system blocks", () =>
+    Effect.gen(function* () {
+      const empty = yield* compileRequest(LLM.request({ model, system: "", prompt: "hello" }))
+      const cachedEmpty = yield* compileRequest(
+        LLM.request({
+          model,
+          system: [{ type: "text", text: "", cache: new CacheHint({ type: "ephemeral" }) }],
+          prompt: "hello",
+          cache: "none",
+        }),
+      )
+
+      expect(empty.body.system).toBeUndefined()
+      expect(cachedEmpty.body.system).toBeUndefined()
+    }),
+  )
+
+  it.effect("omits empty system blocks while preserving order and cache hints", () =>
+    Effect.gen(function* () {
+      const cache = new CacheHint({ type: "ephemeral" })
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          system: [
+            { type: "text", text: "", cache },
+            { type: "text", text: "First." },
+            { type: "text", text: " " },
+            { type: "text", text: "" },
+            { type: "text", text: "Second.", cache },
+          ],
+          prompt: "hello",
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body.system).toEqual([
+        { text: "First." },
+        { text: " " },
+        { text: "Second." },
+        { cachePoint: { type: "default" } },
+      ])
+    }),
+  )
+
   it.effect("passes topK through additionalModelRequestFields as top_k", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
