@@ -6,7 +6,10 @@ describe("tool", () => {
     expect(() =>
       tool({
         description: "invalid tool",
-        args: { foo: "string" } as never,
+        args: {
+          // @ts-expect-error Verify the runtime diagnostic for JavaScript callers.
+          foo: "string",
+        },
         execute: async () => "ok",
       }),
     ).toThrow('Invalid tool argument "foo": args must contain Zod schemas')
