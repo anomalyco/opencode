@@ -669,6 +669,18 @@ const step = (state: ParserState, event: GeminiEvent) => {
     else if (signature !== undefined && "text" in part) textSignature = signature
     if ("text" in part && part.text.length > 0) {
       if (part.thought) {
+        if (textId !== undefined) {
+          lifecycle = Lifecycle.textEnd(
+            lifecycle,
+            events,
+            textId,
+            textSignature
+              ? providerMetadata(state.providerMetadataKey, { thoughtSignature: textSignature })
+              : undefined,
+          )
+          textId = undefined
+          textSignature = undefined
+        }
         if (reasoningId === undefined) {
           reasoningId = `reasoning-${nextReasoningId}`
           nextReasoningId += 1
@@ -692,6 +704,7 @@ const step = (state: ParserState, event: GeminiEvent) => {
             : undefined,
         )
         reasoningId = undefined
+        reasoningSignature = undefined
       }
       if (textId === undefined) {
         textId = `text-${nextTextId}`
@@ -728,6 +741,7 @@ const step = (state: ParserState, event: GeminiEvent) => {
             : undefined,
         )
         reasoningId = undefined
+        reasoningSignature = undefined
       }
       lifecycle = Lifecycle.stepStart(lifecycle, events)
       events.push(

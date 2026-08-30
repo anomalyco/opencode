@@ -920,7 +920,11 @@ describe("Gemini route", () => {
           ],
         },
         {
-          candidates: [{ content: { role: "model", parts: [{ text: "X" }] } }],
+          candidates: [
+            {
+              content: { role: "model", parts: [{ text: "X", thoughtSignature: "text_sig_x" }] },
+            },
+          ],
         },
         {
           candidates: [
@@ -933,7 +937,12 @@ describe("Gemini route", () => {
           ],
         },
         {
-          candidates: [{ content: { role: "model", parts: [{ text: "Y" }] }, finishReason: "STOP" }],
+          candidates: [
+            {
+              content: { role: "model", parts: [{ text: "Y", thoughtSignature: "text_sig_y" }] },
+              finishReason: "STOP",
+            },
+          ],
         },
       )
       const response = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse(body)))
@@ -948,22 +957,38 @@ describe("Gemini route", () => {
         { id: "reasoning-1", text: "B" },
       ])
       expect(ends.map((event) => event.id)).toEqual(["reasoning-0", "reasoning-1"])
-      expect(response.events.filter((event) => event.type.startsWith("text-")).map((event) => event.id)).toEqual([
+      expect(response.events.filter((event) => event.type === "text-start").map((event) => event.id)).toEqual([
         "text-0",
-        "text-0",
-        "text-0",
-        "text-0",
+        "text-1",
       ])
-      expect(response.message.content.filter((part) => part.type === "reasoning")).toEqual([
+      expect(response.events.filter((event) => event.type === "text-delta").map((event) => event.id)).toEqual([
+        "text-0",
+        "text-1",
+      ])
+      expect(response.events.filter((event) => event.type === "text-end").map((event) => event.id)).toEqual([
+        "text-0",
+        "text-1",
+      ])
+      expect(response.message.content).toEqual([
         {
           type: "reasoning",
           text: "A",
           providerMetadata: { google: { thoughtSignature: "reasoning_sig_a" } },
         },
         {
+          type: "text",
+          text: "X",
+          providerMetadata: { google: { thoughtSignature: "text_sig_x" } },
+        },
+        {
           type: "reasoning",
           text: "B",
           providerMetadata: { google: { thoughtSignature: "reasoning_sig_b" } },
+        },
+        {
+          type: "text",
+          text: "Y",
+          providerMetadata: { google: { thoughtSignature: "text_sig_y" } },
         },
       ])
     }),
