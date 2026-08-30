@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect"
+import { Effect, Encoding, Schema } from "effect"
 import { Route } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Protocol } from "../route/protocol.js"
@@ -503,6 +503,16 @@ interface ParserState {
   readonly hasToolCalls: boolean
   readonly lifecycle: Lifecycle.State
   readonly reasoningSignatures: Readonly<Record<number, string>>
+  readonly reasoningRedactedContent: Readonly<Record<number, ReadonlyArray<Uint8Array>>>
+}
+
+const encodeRedactedContent = (chunks: ReadonlyArray<Uint8Array>) => {
+  const bytes = new Uint8Array(chunks.reduce((total, chunk) => total + chunk.length, 0))
+  chunks.reduce((offset, chunk) => {
+    bytes.set(chunk, offset)
+    return offset + chunk.length
+  }, 0)
+  return Encoding.encodeBase64(bytes)
 }
 
 const step = (state: ParserState, event: BedrockEvent) =>
@@ -550,7 +560,23 @@ const step = (state: ParserState, event: BedrockEvent) =>
       const index = event.contentBlockDelta.contentBlockIndex
       const reasoning = event.contentBlockDelta.delta.reasoningContent
       const events: LLMEvent[] = []
-      const redactedData = reasoning.redactedContent ?? reasoning.data
+      const redactedChunks =
+        reasoning.redactedContent === undefined
+          ? undefined
+          : [
+              ...(state.reasoningRedactedContent[index] ?? []),
+              yield* Effect.fromResult(Encoding.decodeBase64(reasoning.redactedContent)).pipe(
+                Effect.mapError((cause) =>
+                  ProviderShared.eventError(
+                    ADAPTER,
+                    "Bedrock Converse reasoningContent.redactedContent contains invalid base64 data",
+                    undefined,
+                    cause,
+                  ),
+                ),
+              ),
+            ]
+      const redactedData = redactedChunks === undefined ? reasoning.data : encodeRedactedContent(redactedChunks)
       const metadata = reasoning.signature
         ? providerMetadata(state.providerMetadataKey, { signature: reasoning.signature })
         : redactedData !== undefined
@@ -567,6 +593,14 @@ const step = (state: ParserState, event: BedrockEvent) =>
           reasoningSignatures: reasoning.signature
             ? { ...state.reasoningSignatures, [index]: reasoning.signature }
             : state.reasoningSignatures,
+          reasoningRedactedContent:
+            redactedChunks === undefined
+              ? reasoning.data === undefined
+                ? state.reasoningRedactedContent
+                : Object.fromEntries(
+                    Object.entries(state.reasoningRedactedContent).filter(([key]) => key !== String(index)),
+                  )
+              : { ...state.reasoningRedactedContent, [index]: redactedChunks },
         },
         events,
       ] as const
@@ -602,7 +636,11 @@ const step = (state: ParserState, event: BedrockEvent) =>
             `reasoning-${index}`,
             state.reasoningSignatures[index]
               ? providerMetadata(state.providerMetadataKey, { signature: state.reasoningSignatures[index] })
-              : undefined,
+              : state.reasoningRedactedContent[index]
+                ? providerMetadata(state.providerMetadataKey, {
+                    redactedData: encodeRedactedContent(state.reasoningRedactedContent[index]),
+                  })
+                : undefined,
           )
       events.push(...resultEvents)
       return [
@@ -616,6 +654,9 @@ const step = (state: ParserState, event: BedrockEvent) =>
           finishedTools: resultEvents.length > 0 ? new Set([...state.finishedTools, index]) : state.finishedTools,
           reasoningSignatures: Object.fromEntries(
             Object.entries(state.reasoningSignatures).filter(([key]) => key !== String(index)),
+          ),
+          reasoningRedactedContent: Object.fromEntries(
+            Object.entries(state.reasoningRedactedContent).filter(([key]) => key !== String(index)),
           ),
         },
         events,
@@ -719,6 +760,7 @@ export const protocol = Protocol.make({
       hasToolCalls: false,
       lifecycle: Lifecycle.initial(),
       reasoningSignatures: {},
+      reasoningRedactedContent: {},
     }),
     step,
     onHalt: (state) => Effect.succeed(onHalt(state)),

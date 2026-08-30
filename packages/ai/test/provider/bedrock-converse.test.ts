@@ -923,7 +923,7 @@ describe("Bedrock Converse route", () => {
     Effect.gen(function* () {
       // Bedrock represents redactedContent blobs as base64 strings on its JSON
       // wire. The provider owns the payload and requires byte-exact replay.
-      const redactedData = "cmVkYWN0ZWQtdGhpbmtpbmc="
+      const redactedData = "AQID"
       const response = yield* LLMClient.generate(
         LLMRequest.update(baseRequest, {
           tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
@@ -933,10 +933,8 @@ describe("Bedrock Converse route", () => {
           fixedBytes(
             eventStreamBody(
               ["messageStart", { role: "assistant" }],
-              [
-                "contentBlockDelta",
-                { contentBlockIndex: 0, delta: { reasoningContent: { redactedContent: redactedData } } },
-              ],
+              ["contentBlockDelta", { contentBlockIndex: 0, delta: { reasoningContent: { redactedContent: "AQ==" } } }],
+              ["contentBlockDelta", { contentBlockIndex: 0, delta: { reasoningContent: { redactedContent: "AgM=" } } }],
               ["contentBlockStop", { contentBlockIndex: 0 }],
               [
                 "contentBlockStart",
@@ -952,10 +950,15 @@ describe("Bedrock Converse route", () => {
           ),
         ),
       )
-      expect(response.events.find((event) => event.type === "reasoning-delta" && event.text === "")).toEqual({
+      expect(response.events.filter((event) => event.type === "reasoning-delta" && event.text === "").at(-1)).toEqual({
         type: "reasoning-delta",
         id: "reasoning-0",
         text: "",
+        providerMetadata: { bedrock: { redactedData } },
+      })
+      expect(response.events.find((event) => event.type === "reasoning-end")).toEqual({
+        type: "reasoning-end",
+        id: "reasoning-0",
         providerMetadata: { bedrock: { redactedData } },
       })
       const prepared = yield* compileRequest(
@@ -985,6 +988,73 @@ describe("Bedrock Converse route", () => {
           content: [{ toolResult: { toolUseId: "tool_1", content: [{ text: "sunny" }], status: "success" } }],
         },
       ])
+    }),
+  )
+
+  it.effect("keeps redacted reasoning accumulation separate by content block index", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(baseRequest).pipe(
+        Effect.provide(
+          fixedBytes(
+            eventStreamBody(
+              ["messageStart", { role: "assistant" }],
+              ["contentBlockDelta", { contentBlockIndex: 2, delta: { reasoningContent: { redactedContent: "AQ==" } } }],
+              ["contentBlockDelta", { contentBlockIndex: 2, delta: { reasoningContent: { redactedContent: "Ag==" } } }],
+              ["contentBlockStop", { contentBlockIndex: 2 }],
+              ["contentBlockDelta", { contentBlockIndex: 7, delta: { reasoningContent: { redactedContent: "Aw==" } } }],
+              ["contentBlockDelta", { contentBlockIndex: 7, delta: { reasoningContent: { redactedContent: "BA==" } } }],
+              ["contentBlockStop", { contentBlockIndex: 7 }],
+              ["messageStop", { stopReason: "end_turn" }],
+            ),
+          ),
+        ),
+      )
+
+      expect(response.message.content).toEqual([
+        { type: "reasoning", text: "", providerMetadata: { bedrock: { redactedData: "AQI=" } } },
+        { type: "reasoning", text: "", providerMetadata: { bedrock: { redactedData: "AwQ=" } } },
+      ])
+    }),
+  )
+
+  it.effect("preserves split redacted reasoning when contentBlockStop is missing", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(baseRequest).pipe(
+        Effect.provide(
+          fixedBytes(
+            eventStreamBody(
+              ["messageStart", { role: "assistant" }],
+              ["contentBlockDelta", { contentBlockIndex: 0, delta: { reasoningContent: { redactedContent: "AQ==" } } }],
+              ["contentBlockDelta", { contentBlockIndex: 0, delta: { reasoningContent: { redactedContent: "AgM=" } } }],
+              ["messageStop", { stopReason: "end_turn" }],
+            ),
+          ),
+        ),
+      )
+
+      expect(response.message.content).toEqual([
+        { type: "reasoning", text: "", providerMetadata: { bedrock: { redactedData: "AQID" } } },
+      ])
+    }),
+  )
+
+  it.effect("rejects invalid redacted reasoning base64 with the triggering event", () =>
+    Effect.gen(function* () {
+      const payload = { contentBlockIndex: 0, delta: { reasoningContent: { redactedContent: "%%==" } } }
+      const error = yield* LLMClient.generate(baseRequest).pipe(
+        Effect.provide(fixedBytes(eventStreamBody(["contentBlockDelta", payload]))),
+        Effect.flip,
+      )
+
+      expect(error).toMatchObject({
+        reason: { _tag: "InvalidProviderOutput" },
+        message: "Bedrock Converse reasoningContent.redactedContent contains invalid base64 data",
+      })
+      expect(JSON.parse(error.reason.body ?? "")).toMatchObject({
+        headers: { ":event-type": { value: "contentBlockDelta" } },
+        body: JSON.stringify(payload),
+      })
+      expect(error.reason.cause).toBeInstanceOf(Error)
     }),
   )
 
