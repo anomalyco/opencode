@@ -11,7 +11,7 @@ export interface MCPDraft {
   remove(name: string): void
 }
 
-export interface MCPDomain extends Omit<McpApi, "resource"> {
+export interface MCPDomain extends Pick<McpApi, "list"> {
   readonly transform: Transform<MCPDraft>
   readonly reload: () => Promise<void>
 }

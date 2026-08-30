@@ -47,7 +47,6 @@ type MockStreamWindow = Window & {
 }
 
 export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
-  const state = { cursors: new Map<string, string>(), nextCursor: 0 }
   const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
 
   await page.addInitScript(
@@ -135,21 +134,17 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     }, 50)
     page.on("close", () => clearInterval(timer))
   }
-  const transport = HttpRouter.toWebHandler(
-    HttpApiBuilder.layer(MockApi).pipe(
-      Layer.provide(mockHandlers(config, state)),
-      Layer.provide(HttpServer.layerServices),
-    ),
-    { disableLogger: true },
-  )
+  const transport = createMockServerHandler(config)
   page.on("close", () => void transport.dispose())
 
-  await page.route("**/*", async (route) => {
+  await page.route("**/api/**", async (route) => {
     const url = new URL(route.request().url())
     const appPort = new URL(
       process.env.PLAYWRIGHT_BASE_URL ?? `http://127.0.0.1:${process.env.PLAYWRIGHT_PORT ?? "3000"}`,
     ).port
     if (url.origin !== server && url.port !== appPort) return route.fallback()
+    // Production serves the UI and API from one origin; leave app assets to Vite.
+    if (!url.pathname.startsWith("/api/")) return route.fallback()
     if (route.request().method() === "OPTIONS") {
       return route.fulfill({ status: 204, headers: corsHeaders })
     }
@@ -169,6 +164,16 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
       body: Buffer.from(await response.arrayBuffer()),
     })
   })
+}
+
+export function createMockServerHandler(config: MockServerConfig) {
+  return HttpRouter.toWebHandler(
+    HttpApiBuilder.layer(MockApi).pipe(
+      Layer.provide(mockHandlers(config, { cursors: new Map<string, string>(), nextCursor: 0 })),
+      Layer.provide(HttpServer.layerServices),
+    ),
+    { disableLogger: true },
+  )
 }
 
 const corsHeaders = {

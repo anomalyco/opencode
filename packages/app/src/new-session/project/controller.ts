@@ -4,10 +4,11 @@ import { useGlobal, useServerCtx } from "@/runtime/server/runtime"
 import { useServerSDK } from "@/runtime/server/client"
 import { serverName, ServerConnection, useServers } from "@/runtime/server/registry"
 import { useWorkspaceLocation } from "@/workspaces/location"
+import { workspaceSelectionDestination } from "@/workspaces/paths"
 import { useTabs } from "@/shell/tabs/tabs"
 import type { PromptProjectControls } from "./selector"
 
-export function createComposerProjectControls(props: { draftId: string }) {
+export function createComposerProjectControls(props: { draftId: string; worktree: () => string }) {
   const servers = useServers()
   const serverSDK = useServerSDK()
   const location = useWorkspaceLocation()
@@ -38,7 +39,7 @@ export function createComposerProjectControls(props: { draftId: string }) {
     tabs.updateDraft(props.draftId, {
       server: ServerConnection.key(connection),
       directory: worktree,
-      worktree: undefined,
+      worktree: workspaceSelectionDestination(props.worktree(), location().directory),
       branch: undefined,
     })
   }

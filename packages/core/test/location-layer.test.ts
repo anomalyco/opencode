@@ -13,6 +13,7 @@ import {
   Hash,
   Layer,
   LayerMap,
+  Option,
   RcMap,
   Schema,
   Stream,
@@ -31,7 +32,7 @@ import { Plugin } from "@opencode-ai/core/plugin"
 import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
 import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { Model } from "@opencode-ai/core/model"
-import { MCP } from "@opencode-ai/core/mcp/index"
+import { Mcp } from "@opencode-ai/core/mcp/index"
 import { Project } from "@opencode-ai/core/project"
 import { Provider } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -42,7 +43,7 @@ import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { tmpdir } from "./fixture/tmpdir"
 import { tempGlobalLayer } from "./fixture/global"
 import { testEffect } from "./lib/effect"
-import { toolDefinitions, waitForTool } from "./lib/tool"
+import { toolDefinitions } from "./lib/tool"
 import { Database } from "../src/database/database"
 import { Bus } from "../src/bus"
 import { Reference } from "../src/reference"
@@ -81,6 +82,28 @@ const itWithActivity = testEffect(
 )
 
 describe("LocationServiceMap", () => {
+  itWithActivity.effect("does not refresh lifetime from inferred Session routing", () =>
+    Effect.gen(function* () {
+      const locations = yield* LocationServiceMap.Service
+      const bus = yield* Bus.Service
+      const ref = Location.Ref.make({ directory: AbsolutePath.make("/project") })
+      const sessionID = Session.ID.make("ses_routing_activity")
+      yield* Location.Service.pipe(Effect.provide(locations.get(ref)), Effect.scoped)
+      yield* bus.publish(SessionEvent.Created, {
+        sessionID,
+        location: ref,
+        projectID: Project.ID.global,
+        slug: "routing",
+        version: "test",
+      })
+      yield* TestClock.adjust("59 minutes")
+      const event = yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID })
+      expect(event).not.toHaveProperty("location")
+      yield* TestClock.adjust("2 minutes")
+      expect(Array.from(yield* RcMap.keys(locations.rcMap))).toEqual([])
+    }),
+  )
+
   itWithActivity.effect("refreshes lifetime from Session events only", () =>
     Effect.gen(function* () {
       const locations = yield* LocationServiceMap.Service
@@ -495,7 +518,8 @@ describe("LocationServiceMap", () => {
           )
           const plugins = yield* Effect.gen(function* () {
             const plugins = yield* Plugin.Service
-            yield* (yield* PluginSupervisor.Service).flush
+            const supervisor = yield* PluginSupervisor.Service
+            yield* supervisor.flush
             return yield* plugins.list()
           }).pipe(
             Effect.scoped,
@@ -652,14 +676,21 @@ describe("LocationServiceMap", () => {
             expect(Equal.equals(absent, present)).toBe(false)
             if (process.platform === "win32") expect(absent.directory).not.toBe(present.directory)
 
+            expect(yield* locations.contextEffectOption(absent)).toEqual(Option.none())
+            expect(Array.from(yield* RcMap.keys(locations.rcMap))).toHaveLength(0)
+
             const first = yield* locations.contextEffect(absent)
             expect(yield* locations.contextEffect(present)).toBe(first)
+            expect(Option.getOrThrow(yield* locations.contextEffectOption(absent))).toBe(first)
+            expect(Option.getOrThrow(yield* locations.contextEffectOption(present))).toBe(first)
             expect(Array.from(yield* RcMap.keys(locations.rcMap))).toEqual([
               Location.Ref.make({ directory, workspaceID: undefined }),
             ])
 
             // Invalidating with the shape opposite to the one that booted must evict.
             yield* locations.invalidate(present)
+            expect(yield* locations.contextEffectOption(absent)).toEqual(Option.none())
+            expect(yield* locations.contextEffectOption(present)).toEqual(Option.none())
             expect(Array.from(yield* RcMap.keys(locations.rcMap))).toHaveLength(0)
           }),
         ),
@@ -679,25 +710,9 @@ describe("LocationServiceMap", () => {
               yield* Reference.Service
               const catalog = yield* Catalog.Service
               yield* catalog.transform((editor) => editor.provider.update(providerID, () => {}))
+              const supervisor = yield* PluginSupervisor.Service
+              yield* supervisor.flush
               const registry = yield* Tool.Service
-              // Tool plugins register during the forked PluginSupervisor boot; wait for
-              // every expected tool rather than relying on batch ordering.
-              yield* Effect.forEach(
-                [
-                  "edit",
-                  "glob",
-                  "grep",
-                  "question",
-                  "read",
-                  "shell",
-                  "skill",
-                  "subagent",
-                  "webfetch",
-                  "websearch",
-                  "write",
-                ],
-                (name) => waitForTool(registry, name),
-              )
               return {
                 providers: yield* catalog.provider.all(),
                 tools: yield* toolDefinitions(registry),
@@ -775,8 +790,10 @@ describe("LocationServiceMap", () => {
               }),
             ),
           )
-          const failure = yield* SessionRunnerModel.Service.use((models) =>
-            models.resolve(
+          const failure = yield* Effect.gen(function* () {
+            const catalog = yield* Catalog.Service
+            const models = yield* SessionRunnerModel.Service
+            return yield* models.resolve(
               Session.Info.make({
                 id: Session.ID.make("ses_unavailable_model"),
                 projectID: Project.ID.global,
@@ -790,8 +807,9 @@ describe("LocationServiceMap", () => {
                 time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
                 location,
               }),
-            ),
-          ).pipe(Effect.provide(LocationServiceMap.Service.get(location)), Effect.flip)
+              catalog.model.available,
+            )
+          }).pipe(Effect.provide(LocationServiceMap.Service.get(location)), Effect.flip)
 
           expect(failure).toMatchObject({
             _tag: "SessionRunnerModel.ModelUnavailableError",
@@ -815,8 +833,10 @@ describe("LocationServiceMap", () => {
             ["azure-cognitive-services", "azure"],
             ["google-vertex-anthropic", "google-vertex"],
           ] as const) {
-            const failure = yield* SessionRunnerModel.Service.use((models) =>
-              models.resolve(
+            const failure = yield* Effect.gen(function* () {
+              const catalog = yield* Catalog.Service
+              const models = yield* SessionRunnerModel.Service
+              return yield* models.resolve(
                 Session.Info.make({
                   id: Session.ID.make(`ses_removed_${providerID}`),
                   projectID: Project.ID.global,
@@ -830,8 +850,9 @@ describe("LocationServiceMap", () => {
                   time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
                   location,
                 }),
-              ),
-            ).pipe(Effect.provide(LocationServiceMap.Service.get(location)), Effect.flip)
+                catalog.model.available,
+              )
+            }).pipe(Effect.provide(LocationServiceMap.Service.get(location)), Effect.flip)
 
             expect(failure).toMatchObject({
               _tag: "SessionRunnerModel.ModelUnavailableError",
@@ -883,6 +904,7 @@ describe("LocationServiceMap", () => {
                 time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
                 location,
               }),
+              catalog.model.available,
             )
           }).pipe(Effect.provide(LocationServiceMap.Service.get(location)))
 
@@ -921,7 +943,8 @@ describe("LocationServiceMap", () => {
           })
           yield* plugins.activate([{ ...reviewer, version: "1" }])
 
-          expect(yield* (yield* Agent.Service).get(Agent.ID.make("reviewer"))).toMatchObject({
+          const agents = yield* Agent.Service
+          expect(yield* agents.get(Agent.ID.make("reviewer"))).toMatchObject({
             description: "Reviews code",
             mode: "subagent",
           })
@@ -969,7 +992,7 @@ describe("LocationServiceMap", () => {
 
           yield* Effect.gen(function* () {
             const supervisor = yield* PluginSupervisor.Service
-            const mcp = yield* MCP.Service
+            const mcp = yield* Mcp.Service
             yield* supervisor.flush
             expect(observed.example).toBe(false)
             yield* mcp.add("dynamic", {

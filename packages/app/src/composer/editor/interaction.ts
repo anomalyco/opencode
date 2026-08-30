@@ -384,10 +384,18 @@ export function createComposerEditor(input: {
         void attachments.handlePaste(event)
         return
       }
-      const text = clipboard?.getData("text/plain")
+      const text = clipboard?.getData("text/plain").replace(/\r\n?/g, "\n")
       if (!text) return
       event.preventDefault()
-      if (typeof document.execCommand === "function" && document.execCommand("insertText", false, text)) return
+      // insertText emits input events per line, repeatedly parsing and saving the draft.
+      // Escaped HTML inserts multiline text once and preserves native selection and undo.
+      const multiline = text.includes("\n")
+      const value = multiline ? text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;") : text
+      if (
+        typeof document.execCommand === "function" &&
+        document.execCommand(multiline ? "insertHTML" : "insertText", false, value)
+      )
+        return
       const target = event.currentTarget
       const selection = window.getSelection()
       if (!(target instanceof HTMLElement) || !selection?.rangeCount || !target.contains(selection.anchorNode)) return

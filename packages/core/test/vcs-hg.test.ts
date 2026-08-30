@@ -73,6 +73,22 @@ async function commitAll(directory: string, message: string) {
   await hg(directory, "commit", "-q", "-m", message, "-u", "test")
 }
 
+it.live("Mercurial rejects unsupported review modes and bases without requiring hg", () =>
+  withTmp((directory) =>
+    Effect.gen(function* () {
+      const vcs = yield* Vcs.Service
+      const context = host()
+      yield* VcsHgPlugin.Plugin.effect({
+        ...context,
+        vcs: { ...context.vcs, transform: vcs.transform, reload: vcs.reload },
+      })
+      expect(yield* vcs.base()).toBeNull()
+      expect(yield* vcs.diff("committed").pipe(Effect.flip)).toMatchObject({ _tag: "Vcs.DiffError" })
+      expect(yield* vcs.diff("branch", { base: "release" }).pipe(Effect.flip)).toMatchObject({ _tag: "Vcs.DiffError" })
+    }).pipe(provide(directory)),
+  ),
+)
+
 describeHg("Vcs mercurial", () => {
   it.live("reports modified, missing, and untracked files", () =>
     withHg((directory) =>

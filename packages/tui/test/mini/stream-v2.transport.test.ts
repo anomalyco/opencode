@@ -667,7 +667,13 @@ describe("V2 mini transport", () => {
             sessionID: "ses_1",
             timeCreated: 1,
             type: "user",
-            payload: { text: "follow up" },
+            payload: {
+              text: "follow up",
+              skills: [
+                { id: "effect", name: "Effect", text: "Use Effect services" },
+                { id: "effect", name: "Effect" },
+              ],
+            },
             delivery: "queue",
           },
           {
@@ -706,9 +712,10 @@ describe("V2 mini transport", () => {
     })
     while (!ui.commits.some((item) => item.messageID === "msg_queued")) await Bun.sleep(0)
 
-    expect(ui.commits).toContainEqual(
-      expect.objectContaining({ kind: "user", messageID: "msg_queued", text: "follow up" }),
-    )
+    expect(ui.commits.filter((item) => item.messageID === "msg_queued")).toEqual([
+      expect.objectContaining({ kind: "system", partID: "skill:effect", text: '→ Skill "Effect"' }),
+      expect.objectContaining({ kind: "user", text: "follow up" }),
+    ])
     expect(pending()).toEqual([["msg_cancelled", "queue"]])
     events.push({
       id: "evt_queued",
@@ -739,7 +746,7 @@ describe("V2 mini transport", () => {
       data: { sessionID: "ses_1", inboxID: "msg_queued" },
     })
     while (pending()?.length !== 0) await Bun.sleep(0)
-    expect(ui.commits.filter((item) => item.messageID === "msg_queued")).toHaveLength(1)
+    expect(ui.commits.filter((item) => item.messageID === "msg_queued")).toHaveLength(2)
     const prompt = spyOn(client.session, "prompt").mockImplementation(
       (request) => ok(promptAdmission(request)) as never,
     )

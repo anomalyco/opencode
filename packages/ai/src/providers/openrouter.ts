@@ -1,7 +1,6 @@
 import { Effect, Schema } from "effect"
 import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
-import { Framing } from "../route/framing.js"
 import { Protocol } from "../route/protocol.js"
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import { ProviderID, type CacheHint, type ModelID } from "../schema/index.js"
@@ -164,9 +163,10 @@ const bodyOptions = (input: unknown) => {
 export const route = Route.make({
   id: ADAPTER,
   provider: profile.provider,
+  providerMetadataKey: "openrouter",
   protocol,
   endpoint: Endpoint.path("/chat/completions", { baseURL: profile.baseURL }),
-  framing: Framing.sse,
+  framing: OpenAIChat.framing,
 })
 
 export const routes = [route]

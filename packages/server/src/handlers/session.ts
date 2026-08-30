@@ -119,6 +119,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                 title: ctx.payload.title,
                 agent: ctx.payload.agent,
                 model: ctx.payload.model,
+                metadata: ctx.payload.metadata,
                 location: ctx.payload.location ?? { directory: AbsolutePath.make(process.cwd()) },
               })
               .pipe(Effect.orDie),
@@ -135,6 +136,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                 location: ctx.payload.location ?? { directory: AbsolutePath.make(process.cwd()) },
               })
               .pipe(
+                Effect.catchTag("Session.NotFoundError", missingSession),
                 Effect.catchTag(
                   "SessionTransfer.ImportConflictError",
                   (error) =>
@@ -633,6 +635,37 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
             messageID: ctx.params.messageID,
             message: `Message not found: ${ctx.params.messageID}`,
           })
+        }),
+      )
+      .handle(
+        "session.messageUpdate",
+        Effect.fn(function* (ctx) {
+          const message = yield* session.updateMessage({ ...ctx.params, content: ctx.payload.content }).pipe(
+            Effect.catchTag("Session.NotFoundError", missingSession),
+            Effect.catchTag(
+              "Session.MessageNotFoundError",
+              (error) =>
+                new MessageNotFoundError({
+                  sessionID: error.sessionID,
+                  messageID: error.messageID,
+                  message: `Message not found: ${error.messageID}`,
+                }),
+            ),
+            Effect.catchTag("Session.BusyError", busySession),
+            Effect.catchTag(
+              "Session.MessageNotAssistantError",
+              () => new InvalidRequestError({ message: "Only assistant messages can be updated", field: "messageID" }),
+            ),
+            Effect.catchTag(
+              "Session.MessageIncompleteError",
+              (error) => new ConflictError({ message: "Assistant message is incomplete", resource: error.messageID }),
+            ),
+            Effect.catchTag(
+              "Session.MessageToolIncompleteError",
+              () => new InvalidRequestError({ message: "Tool content must be completed", field: "content" }),
+            ),
+          )
+          return { data: message }
         }),
       )
   }),

@@ -7,7 +7,8 @@ import { Global } from "@opencode-ai/util/global"
 import { OPENCODE_CHANNEL, OPENCODE_VERSION } from "./version"
 import { AppProcess } from "@opencode-ai/util/process"
 import { randomBytes, randomUUID } from "node:crypto"
-import { Effect, Option, Redacted, Schedule } from "effect"
+import { Effect, Option, Redacted, Schedule, Schema } from "effect"
+import { PersistentPty } from "@opencode-ai/schema/persistent-pty"
 import { HttpServer } from "effect/unstable/http"
 import { Env } from "./env"
 import { ServiceConfig } from "./services/service-config"
@@ -21,6 +22,7 @@ export type Options = {
   readonly mode: Mode
   readonly hostname?: string
   readonly port?: number
+  readonly cors?: readonly string[]
 }
 
 // The process effect lives until server shutdown; tracing it would parent every request to one process-lifetime trace.
@@ -40,6 +42,14 @@ export const run = Effect.fnUntraced(function* (options: Options) {
 })
 
 const processEffect = Effect.fnUntraced(function* (options: Options) {
+  const inherited = process.env.OPENCODE_PTY_HANDOFF
+  delete process.env.OPENCODE_PTY_HANDOFF
+  const handoff =
+    inherited === undefined
+      ? undefined
+      : yield* Schema.decodeUnknownEffect(Schema.fromJsonString(PersistentPty.Handoff))(inherited).pipe(
+          Effect.mapError(() => new Error("Invalid PTY restart handoff")),
+        )
   const global = yield* Global.Service
   if (options.mode === "service") yield* Effect.sync(() => process.chdir(global.home))
   return yield* Effect.scoped(
@@ -79,7 +89,9 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
           },
           hostname,
           port,
+          cors: options.cors ?? config.cors,
           password,
+          pty: { handoff },
           simulation: truthy(process.env.OPENCODE_SIMULATE),
           database: {
             path:

@@ -1,5 +1,33 @@
 import { describe, expect, test } from "bun:test"
-import { monoDefault, monoFontFamily, sansDefault, sansFontFamily, terminalFontFamily } from "./model"
+import { migrateSettings, monoDefault, monoFontFamily, sansDefault, sansFontFamily, terminalFontFamily } from "./model"
+
+describe("settings reasoning mode migration", () => {
+  test.each([
+    [true, "full"],
+    [false, "compact"],
+  ])("maps persisted reasoning summaries %s to %s", (showReasoningSummaries, reasoningMode) => {
+    const value = { general: { showReasoningSummaries, showTerminal: true }, appearance: { fontSize: 16 } }
+    expect(migrateSettings(value)).toEqual({
+      ...value,
+      general: { ...value.general, reasoningMode },
+    })
+    expect(value.general).not.toHaveProperty("reasoningMode")
+  })
+
+  test.each(["hidden", "compact", "full"])(
+    "preserves an explicit %s mode over either legacy value",
+    (reasoningMode) => {
+      ;[true, false].forEach((showReasoningSummaries) => {
+        const value = { general: { reasoningMode, showReasoningSummaries } }
+        expect(migrateSettings(value)).toBe(value)
+      })
+    },
+  )
+
+  test.each([undefined, null, {}, { general: {} }])("leaves missing legacy settings to the defaults: %j", (value) => {
+    expect(migrateSettings(value)).toBe(value)
+  })
+})
 
 describe("settings font families", () => {
   test("defaults normal text to Inter", () => {

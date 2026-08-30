@@ -1,6 +1,7 @@
 export * as Config from "."
 
 import { createBindingLookup } from "@opentui/keymap/extras"
+import { Vcs } from "@opencode-ai/schema/vcs"
 import { Schema } from "effect"
 import { createContext, onCleanup, type JSX, useContext } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
@@ -90,6 +91,9 @@ export const Info = Schema.Struct({
   ).annotate({ description: "System notification and sound settings" }),
   diffs: Schema.optional(
     Schema.Struct({
+      source: Schema.optional(Vcs.Mode).annotate({
+        description: "Initial diff source; defaults to 'branch' (branch and uncommitted changes)",
+      }),
       wrap: Schema.optional(Schema.Literals(["word", "none"])).annotate({
         description: "Line wrapping behavior in diff output",
       }),
@@ -126,6 +130,7 @@ export const Info = Schema.Struct({
       sidebar: Schema.optional(Schema.Literals(["auto", "hide"])).annotate({
         description: "Session sidebar visibility; 'auto' shows it when space permits",
       }),
+      terminal: Schema.optional(Schema.Boolean).annotate({ description: "Enable persistent session terminal panes" }),
       scrollbar: Schema.optional(Schema.Boolean).annotate({ description: "Show the session transcript scrollbar" }),
       thinking: Schema.optional(Schema.Literals(["show", "hide"])).annotate({
         description: "Show or hide model reasoning by default",
@@ -135,6 +140,9 @@ export const Info = Schema.Struct({
       }),
       image_preview: Schema.optional(Schema.Boolean).annotate({
         description: "Show user attachment and tool-result images in the session transcript",
+      }),
+      tps: Schema.optional(Schema.Boolean).annotate({
+        description: "Show output tokens per second in assistant footers",
       }),
       markdown: Schema.optional(Schema.Literals(["source", "rendered"])).annotate({
         description: "Show Markdown syntax markers or conceal them in rendered transcript content",
@@ -154,6 +162,9 @@ export const Info = Schema.Struct({
       }),
       layout: Schema.optional(Schema.Literals(["horizontal", "vertical"])).annotate({
         description: "Show tabs in a horizontal strip or vertical sidebar",
+      }),
+      indicators: Schema.optional(Schema.Literals(["status", "numbers"])).annotate({
+        description: "Show status icons or always show tab numbers",
       }),
     }),
   ).annotate({ description: "Tab strip settings" }),
@@ -219,18 +230,26 @@ export type Resolved = Omit<Info, "attention" | "cursor" | "keybinds" | "leader"
     style: "block" | "underline" | "line" | "default"
     blinking: boolean
   }
-  session: Omit<NonNullable<Info["session"]>, "new_location"> & {
+  session: Omit<NonNullable<Info["session"]>, "new_location" | "tps"> & {
     new_location: "launch" | "inherit"
+    tps: boolean
   }
   tabs: {
     enabled: boolean
     scope: "global" | "cwd"
     layout: "horizontal" | "vertical"
+    indicators: "status" | "numbers"
   }
 }
 
 export function resolve(input: Info, options: { terminalSuspend: boolean }): Resolved {
   const keybinds: TuiKeybind.KeybindOverrides = { ...input.keybinds }
+  if (input.session?.terminal) {
+    if (input.keybinds?.["terminal.toggle"] === undefined && input.keybinds?.["theme.switch"] === undefined) {
+      keybinds["terminal.toggle"] = "<leader>t"
+      keybinds["theme.switch"] = "none"
+    }
+  }
   if (!options.terminalSuspend) {
     keybinds["terminal.suspend"] = "none"
     if (keybinds["input.undo"] === undefined) {
@@ -265,12 +284,14 @@ export function resolve(input: Info, options: { terminalSuspend: boolean }): Res
     session: {
       ...input.session,
       new_location: input.session?.new_location ?? "launch",
+      tps: input.session?.tps ?? true,
     },
     tabs: {
       ...input.tabs,
       enabled: input.tabs?.enabled ?? true,
       scope: input.tabs?.scope ?? "cwd",
       layout: input.tabs?.layout ?? "horizontal",
+      indicators: input.tabs?.indicators ?? "status",
     },
   }
 }

@@ -1,22 +1,20 @@
 import { describe, expect, test } from "bun:test"
 import {
-  AuthenticationReason,
-  ContentPolicyReason,
-  InvalidProviderOutputReason,
-  InvalidRequestReason,
+  AuthenticationError,
+  ContentPolicyError,
+  InvalidProviderOutputError,
+  InvalidRequestError,
   AIError,
-  NoRouteReason,
+  NoRouteError,
   ModelID,
   ProviderID,
-  ProviderInternalReason,
-  QuotaExceededReason,
-  RateLimitReason,
-  TransportReason,
-  UnknownProviderReason,
+  ProviderInternalError,
+  QuotaExceededError,
+  RateLimitError,
+  TransportError,
+  UnknownProviderError,
   ToolFailure,
   HttpContext,
-  HttpRequestDetails,
-  HttpResponseDetails,
 } from "@opencode-ai/ai"
 import { Permission } from "@opencode-ai/core/permission"
 import { ID } from "@opencode-ai/core/model"
@@ -26,33 +24,30 @@ import { Tool } from "@opencode-ai/schema/tool"
 import { toSessionError } from "@opencode-ai/core/session/to-session-error"
 import { SessionRunnerRetry } from "@opencode-ai/core/session/runner/retry"
 
-const llm = (reason: AIError["reason"]) => new AIError({ module: "test", method: "stream", reason })
+const llm = (reason: AIError["reason"]) => new AIError({ reason })
 
 describe("toSessionError", () => {
   test("maps every AI error reason to the open wire type", () => {
-    expect(toSessionError(llm(new RateLimitReason({ message: "rate", retryAfterMs: 123 })))).toEqual({
+    expect(toSessionError(llm(new RateLimitError({ message: "rate", retryAfterMs: 123 })))).toEqual({
       type: "provider.rate-limit",
       message: "rate",
     })
-    expect(toSessionError(llm(new AuthenticationReason({ message: "auth", kind: "invalid" }))).type).toBe(
-      "provider.auth",
-    )
-    expect(toSessionError(llm(new QuotaExceededReason({ message: "quota" }))).type).toBe("provider.quota")
-    expect(toSessionError(llm(new ContentPolicyReason({ message: "blocked" }))).type).toBe("provider.content-filter")
+    expect(toSessionError(llm(new AuthenticationError({ message: "auth" }))).type).toBe("provider.auth")
+    expect(toSessionError(llm(new QuotaExceededError({ message: "quota" }))).type).toBe("provider.quota")
+    expect(toSessionError(llm(new ContentPolicyError({ message: "blocked" }))).type).toBe("provider.content-filter")
     expect(
-      toSessionError(llm(new TransportReason({ message: "transport", transport: "http", operation: "request" }))).type,
+      toSessionError(llm(new TransportError({ message: "transport", transport: "http", operation: "request" }))).type,
     ).toBe("provider.transport")
-    expect(toSessionError(llm(new ProviderInternalReason({ message: "internal", status: 500 }))).type).toBe(
-      "provider.internal",
-    )
-    expect(toSessionError(llm(new InvalidProviderOutputReason({ message: "output" }))).type).toBe(
+    expect(toSessionError(llm(new ProviderInternalError({ message: "internal" }))).type).toBe("provider.internal")
+    expect(toSessionError(llm(new InvalidProviderOutputError({ message: "output" }))).type).toBe(
       "provider.invalid-output",
     )
-    expect(toSessionError(llm(new InvalidRequestReason({ message: "request" }))).type).toBe("provider.invalid-request")
+    expect(toSessionError(llm(new InvalidRequestError({ message: "request" }))).type).toBe("provider.invalid-request")
     expect(
       toSessionError(
         llm(
-          new NoRouteReason({
+          new NoRouteError({
+            message: "failed",
             route: "route",
             provider: ProviderID.make("provider"),
             model: ModelID.make("model"),
@@ -60,7 +55,7 @@ describe("toSessionError", () => {
         ),
       ).type,
     ).toBe("provider.no-route")
-    expect(toSessionError(llm(new UnknownProviderReason({ message: "unknown" }))).type).toBe("provider.unknown")
+    expect(toSessionError(llm(new UnknownProviderError({ message: "unknown" }))).type).toBe("provider.unknown")
   })
 
   test("preserves the permission rejection type without exposing internal fields", () => {
@@ -79,17 +74,40 @@ describe("toSessionError", () => {
     })
   })
 
-  test("preserves provider HTTP status", () => {
+  test("preserves provider HTTP status without exposing runtime diagnostics", () => {
     const http = new HttpContext({
-      request: new HttpRequestDetails({ method: "POST", url: "https://example.com", headers: {} }),
-      response: new HttpResponseDetails({ status: 413, headers: {} }),
+      url: "https://example.com",
+      status: 413,
+      headers: { "x-request-id": "request-1" },
     })
-    expect(toSessionError(llm(new InvalidRequestReason({ message: "too large", http })))).toEqual({
+    expect(
+      toSessionError(
+        llm(
+          new InvalidRequestError({
+            message: "too large",
+            classification: "context-overflow",
+            parameter: "messages",
+            body: '{"error":"context limit"}',
+            http,
+            cause: new Error("request failed"),
+          }),
+        ),
+      ),
+    ).toEqual({
       type: "provider.invalid-request",
       message: "too large",
       status: 413,
     })
-    expect(toSessionError(llm(new ProviderInternalReason({ message: "bad gateway", status: 502 })))).toEqual({
+    expect(
+      toSessionError(
+        llm(
+          new ProviderInternalError({
+            message: "bad gateway",
+            http: new HttpContext({ url: "https://example.com", status: 502, headers: {} }),
+          }),
+        ),
+      ),
+    ).toEqual({
       type: "provider.internal",
       message: "bad gateway",
       status: 502,
@@ -109,31 +127,38 @@ describe("toSessionError", () => {
     })
   })
 
-  test("retries only rate limits, provider-internal failures, and transport failures", () => {
+  test("retries rate limits, provider-internal, transport, and unrecognized failures", () => {
     const eligible = [
-      llm(new RateLimitReason({ message: "rate" })),
-      llm(new ProviderInternalReason({ message: "internal", status: 500 })),
-      llm(new TransportReason({ message: "transport", transport: "http", operation: "request" })),
+      llm(new RateLimitError({ message: "rate" })),
+      llm(new ProviderInternalError({ message: "internal" })),
+      llm(new TransportError({ message: "transport", transport: "http", operation: "request" })),
+      llm(new UnknownProviderError({ message: "unknown" })),
     ]
     const ineligible = [
-      llm(new AuthenticationReason({ message: "auth", kind: "invalid" })),
-      llm(new QuotaExceededReason({ message: "quota" })),
-      llm(new ContentPolicyReason({ message: "blocked" })),
-      llm(new InvalidProviderOutputReason({ message: "output" })),
-      llm(new InvalidRequestReason({ message: "request" })),
-      llm(new NoRouteReason({ route: "route", provider: ProviderID.make("provider"), model: ModelID.make("model") })),
-      llm(new UnknownProviderReason({ message: "unknown" })),
+      llm(new AuthenticationError({ message: "auth" })),
+      llm(new QuotaExceededError({ message: "quota" })),
+      llm(new ContentPolicyError({ message: "blocked" })),
+      llm(new InvalidProviderOutputError({ message: "output" })),
+      llm(new InvalidRequestError({ message: "request" })),
+      llm(
+        new NoRouteError({
+          message: "failed",
+          route: "route",
+          provider: ProviderID.make("provider"),
+          model: ModelID.make("model"),
+        }),
+      ),
     ]
 
-    expect(eligible.map(SessionRunnerRetry.isRetryable)).toEqual([true, true, true])
-    expect(ineligible.map(SessionRunnerRetry.isRetryable)).toEqual([false, false, false, false, false, false, false])
+    expect(eligible.map(SessionRunnerRetry.isRetryable)).toEqual([true, true, true, true])
+    expect(ineligible.map(SessionRunnerRetry.isRetryable)).toEqual([false, false, false, false, false, false])
   })
 
   test("retries transport failures only when delivery is absent or not sent", () => {
     const retryable = [
-      llm(new TransportReason({ message: "http transport", transport: "http", operation: "request" })),
+      llm(new TransportError({ message: "http transport", transport: "http", operation: "request" })),
       llm(
-        new TransportReason({
+        new TransportError({
           message: "connect failed",
           transport: "websocket",
           operation: "request",
@@ -144,7 +169,7 @@ describe("toSessionError", () => {
     ]
     const ineligible = [
       llm(
-        new TransportReason({
+        new TransportError({
           message: "send uncertain",
           transport: "websocket",
           operation: "write",
@@ -153,7 +178,7 @@ describe("toSessionError", () => {
         }),
       ),
       llm(
-        new TransportReason({
+        new TransportError({
           message: "response interrupted",
           transport: "websocket",
           operation: "read",
@@ -162,7 +187,7 @@ describe("toSessionError", () => {
         }),
       ),
       llm(
-        new TransportReason({
+        new TransportError({
           message: "continuation rejected",
           transport: "websocket",
           operation: "read",
@@ -180,16 +205,16 @@ describe("toSessionError", () => {
   test("honors provider retry header overrides", () => {
     const http = (headers: Record<string, string>) =>
       new HttpContext({
-        request: new HttpRequestDetails({ method: "POST", url: "https://example.com", headers: {} }),
-        response: new HttpResponseDetails({ status: 500, headers }),
+        url: "https://example.com",
+        status: 500,
+        headers,
       })
 
     expect(
       SessionRunnerRetry.isRetryable(
         llm(
-          new ProviderInternalReason({
+          new ProviderInternalError({
             message: "do not retry",
-            status: 500,
             http: http({ "x-should-retry": "false" }),
           }),
         ),
@@ -197,7 +222,7 @@ describe("toSessionError", () => {
     ).toBeFalse()
     expect(
       SessionRunnerRetry.isRetryable(
-        llm(new InvalidRequestReason({ message: "retry", http: http({ "x-should-retry": "true" }) })),
+        llm(new InvalidRequestError({ message: "retry", http: http({ "x-should-retry": "true" }) })),
       ),
     ).toBeTrue()
   })

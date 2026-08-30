@@ -13,10 +13,8 @@ import { Config } from "../../../config"
 export default Runtime.handler(
   Commands.commands.plugin.commands.add,
   Effect.fn("cli.plugin.add")(function* (input) {
-    if (!(yield* Effect.promise(() => Npm.isRegistryPackage(input.package))))
-      return yield* Effect.fail(
-        new Error("Plugin target must be an npm registry package name, version, tag, or semver range"),
-      )
+    if (!(yield* Effect.promise(() => Npm.isInstallablePackage(input.package))))
+      return yield* Effect.fail(new Error("Plugin target must be an npm registry package or Git package specifier"))
     const npm = yield* Npm.Service
     const installed = yield* npm.add(input.package, { subpaths: ["server", ""] })
     const tui = yield* npm.resolve(input.package, { subpaths: ["tui"] })

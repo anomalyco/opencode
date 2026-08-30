@@ -15,6 +15,7 @@ import { Permission } from "@opencode-ai/core/permission"
 import { AgentPlugin } from "@opencode-ai/core/plugin/agent"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { ConfigMigrateV1 } from "@opencode-ai/core/v1/config/migrate"
+import { ConfigAgentV1 } from "@opencode-ai/core/v1/config/agent"
 import { advance, drain } from "../lib/clock"
 import { tmpdir } from "../fixture/tmpdir"
 import { testEffect } from "../lib/effect"
@@ -32,6 +33,30 @@ const defaultPermissions = (global: Global.Interface): Permission.Ruleset => [
 
 test("rejects named agent color tokens", () => {
   expect(() => decode({ agents: { reviewer: { color: "warning" } } })).toThrow()
+})
+
+test("keeps schema fields and name out of legacy agent options", () => {
+  const agent = Schema.decodeUnknownSync(ConfigAgentV1.Info)({
+    name: "reviewer",
+    model: "test/model",
+    variant: "high",
+    temperature: 0.5,
+    top_p: 0.9,
+    prompt: "Review carefully.",
+    tools: { edit: false },
+    disable: false,
+    description: "Reviews changes",
+    mode: "subagent",
+    hidden: true,
+    options: { existing: true },
+    color: "#112233",
+    steps: 10,
+    maxSteps: 20,
+    permission: { read: "allow" },
+    custom: "preserved",
+  })
+
+  expect(agent.options).toEqual({ existing: true, custom: "preserved" })
 })
 
 describe("ConfigAgentPlugin.Plugin", () => {
@@ -330,10 +355,7 @@ describe("ConfigAgentPlugin.Plugin", () => {
   )
 
   it.live("loads legacy file-based agents from config directories", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ).pipe(
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
           yield* Effect.promise(async () => {
@@ -354,6 +376,7 @@ Review carefully.`,
             await fs.writeFile(
               path.join(tmp.path, "agents", "native.md"),
               `---
+variant: high
 request:
   headers:
     x-agent: native
@@ -407,10 +430,7 @@ Use native v2 fields.`,
 
   for (const testCase of sourceCases()) {
     it.effect(`rebuilds agents when a source file is ${testCase.name}`, () =>
-      Effect.acquireRelease(
-        Effect.promise(() => tmpdir()),
-        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-      ).pipe(
+      Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
         Effect.flatMap((tmp) =>
           Effect.gen(function* () {
             const directory = path.join(tmp.path, testCase.source)
@@ -445,10 +465,7 @@ Use native v2 fields.`,
   }
 
   it.effect("coalesces updates inside the debounce window into one rebuild", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ).pipe(
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
           const directory = path.join(tmp.path, "agents")
@@ -485,10 +502,7 @@ Use native v2 fields.`,
   )
 
   it.effect("ignores updates outside agent source directories", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ).pipe(
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
           const directory = path.join(tmp.path, "agents")

@@ -29,6 +29,7 @@ import type {
   SessionMessageAssistantTool,
   SessionInfo,
   SessionInboxInfo,
+  SessionInboxCompaction,
   ShellInfo,
   SkillInfo,
   VcsInfo,
@@ -167,6 +168,10 @@ function createSync() {
     has(key: string) {
       return state.has(key)
     },
+    pending(key: string) {
+      const active = state.get(key)
+      return active !== undefined && active !== true
+    },
     invalidate(key?: string) {
       if (key) {
         const active = state.get(key)
@@ -211,8 +216,10 @@ export function createData(config: CreateDataInput) {
   )
   const messageIndex = new Map<string, Map<string, number>>()
   const sync = createSync()
+  let activeUpdates: Map<string, DataSessionStatus | undefined> | undefined
 
   function setSessionActive(sessionID: string, status: DataSessionStatus) {
+    activeUpdates?.set(sessionID, status)
     setStore("session", "active", sessionID, status)
   }
 
@@ -278,12 +285,11 @@ export function createData(config: CreateDataInput) {
     setStore("session", "pending", sessionID, index, { ...item, delivery })
   }
 
-  // Inbox IDs of optimistic prompt admissions still awaiting their durable
-  // echo. This is the one deliberate piece of in-flight bookkeeping in this
-  // layer: it exists so a rejection only rolls back rows the server never
-  // acknowledged, and so a concurrent pending re-fetch cannot wipe a row the
-  // server does not know about yet. Entries clear on the enqueued echo or on
-  // rollback — not on POST success, which typically precedes the echo.
+  // Inbox IDs of optimistic admissions awaiting acknowledgement, so rejection
+  // only rolls back unacknowledged rows and a pending re-fetch cannot wipe a
+  // row the server does not know about yet. Prompts clear on their durable
+  // echo, positive pending read, or rollback; compactions also reconcile the
+  // POST's canonical ID.
   const outbox = new Set<string>()
 
   // Session IDs of optimistic create admissions still awaiting acknowledgement
@@ -297,11 +303,13 @@ export function createData(config: CreateDataInput) {
   // to exist server-side instead of failing with "not found".
   const creating = new Map<string, Promise<unknown>>()
 
-  // Per-session send chain: prompts must be admitted in submission order,
-  // and HTTP gives no ordering across concurrent POSTs. Each prompt waits
-  // for the previous prompt's POST (settled, so one failure does not block
-  // the next) before sending its own.
+  // Per-session send chain: prompts and compactions must be admitted in
+  // submission order. Each waits for the previous POST to settle, so one
+  // failure does not block the next.
   const sending = new Map<string, Promise<unknown>>()
+  const messageLoads = new Map<string, Promise<unknown>>()
+  const compacting = new Map<string, { id: string; observed: Set<string>; request: Promise<SessionInboxCompaction> }>()
+  onCleanup(() => compacting.clear())
 
   // Register `promise` under `key` until it settles. A later registration
   // replaces an earlier one; settlement only clears its own entry.
@@ -313,9 +321,24 @@ export function createData(config: CreateDataInput) {
     void promise.then(settle, settle)
   }
 
+  // Capture creation before settlement clears its entry, so dependent RPCs still see a failed create.
+  function sendAdmission<Value>(sessionID: string, send: () => Promise<Value>, gate?: Promise<unknown>) {
+    const created = creating.get(sessionID)
+    const previous = sending.get(sessionID)
+    const request = Promise.resolve()
+      .then(() => Promise.all([gate, created, previous]))
+      .then(send)
+    track(
+      sending,
+      sessionID,
+      request.catch(() => undefined),
+    )
+    return request
+  }
+
   // Upsert an admitted inbox item into pending, input, and (for user and
   // synthetic items) the visible transcript. Used by the inbox.enqueued
-  // handler and by optimistic prompt admission; the upsert is what reconciles
+  // handler and by optimistic admission; the upsert is what reconciles
   // the durable echo with an optimistic placeholder — the durable payload and
   // times replace the client's guess.
   function admitLocal(item: SessionInboxInfo) {
@@ -328,6 +351,7 @@ export function createData(config: CreateDataInput) {
         item.sessionID,
         at < 0 ? [...pending, item] : pending.map((entry, index) => (index === at ? item : entry)),
       )
+      if (item.type === "compaction") return
       const input = store.session.input[item.sessionID] ?? []
       if (!input.includes(item.id)) setStore("session", "input", item.sessionID, [...input, item.id])
       materializeInboxMessage(item)
@@ -469,6 +493,7 @@ export function createData(config: CreateDataInput) {
   }
 
   function removeSession(sessionID: string) {
+    activeUpdates?.set(sessionID, undefined)
     store.session.pending[sessionID]?.forEach((item) => outbox.delete(item.id))
     messageIndex.delete(sessionID)
     sync.invalidate(`session:${sessionID}`)
@@ -500,17 +525,25 @@ export function createData(config: CreateDataInput) {
 
   function handleEvent(event: OpenCodeEvent) {
     switch (event.type) {
-      case "server.connected":
+      case "server.connected": {
+        const updates = new Map<string, DataSessionStatus | undefined>()
+        activeUpdates = updates
         void api()
           .session.active()
           .then((active) => {
-            setStore(
-              "session",
-              "active",
-              reconcile(Object.fromEntries(Object.keys(active).map((sessionID) => [sessionID, "running" as const]))),
-            )
+            if (activeUpdates !== updates) return
+            // Lifecycle events received during hydration supersede the snapshot.
+            const snapshot = new Map<string, DataSessionStatus>(Object.keys(active).map((id) => [id, "running"]))
+            updates.forEach((status, id) => {
+              if (status === undefined) return snapshot.delete(id)
+              snapshot.set(id, status)
+            })
+            activeUpdates = undefined
+            setStore("session", "active", reconcile(Object.fromEntries(snapshot)))
           })
-          .catch(() => undefined)
+          .catch(() => {
+            if (activeUpdates === updates) activeUpdates = undefined
+          })
         void api()
           .location.get({ location: locationQuery(defaultLocation()) })
           .then((location) => {
@@ -521,6 +554,7 @@ export function createData(config: CreateDataInput) {
         void result.location.vcs.sync().catch((error) => console.error("Failed to preload VCS info", error))
         void result.project.sync().catch((error) => console.error("Failed to preload projects", error))
         return
+      }
       case "project.updated":
         setStore("project", "info", event.data.id, reconcile(event.data))
         return
@@ -617,7 +651,22 @@ export function createData(config: CreateDataInput) {
       }
       case "worktree.resolved": {
         for (const [sessionID, info] of Object.entries(store.session.info)) {
-          const adopted = Worktree.adopt({ projectID: info.projectID, directory: info.location.directory }, event.data)
+          const explicit = event.data.adopted?.includes(info.projectID)
+          const directory = explicit ? store.project.info[info.projectID]?.canonical : info.location.directory
+          if (!directory) {
+            if (info.location.workspaceID) continue
+            result.session.invalidate(sessionID)
+            void result.session.sync(sessionID)
+            continue
+          }
+          const adopted = Worktree.adopt(
+            {
+              projectID: info.projectID,
+              directory,
+              workspaceID: info.location.workspaceID,
+            },
+            event.data,
+          )
           if (!adopted) continue
           setStore("session", "info", sessionID, "projectID", adopted.projectID)
           setStore("session", "info", sessionID, "subpath", adopted.subpath)
@@ -637,6 +686,7 @@ export function createData(config: CreateDataInput) {
           draft.push(existing)
           message.reindex(draft, index, position)
         })
+        compacting.get(event.data.sessionID)?.observed.add(event.data.inboxID)
         return
       }
       case "session.inbox.delivery.changed":
@@ -644,6 +694,7 @@ export function createData(config: CreateDataInput) {
         return
       case "session.inbox.cancelled": {
         retractLocal(event.data.sessionID, event.data.inboxID)
+        compacting.get(event.data.sessionID)?.observed.add(event.data.inboxID)
         return
       }
       case "session.inbox.enqueued": {
@@ -654,6 +705,12 @@ export function createData(config: CreateDataInput) {
           timeCreated: event.created,
           ...event.data.item,
         })
+        if (event.data.item.type === "compaction") {
+          const active = compacting.get(event.data.sessionID)
+          active?.observed.add(event.data.inboxID)
+          if (active && active.id !== event.data.inboxID && outbox.delete(active.id))
+            removePending(event.data.sessionID, active.id)
+        }
         return
       }
       case "session.instructions.updated":
@@ -693,7 +750,8 @@ export function createData(config: CreateDataInput) {
             command: event.data.shell.command,
             status: event.data.shell.status,
             exit: event.data.shell.exit,
-            metadata: event.metadata,
+            metadata:
+              event.data.shell.metadata.background === true ? { ...event.metadata, background: true } : event.metadata,
             time: { created: event.created },
           })
         })
@@ -708,6 +766,17 @@ export function createData(config: CreateDataInput) {
           match.time.completed = event.created
         })
         return
+      case "session.message.content.updated": {
+        if (store.session.message[event.data.sessionID])
+          message.update(event.data.sessionID, (draft, index) => {
+            const assistant = message.assistant(draft, index, event.data.messageID)
+            if (assistant) assistant.content = [...event.data.content]
+          })
+        if (!sync.pending(`session.message:${event.data.sessionID}`)) return
+        result.session.message.invalidate(event.data.sessionID)
+        void result.session.message.sync(event.data.sessionID)
+        return
+      }
       case "session.step.started":
         message.update(event.data.sessionID, (draft, index) => {
           const position = index.get(event.data.assistantMessageID)
@@ -720,6 +789,7 @@ export function createData(config: CreateDataInput) {
             existing.finish = undefined
             existing.rawFinish = undefined
             existing.providerState = undefined
+            existing.time.streamed = undefined
             existing.time.completed = undefined
             if (event.data.snapshot) existing.snapshot = { ...existing.snapshot, start: event.data.snapshot }
             return
@@ -739,6 +809,12 @@ export function createData(config: CreateDataInput) {
             snapshot: event.data.snapshot ? { start: event.data.snapshot } : undefined,
             time: { created: event.created },
           })
+        })
+        return
+      case "session.step.streamed":
+        message.update(event.data.sessionID, (draft, index) => {
+          const currentAssistant = message.assistant(draft, index, event.data.assistantMessageID)
+          if (currentAssistant) currentAssistant.time.streamed = event.created
         })
         return
       case "session.step.ended": {
@@ -934,6 +1010,7 @@ export function createData(config: CreateDataInput) {
             time: { created: event.created },
           })
         })
+        if (event.data.inputID) compacting.get(event.data.sessionID)?.observed.add(event.data.inputID)
         return
       case "session.execution.succeeded":
       case "session.execution.failed":
@@ -1031,6 +1108,7 @@ export function createData(config: CreateDataInput) {
           }
           message.append(draft, index, failed)
         })
+        if (event.data.inputID) compacting.get(event.data.sessionID)?.observed.add(event.data.inputID)
         return
       case "permission.asked":
         if (store.session.permission[event.data.sessionID]?.some((request) => request.id === event.data.id)) return
@@ -1217,12 +1295,17 @@ export function createData(config: CreateDataInput) {
         sync(sessionID: string) {
           return sync.run(`session.pending:${sessionID}`, async () => {
             const pending = await api().session.inbox.list({ sessionID })
+            // A positive read acknowledges admission even when its SSE echo is delayed.
+            pending.forEach((item) => outbox.delete(item.id))
+            // Compactions also coalesce by Session, not just by the proposed ID.
+            if (pending.some((item) => item.type === "compaction"))
+              store.session.pending[sessionID]
+                ?.filter((item) => item.type === "compaction")
+                .forEach((item) => outbox.delete(item.id))
             // Keep optimistic rows still awaiting their echo: this fetch may
             // have raced ahead of an in-flight admission the server does not
             // know about yet.
-            const inflight = (store.session.pending[sessionID] ?? []).filter(
-              (item) => outbox.has(item.id) && !pending.some((row) => row.id === item.id),
-            )
+            const inflight = (store.session.pending[sessionID] ?? []).filter((item) => outbox.has(item.id))
             const merged = inflight.length === 0 ? pending : [...pending, ...inflight]
             batch(() => {
               setStore("session", "pending", sessionID, reconcile(merged))
@@ -1296,13 +1379,56 @@ export function createData(config: CreateDataInput) {
         if (fresh) track(creating, id, request)
         return { id, request }
       },
+      compact(input: { sessionID: string; model?: ModelRef }) {
+        const active = compacting.get(input.sessionID)
+        if (active) return active.request
+        // A known pending control ID may be consumed while setup waits. Propose
+        // a fresh ID and let the server coalesce, without duplicating its row.
+        const id = SessionMessage.ID.create()
+        if (!store.session.pending[input.sessionID]?.some((item) => item.type === "compaction")) {
+          outbox.add(id)
+          admitLocal({
+            id,
+            sessionID: input.sessionID,
+            timeCreated: Date.now(),
+            type: "compaction",
+            delivery: "steer",
+            payload: {},
+          })
+        }
+        // Compaction admission can coalesce onto a different ID. Retire the
+        // speculative row on an echo, and remember consumed IDs until the POST
+        // settles so its older response cannot resurrect a queued row.
+        const observed = new Set<string>()
+        const request = sendAdmission(input.sessionID, async () => {
+          if (input.model) await api().session.switchModel({ sessionID: input.sessionID, model: input.model })
+          return api().session.compact({ sessionID: input.sessionID, id })
+        })
+          .then((item) => {
+            batch(() => {
+              outbox.delete(id)
+              if (item.id !== id) removePending(input.sessionID, id)
+              if (!observed.has(item.id) && !messageIndex.get(input.sessionID)?.has(item.id)) admitLocal(item)
+            })
+            return item
+          })
+          .catch((error) => {
+            if (outbox.delete(id)) removePending(input.sessionID, id)
+            throw error
+          })
+          .finally(() => {
+            if (compacting.get(input.sessionID)?.request === request) compacting.delete(input.sessionID)
+          })
+        compacting.set(input.sessionID, { id, observed, request })
+        return request
+      },
       // Optimistic prompt admission: render the prompt immediately under a
       // client-minted ID, send it, and let the durable inbox.enqueued echo
       // upsert that same ID with the server's payload. Server admission is
       // idempotent per ID, so retrying with the identical payload cannot
       // double-admit.
-      prompt(input: SessionPromptInput & { gate?: Promise<unknown> }) {
-        const { gate, ...request } = input
+      prompt(input: SessionPromptInput & { gate?: Promise<unknown>; prepare?: () => Promise<unknown> }) {
+        const { gate, prepare, ...request } = input
         const id = request.id ?? SessionMessage.ID.create()
         // A retry may reuse an ID that is already rendered — and possibly
         // already durable. Admit optimistically only for new IDs so a failed
@@ -1328,25 +1454,15 @@ export function createData(config: CreateDataInput) {
             },
           })
         }
-        // Wrapped so even a synchronous client failure reaches the rollback.
-        // The POST additionally waits for the caller's gate, for any
-        // in-flight optimistic create of this session, and for the previous
-        // prompt's POST: the row renders now, the send happens once the
-        // session exists server-side and earlier prompts are admitted.
-        const previous = sending.get(request.sessionID)
-        const send = Promise.resolve()
-          .then(() => Promise.all([gate, creating.get(request.sessionID), previous]))
-          .then(() => api().session.prompt({ ...request, id }))
-        track(
-          sending,
+        return sendAdmission(
           request.sessionID,
-          send.then(
-            () => undefined,
-            () => undefined,
-          ),
-        )
-        return send.catch((error) => {
-          // Roll back only rows this call admitted and the echo has not
+          async () => {
+            await prepare?.()
+            return api().session.prompt({ ...request, id })
+          },
+          gate,
+        ).catch((error) => {
+          // Roll back only rows this call admitted and the server has not
           // acknowledged: anything else is server state.
           if (fresh && outbox.delete(id)) retractLocal(request.sessionID, id)
           throw error
@@ -1415,20 +1531,70 @@ export function createData(config: CreateDataInput) {
         loading(sessionID: string) {
           return store.session.messageLoading[sessionID] ?? false
         },
-        async loadMore(sessionID: string) {
+        async loadMore(
+          sessionID: string,
+          options?: {
+            all?: boolean
+            signal?: AbortSignal
+            /** Runs synchronously inside the store-publication batch. */
+            beforePublish?: () => void
+          },
+        ) {
+          const signal = options?.signal
+          if (signal?.aborted) return
+          while (messageLoads.has(sessionID)) {
+            const published = await (() => {
+              const pending = messageLoads.get(sessionID)
+              if (!signal) return pending
+              const aborted = Promise.withResolvers<void>()
+              const cancel = () => aborted.resolve()
+              signal.addEventListener("abort", cancel, { once: true })
+              return Promise.race([pending, aborted.promise])
+                .catch((error) => {
+                  if (!signal.aborted) throw error
+                })
+                .finally(() => signal.removeEventListener("abort", cancel))
+            })()
+            if ((!options?.all && published) || signal?.aborted) return
+          }
           const cursor = store.session.messageCursor[sessionID]
-          if (!cursor || store.session.messageLoading[sessionID]) return
+          if (!cursor || signal?.aborted) return
           setStore("session", "messageLoading", sessionID, true)
-          const response = await api()
-            .message.list({ sessionID, limit: messagePageLimit, cursor })
+          const request = (async () => {
+            const fetched: SessionMessageInfo[] = []
+            let next: string | undefined = cursor
+            do {
+              const response = await api().message.list(
+                {
+                  sessionID,
+                  limit: options?.all ? 200 : messagePageLimit,
+                  cursor: next,
+                },
+                { signal },
+              )
+              if (signal?.aborted) return
+              fetched.push(...response.data)
+              next = response.cursor.next ?? undefined
+              if (!options?.all) break
+            } while (next)
+            // A jump through history publishes once, not once per page of offscreen messages.
+            const existing = store.session.message[sessionID] ?? []
+            const ids = new Set(existing.map((item) => item.id))
+            const messages = [...fetched.reverse().filter((item) => !ids.has(item.id)), ...existing]
+            batch(() => {
+              options?.beforePublish?.()
+              messageIndex.set(sessionID, new Map(messages.map((item, position) => [item.id, position])))
+              setStore("session", "message", sessionID, reconcile(messages))
+              setStore("session", "messageCursor", sessionID, next)
+            })
+            return true
+          })()
+            .catch((error) => {
+              if (!signal?.aborted) throw error
+            })
             .finally(() => setStore("session", "messageLoading", sessionID, false))
-          const older = response.data.toReversed()
-          const existing = store.session.message[sessionID] ?? []
-          const ids = new Set(existing.map((item) => item.id))
-          const messages = [...older.filter((item) => !ids.has(item.id)), ...existing]
-          messageIndex.set(sessionID, new Map(messages.map((item, position) => [item.id, position])))
-          setStore("session", "message", sessionID, reconcile(messages))
-          setStore("session", "messageCursor", sessionID, response.cursor.next ?? undefined)
+          track(messageLoads, sessionID, request)
+          await request
         },
         invalidate(sessionID: string) {
           sync.invalidate(`session.message:${sessionID}`)

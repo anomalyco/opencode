@@ -190,6 +190,9 @@ function pendingPrompt(item: SessionInboxInfo): FooterQueuedPrompt | undefined {
     messageID: item.id,
     prompt: { messageID: item.id, text: item.payload.text, parts: [] },
     delivery: item.delivery,
+    ...(item.payload.skills?.length
+      ? { skills: item.payload.skills.map((skill) => ({ id: skill.id, name: skill.name })) }
+      : {}),
   }
 }
 
@@ -386,6 +389,12 @@ function skillCommit(messageID: string, name: string, skillID = messageID): Stre
     text: `→ Skill "${name}"`,
     phase: "start",
   }
+}
+
+function skillCommits(messageID: string, skills: FooterQueuedPrompt["skills"] = []) {
+  return Array.from(new Map(skills.map((skill) => [skill.id, skill])).values(), (skill) =>
+    skillCommit(messageID, skill.name, skill.id),
+  )
 }
 
 function compactionCommit(messageID: string): StreamCommit {
@@ -667,7 +676,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       if (!render) return
       if (reuseVisibleWait && waiting) return
       write([
-        ...(message.skills ?? []).map((skill) => skillCommit(message.id, skill.name, skill.id)),
+        ...skillCommits(message.id, message.skills),
         { kind: "user", source: "system", text: message.text, phase: "start", messageID: message.id },
       ])
       return
@@ -956,18 +965,16 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       syncPending()
       const visible = state.messageIDs.has(event.data.inboxID)
       if (waiting || pending) state.messageIDs.add(event.data.inboxID)
-      if (!waiting && pending && !visible) {
-        write([
-          {
-            kind: "user",
-            source: "system",
-            text: pending.prompt.text,
-            phase: "start",
-            messageID: event.data.inboxID,
-          },
-        ])
-      }
-      write([], { phase: "running", status: "waiting for assistant" })
+      const commits = pending && !visible ? skillCommits(event.data.inboxID, pending.skills) : []
+      if (!waiting && pending && !visible)
+        commits.push({
+          kind: "user",
+          source: "system",
+          text: pending.prompt.text,
+          phase: "start",
+          messageID: event.data.inboxID,
+        })
+      write(commits, { phase: "running", status: "waiting for assistant" })
       return
     }
     if (event.type === "session.inbox.delivery.changed") {
@@ -979,6 +986,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       if (state.messageIDs.has(event.data.inboxID)) return
       state.messageIDs.add(event.data.inboxID)
       write([
+        ...skillCommits(event.data.inboxID, pending.skills),
         {
           kind: "user",
           source: "system",

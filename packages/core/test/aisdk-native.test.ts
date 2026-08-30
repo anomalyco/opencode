@@ -61,8 +61,8 @@ describe("AISDKNative", () => {
     })
   })
 
-  test("maps Cerebras and Together AI settings, headers, and reasoning options to native providers", () => {
-    for (const name of ["cerebras", "togetherai"]) {
+  test("maps Cerebras, DeepInfra, Groq, and Together AI settings, headers, and reasoning options to native providers", () => {
+    for (const name of ["cerebras", "deepinfra", "groq", "togetherai"]) {
       expect(
         map(`@ai-sdk/${name}`, {
           apiKey: "secret",
@@ -106,6 +106,66 @@ describe("AISDKNative", () => {
           thinkingConfig: { thinkingLevel: "high" },
         },
       },
+    })
+  })
+
+  test("maps supported Mistral settings and request overlays to the native provider", () => {
+    expect(
+      map("@ai-sdk/mistral", {
+        apiKey: "secret",
+        baseURL: "https://mistral.example/v1",
+        headers: { "x-provider": "mistral" },
+        extraBody: { custom: { enabled: true } },
+        safePrompt: false,
+        documentImageLimit: 4,
+        documentPageLimit: 12,
+        parallelToolCalls: false,
+        promptCacheKey: "session-123",
+        reasoningEffort: "high",
+        promptMode: "reasoning",
+        fetch: "ignored",
+        generateId: "ignored",
+        structuredOutputs: true,
+        unsupported: true,
+      }),
+    ).toEqual({
+      package: "@opencode-ai/ai/providers/mistral",
+      settings: {
+        apiKey: "secret",
+        baseURL: "https://mistral.example/v1",
+        providerOptions: {
+          safePrompt: false,
+          documentImageLimit: 4,
+          documentPageLimit: 12,
+          parallelToolCalls: false,
+          promptCacheKey: "session-123",
+          reasoningEffort: "high",
+          promptMode: "reasoning",
+        },
+      },
+      headers: { "x-provider": "mistral" },
+      body: { custom: { enabled: true } },
+    })
+  })
+
+  test("omits invalid and runtime-only Mistral settings", () => {
+    expect(
+      map("@ai-sdk/mistral", {
+        headers: { valid: "header", invalid: 1 },
+        extraBody: "invalid",
+        safePrompt: "false",
+        documentImageLimit: "4",
+        documentPageLimit: null,
+        parallelToolCalls: 0,
+        promptCacheKey: false,
+        reasoningEffort: false,
+        promptMode: "unsupported",
+        fetch: "ignored",
+        generateId: "ignored",
+      }),
+    ).toEqual({
+      package: "@opencode-ai/ai/providers/mistral",
+      settings: {},
     })
   })
 
@@ -222,9 +282,11 @@ describe("AISDKNative", () => {
       },
       headers: { "x-test": "value" },
     })
-    expect(map("@ai-sdk/amazon-bedrock/mantle", settings, "openai.gpt-oss-safeguard-20b")?.package).toBe(
-      "@opencode-ai/ai/providers/amazon-bedrock/mantle/chat",
-    )
+    for (const modelID of ["openai.gpt-oss-safeguard-20b", "openai.gpt-oss-safeguard-120b"]) {
+      expect(map("@ai-sdk/amazon-bedrock/mantle", settings, modelID)?.package).toBe(
+        "@opencode-ai/ai/providers/amazon-bedrock/mantle/chat",
+      )
+    }
     expect(
       map(
         "@ai-sdk/amazon-bedrock/mantle",

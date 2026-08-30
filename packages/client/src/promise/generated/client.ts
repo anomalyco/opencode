@@ -80,6 +80,8 @@ import type {
   SessionBackgroundOutput,
   SessionMessageInput,
   SessionMessageOutput,
+  SessionMessageUpdateInput,
+  SessionMessageUpdateOutput,
   SessionEnvironmentInput,
   SessionEnvironmentOutput,
   SessionViewInput,
@@ -192,11 +194,14 @@ import type {
   PtyRemoveOutput,
   PtyConnectTokenInput,
   PtyConnectTokenOutput,
+  ExperimentalPersistentPtyReadInput,
+  ExperimentalPersistentPtyReadOutput,
   ExperimentalPersistentPtyListInput,
   ExperimentalPersistentPtyListOutput,
   ExperimentalPersistentPtyCreateInput,
   ExperimentalPersistentPtyCreateOutput,
   ExperimentalPersistentPtyShutdownOutput,
+  ExperimentalPersistentPtyHandoffOutput,
   ExperimentalPersistentPtyGetInput,
   ExperimentalPersistentPtyGetOutput,
   ExperimentalPersistentPtyUpdateInput,
@@ -235,6 +240,8 @@ import type {
   WorkspaceDestroyOutput,
   VcsGetInput,
   VcsGetOutput,
+  VcsBaseInput,
+  VcsBaseOutput,
   VcsStatusInput,
   VcsStatusOutput,
   VcsBranchesInput,
@@ -510,6 +517,7 @@ export function make(options: ClientOptions) {
               agent: input?.["agent"],
               model: input?.["model"],
               location: input?.["location"],
+              metadata: input?.["metadata"],
             },
             successStatus: 200,
             declaredStatuses: [401, 400],
@@ -524,7 +532,7 @@ export function make(options: ClientOptions) {
             path: `/api/session/import`,
             body: { info: input["info"], messages: input["messages"], location: input["location"] },
             successStatus: 200,
-            declaredStatuses: [409, 401, 400],
+            declaredStatuses: [409, 404, 401, 400],
             empty: false,
           },
           requestOptions,
@@ -925,6 +933,18 @@ export function make(options: ClientOptions) {
             path: `/api/session/${encodeURIComponent(input.sessionID)}/message/${encodeURIComponent(input.messageID)}`,
             successStatus: 200,
             declaredStatuses: [404, 401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      messageUpdate: (input: SessionMessageUpdateInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: SessionMessageUpdateOutput }>(
+          {
+            method: "PATCH",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/message/${encodeURIComponent(input.messageID)}`,
+            body: { content: input["content"] },
+            successStatus: 200,
+            declaredStatuses: [404, 400, 409, 401],
             empty: false,
           },
           requestOptions,
@@ -1349,7 +1369,7 @@ export function make(options: ClientOptions) {
             method: "GET",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/form`,
             successStatus: 200,
-            declaredStatuses: [404, 400, 401],
+            declaredStatuses: [404, 401, 400],
             empty: false,
           },
           requestOptions,
@@ -1478,7 +1498,7 @@ export function make(options: ClientOptions) {
             method: "GET",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/permission`,
             successStatus: 200,
-            declaredStatuses: [404, 400, 401],
+            declaredStatuses: [404, 401, 400],
             empty: false,
           },
           requestOptions,
@@ -1668,6 +1688,18 @@ export function make(options: ClientOptions) {
     },
     experimental: {
       persistentPty: {
+        read: (input: ExperimentalPersistentPtyReadInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalPersistentPtyReadOutput }>(
+            {
+              method: "GET",
+              path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/terminal/read`,
+              query: { lines: input["lines"] },
+              successStatus: 200,
+              declaredStatuses: [503, 401, 400],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
         list: (input: ExperimentalPersistentPtyListInput, requestOptions?: RequestOptions) =>
           request<{ readonly data: ExperimentalPersistentPtyListOutput }>(
             {
@@ -1706,6 +1738,17 @@ export function make(options: ClientOptions) {
               successStatus: 204,
               declaredStatuses: [503, 401, 400],
               empty: true,
+            },
+            requestOptions,
+          ),
+        handoff: (requestOptions?: RequestOptions) =>
+          request<ExperimentalPersistentPtyHandoffOutput>(
+            {
+              method: "POST",
+              path: `/api/experimental/persistent-pty/handoff`,
+              successStatus: 200,
+              declaredStatuses: [503, 401, 400],
+              empty: false,
             },
             requestOptions,
           ),
@@ -1955,6 +1998,18 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
+      base: (input?: VcsBaseInput, requestOptions?: RequestOptions) =>
+        request<VcsBaseOutput>(
+          {
+            method: "GET",
+            path: `/api/vcs/base`,
+            query: { location: input?.["location"] },
+            successStatus: 200,
+            declaredStatuses: [503, 401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
       status: (input?: VcsStatusInput, requestOptions?: RequestOptions) =>
         request<VcsStatusOutput>(
           {
@@ -1984,9 +2039,9 @@ export function make(options: ClientOptions) {
           {
             method: "GET",
             path: `/api/vcs/diff`,
-            query: { location: input["location"], mode: input["mode"], context: input["context"] },
+            query: { location: input["location"], mode: input["mode"], base: input["base"], context: input["context"] },
             successStatus: 200,
-            declaredStatuses: [401, 400],
+            declaredStatuses: [503, 401, 400],
             empty: false,
           },
           requestOptions,

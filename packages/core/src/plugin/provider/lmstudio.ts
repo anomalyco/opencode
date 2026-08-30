@@ -1,11 +1,11 @@
 import { define } from "@opencode-ai/plugin/effect/plugin"
-import { Document, type Entry } from "@opencode-ai/schema/config"
+import type { Entry } from "@opencode-ai/schema/config"
 import { Duration, Effect, Schedule, Schema, Semaphore, Stream } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { Config } from "../../config.js"
 import { Model } from "../../model.js"
-import { Provider } from "../../provider.js"
 import type { PluginInternal } from "../internal.js"
+import { foldSettings } from "./configured.js"
 
 const providerID = "lmstudio"
 
@@ -150,13 +150,7 @@ export function make(origin = "http://127.0.0.1:1234", interval: Duration.Input 
 export const LMStudioPlugin = make()
 
 function configured(entries: readonly Entry[], origin: string) {
-  const settings = entries
-    .filter((entry): entry is Document => entry.type === "document")
-    .flatMap((entry) => {
-      const settings = entry.info.providers?.[providerID]?.settings
-      return settings ? [settings] : []
-    })
-    .reduce<Provider.Settings | undefined>((result, item) => Provider.mergeOverlay(result, item), undefined)
+  const settings = foldSettings(entries, providerID, undefined)
   const baseURL = (
     typeof settings?.baseURL === "string" ? settings.baseURL : `${origin.replace(/\/+$/, "")}/v1`
   ).replace(/\/+$/, "")

@@ -174,6 +174,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
           agent: Agent.ID.pipe(Schema.optional),
           model: Model.Ref.pipe(Schema.optional),
           location: Location.Ref.pipe(Schema.optional),
+          metadata: Session.Metadata.pipe(Schema.optional),
         }),
         success: Schema.Struct({ data: Session.Info }),
       }).annotateMerge(
@@ -191,12 +192,13 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
           location: Location.Ref.pipe(Schema.optional),
         }),
         success: Schema.Struct({ data: Session.Info }),
-        error: ConflictError,
+        error: [ConflictError, SessionNotFoundError],
       }).annotateMerge(
         OpenApi.annotations({
           identifier: "v2.session.import",
           summary: "Import session",
-          description: "Import a projected session transcript at the requested location.",
+          description:
+            "Import a projected session transcript at the requested location. If parentID is supplied, the parent session must already exist; import parents before children.",
         }),
       ),
     )
@@ -707,6 +709,20 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
           identifier: "v2.session.message",
           summary: "Get session message",
           description: "Retrieve one projected message owned by the Session.",
+        }),
+      ),
+    )
+    .add(
+      HttpApiEndpoint.patch("session.messageUpdate", "/api/session/:sessionID/message/:messageID", {
+        params: { sessionID: Session.ID, messageID: SessionMessage.ID },
+        payload: Schema.Struct({ content: Schema.Array(SessionMessage.AssistantContent) }),
+        success: Schema.Struct({ data: SessionMessage.Assistant }),
+        error: [SessionNotFoundError, MessageNotFoundError, InvalidRequestError, SessionBusyError, ConflictError],
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.session.messageUpdate",
+          summary: "Update assistant message content",
+          description: "Replace the content of a completed assistant message in an idle session.",
         }),
       ),
     )

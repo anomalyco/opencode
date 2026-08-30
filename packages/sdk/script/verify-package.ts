@@ -38,9 +38,9 @@ try {
     const archive = join(temporary, `${name}.tgz`)
 
     if (pkg.dependencies) {
-      const unpacked = Object.keys(pkg.dependencies).filter(
-        (dependency) => dependency.startsWith("@opencode-ai/") && !archives.has(dependency),
-      )
+      const unpacked = Object.entries(pkg.dependencies)
+        .filter(([dependency, version]) => version.startsWith("workspace:") && !archives.has(dependency))
+        .map(([dependency]) => dependency)
       if (unpacked.length > 0)
         throw new Error(`${pkg.name} has unpacked workspace dependencies: ${unpacked.join(", ")}`)
       pkg.dependencies = Object.fromEntries(
@@ -173,6 +173,10 @@ for (const module of modules) {
   const sdk = archives.get("@opencode-ai/sdk")
   if (!sdk) throw new Error("Packed SDK archive was not created")
   await $`npm install --ignore-scripts --no-audit --no-fund --package-lock=false ${sdk} wrangler@4.110.0`.cwd(consumer)
+  const runtimes = (await $`npm ls effect --all --parseable`.cwd(consumer).text()).trim().split("\n")
+  if (runtimes.length !== 1) {
+    throw new Error(`Packed SDK consumer resolved multiple Effect runtimes:\n${runtimes.join("\n")}`)
+  }
   await $`bun imports.mjs`.cwd(consumer)
   await $`bun --conditions=workerd imports.mjs`.cwd(consumer)
   await $`node_modules/.bin/wrangler deploy --dry-run --config wrangler.jsonc --outdir dist`.cwd(consumer)

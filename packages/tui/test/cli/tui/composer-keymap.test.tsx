@@ -96,7 +96,7 @@ async function renderComposer(
         <ConfigProvider config={createTuiResolvedConfig({ keybinds })}>
           <Keymap.Provider>
             <ClientProvider api={createApi(calls.fetch)}>
-              <DataProvider>
+              <DataProvider directory={process.cwd()}>
                 <LocationProvider>
                   <RouteProvider initialRoute={{ type: "session", sessionID: "parent" }}>
                     <ThemeProvider mode="dark" source={{ discover: async () => ({}) }}>
@@ -182,6 +182,17 @@ test("configured composer bindings work with a focused textarea", async () => {
     composer.app.mockInput.pressKey("u", { ctrl: true })
     await wait(() => composer.removed.length === 1)
     expect(composer.removed).toEqual(["sh-a"])
+  } finally {
+    composer.app.renderer.destroy()
+  }
+})
+
+test("ctrl+c closes the active composer", async () => {
+  const composer = await renderComposer("shell", {})
+
+  try {
+    composer.app.mockInput.pressKey("c", { ctrl: true })
+    await composer.app.waitFor(() => composer.closed() === 1)
   } finally {
     composer.app.renderer.destroy()
   }

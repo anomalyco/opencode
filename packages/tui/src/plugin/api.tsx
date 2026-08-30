@@ -177,11 +177,15 @@ export function createPluginContext(input: {
       tabs: {
         enabled: host.sessionTabs.enabled,
         list: () =>
-          host.sessionTabs.tabs().map((tab) => ({
-            ...tab,
-            active: host.sessionTabs.current() === tab.sessionID,
-            ...host.sessionTabs.status(tab.sessionID),
-          })),
+          host.sessionTabs.tabs().map((tab) => {
+            const status = host.sessionTabs.status(tab.sessionID)
+            return {
+              ...tab,
+              active: host.sessionTabs.current() === tab.sessionID,
+              ...status,
+              attention: Boolean(status.attention),
+            }
+          }),
         open(sessionID) {
           if (!host.sessionTabs.enabled()) return false
           host.sessionTabs.select(sessionID)
@@ -232,7 +236,10 @@ function settle<T>(resolve: (value: T) => void) {
   }
 }
 
-function createDialogApi(dialog: ReturnType<typeof useDialog>, provide: (render: () => JSX.Element) => JSX.Element) {
+export function createDialogApi(
+  dialog: ReturnType<typeof useDialog>,
+  provide: (render: () => JSX.Element) => JSX.Element,
+) {
   const api: Dialog = {
     show(render, onClose) {
       dialog.replace(() => provide(render), onClose)

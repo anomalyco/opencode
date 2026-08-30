@@ -11,7 +11,8 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { getProjectAvatarVariant, type LocalProject } from "@/shell/state/layout"
 import { ServerConnection } from "@/runtime/server/registry"
 import { LocationProvider } from "@/workspaces/location"
-import { displayName, getProjectAvatarSource } from "@/shell/layout/helpers"
+import { displayName } from "@/shell/layout/helpers"
+import { ProjectIcon } from "@/shell/layout/project-icon"
 import { createEditProjectModel } from "./project-model"
 import { ProjectSettingsExtensions } from "./project-extensions"
 import { SettingsServerDataScope } from "@/settings/server-scope"
@@ -57,11 +58,7 @@ function ProjectSettingsDialog(props: { project: LocalProject; server: ServerCon
         <Tabs.List>
           <div class="project-settings-nav">
             <Tabs.Trigger value="general">
-              <ProjectAvatar
-                fallback={projectName()}
-                variant={getProjectAvatarVariant(props.project.icon?.color)}
-                class="!size-4 shrink-0"
-              />
+              <ProjectIcon project={props.project} class="!size-4 shrink-0" />
               <span class="truncate">{projectName()}</span>
             </Tabs.Trigger>
             <Tabs.Trigger value="scripts">
@@ -114,14 +111,14 @@ function ProjectSettingsDialog(props: { project: LocalProject; server: ServerCon
                     onDragLeave={model.dragLeave}
                     onClick={model.iconClick}
                   >
-                    <ProjectAvatar
+                    <ProjectIcon
+                      project={props.project}
                       fallback={model.store.name || model.defaultName()}
-                      src={getProjectAvatarSource(props.project.id, {
+                      icon={{
                         color: model.store.color,
                         url: props.project.icon?.url,
                         override: model.store.iconOverride,
-                      })}
-                      variant={getProjectAvatarVariant(model.store.color)}
+                      }}
                       class="!size-16 [&_[data-slot=project-avatar-surface]]:!rounded-[6px] [&_[data-slot=project-avatar-surface]]:!text-[32px]"
                     />
                     <span

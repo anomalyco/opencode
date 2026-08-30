@@ -6,6 +6,7 @@ import { Endpoint } from "../route/endpoint.js"
 import { Framing } from "../route/framing.js"
 import { Protocol } from "../route/protocol.js"
 import {
+  AIError,
   LLMEvent,
   Usage,
   type FinishReason,
@@ -17,6 +18,7 @@ import {
   type ToolCallPart,
   type ToolDefinition,
 } from "../schema/index.js"
+import { classifyProviderFailure } from "../provider-error.js"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
 import { GeminiToolSchema } from "./utils/gemini-tool-schema.js"
 import { Lifecycle } from "./utils/lifecycle.js"
@@ -221,6 +223,7 @@ const GeminiPromptFeedback = Schema.StructWithRest(
 type GeminiPromptFeedback = Schema.Schema.Type<typeof GeminiPromptFeedback>
 
 const GeminiEvent = Schema.Struct({
+  error: Schema.optional(Schema.Unknown),
   candidates: optionalNull(Schema.Array(GeminiCandidate)),
   promptFeedback: optionalNull(GeminiPromptFeedback),
   usageMetadata: optionalNull(GeminiUsage),
@@ -229,6 +232,7 @@ type GeminiEvent = Schema.Schema.Type<typeof GeminiEvent>
 
 interface ParserState {
   readonly route: string
+  readonly providerMetadataKey: string
   readonly finishReason?: string
   readonly hasToolCalls: boolean
   readonly promptFeedback?: GeminiPromptFeedback
@@ -236,6 +240,10 @@ interface ParserState {
   readonly lifecycle: Lifecycle.State
   readonly reasoningSignature?: string
   readonly textSignature?: string
+  readonly reasoningId?: string
+  readonly textId?: string
+  readonly nextReasoningId: number
+  readonly nextTextId: number
   readonly seenCallIds?: ReadonlySet<string>
 }
 
@@ -285,22 +293,23 @@ const lowerUserPart = Effect.fn("Gemini.lowerUserPart")(function* (part: TextPar
   return { inlineData: { mimeType: media.mime, data: media.base64 } }
 })
 
-const googleMetadata = (metadata: Record<string, unknown>): ProviderMetadata => ({ google: metadata })
+const providerMetadata = (key: string, metadata: Record<string, unknown>): ProviderMetadata => ({ [key]: metadata })
 
-const thoughtSignature = (providerMetadata: ProviderMetadata | undefined) => {
-  const google = providerMetadata?.google
-  return ProviderShared.isRecord(google) && typeof google.thoughtSignature === "string"
-    ? google.thoughtSignature
+const thoughtSignature = (metadata: ProviderMetadata | undefined, key: string) => {
+  const value = metadata?.[key]
+  return ProviderShared.isRecord(value) && typeof value.thoughtSignature === "string"
+    ? value.thoughtSignature
     : undefined
 }
 
-const lowerToolCall = (part: ToolCallPart, omitIds: boolean) => ({
+const lowerToolCall = (part: ToolCallPart, omitIds: boolean, metadataKey: string) => ({
   functionCall: { ...(omitIds ? {} : { id: part.id }), name: part.name, args: part.input },
-  thoughtSignature: thoughtSignature(part.providerMetadata),
+  thoughtSignature: thoughtSignature(part.providerMetadata, metadataKey),
 })
 
 const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMRequest) {
   const contents: GeminiContent[] = []
+  const metadataKey = request.model.route.providerMetadataKey ?? String(request.model.provider)
   const omitCallIds = omitsFunctionCallIds(request.model.id)
   const legacyToolMedia = routesLegacyToolMedia(request.model.id)
   let pendingMedia: GeminiInlineDataPart[] | undefined
@@ -342,15 +351,19 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
         if (!ProviderShared.supportsContent(part, ["text", "reasoning", "tool-call"]))
           return yield* ProviderShared.unsupportedContent("Gemini", "assistant", ["text", "reasoning", "tool-call"])
         if (part.type === "text") {
-          parts.push({ text: part.text, thoughtSignature: thoughtSignature(part.providerMetadata) })
+          parts.push({ text: part.text, thoughtSignature: thoughtSignature(part.providerMetadata, metadataKey) })
           continue
         }
         if (part.type === "reasoning") {
-          parts.push({ text: part.text, thought: true, thoughtSignature: thoughtSignature(part.providerMetadata) })
+          parts.push({
+            text: part.text,
+            thought: true,
+            thoughtSignature: thoughtSignature(part.providerMetadata, metadataKey),
+          })
           continue
         }
         if (part.type === "tool-call") {
-          const lowered = lowerToolCall(part, omitCallIds)
+          const lowered = lowerToolCall(part, omitCallIds, metadataKey)
           const signature = lowered.thoughtSignature
           parts.push({
             ...lowered,
@@ -498,7 +511,7 @@ const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMReque
 // `cachedContentTokenCount` subset. `candidatesTokenCount` is *exclusive*
 // of `thoughtsTokenCount` — visible-only, not a total — so we sum the two
 // to produce the inclusive `outputTokens` the rest of the contract expects.
-const mapUsage = (usage: GeminiUsage | undefined) => {
+const mapUsage = (usage: GeminiUsage | undefined, metadataKey: string) => {
   if (!usage) return undefined
   // Explicit provider nulls decode as `null`; normalize to `undefined` so the
   // token arithmetic below treats them like absent counts.
@@ -519,7 +532,7 @@ const mapUsage = (usage: GeminiUsage | undefined) => {
     cacheReadInputTokens: cached,
     reasoningTokens: thoughts,
     totalTokens: ProviderShared.totalTokens(promptTokens, outputTokens, usage.totalTokenCount ?? undefined),
-    providerMetadata: { google: usage },
+    providerMetadata: providerMetadata(metadataKey, usage),
   })
 }
 
@@ -562,15 +575,24 @@ const finish = (state: ParserState): ReadonlyArray<LLMEvent> => {
 
   const events: LLMEvent[] = []
   let lifecycle = state.lifecycle
-  if (state.reasoningSignature !== undefined)
+  if (state.reasoningId !== undefined)
     lifecycle = Lifecycle.reasoningEnd(
       lifecycle,
       events,
-      "reasoning-0",
-      googleMetadata({ thoughtSignature: state.reasoningSignature }),
+      state.reasoningId,
+      state.reasoningSignature === undefined
+        ? undefined
+        : providerMetadata(state.providerMetadataKey, { thoughtSignature: state.reasoningSignature }),
     )
-  if (state.textSignature !== undefined)
-    lifecycle = Lifecycle.textEnd(lifecycle, events, "text-0", googleMetadata({ thoughtSignature: state.textSignature }))
+  if (state.textId !== undefined)
+    lifecycle = Lifecycle.textEnd(
+      lifecycle,
+      events,
+      state.textId,
+      state.textSignature === undefined
+        ? undefined
+        : providerMetadata(state.providerMetadataKey, { thoughtSignature: state.textSignature }),
+    )
   Lifecycle.finish(lifecycle, events, {
     reason: {
       normalized:
@@ -579,16 +601,32 @@ const finish = (state: ParserState): ReadonlyArray<LLMEvent> => {
     },
     usage: state.usage,
     providerMetadata:
-      state.promptFeedback === undefined ? undefined : googleMetadata({ promptFeedback: state.promptFeedback }),
+      state.promptFeedback === undefined
+        ? undefined
+        : providerMetadata(state.providerMetadataKey, { promptFeedback: state.promptFeedback }),
   })
   return events
 }
 
 const step = (state: ParserState, event: GeminiEvent) => {
+  if (ProviderShared.isRecord(event.error) && typeof event.error.message === "string") {
+    const body = ProviderShared.encodeJson(event)
+    return Effect.fail(
+      new AIError({
+        reason: classifyProviderFailure({
+          message: event.error.message,
+          status: typeof event.error.code === "number" ? event.error.code : undefined,
+          rawBody: body,
+        }),
+      }),
+    )
+  }
   const nextState = {
     ...state,
     promptFeedback: event.promptFeedback ?? state.promptFeedback,
-    usage: event.usageMetadata ? (mapUsage(event.usageMetadata) ?? state.usage) : state.usage,
+    usage: event.usageMetadata
+      ? (mapUsage(event.usageMetadata, state.providerMetadataKey) ?? state.usage)
+      : state.usage,
   }
   const candidate = event.candidates?.[0]
   if (!candidate?.content)
@@ -602,6 +640,10 @@ const step = (state: ParserState, event: GeminiEvent) => {
   let lifecycle = nextState.lifecycle
   let reasoningSignature = nextState.reasoningSignature
   let textSignature = nextState.textSignature
+  let reasoningId = nextState.reasoningId
+  let textId = nextState.textId
+  let nextReasoningId = nextState.nextReasoningId
+  let nextTextId = nextState.nextTextId
   // Supplier ids must be tracked across chunks of the same response, not just within one event's parts.
   const seenCallIds = new Set(nextState.seenCallIds)
 
@@ -627,27 +669,53 @@ const step = (state: ParserState, event: GeminiEvent) => {
     else if (signature !== undefined && "text" in part) textSignature = signature
     if ("text" in part && part.text.length > 0) {
       if (part.thought) {
+        if (textId !== undefined) {
+          lifecycle = Lifecycle.textEnd(
+            lifecycle,
+            events,
+            textId,
+            textSignature
+              ? providerMetadata(state.providerMetadataKey, { thoughtSignature: textSignature })
+              : undefined,
+          )
+          textId = undefined
+          textSignature = undefined
+        }
+        if (reasoningId === undefined) {
+          reasoningId = `reasoning-${nextReasoningId}`
+          nextReasoningId += 1
+        }
         lifecycle = Lifecycle.reasoningDelta(
           lifecycle,
           events,
-          "reasoning-0",
+          reasoningId,
           part.text,
-          signature ? googleMetadata({ thoughtSignature: signature }) : undefined,
+          signature ? providerMetadata(state.providerMetadataKey, { thoughtSignature: signature }) : undefined,
         )
         continue
       }
-      lifecycle = Lifecycle.reasoningEnd(
-        lifecycle,
-        events,
-        "reasoning-0",
-        reasoningSignature ? googleMetadata({ thoughtSignature: reasoningSignature }) : undefined,
-      )
+      if (reasoningId !== undefined) {
+        lifecycle = Lifecycle.reasoningEnd(
+          lifecycle,
+          events,
+          reasoningId,
+          reasoningSignature
+            ? providerMetadata(state.providerMetadataKey, { thoughtSignature: reasoningSignature })
+            : undefined,
+        )
+        reasoningId = undefined
+        reasoningSignature = undefined
+      }
+      if (textId === undefined) {
+        textId = `text-${nextTextId}`
+        nextTextId += 1
+      }
       lifecycle = Lifecycle.textDelta(
         lifecycle,
         events,
-        "text-0",
+        textId,
         part.text,
-        textSignature ? googleMetadata({ thoughtSignature: textSignature }) : undefined,
+        textSignature ? providerMetadata(state.providerMetadataKey, { thoughtSignature: textSignature }) : undefined,
       )
       textSignature = undefined
       continue
@@ -663,20 +731,37 @@ const step = (state: ParserState, event: GeminiEvent) => {
       const duplicate = supplied !== undefined && seenCallIds.has(supplied)
       if (supplied !== undefined) seenCallIds.add(supplied)
       const id = supplied !== undefined && !duplicate ? supplied : `tool_${crypto.randomUUID().replaceAll("-", "")}`
-      lifecycle = Lifecycle.reasoningEnd(
-        lifecycle,
-        events,
-        "reasoning-0",
-        reasoningSignature ? googleMetadata({ thoughtSignature: reasoningSignature }) : undefined,
-      )
+      if (reasoningId !== undefined) {
+        lifecycle = Lifecycle.reasoningEnd(
+          lifecycle,
+          events,
+          reasoningId,
+          reasoningSignature
+            ? providerMetadata(state.providerMetadataKey, { thoughtSignature: reasoningSignature })
+            : undefined,
+        )
+        reasoningId = undefined
+        reasoningSignature = undefined
+      }
+      if (textId !== undefined) {
+        lifecycle = Lifecycle.textEnd(
+          lifecycle,
+          events,
+          textId,
+          textSignature ? providerMetadata(state.providerMetadataKey, { thoughtSignature: textSignature }) : undefined,
+        )
+        textId = undefined
+        textSignature = undefined
+      }
       lifecycle = Lifecycle.stepStart(lifecycle, events)
       events.push(
         LLMEvent.toolCall({
           id,
           name: part.functionCall.name,
           input,
-          providerMetadata:
-            part.thoughtSignature ? googleMetadata({ thoughtSignature: part.thoughtSignature }) : undefined,
+          providerMetadata: part.thoughtSignature
+            ? providerMetadata(state.providerMetadataKey, { thoughtSignature: part.thoughtSignature })
+            : undefined,
         }),
       )
       hasToolCalls = true
@@ -690,6 +775,10 @@ const step = (state: ParserState, event: GeminiEvent) => {
       lifecycle,
       reasoningSignature,
       textSignature,
+      reasoningId,
+      textId,
+      nextReasoningId,
+      nextTextId,
       seenCallIds,
       finishReason: candidate.finishReason ?? nextState.finishReason,
     },
@@ -714,8 +803,11 @@ export const protocol = Protocol.make({
     event: Protocol.jsonEvent(GeminiEvent),
     initial: (request) => ({
       route: `${request.model.provider}/${request.model.route.id}`,
+      providerMetadataKey: request.model.route.providerMetadataKey ?? String(request.model.provider),
       hasToolCalls: false,
       lifecycle: Lifecycle.initial(),
+      nextReasoningId: 0,
+      nextTextId: 0,
     }),
     step,
     onHalt: (state) => Effect.succeed(finish(state)),

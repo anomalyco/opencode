@@ -12,6 +12,7 @@ it.live("allows browser preflight requests without credentials", () =>
         hostname: "127.0.0.1",
         port: 0,
         password: "secret",
+        cors: ["http://192.168.1.10:3001", "https://example.com"],
         app: { version: "test-version" },
         database: { path: ":memory:" },
       },
@@ -51,6 +52,42 @@ it.live("allows browser preflight requests without credentials", () =>
     expect(health.status).toBe(200)
     expect(health.headers.get("access-control-allow-origin")).toBe("http://localhost:3000")
     expect(yield* Effect.promise(() => health.json())).toMatchObject({ version: "test-version" })
+
+    yield* Effect.forEach(
+      ["http://192.168.1.10:3001", "https://example.com", "https://untrusted.example.com"],
+      (origin) =>
+        Effect.gen(function* () {
+          const allowed = origin === "https://untrusted.example.com" ? null : origin
+          const preflight = yield* Effect.promise(() =>
+            fetch(new URL("/api/health", HttpServer.formatAddress(server.address)), {
+              method: "OPTIONS",
+              headers: {
+                origin,
+                "access-control-request-method": "GET",
+                "access-control-request-headers": "authorization",
+              },
+            }),
+          )
+          expect(preflight.status).toBe(204)
+          expect(preflight.headers.get("access-control-allow-origin")).toBe(allowed)
+
+          const health = yield* Effect.promise(() =>
+            fetch(new URL("/api/health", HttpServer.formatAddress(server.address)), {
+              headers: { origin, authorization: `Basic ${btoa("opencode:secret")}` },
+            }),
+          )
+          expect(health.status).toBe(200)
+          expect(health.headers.get("access-control-allow-origin")).toBe(allowed)
+          yield* Effect.promise(() => health.arrayBuffer())
+
+          const denied = yield* Effect.promise(() =>
+            fetch(new URL("/api/health", HttpServer.formatAddress(server.address)), { headers: { origin } }),
+          )
+          expect(denied.status).toBe(401)
+          expect(denied.headers.get("access-control-allow-origin")).toBe(allowed)
+          yield* Effect.promise(() => denied.arrayBuffer())
+        }),
+    )
 
     const event = yield* Effect.promise(() =>
       fetch(new URL("/api/event", HttpServer.formatAddress(server.address)), {

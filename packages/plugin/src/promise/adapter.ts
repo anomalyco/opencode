@@ -69,6 +69,7 @@ export function fromPromise(plugin: Plugin) {
   return define({
     id: plugin.id,
     tui: plugin.tui,
+    vcs: plugin.vcs,
     effect: (host) =>
       Effect.gen(function* () {
         const [{ ClientApi }, { OpenCodeEvent }] = yield* Effect.promise(() =>
@@ -76,6 +77,7 @@ export function fromPromise(plugin: Plugin) {
         )
         const AgentEndpoints = ClientApi.groups["server.agent"].endpoints
         const CommandEndpoints = ClientApi.groups["server.command"].endpoints
+        const ExperimentalEndpoints = ClientApi.groups["server.experimental"].endpoints
         const GenerateEndpoints = ClientApi.groups["server.generate"].endpoints
         const IntegrationEndpoints = ClientApi.groups["server.integration"].endpoints
         const McpEndpoints = ClientApi.groups["server.mcp"].endpoints
@@ -97,6 +99,16 @@ export function fromPromise(plugin: Plugin) {
           }))
 
         const run = <A, E>(effect: Effect.Effect<A, E>) => Effect.runPromiseWith(context)(effect)
+
+        const promiseExecutor =
+          (execute: Tool.Info["execute"]): Info["execute"] =>
+          (input, context) =>
+            run(
+              execute(input, {
+                ...context,
+                progress: (update) => Effect.promise(() => context.progress(update)),
+              }),
+            )
 
         const adaptApiMethod = <PromiseMethod>(
           endpoint: HttpApiEndpoint.Top,
@@ -125,6 +137,7 @@ export function fromPromise(plugin: Plugin) {
 
         const context2: Context = {
           app: host.app,
+          location: host.location,
           options: host.options,
           agent: {
             get: adaptApiMethod(AgentEndpoints["agent.get"], host.agent.get),
@@ -175,6 +188,11 @@ export function fromPromise(plugin: Plugin) {
                   Stream.map((event) => event as unknown as PromiseEvent),
                 ),
               ),
+          },
+          experimental: {
+            terminal: {
+              read: adaptApiMethod(ExperimentalEndpoints["persistentPty.read"], host.experimental.terminal.read),
+            },
           },
           generate: {
             text: adaptApiMethod(GenerateEndpoints["generate.text"], host.generate.text),
@@ -259,10 +277,6 @@ export function fromPromise(plugin: Plugin) {
           },
           mcp: {
             list: adaptApiMethod(McpEndpoints["mcp.list"], host.mcp.list),
-            add: adaptApiMethod(McpEndpoints["mcp.add"], host.mcp.add),
-            remove: adaptApiMethod(McpEndpoints["mcp.remove"], host.mcp.remove),
-            connect: adaptApiMethod(McpEndpoints["mcp.connect"], host.mcp.connect),
-            disconnect: adaptApiMethod(McpEndpoints["mcp.disconnect"], host.mcp.disconnect),
             transform: transform(host.mcp),
             reload: () => run(host.mcp.reload()),
           },
@@ -293,15 +307,36 @@ export function fromPromise(plugin: Plugin) {
             scan: (options) => run(host.storage.scan(options)),
           },
           tool: {
+            reload: () => run(host.tool.reload()),
             transform: (callback) =>
               register(
                 host.tool.transform((draft) =>
                   callback({
+                    list: () => draft.list().map((tool) => ({ ...tool, execute: promiseExecutor(tool.execute) })),
+                    get: (id) => {
+                      const tool = draft.get(id)
+                      return tool ? { ...tool, execute: promiseExecutor(tool.execute) } : undefined
+                    },
                     add: (tool: Info) =>
                       draft.add({
                         ...tool,
                         execute: (input, context) => executePromiseTool(tool, input, context),
                       }),
+                    update: (id, update) =>
+                      draft.update(id, (tool) => {
+                        const value: Info = {
+                          ...tool,
+                          execute: promiseExecutor(tool.execute),
+                        }
+                        update(value)
+                        Object.assign(tool, value, {
+                          output: value.output,
+                          options: value.options,
+                          execute: (input: Parameters<Info["execute"]>[0], context: Tool.Context) =>
+                            executePromiseTool(value, input, context),
+                        })
+                      }),
+                    remove: draft.remove,
                   }),
                 ),
               ),
@@ -310,6 +345,7 @@ export function fromPromise(plugin: Plugin) {
           },
           vcs: {
             get: adaptApiMethod(VcsEndpoints["vcs.get"], host.vcs.get),
+            base: adaptApiMethod(VcsEndpoints["vcs.base"], host.vcs.base),
             branches: adaptApiMethod(VcsEndpoints["vcs.branches"], host.vcs.branches),
             status: adaptApiMethod(VcsEndpoints["vcs.status"], host.vcs.status),
             diff: adaptApiMethod(VcsEndpoints["vcs.diff"], host.vcs.diff),
@@ -318,15 +354,18 @@ export function fromPromise(plugin: Plugin) {
               register(
                 host.vcs.transform((draft) => {
                   callback({
-                    add: (definition) =>
+                    add: (definition) => {
+                      const base = definition.base?.bind(definition)
                       draft.add({
                         id: definition.id,
                         name: definition.name,
                         info: (input) => attempt((signal) => definition.info(input, { signal })),
+                        base: base ? (input) => attempt((signal) => base(input, { signal })) : undefined,
                         branches: (input) => attempt((signal) => definition.branches(input, { signal })),
                         status: (input) => attempt((signal) => definition.status(input, { signal })),
                         diff: (input) => attempt((signal) => definition.diff(input, { signal })),
-                      }),
+                      })
+                    },
                     default: draft.default,
                   })
                 }),
@@ -366,6 +405,7 @@ export function fromPromise(plugin: Plugin) {
             synthetic: adaptApiMethod(SessionEndpoints["session.synthetic"], host.session.synthetic),
             interrupt: adaptApiMethod(SessionEndpoints["session.interrupt"], host.session.interrupt),
             rename: adaptApiMethod(SessionEndpoints["session.rename"], host.session.rename),
+            move: adaptApiMethod(SessionEndpoints["session.move"], host.session.move),
             wait: adaptApiMethod(SessionEndpoints["session.wait"], host.session.wait),
             context: adaptApiMethod(SessionEndpoints["session.context"], host.session.context),
           },

@@ -2,12 +2,12 @@ export * as PlanPlugin from "./plan.js"
 
 import { Message, ToolFailure } from "@opencode-ai/ai"
 import { define } from "@opencode-ai/plugin/effect/plugin"
+import { Agent } from "@opencode-ai/schema/agent"
+import type { SessionEvent } from "@opencode-ai/schema/session-event"
 import { Global } from "@opencode-ai/util/global"
 import { Effect, Stream } from "effect"
 import path from "path"
-import { Agent } from "../agent.js"
 import { Permission } from "../permission.js"
-import { SessionEvent } from "../session/event.js"
 
 const plan = Agent.ID.make("plan")
 

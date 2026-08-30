@@ -1,19 +1,12 @@
 import { describe, expect, test } from "bun:test"
+import { Effect } from "effect"
 
 const forbidden = /["']@opencode-ai\/(?:core|sdk|server)(?:\/[^"']*)?["']/
 const oldSession = /(?:SessionV1|session-v1|legacy-message|legacy-message-values)/
 
 describe("Session UI package boundaries", () => {
   test("does not import server runtime packages", async () => {
-    const files = new Bun.Glob("**/*.{ts,tsx}")
-    const violations: string[] = []
-
-    for await (const path of files.scan({ cwd: import.meta.dir, absolute: true })) {
-      if (path === import.meta.path) continue
-      if (forbidden.test(await Bun.file(path).text())) violations.push(path.slice(import.meta.dir.length + 1))
-    }
-
-    expect(violations).toEqual([])
+    expect(await findViolations(forbidden)).toEqual([])
   })
 
   test("does not declare server runtime dependencies", async () => {
@@ -26,15 +19,7 @@ describe("Session UI package boundaries", () => {
   })
 
   test("does not contain old Session message boundaries", async () => {
-    const files = new Bun.Glob("**/*.{ts,tsx}")
-    const violations: string[] = []
-
-    for await (const path of files.scan({ cwd: import.meta.dir, absolute: true })) {
-      if (path === import.meta.path) continue
-      if (oldSession.test(await Bun.file(path).text())) violations.push(path.slice(import.meta.dir.length + 1))
-    }
-
-    expect(violations).toEqual([])
+    expect(await findViolations(oldSession)).toEqual([])
   })
 
   test("exports the current Session document surface", async () => {
@@ -49,3 +34,18 @@ describe("Session UI package boundaries", () => {
     expect(exports["./timeline/projection"]).toBe("./src/timeline/projection.ts")
   })
 })
+
+async function findViolations(pattern: RegExp) {
+  const files = await Array.fromAsync(new Bun.Glob("**/*.{ts,tsx}").scan({ cwd: import.meta.dir, absolute: true }))
+  const matches = await Effect.runPromise(
+    Effect.forEach(
+      files.filter((path) => path !== import.meta.path),
+      (path) =>
+        Effect.promise(async () =>
+          pattern.test(await Bun.file(path).text()) ? path.slice(import.meta.dir.length + 1) : undefined,
+        ),
+      { concurrency: 8 },
+    ),
+  )
+  return matches.filter((path) => path !== undefined)
+}

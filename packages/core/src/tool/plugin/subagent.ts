@@ -1,13 +1,15 @@
 export * as SubagentTool from "./subagent.js"
 
 import { ToolFailure } from "@opencode-ai/ai"
-import type { Context as PluginContext } from "@opencode-ai/plugin/effect/plugin"
+import type { Context } from "@opencode-ai/plugin/effect/plugin"
 import { Effect, Schema, Scope } from "effect"
 import { Agent } from "../../agent.js"
 import { Config } from "../../config.js"
+import type { Job } from "../../job.js"
 import { PluginRuntime } from "../../plugin/runtime.js"
 import { Permission } from "../../permission.js"
 import { SessionSchema } from "../../session/schema.js"
+import { SubagentCompletion } from "../../session/subagent-completion.js"
 
 export const name = "subagent"
 
@@ -52,7 +54,7 @@ export const description = [
 
 export const Plugin = {
   id: "opencode.tool.subagent",
-  effect: Effect.fn("SubagentTool.Plugin")(function* (ctx: PluginContext) {
+  effect: Effect.fn("SubagentTool.Plugin")(function* (ctx: Context) {
     const runtime = yield* PluginRuntime.Service
     const agents = yield* Agent.Service
     const config = yield* Config.Service
@@ -78,49 +80,17 @@ export const Plugin = {
       return text.length > 0 ? text : NO_TEXT
     })
 
-    const injectCompletion = Effect.fn("SubagentTool.injectCompletion")(function* (
-      parentID: SessionSchema.ID,
-      childID: SessionSchema.ID,
-      agent: string,
-      description: string,
-      state: "completed" | "error" | "cancelled",
-      text: string,
-    ) {
-      yield* runtime.session.synthetic({
-        sessionID: parentID,
-        text: `<subagent sessionID="${childID}" state="${state}" description="${description}">\n${text}\n</subagent>`,
-        description,
-        metadata: { source: "subagent", childID, agent, state },
-      })
-    })
-
     const notifyWhenDone = Effect.fn("SubagentTool.notifyWhenDone")(function* (
-      parentID: SessionSchema.ID,
-      childID: SessionSchema.ID,
-      agent: string,
-      description: string,
+      recovery: Extract<Job.Recovery, { kind: "subagent" }>,
       startedAt: number,
     ) {
-      const key = `${childID}:${startedAt}`
+      const key = `${recovery.childSessionID}:${startedAt}`
       if (notifications.has(key)) return
       notifications.add(key)
-      yield* runtime.job.wait({ id: childID }).pipe(
-        Effect.flatMap((result) => {
-          if (result.info?.status === "completed")
-            return injectCompletion(parentID, childID, agent, description, "completed", result.info.output ?? NO_TEXT)
-          if (result.info?.status === "error")
-            return injectCompletion(
-              parentID,
-              childID,
-              agent,
-              description,
-              "error",
-              result.info.error ?? "Subagent failed",
-            )
-          if (result.info?.status === "cancelled")
-            return injectCompletion(parentID, childID, agent, description, "cancelled", "Subagent cancelled")
-          return Effect.void
-        }),
+      yield* Effect.gen(function* () {
+        const info = (yield* runtime.job.wait({ id: recovery.childSessionID })).info
+        if (info) yield* SubagentCompletion.deliver(runtime.session, runtime.job, { ...info, recovery })
+      }).pipe(
         Effect.ensuring(Effect.sync(() => notifications.delete(key))),
         Effect.forkIn(scope, { startImmediately: true }),
       )
@@ -239,6 +209,7 @@ export const Plugin = {
                     existing === undefined
                       ? ["You are a subagent spawned by another session.", input.prompt].join("\n")
                       : input.prompt,
+                  ...(background && existing === undefined ? { resume: false } : {}),
                 })
                 .pipe(
                   Effect.mapError(
@@ -246,22 +217,25 @@ export const Plugin = {
                   ),
                 )
 
-              const run = Effect.gen(function* () {
-                yield* runtime.session.resume(child.id)
-                return yield* latestAssistantText(child.id)
-              }).pipe(Effect.onInterrupt(() => runtime.session.interrupt(child.id)))
-
+              const recovery = {
+                kind: "subagent" as const,
+                parentSessionID: context.sessionID,
+                childSessionID: child.id,
+                agent: agent.name,
+                description: input.description,
+              }
               const info = yield* runtime.job.start({
                 id: child.id,
                 type: name,
                 title: input.description,
                 metadata: {},
-                run,
+                recovery,
+                run: runtime.session.resume(child.id).pipe(Effect.andThen(latestAssistantText(child.id))),
               })
 
               if (background) {
                 yield* runtime.job.background(info.id)
-                yield* notifyWhenDone(context.sessionID, child.id, agent.name, input.description, info.started_at)
+                yield* notifyWhenDone(recovery, info.started_at)
                 return backgroundResult(child.id)
               }
 
@@ -273,13 +247,7 @@ export const Plugin = {
                 ),
               )
               if (result?.type === "backgrounded") {
-                yield* notifyWhenDone(
-                  context.sessionID,
-                  child.id,
-                  agent.name,
-                  input.description,
-                  result.info.started_at,
-                )
+                yield* notifyWhenDone(recovery, result.info.started_at)
                 return backgroundResult(child.id)
               }
               // Failure surfaces keep the sessionID visible so the model can continue the child.

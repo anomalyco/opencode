@@ -47,15 +47,16 @@
   "scripts": {
     "generate:progress-indicator": "bun script/generate-session-progress-indicator.ts",
     "typecheck": "tsgo -b",
-    "test": "bun test src --only-failures"
+    "test": "bun test src --only-failures",
+    "test:components": "playwright test --config playwright.components.config.ts",
+    "test:components:ui": "playwright test --config playwright.components.config.ts --ui"
   },
   "devDependencies": {
     "@happy-dom/global-registrator": "20.0.11",
+    "@playwright/test": "catalog:",
     "@tsconfig/node22": "catalog:",
     "@types/bun": "catalog:",
-    "@types/luxon": "catalog:",
     "@typescript/native-preview": "catalog:",
-    "typescript": "catalog:",
     "vite": "catalog:"
   },
   "dependencies": {
@@ -65,23 +66,19 @@
     "@opencode-ai/util": "workspace:*",
     "@pierre/diffs": "catalog:",
     "@shikijs/stream": "catalog:",
-    "@solid-primitives/event-listener": "2.4.5",
-    "@solid-primitives/media": "2.3.3",
-    "@solid-primitives/resize-observer": "2.1.3",
+    "@solid-primitives/event-listener": "catalog:",
+    "@solid-primitives/media": "catalog:",
+    "@solid-primitives/resize-observer": "catalog:",
     "@solidjs/meta": "catalog:",
     "diff": "catalog:",
     "effect": "catalog:",
-    "dompurify": "3.3.1",
-    "fuzzysort": "catalog:",
-    "luxon": "catalog:",
+    "dompurify": "3.4.14",
     "marked": "catalog:",
-    "mermaid": "11.16.1",
+    "mermaid": "11.17.2",
     "motion": "12.34.5",
-    "remeda": "catalog:",
     "remend": "catalog:",
     "shiki": "catalog:",
     "solid-js": "catalog:",
-    "solid-list": "catalog:",
     "strip-ansi": "7.1.2"
   }
 }

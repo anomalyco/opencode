@@ -2,7 +2,7 @@ import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
 import { CacheHint, LLM, AIError, LLMRequest, Message, ToolCallPart, ToolDefinition, Usage } from "../../src/index.js"
-import { Auth, LLMClient } from "../../src/route.js"
+import { Auth, Endpoint, LLMClient, Route } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import * as AnthropicMessages from "../../src/protocols/anthropic-messages.js"
 import { GoogleVertexMessages } from "../../src/providers.js"
@@ -71,6 +71,48 @@ describe("Anthropic Messages route", () => {
         max_tokens: 20,
         temperature: 0,
       })
+    }),
+  )
+
+  it.effect("omits empty system text while preserving whitespace", () =>
+    Effect.gen(function* () {
+      const empty = yield* compileRequest(LLMRequest.update(request, { system: [{ type: "text", text: "" }] }))
+      const whitespace = yield* compileRequest(LLMRequest.update(request, { system: [{ type: "text", text: " " }] }))
+
+      expect(empty.body.system).toBeUndefined()
+      expect(whitespace.body.system).toEqual([{ type: "text", text: " " }])
+    }),
+  )
+
+  it.effect("filters whitespace-only text and removes empty messages", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.user(" \n\t"),
+            Message.user([]),
+            Message.user([
+              { type: "text", text: "" },
+              { type: "text", text: "  Keep this spacing.  " },
+              { type: "text", text: " \n\t" },
+            ]),
+            Message.assistant(" \n\t"),
+            Message.assistant([]),
+            Message.assistant([{ type: "reasoning", text: "" }]),
+            Message.assistant([
+              { type: "text", text: "" },
+              { type: "reasoning", text: "", providerMetadata: { anthropic: { signature: "sig_1" } } },
+            ]),
+          ],
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        { role: "user", content: [{ type: "text", text: "  Keep this spacing.  " }] },
+        { role: "assistant", content: [{ type: "thinking", thinking: "", signature: "sig_1" }] },
+      ])
     }),
   )
 
@@ -810,6 +852,147 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
+  it.effect("round-trips compatible provider metadata in its own namespace", () =>
+    Effect.gen(function* () {
+      const compatible = Route.make({
+        id: "custom-anthropic-messages",
+        provider: "custom-anthropic",
+        protocol: AnthropicMessages.protocol,
+        endpoint: Endpoint.path("/messages", { baseURL: "https://compatible.test/v1" }),
+        auth: Auth.header("x-api-key", "test"),
+        framing: AnthropicMessages.framing,
+      }).model({ id: "custom-model" })
+      const result = [
+        {
+          type: "web_search_result",
+          url: "https://example.com",
+          citations: [{ type: "web_search_result_location", cited_text: "Example" }],
+        },
+      ]
+      const response = yield* LLMClient.generate(LLM.request({ model: compatible, prompt: "Search." })).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "message_start", message: { usage: { input_tokens: 5, custom_start: true } } },
+              { type: "content_block_start", index: 0, content_block: { type: "thinking", thinking: "Thinking." } },
+              { type: "content_block_delta", index: 0, delta: { type: "signature_delta", signature: "custom_sig" } },
+              { type: "content_block_stop", index: 0 },
+              {
+                type: "content_block_start",
+                index: 1,
+                content_block: { type: "redacted_thinking", data: "custom_redacted" },
+              },
+              { type: "content_block_stop", index: 1 },
+              {
+                type: "content_block_start",
+                index: 2,
+                content_block: {
+                  type: "server_tool_use",
+                  id: "custom_tool",
+                  name: "web_search",
+                  input: { query: "example" },
+                },
+              },
+              { type: "content_block_stop", index: 2 },
+              {
+                type: "content_block_start",
+                index: 3,
+                content_block: { type: "web_search_tool_result", tool_use_id: "custom_tool", content: result },
+              },
+              { type: "content_block_stop", index: 3 },
+              {
+                type: "message_delta",
+                delta: { stop_reason: "end_turn", stop_sequence: "custom_stop" },
+                usage: { output_tokens: 2, custom_terminal: true },
+              },
+              { type: "message_stop" },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.message.content).toMatchObject([
+        { type: "reasoning", text: "Thinking.", providerMetadata: { "custom-anthropic": { signature: "custom_sig" } } },
+        { type: "reasoning", text: "", providerMetadata: { "custom-anthropic": { redactedData: "custom_redacted" } } },
+        { type: "tool-call", id: "custom_tool", providerExecuted: true },
+        {
+          type: "tool-result",
+          providerExecuted: true,
+          providerMetadata: { "custom-anthropic": { blockType: "web_search_tool_result", result } },
+        },
+      ])
+      expect(response.usage?.providerMetadata).toEqual({
+        "custom-anthropic": { input_tokens: 5, custom_start: true, output_tokens: 2, custom_terminal: true },
+      })
+      expect(response.events.at(-1)).toMatchObject({
+        providerMetadata: { "custom-anthropic": { stopSequence: "custom_stop" } },
+      })
+
+      const prepared = yield* compileRequest(
+        LLM.request({ model: compatible, messages: [response.message], cache: "none" }),
+      )
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "assistant",
+          content: [
+            { type: "thinking", thinking: "Thinking.", signature: "custom_sig" },
+            { type: "redacted_thinking", data: "custom_redacted" },
+            { type: "server_tool_use", id: "custom_tool", name: "web_search", input: { query: "example" } },
+            { type: "web_search_tool_result", tool_use_id: "custom_tool", content: result },
+          ],
+        },
+      ])
+    }),
+  )
+
+  it.effect("preserves a reasoning signature when message_stop closes the block", () =>
+    Effect.gen(function* () {
+      const compatible = Route.make({
+        id: "custom-anthropic-messages",
+        provider: "custom-anthropic",
+        protocol: AnthropicMessages.protocol,
+        endpoint: Endpoint.path("/messages", { baseURL: "https://compatible.test/v1" }),
+        auth: Auth.header("x-api-key", "test"),
+        framing: AnthropicMessages.framing,
+      }).model({ id: "custom-model" })
+      const body = sseEvents(
+        { type: "message_start", message: { usage: { input_tokens: 5 } } },
+        {
+          type: "content_block_start",
+          index: 0,
+          content_block: { type: "thinking", thinking: "", signature: "" },
+        },
+        { type: "content_block_delta", index: 0, delta: { type: "thinking_delta", thinking: "Reasoning." } },
+        { type: "content_block_delta", index: 0, delta: { type: "signature_delta", signature: "sig_1" } },
+        { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 2 } },
+        { type: "message_stop" },
+      )
+      const response = yield* LLMClient.generate(LLM.request({ model: compatible, prompt: "Think." })).pipe(
+        Effect.provide(fixedResponse(body)),
+      )
+
+      const reasoningEnds = response.events.filter((event) => event.type === "reasoning-end")
+      expect(reasoningEnds).toHaveLength(1)
+      expect(reasoningEnds[0]).toMatchObject({
+        providerMetadata: { "custom-anthropic": { signature: "sig_1" } },
+      })
+      expect(response.message.content).toEqual([
+        {
+          type: "reasoning",
+          text: "Reasoning.",
+          providerMetadata: { "custom-anthropic": { signature: "sig_1" } },
+        },
+      ])
+
+      const prepared = yield* compileRequest(
+        LLM.request({ model: compatible, messages: [response.message], cache: "none" }),
+      )
+      expect(prepared.body.messages).toEqual([
+        { role: "assistant", content: [{ type: "thinking", thinking: "Reasoning.", signature: "sig_1" }] },
+      ])
+    }),
+  )
+
   it.effect("parses text, reasoning, and usage stream fixtures", () =>
     Effect.gen(function* () {
       const body = sseEvents(
@@ -843,6 +1026,7 @@ describe("Anthropic Messages route", () => {
       expect(response.events.find((event) => event.type === "reasoning-end")).toMatchObject({
         providerMetadata: { anthropic: { signature: "sig_1" } },
       })
+      expect(response.events.filter((event) => event.type === "reasoning-end")).toHaveLength(1)
       expect(response.events.find((event) => event.type === "reasoning-delta" && event.text === "")).toBeUndefined()
       expect(response.message.content).toEqual([
         { type: "text", text: "Hello!" },
@@ -852,6 +1036,41 @@ describe("Anthropic Messages route", () => {
         type: "finish",
         reason: { normalized: "stop", raw: "end_turn" },
         providerMetadata: { anthropic: { stopSequence: "\n\nHuman:" } },
+      })
+    }),
+  )
+
+  it.effect("preserves terminal state across usage-only message deltas", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "message_start", message: { usage: { input_tokens: 5 } } },
+              {
+                type: "message_delta",
+                delta: { stop_reason: "end_turn", stop_sequence: "X" },
+                usage: { output_tokens: 8 },
+              },
+              { type: "message_delta", delta: {}, usage: { output_tokens: 10 } },
+              { type: "message_stop" },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.usage).toMatchObject({ inputTokens: 5, outputTokens: 10, totalTokens: 15 })
+      expect(response.finishReason).toEqual({ normalized: "stop", raw: "end_turn" })
+      expect(response.events.find((event) => event.type === "step-finish")).toMatchObject({
+        reason: { normalized: "stop", raw: "end_turn" },
+        usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+        providerMetadata: { anthropic: { stopSequence: "X" } },
+      })
+      expect(response.events.at(-1)).toMatchObject({
+        type: "finish",
+        reason: { normalized: "stop", raw: "end_turn" },
+        usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+        providerMetadata: { anthropic: { stopSequence: "X" } },
       })
     }),
   )
@@ -873,9 +1092,8 @@ describe("Anthropic Messages route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({
-        _tag: "InvalidProviderOutput",
-        classification: "incomplete-stream",
+      expect(error).toMatchObject({
+        reason: { _tag: "InvalidProviderOutput", classification: "incomplete-stream" },
         message: "The provider response ended unexpectedly.",
       })
     }),
@@ -964,8 +1182,8 @@ describe("Anthropic Messages route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({
-        _tag: "InvalidProviderOutput",
+      expect(error).toMatchObject({
+        reason: { _tag: "InvalidProviderOutput" },
         message: "Invalid anthropic/anthropic-messages stream event",
       })
     }),
@@ -986,8 +1204,8 @@ describe("Anthropic Messages route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({
-        _tag: "InvalidProviderOutput",
+      expect(error).toMatchObject({
+        reason: { _tag: "InvalidProviderOutput" },
         message: "Invalid anthropic/anthropic-messages stream event",
       })
     }),
@@ -1013,8 +1231,8 @@ describe("Anthropic Messages route", () => {
             Effect.flip,
           )
 
-          expect(error.reason).toMatchObject({
-            _tag: "InvalidProviderOutput",
+          expect(error).toMatchObject({
+            reason: { _tag: "InvalidProviderOutput" },
             message: "Invalid anthropic/anthropic-messages stream event",
           })
         }),
@@ -1029,8 +1247,8 @@ describe("Anthropic Messages route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({
-        _tag: "InvalidProviderOutput",
+      expect(error).toMatchObject({
+        reason: { _tag: "InvalidProviderOutput" },
         message: "Invalid anthropic/anthropic-messages stream event",
       })
     }),
@@ -1552,7 +1770,7 @@ describe("Anthropic Messages route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({ _tag: "ProviderInternal", message: "overloaded_error: Overloaded" })
+      expect(error).toMatchObject({ reason: { _tag: "ProviderInternal" }, message: "overloaded_error: Overloaded" })
     }),
   )
 
@@ -1570,10 +1788,9 @@ describe("Anthropic Messages route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({
-        _tag: "InvalidRequest",
+      expect(error).toMatchObject({
+        reason: { _tag: "InvalidRequest", classification: "context-overflow" },
         message: "invalid_request_error: prompt is too long: 210000 tokens",
-        classification: "context-overflow",
       })
     }),
   )
@@ -1585,7 +1802,7 @@ describe("Anthropic Messages route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({ _tag: "ProviderInternal", message: "overloaded_error" })
+      expect(error).toMatchObject({ reason: { _tag: "ProviderInternal" }, message: "overloaded_error" })
     }),
   )
 
@@ -1596,7 +1813,7 @@ describe("Anthropic Messages route", () => {
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({ _tag: "UnknownProvider", message: "Anthropic Messages stream error" })
+      expect(error).toMatchObject({ reason: { _tag: "UnknownProvider" }, message: "Anthropic Messages stream error" })
     }),
   )
 
@@ -1613,7 +1830,7 @@ describe("Anthropic Messages route", () => {
       )
 
       expect(error).toBeInstanceOf(AIError)
-      expect(error.reason).toMatchObject({ _tag: "InvalidRequest", message: "Bad request" })
+      expect(error).toMatchObject({ reason: { _tag: "InvalidRequest" }, message: "Bad request" })
     }),
   )
 

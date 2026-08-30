@@ -5,7 +5,7 @@ import {
   LLMEvent,
   LanguageModel,
   SystemPart,
-  TransportReason,
+  TransportError,
   type LLMRequest,
 } from "@opencode-ai/ai"
 import { OpenAIChat } from "@opencode-ai/ai/protocols"
@@ -24,6 +24,8 @@ import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { SessionTitle } from "@opencode-ai/core/session/title"
 import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
+import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
+import { Location } from "@opencode-ai/core/location"
 import { Session } from "@opencode-ai/core/session"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
@@ -127,6 +129,8 @@ const it = testEffect(
       [llmClient, client],
       [Catalog.node, catalog],
       [SessionRunnerModel.node, models],
+      [Location.node, Location.boundNode({ directory: AbsolutePath.make("/project") })],
+      [PluginSupervisor.node, Layer.mock(PluginSupervisor.Service, { flush: Effect.void })],
     ],
   ),
 )
@@ -194,18 +198,20 @@ beforeEach(() => {
   titleStream = successfulTitle
 })
 
+const enableTitleAgent = Effect.gen(function* () {
+  const agents = yield* Agent.Service
+  yield* agents.transform((editor) => {
+    editor.update(Agent.ID.make("title"), (agent) => {
+      agent.mode = "primary"
+      agent.hidden = true
+      agent.system = "You are a title generator."
+    })
+  })
+})
+
 it.effect("generates a title from the sole user message and renames the session", () =>
   Effect.gen(function* () {
-    requests = []
-    titleStream = successfulTitle
-    const agentService = yield* Agent.Service
-    yield* agentService.transform((editor) => {
-      editor.update(Agent.ID.make("title"), (agent) => {
-        agent.mode = "primary"
-        agent.hidden = true
-        agent.system = "You are a title generator."
-      })
-    })
+    yield* enableTitleAgent
     const sessionID = Session.ID.make("ses_title_generate")
     yield* insertSession(sessionID)
     yield* prompt(sessionID, "Help me debug the failing build")
@@ -236,17 +242,8 @@ it.effect("generates a title from the sole user message and renames the session"
 
 it.effect("uses a small model from the primary provider", () =>
   Effect.gen(function* () {
-    requests = []
-    titleStream = successfulTitle
     selectedSmall = small
-    const agentService = yield* Agent.Service
-    yield* agentService.transform((editor) => {
-      editor.update(Agent.ID.make("title"), (agent) => {
-        agent.mode = "primary"
-        agent.hidden = true
-        agent.system = "You are a title generator."
-      })
-    })
+    yield* enableTitleAgent
     const sessionID = Session.ID.make("ses_title_small_model")
     yield* insertSession(sessionID)
     yield* prompt(sessionID, "Use a small model for this title")
@@ -263,20 +260,12 @@ it.effect("uses a small model from the primary provider", () =>
 
 it.effect("falls back to the primary model when the small model fails", () =>
   Effect.gen(function* () {
-    requests = []
     titleStream = () =>
       requests.length === 1
         ? Stream.make(LLMEvent.providerError({ message: "Small model unavailable" }))
         : successfulTitle()
     selectedSmall = lowSmall
-    const agentService = yield* Agent.Service
-    yield* agentService.transform((editor) => {
-      editor.update(Agent.ID.make("title"), (agent) => {
-        agent.mode = "primary"
-        agent.hidden = true
-        agent.system = "You are a title generator."
-      })
-    })
+    yield* enableTitleAgent
     const sessionID = Session.ID.make("ses_title_small_fallback")
     yield* insertSession(
       sessionID,
@@ -310,16 +299,7 @@ it.effect("falls back to the primary model when the small model fails", () =>
 
 it.effect("generates from the first user message after later messages exist", () =>
   Effect.gen(function* () {
-    requests = []
-    titleStream = successfulTitle
-    const agentService = yield* Agent.Service
-    yield* agentService.transform((editor) => {
-      editor.update(Agent.ID.make("title"), (agent) => {
-        agent.mode = "primary"
-        agent.hidden = true
-        agent.system = "You are a title generator."
-      })
-    })
+    yield* enableTitleAgent
     const sessionID = Session.ID.make("ses_title_second_message")
     yield* insertSession(sessionID)
     yield* prompt(sessionID, "First message")
@@ -338,16 +318,7 @@ it.effect("generates from the first user message after later messages exist", ()
 
 it.effect("retries a legacy persisted fallback title", () =>
   Effect.gen(function* () {
-    requests = []
-    titleStream = successfulTitle
-    const agentService = yield* Agent.Service
-    yield* agentService.transform((editor) => {
-      editor.update(Agent.ID.make("title"), (agent) => {
-        agent.mode = "primary"
-        agent.hidden = true
-        agent.system = "You are a title generator."
-      })
-    })
+    yield* enableTitleAgent
     const sessionID = Session.ID.make("ses_title_legacy")
     const created = Date.parse("2026-07-30T18:45:03.662Z")
     yield* insertSession(sessionID, "New session - 2026-07-30T18:45:03.662Z", created)
@@ -364,16 +335,7 @@ it.effect("retries a legacy persisted fallback title", () =>
 
 it.effect("generates a title for an explicitly requested child session", () =>
   Effect.gen(function* () {
-    requests = []
-    titleStream = successfulTitle
-    const agentService = yield* Agent.Service
-    yield* agentService.transform((editor) => {
-      editor.update(Agent.ID.make("title"), (agent) => {
-        agent.mode = "primary"
-        agent.hidden = true
-        agent.system = "You are a title generator."
-      })
-    })
+    yield* enableTitleAgent
     const sessionID = Session.ID.make("ses_title_child")
     const { db } = yield* Database.Service
     yield* db
@@ -407,8 +369,6 @@ it.effect("generates a title for an explicitly requested child session", () =>
 
 it.effect("does not generate when the title agent is removed", () =>
   Effect.gen(function* () {
-    requests = []
-    titleStream = successfulTitle
     const sessionID = Session.ID.make("ses_title_no_agent")
     yield* insertSession(sessionID)
     yield* prompt(sessionID, "Help me debug the failing build")
@@ -425,14 +385,7 @@ it.effect("does not generate when the title agent is removed", () =>
 
 it.effect("regenerates an existing title using the title agent", () =>
   Effect.gen(function* () {
-    const agentService = yield* Agent.Service
-    yield* agentService.transform((editor) => {
-      editor.update(Agent.ID.make("title"), (agent) => {
-        agent.mode = "primary"
-        agent.hidden = true
-        agent.system = "You are a title generator."
-      })
-    })
+    yield* enableTitleAgent
     const sessionID = Session.ID.make("ses_title_regenerate")
     yield* insertSession(sessionID, "Original title")
     yield* prompt(sessionID, "Investigate the login failure")
@@ -476,14 +429,7 @@ it.effect("regenerates an existing title using the title agent", () =>
 
 it.effect("bounds regeneration context while preserving the original request and recent conversation", () =>
   Effect.gen(function* () {
-    const agentService = yield* Agent.Service
-    yield* agentService.transform((editor) => {
-      editor.update(Agent.ID.make("title"), (agent) => {
-        agent.mode = "primary"
-        agent.hidden = true
-        agent.system = "You are a title generator."
-      })
-    })
+    yield* enableTitleAgent
     const sessionID = Session.ID.make("ses_title_regenerate_bounded")
     yield* insertSession(sessionID, "Original title")
     yield* prompt(sessionID, `ORIGINAL_GOAL ${"a".repeat(3_000)} OMITTED_ORIGINAL_END`)
@@ -505,14 +451,7 @@ it.effect("bounds regeneration context while preserving the original request and
 
 it.effect("preserves the existing title when regeneration fails", () =>
   Effect.gen(function* () {
-    const agentService = yield* Agent.Service
-    yield* agentService.transform((editor) => {
-      editor.update(Agent.ID.make("title"), (agent) => {
-        agent.mode = "primary"
-        agent.hidden = true
-        agent.system = "You are a title generator."
-      })
-    })
+    yield* enableTitleAgent
     const sessionID = Session.ID.make("ses_title_regenerate_failure")
     yield* insertSession(sessionID, "Original title")
     yield* prompt(sessionID, "Fail to regenerate this title")
@@ -529,15 +468,7 @@ it.effect("preserves the existing title when regeneration fails", () =>
 
 it.effect("retries after a failed title request", () =>
   Effect.gen(function* () {
-    requests = []
-    const agentService = yield* Agent.Service
-    yield* agentService.transform((editor) => {
-      editor.update(Agent.ID.make("title"), (agent) => {
-        agent.mode = "primary"
-        agent.hidden = true
-        agent.system = "You are a title generator."
-      })
-    })
+    yield* enableTitleAgent
     const sessionID = Session.ID.make("ses_title_retry")
     yield* insertSession(sessionID)
     yield* prompt(sessionID, "Retry this title")
@@ -556,23 +487,14 @@ it.effect("retries after a failed title request", () =>
 
 it.effect("does not rename after a failed title stream", () =>
   Effect.gen(function* () {
-    const agentService = yield* Agent.Service
-    yield* agentService.transform((editor) => {
-      editor.update(Agent.ID.make("title"), (agent) => {
-        agent.mode = "primary"
-        agent.hidden = true
-        agent.system = "You are a title generator."
-      })
-    })
+    yield* enableTitleAgent
     const sessionID = Session.ID.make("ses_title_stream_failure")
     yield* insertSession(sessionID)
     yield* prompt(sessionID, "Fail this title stream")
     titleStream = () =>
       Stream.fail(
         new AIError({
-          module: "test",
-          method: "stream",
-          reason: new TransportReason({ message: "Disconnected", transport: "http", operation: "request" }),
+          reason: new TransportError({ message: "Disconnected", transport: "http", operation: "request" }),
         }),
       )
 
@@ -587,16 +509,7 @@ it.effect("does not rename after a failed title stream", () =>
 
 it.effect("keeps session context hooks away from title requests", () =>
   Effect.gen(function* () {
-    requests = []
-    titleStream = successfulTitle
-    const agentService = yield* Agent.Service
-    yield* agentService.transform((editor) => {
-      editor.update(Agent.ID.make("title"), (agent) => {
-        agent.mode = "primary"
-        agent.hidden = true
-        agent.system = "You are a title generator."
-      })
-    })
+    yield* enableTitleAgent
     // Context hooks shape the agent conversation; title generation is not part of
     // it, so it opts out and the transcript passes through unchanged.
     const hooks = yield* PluginHooks.Service
@@ -619,15 +532,7 @@ it.effect("keeps session context hooks away from title requests", () =>
 
 it.effect("preserves a manual rename completed while generation is in flight", () =>
   Effect.gen(function* () {
-    requests = []
-    const agentService = yield* Agent.Service
-    yield* agentService.transform((editor) => {
-      editor.update(Agent.ID.make("title"), (agent) => {
-        agent.mode = "primary"
-        agent.hidden = true
-        agent.system = "You are a title generator."
-      })
-    })
+    yield* enableTitleAgent
     const sessionID = Session.ID.make("ses_title_manual_rename")
     yield* insertSession(sessionID)
     yield* prompt(sessionID, "Generate this title")

@@ -1,10 +1,37 @@
-import { type LanguageModelV3CallOptions, type SharedV3Warning, UnsupportedFunctionalityError } from "@ai-sdk/provider"
+import {
+  type LanguageModelV3CallOptions,
+  type LanguageModelV3ProviderTool,
+  type SharedV3Warning,
+  UnsupportedFunctionalityError,
+} from "@ai-sdk/provider"
 import { codeInterpreterArgsSchema } from "./tool/code-interpreter.js"
 import { fileSearchArgsSchema } from "./tool/file-search.js"
 import { webSearchArgsSchema } from "./tool/web-search.js"
 import { webSearchPreviewArgsSchema } from "./tool/web-search-preview.js"
 import { imageGenerationArgsSchema } from "./tool/image-generation.js"
 import type { OpenAIResponsesTool } from "./openai-responses-api-types.js"
+
+export type ResponsesHostedTool = {
+  name: string
+  type: "file_search" | "web_search_preview" | "web_search" | "code_interpreter" | "image_generation"
+  responseType: "file_search" | "web_search" | "code_interpreter" | "image_generation"
+}
+
+export function getResponsesHostedTool(tool: LanguageModelV3ProviderTool): ResponsesHostedTool | undefined {
+  switch (tool.id) {
+    case "openai.file_search":
+      return { name: tool.name, type: "file_search", responseType: "file_search" }
+    case "openai.web_search_preview":
+      return { name: tool.name, type: "web_search_preview", responseType: "web_search" }
+    case "openai.web_search":
+      return { name: tool.name, type: "web_search", responseType: "web_search" }
+    case "openai.code_interpreter":
+      return { name: tool.name, type: "code_interpreter", responseType: "code_interpreter" }
+    case "openai.image_generation":
+      return { name: tool.name, type: "image_generation", responseType: "image_generation" }
+  }
+  return undefined
+}
 
 export function prepareResponsesTools({
   tools,
@@ -26,6 +53,8 @@ export function prepareResponsesTools({
     | { type: "function"; name: string }
     | { type: "code_interpreter" }
     | { type: "image_generation" }
+  hostedTools: ResponsesHostedTool[]
+  selectedHostedTool?: ResponsesHostedTool
   toolWarnings: SharedV3Warning[]
 } {
   // when the tools array is empty, change it to undefined to prevent errors:
@@ -34,7 +63,49 @@ export function prepareResponsesTools({
   const toolWarnings: SharedV3Warning[] = []
 
   if (tools == null) {
-    return { tools: undefined, toolChoice: undefined, toolWarnings }
+    return { tools: undefined, toolChoice: undefined, hostedTools: [], toolWarnings }
+  }
+
+  const hostedTools = tools.flatMap((tool) => {
+    if (tool.type !== "provider") return []
+    const hostedTool = getResponsesHostedTool(tool)
+    return hostedTool ? [hostedTool] : []
+  })
+  const selectedToolName = toolChoice?.type === "tool" ? toolChoice.toolName : undefined
+  const selectedTools = selectedToolName === undefined ? [] : tools.filter((tool) => tool.name === selectedToolName)
+  if (selectedTools.length > 1) {
+    throw new UnsupportedFunctionalityError({
+      functionality: `ambiguous tool choice '${selectedToolName}': multiple tool definitions share this name`,
+    })
+  }
+  const selectedHostedTool =
+    selectedTools[0]?.type === "provider" ? getResponsesHostedTool(selectedTools[0]) : undefined
+
+  const ambiguousHostedResponse =
+    toolChoice?.type === "none" || toolChoice?.type === "tool"
+      ? undefined
+      : hostedTools.find(
+          (tool) =>
+            new Set(
+              hostedTools.filter((candidate) => candidate.responseType === tool.responseType).map((item) => item.name),
+            ).size > 1,
+        )
+  if (ambiguousHostedResponse) {
+    const names = new Set(
+      hostedTools.filter((tool) => tool.responseType === ambiguousHostedResponse.responseType).map((tool) => tool.name),
+    )
+    throw new UnsupportedFunctionalityError({
+      functionality: `ambiguous ${ambiguousHostedResponse.responseType} response for hosted tools: ${[...names].join(", ")}`,
+    })
+  }
+
+  if (selectedHostedTool) {
+    const names = new Set(hostedTools.filter((tool) => tool.type === selectedHostedTool.type).map((tool) => tool.name))
+    if (names.size > 1) {
+      throw new UnsupportedFunctionalityError({
+        functionality: `ambiguous ${selectedHostedTool.type} tool choice for hosted tools: ${[...names].join(", ")}`,
+      })
+    }
   }
 
   const openaiTools: Array<OpenAIResponsesTool> = []
@@ -47,7 +118,7 @@ export function prepareResponsesTools({
           name: tool.name,
           description: tool.description,
           parameters: tool.inputSchema,
-          strict: strictJsonSchema,
+          strict: tool.strict ?? strictJsonSchema,
         })
         break
       case "provider": {
@@ -134,7 +205,7 @@ export function prepareResponsesTools({
   }
 
   if (toolChoice == null) {
-    return { tools: openaiTools, toolChoice: undefined, toolWarnings }
+    return { tools: openaiTools, toolChoice: undefined, hostedTools, selectedHostedTool, toolWarnings }
   }
 
   const type = toolChoice.type
@@ -143,20 +214,18 @@ export function prepareResponsesTools({
     case "auto":
     case "none":
     case "required":
-      return { tools: openaiTools, toolChoice: type, toolWarnings }
-    case "tool":
+      return { tools: openaiTools, toolChoice: type, hostedTools, selectedHostedTool, toolWarnings }
+    case "tool": {
       return {
         tools: openaiTools,
-        toolChoice:
-          toolChoice.toolName === "code_interpreter" ||
-          toolChoice.toolName === "file_search" ||
-          toolChoice.toolName === "image_generation" ||
-          toolChoice.toolName === "web_search_preview" ||
-          toolChoice.toolName === "web_search"
-            ? { type: toolChoice.toolName }
-            : { type: "function", name: toolChoice.toolName },
+        toolChoice: selectedHostedTool
+          ? { type: selectedHostedTool.type }
+          : { type: "function", name: toolChoice.toolName },
+        hostedTools,
+        selectedHostedTool,
         toolWarnings,
       }
+    }
     default: {
       const _exhaustiveCheck: never = type
       throw new UnsupportedFunctionalityError({

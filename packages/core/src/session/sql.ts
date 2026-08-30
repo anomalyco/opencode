@@ -5,10 +5,10 @@ import { ProjectTable } from "../project/sql.js"
 import type { SessionMessage } from "./message.js"
 import type { SessionInbox } from "./inbox.js"
 import type { FileDiff } from "@opencode-ai/schema/file-diff"
-import { PermissionV1 } from "../v1/permission.js"
-import { Project } from "../project.js"
+import type { PermissionV1 } from "@opencode-ai/schema/permission-v1"
+import type { Project } from "@opencode-ai/schema/project"
 import type { SessionSchema } from "./schema.js"
-import { Workspace } from "../workspace.js"
+import type { Workspace } from "@opencode-ai/schema/workspace"
 import { Timestamps } from "../database/schema.sql.js"
 import type { Instruction } from "@opencode-ai/schema/instruction"
 import type { Session } from "@opencode-ai/schema/session"
@@ -41,7 +41,7 @@ export const SessionTable = sqliteTable(
     summary_deletions: integer(),
     summary_files: integer(),
     summary_diffs: text({ mode: "json" }).$type<FileDiff.LegacyInfo[]>(),
-    metadata: text({ mode: "json" }).$type<Record<string, unknown>>(),
+    metadata: text({ mode: "json" }).$type<Session.Metadata>(),
     cost: real().notNull().default(0),
     tokens_input: integer().notNull().default(0),
     tokens_output: integer().notNull().default(0),

@@ -105,6 +105,7 @@ const builtins = Layer.mock(InstructionBuiltIns.Service, {
 })
 const discovery = Layer.mock(InstructionDiscovery.Service, {
   project: true,
+  global: true,
   load: () => Effect.succeed(Instructions.empty),
 })
 const skills = Layer.mock(SkillInstructions.Service, { load: () => Effect.succeed(Instructions.empty) })
@@ -132,6 +133,7 @@ const it = testEffect(
     LayerNode.group([
       Database.node,
       Bus.node,
+      Project.node,
       SessionProjector.node,
       SessionStore.node,
       Agent.node,
@@ -200,6 +202,7 @@ const setup = Effect.gen(function* () {
   const { db } = yield* Database.Service
   const bus = yield* Bus.Service
   const agents = yield* Agent.Service
+  const projects = yield* Project.Service
   const instructionBuiltIns = yield* InstructionBuiltIns.Service
   yield* agents.transform((draft) =>
     draft.update(Agent.ID.make("build"), (agent) => {
@@ -210,7 +213,7 @@ const setup = Effect.gen(function* () {
     .insert(SessionTable)
     .values({
       id: sessionID,
-      project_id: Project.ID.global,
+      project_id: (yield* projects.resolve(AbsolutePath.make("/project"))).id,
       slug: "generate-test",
       directory: "/project",
       title: "Generate test",

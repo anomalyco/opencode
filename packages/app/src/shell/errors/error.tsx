@@ -1,5 +1,5 @@
 import { TextField } from "@opencode-ai/ui/text-field"
-import { captureException, isEnabled } from "@sentry/solid"
+import type { captureException } from "@sentry/solid"
 import { Logo } from "@opencode-ai/ui/logo"
 import { Button } from "@opencode-ai/ui/button"
 import { Component, createSignal, onMount, Show } from "solid-js"
@@ -227,6 +227,7 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
   let recordedFatalError: Promise<void> | undefined
   const [store, setStore] = createStore({
     actionError: undefined as string | undefined,
+    captureException: undefined as typeof captureException | undefined,
   })
 
   function ensureFatalErrorRecorded() {
@@ -243,6 +244,11 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
 
   onMount(() => {
     void ensureFatalErrorRecorded().catch(() => undefined)
+    void import("@sentry/solid")
+      .then(({ captureException, isEnabled }) => {
+        if (isEnabled()) setStore("captureException", () => captureException)
+      })
+      .catch(() => undefined)
   })
 
   async function checkForUpdates() {
@@ -278,7 +284,7 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
 
   return (
     <div
-      class="relative flex-1 h-screen w-screen min-h-0 overflow-y-auto flex flex-col items-center justify-start sm:justify-center p-4 sm:p-8 font-sans"
+      class="relative flex-1 h-full w-full min-h-0 min-w-0 overflow-y-auto flex flex-col items-center justify-start sm:justify-center p-4 sm:p-8 font-sans"
       data-tauri-drag-region
     >
       <div class="w-full max-w-3xl flex flex-col items-center justify-center gap-6 sm:gap-8 my-auto">
@@ -311,15 +317,15 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
               {language.t("error.page.action.exportLogs")}
             </Button>
           </Show>
-          <Show when={isEnabled}>
-            {(_) => {
+          <Show when={store.captureException}>
+            {(capture) => {
               const [reported, setReported] = createSignal(false)
               return (
                 <Button
                   size="large"
                   disabled={reported()}
                   onClick={() => {
-                    captureException(props.error)
+                    capture()(props.error)
                     setReported(true)
                   }}
                 >

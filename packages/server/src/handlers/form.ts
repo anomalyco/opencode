@@ -1,4 +1,6 @@
+import { Database } from "@opencode-ai/core/database/database"
 import { Form } from "@opencode-ai/core/form"
+import { LocationServiceMap } from "@opencode-ai/core/location-services"
 import {
   ConflictError,
   FormAlreadySettledError,
@@ -6,10 +8,10 @@ import {
   FormNotFoundError,
   InvalidRequestError,
 } from "@opencode-ai/protocol/errors"
-import { Effect } from "effect"
+import { Effect, Option } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { Api } from "../api"
-import { response } from "../location"
+import { requestRef, response, sessionRef, withLoadedLocationServices } from "../location"
 
 function missingForm(id: Form.ID) {
   return new FormNotFoundError({ id, message: `Form not found: ${id}` })
@@ -17,6 +19,8 @@ function missingForm(id: Form.ID) {
 
 export const FormHandler = HttpApiBuilder.group(Api, "server.form", (handlers) =>
   Effect.gen(function* () {
+    const locations = yield* LocationServiceMap.Service
+    const database = yield* Database.Service
     const requireOwnedForm = Effect.fnUntraced(function* (sessionID: Form.Info["sessionID"], formID: Form.ID) {
       const form = yield* Form.Service
       const info = yield* form.get(formID).pipe(Effect.catchTag("Form.NotFoundError", () => missingForm(formID)))
@@ -35,9 +39,16 @@ export const FormHandler = HttpApiBuilder.group(Api, "server.form", (handlers) =
       .handle(
         "session.form.list",
         Effect.fn(function* (ctx) {
-          const form = yield* Form.Service
-          const forms = yield* form.list({ sessionID: ctx.params.sessionID })
-          return { data: forms }
+          const ref =
+            ctx.params.sessionID === "global"
+              ? requestRef(ctx.request)
+              : yield* sessionRef(database, ctx.params.sessionID)
+          const forms = yield* withLoadedLocationServices(
+            locations,
+            ref,
+            Form.Service.use((form) => form.list({ sessionID: ctx.params.sessionID })),
+          )
+          return { data: Option.getOrElse(forms, () => []) }
         }),
       )
       .handle(

@@ -1,7 +1,7 @@
 import { Message, ToolCallPart, ToolResultPart, type ContentPart, type ProviderMetadata } from "@opencode-ai/ai"
+import type { Model } from "@opencode-ai/schema/model"
 import { Option, Schema } from "effect"
 import { fileURLToPath } from "url"
-import type { Model } from "../../model.js"
 import { SessionMessage } from "../message.js"
 import type { FileAttachment } from "@opencode-ai/schema/prompt"
 
@@ -157,6 +157,7 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
           providerMetadata: reuseProviderMetadata ? providerMetadata(providerMetadataKey, item.state) : undefined,
         },
       ]
+    // Let the destination adapter handle readable reasoning after a model/provider switch.
     if (item.type === "reasoning")
       return reuseProviderMetadata
         ? [
@@ -167,7 +168,7 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
             },
           ]
         : item.text.length > 0
-          ? [{ type: "text", text: item.text }]
+          ? [{ type: message.error === undefined ? "reasoning" : "text", text: item.text }]
           : []
     // Call-side metadata is model-scoped proof of generation (Gemini thought
     // signatures, OpenAI encrypted reasoning): only the producing model may
@@ -236,6 +237,7 @@ function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMe
       ]
     case "user":
       const content = [
+        ...(message.skills ?? []).flatMap((skill) => (skill.text === undefined ? [] : [Message.text(skill.text)])),
         ...(message.text === "" ? [] : [Message.text(message.text)]),
         ...userAttachmentContent(message.files ?? []),
       ]
@@ -258,6 +260,8 @@ function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMe
     case "system":
       return [Message.system(message.text)]
     case "shell":
+      // Background shell results enter context once, through their completion inbox item.
+      if (message.metadata?.background === true) return []
       return [
         Message.make({
           id: message.id,
