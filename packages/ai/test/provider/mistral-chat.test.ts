@@ -436,6 +436,34 @@ describe("Mistral Chat", () => {
     }),
   )
 
+  it.effect("normalizes stop to tool calls when a hosted model emits indexed tool fragments", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              chunk({
+                tool_calls: [
+                  {
+                    index: 0,
+                    id: "chatcmpl-tool-8cc4d8f9f07b298a",
+                    function: { name: "lookup", arguments: '{"city":"' },
+                  },
+                ],
+              }),
+              chunk({ tool_calls: [{ index: 0, function: { name: "", arguments: 'Paris"}' } }] }),
+              chunk({}, "stop"),
+            ),
+          ),
+        ),
+      )
+
+      expect(response.finishReason).toEqual({ normalized: "tool-calls", raw: "stop" })
+      expect(response.toolCalls).toMatchObject([{ name: "lookup", input: { city: "Paris" } }])
+      expect(response.events.filter(LLMEvent.is.toolCall)).toHaveLength(1)
+    }),
+  )
+
   it.effect("generates a stable ID when the first indexed fragment has null identity", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(request).pipe(

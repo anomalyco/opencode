@@ -735,7 +735,11 @@ const finishEvents = Effect.fn("MistralChat.finishEvents")(function* (state: Par
   const closed = closeActive(state, events)
   const lifecycle = closed.completedTools.length > 0 ? Lifecycle.stepStart(closed.lifecycle, events) : closed.lifecycle
   events.push(...closed.completedTools)
-  Lifecycle.finish(lifecycle, events, { reason: state.finishReason, usage: closed.usage })
+  const reason =
+    state.finishReason.normalized === "stop" && closed.completedTools.some(LLMEvent.is.toolCall)
+      ? { ...state.finishReason, normalized: "tool-calls" as const }
+      : state.finishReason
+  Lifecycle.finish(lifecycle, events, { reason, usage: closed.usage })
   return events
 })
 

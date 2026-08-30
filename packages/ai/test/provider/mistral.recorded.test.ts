@@ -13,6 +13,12 @@ const recorded = recordedTests({
   protocol: "mistral-chat",
   requires: ["MISTRAL_API_KEY"],
 })
+const glmRecorded = recordedTests({
+  prefix: "mistral-chat-glm",
+  provider: "mistral",
+  protocol: "mistral-chat",
+  requires: ["MISTRAL_API_KEY"],
+})
 
 const weather = ToolDefinition.make({
   name: "lookup_weather",
@@ -119,6 +125,34 @@ describe("Mistral recorded", () => {
         expect(second.finishReason.normalized).toBe("stop")
         expect(second.toolCalls).toHaveLength(0)
         expect(second.text.toLowerCase()).toContain("sunny")
+      }),
+    60_000,
+  )
+})
+
+describe("Mistral hosted GLM recorded", () => {
+  glmRecorded.effect.with(
+    "streams an indexed tool call",
+    { tags: ["hosted-model", "tool", "tool-call"], metadata: { model: "zai-glm-5-2" } },
+    () =>
+      Effect.gen(function* () {
+        const response = yield* LLMClient.generate(
+          LLM.request({
+            model: configure({ apiKey }).model("zai-glm-5-2"),
+            system: "Call lookup_weather exactly once with Paris.",
+            prompt: "What is the weather?",
+            tools: [weather],
+            toolChoice: weather,
+            generation: { maxTokens: 256, temperature: 0 },
+          }),
+        )
+
+        expect(response.finishReason.normalized).toBe("tool-calls")
+        expect(response.toolCalls).toMatchObject([{ name: "lookup_weather", input: { city: "Paris" } }])
+        expect(response.events.filter(LLMEvent.is.toolInputStart)).toHaveLength(1)
+        expect(response.events.filter(LLMEvent.is.toolInputDelta).length).toBeGreaterThan(0)
+        expect(response.events.filter(LLMEvent.is.toolInputEnd)).toHaveLength(1)
+        expect(response.events.filter(LLMEvent.is.toolCall)).toHaveLength(1)
       }),
     60_000,
   )
