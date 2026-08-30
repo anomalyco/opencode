@@ -142,9 +142,134 @@
     display: none;
   }
 
+  [data-slot="tab-worktree"] {
+    display: none;
+  }
+
   [data-slot="tab-close"] {
     right: auto;
     left: 50%;
     transform: translateX(-50%);
+  }
+
+  /* In the collapsed icon strip, keep the session avatar visible on the active
+     tab and only reveal the close button on hover, so tabs stay identifiable. */
+  [data-titlebar-tab][data-active="true"]:not(:hover) [data-slot="tab-close"] {
+    opacity: 0;
+  }
+}
+
+/* Touch devices have no hover, so `hover-reveal` forces every close button
+   visible. In the collapsed strip that hides the avatars behind X buttons and
+   inverts which tab looks active. Hide all close buttons there; the rail is
+   tapped open to reveal them. */
+@media (hover: none) {
+  @container (max-width: 64px) {
+    [data-slot="tab-close"] {
+      opacity: 0;
+    }
+  }
+}
+
+/* Vertical tab rail: give stacked tabs a little more height so the grip,
+   title, and worktree badge aren't vertically clipped inside the row. */
+[data-slot="titlebar-tabs"][data-orientation="vertical"] [data-titlebar-tab] {
+  height: 2rem;
+}
+
+/* The tight leading-4 (16px) line box clips descenders (p, g, y) once the tab
+   clips overflow. Relax the line-height for vertical-rail titles so glyphs fit. */
+[data-slot="titlebar-tabs"][data-orientation="vertical"] [data-titlebar-tab-title] {
+  line-height: 1.25rem;
+}
+
+/* Right-side vertical rail: mirror each tab so the session avatar hugs the
+   right edge and the close button sits on the left. */
+[data-slot="titlebar-tabs"][data-side="right"] [data-slot="tab-link"] {
+  flex-direction: row-reverse;
+  transition: padding-left 120ms ease;
+}
+
+[data-slot="titlebar-tabs"][data-side="right"] [data-slot="tab-close"] {
+  right: auto;
+  left: 4px;
+}
+
+/* Reserve room on the sides for the close button so it doesn't cover the
+   title when the rail is narrow. The 24px badge margin already keeps the X
+   clear at any width; we only add the on-hover/active title shift when the
+   rail is narrow enough that the badge sits close enough to overlap the
+   title text after the X reveals. */
+@container (min-width: 65px) and (max-width: 180px) {
+  [data-slot="titlebar-tabs"][data-orientation="vertical"][data-side="right"] [data-titlebar-tab]:hover [data-slot="tab-link"],
+  [data-slot="titlebar-tabs"][data-orientation="vertical"][data-side="right"] [data-titlebar-tab][data-active="true"] [data-slot="tab-link"] {
+    padding-left: 22px;
+  }
+
+  [data-slot="titlebar-tabs"][data-orientation="vertical"][data-side="left"] [data-titlebar-tab]:hover [data-slot="tab-link"],
+  [data-slot="titlebar-tabs"][data-orientation="vertical"][data-side="left"] [data-titlebar-tab][data-active="true"] [data-slot="tab-link"] {
+    padding-right: 22px;
+  }
+}
+
+[data-slot="titlebar-tabs"][data-side="right"] [data-titlebar-tab] [data-slot="tab-close"]::before {
+  right: auto;
+  left: 0;
+  background: linear-gradient(to left, transparent, var(--tab-bg));
+}
+
+/* Vertical rail: push the trailing worktree/branch badge away from the corner
+   where the close button lives, so they don't overlap on touch (where the
+   close is always visible, not just on hover). 24px = the close button (20px)
+   plus its 4px offset from the rail edge. */
+[data-slot="titlebar-tabs"][data-orientation="vertical"][data-side="left"] [data-slot="tab-worktree"] {
+  margin-right: 24px;
+}
+
+[data-slot="titlebar-tabs"][data-orientation="vertical"][data-side="right"] [data-slot="tab-worktree"] {
+  margin-left: 24px;
+}
+
+/* Vertical rail (any width): the worktree/branch badge crowds the title on a
+   single row. Stack the badge on a second row (avatar + title on row 1, badge
+   on row 2) so the title gets the full width and the close button can't
+   overlap the badge. The markup wraps avatar+title in a single span so the
+   link only has 2 children and a column layout reliably stacks them. */
+@container (min-width: 65px) {
+  [data-slot="titlebar-tabs"][data-orientation="vertical"] [data-titlebar-tab] {
+    height: auto;
+    min-height: 3.5rem;
+  }
+
+  [data-slot="titlebar-tabs"][data-orientation="vertical"] [data-slot="tab-link"] {
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: center;
+    row-gap: 4px;
+    padding-block: 6px;
+  }
+
+  /* The close button is absolutely positioned at the top corner. Reserve its
+     space so the title on row 1 doesn't sit under it. 24px = 20px button +
+     4px offset. The badge's margin above already does the same for row 2. */
+  [data-slot="titlebar-tabs"][data-orientation="vertical"][data-side="right"] [data-slot="tab-link"] {
+    padding-left: 24px;
+  }
+
+  [data-slot="titlebar-tabs"][data-orientation="vertical"][data-side="left"] [data-slot="tab-link"] {
+    padding-right: 24px;
+  }
+
+  /* Row-1 wrapper fills the line; avatar + title sit on it. */
+  [data-slot="titlebar-tabs"][data-orientation="vertical"] [data-slot="tab-link-row"] {
+    min-width: 0;
+  }
+
+  /* Badge stays at its natural width, not stretched. */
+  [data-slot="titlebar-tabs"][data-orientation="vertical"] [data-slot="tab-worktree"] {
+    align-self: flex-start;
+  }
+  [data-slot="titlebar-tabs"][data-orientation="vertical"][data-side="right"] [data-slot="tab-worktree"] {
+    align-self: flex-end;
   }
 }

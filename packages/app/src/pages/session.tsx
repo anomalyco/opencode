@@ -2334,13 +2334,17 @@ export default function Page() {
                       reviewHasFocusableContent={() => hasReview() || reviewV2State.sidebarOpened()}
                       reviewCount={reviewCount}
                       reviewPanel={reviewPanelV2}
-                      reviewSidebarToggle={(disabled) => (
-                        <SessionReviewV2SidebarToggle
-                          opened={reviewV2State.sidebarOpened()}
-                          disabled={disabled}
-                          onToggle={reviewV2State.toggleSidebar}
-                        />
-                      )}
+                      reviewSidebarToggle={
+                        settings.general.showReviewPanelButton()
+                          ? (disabled) => (
+                              <SessionReviewV2SidebarToggle
+                                opened={reviewV2State.sidebarOpened()}
+                                disabled={disabled}
+                                onToggle={reviewV2State.toggleSidebar}
+                              />
+                            )
+                          : undefined
+                      }
                       fileBrowserState={reviewV2State}
                       activeDiff={activeReviewFile()}
                       focusReviewDiff={focusReviewDiff}
