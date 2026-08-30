@@ -85,8 +85,8 @@
     "file": "css-highlights.scm"
   },
   {
-    "url": "https://github.com/tree-sitter-grammars/tree-sitter-diff/releases/download/v0.1.0/tree-sitter-diff.wasm",
-    "sha256": "60409c8a17dd5a804e5119887c5b1322f0e780f1976e27d81a1e251dc92e2761",
+    "url": "https://github.com/tree-sitter-grammars/tree-sitter-diff/releases/download/v0.2.0/tree-sitter-diff.wasm",
+    "sha256": "81235a285f2964d33767cc76e9511c6694050b73a099afe4c3e401e5f87f9587",
     "file": "diff-tree-sitter.wasm"
   },
   {
@@ -235,8 +235,8 @@
     "file": "make-tree-sitter.wasm"
   },
   {
-    "url": "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/074aa4422bf029908338e855d0c0f71470a971bb/runtime/queries/make/highlights.scm",
-    "sha256": "d286db89e1d5675911e01afa614546590991b7478601573da19ce1890ef42322",
+    "url": "https://raw.githubusercontent.com/tree-sitter-grammars/tree-sitter-make/v1.1.1/queries/highlights.scm",
+    "sha256": "295045cf653f02bdca99f86bd34667eabbc474939056209655505fae3c8c83f4",
     "file": "make-highlights.scm"
   },
   {
@@ -340,8 +340,8 @@
     "file": "scala-tree-sitter.wasm"
   },
   {
-    "url": "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/074aa4422bf029908338e855d0c0f71470a971bb/runtime/queries/scala/highlights.scm",
-    "sha256": "f739d4ce8c58b5e325a7614359df2f5da3cf7ed77188daac75d259c7ebda9193",
+    "url": "https://raw.githubusercontent.com/tree-sitter/tree-sitter-scala/v0.24.0/queries/highlights.scm",
+    "sha256": "8b3dc3bd20e05112854d3f4bd9a564fe53b762db89db9760d83d4f8e3828d0ab",
     "file": "scala-highlights.scm"
   },
   {
