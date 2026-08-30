@@ -351,6 +351,21 @@ const AnthropicUsage = Schema.StructWithRest(
         Schema.Record(Schema.String, Schema.Unknown),
       ]),
     ),
+    iterations: optionalNull(
+      Schema.Array(
+        Schema.StructWithRest(
+          Schema.Struct({
+            type: Schema.String,
+            model: optionalNull(Schema.String),
+            input_tokens: Schema.Number,
+            output_tokens: Schema.Number,
+            cache_creation_input_tokens: optionalNull(Schema.Number),
+            cache_read_input_tokens: optionalNull(Schema.Number),
+          }),
+          [Schema.Record(Schema.String, Schema.Unknown)],
+        ),
+      ),
+    ),
   }),
   [Schema.Record(Schema.String, Schema.Unknown)],
 )
@@ -409,7 +424,10 @@ interface ParserState {
   readonly providerMetadataKey: string
   readonly tools: ToolStream.State<number>
   readonly reasoningSignatures: Readonly<Record<number, string>>
-  readonly usage?: Usage
+  readonly usage?: {
+    readonly effective: AnthropicUsage
+    readonly metadata: Record<string, unknown>
+  }
   readonly pendingFinish?: {
     readonly reason: FinishReasonDetails
     readonly providerMetadata?: ProviderMetadata
@@ -1074,52 +1092,73 @@ const mapFinishReason = (reason: string | null | undefined): FinishReason => {
 // inclusive `inputTokens` the rest of the contract expects. Extended
 // thinking tokens are included in `output_tokens`; newer responses also
 // expose that subset through `output_tokens_details.thinking_tokens`.
-const mapUsage = (usage: AnthropicUsage | undefined, providerMetadataKey: string): Usage | undefined => {
+// Compaction usage is excluded from the top-level counters, so include its
+// iterations alongside ordinary message iterations. Advisor work belongs to
+// another model, while fallback top-level usage already describes the model
+// that served the response.
+const mapUsage = (
+  usage: AnthropicUsage | undefined,
+  providerMetadataKey: string,
+  metadata?: Record<string, unknown>,
+): Usage | undefined => {
   if (!usage) return undefined
-  const nonCached = usage.input_tokens ?? undefined
-  const cacheRead = usage.cache_read_input_tokens ?? undefined
-  const cacheWrite = usage.cache_creation_input_tokens ?? undefined
+  const executorIterations = usage.iterations?.some((iteration) => iteration.type === "fallback_message")
+    ? undefined
+    : usage.iterations?.filter((iteration) => iteration.type === "compaction" || iteration.type === "message")
+  const iterationUsage = executorIterations?.length
+    ? {
+        input: executorIterations.reduce((total, iteration) => total + iteration.input_tokens, 0),
+        output: executorIterations.reduce((total, iteration) => total + iteration.output_tokens, 0),
+        cacheRead: ProviderShared.sumTokens(
+          ...executorIterations.map((iteration) => iteration.cache_read_input_tokens ?? undefined),
+        ),
+        cacheWrite: ProviderShared.sumTokens(
+          ...executorIterations.map((iteration) => iteration.cache_creation_input_tokens ?? undefined),
+        ),
+      }
+    : undefined
+  const nonCached = iterationUsage?.input ?? usage.input_tokens ?? undefined
+  const cacheRead = iterationUsage?.cacheRead ?? usage.cache_read_input_tokens ?? undefined
+  const cacheWrite = iterationUsage?.cacheWrite ?? usage.cache_creation_input_tokens ?? undefined
+  const output = iterationUsage?.output ?? usage.output_tokens
   const inputTokens = ProviderShared.sumTokens(nonCached, cacheRead, cacheWrite)
   return new Usage({
     inputTokens,
-    outputTokens: usage.output_tokens,
+    outputTokens: output,
     nonCachedInputTokens: nonCached,
     cacheReadInputTokens: cacheRead,
     cacheWriteInputTokens: cacheWrite,
     reasoningTokens: usage.output_tokens_details?.thinking_tokens,
-    totalTokens: ProviderShared.totalTokens(inputTokens, usage.output_tokens, undefined),
-    providerMetadata: { [providerMetadataKey]: usage },
+    totalTokens: ProviderShared.totalTokens(inputTokens, output, undefined),
+    providerMetadata: { [providerMetadataKey]: metadata ?? usage },
   })
 }
 
-// Anthropic emits usage on `message_start` and again on `message_delta` — the
-// final delta carries the authoritative totals. Right-biased merge: each
-// field prefers `right` when defined, falls back to `left`. `inputTokens` is
-// recomputed from the merged breakdown so the inclusive total stays
-// consistent with `nonCached + cacheRead + cacheWrite`.
-const mergeUsage = (left: Usage | undefined, right: Usage | undefined, providerMetadataKey: string) => {
-  if (!left) return right
+// Streamed counters are cumulative. Null and omitted known values leave the
+// previous effective value intact, while metadata retains the complete raw
+// payload for diagnostics and provider-specific accounting.
+const mergeUsage = (left: ParserState["usage"], right: AnthropicUsage | undefined): ParserState["usage"] => {
   if (!right) return left
-  const nonCachedInputTokens = right.nonCachedInputTokens ?? left.nonCachedInputTokens
-  const cacheReadInputTokens = right.cacheReadInputTokens ?? left.cacheReadInputTokens
-  const cacheWriteInputTokens = right.cacheWriteInputTokens ?? left.cacheWriteInputTokens
-  const inputTokens = ProviderShared.sumTokens(nonCachedInputTokens, cacheReadInputTokens, cacheWriteInputTokens)
-  const outputTokens = right.outputTokens ?? left.outputTokens
-  const reasoningTokens = right.reasoningTokens ?? left.reasoningTokens
-  return new Usage({
-    inputTokens,
-    outputTokens,
-    nonCachedInputTokens,
-    cacheReadInputTokens,
-    cacheWriteInputTokens,
-    reasoningTokens,
-    totalTokens: ProviderShared.totalTokens(inputTokens, outputTokens, undefined),
-    providerMetadata: {
-      [providerMetadataKey]:
-        mergeJsonRecords(left.providerMetadata?.[providerMetadataKey], right.providerMetadata?.[providerMetadataKey]) ??
-        {},
+  if (!left) return { effective: right, metadata: right }
+  return {
+    effective: {
+      ...left.effective,
+      ...right,
+      input_tokens: right.input_tokens ?? left.effective.input_tokens,
+      output_tokens: right.output_tokens ?? left.effective.output_tokens,
+      cache_creation_input_tokens: right.cache_creation_input_tokens ?? left.effective.cache_creation_input_tokens,
+      cache_read_input_tokens: right.cache_read_input_tokens ?? left.effective.cache_read_input_tokens,
+      output_tokens_details:
+        right.output_tokens_details === null || right.output_tokens_details === undefined
+          ? left.effective.output_tokens_details
+          : {
+              ...left.effective.output_tokens_details,
+              ...right.output_tokens_details,
+            },
+      iterations: right.iterations ?? left.effective.iterations,
     },
-  })
+    metadata: mergeJsonRecords(left.metadata, right) ?? {},
+  }
 }
 
 // Server tool result blocks come whole in `content_block_start` (no streaming
@@ -1158,8 +1197,8 @@ type StepResult = readonly [ParserState, ReadonlyArray<LLMEvent>]
 const NO_EVENTS: StepResult["1"] = []
 
 const onMessageStart = (state: ParserState, event: AnthropicEvent): StepResult => {
-  const usage = mapUsage(event.message?.usage, state.providerMetadataKey)
-  return [usage ? { ...state, usage: mergeUsage(state.usage, usage, state.providerMetadataKey) } : state, NO_EVENTS]
+  const usage = mergeUsage(state.usage, event.message?.usage)
+  return [usage ? { ...state, usage } : state, NO_EVENTS]
 }
 
 const onContentBlockStart = (
@@ -1342,7 +1381,7 @@ const onMessageDelta = (
   state: ParserState,
   event: AnthropicEvent & { readonly delta?: AnthropicStreamDelta },
 ): StepResult => {
-  const usage = mergeUsage(state.usage, mapUsage(event.usage, state.providerMetadataKey), state.providerMetadataKey)
+  const usage = mergeUsage(state.usage, event.usage)
   const pendingFinish = (() => {
     const stopReason = event.delta?.stop_reason
     if (stopReason === null || stopReason === undefined) return state.pendingFinish
@@ -1390,7 +1429,7 @@ const onMessageStop = Effect.fn("AnthropicMessages.onMessageStop")(function* (st
       normalized: "unknown",
       raw: undefined,
     },
-    usage: state.usage,
+    usage: mapUsage(state.usage?.effective, state.providerMetadataKey, state.usage?.metadata),
     providerMetadata: state.pendingFinish?.providerMetadata,
   })
   return [{ ...state, lifecycle: finished, tools: result.tools }, events] satisfies StepResult

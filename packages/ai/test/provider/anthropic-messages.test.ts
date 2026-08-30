@@ -1273,6 +1273,177 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
+  it.effect("includes compaction iterations in normalized usage", () =>
+    Effect.gen(function* () {
+      const iterations = [
+        {
+          type: "compaction",
+          input_tokens: 1000,
+          output_tokens: 100,
+          cache_read_input_tokens: 5,
+          cache_creation_input_tokens: 6,
+        },
+        {
+          type: "message",
+          input_tokens: 20,
+          output_tokens: 10,
+          cache_read_input_tokens: 4,
+          cache_creation_input_tokens: 3,
+        },
+      ]
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "message_start", message: { usage: { input_tokens: 20 } } },
+              {
+                type: "message_delta",
+                delta: { stop_reason: "end_turn" },
+                usage: {
+                  input_tokens: 20,
+                  output_tokens: 10,
+                  cache_read_input_tokens: 4,
+                  cache_creation_input_tokens: 3,
+                  iterations,
+                },
+              },
+              {
+                type: "message_delta",
+                delta: {},
+                usage: { output_tokens: 10 },
+              },
+              { type: "message_stop" },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.usage).toMatchObject({
+        inputTokens: 1038,
+        outputTokens: 110,
+        nonCachedInputTokens: 1020,
+        cacheReadInputTokens: 9,
+        cacheWriteInputTokens: 9,
+        totalTokens: 1148,
+        providerMetadata: { anthropic: { iterations } },
+      })
+    }),
+  )
+
+  it.effect("keeps advisor iterations separate from normalized usage", () =>
+    Effect.gen(function* () {
+      const iterations = [
+        {
+          type: "message",
+          input_tokens: 10,
+          output_tokens: 5,
+          cache_read_input_tokens: 1,
+          cache_creation_input_tokens: 2,
+        },
+        {
+          type: "advisor_message",
+          model: "claude-opus-5",
+          input_tokens: 500,
+          output_tokens: 400,
+          cache_read_input_tokens: 50,
+          cache_creation_input_tokens: 60,
+        },
+        {
+          type: "message",
+          input_tokens: 20,
+          output_tokens: 15,
+          cache_read_input_tokens: 2,
+          cache_creation_input_tokens: 1,
+        },
+      ]
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "message_start", message: { usage: { input_tokens: 30 } } },
+              {
+                type: "message_delta",
+                delta: { stop_reason: "end_turn" },
+                usage: {
+                  input_tokens: 30,
+                  output_tokens: 20,
+                  cache_read_input_tokens: 3,
+                  cache_creation_input_tokens: 3,
+                  iterations,
+                },
+              },
+              { type: "message_stop" },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.usage).toMatchObject({
+        inputTokens: 36,
+        outputTokens: 20,
+        nonCachedInputTokens: 30,
+        cacheReadInputTokens: 3,
+        cacheWriteInputTokens: 3,
+        totalTokens: 56,
+        providerMetadata: { anthropic: { iterations } },
+      })
+    }),
+  )
+
+  it.effect("uses top-level usage for fallback responses", () =>
+    Effect.gen(function* () {
+      const iterations = [
+        {
+          type: "message",
+          model: "claude-fable-5",
+          input_tokens: 100,
+          output_tokens: 0,
+          cache_read_input_tokens: 10,
+          cache_creation_input_tokens: 20,
+        },
+        {
+          type: "fallback_message",
+          model: "claude-opus-4-8",
+          input_tokens: 40,
+          output_tokens: 20,
+          cache_read_input_tokens: 4,
+          cache_creation_input_tokens: 3,
+        },
+      ]
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "message_start", message: { usage: { input_tokens: 40 } } },
+              {
+                type: "message_delta",
+                delta: { stop_reason: "end_turn" },
+                usage: {
+                  input_tokens: 40,
+                  output_tokens: 20,
+                  cache_read_input_tokens: 4,
+                  cache_creation_input_tokens: 3,
+                  iterations,
+                },
+              },
+              { type: "message_stop" },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.usage).toMatchObject({
+        inputTokens: 47,
+        outputTokens: 20,
+        nonCachedInputTokens: 40,
+        cacheReadInputTokens: 4,
+        cacheWriteInputTokens: 3,
+        totalTokens: 67,
+        providerMetadata: { anthropic: { iterations } },
+      })
+    }),
+  )
+
   it.effect("round-trips omitted thinking carried only by a signature delta", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(request).pipe(
