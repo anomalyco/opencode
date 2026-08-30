@@ -311,6 +311,79 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
+  it.effect("removes empty keys recursively from outbound tool inputs without mutating history", () =>
+    Effect.gen(function* () {
+      const input = {
+        path: "file.ts",
+        edits: [
+          { oldText: "a", newText: "b", "": "" },
+          null,
+          true,
+          7,
+          "text",
+          ["kept", { "": false, nested: { "": null, value: "ok" } }],
+        ],
+        nested: { "": "drop", empty: {}, onlyEmpty: { "": 1 } },
+        " ": "preserve whitespace key",
+        "": "drop",
+      }
+      const original = structuredClone(input)
+      const call = ToolCallPart.make({ id: "tool_1", name: "edit", input })
+      const prepared = yield* compileRequest(
+        LLM.request({ model, messages: [Message.assistant([call])], cache: "none" }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "assistant",
+          content: [
+            {
+              toolUse: {
+                toolUseId: "tool_1",
+                name: "edit",
+                input: {
+                  path: "file.ts",
+                  edits: [{ oldText: "a", newText: "b" }, null, true, 7, "text", ["kept", { nested: { value: "ok" } }]],
+                  nested: { empty: {}, onlyEmpty: {} },
+                  " ": "preserve whitespace key",
+                },
+              },
+            },
+          ],
+        },
+      ])
+      expect(input).toEqual(original)
+      expect(call.input).toBe(input)
+    }),
+  )
+
+  it.effect("keeps empty tool inputs and empties inputs containing only empty keys", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([
+              ToolCallPart.make({ id: "tool_empty_key", name: "first", input: { "": { value: true } } }),
+              ToolCallPart.make({ id: "tool_empty_object", name: "second", input: {} }),
+            ]),
+          ],
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "assistant",
+          content: [
+            { toolUse: { toolUseId: "tool_empty_key", name: "first", input: {} } },
+            { toolUse: { toolUseId: "tool_empty_object", name: "second", input: {} } },
+          ],
+        },
+      ])
+    }),
+  )
+
   it.effect("merges parallel tool results into one user message", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(

@@ -271,11 +271,19 @@ const reasoningRedactedData = (part: ReasoningPart, providerMetadataKey: string)
   if (ProviderShared.isRecord(metadata) && typeof metadata.redactedData === "string") return metadata.redactedData
 }
 
+const removeEmptyToolInputKeys = (input: unknown): unknown => {
+  if (Array.isArray(input)) return input.map(removeEmptyToolInputKeys)
+  if (!ProviderShared.isRecord(input)) return input
+  return Object.fromEntries(
+    Object.entries(input).flatMap(([key, value]) => (key === "" ? [] : [[key, removeEmptyToolInputKeys(value)]])),
+  )
+}
+
 const lowerToolCall = (part: ToolCallPart): BedrockToolUseBlock => ({
   toolUse: {
     toolUseId: part.id,
     name: part.name,
-    input: part.input,
+    input: removeEmptyToolInputKeys(part.input),
   },
 })
 
