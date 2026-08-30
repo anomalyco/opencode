@@ -3372,6 +3372,7 @@ export class Session2 extends HeyApiClient {
       scope?: "project"
       path?: string
       roots?: boolean | "true" | "false"
+      excludeActive?: boolean | "true" | "false"
       start?: number
       search?: string
       limit?: number
@@ -3388,6 +3389,7 @@ export class Session2 extends HeyApiClient {
             { in: "query", key: "scope" },
             { in: "query", key: "path" },
             { in: "query", key: "roots" },
+            { in: "query", key: "excludeActive" },
             { in: "query", key: "start" },
             { in: "query", key: "search" },
             { in: "query", key: "limit" },

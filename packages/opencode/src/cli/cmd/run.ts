@@ -489,7 +489,21 @@ export const RunCommand = effectCmd({
           }
         }
 
-        const base = args.continue ? (await sdk.session.list()).data?.find((item) => !item.parentID) : undefined
+        const base = args.continue
+          ? await (async () => {
+              const [all, idle] = await Promise.all([sdk.session.list(), sdk.session.list({ excludeActive: true })])
+              const wouldBe = all.data?.find((item) => !item.parentID)
+              const candidate = idle.data?.find((item) => !item.parentID)
+              if (candidate && wouldBe && candidate.id !== wouldBe.id) {
+                UI.println(
+                  UI.Style.TEXT_WARNING_BOLD +
+                    `Skipped session ${wouldBe.id} (still active in another instance)` +
+                    UI.Style.TEXT_NORMAL,
+                )
+              }
+              return candidate
+            })()
+          : undefined
 
         if (base && args.fork) {
           const forked = await sdk.session.fork({

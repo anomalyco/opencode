@@ -2,6 +2,8 @@ import { describe, expect } from "bun:test"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { EventV2 } from "@opencode-ai/core/event"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
+import { Database } from "@opencode-ai/core/database/database"
+import { MessageTable } from "@opencode-ai/core/session/sql"
 import { Deferred, Effect, Exit, Layer } from "effect"
 import { Session as SessionNs } from "@/session/session"
 import { MessageV2 } from "../../src/session/message-v2"
@@ -20,6 +22,7 @@ import { InstanceBootstrap } from "@/project/bootstrap"
 const it = testEffect(
   AppNodeBuilder.build(
     LayerNode.group([
+      Database.node,
       SessionNs.node,
       EventV2Bridge.node,
       SessionProjector.node,
@@ -280,6 +283,67 @@ describe("Session", () => {
 
       expect(created.metadata).toBeUndefined()
       expect(saved.metadata).toBeUndefined()
+    }),
+  )
+
+  it.instance("excludeActive skips sessions with an in-flight assistant message", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionNs.Service
+      const { db } = yield* Database.Service
+      const created = yield* Effect.acquireRelease(session.create({}), (info) =>
+        session.remove(info.id).pipe(Effect.ignore),
+      )
+
+      // A durable assistant message that has started but not completed marks the
+      // session as in-flight: `data.role` is "assistant" and `data.time` has
+      // `created` but no `completed`.
+      yield* db
+        .insert(MessageTable)
+        .values({
+          id: MessageID.ascending(),
+          session_id: created.id,
+          time_created: Date.now(),
+          data: {
+            role: "assistant",
+            time: { created: Date.now() },
+          } as unknown as (typeof MessageTable.$inferInsert)["data"],
+        })
+        .run()
+        .pipe(Effect.orDie)
+
+      const all = yield* session.list()
+      const idle = yield* session.list({ excludeActive: true })
+
+      expect(all.some((item) => item.id === created.id)).toBe(true)
+      expect(idle.some((item) => item.id === created.id)).toBe(false)
+    }),
+  )
+
+  it.instance("excludeActive keeps sessions with only completed assistant messages", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionNs.Service
+      const { db } = yield* Database.Service
+      const created = yield* Effect.acquireRelease(session.create({}), (info) =>
+        session.remove(info.id).pipe(Effect.ignore),
+      )
+
+      yield* db
+        .insert(MessageTable)
+        .values({
+          id: MessageID.ascending(),
+          session_id: created.id,
+          time_created: Date.now(),
+          data: {
+            role: "assistant",
+            time: { created: Date.now(), completed: Date.now() },
+          } as unknown as (typeof MessageTable.$inferInsert)["data"],
+        })
+        .run()
+        .pipe(Effect.orDie)
+
+      const idle = yield* session.list({ excludeActive: true })
+
+      expect(idle.some((item) => item.id === created.id)).toBe(true)
     }),
   )
 })
