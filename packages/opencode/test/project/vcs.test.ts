@@ -285,6 +285,31 @@ describe("Vcs diff", () => {
     { git: true },
   )
 
+  worktreeIt.live("diff('git') resolves untracked files when the session directory is a subdirectory", () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped({ git: true })
+      const sub = path.join(root, "nested", "dir")
+      yield* write(path.join(sub, "new.md"), "# hello\n\nworld\n")
+
+      const diff = yield* Effect.gen(function* () {
+        const vcs = yield* init()
+        return yield* vcs.diff("git")
+      }).pipe(provideInstance(sub))
+
+      expect(diff).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            file: "nested/dir/new.md",
+            status: "added",
+          }),
+        ]),
+      )
+      const item = diff.find((d) => d.file === "nested/dir/new.md")
+      expect(item?.additions).toBeGreaterThan(0)
+      expect(item?.patch).toContain("+world")
+    }),
+  )
+
   it.instance(
     "diff('git') keeps carriage returns inside patch hunks",
     () =>
