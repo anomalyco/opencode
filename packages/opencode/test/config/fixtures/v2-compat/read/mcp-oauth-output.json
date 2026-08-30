@@ -1,0 +1,25 @@
+{
+  "mcp": {
+    "authenticated": {
+      "type": "remote",
+      "url": "https://oauth.example.com/mcp",
+      "headers": {
+        "Authorization": "Bearer token"
+      },
+      "oauth": {
+        "clientId": "client",
+        "clientSecret": "secret",
+        "scope": "read write",
+        "callbackPort": 19877,
+        "redirectUri": "http://127.0.0.1:19877/callback"
+      },
+      "enabled": true
+    },
+    "anonymous": {
+      "type": "remote",
+      "url": "https://anonymous.example.com/mcp",
+      "oauth": false,
+      "enabled": true
+    }
+  }
+}
