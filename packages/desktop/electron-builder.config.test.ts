@@ -192,3 +192,49 @@ test("does not bundle the CLI in prod builds", async () => {
 
   expect(config.extraResources).toEqual([])
 })
+
+test("only the bundled macOS CLI gets the library-validation exception", async () => {
+  const { default: config, macSignOptions } = await import("./electron-builder.config.ts")
+  const app = "/tmp/OpenCode Beta.app"
+  const defaults = {
+    entitlements: config.mac?.entitlementsInherit ?? undefined,
+    hardenedRuntime: true,
+    timestamp: "https://timestamp.apple.com/ts01",
+    additionalArguments: ["--test-option"],
+  }
+  const options = macSignOptions({
+    app,
+    identity: "test-identity",
+    keychain: "/tmp/test.keychain",
+    optionsForFile: () => defaults,
+  })
+  expect(typeof config.mac?.sign).toBe("function")
+  expect(options.identity).toBe("test-identity")
+  expect(options.keychain).toBe("/tmp/test.keychain")
+
+  const cli = options.optionsForFile?.(`${app}/Contents/Resources/opencode-cli`)
+  expect(cli).toEqual({
+    ...defaults,
+    entitlements: path.join(import.meta.dirname, "resources/entitlements.cli.plist"),
+  })
+  const entitlements = await Bun.file(cli!.entitlements as string).text()
+  expect(entitlements).toContain("<key>com.apple.security.cs.allow-jit</key>\n    <true/>")
+  expect(entitlements).toContain("<key>com.apple.security.cs.disable-library-validation</key>\n    <true/>")
+  expect(entitlements.match(/<key>/g)).toHaveLength(2)
+
+  for (const file of [
+    app,
+    `${app}/Contents/MacOS/OpenCode Beta`,
+    `${app}/Contents/Frameworks/OpenCode Beta Helper.app`,
+    `${app}/Contents/Frameworks/OpenCode Beta Helper (Renderer).app`,
+    `${app}/Contents/Resources/app.asar.unpacked/node_modules/native.node`,
+    `${app}/Contents/Resources/opencode-cli-other`,
+    `${app}/Contents/Resources/nested/opencode-cli`,
+  ]) {
+    expect(options.optionsForFile?.(file)).toEqual(defaults)
+  }
+  for (const file of [config.mac?.entitlements, config.mac?.entitlementsInherit]) {
+    expect(typeof file).toBe("string")
+    expect(await Bun.file(path.join(import.meta.dirname, file!)).text()).not.toContain("disable-library-validation")
+  }
+})
