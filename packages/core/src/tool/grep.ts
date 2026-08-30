@@ -94,11 +94,14 @@ const layer = Layer.effectDiscard(
               })
               const target = path.resolve(location.directory, input.path ?? ".")
               const info = yield* fs.stat(target).pipe(Effect.catch(() => Effect.succeed(undefined)))
+              if (!info) {
+                return yield* Effect.fail(new ToolFailure({ message: `Path does not exist: ${target}` }))
+              }
               return yield* ripgrep
                 .grep({
-                  cwd: info?.type === "Directory" ? target : path.dirname(target),
+                  cwd: info.type === "Directory" ? target : path.dirname(target),
                   pattern: input.pattern,
-                  file: info?.type === "File" ? path.basename(target) : undefined,
+                  file: info.type === "File" ? path.basename(target) : undefined,
                   include: input.include,
                   limit: input.limit ?? Number.MAX_SAFE_INTEGER,
                 })
@@ -113,7 +116,7 @@ const layer = Layer.effectDiscard(
                             path.relative(
                               location.directory,
                               path.resolve(
-                                info?.type === "Directory" ? target : path.dirname(target),
+                                info.type === "Directory" ? target : path.dirname(target),
                                 match.entry.path,
                               ),
                             ),
@@ -123,7 +126,9 @@ const layer = Layer.effectDiscard(
                     ),
                   ),
                 )
-            }).pipe(Effect.mapError(() => new ToolFailure({ message: `Unable to grep for ${input.pattern}` }))),
+            }).pipe(Effect.mapError((error) =>
+              error instanceof ToolFailure ? error : new ToolFailure({ message: `Unable to grep for ${input.pattern}`, error }),
+            )),
         }),
       })
       .pipe(Effect.orDie)
