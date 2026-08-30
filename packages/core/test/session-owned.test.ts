@@ -440,7 +440,6 @@ describe("Session-owned handles", () => {
     Effect.gen(function* () {
       const scope = yield* Scope.Scope
       const host = yield* Scope.fork(scope, "sequential")
-      const release = yield* Deferred.make<void>()
       const calls: string[] = []
       const stopped: SessionSchema.ID[] = []
       const execution = yield* SessionExecution.Service.pipe(Effect.provide(SessionExecution.noopLayer))
@@ -450,7 +449,7 @@ describe("Session-owned handles", () => {
           resume: (id) =>
             Effect.gen(function* () {
               calls.push(`resume:${id}`)
-              yield* Deferred.await(release)
+              yield* Effect.never
             }).pipe(
               Effect.onInterrupt(() =>
                 Effect.sync(() => {
