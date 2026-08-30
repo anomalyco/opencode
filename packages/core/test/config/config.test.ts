@@ -795,4 +795,133 @@ describe("Config", () => {
       }),
     ),
   )
+
+  it.live("substitutes {file:} references in config values", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Promise.all([
+              fs.writeFile(path.join(tmp.path, "api.key"), "sk-secret-key\n"),
+              fs.writeFile(path.join(tmp.path, "opencode.json"), JSON.stringify({ model: "{file:./api.key}" })),
+            ]),
+          )
+          return yield* Effect.gen(function* () {
+            const config = yield* Config.Service
+            const documents = (yield* config.entries()).filter((entry) => entry.type === "document")
+            expect(documents[0]?.info.model).toBe("sk-secret-key")
+          }).pipe(Effect.provide(testLayer(tmp.path)))
+        }),
+      ),
+    ),
+  )
+
+  it.live("substitutes {env:} references in config values", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const previous = process.env.OPENCODE_TEST_MODEL
+          process.env.OPENCODE_TEST_MODEL = "anthropic/claude"
+          yield* Effect.promise(() =>
+            fs.writeFile(path.join(tmp.path, "opencode.json"), JSON.stringify({ model: "{env:OPENCODE_TEST_MODEL}" })),
+          )
+          return yield* Effect.gen(function* () {
+            const config = yield* Config.Service
+            const documents = (yield* config.entries()).filter((entry) => entry.type === "document")
+            expect(documents[0]?.info.model).toBe("anthropic/claude")
+          }).pipe(
+            Effect.provide(testLayer(tmp.path)),
+            Effect.ensuring(
+              Effect.sync(() => {
+                if (previous === undefined) delete process.env.OPENCODE_TEST_MODEL
+                else process.env.OPENCODE_TEST_MODEL = previous
+              }),
+            ),
+          )
+        }),
+      ),
+    ),
+  )
+
+  it.live("does not substitute {file:} inside JSONC line comments", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Promise.all([
+              fs.writeFile(path.join(tmp.path, "api.key"), "sk-secret-key"),
+              fs.writeFile(
+                path.join(tmp.path, "opencode.jsonc"),
+                `{
+                  // "model": "{file:./api.key}"
+                  "model": "anthropic/claude"
+                }`,
+              ),
+            ]),
+          )
+          return yield* Effect.gen(function* () {
+            const config = yield* Config.Service
+            const documents = (yield* config.entries()).filter((entry) => entry.type === "document")
+            expect(documents[0]?.info.model).toBe("anthropic/claude")
+          }).pipe(Effect.provide(testLayer(tmp.path)))
+        }),
+      ),
+    ),
+  )
+
+  it.live("substitutes {file:} with absolute paths", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const keyPath = path.join(tmp.path, "secret.key")
+          yield* Effect.promise(() =>
+            Promise.all([
+              fs.writeFile(keyPath, "sk-abs-key"),
+              fs.writeFile(path.join(tmp.path, "opencode.json"), JSON.stringify({ model: `{file:${keyPath}}` })),
+            ]),
+          )
+          return yield* Effect.gen(function* () {
+            const config = yield* Config.Service
+            const documents = (yield* config.entries()).filter((entry) => entry.type === "document")
+            expect(documents[0]?.info.model).toBe("sk-abs-key")
+          }).pipe(Effect.provide(testLayer(tmp.path)))
+        }),
+      ),
+    ),
+  )
+
+  it.live("substitutes {file:} content with JSON-special characters", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Promise.all([
+              fs.writeFile(path.join(tmp.path, "api.key"), 'sk-"quote"\n\\backslash\t'),
+              fs.writeFile(path.join(tmp.path, "opencode.json"), JSON.stringify({ model: "{file:./api.key}" })),
+            ]),
+          )
+          return yield* Effect.gen(function* () {
+            const config = yield* Config.Service
+            const documents = (yield* config.entries()).filter((entry) => entry.type === "document")
+            expect(documents[0]?.info.model).toBe('sk-"quote"\n\\backslash')
+          }).pipe(Effect.provide(testLayer(tmp.path)))
+        }),
+      ),
+    ),
+  )
 })
