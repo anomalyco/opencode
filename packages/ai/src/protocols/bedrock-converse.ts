@@ -577,15 +577,21 @@ const step = (state: ParserState, event: BedrockEvent) =>
               ),
             ]
       const redactedData = redactedChunks === undefined ? reasoning.data : encodeRedactedContent(redactedChunks)
-      const metadata = reasoning.signature
-        ? providerMetadata(state.providerMetadataKey, { signature: reasoning.signature })
-        : redactedData !== undefined
-          ? providerMetadata(state.providerMetadataKey, { redactedData })
-          : undefined
+      const metadata = (() => {
+        if (reasoning.signature) return providerMetadata(state.providerMetadataKey, { signature: reasoning.signature })
+        if (redactedData !== undefined) return providerMetadata(state.providerMetadataKey, { redactedData })
+      })()
       const lifecycle =
         reasoning.text !== undefined || metadata !== undefined
           ? Lifecycle.reasoningDelta(state.lifecycle, events, `reasoning-${index}`, reasoning.text ?? "", metadata)
           : state.lifecycle
+      const reasoningRedactedContent = (() => {
+        if (redactedChunks !== undefined) return { ...state.reasoningRedactedContent, [index]: redactedChunks }
+        if (reasoning.data === undefined) return state.reasoningRedactedContent
+        return Object.fromEntries(
+          Object.entries(state.reasoningRedactedContent).filter(([key]) => key !== String(index)),
+        )
+      })()
       return [
         {
           ...state,
@@ -593,14 +599,7 @@ const step = (state: ParserState, event: BedrockEvent) =>
           reasoningSignatures: reasoning.signature
             ? { ...state.reasoningSignatures, [index]: reasoning.signature }
             : state.reasoningSignatures,
-          reasoningRedactedContent:
-            redactedChunks === undefined
-              ? reasoning.data === undefined
-                ? state.reasoningRedactedContent
-                : Object.fromEntries(
-                    Object.entries(state.reasoningRedactedContent).filter(([key]) => key !== String(index)),
-                  )
-              : { ...state.reasoningRedactedContent, [index]: redactedChunks },
+          reasoningRedactedContent,
         },
         events,
       ] as const
@@ -628,20 +627,24 @@ const step = (state: ParserState, event: BedrockEvent) =>
       const result = yield* ToolStream.finish(ADAPTER, state.tools, index)
       const events: LLMEvent[] = []
       const resultEvents = result.events ?? []
-      const lifecycle = resultEvents.length
-        ? Lifecycle.stepStart(state.lifecycle, events)
-        : Lifecycle.reasoningEnd(
-            Lifecycle.textEnd(state.lifecycle, events, `text-${index}`),
-            events,
-            `reasoning-${index}`,
-            state.reasoningSignatures[index]
-              ? providerMetadata(state.providerMetadataKey, { signature: state.reasoningSignatures[index] })
-              : state.reasoningRedactedContent[index]
-                ? providerMetadata(state.providerMetadataKey, {
-                    redactedData: encodeRedactedContent(state.reasoningRedactedContent[index]),
-                  })
-                : undefined,
-          )
+      const lifecycle = (() => {
+        if (resultEvents.length) return Lifecycle.stepStart(state.lifecycle, events)
+        const metadata = (() => {
+          const signature = state.reasoningSignatures[index]
+          if (signature) return providerMetadata(state.providerMetadataKey, { signature })
+          const redactedContent = state.reasoningRedactedContent[index]
+          if (redactedContent)
+            return providerMetadata(state.providerMetadataKey, {
+              redactedData: encodeRedactedContent(redactedContent),
+            })
+        })()
+        return Lifecycle.reasoningEnd(
+          Lifecycle.textEnd(state.lifecycle, events, `text-${index}`),
+          events,
+          `reasoning-${index}`,
+          metadata,
+        )
+      })()
       events.push(...resultEvents)
       return [
         {
