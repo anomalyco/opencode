@@ -4,7 +4,12 @@ import type { ServerConnection } from "@/context/server"
 import { decode64 } from "@/utils/base64"
 
 export function authTokenFromCredentials(input: { username?: string; password: string }) {
-  return btoa(`${input.username ?? "opencode"}:${input.password}`)
+  return btoa(
+    Array.from(
+      new TextEncoder().encode(`${input.username ?? "opencode"}:${input.password}`),
+      (byte) => String.fromCharCode(byte),
+    ).join(""),
+  )
 }
 
 export function authFromToken(token: string | null) {
