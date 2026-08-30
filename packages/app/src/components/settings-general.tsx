@@ -95,7 +95,16 @@ export const SettingsGeneral: Component = () => {
 
   const linux = createMemo(() => platform.platform === "desktop" && platform.os === "linux")
   const dir = createMemo(() => decode64(params.dir))
+  const serverSync = useServerSync()
+  const serverSdk = useServerSDK()
+  const globalAutoAccept = createMemo(() => {
+    const perm = (serverSync().data.config as any)?.permission
+    if (perm === "allow") return true
+    if (perm && typeof perm === "object" && perm["*"] === "allow") return true
+    return false
+  })
   const accepting = createMemo(() => {
+    if (globalAutoAccept()) return true
     const value = dir()
     if (!value) return false
     if (!params.id) return permission.isAutoAcceptingDirectory(value)
@@ -122,9 +131,6 @@ export const SettingsGeneral: Component = () => {
   const desktop = createMemo(() => platform.platform === "desktop")
 
   const themeOptions = createMemo<ThemeOption[]>(() => theme.ids().map((id) => ({ id, name: theme.name(id) })))
-
-  const serverSync = useServerSync()
-  const serverSdk = useServerSDK()
 
   const [shells] = createResource(
     async () => {
@@ -321,7 +327,7 @@ export const SettingsGeneral: Component = () => {
           description={language.t("toast.permissions.autoaccept.on.description")}
         >
           <div data-action="settings-auto-accept-permissions">
-            <Switch checked={accepting()} disabled={!dir()} onChange={toggleAccept} />
+            <Switch checked={accepting()} disabled={!dir() || globalAutoAccept()} onChange={toggleAccept} />
           </div>
         </SettingsRow>
 
