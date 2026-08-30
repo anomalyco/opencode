@@ -906,6 +906,69 @@ describe("Gemini route", () => {
     }),
   )
 
+  it.effect("assigns unique ids to separated reasoning blocks", () =>
+    Effect.gen(function* () {
+      const body = sseEvents(
+        {
+          candidates: [
+            {
+              content: {
+                role: "model",
+                parts: [{ text: "A", thought: true, thoughtSignature: "reasoning_sig_a" }],
+              },
+            },
+          ],
+        },
+        {
+          candidates: [{ content: { role: "model", parts: [{ text: "X" }] } }],
+        },
+        {
+          candidates: [
+            {
+              content: {
+                role: "model",
+                parts: [{ text: "B", thought: true, thoughtSignature: "reasoning_sig_b" }],
+              },
+            },
+          ],
+        },
+        {
+          candidates: [{ content: { role: "model", parts: [{ text: "Y" }] }, finishReason: "STOP" }],
+        },
+      )
+      const response = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse(body)))
+      const starts = response.events.filter((event) => event.type === "reasoning-start")
+      const deltas = response.events.filter((event) => event.type === "reasoning-delta")
+      const ends = response.events.filter((event) => event.type === "reasoning-end")
+
+      expect(starts.map((event) => event.id)).toEqual(["reasoning-0", "reasoning-1"])
+      expect(starts[0]?.id).not.toBe(starts[1]?.id)
+      expect(deltas.map((event) => ({ id: event.id, text: event.text }))).toEqual([
+        { id: "reasoning-0", text: "A" },
+        { id: "reasoning-1", text: "B" },
+      ])
+      expect(ends.map((event) => event.id)).toEqual(["reasoning-0", "reasoning-1"])
+      expect(response.events.filter((event) => event.type.startsWith("text-")).map((event) => event.id)).toEqual([
+        "text-0",
+        "text-0",
+        "text-0",
+        "text-0",
+      ])
+      expect(response.message.content.filter((part) => part.type === "reasoning")).toEqual([
+        {
+          type: "reasoning",
+          text: "A",
+          providerMetadata: { google: { thoughtSignature: "reasoning_sig_a" } },
+        },
+        {
+          type: "reasoning",
+          text: "B",
+          providerMetadata: { google: { thoughtSignature: "reasoning_sig_b" } },
+        },
+      ])
+    }),
+  )
+
   it.effect("ignores unknown response parts", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(request).pipe(
