@@ -74,6 +74,38 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
+  it.effect("filters whitespace-only text and removes empty messages", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.user(" \n\t"),
+            Message.user([]),
+            Message.user([
+              { type: "text", text: "" },
+              { type: "text", text: "  Keep this spacing.  " },
+              { type: "text", text: " \n\t" },
+            ]),
+            Message.assistant(" \n\t"),
+            Message.assistant([]),
+            Message.assistant([{ type: "reasoning", text: "" }]),
+            Message.assistant([
+              { type: "text", text: "" },
+              { type: "reasoning", text: "", providerMetadata: { anthropic: { signature: "sig_1" } } },
+            ]),
+          ],
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        { role: "user", content: [{ type: "text", text: "  Keep this spacing.  " }] },
+        { role: "assistant", content: [{ type: "thinking", thinking: "", signature: "sig_1" }] },
+      ])
+    }),
+  )
+
   it.effect("lowers adaptive thinking settings with effort", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
