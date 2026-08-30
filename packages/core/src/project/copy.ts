@@ -214,10 +214,12 @@ const layer = Layer.effect(
 
     const refresh = Effect.fn("ProjectCopy.refresh")(function* (input: RefreshInput) {
       const stored = yield* directories.list(input.projectID)
+      // Fast path: if no stored directories, nothing to refresh
+      if (stored.length === 0) return { updated: [], removed: [] }
       const checked = yield* Effect.forEach(
         stored,
         (item) => fs.isDir(item.directory).pipe(Effect.map((exists) => ({ ...item, exists }))),
-        { concurrency: "unbounded" },
+        { concurrency: 8 },
       )
       const sourceDirectories = checked
         .filter((item) => item.strategy === undefined && item.exists)
@@ -236,11 +238,19 @@ const layer = Layer.effect(
               ),
             ),
           ),
-        { concurrency: "unbounded" },
+        { concurrency: 8 },
       ).pipe(
         Effect.map((sets) => new Map(sets.flat(2).map((item) => [item.directory, item] as const)).values().toArray()),
       )
       const removed = checked.filter((item) => !item.exists).map((item) => item.directory)
+      // Fast path: if discovered set matches stored set exactly and nothing removed, skip DB transaction
+      const discoveredDirs = new Set(discovered.map((d) => d.directory))
+      const storedDirs = new Set(checked.filter((item) => item.exists).map((item) => item.directory))
+      const noChanges =
+        removed.length === 0 &&
+        discoveredDirs.size === storedDirs.size &&
+        [...discoveredDirs].every((d) => storedDirs.has(d))
+      if (noChanges) return { updated: [], removed: [] }
       const result = yield* db
         .transaction((tx) =>
           Effect.all({
