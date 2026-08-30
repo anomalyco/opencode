@@ -17,7 +17,11 @@ test("loads cached plugin packages without requesting a refresh", async () => {
             calls.push(options)
             return { directory: path.dirname(entrypoint), entrypoint: pathToFileURL(entrypoint).href }
           }),
-        resolve: () => Effect.die(new Error("Unexpected resolve")),
+        resolve: (_pkg, options) =>
+          Effect.sync(() => {
+            calls.push(options)
+            return { directory: path.dirname(entrypoint), entrypoint: pathToFileURL(entrypoint).href }
+          }),
         which: () => Effect.die(new Error("Unexpected which")),
       }),
     ),
@@ -25,5 +29,6 @@ test("loads cached plugin packages without requesting a refresh", async () => {
   )
 
   expect(plugin.id).toBe("config-effect-plugin")
-  expect(calls).toEqual([{ subpaths: ["server", ""] }])
+  expect(plugin.features).toEqual({ tui: true, rpc: true })
+  expect(calls).toEqual([{ subpaths: ["server", ""] }, { subpaths: ["tui"] }, { subpaths: ["rpc"] }])
 })

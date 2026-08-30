@@ -39,6 +39,7 @@ export interface Interface {
 export type Versioned = PluginDefinition & {
   readonly version: string
   readonly source?: Plugin.Source
+  readonly features?: Plugin.Features
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Plugin") {}

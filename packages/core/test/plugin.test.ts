@@ -337,7 +337,7 @@ describe("Plugin", () => {
     }),
   )
 
-  it.effect("reports activated and declared plugin features", () =>
+  it.effect("reports activated and discovered plugin features", () =>
     Effect.gen(function* () {
       const plugins = yield* Plugin.Service
       yield* plugins.activate([

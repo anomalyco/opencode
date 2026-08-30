@@ -132,11 +132,6 @@ interface Context {
 
 interface Plugin<R = Scope.Scope> {
   readonly id: string
-  readonly features?: {
-    readonly server?: true
-    readonly tui?: true
-    readonly rpc?: true
-  }
   readonly effect: (context: Context) => Effect.Effect<void, never, R>
 }
 ```

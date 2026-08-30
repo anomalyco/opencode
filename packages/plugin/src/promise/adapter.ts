@@ -214,7 +214,6 @@ function compileEndpoint(endpoint: HttpApiEndpoint.Top) {
 export function fromPromise(plugin: Plugin) {
   return define({
     id: plugin.id,
-    features: plugin.features,
     vcs: plugin.vcs,
     effect: (host) =>
       Effect.gen(function* () {

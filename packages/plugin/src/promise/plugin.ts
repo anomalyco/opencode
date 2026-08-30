@@ -1,7 +1,6 @@
 import type { OpenCodeClient } from "@opencode-ai/client"
 import type { GenerateApi, PluginApi } from "@opencode-ai/client/promise/api"
 import type { Location } from "@opencode-ai/schema/location"
-import type { Features } from "@opencode-ai/schema/plugin"
 import type { PluginOptions } from "../options.js"
 import type { VcsDiscovery } from "../vcs.js"
 import type { App } from "../app.js"
@@ -55,7 +54,6 @@ export type Cleanup = () => Promise<void> | void
 
 export interface Plugin {
   readonly id: string
-  readonly features?: Features
   readonly vcs?: VcsDiscovery
   readonly setup: (context: Context) => Promise<Cleanup | void> | Cleanup | void
 }
