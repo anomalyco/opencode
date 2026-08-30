@@ -2,18 +2,17 @@ import { describe, expect, test } from "bun:test"
 import { Message, ToolCallPart, ToolResultPart } from "../src/schema/messages.js"
 import { normalizeToolHistory } from "../src/tool-history.js"
 
-const call = (id: string, name = id) => ToolCallPart.make({ id, name, input: {} })
-const result = (id: string, value: unknown, name = id, resultType?: "text" | "content" | "error") =>
+const toolCall = (id: string, name = id) => ToolCallPart.make({ id, name, input: {} })
+const toolResult = (id: string, value: unknown, name = id, resultType?: "text" | "content" | "error") =>
   Message.tool(ToolResultPart.make({ id, name, result: value, resultType }))
 
 describe("tool history normalization", () => {
-  test("settles missing calls before the next message and at history end", () => {
-    const next = Message.user("Continue.")
+  test("fills missing local results at step boundaries", () => {
     const normalized = normalizeToolHistory([
-      Message.assistant([call("first"), call("second")]),
-      result("first", "done", "wrong", "text"),
-      next,
-      Message.assistant(call("trailing")),
+      Message.assistant([toolCall("first"), toolCall("second")]),
+      toolResult("first", "done", "wrong", "text"),
+      Message.user("Continue."),
+      Message.assistant(toolCall("trailing")),
     ])
 
     expect(normalized.map((message) => message.role)).toEqual([
@@ -41,12 +40,18 @@ describe("tool history normalization", () => {
   test("normalizes empty results without changing whitespace or media", () => {
     const media = { type: "file" as const, uri: "data:image/png;base64,AQID", mime: "image/png" }
     const normalized = normalizeToolHistory([
-      Message.assistant([call("text"), call("content"), call("error"), call("mixed"), call("whitespace")]),
-      result("text", "", "text", "text"),
-      result("content", [], "content", "content"),
-      result("error", "", "error", "error"),
-      result("mixed", [{ type: "text", text: "" }, media], "mixed", "content"),
-      result("whitespace", "   ", "whitespace", "text"),
+      Message.assistant([
+        toolCall("text"),
+        toolCall("content"),
+        toolCall("error"),
+        toolCall("mixed"),
+        toolCall("whitespace"),
+      ]),
+      toolResult("text", "", "text", "text"),
+      toolResult("content", [], "content", "content"),
+      toolResult("error", "", "error", "error"),
+      toolResult("mixed", [{ type: "text", text: "" }, media], "mixed", "content"),
+      toolResult("whitespace", "   ", "whitespace", "text"),
     ])
 
     expect(normalized.slice(1).map((message) => message.content[0])).toEqual([
@@ -58,7 +63,7 @@ describe("tool history normalization", () => {
     ])
   })
 
-  test("preserves unmatched and provider-executed results", () => {
+  test("leaves unmatched and provider-executed history unchanged", () => {
     const hostedCall = ToolCallPart.make({
       id: "hosted",
       name: "web_search",
@@ -73,7 +78,7 @@ describe("tool history normalization", () => {
       providerExecuted: true,
     })
     const hosted = Message.assistant([hostedCall, hostedResult])
-    const orphan = result("orphan", "ignored", "orphan", "text")
+    const orphan = toolResult("orphan", "ignored", "orphan", "text")
 
     expect(normalizeToolHistory([orphan, hosted])).toEqual([orphan, hosted])
   })
