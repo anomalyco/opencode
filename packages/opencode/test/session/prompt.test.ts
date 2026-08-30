@@ -628,6 +628,89 @@ it.instance("legacy prompt emits message events without session.next events", ()
   }),
 )
 
+it.instance("loop aborts on 10 consecutive identical tool calls", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const events = yield* EventV2Bridge.Service
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+    const errors: NonNullable<SessionV1.Assistant["error"]>[] = []
+    const off = yield* events.listen((event) => {
+      if (event.type !== Session.Event.Error.type) return Effect.void
+      const data = event.data as typeof Session.Event.Error.data.Type
+      if (data.sessionID === chat.id && data.error) errors.push(data.error)
+      return Effect.void
+    })
+
+    yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "hello" }],
+    })
+    for (let i = 0; i < 12; i++) yield* llm.tool("glob", { pattern: "**/*.txt" })
+    yield* llm.text("should never be consumed")
+
+    const result = yield* prompt.loop({ sessionID: chat.id })
+    yield* off
+
+    expect(yield* llm.calls).toBe(10)
+    expect(result.info.role).toBe("assistant")
+    expect(errors).toContainEqual(
+      expect.objectContaining({
+        name: "UnknownError",
+        data: expect.objectContaining({
+          ref: "repeated-identical-tool-call",
+          message: expect.stringContaining('tool "glob" was called 10 consecutive times'),
+        }),
+      }),
+    )
+  }),
+)
+
+it.instance("loop does not abort below the identical-call threshold", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+    yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "hello" }],
+    })
+    for (let i = 0; i < 9; i++) yield* llm.tool("glob", { pattern: "**/*.txt" })
+    yield* llm.text("done")
+
+    const result = yield* prompt.loop({ sessionID: chat.id })
+    expect(yield* llm.calls).toBe(10)
+    expect(result.parts.some((part) => part.type === "text" && part.text === "done")).toBe(true)
+  }),
+)
+
+it.instance("loop does not abort on alternating tool call arguments", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+    yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "hello" }],
+    })
+    for (let i = 0; i < 12; i++) yield* llm.tool("glob", { pattern: i % 2 === 0 ? "**/*.txt" : "**/*.ts" })
+    yield* llm.text("done")
+
+    const result = yield* prompt.loop({ sessionID: chat.id })
+    expect(yield* llm.calls).toBe(13)
+    expect(result.parts.some((part) => part.type === "text" && part.text === "done")).toBe(true)
+  }),
+)
+
 it.instance("loop surfaces content-filter finishes as session errors", () =>
   Effect.gen(function* () {
     const { llm } = yield* useServerConfig(providerCfg)
