@@ -18,6 +18,26 @@ import { waitForAbort } from "@opencode-ai/util/process"
 import { State } from "../state.js"
 import type { McpClient } from "./client.js"
 
+/**
+ * Global MCP process registry — shares identical subprocesses across Locations.
+ *
+ * Keyed by a hash of the server config (name + command + args + env).
+ * Reference-counted: each Location increments on connect, decrements on disconnect.
+ * When the last Location releases a server, the subprocess is killed.
+ */
+interface GlobalProcessEntry {
+  client: McpClient.Connection
+  tools: Mcp.Tool[]
+  refCount: number
+  configHash: string
+}
+const globalProcessRegistry = new Map<string, GlobalProcessEntry>()
+
+function configHash(name: string, config: Mcp.ServerConfig): string {
+  const key = JSON.stringify({ name, type: config.type, command: "command" in config ? config.command : undefined, args: "args" in config ? config.args : undefined, url: "url" in config ? config.url : undefined })
+  return createHash("sha256").update(key).digest("hex").slice(0, 16)
+}
+
 export const ServerName = Schema.String.pipe(Schema.brand("MCP.ServerName"))
 export const PromptsChanged = ephemeral({ type: "mcp.prompts.changed", schema: { server: Schema.String } })
 export type ServerName = typeof ServerName.Type
@@ -509,6 +529,23 @@ export const layer = (options?: Options) =>
 
       const startServer = (name: ServerName, entry: ServerEntry) =>
         Effect.gen(function* () {
+          // Check global process registry for identical server — share subprocess across Locations
+          const hash = configHash(name, entry.config)
+          const existing = globalProcessRegistry.get(hash)
+          if (existing && existing.client) {
+            // Reuse existing connection — increment refcount, share client and tools
+            existing.refCount++
+            entry.client = existing.client
+            entry.tools = existing.tools
+            entry.prompts = []
+            entry.status = { status: "connected" }
+            // Don't watch or start prompts for shared connections — the original handles that
+            yield* Effect.logInfo("mcp shared", { server: name, tools: entry.tools.length, refCount: existing.refCount })
+            yield* bus.publish(McpEvent.ToolsChanged, { server: name }).pipe(Effect.ignore)
+            yield* bus.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore)
+            return
+          }
+
           // Announce the handshake so connect() and credential reconnects don't show a stale
           // disabled/failed status for the duration of the connection attempt.
           entry.status = { status: "pending" }
@@ -539,6 +576,13 @@ export const layer = (options?: Options) =>
             entry.prompts = []
             entry.status = { status: "connected" }
             watch(name, entry, result.value.connection)
+            // Register in global process registry for sharing across Locations
+            globalProcessRegistry.set(hash, {
+              client: result.value.connection,
+              tools: entry.tools,
+              refCount: 1,
+              configHash: hash,
+            })
             yield* Effect.logInfo("mcp connected", { server: name, tools: entry.tools.length })
             // Announce the new tool set so the tool registry registers it. A server that finishes connecting
             // after the initial registration sweep and emits no list-changed notification would otherwise
@@ -567,6 +611,23 @@ export const layer = (options?: Options) =>
         entry.client = undefined
         entry.tools = undefined
         entry.prompts = undefined
+        // Decrement global process registry refcount — only kill subprocess when last Location releases
+        const hash = configHash(name, entry.config)
+        const globalEntry = globalProcessRegistry.get(hash)
+        if (globalEntry) {
+          globalEntry.refCount--
+          if (globalEntry.refCount > 0) {
+            // Other Locations still using this server — don't kill it
+            yield* Effect.logInfo("mcp shared release", { server: name, refCount: globalEntry.refCount })
+            yield* Scope.close(scope, Exit.void)
+            yield* bus.publish(McpEvent.ToolsChanged, { server: name }).pipe(Effect.ignore)
+            yield* bus.publish(McpEvent.ResourcesChanged, { server: name }).pipe(Effect.ignore)
+            yield* bus.publish(PromptsChanged, { server: name }).pipe(Effect.ignore)
+            return
+          }
+          // Last Location — remove from registry and kill subprocess
+          globalProcessRegistry.delete(hash)
+        }
         yield* Scope.close(scope, Exit.void)
         yield* bus.publish(McpEvent.ToolsChanged, { server: name }).pipe(Effect.ignore)
         yield* bus.publish(McpEvent.ResourcesChanged, { server: name }).pipe(Effect.ignore)
