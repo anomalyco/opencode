@@ -322,7 +322,8 @@ export function createSessionTimelineRowRenderer(input: {
     }
     if (message.type !== "synthetic") return undefined
     if (message.metadata?.notice === "restart") return { label: i18n.t("ui.sessionTimeline.notice.restart") }
-    if (message.description === "Continuing after restart") return { label: message.description }
+    if (message.description === "Continuing after restart")
+      return { label: i18n.t("ui.sessionTimeline.notice.restart") }
     const source = typeof message.metadata?.source === "string" ? message.metadata.source : undefined
     const state = typeof message.metadata?.state === "string" ? message.metadata.state : undefined
     if (source === "subagent" || source === "shell") {

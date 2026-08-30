@@ -55,6 +55,7 @@ export const SettingsProjects: Component = () => {
             variant="ghost-muted"
             size="small"
             icon={<Icon name="settings-gear" size="small" class="text-v2-icon-icon-muted" />}
+            aria-label={language.t("command.settings.open")}
             onClick={(event: MouseEvent) => {
               event.stopPropagation()
               openProjectSettings(props.project, props.server)
