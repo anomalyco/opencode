@@ -1,7 +1,7 @@
 import { EventStreamCodec } from "@smithy/eventstream-codec"
 import { fromUtf8, toUtf8 } from "@smithy/util-utf8"
 import { describe, expect } from "bun:test"
-import { Effect, Ref, Stream } from "effect"
+import { Effect, Encoding, Ref, Stream } from "effect"
 import {
   CacheHint,
   GenerationOptions,
@@ -83,6 +83,17 @@ const eventStreamBody = (...payloads: ReadonlyArray<readonly [string, object]>) 
 // the cassette layer treats the body as bytes when recording.
 const fixedBytes = (bytes: Uint8Array) =>
   fixedResponse(bytes.slice().buffer, { headers: { "content-type": "application/vnd.amazon.eventstream" } })
+
+const fixedByteChunks = (...chunks: ReadonlyArray<Uint8Array>) =>
+  fixedResponse(
+    new ReadableStream<Uint8Array>({
+      start(controller) {
+        chunks.forEach((chunk) => controller.enqueue(chunk))
+        controller.close()
+      },
+    }),
+    { headers: { "content-type": "application/vnd.amazon.eventstream" } },
+  )
 
 const model = AmazonBedrock.configure({
   baseURL: "https://bedrock-runtime.test",
@@ -383,6 +394,44 @@ describe("Bedrock Converse route", () => {
         outputTokens: 2,
         totalTokens: 7,
       })
+    }),
+  )
+
+  it.effect("rejects truncated event-stream frames after message stop", () =>
+    Effect.gen(function* () {
+      const partialFrames = [
+        eventFrame("metadata", { usage: { inputTokens: 5, outputTokens: 2, totalTokens: 7 } }).subarray(0, 3),
+        exceptionFrame("modelStreamErrorException", { originalMessage: "Upstream model failed" }).subarray(0, -1),
+      ]
+
+      for (const partial of partialFrames) {
+        const error = yield* LLMClient.generate(baseRequest).pipe(
+          Effect.provide(fixedBytes(concat([eventFrame("messageStop", { stopReason: "end_turn" }), partial]))),
+          Effect.flip,
+        )
+
+        expect(error).toMatchObject({
+          reason: { _tag: "InvalidProviderOutput", classification: "incomplete-stream" },
+          message: `Incomplete Bedrock Converse event-stream frame: ${partial.length} buffered bytes remain at end of stream`,
+        })
+        expect(error.reason.body).toBe(Encoding.encodeBase64(partial))
+      }
+    }),
+  )
+
+  it.effect("decodes frames split across transport chunks through exact-boundary EOF", () =>
+    Effect.gen(function* () {
+      const body = eventStreamBody(
+        ["messageStart", { role: "assistant" }],
+        ["contentBlockDelta", { contentBlockIndex: 0, delta: { text: "Hello" } }],
+        ["messageStop", { stopReason: "end_turn" }],
+      )
+      const response = yield* LLMClient.generate(baseRequest).pipe(
+        Effect.provide(fixedByteChunks(body.subarray(0, 2), body.subarray(2, 17), body.subarray(17))),
+      )
+
+      expect(response.text).toBe("Hello")
+      expect(response.finishReason).toEqual({ normalized: "stop", raw: "end_turn" })
     }),
   )
 
