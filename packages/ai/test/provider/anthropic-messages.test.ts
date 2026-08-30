@@ -74,6 +74,16 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
+  it.effect("omits empty system text while preserving whitespace", () =>
+    Effect.gen(function* () {
+      const empty = yield* compileRequest(LLMRequest.update(request, { system: [{ type: "text", text: "" }] }))
+      const whitespace = yield* compileRequest(LLMRequest.update(request, { system: [{ type: "text", text: " " }] }))
+
+      expect(empty.body.system).toBeUndefined()
+      expect(whitespace.body.system).toEqual([{ type: "text", text: " " }])
+    }),
+  )
+
   it.effect("lowers adaptive thinking settings with effort", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
