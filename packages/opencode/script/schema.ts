@@ -6,9 +6,9 @@ import { TuiConfig } from "@opencode-ai/tui/config"
 import { Schema } from "effect"
 
 type JsonSchema = Record<string, unknown>
-const MODEL_REF = "https://models.dev/model-schema.json#/$defs/Model"
+export const MODEL_REF = "https://models.dev/model-schema.json#/$defs/Model"
 
-function generateEffect(schema: Schema.Top) {
+export function generateEffect(schema: Schema.Top) {
   const document = Schema.toJsonSchemaDocument(schema)
   const normalized = normalize({
     $schema: "https://json-schema.org/draft/2020-12/schema",
@@ -50,13 +50,15 @@ function normalize(value: unknown): unknown {
   return schema
 }
 
-function restoreModelRefs(value: unknown, key?: string): unknown {
+export function restoreModelRefs(value: unknown, key?: string): unknown {
   if (Array.isArray(value)) return value.map((item) => restoreModelRefs(item))
   if (!isRecord(value)) return value
 
   const schema = Object.fromEntries(Object.entries(value).map(([name, item]) => [name, restoreModelRefs(item, name)]))
   if ((key === "model" || key === "small_model") && schema.type === "string") {
-    return { ...schema, $ref: MODEL_REF }
+    const { type: _, ...rest } = schema
+    // models.dev Model is a closed enum; sibling $ref rejects custom ids.
+    return { ...rest, anyOf: [{ type: "string" }, { $ref: MODEL_REF }] }
   }
   return schema
 }
@@ -65,13 +67,15 @@ function isRecord(value: unknown): value is JsonSchema {
   return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
-const configFile = process.argv[2]
-const tuiFile = process.argv[3]
+if (import.meta.main) {
+  const configFile = process.argv[2]
+  const tuiFile = process.argv[3]
 
-console.log(configFile)
-await Bun.write(configFile, JSON.stringify(generateEffect(ConfigV1.Info), null, 2))
+  console.log(configFile)
+  await Bun.write(configFile, JSON.stringify(generateEffect(ConfigV1.Info), null, 2))
 
-if (tuiFile) {
-  console.log(tuiFile)
-  await Bun.write(tuiFile, JSON.stringify(generateEffect(TuiConfig.Info), null, 2))
+  if (tuiFile) {
+    console.log(tuiFile)
+    await Bun.write(tuiFile, JSON.stringify(generateEffect(TuiConfig.Info), null, 2))
+  }
 }
