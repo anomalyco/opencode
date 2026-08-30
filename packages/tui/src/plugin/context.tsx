@@ -101,7 +101,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
   const data = useData()
   const [serverPlugins, setServerPlugins] = createSignal<
     ReadonlyArray<
-      Extract<PluginInfo, { readonly status: "active" }> & {
+      PluginInfo & { readonly status: { readonly type: "active" } } & {
         readonly source: { readonly type: "package" } | { readonly type: "local" }
       }
     >
@@ -507,10 +507,10 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
           response.data.filter(
             (
               plugin,
-            ): plugin is Extract<PluginInfo, { readonly status: "active" }> & {
+            ): plugin is PluginInfo & { readonly status: { readonly type: "active" } } & {
               readonly source: { readonly type: "package" } | { readonly type: "local" }
             } =>
-              plugin.status === "active" &&
+              plugin.status.type === "active" &&
               plugin.features.tui === true &&
               (plugin.source.type === "package" || plugin.source.type === "local"),
           ),

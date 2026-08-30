@@ -16555,51 +16555,23 @@
         "additionalProperties": false
       },
       "Plugin.Info": {
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string"
-              },
-              "source": {
-                "$ref": "#/components/schemas/Plugin.Source"
-              },
-              "status": {
-                "type": "string",
-                "enum": ["active"]
-              },
-              "features": {
-                "$ref": "#/components/schemas/Plugin.Features"
-              }
-            },
-            "required": ["id", "source", "status", "features"],
-            "additionalProperties": false
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
           },
-          {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string"
-              },
-              "source": {
-                "$ref": "#/components/schemas/Plugin.Source"
-              },
-              "status": {
-                "type": "string",
-                "enum": ["failed"]
-              },
-              "error": {
-                "type": "string"
-              },
-              "features": {
-                "$ref": "#/components/schemas/Plugin.Features"
-              }
-            },
-            "required": ["source", "status", "error", "features"],
-            "additionalProperties": false
+          "source": {
+            "$ref": "#/components/schemas/Plugin.Source"
+          },
+          "features": {
+            "$ref": "#/components/schemas/Plugin.Features"
+          },
+          "status": {
+            "$ref": "#/components/schemas/Plugin.Status"
           }
-        ]
+        },
+        "required": ["source", "features", "status"],
+        "additionalProperties": false
       },
       "Plugin.Source": {
         "anyOf": [
@@ -16651,6 +16623,35 @@
               }
             },
             "required": ["type"],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "Plugin.Status": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["active"]
+              }
+            },
+            "required": ["type"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["failed"]
+              },
+              "error": {
+                "type": "string"
+              }
+            },
+            "required": ["type", "error"],
             "additionalProperties": false
           }
         ]

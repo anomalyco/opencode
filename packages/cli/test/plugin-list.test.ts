@@ -6,23 +6,22 @@ test("formats server and TUI plugins in sections without builtins", () => {
   expect(
     format(
       [
-        { id: "opencode.agent", source: { type: "builtin" }, status: "active", features: { server: true } },
+        { id: "opencode.agent", source: { type: "builtin" }, status: { type: "active" }, features: { server: true } },
         {
           id: "acme.dual",
           source: { type: "package", package: "acme-plugin@1.0.0" },
-          status: "active",
+          status: { type: "active" },
           features: { server: true, tui: true },
         },
         {
           source: { type: "package", package: "broken-plugin" },
-          status: "failed",
-          error: "broken",
+          status: { type: "failed", error: "broken" },
           features: { server: true },
         },
         {
           id: "local.dual",
           source: { type: "local", path: "/tmp/local/index.ts" },
-          status: "active",
+          status: { type: "active" },
           features: { server: true, tui: true },
         },
       ],
@@ -50,7 +49,14 @@ test("formats server and TUI plugins in sections without builtins", () => {
 test("includes builtins when requested", () => {
   expect(
     format(
-      [{ id: "opencode.agent", source: { type: "builtin" }, status: "active", features: { server: true } }],
+      [
+        {
+          id: "opencode.agent",
+          source: { type: "builtin" },
+          status: { type: "active" },
+          features: { server: true },
+        },
+      ],
       [],
       true,
     ),

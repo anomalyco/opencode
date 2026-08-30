@@ -1,5 +1,5 @@
 export * as Plugin from "./plugin.js"
-export { Event, ID, Info, Source } from "@opencode-ai/schema/plugin"
+export { Event, ID, Info, Source, Status } from "@opencode-ai/schema/plugin"
 
 import { Plugin } from "@opencode-ai/schema/plugin"
 import type { Plugin as PluginDefinition } from "@opencode-ai/plugin/effect/plugin"
@@ -31,10 +31,12 @@ import { Permission } from "./permission.js"
 export interface Interface {
   readonly activate: (
     plugins: readonly Versioned[],
-    failures?: readonly Extract<Plugin.Info, { readonly status: "failed" }>[],
+    failures?: readonly Failure[],
   ) => Effect.Effect<void>
   readonly list: () => Effect.Effect<Plugin.Info[]>
 }
+
+type Failure = Plugin.Info & { readonly status: Extract<Plugin.Status, { readonly type: "failed" }> }
 
 export type Versioned = PluginDefinition & {
   readonly version: string
@@ -82,7 +84,7 @@ const layer = Layer.effect(
 
     const activate = Effect.fn("Plugin.activate")(function* (
       plugins: readonly Versioned[],
-      failures: readonly Extract<Plugin.Info, { readonly status: "failed" }>[] = [],
+      failures: readonly Failure[] = [],
     ) {
       const definitions = plugins.map((plugin) => ({ ...plugin, id: Plugin.ID.make(plugin.id) }))
       const ids = new Set<Plugin.ID>()
@@ -124,8 +126,7 @@ const layer = Layer.effect(
                 nextInventory.push({
                   id: definition.id,
                   source: definition.source ?? { type: "builtin" },
-                  status: "failed",
-                  error: loaded.error,
+                  status: { type: "failed", error: loaded.error },
                   features: { server: true, ...definition.features },
                 })
 
@@ -177,7 +178,7 @@ function activeInfo(plugin: Versioned): Plugin.Info {
   return {
     id: Plugin.ID.make(plugin.id),
     source: plugin.source ?? { type: "builtin" },
-    status: "active",
+    status: { type: "active" },
     features: { server: true, ...plugin.features },
   }
 }
