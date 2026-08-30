@@ -16,11 +16,13 @@ export const RpcHandler = HttpApiBuilder.group(Api, "server.rpc", (handlers) =>
     }).pipe(
       Effect.mapError(
         (error) =>
-          new RpcError({
-            type: error.type,
-            message: error.message,
-            ...(error.data === undefined ? {} : { data: error.data }),
-          }),
+          error.type === "rpc.invalid_output"
+            ? new RpcInternalError({ type: error.type, message: error.message })
+            : new RpcError({
+                type: error.type,
+                message: error.message,
+                ...(error.data === undefined ? {} : { data: error.data }),
+              }),
       ),
       Effect.catchDefect((error) =>
         Effect.fail(

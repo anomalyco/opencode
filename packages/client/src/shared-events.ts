@@ -10,7 +10,6 @@ export function make<A extends { readonly type: string }>(connect: (signal: Abor
     controller: AbortController
     subscribers: Set<Subscriber>
     connected?: A
-    read?: ReturnType<typeof Promise.withResolvers<IteratorResult<A>>>
   }
 
   let current: Connection | undefined
@@ -18,7 +17,6 @@ export function make<A extends { readonly type: string }>(connect: (signal: Abor
 
   function stop(connection: Connection) {
     connection.connected = undefined
-    connection.read?.resolve({ done: true, value: undefined })
     connection.controller.abort()
     if (current === connection) current = undefined
   }
@@ -30,11 +28,7 @@ export function make<A extends { readonly type: string }>(connect: (signal: Abor
       if (connection.controller.signal.aborted) return
       iterator = connect(connection.controller.signal)[Symbol.asyncIterator]()
       while (!connection.controller.signal.aborted) {
-        // Cancellation must reach return() even when the source has a pending next().
-        connection.read = Promise.withResolvers<IteratorResult<A>>()
-        iterator.next().then(connection.read.resolve, connection.read.reject)
-        const item = await connection.read.promise
-        connection.read = undefined
+        const item = await iterator.next()
         if (item.done || connection.controller.signal.aborted) break
         if (item.value.type === "server.connected") connection.connected = item.value
         await Promise.all(Array.from(connection.subscribers, (subscriber) => subscriber.push(item.value)))
@@ -62,12 +56,10 @@ export function make<A extends { readonly type: string }>(connect: (signal: Abor
           let connection: Connection | undefined
           let offered: { readonly value: A; readonly accepted: ReturnType<typeof Promise.withResolvers<void>> } | undefined
 
-          function finish(result: Completion, discard = false) {
+          function finish(result: Completion) {
             completion = result
-            if (discard || "error" in result) {
-              offered?.accepted.resolve()
-              offered = undefined
-            }
+            offered?.accepted.resolve()
+            offered = undefined
             options?.signal?.removeEventListener("abort", abort)
             if (connection?.subscribers.delete(subscriber) && !connection.subscribers.size) stop(connection)
             pending.splice(0).forEach((request) => {
@@ -77,7 +69,7 @@ export function make<A extends { readonly type: string }>(connect: (signal: Abor
           }
 
           function abort() {
-            finish({}, true)
+            finish({})
           }
 
           const subscriber: Subscriber = {
@@ -134,7 +126,7 @@ export function make<A extends { readonly type: string }>(connect: (signal: Abor
               return request.promise
             },
             return(): Promise<IteratorResult<A>> {
-              finish({}, true)
+              finish({})
               return Promise.resolve({ done: true, value: undefined })
             },
           }

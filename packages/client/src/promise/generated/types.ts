@@ -333,7 +333,7 @@ export type SkillInfo = {
   content: string
 }
 
-export type RpcOutput = { output?: JsonValue }
+export type RpcOutput = { output?: any }
 
 export type PermissionReply = "once" | "always" | "reject"
 
@@ -5705,7 +5705,7 @@ export type RpcCallInput = {
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   }["location"]
-  readonly input?: { readonly input?: JsonValue }["input"]
+  readonly input?: { readonly input: JsonValue }["input"]
 }
 
 export type RpcCallOutput = RpcOutput

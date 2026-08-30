@@ -7,7 +7,7 @@ import { RpcInput, RpcOutput } from "../src/groups/rpc.js"
 
 test("RPC wrappers preserve JSON primitives and omit undefined fields", () => {
   expect(Schema.encodeSync(RpcInput)({ input: undefined })).toEqual({})
-  expect(Schema.encodeSync(RpcOutput)({ output: undefined })).toEqual({})
+  expect(Schema.encodeSync(RpcOutput)({})).toEqual({})
   expect(Schema.decodeUnknownSync(RpcInput)({})).toEqual({})
   expect(Schema.decodeUnknownSync(RpcOutput)({})).toEqual({})
   for (const value of [null, false, 123, "text", [1, 2], { location: "ordinary payload" }]) {
@@ -36,6 +36,9 @@ test("RPC errors use the standard transport wrapper", () => {
   expect(
     Schema.encodeSync(RpcInternalError)(new RpcInternalError({ type: "rpc.internal", message: "Failed" })),
   ).toEqual({ _tag: "RpcInternalError", type: "rpc.internal", message: "Failed" })
+  expect(
+    Schema.encodeSync(RpcInternalError)(new RpcInternalError({ type: "rpc.invalid_output", message: "Invalid" })),
+  ).toEqual({ _tag: "RpcInternalError", type: "rpc.invalid_output", message: "Invalid" })
 })
 
 test("exposes one generic RPC operation with location routing and ordinary transport errors", () => {

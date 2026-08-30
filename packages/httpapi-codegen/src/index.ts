@@ -1200,7 +1200,7 @@ function codegenAsts(roots: ReadonlyArray<SchemaAST.AST>) {
         "id" in representation &&
         representation.id === "effect/schema/Json"
       ) {
-        return ast.context?.isOptional ? Schema.optionalKey(Schema.Json).ast : Schema.Json.ast
+        return Schema.Json.ast
       }
       if (ast.annotations?.["~constructor"] !== undefined && ast.typeParameters[0] !== undefined) {
         const identifier = SchemaAST.resolveIdentifier(ast)

@@ -582,28 +582,6 @@ describe("HttpApiCodegen.generate", () => {
     )
   })
 
-  test("preserves optional keys when HTTP normalization converts unknown to JSON", () => {
-    const OptionalUnknown = Schema.optionalKey(Schema.Unknown).pipe(
-      Schema.decodeTo(Schema.optional(Schema.Unknown), {
-        decode: SchemaGetter.passthrough({ strict: false }),
-        encode: SchemaGetter.passthrough({ strict: false }),
-      }),
-    )
-    const output = emitPromise(
-      compileContract(
-        api(
-          HttpApiEndpoint.get("get", "/rpc", {
-            success: Schema.Struct({ output: OptionalUnknown }).annotate({ identifier: "RpcOutput" }),
-          }),
-        ),
-      ),
-    )
-
-    expect(output.files.find((file) => file.path === "types.ts")?.content).toContain(
-      'export type RpcOutput = { readonly "output"?: JsonValue }',
-    )
-  })
-
   test("supports name-discriminated Promise errors", () => {
     class NamedError extends Schema.Error<NamedError>("NamedError")(
       { name: Schema.Literal("NamedError"), message: Schema.String },

@@ -1579,7 +1579,7 @@ export type RpcCallInput = {
   readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   readonly input?: unknown | undefined
 }
-export type RpcCallOutput = { readonly output?: unknown | undefined }
+export type RpcCallOutput = { readonly output?: unknown }
 export type RpcCallOperation<E = never> = (input: RpcCallInput) => Effect.Effect<RpcCallOutput, E>
 
 export interface RpcApi<E = never> {

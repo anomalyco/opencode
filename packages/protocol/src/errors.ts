@@ -24,7 +24,7 @@ export class RpcError extends Schema.TaggedError<RpcError>()(
 export class RpcInternalError extends Schema.TaggedError<RpcInternalError>()(
   "RpcInternalError",
   {
-    type: Schema.Literal("rpc.internal"),
+    type: Schema.Literals(["rpc.internal", "rpc.invalid_output"]),
     message: Schema.String,
     data: Schema.optional(Schema.Unknown),
   },

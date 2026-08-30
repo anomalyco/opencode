@@ -159,7 +159,6 @@ it.live("dispatches RPC wrappers with query, header and default locations and ge
           error: { type: "rejected", message: "handler failed", data: { reason: "declared" } },
         },
         { route: "transport.echo/echo", body: { input: 123 }, error: { type: "rpc.invalid_input" } },
-        { route: "transport.echo/invalid", body: {}, error: { type: "rpc.invalid_output" } },
       ],
       (item) =>
         Effect.gen(function* () {
@@ -178,6 +177,13 @@ it.live("dispatches RPC wrappers with query, header and default locations and ge
       _tag: "RpcInternalError",
       type: "rpc.internal",
       message: "handler defect",
+    })
+    const invalid = yield* server.call("transport.echo/invalid")
+    expect(invalid.status).toBe(500)
+    expect(yield* Effect.promise(() => invalid.json())).toMatchObject({
+      _tag: "RpcInternalError",
+      type: "rpc.invalid_output",
+      message: expect.any(String),
     })
     const malformed = yield* server.call("transport.echo/echo", "not a wrapper")
     expect(malformed.status).toBe(400)
