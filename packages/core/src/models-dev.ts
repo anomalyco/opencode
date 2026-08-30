@@ -131,6 +131,8 @@ export const Provider = Schema.Struct({
 
 export type Provider = Schema.Schema.Type<typeof Provider>
 
+const Catalog = Schema.Record(Schema.String, Provider)
+
 export const Event = ModelsDev.Event
 
 declare const OPENCODE_MODELS_DEV: Record<string, Provider> | undefined
@@ -182,6 +184,7 @@ const layer = Layer.effect(
     })
 
     const loadFromDisk = fs.readJson(Flag.OPENCODE_MODELS_PATH ?? filepath).pipe(
+      Effect.flatMap(Schema.decodeUnknownEffect(Catalog)),
       Effect.catch((error) => {
         if (
           Flag.OPENCODE_MODELS_PATH === undefined &&
@@ -201,6 +204,7 @@ const layer = Layer.effect(
 
     const fetchAndWrite = Effect.fn("ModelsDev.fetchAndWrite")(function* () {
       const text = yield* fetchApi()
+      const catalog = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Catalog))(text)
       const tempfile = `${filepath}.${process.pid}.${Date.now()}.tmp`
       yield* fs.writeWithDirs(tempfile, text).pipe(
         Effect.andThen(fs.rename(tempfile, filepath)),
@@ -211,7 +215,7 @@ const layer = Layer.effect(
           }),
         ),
       )
-      return text
+      return catalog
     })
 
     const populate = Effect.gen(function* () {
@@ -221,14 +225,18 @@ const layer = Layer.effect(
       if (snapshot) return snapshot
       if (Flag.OPENCODE_DISABLE_MODELS_FETCH) return {}
       // Flock is cross-process: concurrent opencode CLIs can race on this cache file.
-      const text = yield* Effect.scoped(
+      return yield* Effect.scoped(
         Effect.gen(function* () {
           yield* Flock.effect(lockKey)
           return yield* fetchAndWrite()
         }),
       )
-      return JSON.parse(text) as Record<string, Provider>
-    }).pipe(Effect.withSpan("ModelsDev.populate"), Effect.orDie)
+    }).pipe(
+      Effect.withSpan("ModelsDev.populate"),
+      Effect.catch((error) =>
+        Effect.logError("Failed to fetch models.dev", { error }).pipe(Effect.as({} as Record<string, Provider>)),
+      ),
+    )
 
     const [cachedGet, invalidate] = yield* Effect.cachedInvalidateWithTTL(populate, Duration.infinity)
 
