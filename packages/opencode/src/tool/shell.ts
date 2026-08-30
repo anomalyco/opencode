@@ -1,4 +1,4 @@
-import { Effect, Stream } from "effect"
+import { Duration, Effect, Schedule, Stream } from "effect"
 import os from "os"
 import { createWriteStream } from "node:fs"
 import * as Tool from "./tool"
@@ -25,6 +25,7 @@ import { BashArity } from "@/permission/arity"
 export { Parameters } from "./shell/prompt"
 
 const MAX_METADATA_LENGTH = 30_000
+const METADATA_UPDATE_INTERVAL = 100
 const CWD = new Set(["cd", "chdir", "popd", "pushd", "push-location", "set-location"])
 const FILES = new Set([
   ...CWD,
@@ -446,6 +447,17 @@ export const ShellTool = Tool.define(
       let cut = false
       let expired = false
       let aborted = false
+      let metadataOutput = ""
+
+      const updateMetadata = Effect.suspend(() => {
+        if (last === metadataOutput) return Effect.void
+        const output = last
+        return ctx.metadata({
+          metadata: {
+            output,
+          },
+        }).pipe(Effect.andThen(Effect.sync(() => (metadataOutput = output))))
+      })
 
       const closeSink = Effect.fnUntraced(function* () {
         const stream = sink
@@ -483,6 +495,11 @@ export const ShellTool = Tool.define(
           yield* Effect.addFinalizer(closeSink)
           const handle = yield* spawner.spawn(cmd(input.shell, input.command, input.cwd, input.env))
 
+          yield* updateMetadata.pipe(
+            Effect.repeat(Schedule.spaced(Duration.millis(METADATA_UPDATE_INTERVAL))),
+            Effect.forkScoped,
+          )
+
           yield* Effect.forkScoped(
             Stream.runForEach(Stream.decodeText(handle.all), (chunk) => {
               const size = Buffer.byteLength(chunk, "utf-8")
@@ -511,22 +528,11 @@ export const ShellTool = Tool.define(
                         full = ""
                       }),
                     ),
-                    Effect.andThen(
-                      ctx.metadata({
-                        metadata: {
-                          output: last,
-                        },
-                      }),
-                    ),
                   )
                 }
               }
 
-              return ctx.metadata({
-                metadata: {
-                  output: last,
-                },
-              })
+              return Effect.void
             }),
           )
 
@@ -557,6 +563,8 @@ export const ShellTool = Tool.define(
           return exit.kind === "exit" ? exit.code : null
         }),
       ).pipe(Effect.orDie)
+
+      yield* updateMetadata
 
       const meta: string[] = []
       if (expired) {

@@ -1112,7 +1112,7 @@ describe("tool.shell abort", () => {
         const updates: string[] = []
         const result = yield* run(
           {
-            command: `echo first && sleep 0.1 && echo second`,
+            command: `echo first && sleep 0.2 && echo second`,
           },
           {
             ...ctx,
@@ -1128,6 +1128,72 @@ describe("tool.shell abort", () => {
         expect(updates.length).toBeGreaterThan(1)
       }),
     ),
+  )
+
+  it.live("publishes coalesced output before process exit", () =>
+    runIn(
+      projectRoot,
+      Effect.gen(function* () {
+        const controller = new AbortController()
+        const updates: string[] = []
+        const code =
+          "let i=0;const timer=setInterval(()=>{process.stdout.write(String(++i)+String.fromCharCode(10));if(i===30){clearInterval(timer);setTimeout(()=>{},30000)}},10)"
+        const result = yield* run(
+          {
+            command: `${PS.has(sh()) ? "& " : ""}${bin} -e ${evalarg(code)}`,
+          },
+          {
+            ...ctx,
+            abort: controller.signal,
+            metadata: (input) =>
+              Effect.sync(() => {
+                const output = (input.metadata as { output?: string })?.output
+                if (!output) return
+                updates.push(output)
+                if (output.includes("30")) controller.abort()
+              }),
+          },
+        )
+        expect(result.output).toContain("30")
+        expect(result.output).toContain("User aborted the command")
+        expect(updates.at(-1)).toContain("30")
+      }),
+    ),
+  )
+
+  it.live("flushes the latest output after the process scope closes", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      const marker = path.join(tmp, "release")
+      const updates: string[] = []
+      let released = false
+      const code =
+        "console.log(1);while(!(await Bun.file(Bun.argv[1]).exists()))await Bun.sleep(1);console.log(2)"
+
+      yield* runIn(
+        tmp,
+        Effect.gen(function* () {
+          const result = yield* run(
+            {
+              command: `${PS.has(sh()) ? "& " : ""}${bin} -e ${evalarg(code)} ${quote(marker)}`,
+            },
+            {
+              ...ctx,
+              metadata: (input) => {
+                const output = (input.metadata as { output?: string })?.output
+                if (!output) return Effect.void
+                updates.push(output)
+                if (released || !output.includes("1")) return Effect.void
+                released = true
+                return Effect.promise(() => Bun.write(marker, "")).pipe(Effect.asVoid)
+              },
+            },
+          )
+          expect(result.output).toContain("2")
+          expect(updates.at(-1)).toContain("2")
+        }),
+      )
+    }),
   )
 })
 
