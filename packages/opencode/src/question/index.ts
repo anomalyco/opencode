@@ -56,6 +56,7 @@ export interface Interface {
     answers: ReadonlyArray<Answer>
   }) => Effect.Effect<void, NotFoundError>
   readonly reject: (requestID: QuestionID) => Effect.Effect<void, NotFoundError>
+  readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
   readonly list: () => Effect.Effect<ReadonlyArray<Request>>
 }
 
@@ -74,7 +75,11 @@ const layer = Layer.effect(
         yield* Effect.addFinalizer(() =>
           Effect.gen(function* () {
             for (const item of state.pending.values()) {
-              yield* Deferred.fail(item.deferred, new RejectedError())
+              yield* events.publish(Event.Rejected, {
+                sessionID: item.info.sessionID,
+                requestID: item.info.id,
+              })
+              yield* Deferred.fail(item.deferred, new RejectedError()).pipe(Effect.ignore)
             }
             state.pending.clear()
           }),
@@ -103,11 +108,24 @@ const layer = Layer.effect(
       pending.set(id, { info, deferred })
       yield* events.publish(Event.Asked, info)
 
-      return yield* Effect.ensuring(
-        Deferred.await(deferred),
-        Effect.sync(() => {
-          pending.delete(id)
-        }),
+      return yield* Deferred.await(deferred).pipe(
+        Effect.onInterrupt(() =>
+          Effect.gen(function* () {
+            if (!pending.has(id)) return
+            pending.delete(id)
+            yield* Effect.logInfo("rejected on interrupt", { requestID: id, sessionID: input.sessionID })
+            yield* events.publish(Event.Rejected, {
+              sessionID: input.sessionID,
+              requestID: id,
+            })
+            yield* Deferred.fail(deferred, new RejectedError()).pipe(Effect.ignore)
+          }),
+        ),
+        Effect.ensuring(
+          Effect.sync(() => {
+            pending.delete(id)
+          }),
+        ),
       )
     })
 
@@ -147,12 +165,26 @@ const layer = Layer.effect(
       yield* Deferred.fail(existing.deferred, new RejectedError())
     })
 
+    const cancel = Effect.fn("Question.cancel")(function* (sessionID: SessionID) {
+      const pending = (yield* InstanceState.get(state)).pending
+      for (const [id, item] of pending.entries()) {
+        if (item.info.sessionID !== sessionID) continue
+        pending.delete(id)
+        yield* Effect.logInfo("rejected on cancel", { sessionID, requestID: id })
+        yield* events.publish(Event.Rejected, {
+          sessionID: item.info.sessionID,
+          requestID: item.info.id,
+        })
+        yield* Deferred.fail(item.deferred, new RejectedError()).pipe(Effect.ignore)
+      }
+    })
+
     const list = Effect.fn("Question.list")(function* () {
       const pending = (yield* InstanceState.get(state)).pending
       return Array.from(pending.values(), (x) => x.info)
     })
 
-    return Service.of({ ask, reply, reject, list })
+    return Service.of({ ask, reply, reject, cancel, list })
   }),
 )
 

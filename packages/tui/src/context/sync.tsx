@@ -378,20 +378,43 @@ export const {
           const parts = store.part[event.properties.part.messageID]
           if (!parts) {
             setStore("part", event.properties.part.messageID, [event.properties.part])
-            break
+          } else {
+            const result = search(parts, event.properties.part.id, (part) => part.id)
+            if (result.found) {
+              setStore("part", event.properties.part.messageID, result.index, reconcile(event.properties.part))
+            } else {
+              setStore(
+                "part",
+                event.properties.part.messageID,
+                produce((draft) => {
+                  draft.splice(result.index, 0, event.properties.part)
+                }),
+              )
+            }
           }
-          const result = search(parts, event.properties.part.id, (part) => part.id)
-          if (result.found) {
-            setStore("part", event.properties.part.messageID, result.index, reconcile(event.properties.part))
-            break
+          if (
+            event.properties.part.type === "tool" &&
+            (event.properties.part.state.status === "error" || event.properties.part.state.status === "completed") &&
+            store.question[event.properties.part.sessionID]
+          ) {
+            const questions = store.question[event.properties.part.sessionID]!
+            const toolCallID = event.properties.part.callID
+            const toolMessageID = event.properties.part.messageID
+            const indices = questions
+              .map((q, i) => (q.tool?.callID === toolCallID || q.tool?.messageID === toolMessageID ? i : -1))
+              .filter((i) => i !== -1)
+            if (indices.length > 0) {
+              setStore(
+                "question",
+                event.properties.part.sessionID,
+                produce((draft) => {
+                  for (let i = indices.length - 1; i >= 0; i--) {
+                    draft.splice(indices[i], 1)
+                  }
+                }),
+              )
+            }
           }
-          setStore(
-            "part",
-            event.properties.part.messageID,
-            produce((draft) => {
-              draft.splice(result.index, 0, event.properties.part)
-            }),
-          )
           break
         }
 

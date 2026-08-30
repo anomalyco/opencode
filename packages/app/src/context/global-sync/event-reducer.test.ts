@@ -613,4 +613,46 @@ describe("applyDirectoryEvent", () => {
     expect(pushes).toEqual(["/tmp"])
     expect(lspLoads).toBe(1)
   })
+
+  test("cleans up pending question when its tool part transitions to error or completed", () => {
+    const sessionID = "ses_test"
+    const messageID = "msg_1"
+    const callID = "call_question_1"
+    const questionWithTool = {
+      ...questionRequest("q_1", sessionID),
+      tool: { messageID, callID },
+    }
+    const [store, setStore] = createStore(
+      baseState({
+        question: { [sessionID]: [questionWithTool] },
+      }),
+    )
+
+    const toolPart = {
+      id: "part_tool_1",
+      sessionID,
+      messageID,
+      type: "tool",
+      tool: "question",
+      callID,
+      state: {
+        status: "error",
+        input: {},
+        error: "Tool execution aborted",
+        metadata: { interrupted: true },
+        time: { start: 1, end: 2 },
+      },
+    } as Part
+
+    applyDirectoryEvent({
+      event: { type: "message.part.updated", properties: { part: toolPart } },
+      store,
+      setStore,
+      push() {},
+      directory: "/tmp",
+      loadLsp() {},
+    })
+
+    expect(store.question[sessionID]).toEqual([])
+  })
 })
