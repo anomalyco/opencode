@@ -1021,10 +1021,11 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
         )
   // Anthropic rejects tool_choice when tools are absent; "none" is only meaningful with tools present.
   const toolChoice = tools === undefined || !request.toolChoice ? undefined : yield* lowerToolChoice(request.toolChoice)
+  const systemParts = request.system.filter((part) => part.text.length > 0)
   const system =
-    request.system.length === 0
+    systemParts.length === 0
       ? undefined
-      : request.system.map((part) => ({
+      : systemParts.map((part) => ({
           type: "text" as const,
           text: part.text,
           cache_control: cacheControl(breakpoints, part.cache),
