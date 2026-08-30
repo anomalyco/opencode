@@ -511,7 +511,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
               readonly source: { readonly type: "package" } | { readonly type: "local" }
             } =>
               plugin.status === "active" &&
-              plugin.tui &&
+              plugin.features.tui === true &&
               (plugin.source.type === "package" || plugin.source.type === "local"),
           ),
         ),

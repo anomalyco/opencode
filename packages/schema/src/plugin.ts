@@ -15,19 +15,26 @@ export const Source = Schema.Union([
 ]).annotate({ identifier: "Plugin.Source" })
 export type Source = typeof Source.Type
 
+export const Features = Schema.Struct({
+  server: Schema.Literal(true).pipe(optional),
+  tui: Schema.Literal(true).pipe(optional),
+  rpc: Schema.Literal(true).pipe(optional),
+}).annotate({ identifier: "Plugin.Features" })
+export type Features = typeof Features.Type
+
 export const Info = Schema.Union([
   Schema.Struct({
     id: ID,
     source: Source,
     status: Schema.Literal("active"),
-    tui: Schema.Boolean,
+    features: Features,
   }),
   Schema.Struct({
     id: ID.pipe(optional),
     source: Source,
     status: Schema.Literal("failed"),
     error: Schema.String,
-    tui: Schema.Boolean,
+    features: Features,
   }),
 ]).annotate({ identifier: "Plugin.Info" })
 export type Info = typeof Info.Type

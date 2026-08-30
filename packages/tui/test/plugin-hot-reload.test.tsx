@@ -123,7 +123,7 @@ test("loads an advertised package TUI entrypoint only from the local cache", asy
         id: "test.server",
         source: { type: "package", package: "test-plugin@1.0.0" },
         status: "active",
-        tui: true,
+        features: { server: true, tui: true },
       },
     ],
     resolve: async (spec, install) => {
@@ -158,7 +158,7 @@ test("loads an advertised local TUI entrypoint beside its server entrypoint", as
         id: "test.server",
         source: { type: "local", path: path.join(plugin, "index.ts") },
         status: "active",
-        tui: true,
+        features: { server: true, tui: true },
       },
     ],
   })

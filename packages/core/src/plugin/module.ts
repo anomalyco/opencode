@@ -1,6 +1,7 @@
 export * as PluginModule from "./module.js"
 
 import type { Plugin } from "@opencode-ai/plugin/effect/plugin"
+import { Features } from "@opencode-ai/schema/plugin"
 import { Npm } from "@opencode-ai/util/npm"
 import { importModule } from "@opencode-ai/util/runtime-import"
 import { Effect, Schema } from "effect"
@@ -14,18 +15,17 @@ const Discovery = Schema.Struct({
   id: Schema.optional(Schema.String),
   markers: Schema.Array(Schema.String),
 })
-
 const Definition = Schema.Struct({
   default: Schema.Union([
     Schema.Struct({
       id: Schema.String,
-      tui: Schema.optional(Schema.Boolean),
+      features: Schema.optional(Features),
       vcs: Schema.optional(Discovery),
       effect: Schema.declare<Plugin["effect"]>((input): input is Plugin["effect"] => typeof input === "function"),
     }),
     Schema.Struct({
       id: Schema.String,
-      tui: Schema.optional(Schema.Boolean),
+      features: Schema.optional(Features),
       vcs: Schema.optional(Discovery),
       setup: Schema.declare<Parameters<typeof PluginPromise.fromPromise>[0]["setup"]>(
         (input): input is Parameters<typeof PluginPromise.fromPromise>[0]["setup"] => typeof input === "function",
@@ -51,7 +51,7 @@ export const load = Effect.fn("PluginModule.load")(function* (
   const plugin = "effect" in value ? value : PluginPromise.fromPromise(value)
   return {
     id: plugin.id,
-    tui: plugin.tui,
+    features: plugin.features,
     vcs: plugin.vcs,
     version: JSON.stringify(operation),
     source: path.isAbsolute(operation.target)

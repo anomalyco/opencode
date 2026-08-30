@@ -124,7 +124,7 @@ describe("PluginSupervisor config", () => {
             path: path.join(import.meta.dir, "../plugin/fixtures/config-promise/index.ts"),
           },
           status: "active",
-          tui: true,
+          features: { server: true, tui: true },
         })
       }),
     ),

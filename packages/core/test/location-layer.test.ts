@@ -575,7 +575,7 @@ describe("LocationServiceMap", () => {
                 source: { type: "local", path: path.join(import.meta.dir, "plugin/fixtures/failing/index.ts") },
                 status: "failed",
                 error: expect.stringContaining("plugin failed"),
-                tui: false,
+                features: { server: true },
               },
             ])
 

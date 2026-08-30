@@ -637,6 +637,7 @@ import { Acme } from "./rpc.js"
 
 export default Plugin.define({
   id: "acme-plugin",
+  features: { rpc: true },
   async setup(ctx) {
     const registration = await ctx.rpc.register(Acme, {
       search: async ({ query }, context) => {

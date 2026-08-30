@@ -16536,6 +16536,24 @@
         "required": ["size"],
         "additionalProperties": false
       },
+      "Plugin.Features": {
+        "type": "object",
+        "properties": {
+          "server": {
+            "type": "boolean",
+            "enum": [true]
+          },
+          "tui": {
+            "type": "boolean",
+            "enum": [true]
+          },
+          "rpc": {
+            "type": "boolean",
+            "enum": [true]
+          }
+        },
+        "additionalProperties": false
+      },
       "Plugin.Info": {
         "anyOf": [
           {
@@ -16551,11 +16569,11 @@
                 "type": "string",
                 "enum": ["active"]
               },
-              "tui": {
-                "type": "boolean"
+              "features": {
+                "$ref": "#/components/schemas/Plugin.Features"
               }
             },
-            "required": ["id", "source", "status", "tui"],
+            "required": ["id", "source", "status", "features"],
             "additionalProperties": false
           },
           {
@@ -16574,11 +16592,11 @@
               "error": {
                 "type": "string"
               },
-              "tui": {
-                "type": "boolean"
+              "features": {
+                "$ref": "#/components/schemas/Plugin.Features"
               }
             },
-            "required": ["source", "status", "error", "tui"],
+            "required": ["source", "status", "error", "features"],
             "additionalProperties": false
           }
         ]
@@ -17156,7 +17174,7 @@
           },
           "type": {
             "type": "string",
-            "enum": ["rpc.internal"]
+            "enum": ["rpc.internal", "rpc.invalid_output"]
           },
           "message": {
             "type": "string"

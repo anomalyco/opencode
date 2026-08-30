@@ -16,6 +16,8 @@ export type PluginSource =
   | { type: "local"; path: string }
   | { type: "sdk" }
 
+export type PluginFeatures = { server?: true; tui?: true; rpc?: true }
+
 export type SessionForkBoundary = { type: "before"; messageID: string } | { type: "through"; messageID: string }
 
 export type MoneyUSD = number
@@ -445,8 +447,8 @@ export type ProviderRequest = {
 export type PermissionRule = { action: string; resource: string; effect: PermissionEffect }
 
 export type PluginInfo =
-  | { id: string; source: PluginSource; status: "active"; tui: boolean }
-  | { id?: string; source: PluginSource; status: "failed"; error: string; tui: boolean }
+  | { id: string; source: PluginSource; status: "active"; features: PluginFeatures }
+  | { id?: string; source: PluginSource; status: "failed"; error: string; features: PluginFeatures }
 
 export type SessionMessageLocationSwitched = {
   id: string
@@ -2504,7 +2506,7 @@ export const isRpcError = (value: unknown): value is RpcError =>
 
 export type RpcInternalError = {
   readonly _tag: "RpcInternalError"
-  readonly type: "rpc.internal"
+  readonly type: "rpc.internal" | "rpc.invalid_output"
   readonly message: string
   readonly data?: unknown | undefined
 }

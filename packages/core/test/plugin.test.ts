@@ -270,7 +270,7 @@ describe("Plugin", () => {
             source: { type: "package", package: "broken" },
             status: "failed",
             error: "failed to resolve",
-            tui: false,
+            features: { server: true },
           },
         ],
       )
@@ -331,7 +331,27 @@ describe("Plugin", () => {
         .pipe(Effect.exit)
 
       expect(Exit.isFailure(result)).toBe(true)
-      expect(yield* plugins.list()).toEqual([{ id: active, source: { type: "builtin" }, status: "active", tui: false }])
+      expect(yield* plugins.list()).toEqual([
+        { id: active, source: { type: "builtin" }, status: "active", features: { server: true } },
+      ])
+    }),
+  )
+
+  it.effect("reports activated and declared plugin features", () =>
+    Effect.gen(function* () {
+      const plugins = yield* Plugin.Service
+      yield* plugins.activate([
+        { id: "rpc-plugin", version: "1", features: { rpc: true }, effect: () => Effect.void },
+      ])
+
+      expect(yield* plugins.list()).toEqual([
+        {
+          id: Plugin.ID.make("rpc-plugin"),
+          source: { type: "builtin" },
+          status: "active",
+          features: { server: true, rpc: true },
+        },
+      ])
     }),
   )
 
@@ -361,13 +381,13 @@ describe("Plugin", () => {
 
       yield* plugins.activate([versioned(good), versioned(bad)])
       expect(yield* plugins.list()).toEqual([
-        { id: Plugin.ID.make("good"), source: { type: "builtin" }, status: "active", tui: false },
+        { id: Plugin.ID.make("good"), source: { type: "builtin" }, status: "active", features: { server: true } },
         {
           id: Plugin.ID.make("bad"),
           source: { type: "builtin" },
           status: "failed",
           error: expect.stringContaining("materialization failed"),
-          tui: false,
+          features: { server: true },
         },
       ])
       expect((yield* agents.get(Agent.ID.make("configured")))?.description).toBe("loaded")
@@ -375,8 +395,8 @@ describe("Plugin", () => {
       fail = false
       yield* plugins.activate([versioned(good), versioned(bad, "2")])
       expect(yield* plugins.list()).toEqual([
-        { id: Plugin.ID.make("good"), source: { type: "builtin" }, status: "active", tui: false },
-        { id: Plugin.ID.make("bad"), source: { type: "builtin" }, status: "active", tui: false },
+        { id: Plugin.ID.make("good"), source: { type: "builtin" }, status: "active", features: { server: true } },
+        { id: Plugin.ID.make("bad"), source: { type: "builtin" }, status: "active", features: { server: true } },
       ])
     }),
   )
@@ -413,7 +433,12 @@ describe("Plugin", () => {
       ])
 
       expect(yield* plugins.list()).toEqual([
-        { id: Plugin.ID.make("partial-tools"), source: { type: "builtin" }, status: "active", tui: false },
+        {
+          id: Plugin.ID.make("partial-tools"),
+          source: { type: "builtin" },
+          status: "active",
+          features: { server: true },
+        },
       ])
       expect((yield* agents.get(Agent.ID.make("configured")))?.description).toBe("setup continued")
       expect((yield* tools.snapshot()).definitions.map((tool) => tool.name)).toEqual(["healthy", "execute"])
@@ -459,7 +484,7 @@ describe("Plugin", () => {
           source: { type: "builtin" },
           status: "failed",
           error: expect.stringContaining("replacement failed"),
-          tui: false,
+          features: { server: true },
         },
       ])
       expect((yield* agents.get(Agent.ID.make("configured")))?.description).toBe("previous")
@@ -499,7 +524,7 @@ describe("Plugin", () => {
           source: { type: "builtin" },
           status: "failed",
           error: expect.stringContaining("replacement failed"),
-          tui: false,
+          features: { server: true },
         },
       ])
       expect(yield* agents.get(Agent.ID.make("configured"))).toBeUndefined()
