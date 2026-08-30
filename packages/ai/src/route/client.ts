@@ -446,7 +446,9 @@ export function make<Body, Prepared, Frame, Event, State>(
 
 const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest, options?: StreamOptions) {
   const original = applyCachePolicy(resolveRequestOptions(request))
-  const resolved = LLMRequest.update(original, sanitizeSurrogates({ ...LLMRequest.input(original), model: undefined }))
+  const sanitized = LLMRequest.update(original, sanitizeSurrogates({ ...LLMRequest.input(original), model: undefined }))
+  const tools = [...new Map(sanitized.tools.map((tool) => [tool.name, tool])).values()]
+  const resolved = tools.length === sanitized.tools.length ? sanitized : LLMRequest.update(sanitized, { tools })
   const route = resolved.model.route
 
   const body = yield* route.body

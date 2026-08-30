@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Ref, Schema } from "effect"
 import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
-import { LLM, Message, ToolCallPart, mergeProviderOptions } from "../src/index.js"
+import { LLM, LLMRequest, Message, ToolCallPart, ToolDefinition, mergeProviderOptions } from "../src/index.js"
 import { AnthropicMessages, OpenAIChat } from "../src/protocols.js"
 import { Auth, LLMClient } from "../src/route.js"
 import { compileRequest } from "../src/route/client.js"
@@ -74,6 +74,35 @@ describe("request option precedence", () => {
         reasoning_effort: "medium",
       })
       expect(prepared.body.stop).toEqual(["request"])
+    }),
+  )
+
+  it.effect("keeps the last tool definition for duplicate names", () =>
+    Effect.gen(function* () {
+      const request = LLM.request({
+        model: OpenAIChat.route.model({ id: "gpt-4o-mini" }),
+        prompt: "Use a tool.",
+      })
+      const prepared = yield* compileRequest(
+        LLMRequest.update(request, {
+          tools: [
+            ToolDefinition.make({ name: "lookup", description: "old", inputSchema: { type: "object" } }),
+            ToolDefinition.make({ name: "search", description: "search", inputSchema: { type: "object" } }),
+            ToolDefinition.make({ name: "lookup", description: "new", inputSchema: { type: "object" } }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.tools).toEqual([
+        {
+          type: "function",
+          function: { name: "lookup", description: "new", parameters: { type: "object" }, strict: false },
+        },
+        {
+          type: "function",
+          function: { name: "search", description: "search", parameters: { type: "object" }, strict: false },
+        },
+      ])
     }),
   )
 
