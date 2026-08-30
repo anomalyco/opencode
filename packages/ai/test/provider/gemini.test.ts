@@ -1368,6 +1368,56 @@ describe("Gemini route", () => {
     }),
   )
 
+  it.effect("separates text blocks around streamed tool calls", () =>
+    Effect.gen(function* () {
+      const body = sseEvents({
+        candidates: [
+          {
+            content: {
+              role: "model",
+              parts: [
+                { text: "before" },
+                { functionCall: { id: "call_1", name: "lookup", args: { query: "weather" } } },
+                { text: "after" },
+              ],
+            },
+            finishReason: "STOP",
+          },
+        ],
+      })
+      const response = yield* LLMClient.generate(
+        LLMRequest.update(request, {
+          tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
+        }),
+      ).pipe(Effect.provide(fixedResponse(body)))
+
+      expect(response.events.slice(1, 8)).toEqual([
+        { type: "text-start", id: "text-0" },
+        { type: "text-delta", id: "text-0", text: "before" },
+        { type: "text-end", id: "text-0" },
+        {
+          type: "tool-call",
+          id: "call_1",
+          name: "lookup",
+          input: { query: "weather" },
+          providerExecuted: undefined,
+          providerMetadata: undefined,
+        },
+        { type: "text-start", id: "text-1" },
+        { type: "text-delta", id: "text-1", text: "after" },
+        { type: "text-end", id: "text-1" },
+      ])
+      const textStarts = response.events.filter((event) => event.type === "text-start")
+      expect(textStarts[0]?.id).not.toBe(textStarts[1]?.id)
+      expect(response.message.content).toEqual([
+        { type: "text", text: "before" },
+        { type: "tool-call", id: "call_1", name: "lookup", input: { query: "weather" } },
+        { type: "text", text: "after" },
+      ])
+      expect(response.finishReason).toEqual({ normalized: "tool-calls", raw: "STOP" })
+    }),
+  )
+
   it.effect("defaults omitted function call args to an empty object", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(

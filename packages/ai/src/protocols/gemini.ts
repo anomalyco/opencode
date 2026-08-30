@@ -743,6 +743,16 @@ const step = (state: ParserState, event: GeminiEvent) => {
         reasoningId = undefined
         reasoningSignature = undefined
       }
+      if (textId !== undefined) {
+        lifecycle = Lifecycle.textEnd(
+          lifecycle,
+          events,
+          textId,
+          textSignature ? providerMetadata(state.providerMetadataKey, { thoughtSignature: textSignature }) : undefined,
+        )
+        textId = undefined
+        textSignature = undefined
+      }
       lifecycle = Lifecycle.stepStart(lifecycle, events)
       events.push(
         LLMEvent.toolCall({
