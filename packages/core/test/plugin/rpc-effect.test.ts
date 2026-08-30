@@ -9,7 +9,7 @@ import { testEffect } from "../lib/effect"
 
 const it = testEffect(PluginTestLayer)
 const Echo = Rpc.define({
-  namespace: "shared-echo",
+  id: "shared-echo",
   methods: {
     echo: { input: Schema.String, output: Schema.String },
     fail: {
@@ -21,7 +21,7 @@ const Echo = Rpc.define({
   events: { updated: { schema: Schema.Struct({ text: Schema.String }) } },
 })
 
-it.effect("Effect plugins register, call, and publish namespaces independently of plugin identity", () =>
+it.effect("Effect plugins register, call, and publish RPCs independently of plugin identity", () =>
   Effect.gen(function* () {
     const plugins = yield* Plugin.Service
     const rpc = yield* Rpc.Service

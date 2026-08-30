@@ -55,6 +55,6 @@ export const event = Effect.fn("Client.Rpc.event")(function* <
 export function eventType<const D extends Rpc.Definition, const Name extends keyof D["events"] & string>(
   definition: D,
   name: Name,
-): `rpc.${D["namespace"]}.${Name}` {
-  return `rpc.${definition.namespace}.${name}`
+): `rpc.${D["id"]}.${Name}` {
+  return `rpc.${definition.id}.${name}`
 }

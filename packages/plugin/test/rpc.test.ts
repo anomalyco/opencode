@@ -3,9 +3,9 @@ import { Rpc } from "@opencode-ai/plugin/rpc"
 import { fileURLToPath } from "node:url"
 import { Acme } from "./rpc.fixture.js"
 
-test("definitions preserve their schemas and namespace without registering anything", () => {
+test("definitions preserve their schemas and ID without registering anything", () => {
   expect(Rpc.define(Acme)).toBe(Acme)
-  expect(Acme.namespace).toBe("acme")
+  expect(Acme.id).toBe("acme")
   expect(Object.keys(Acme.events)).toEqual(["updated", "progress", "counted"])
 })
 
@@ -20,7 +20,7 @@ test("defining an RPC contract does not invoke its schema parser", () => {
     },
   }
   const definition = Rpc.define({
-    namespace: "portable",
+    id: "portable",
     methods: { echo: { input: schema, output: schema, errors: { rejected: schema } } },
     events: { updated: { schema } },
   })
@@ -35,7 +35,7 @@ test("framework RPC error names are reserved", () => {
   const schema = { type: "null" }
   const errors = Object.fromEntries([["rpc.internal", schema]])
   expect(() =>
-    Rpc.define({ namespace: "reserved", methods: { call: { input: schema, output: schema, errors } }, events: {} }),
+    Rpc.define({ id: "reserved", methods: { call: { input: schema, output: schema, errors } }, events: {} }),
   ).toThrow('RPC error names starting with "rpc." are reserved: rpc.internal')
 })
 

@@ -1601,7 +1601,7 @@ export function make(options: ClientOptions) {
         request<RpcCallOutput>(
           {
             method: "POST",
-            path: `/api/rpc/${encodeURIComponent(input.namespace)}/${encodeURIComponent(input.method)}`,
+            path: `/api/rpc/${encodeURIComponent(input.rpcID)}/${encodeURIComponent(input.method)}`,
             query: { location: input["location"] },
             body: { input: input["input"] },
             successStatus: 200,

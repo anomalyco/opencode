@@ -11,8 +11,8 @@ export const RpcOutput = Schema.Struct({ output: Schema.optionalKey(Schema.Unkno
 
 export const RpcGroup = HttpApiGroup.make("server.rpc")
   .add(
-    HttpApiEndpoint.post("rpc.call", "/api/rpc/:namespace/:method", {
-      params: { namespace: Schema.String, method: Schema.String },
+    HttpApiEndpoint.post("rpc.call", "/api/rpc/:rpcID/:method", {
+      params: { rpcID: Schema.String, method: Schema.String },
       query: LocationQuery,
       payload: RpcInput,
       success: RpcOutput,
@@ -23,7 +23,7 @@ export const RpcGroup = HttpApiGroup.make("server.rpc")
         OpenApi.annotations({
           identifier: "v2.rpc.call",
           summary: "Call a plugin RPC",
-          description: "Dispatch a method to the currently registered RPC namespace at the requested location.",
+          description: "Dispatch a method to the currently registered RPC at the requested location.",
         }),
       ),
   )

@@ -11,7 +11,7 @@ afterEach(() => {
 })
 
 const Echo = Rpc.define({
-  namespace: "acme/jobs",
+  id: "acme/jobs",
   methods: {
     echo: {
       input: z.string(),
@@ -26,10 +26,10 @@ const Echo = Rpc.define({
   },
 })
 const connected = { id: "evt_connected", created: 0, type: "server.connected", data: {} }
-const rpcEvent = (data: unknown, directory = "/first", namespace = Echo.namespace, name = "updated") => ({
+const rpcEvent = (data: unknown, directory = "/first", rpcID = Echo.id, name = "updated") => ({
   id: "evt_rpc",
   created: 10,
-  type: `rpc.${namespace}.${name}`,
+  type: `rpc.${rpcID}.${name}`,
   location: { directory },
   metadata: { source: "test" },
   data,
@@ -115,7 +115,7 @@ test("rpc is callable, retains raw call, and routes method location, headers, an
   expect(requests[0].headers.get("authorization")).toBe("Bearer override")
   expect(requests[0].headers.get("x-base")).toBe("base")
   expect(requests[0].headers.get("x-call")).toBe("call")
-  expect(await client.rpc.call({ namespace: Echo.namespace, method: "echo", input: "raw" })).toEqual({ output: "raw" })
+  expect(await client.rpc.call({ rpcID: Echo.id, method: "echo", input: "raw" })).toEqual({ output: "raw" })
   expect(new URL(requests[1].url).search).toBe("")
   expect(requests[1].headers.get("authorization")).toBe("Bearer default")
 })
@@ -163,7 +163,7 @@ test("RPC Standard Schema results are already parsed and are not transformed aga
     },
   }
   const definition = Rpc.define({
-    namespace: "standard",
+    id: "standard",
     methods: { count: { input, output } },
     events: { counted: { schema: eventOutput } },
   })
@@ -175,7 +175,7 @@ test("RPC Standard Schema results are already parsed and are not transformed aga
   const source = events()
   const iterator = source.client.rpc(definition).events.subscribe("counted")[Symbol.asyncIterator]()
   const next = iterator.next()
-  await source.send(rpcEvent({ text: "42" }, "/project", definition.namespace, "counted"))
+  await source.send(rpcEvent({ text: "42" }, "/project", definition.id, "counted"))
   expect((await next).value?.data).toEqual({ text: "42" })
   await iterator.return?.()
   expect(calls).toEqual({ input: 0, output: 0 })
@@ -223,7 +223,7 @@ test("RPC method failures remove the generic transport wrapper", async () => {
   const error = await client.rpc(Echo).echo("hello").catch((error: unknown) => error)
 
   expect(error).toEqual({ type: "rejected", message: "Rejected", data: { reason: "busy" } })
-  await expect(client.rpc.call({ namespace: Echo.namespace, method: "echo", input: "hello" })).rejects.toEqual(response)
+  await expect(client.rpc.call({ rpcID: Echo.id, method: "echo", input: "hello" })).rejects.toEqual(response)
 })
 
 test("RPC transport failures remove the generic transport wrapper", async () => {
@@ -239,7 +239,7 @@ test("native events and multiple RPC clients share one lazy source across locati
   const native = source.client.event.subscribe()[Symbol.asyncIterator]()
   const first = source.client.rpc(Echo).events.subscribe("updated")[Symbol.asyncIterator]()
   const second = source.client.rpc(Echo).events.subscribe("updated")[Symbol.asyncIterator]()
-  const otherDefinition = Rpc.define({ ...Echo, namespace: "other" })
+  const otherDefinition = Rpc.define({ ...Echo, id: "other" })
   const other = source.client.rpc(otherDefinition).events.subscribe("updated")[Symbol.asyncIterator]()
   expect(source.requests).toHaveLength(0)
   const firstNext = first.next()
@@ -251,8 +251,8 @@ test("native events and multiple RPC clients share one lazy source across locati
   const late = source.client.event.subscribe()[Symbol.asyncIterator]()
   expect(await late.next()).toEqual({ done: false, value: connected })
   await Promise.all([native.return?.(), late.return?.()])
-  await source.send(rpcEvent({ ignored: true }, "/first", Echo.namespace, "unknown"))
-  await source.send(rpcEvent({ count: 9 }, "/other", otherDefinition.namespace))
+  await source.send(rpcEvent({ ignored: true }, "/first", Echo.id, "unknown"))
+  await source.send(rpcEvent({ count: 9 }, "/other", otherDefinition.id))
   expect((await otherNext).value).toMatchObject({
     type: "rpc.other.updated",
     location: { directory: "/other" },
@@ -263,7 +263,7 @@ test("native events and multiple RPC clients share one lazy source across locati
   const expected = {
     id: "evt_rpc",
     created: 10,
-    type: `rpc.${Echo.namespace}.updated`,
+    type: `rpc.${Echo.id}.updated`,
     location: { directory: "/first" },
     metadata: { source: "test" },
     data: { count: 42 },
@@ -310,7 +310,7 @@ test("RPC callback subscriptions unsubscribe independently", async () => {
   await native.next()
   const unsubscribe = source.client.rpc(Echo).events.on("updated", received.resolve)
   await source.send(rpcEvent({ count: 42 }))
-  expect(await received.promise).toMatchObject({ data: { count: 42 }, type: `rpc.${Echo.namespace}.updated` })
+  expect(await received.promise).toMatchObject({ data: { count: 42 }, type: `rpc.${Echo.id}.updated` })
   unsubscribe()
   unsubscribe()
   expect(source.requests[0].signal.aborted).toBe(false)

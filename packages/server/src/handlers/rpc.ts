@@ -11,7 +11,7 @@ export const RpcHandler = HttpApiBuilder.group(Api, "server.rpc", (handlers) =>
       const supervisor = yield* PluginSupervisor.Service
       yield* supervisor.flush
       const rpc = yield* Rpc.Service
-      const output = yield* rpc.call(params.namespace, params.method, payload.input)
+      const output = yield* rpc.call(params.rpcID, params.method, payload.input)
       return output === undefined ? {} : { output }
     }).pipe(
       Effect.mapError(

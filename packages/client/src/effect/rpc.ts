@@ -47,7 +47,7 @@ export function make<CallError, EventError>(
           const result = Effect.gen(function* () {
             const response = yield* call(
               {
-                namespace: definition.namespace,
+                rpcID: definition.id,
                 method: name,
                 input,
                 location: options?.location,

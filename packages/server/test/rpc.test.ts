@@ -73,7 +73,7 @@ const fixture = Effect.fn(function* (plugins: readonly Plugin.Plugin[]) {
 it.live("dispatches RPC wrappers with query, header and default locations and generic failures", () =>
   Effect.gen(function* () {
     const Echo = Rpc.define({
-      namespace: "transport.echo",
+      id: "transport.echo",
       methods: {
         echo: { input: Schema.String, output: Schema.String },
         json: { input: Schema.Json, output: Schema.Json },
@@ -146,7 +146,7 @@ it.live("dispatches RPC wrappers with query, header and default locations and ge
         {
           route: "missing/echo",
           body: {},
-          error: { type: "rpc.namespace_unavailable", message: "RPC namespace is unavailable: missing" },
+          error: { type: "rpc.unavailable", message: "RPC is unavailable: missing" },
         },
         {
           route: "transport.echo/missing",
@@ -201,12 +201,12 @@ it.live("request cancellation interrupts Effect RPC handlers and signals Promise
     const promiseStarted = Promise.withResolvers<void>()
     const promiseStopped = Promise.withResolvers<void>()
     const Blocking = Rpc.define({
-      namespace: "blocking",
+      id: "blocking",
       methods: { wait: { input: Schema.Undefined, output: Schema.Undefined } },
       events: {},
     })
     const PromiseBlocking = Rpc.define({
-      namespace: "promise-blocking",
+      id: "promise-blocking",
       methods: { wait: { input: { type: "null" }, output: { type: "null" } } },
       events: {},
     })
@@ -281,7 +281,7 @@ it.live("request cancellation interrupts Effect RPC handlers and signals Promise
 it.live("public SSE and generic native plugin subscriptions receive RPC events across locations", () =>
   Effect.gen(function* () {
     const Updates = Rpc.define({
-      namespace: "updates",
+      id: "updates",
       methods: { emit: { input: Schema.String, output: Schema.Undefined } },
       events: { updated: { schema: Schema.Struct({ text: Schema.String }) } },
     })

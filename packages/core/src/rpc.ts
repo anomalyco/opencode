@@ -16,7 +16,7 @@ import { optional, statics } from "./schema.js"
 export interface Interface {
   readonly register: RpcDomain["register"]
   readonly client: <D extends Rpc.Definition>(definition: D) => RpcClient<D, Rpc.SystemError, never, unknown>
-  readonly call: (namespace: string, method: string, input: unknown) => Effect.Effect<unknown, Rpc.Failure>
+  readonly call: (rpcID: string, method: string, input: unknown) => Effect.Effect<unknown, Rpc.Failure>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Rpc") {}
@@ -70,16 +70,16 @@ const layer = Layer.effect(
     ) {
       const entry = { definition, handlers }
       const dispose = Effect.sync(() => {
-        const remaining = (registrations.get(definition.namespace) ?? []).filter((candidate) => candidate !== entry)
+        const remaining = (registrations.get(definition.id) ?? []).filter((candidate) => candidate !== entry)
         if (remaining.length === 0) {
-          registrations.delete(definition.namespace)
+          registrations.delete(definition.id)
           return
         }
-        registrations.set(definition.namespace, remaining)
+        registrations.set(definition.id, remaining)
       })
       yield* Effect.acquireRelease(
         Effect.sync(() =>
-          registrations.set(definition.namespace, [...(registrations.get(definition.namespace) ?? []), entry]),
+          registrations.set(definition.id, [...(registrations.get(definition.id) ?? []), entry]),
         ),
         () => dispose,
       )
@@ -91,7 +91,7 @@ const layer = Layer.effect(
           emit: Effect.fn("Rpc.emit")(function* (...args: Rpc.EventInput<D>) {
             const registered = events.get(args[0])
             if (!registered)
-              return yield* Effect.fail(new Error(`Unknown RPC event: ${definition.namespace}.${args[0]}`))
+              return yield* Effect.fail(new Error(`Unknown RPC event: ${definition.id}.${args[0]}`))
             const event = registered.event
             // SAFETY: The public event-schema contract guarantees an object encoded/output type.
             // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
@@ -106,12 +106,12 @@ const layer = Layer.effect(
       }
     })
 
-    const call = Effect.fn("Rpc.call")(function* (namespace: string, name: string, input: unknown) {
-      const entry = registrations.get(namespace)?.at(-1)
+    const call = Effect.fn("Rpc.call")(function* (rpcID: string, name: string, input: unknown) {
+      const entry = registrations.get(rpcID)?.at(-1)
       if (!entry)
-        return yield* Effect.fail(failure("rpc.namespace_unavailable", `RPC namespace is unavailable: ${namespace}`))
+        return yield* Effect.fail(failure("rpc.unavailable", `RPC is unavailable: ${rpcID}`))
       if (!Object.hasOwn(entry.definition.methods, name) || !Object.hasOwn(entry.handlers, name))
-        return yield* Effect.fail(failure("rpc.method_not_found", `Unknown RPC method: ${namespace}.${name}`))
+        return yield* Effect.fail(failure("rpc.method_not_found", `Unknown RPC method: ${rpcID}.${name}`))
       const method = entry.definition.methods[name]
       const handler = entry.handlers[name]
       const parsed = yield* parse(method.input, input).pipe(
@@ -133,7 +133,7 @@ const layer = Layer.effect(
         Object.entries(definition.methods).map(([name, method]) => [
           name,
           (input: unknown) =>
-            call(definition.namespace, name, input).pipe(
+            call(definition.id, name, input).pipe(
               Effect.catch((error) => decodeError(method, error)),
               Effect.flatMap((value) => read(method.output, value).pipe(Effect.catch((cause) => Effect.die(cause)))),
             ),
@@ -146,7 +146,7 @@ const layer = Layer.effect(
         events: {
           subscribe: <Name extends keyof D["events"] & string>(name: Name) => {
             const registered = events.get(name)
-            if (!registered) return Stream.fail(new Error(`Unknown RPC event: ${definition.namespace}.${name}`))
+            if (!registered) return Stream.fail(new Error(`Unknown RPC event: ${definition.id}.${name}`))
             return bus.subscribe(registered.definition).pipe(
               Stream.provideService(Location.Service, location),
               Stream.mapEffect((payload) => logicalEvent(definition, name, payload, ref)),
@@ -174,8 +174,8 @@ const jsonSchemas = new WeakMap<JsonSchema.JsonSchema, Schema.Codec<unknown>>()
 function eventType<const D extends Rpc.Definition, const Name extends keyof D["events"] & string>(
   definition: D,
   name: Name,
-): `rpc.${D["namespace"]}.${Name}` {
-  return `rpc.${definition.namespace}.${name}`
+): `rpc.${D["id"]}.${Name}` {
+  return `rpc.${definition.id}.${name}`
 }
 
 function eventDefinition(definition: Rpc.Definition, name: string): Event.Definition {

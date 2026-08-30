@@ -46,12 +46,12 @@ test("exposes one generic RPC operation with location routing and ordinary trans
   expect(Object.keys(ClientApi.groups["server.rpc"].endpoints)).toEqual(["rpc.call"])
   const document = OpenApi.fromApi(ClientApi)
   expect(Object.keys(document.paths).filter((path) => path.startsWith("/api/rpc/"))).toEqual([
-    "/api/rpc/{namespace}/{method}",
+    "/api/rpc/{rpcID}/{method}",
   ])
-  const operation = document.paths["/api/rpc/{namespace}/{method}"]?.post
+  const operation = document.paths["/api/rpc/{rpcID}/{method}"]?.post
   expect(operation?.operationId).toBe("v2.rpc.call")
   expect(operation?.parameters).toContainEqual(
-    expect.objectContaining({ name: "namespace", in: "path", required: true }),
+    expect.objectContaining({ name: "rpcID", in: "path", required: true }),
   )
   expect(operation?.parameters).toContainEqual(expect.objectContaining({ name: "method", in: "path", required: true }))
   expect(operation?.parameters).toContainEqual(

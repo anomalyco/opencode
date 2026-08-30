@@ -590,7 +590,7 @@ import { Rpc } from "@opencode-ai/plugin/rpc"
 import { z } from "zod"
 
 export const Acme = Rpc.define({
-  namespace: "acme",
+  id: "acme",
   methods: {
     search: {
       input: z.object({ query: z.string() }),
@@ -653,13 +653,12 @@ export default Plugin.define({
 
 Promise handlers receive a general second context argument with `signal` and a
 typed `error(type, message, data)` constructor. They may return or throw the
-constructed error; both reject callers with `{ type, message, data? }`. RPC
-namespaces are independent of plugin IDs. One plugin
-can implement several namespaces, and later registrations override earlier ones
+constructed error; both reject callers with `{ type, message, data? }`. RPC IDs
+are independent of plugin IDs. One plugin can implement several RPCs, and later registrations override earlier ones
 at the same location. Disposal or unload removes only that registration and
 reveals the previous implementation. In-flight calls retain their original handler.
 
-Other server plugins can obtain a handle without implementing the namespace:
+Other server plugins can obtain a handle without implementing the RPC:
 
 ```ts
 const acme = ctx.rpc(Acme)
@@ -684,8 +683,8 @@ while disconnected are missed. The method name `events` is reserved for the
 subclient's event API.
 
 External [clients](/build/client#plugin-rpc) use `client.rpc(Acme)` and receive
-that namespace's events across all locations. The native `/api/event` stream and
-typed subclients observe the same direct `rpc.<namespace>.<event>` envelope.
+that RPC's events across all locations. The native `/api/event` stream and
+typed subclients observe the same direct `rpc.<rpcID>.<event>` envelope.
 Neither importing the contract nor constructing a handle loads the server implementation.
 Configure the plugin on the server separately.
 

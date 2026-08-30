@@ -41,7 +41,7 @@ export interface EventDefinition {
 export type PortableEventDefinition = EventDefinition & { readonly schema: PortableEventValueSchema }
 
 export interface Definition {
-  readonly namespace: string
+  readonly id: string
   readonly methods: Readonly<Record<string, Method>> & { readonly events?: never }
   readonly events: Readonly<Record<string, EventDefinition>>
 }
@@ -100,7 +100,7 @@ export interface Failure<Type extends string = string, Data = unknown> {
 }
 
 export type SystemError = Failure<
-  | "rpc.namespace_unavailable"
+  | "rpc.unavailable"
   | "rpc.method_not_found"
   | "rpc.invalid_input"
   | "rpc.invalid_output"
@@ -157,7 +157,7 @@ type EventPayloadFor<
   D extends Definition,
   Name extends keyof D["events"] & string,
 > = Omit<Event.Payload<Event.EphemeralDefinition>, "type" | "data" | "durable" | "location"> & {
-  readonly type: `rpc.${D["namespace"]}.${Name}`
+  readonly type: `rpc.${D["id"]}.${Name}`
   readonly data: EventData<D["events"][Name]["schema"]>
   readonly location: Location.Ref
 }

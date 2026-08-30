@@ -37,7 +37,7 @@ type RpcEventPayloadFor<
   D extends Rpc.PortableDefinition,
   Name extends keyof D["events"] & string,
 > = Omit<RpcEvent, "type" | "data"> & {
-  type: `rpc.${D["namespace"]}.${Name}`
+  type: `rpc.${D["id"]}.${Name}`
   data: Rpc.EventData<D["events"][Name]["schema"]>
 }
 
@@ -59,7 +59,7 @@ export function makeRpc(
       name: string,
       options?: Pick<RequestOptions, "signal">,
     ): AsyncIterable<RpcEventPayload<Rpc.PortableDefinition>> => {
-      if (!Object.hasOwn(definition.events, name)) throw new Error(`Unknown RPC event: ${definition.namespace}.${name}`)
+      if (!Object.hasOwn(definition.events, name)) throw new Error(`Unknown RPC event: ${definition.id}.${name}`)
       const type = eventType(definition, name)
       return {
         [Symbol.asyncIterator]() {
@@ -101,7 +101,7 @@ export function makeRpc(
             try {
               const result = await raw.rpc.call(
                 {
-                  namespace: definition.namespace,
+                  rpcID: definition.id,
                   method: name,
                   // SAFETY: The method schema defines the accepted input; this assertion bridges it to the generic JSON transport.
                   // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
@@ -143,5 +143,5 @@ export function makeRpc(
 }
 
 function eventType(definition: Rpc.PortableDefinition, name: string) {
-  return `rpc.${definition.namespace}.${name}` as const
+  return `rpc.${definition.id}.${name}` as const
 }

@@ -16,7 +16,7 @@ describe("Promise plugin RPC", () => {
     Effect.gen(function* () {
       const plugins = yield* Plugin.Service
       const service = Rpc.define({
-        namespace: "promise-rpc-calls",
+        id: "promise-rpc-calls",
         methods: {
           standard: { input: z.string().transform(Number), output: z.number().transform(String) },
           ping: { input: z.undefined(), output: z.null() },
@@ -93,7 +93,7 @@ describe("Promise plugin RPC", () => {
     Effect.gen(function* () {
       const plugins = yield* Plugin.Service
       const service = Rpc.define({
-        namespace: "promise-rpc-cancel",
+        id: "promise-rpc-cancel",
         methods: { wait: { input: z.string(), output: z.string() } },
         events: {},
       })
@@ -150,7 +150,7 @@ describe("Promise plugin RPC", () => {
     Effect.gen(function* () {
       const plugins = yield* Plugin.Service
       const service = Rpc.define({
-        namespace: "promise-rpc-async-listeners",
+        id: "promise-rpc-async-listeners",
         methods: {},
         events: { updated: { schema: z.object({ value: z.number() }) } },
       })
@@ -208,7 +208,7 @@ describe("Promise plugin RPC", () => {
     Effect.gen(function* () {
       const plugins = yield* Plugin.Service
       const service = Rpc.define({
-        namespace: "promise-rpc-events",
+        id: "promise-rpc-events",
         methods: {},
         events: {
           counted: { schema: z.object({ count: z.number() }).transform(({ count }) => ({ text: String(count) })) },

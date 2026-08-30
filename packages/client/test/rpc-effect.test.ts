@@ -5,7 +5,7 @@ import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstab
 import { OpenCode } from "../src/effect/index"
 
 const definition = Rpc.define({
-  namespace: "example",
+  id: "example",
   methods: {
     count: {
       input: Schema.Struct({ count: Schema.FiniteFromString }),
@@ -24,11 +24,11 @@ const definition = Rpc.define({
 
 const connected = { id: "evt_connected", type: "server.connected", data: {} }
 
-function rpcEvent(count: unknown, directory = "/project/one", namespace = "example", name = "progress") {
+function rpcEvent(count: unknown, directory = "/project/one", rpcID = "example", name = "progress") {
   return {
     id: "evt_progress",
     created: 123,
-    type: `rpc.${namespace}.${name}`,
+    type: `rpc.${rpcID}.${name}`,
     location: { directory },
     metadata: { origin: "test" },
     data: { count },
@@ -93,7 +93,7 @@ test("Effect RPC calls retain encoded inputs, decode outputs, and preserve raw n
     const primitives = yield* Effect.forEach([null, false, 0, "hello", [1, "two"]], (value) => rpc.echo(value))
     const empty = yield* rpc.empty()
     const raw = yield* rpc.raw("input")
-    const native = yield* client.rpc.call({ namespace: "example", method: "count", input: null })
+    const native = yield* client.rpc.call({ rpcID: "example", method: "count", input: null })
     expect(Object.keys(rpc.events)).toEqual(["subscribe"])
     return { count, primitives, empty, raw, native }
   }).pipe(Effect.provideService(HttpClient.HttpClient, httpClient), Effect.runPromise)
@@ -122,7 +122,7 @@ test("Effect RPC trusts server-side Standard Schema transforms for outputs and e
     },
   }
   const service = Rpc.define({
-    namespace: "standard",
+    id: "standard",
     methods: { transform: { input: standard, output: standard } },
     events: {
       transformed: {

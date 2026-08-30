@@ -19,7 +19,7 @@ const it = testEffect(
   ]),
 )
 const Echo = Rpc.define({
-  namespace: "test.rpc",
+  id: "test.rpc",
   methods: { echo: { input: z.string(), output: z.string() } },
   events: { updated: { schema: z.object({ text: z.string() }) } },
 })
@@ -31,19 +31,19 @@ describe("Rpc", () => {
       const client = rpc.client(Echo)
       const request = client.echo("hello")
       expect(yield* request.pipe(Effect.flip)).toEqual({
-        type: "rpc.namespace_unavailable",
-        message: "RPC namespace is unavailable: test.rpc",
+        type: "rpc.unavailable",
+        message: "RPC is unavailable: test.rpc",
       })
 
       yield* rpc.register(Echo, { echo: (value) => Effect.succeed(value) })
       expect(yield* request).toBe("hello")
       yield* rpc.register(Echo, { echo: (value) => Effect.succeed(`${value}!`) })
       expect(yield* request).toBe("hello!")
-      expect(yield* rpc.call(Echo.namespace, "missing", "hello").pipe(Effect.flip)).toEqual({
+      expect(yield* rpc.call(Echo.id, "missing", "hello").pipe(Effect.flip)).toEqual({
         type: "rpc.method_not_found",
         message: "Unknown RPC method: test.rpc.missing",
       })
-      expect(yield* rpc.call(Echo.namespace, "toString", "hello").pipe(Effect.flip)).toEqual({
+      expect(yield* rpc.call(Echo.id, "toString", "hello").pipe(Effect.flip)).toEqual({
         type: "rpc.method_not_found",
         message: "Unknown RPC method: test.rpc.toString",
       })
@@ -92,11 +92,11 @@ describe("Rpc", () => {
             return value
           }),
       })
-      expect(Exit.isFailure(yield* rpc.call(Echo.namespace, "echo", 42).pipe(Effect.exit))).toBe(true)
+      expect(Exit.isFailure(yield* rpc.call(Echo.id, "echo", 42).pipe(Effect.exit))).toBe(true)
       expect(received).toEqual([])
 
       const Checked = Rpc.define({
-        namespace: "checked",
+        id: "checked",
         methods: { echo: { input: z.string(), output: z.string().min(3) } },
         events: {},
       })
@@ -109,7 +109,7 @@ describe("Rpc", () => {
     Effect.gen(function* () {
       const rpc = yield* Rpc.Service
       const Identity = Rpc.define({
-        namespace: "identity",
+        id: "identity",
         methods: { echo: { input: Schema.Unknown, output: Schema.Unknown } },
         events: {},
       })
@@ -124,7 +124,7 @@ describe("Rpc", () => {
       const rpc = yield* Rpc.Service
       const counts = { input: 0, output: 0, event: 0 }
       const Transformed = Rpc.define({
-        namespace: "transformed",
+        id: "transformed",
         methods: {
           count: {
             input: z.string().transform((value) => {
@@ -163,12 +163,12 @@ describe("Rpc", () => {
     Effect.gen(function* () {
       const rpc = yield* Rpc.Service
       const Codec = Rpc.define({
-        namespace: "codec",
+        id: "codec",
         methods: { count: { input: Schema.FiniteFromString, output: Schema.FiniteFromString } },
         events: { counted: { schema: Schema.Struct({ count: Schema.FiniteFromString }) } },
       })
       const registration = yield* rpc.register(Codec, { count: (value) => Effect.succeed(value + 1) })
-      expect(yield* rpc.call(Codec.namespace, "count", "41")).toBe("42")
+      expect(yield* rpc.call(Codec.id, "count", "41")).toBe("42")
       expect(yield* rpc.client(Codec).count("41")).toBe(42)
       const events = yield* rpc
         .client(Codec)
@@ -184,7 +184,7 @@ describe("Rpc", () => {
     Effect.gen(function* () {
       const rpc = yield* Rpc.Service
       const Failing = Rpc.define({
-        namespace: "failing",
+        id: "failing",
         methods: {
           standard: {
             input: z.undefined(),
@@ -205,7 +205,7 @@ describe("Rpc", () => {
         effect: (_input, context) => Effect.fail(context.error("invalid", "Invalid", { count: 3 })),
       })
 
-      expect(yield* rpc.call(Failing.namespace, "standard", undefined).pipe(Effect.flip)).toEqual({
+      expect(yield* rpc.call(Failing.id, "standard", undefined).pipe(Effect.flip)).toEqual({
         type: "missing",
         message: "Missing",
         data: { attempts: 2 },
@@ -215,7 +215,7 @@ describe("Rpc", () => {
         message: "Missing",
         data: { attempts: 2 },
       })
-      expect(yield* rpc.call(Failing.namespace, "effect", undefined).pipe(Effect.flip)).toEqual({
+      expect(yield* rpc.call(Failing.id, "effect", undefined).pipe(Effect.flip)).toEqual({
         type: "invalid",
         message: "Invalid",
         data: { count: "3" },
@@ -251,7 +251,7 @@ describe("Rpc", () => {
     Effect.gen(function* () {
       const rpc = yield* Rpc.Service
       const Raw = Rpc.define({
-        namespace: "raw",
+        id: "raw",
         methods: { count: { input: { type: "integer", minimum: 0 }, output: { type: "integer", minimum: 1 } } },
         events: {
           counted: {
@@ -265,9 +265,9 @@ describe("Rpc", () => {
         },
       })
       const registration = yield* rpc.register(Raw, { count: (value) => Effect.succeed(value) })
-      expect(yield* rpc.call(Raw.namespace, "count", 42)).toBe(42)
-      expect(Exit.isFailure(yield* rpc.call(Raw.namespace, "count", "42").pipe(Effect.exit))).toBe(true)
-      expect(Exit.isFailure(yield* rpc.call(Raw.namespace, "count", 0).pipe(Effect.exit))).toBe(true)
+      expect(yield* rpc.call(Raw.id, "count", 42)).toBe(42)
+      expect(Exit.isFailure(yield* rpc.call(Raw.id, "count", "42").pipe(Effect.exit))).toBe(true)
+      expect(Exit.isFailure(yield* rpc.call(Raw.id, "count", 0).pipe(Effect.exit))).toBe(true)
       expect(Exit.isFailure(yield* registration.events.emit("counted", { count: 0 }).pipe(Effect.exit))).toBe(true)
 
     }),
@@ -277,7 +277,7 @@ describe("Rpc", () => {
     Effect.gen(function* () {
       const rpc = yield* Rpc.Service
       const Empty = Rpc.define({
-        namespace: "empty",
+        id: "empty",
         methods: { ping: { input: z.undefined(), output: z.undefined() } },
         events: {},
       })

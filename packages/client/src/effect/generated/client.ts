@@ -1171,7 +1171,7 @@ const adaptGroupSkill = (raw: RawClient["server.skill"]) => ({ list: EndpointSki
 const EndpointRpcCall = (raw: RawClient["server.rpc"]) => (input: RpcCallInput) =>
   preserveEffect<RpcCallOutput>()(
     raw["rpc.call"]({
-      params: { namespace: input["namespace"], method: input["method"] },
+      params: { rpcID: input["rpcID"], method: input["method"] },
       query: { location: input["location"] },
       payload: { input: input["input"] },
     }).pipe(Effect.mapError(mapClientError)),

@@ -5702,8 +5702,8 @@ export type SkillListOutput = {
 }
 
 export type RpcCallInput = {
-  readonly namespace: { readonly namespace: string; readonly method: string }["namespace"]
-  readonly method: { readonly namespace: string; readonly method: string }["method"]
+  readonly rpcID: { readonly rpcID: string; readonly method: string }["rpcID"]
+  readonly method: { readonly rpcID: string; readonly method: string }["method"]
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   }["location"]

@@ -4,7 +4,7 @@ import type { Types } from "effect"
 import { z } from "zod"
 
 export const Acme = Rpc.define({
-  namespace: "acme",
+  id: "acme",
   methods: {
     search: {
       input: z.object({ query: z.string() }),
@@ -39,7 +39,7 @@ export const Acme = Rpc.define({
 })
 
 export const EffectAcme = Rpc.define({
-  namespace: "effect-acme",
+  id: "effect-acme",
   methods: {
     codec: {
       input: Schema.Struct({ count: Schema.FiniteFromString }),

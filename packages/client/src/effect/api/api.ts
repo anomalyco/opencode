@@ -1574,7 +1574,7 @@ export interface SkillApi<E = never> {
 }
 
 export type RpcCallInput = {
-  readonly namespace: string
+  readonly rpcID: string
   readonly method: string
   readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   readonly input?: unknown | undefined

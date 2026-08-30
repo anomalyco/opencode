@@ -8950,13 +8950,13 @@
         "summary": "List skills"
       }
     },
-    "/api/rpc/{namespace}/{method}": {
+    "/api/rpc/{rpcID}/{method}": {
       "post": {
         "tags": ["rpc"],
         "operationId": "v2.rpc.call",
         "parameters": [
           {
-            "name": "namespace",
+            "name": "rpcID",
             "in": "path",
             "schema": {
               "type": "string"
@@ -9062,7 +9062,7 @@
             }
           }
         },
-        "description": "Dispatch a method to the currently registered RPC namespace at the requested location.",
+        "description": "Dispatch a method to the currently registered RPC at the requested location.",
         "summary": "Call a plugin RPC",
         "requestBody": {
           "content": {

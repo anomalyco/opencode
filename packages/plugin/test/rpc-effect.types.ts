@@ -162,9 +162,9 @@ Stream.map(updates, (event) => {
 })
 
 // @ts-expect-error Effect custom event data must also be an object.
-Rpc.define({ namespace: "invalid-event", methods: {}, events: { updated: { schema: Schema.String } } })
+Rpc.define({ id: "invalid-event", methods: {}, events: { updated: { schema: Schema.String } } })
 Rpc.define({
-  namespace: "invalid-array-event",
+  id: "invalid-array-event",
   methods: {},
   // @ts-expect-error Effect custom event data cannot be an array.
   events: { updated: { schema: Schema.Array(Schema.String) } },

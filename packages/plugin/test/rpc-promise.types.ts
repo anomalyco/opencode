@@ -19,7 +19,7 @@ const raw = acme.raw({ value: "hello" })
 const ping = acme.ping()
 
 export type Checks = [
-  Assert<Equal<typeof Acme.namespace, "acme">>,
+  Assert<Equal<typeof Acme.id, "acme">>,
   Assert<Equal<keyof typeof Acme.methods, "search" | "count" | "codec" | "raw" | "ping">>,
   Assert<Equal<typeof search, Promise<{ text: string }>>>,
   Assert<Equal<typeof count, Promise<string>>>,
@@ -119,7 +119,7 @@ await ctx.rpc.register(Acme, {
 await ctx.rpc.register(Acme, { ...handlers, search: async () => ({ text: 42 }) })
 // @ts-expect-error Every declared method must have a handler.
 await ctx.rpc.register(Acme, { search: handlers.search })
-// @ts-expect-error Additional handlers are not declared by the namespace.
+// @ts-expect-error Additional handlers are not declared by the RPC.
 await ctx.rpc.register(Acme, { ...handlers, missing: async () => null })
 // @ts-expect-error Promise handlers must not return synchronous values.
 await ctx.rpc.register(Acme, { ...handlers, ping: () => null })
@@ -175,9 +175,9 @@ acme.events.subscribe("updated", { headers: { "x-test": "yes" } })
 acme.events.on("updated", () => {}, { location: { directory: "/project" } })
 
 // @ts-expect-error Every method requires an output schema.
-Rpc.define({ namespace: "invalid", methods: { search: { input: Acme.methods.search.input } }, events: {} })
+Rpc.define({ id: "invalid", methods: { search: { input: Acme.methods.search.input } }, events: {} })
 Rpc.define({
-  namespace: "invalid-error",
+  id: "invalid-error",
   methods: {
     search: {
       input: z.string(),
@@ -189,16 +189,16 @@ Rpc.define({
   events: {},
 })
 // @ts-expect-error The subclient's events member is reserved, not an RPC method.
-Rpc.define({ namespace: "invalid", methods: { events: Acme.methods.search }, events: {} })
+Rpc.define({ id: "invalid", methods: { events: Acme.methods.search }, events: {} })
 // @ts-expect-error Custom event data must be an object.
-Rpc.define({ namespace: "invalid-event", methods: {}, events: { updated: { schema: z.string() } } })
+Rpc.define({ id: "invalid-event", methods: {}, events: { updated: { schema: z.string() } } })
 // @ts-expect-error Custom event data cannot be an array.
-Rpc.define({ namespace: "invalid-array-event", methods: {}, events: { updated: { schema: z.array(z.string()) } } })
+Rpc.define({ id: "invalid-array-event", methods: {}, events: { updated: { schema: z.array(z.string()) } } })
 // @ts-expect-error Plain JSON Schema events must declare an object root.
-Rpc.define({ namespace: "invalid-json-event", methods: {}, events: { updated: { schema: { type: "string" } } } })
+Rpc.define({ id: "invalid-json-event", methods: {}, events: { updated: { schema: { type: "string" } } } })
 
 const LocationInput = Rpc.define({
-  namespace: "location-input",
+  id: "location-input",
   methods: {
     echo: {
       input: z.object({ location: z.string() }),
