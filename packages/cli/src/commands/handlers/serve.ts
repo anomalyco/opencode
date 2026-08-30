@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect"
 import { HttpRouter, HttpServer } from "effect/unstable/http"
 import { createServer } from "node:http"
 import { createRoutes } from "@opencode-ai/server/routes"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { Commands } from "../commands"
 import { Runtime } from "../../framework/runtime"
 import { Daemon } from "../../services/daemon"
@@ -18,7 +19,18 @@ export default Runtime.handler(
     return yield* Effect.scoped(
       Effect.gen(function* () {
         const daemon = yield* Daemon.Service
-        const address = yield* listen(input.hostname, input.port, yield* daemon.password())
+        // Honor the documented opt-in: enforce basic auth only when
+        // OPENCODE_SERVER_PASSWORD is set. Standalone serves without a
+        // password stay unsecured with a warning, matching the
+        // `packages/opencode` serve behavior; daemon-registered servers
+        // keep their persisted private credential for managed clients.
+        const password = input.register
+          ? (yield* daemon.password())
+          : (Flag.OPENCODE_SERVER_PASSWORD ?? undefined)
+        const address = yield* listen(input.hostname, input.port, password)
+        if (!password) {
+          console.log("Warning: OPENCODE_SERVER_PASSWORD is not set; server is unsecured.")
+        }
         if (input.register) yield* daemon.register(address)
         console.log(`server listening on ${HttpServer.formatAddress(address)}`)
         return yield* Effect.never
@@ -27,7 +39,7 @@ export default Runtime.handler(
   }),
 )
 
-function listen(hostname: string, port: Option.Option<number>, password: string) {
+function listen(hostname: string, port: Option.Option<number>, password?: string) {
   if (Option.isSome(port)) return bind(hostname, port.value, password)
   const next = (port: number): ReturnType<typeof bind> =>
     bind(hostname, port, password).pipe(
@@ -36,7 +48,7 @@ function listen(hostname: string, port: Option.Option<number>, password: string)
   return next(4096)
 }
 
-function bind(hostname: string, port: number, password: string) {
+function bind(hostname: string, port: number, password?: string) {
   return Layer.build(
     HttpRouter.serve(createRoutes(password), { disableListenLog: true, disableLogger: true }).pipe(
       Layer.provideMerge(NodeHttpServer.layer(() => createServer(), { port, host: hostname })),
