@@ -7,12 +7,13 @@ import { makeLocationNode } from "../effect/app-node"
 import { PartTable, SessionTable } from "../session/sql"
 import { SessionSchema } from "../session/schema"
 import { SessionTodo } from "../session/todo"
+import { FlexibleNumber } from "./schema"
 
 export const QualityGateResult = Schema.Struct({
   passed: Schema.Boolean,
-  score: Schema.Number,
-  completedTodos: Schema.Number,
-  totalTodos: Schema.Number,
+  score: FlexibleNumber,
+  completedTodos: FlexibleNumber,
+  totalTodos: FlexibleNumber,
   failedTools: Schema.Array(Schema.String),
   verificationCommands: Schema.Array(Schema.String),
   passedVerificationCommands: Schema.Array(Schema.String),

@@ -1,11 +1,13 @@
 export * as RegressionRunner from "./regression_runner"
 
 import { Context, Effect, Layer, Schema } from "effect"
-import { LLM, LLMError } from "@opencode-ai/llm"
+import { LLM, LLMError, LLMClient } from "@opencode-ai/llm"
 import { Database } from "../database/database"
 import { HarnessVersion } from "./version"
 import { makeLocationNode } from "../effect/app-node"
+import { LayerNodePlatform } from "../effect/app-node-platform"
 import {
+  FlexibleNumber,
   harness_task,
   harness_subtask_feedback,
   harness_version,
@@ -20,16 +22,16 @@ export const RegressionTaskResult = Schema.Struct({
   taskID: Schema.String,
   taskPrompt: Schema.String,
   passed: Schema.Boolean,
-  score: Schema.Number,
+  score: FlexibleNumber,
   reasoning: Schema.String,
 }).annotate({ identifier: "RegressionRunner.RegressionTaskResult" })
 export type RegressionTaskResult = typeof RegressionTaskResult.Type
 
 export const RegressionSummary = Schema.Struct({
   versionID: Schema.String,
-  totalTasks: Schema.Number,
-  passedTasks: Schema.Number,
-  passRate: Schema.Number,
+  totalTasks: FlexibleNumber,
+  passedTasks: FlexibleNumber,
+  passRate: FlexibleNumber,
   promoted: Schema.Boolean,
   results: Schema.Array(RegressionTaskResult),
 }).annotate({ identifier: "RegressionRunner.RegressionSummary" })
@@ -47,6 +49,12 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const { db } = yield* Database.Service
     const versionSvc = yield* HarnessVersion.Service
+    // Capture the LLMClient.Service instance at layer construction time.
+    // runRegressionForCandidate may be invoked inside an Effect.runPromise
+    // call that has no AppRuntime context (via the plugin.ts async hook chain),
+    // so the dynamic `yield* LLMClient.Service` inside LLM.generateObject
+    // would fail. By capturing here we ensure the concrete client is available.
+    const llmClient = yield* LLMClient.Service
 
     // -------------------------------------------------------------------------
     // Run dry-eval regression for a staged candidate version.
@@ -153,11 +161,17 @@ Task Error (if any): ${task.task_error ?? "None"}
               `.trim(),
               schema: Schema.Struct({
                 isSatisfied: Schema.Boolean,
-                score: Schema.Number,
+                score: FlexibleNumber,
                 reasoning: Schema.String,
               }),
               generation: { temperature: 0 },
-            }).pipe(Effect.map((r) => r.object))
+            }).pipe(
+              // Inject captured LLMClient.Service to ensure the dynamic
+              // service lookup inside LLMClient.generate succeeds regardless
+              // of which runtime context this Effect executes in.
+              Effect.provideService(LLMClient.Service, llmClient),
+              Effect.map((r) => r.object),
+            )
 
             const resultID = `reg_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
             yield* db
@@ -254,4 +268,4 @@ Task Error (if any): ${task.task_error ?? "None"}
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [Database.node, HarnessVersion.node] })
+export const node = makeLocationNode({ service: Service, layer, deps: [Database.node, HarnessVersion.node, LayerNodePlatform.llmClient] })

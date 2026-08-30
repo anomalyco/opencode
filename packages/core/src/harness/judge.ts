@@ -1,14 +1,15 @@
 export * as JudgeAgent from "./judge"
 
 import { Context, Effect, Layer, Option, Schema } from "effect"
-import { LLM, LLMError } from "@opencode-ai/llm"
+import { LLM, LLMError, LLMClient } from "@opencode-ai/llm"
 import { Database } from "../database/database"
 import { SessionTodo } from "../session/todo"
 import { PartTable } from "../session/sql"
 import { SessionSchema } from "../session/schema"
 import { Config } from "../config"
 import { makeLocationNode } from "../effect/app-node"
-import { harness_task, harness_subtask_feedback } from "./schema"
+import { LayerNodePlatform } from "../effect/app-node-platform"
+import { FlexibleNumber, harness_task, harness_subtask_feedback } from "./schema"
 import { QualityGate } from "./quality-gate"
 import { PromptFinalizer } from "./improving_prompt_finalizer"
 import { eq } from "drizzle-orm"
@@ -29,12 +30,12 @@ export type Classification = typeof Classification.Type
 
 export const Evaluation = Schema.Struct({
   isSatisfied: Schema.Boolean,
-  score: Schema.Number,
-  codeQualityScore: Schema.optional(Schema.Number),
-  originalityScore: Schema.optional(Schema.Number),
-  completenessScore: Schema.optional(Schema.Number),
-  efficiencyScore: Schema.optional(Schema.Number),
-  robustnessScore: Schema.optional(Schema.Number),
+  score: FlexibleNumber,
+  codeQualityScore: Schema.optional(FlexibleNumber),
+  originalityScore: Schema.optional(FlexibleNumber),
+  completenessScore: Schema.optional(FlexibleNumber),
+  efficiencyScore: Schema.optional(FlexibleNumber),
+  robustnessScore: Schema.optional(FlexibleNumber),
   reasoning: Schema.String,
   critique: Schema.optional(Schema.String),
   flawsIdentified: Schema.optional(Schema.Array(Schema.String)),
@@ -175,6 +176,7 @@ const layer = Layer.effect(
     const todosSvc = yield* SessionTodo.Service
     const qualityGate = yield* QualityGate.Service
     const finalizerSvc = yield* PromptFinalizer.Service
+    const llmClient = yield* LLMClient.Service
 
     const configOption = yield* Effect.serviceOption(Config.Service)
 
@@ -197,7 +199,9 @@ const layer = Layer.effect(
         generation: {
           temperature: 0,
         },
-      })
+      }).pipe(
+        Effect.provideService(LLMClient.Service, llmClient),
+      )
 
       const llmClassification = res.object
 
@@ -284,12 +288,6 @@ const layer = Layer.effect(
       input: EvaluateInput,
       model: unknown,
     ) {
-      // QUALITY GATE TEST LOG
-      console.error(
-        "🔥 JUDGE EVALUATE CALLED:",
-        input.sessionID,
-      )
-
       let subtasks = input.subtasks ?? []
 
       if (!subtasks.length && input.sessionID) {
@@ -370,15 +368,6 @@ const layer = Layer.effect(
               "Quality Gate could not verify execution evidence.",
           }
 
-      console.error("🔥 QUALITY GATE RESULT:")
-      console.error(
-        JSON.stringify(
-          qualityResult,
-          null,
-          2,
-        ),
-      )
-
       const evalRes = yield* LLM.generateObject({
         // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
         model:
@@ -432,6 +421,7 @@ ${input.userResponse ?? "None"}
           temperature: 0,
         },
       }).pipe(
+        Effect.provideService(LLMClient.Service, llmClient),
         Effect.map((res) => res.object),
       )
 
@@ -450,14 +440,6 @@ ${input.userResponse ?? "None"}
           evalRes.score,
           qualityResult.score,
         )
-
-      console.error(
-        `🔥 FINAL DECISION: ${
-          finalSatisfied
-            ? "PASSED ✅"
-            : "FAILED ❌"
-        }`,
-      )
 
       const finalEvaluation: Evaluation = {
         ...evalRes,
@@ -594,25 +576,6 @@ ${input.userResponse ?? "None"}
           )
       }
 
-      // Trigger recursive self-improving prompt evolution,
-      // rule extraction, and regression testing
-      yield* finalizerSvc
-        .finalizeAndEvolve(
-          input.taskID,
-          model,
-        )
-        .pipe(
-          Effect.tapError((err) =>
-            Effect.logError(
-              "Harness evolution pipeline failed",
-              { err },
-            ),
-          ),
-          Effect.orElseSucceed(
-            () => undefined,
-          ),
-        )
-
       return finalEvaluation
     })
 
@@ -632,5 +595,6 @@ export const node = makeLocationNode({
     SessionTodo.node,
     QualityGate.node,
     PromptFinalizer.node,
+    LayerNodePlatform.llmClient,
   ],
 })

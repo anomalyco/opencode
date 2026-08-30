@@ -1,10 +1,10 @@
 export * as HarnessInjector from "./injector"
 
 import { Context, Effect, Layer, Schema } from "effect"
-import { LLM, LLMError } from "@opencode-ai/llm"
+import { LLM, LLMError, LLMClient } from "@opencode-ai/llm"
 import { HarnessVersion } from "./version"
 import { makeLocationNode } from "../effect/app-node"
-
+import { LayerNodePlatform } from "../effect/app-node-platform"
 import type { Hooks } from "@opencode-ai/plugin"
 import { HarnessPlugin } from "./plugin"
 
@@ -47,6 +47,7 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const versionSvc = yield* HarnessVersion.Service
     const pluginSvc = yield* HarnessPlugin.Service
+    const llmClient = yield* LLMClient.Service
 
     const createPluginHooks = Effect.fn("HarnessInjector.createPluginHooks")(function* (domainCategory: string) {
       return yield* pluginSvc.createHooks(domainCategory)
@@ -104,7 +105,9 @@ Requested Changes: ${input.changesRequested ?? "Improve accuracy and fulfill req
         `.trim(),
         schema: RefinedSubtaskPromptResult,
         generation: { temperature: 0 },
-      })
+      }).pipe(
+        Effect.provideService(LLMClient.Service, llmClient),
+      )
 
       return res.object
     })
@@ -113,4 +116,4 @@ Requested Changes: ${input.changesRequested ?? "Improve accuracy and fulfill req
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [HarnessVersion.node, HarnessPlugin.node] })
+export const node = makeLocationNode({ service: Service, layer, deps: [HarnessVersion.node, HarnessPlugin.node, LayerNodePlatform.llmClient] })

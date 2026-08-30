@@ -3,6 +3,7 @@ export * as SessionRunnerModel from "./model"
 import { makeLocationNode } from "../../effect/app-node"
 import { type Model } from "@opencode-ai/llm"
 import * as AnthropicMessages from "@opencode-ai/llm/protocols/anthropic-messages"
+import * as Gemini from "@opencode-ai/llm/protocols/gemini"
 import * as OpenAICompatibleChat from "@opencode-ai/llm/protocols/openai-compatible-chat"
 import * as OpenAIResponses from "@opencode-ai/llm/protocols/openai-responses"
 import { Auth, type AnyRoute } from "@opencode-ai/llm/route"
@@ -153,6 +154,30 @@ export const fromCatalogModel = (
         .model({ id: resolved.api.id }),
     )
   }
+  if (resolved.api.type === "aisdk" && resolved.api.package === "@ai-sdk/google") {
+    const googleAuth = key !== undefined
+      ? Auth.header("x-goog-api-key", key)
+      : Auth.config("GOOGLE_GENERATIVE_AI_API_KEY").pipe(Auth.header("x-goog-api-key"))
+    return Effect.succeed(
+      withDefaults(resolved, Gemini.route)
+        .with({ auth: googleAuth })
+        .model({ id: resolved.api.id }),
+    )
+  }
+  if (resolved.api.type === "aisdk" && resolved.api.package === "@ai-sdk/azure") {
+    return Effect.succeed(
+      withDefaults(resolved, OpenAIResponses.route)
+        .with({ auth: key === undefined ? Auth.none : Auth.header("api-key", key) })
+        .model({ id: resolved.api.id }),
+    )
+  }
+  if (resolved.api.type === "aisdk" && resolved.api.package === "@openrouter/ai-sdk-provider") {
+    return Effect.succeed(
+      withDefaults(resolved, OpenAICompatibleChat.route)
+        .with({ auth: key === undefined ? Auth.none : Auth.bearer(key), endpoint: { baseURL: resolved.api.url ?? "https://openrouter.ai/api/v1" } })
+        .model({ id: resolved.api.id }),
+    )
+  }
   if (resolved.api.type === "aisdk" && resolved.api.package === "@ai-sdk/openai-compatible" && resolved.api.url) {
     return Effect.succeed(
       withDefaults(resolved, OpenAICompatibleChat.route)
@@ -176,6 +201,9 @@ export const supported = (model: ModelV2.Info) =>
   model.api.type === "aisdk" &&
   (model.api.package === "@ai-sdk/openai" ||
     model.api.package === "@ai-sdk/anthropic" ||
+    model.api.package === "@ai-sdk/google" ||
+    model.api.package === "@ai-sdk/azure" ||
+    model.api.package === "@openrouter/ai-sdk-provider" ||
     (model.api.package === "@ai-sdk/openai-compatible" && model.api.url !== undefined))
 
 /** Resolves models from the catalog belonging to the current Location runtime. */
