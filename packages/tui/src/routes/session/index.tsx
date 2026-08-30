@@ -1472,11 +1472,16 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
   const local = useLocal()
   const { theme } = useTheme()
   const sync = useSync()
+  const pluginRuntime = usePluginRuntime()
   const messages = createMemo(() => sync.data.message[props.message.sessionID] ?? [])
   const model = createMemo(() => Model.name(ctx.providers(), props.message.providerID, props.message.modelID))
 
   const final = createMemo(() => {
     return props.message.finish && !["tool-calls", "unknown"].includes(props.message.finish)
+  })
+
+  const terminal = createMemo(() => {
+    return final() || props.message.error?.name === "MessageAbortedError"
   })
 
   const duration = createMemo(() => {
@@ -1572,6 +1577,15 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
           </box>
         </Match>
       </Switch>
+      <pluginRuntime.Slot
+        name="assistant_message_footer"
+        session_id={props.message.sessionID}
+        message_id={props.message.id}
+        message={props.message}
+        parts={props.parts}
+        terminal={terminal()}
+        last={props.last}
+      />
     </>
   )
 }
