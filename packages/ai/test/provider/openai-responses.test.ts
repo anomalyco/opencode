@@ -3474,6 +3474,7 @@ describe("OpenAI Responses route", () => {
         {
           type: "reasoning",
           summary: [{ type: "summary_text", text: "No prefix separator." }],
+          encrypted_content: undefined,
         },
         {
           type: "function_call",
@@ -3488,6 +3489,8 @@ describe("OpenAI Responses route", () => {
           name: "lookup",
           arguments: '{"query":"news"}',
         },
+        { type: "function_call_output", call_id: "call_1", output: "Tool result missing" },
+        { type: "function_call_output", call_id: "call_2", output: "Tool result missing" },
       ])
     }),
   )
@@ -3789,6 +3792,7 @@ describe("OpenAI Responses route", () => {
           name: "lookup",
           arguments: '{"query":"weather"}',
         },
+        { type: "function_call_output", call_id: "call_1", output: "Tool result missing" },
       ])
     }),
   )

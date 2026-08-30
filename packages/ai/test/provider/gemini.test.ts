@@ -1271,6 +1271,16 @@ describe("Gemini route", () => {
             },
           ],
         },
+        {
+          role: "user",
+          parts: ["tool_0", "tool_1", "tool_2"].map((id) => ({
+            functionResponse: {
+              id,
+              name: "lookup",
+              response: { name: "lookup", content: "Tool result missing" },
+            },
+          })),
+        },
       ])
     }),
   )
@@ -1302,6 +1312,16 @@ describe("Gemini route", () => {
               thoughtSignature: "skip_thought_signature_validator",
             },
           ],
+        },
+        {
+          role: "user",
+          parts: ["tool_0", "tool_1"].map((id) => ({
+            functionResponse: {
+              id,
+              name: "lookup",
+              response: { name: "lookup", content: "Tool result missing" },
+            },
+          })),
         },
       ])
     }),

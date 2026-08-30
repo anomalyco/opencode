@@ -106,6 +106,26 @@ describe("request option precedence", () => {
     }),
   )
 
+  it.effect("normalizes tool history before protocol lowering", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: OpenAIChat.route.model({ id: "gpt-4o-mini" }),
+          messages: [
+            Message.assistant(ToolCallPart.make({ id: "call_1", name: "lookup", input: {} })),
+            Message.user("Continue."),
+          ],
+        }),
+      )
+
+      expect(prepared.body.messages).toMatchObject([
+        { role: "assistant", tool_calls: [{ id: "call_1", function: { name: "lookup" } }] },
+        { role: "tool", tool_call_id: "call_1", content: "Tool result missing" },
+        { role: "user", content: "Continue." },
+      ])
+    }),
+  )
+
   it.effect("applies model HTTP defaults before request HTTP overlays", () =>
     LLMClient.generate(
       LLM.request({

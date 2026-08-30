@@ -7,6 +7,7 @@ import { HttpTransport } from "./transport/index.js"
 import type { HttpMiddleware, Transport, TransportRuntime, WebSocketChannelExecutor } from "./transport/index.js"
 import type { Protocol } from "./protocol.js"
 import { applyCachePolicy } from "../cache-policy.js"
+import { normalizeToolHistory } from "../tool-history.js"
 import { sanitizeSurrogates } from "../utils/sanitize.js"
 import * as ProviderShared from "../protocols/shared.js"
 import type { ProtocolID, ProviderOptions } from "../schema/index.js"
@@ -169,17 +170,19 @@ export interface GenerateMethod {
 export class Service extends Context.Service<Service, Interface>()("@opencode/LLMClient") {}
 
 const resolveRequestOptions = (request: LLMRequest) => {
-  const routeDefaults = request.model.route.defaults
-  const modelDefaults = request.model.defaults
-  const generation = mergeGenerationOptions(routeDefaults.generation, modelDefaults?.generation, request.generation)
-  return LLMRequest.update(request, {
+  const messages = normalizeToolHistory(request.messages)
+  const normalized = messages === request.messages ? request : LLMRequest.update(request, { messages })
+  const routeDefaults = normalized.model.route.defaults
+  const modelDefaults = normalized.model.defaults
+  const generation = mergeGenerationOptions(routeDefaults.generation, modelDefaults?.generation, normalized.generation)
+  return LLMRequest.update(normalized, {
     generation: generation ?? new GenerationOptions({}),
     providerOptions: mergeProviderOptions(
       routeDefaults.providerOptions,
       modelDefaults?.providerOptions,
-      request.providerOptions,
+      normalized.providerOptions,
     ),
-    http: mergeHttpOptions(routeDefaults.http, modelDefaults?.http, request.http),
+    http: mergeHttpOptions(routeDefaults.http, modelDefaults?.http, normalized.http),
   })
 }
 
