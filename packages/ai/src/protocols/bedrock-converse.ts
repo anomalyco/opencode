@@ -262,17 +262,13 @@ const providerMetadata = (key: string, metadata: Record<string, unknown>): Provi
 
 const reasoningSignature = (part: ReasoningPart, providerMetadataKey: string) => {
   const metadata = part.providerMetadata?.[providerMetadataKey]
-  return (
-    part.encrypted ??
-    (ProviderShared.isRecord(metadata) && typeof metadata.signature === "string" ? metadata.signature : undefined)
-  )
+  if (part.encrypted !== undefined) return part.encrypted
+  if (ProviderShared.isRecord(metadata) && typeof metadata.signature === "string") return metadata.signature
 }
 
 const reasoningRedactedData = (part: ReasoningPart, providerMetadataKey: string) => {
   const metadata = part.providerMetadata?.[providerMetadataKey]
-  return ProviderShared.isRecord(metadata) && typeof metadata.redactedData === "string"
-    ? metadata.redactedData
-    : undefined
+  if (ProviderShared.isRecord(metadata) && typeof metadata.redactedData === "string") return metadata.redactedData
 }
 
 const lowerToolCall = (part: ToolCallPart): BedrockToolUseBlock => ({
@@ -422,15 +418,15 @@ const fromRequest = Effect.fn("BedrockConverse.fromRequest")(function* (request:
   // Bedrock-Claude shares Anthropic's 4-breakpoint cap. Spend the budget in
   // tools → system → messages order to favour the highest-impact prefixes.
   const breakpoints = BedrockCache.breakpoints()
-  const toolConfig =
-    request.tools.length > 0
-      ? {
-          tools: lowerTools(request.model.compatibility?.toolSchema, breakpoints, request.tools),
-          // Converse has no native "none". Keep definitions stable for prompt
-          // caching and omit only the unsupported choice.
-          toolChoice,
-        }
-      : undefined
+  const toolConfig = (() => {
+    if (request.tools.length === 0) return undefined
+    return {
+      tools: lowerTools(request.model.compatibility?.toolSchema, breakpoints, request.tools),
+      // Converse has no native "none". Keep definitions stable for prompt
+      // caching and omit only the unsupported choice.
+      toolChoice,
+    }
+  })()
   const system = request.system.length === 0 ? undefined : lowerSystem(breakpoints, request.system)
   const messages = yield* lowerMessages(request, breakpoints)
   if (breakpoints.dropped > 0) {
@@ -438,22 +434,26 @@ const fromRequest = Effect.fn("BedrockConverse.fromRequest")(function* (request:
       `Bedrock Converse: dropped ${breakpoints.dropped} cache breakpoint(s); the API allows at most ${BedrockCache.BEDROCK_BREAKPOINT_CAP} per request.`,
     )
   }
-  return {
-    modelId: request.model.id,
-    messages,
-    system,
-    inferenceConfig:
+  const inferenceConfig = (() => {
+    if (
       generation?.maxTokens === undefined &&
       generation?.temperature === undefined &&
       generation?.topP === undefined &&
       (generation?.stop === undefined || generation.stop.length === 0)
-        ? undefined
-        : {
-            maxTokens: generation?.maxTokens,
-            temperature: generation?.temperature,
-            topP: generation?.topP,
-            stopSequences: generation?.stop,
-          },
+    )
+      return undefined
+    return {
+      maxTokens: generation?.maxTokens,
+      temperature: generation?.temperature,
+      topP: generation?.topP,
+      stopSequences: generation?.stop,
+    }
+  })()
+  return {
+    modelId: request.model.id,
+    messages,
+    system,
+    inferenceConfig,
     toolConfig,
     // Converse's base inferenceConfig has no topK; Anthropic/Nova accept it
     // as a model-specific field, so it goes through additionalModelRequestFields.
@@ -560,31 +560,29 @@ const step = (state: ParserState, event: BedrockEvent) =>
       const index = event.contentBlockDelta.contentBlockIndex
       const reasoning = event.contentBlockDelta.delta.reasoningContent
       const events: LLMEvent[] = []
-      const redactedChunks =
-        reasoning.redactedContent === undefined
-          ? undefined
-          : [
-              ...(state.reasoningRedactedContent[index] ?? []),
-              yield* Effect.fromResult(Encoding.decodeBase64(reasoning.redactedContent)).pipe(
-                Effect.mapError((cause) =>
-                  ProviderShared.eventError(
-                    ADAPTER,
-                    "Bedrock Converse reasoningContent.redactedContent contains invalid base64 data",
-                    undefined,
-                    cause,
-                  ),
-                ),
-              ),
-            ]
+      const redactedChunks = yield* (() => {
+        if (reasoning.redactedContent === undefined) return Effect.succeed(undefined)
+        return Effect.fromResult(Encoding.decodeBase64(reasoning.redactedContent)).pipe(
+          Effect.map((chunk) => [...(state.reasoningRedactedContent[index] ?? []), chunk]),
+          Effect.mapError((cause) =>
+            ProviderShared.eventError(
+              ADAPTER,
+              "Bedrock Converse reasoningContent.redactedContent contains invalid base64 data",
+              undefined,
+              cause,
+            ),
+          ),
+        )
+      })()
       const redactedData = redactedChunks === undefined ? reasoning.data : encodeRedactedContent(redactedChunks)
       const metadata = (() => {
         if (reasoning.signature) return providerMetadata(state.providerMetadataKey, { signature: reasoning.signature })
         if (redactedData !== undefined) return providerMetadata(state.providerMetadataKey, { redactedData })
       })()
-      const lifecycle =
-        reasoning.text !== undefined || metadata !== undefined
-          ? Lifecycle.reasoningDelta(state.lifecycle, events, `reasoning-${index}`, reasoning.text ?? "", metadata)
-          : state.lifecycle
+      const lifecycle = (() => {
+        if (reasoning.text === undefined && metadata === undefined) return state.lifecycle
+        return Lifecycle.reasoningDelta(state.lifecycle, events, `reasoning-${index}`, reasoning.text ?? "", metadata)
+      })()
       const reasoningRedactedContent = (() => {
         if (redactedChunks !== undefined) return { ...state.reasoningRedactedContent, [index]: redactedChunks }
         if (reasoning.data === undefined) return state.reasoningRedactedContent
@@ -592,13 +590,15 @@ const step = (state: ParserState, event: BedrockEvent) =>
           Object.entries(state.reasoningRedactedContent).filter(([key]) => key !== String(index)),
         )
       })()
+      const reasoningSignatures = (() => {
+        if (!reasoning.signature) return state.reasoningSignatures
+        return { ...state.reasoningSignatures, [index]: reasoning.signature }
+      })()
       return [
         {
           ...state,
           lifecycle,
-          reasoningSignatures: reasoning.signature
-            ? { ...state.reasoningSignatures, [index]: reasoning.signature }
-            : state.reasoningSignatures,
+          reasoningSignatures,
           reasoningRedactedContent,
         },
         events,
@@ -722,23 +722,22 @@ const step = (state: ParserState, event: BedrockEvent) =>
 
 const framing = BedrockEventStream.framing(ADAPTER)
 
-const onHalt = (state: ParserState): ReadonlyArray<LLMEvent> =>
-  state.pendingFinish
-    ? (() => {
-        const events: LLMEvent[] = []
-        Lifecycle.finish(state.lifecycle, events, {
-          reason: {
-            ...state.pendingFinish.reason,
-            normalized:
-              state.pendingFinish.reason.normalized === "stop" && state.hasToolCalls
-                ? "tool-calls"
-                : state.pendingFinish.reason.normalized,
-          },
-          usage: state.pendingFinish.usage,
-        })
-        return events
-      })()
-    : []
+const onHalt = (state: ParserState): ReadonlyArray<LLMEvent> => {
+  if (!state.pendingFinish) return []
+  const normalized = (() => {
+    if (state.pendingFinish.reason.normalized === "stop" && state.hasToolCalls) return "tool-calls"
+    return state.pendingFinish.reason.normalized
+  })()
+  const events: LLMEvent[] = []
+  Lifecycle.finish(state.lifecycle, events, {
+    reason: {
+      ...state.pendingFinish.reason,
+      normalized,
+    },
+    usage: state.pendingFinish.usage,
+  })
+  return events
+}
 
 // =============================================================================
 // Protocol And Bedrock Route
