@@ -99,6 +99,10 @@ for (const create of [false, true]) {
     const sessionID = "ses_worktree_recovery"
     const events: OpenCodeEvent[] = []
     const requests: { operation: string; body: unknown }[] = []
+    let listing = Promise.withResolvers<void>()
+    let listingRequested = Promise.withResolvers<void>()
+    const moving = Promise.withResolvers<void>()
+    const moveRequested = Promise.withResolvers<void>()
     await mockOpenCodeServer(page, {
       directory: canonical,
       project: { ...fixture.project, worktree: canonical },
@@ -109,13 +113,15 @@ for (const create of [false, true]) {
       }),
       events: () => events.splice(0),
     })
-    await page.route("**/api/**", (route) => {
+    await page.route("**/api/**", async (route) => {
       const url = new URL(route.request().url())
       const headers = { "access-control-allow-origin": "*" }
       if (url.searchParams.get("location[directory]") === directory)
         return route.fulfill({ status: 500, body: "", headers })
       if (url.pathname === `/api/worktree/${fixture.project.id}`) {
-        if (route.request().method() === "GET")
+        if (route.request().method() === "GET") {
+          listingRequested.resolve()
+          await listing.promise
           return route.fulfill({
             json: [
               { directory: canonical, strategy: null },
@@ -123,6 +129,7 @@ for (const create of [false, true]) {
             ],
             headers,
           })
+        }
         if (route.request().method() === "POST") {
           requests.push({ operation: "create", body: route.request().postDataJSON() })
           return route.fulfill({
@@ -133,6 +140,8 @@ for (const create of [false, true]) {
       }
       if (url.pathname === `/api/session/${sessionID}/move` && route.request().method() === "POST") {
         requests.push({ operation: "move", body: route.request().postDataJSON() })
+        moveRequested.resolve()
+        await moving.promise
         events.push({
           id: "evt_worktree_recovered",
           type: "session.moved",
@@ -146,7 +155,27 @@ for (const create of [false, true]) {
     })
     await page.goto(`/server/${base64Encode(fixture.serverKey)}/session/${sessionID}`)
     await page.getByRole("button", { name: "Choose worktree", exact: true }).click()
+    await listingRequested.promise
+    await expect(page.getByRole("menuitem", { name: "Loading", exact: true })).toBeVisible()
+    await expect(page.getByRole("menuitem", { name: "New workspace", exact: true })).toBeVisible()
+    await expect(page.getByText("Recover my worktree", { exact: true })).toBeVisible()
+    await expect(page.getByText("Session location unavailable", { exact: true })).toBeVisible()
+    listing.resolve()
+    await expect(page.getByRole("menuitem", { name: "existing-worktree", exact: true })).toBeVisible()
+    await page.keyboard.press("Escape")
+    await expect(page.getByRole("menu")).toHaveCount(0)
+    listing = Promise.withResolvers<void>()
+    listingRequested = Promise.withResolvers<void>()
+    await page.getByRole("button", { name: "Choose worktree", exact: true }).click()
+    await listingRequested.promise
+    await expect(page.getByRole("menuitem", { name: "existing-worktree", exact: true })).toBeVisible()
+    await expect(page.getByText("Recover my worktree", { exact: true })).toBeVisible()
+    listing.resolve()
     await page.getByRole("menuitem", { name: create ? "New workspace" : "existing-worktree", exact: true }).click()
+    await moveRequested.promise
+    await expect(page.getByRole("button", { name: "Moving session…", exact: true })).toBeDisabled()
+    await expect(page.getByRole("button", { name: "Choose worktree", exact: true })).toBeDisabled()
+    moving.resolve()
     await expect(page.getByText("Session location unavailable", { exact: true })).toHaveCount(0)
     await expect(page.getByRole("textbox", { name: "Prompt", exact: true })).toBeEditable()
     await expect(page.getByText("Recover my worktree", { exact: true })).toBeVisible()
