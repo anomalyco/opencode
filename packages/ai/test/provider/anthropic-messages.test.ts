@@ -903,6 +903,54 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
+  it.effect("preserves a reasoning signature when message_stop closes the block", () =>
+    Effect.gen(function* () {
+      const compatible = Route.make({
+        id: "custom-anthropic-messages",
+        provider: "custom-anthropic",
+        protocol: AnthropicMessages.protocol,
+        endpoint: Endpoint.path("/messages", { baseURL: "https://compatible.test/v1" }),
+        auth: Auth.header("x-api-key", "test"),
+        framing: AnthropicMessages.framing,
+      }).model({ id: "custom-model" })
+      const body = sseEvents(
+        { type: "message_start", message: { usage: { input_tokens: 5 } } },
+        {
+          type: "content_block_start",
+          index: 0,
+          content_block: { type: "thinking", thinking: "", signature: "" },
+        },
+        { type: "content_block_delta", index: 0, delta: { type: "thinking_delta", thinking: "Reasoning." } },
+        { type: "content_block_delta", index: 0, delta: { type: "signature_delta", signature: "sig_1" } },
+        { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 2 } },
+        { type: "message_stop" },
+      )
+      const response = yield* LLMClient.generate(LLM.request({ model: compatible, prompt: "Think." })).pipe(
+        Effect.provide(fixedResponse(body)),
+      )
+
+      const reasoningEnds = response.events.filter((event) => event.type === "reasoning-end")
+      expect(reasoningEnds).toHaveLength(1)
+      expect(reasoningEnds[0]).toMatchObject({
+        providerMetadata: { "custom-anthropic": { signature: "sig_1" } },
+      })
+      expect(response.message.content).toEqual([
+        {
+          type: "reasoning",
+          text: "Reasoning.",
+          providerMetadata: { "custom-anthropic": { signature: "sig_1" } },
+        },
+      ])
+
+      const prepared = yield* compileRequest(
+        LLM.request({ model: compatible, messages: [response.message], cache: "none" }),
+      )
+      expect(prepared.body.messages).toEqual([
+        { role: "assistant", content: [{ type: "thinking", thinking: "Reasoning.", signature: "sig_1" }] },
+      ])
+    }),
+  )
+
   it.effect("parses text, reasoning, and usage stream fixtures", () =>
     Effect.gen(function* () {
       const body = sseEvents(
@@ -936,6 +984,7 @@ describe("Anthropic Messages route", () => {
       expect(response.events.find((event) => event.type === "reasoning-end")).toMatchObject({
         providerMetadata: { anthropic: { signature: "sig_1" } },
       })
+      expect(response.events.filter((event) => event.type === "reasoning-end")).toHaveLength(1)
       expect(response.events.find((event) => event.type === "reasoning-delta" && event.text === "")).toBeUndefined()
       expect(response.message.content).toEqual([
         { type: "text", text: "Hello!" },

@@ -1375,7 +1375,17 @@ const onMessageStop = Effect.fn("AnthropicMessages.onMessageStop")(function* (st
   const events: LLMEvent[] = []
   const lifecycle = result.events.length ? Lifecycle.stepStart(state.lifecycle, events) : state.lifecycle
   events.push(...result.events)
-  const finished = Lifecycle.finish(lifecycle, events, {
+  const closed = Object.entries(state.reasoningSignatures).reduce(
+    (current, [index, signature]) =>
+      Lifecycle.reasoningEnd(
+        current,
+        events,
+        `reasoning-${index}`,
+        providerMetadata(state.providerMetadataKey, { signature }),
+      ),
+    lifecycle,
+  )
+  const finished = Lifecycle.finish(closed, events, {
     reason: state.pendingFinish?.reason ?? {
       normalized: "unknown",
       raw: undefined,
