@@ -40,11 +40,11 @@ export const GrepTool = Tool.define(
             permission: "grep",
             patterns: [params.pattern],
             always: ["*"],
-            metadata: {
-              pattern: params.pattern,
-              path: params.path,
-              include: params.include,
-            },
+            metadata: Object.fromEntries(
+              Object.entries({ pattern: params.pattern, path: params.path, include: params.include }).filter(
+                (entry): entry is [string, string] => entry[1] !== undefined,
+              ),
+            ),
           })
 
           const ins = yield* InstanceState.context

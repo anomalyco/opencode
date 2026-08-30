@@ -29,10 +29,11 @@ export const GlobTool = Tool.define(
             permission: "glob",
             patterns: [params.pattern],
             always: ["*"],
-            metadata: {
-              pattern: params.pattern,
-              path: params.path,
-            },
+            metadata: Object.fromEntries(
+              Object.entries({ pattern: params.pattern, path: params.path }).filter(
+                (entry): entry is [string, string] => entry[1] !== undefined,
+              ),
+            ),
           })
 
           let search = params.path ?? ins.directory
