@@ -263,8 +263,9 @@ function PanelShell(props: {
   children: JSX.Element
   hint?: string
   mono?: boolean
+  background?: boolean
 }) {
-  const background = () => props.theme().shade
+  const background = () => (props.background === false ? "transparent" : props.theme().shade)
   const content = (
     <>
       <box height={1} flexShrink={0} backgroundColor={background()} />
@@ -302,11 +303,13 @@ function PanelShell(props: {
       >
         <input
           width="100%"
-          focusedBackgroundColor={background()}
-          focusedTextColor={props.theme().text}
+          focusedBackgroundColor={props.background === false ? "transparent" : props.theme().formfieldFocusedBg}
+          focusedTextColor={
+            props.background === false ? props.theme().formfieldText : props.theme().formfieldFocusedText
+          }
           placeholder={props.placeholder}
           placeholderColor={props.theme().muted}
-          cursorColor={props.theme().highlight}
+          cursorColor={props.background === false ? props.theme().formfieldText : props.theme().formfieldFocusedText}
           onInput={props.onQuery}
           ref={(input) => {
             props.inputRef(input)
@@ -331,7 +334,7 @@ function PanelShell(props: {
         {content}
       </box>
       <box width="100%" height={1} border={false} backgroundColor="transparent" flexShrink={0}>
-        {props.mono ? null : (
+        {props.mono || props.background === false ? null : (
           <box
             width="100%"
             height={1}
@@ -609,6 +612,7 @@ export function RunAgentSelectBody(props: {
         display: agent.id,
         description: agent.description,
         footer: props.current() === agent.id ? "current" : undefined,
+        footerTone: "selection" as const,
         keywords: `${agent.id} ${agent.name} ${agent.description ?? ""}`,
         id: agent.id,
         current: props.current() === agent.id,
@@ -666,6 +670,7 @@ export function RunSettingsBody(props: {
       category: "Transcript",
       display: "Thinking",
       footer: saving() === "thinking" ? "saving" : props.settings().thinking,
+      footerTone: saving() === "thinking" ? "running" : "selection",
       keywords: `thinking reasoning ${props.settings().thinking}`,
       key: "thinking",
     },
@@ -673,6 +678,7 @@ export function RunSettingsBody(props: {
       category: "Transcript",
       display: "Shell",
       footer: saving() === "shell_output" ? "saving" : props.settings().shell_output,
+      footerTone: saving() === "shell_output" ? "running" : "selection",
       keywords: `shell tool command output ${props.settings().shell_output}`,
       key: "shell_output",
     },
@@ -680,6 +686,7 @@ export function RunSettingsBody(props: {
       category: "Transcript",
       display: "Turn summary",
       footer: saving() === "turn_summary" ? "saving" : props.settings().turn_summary,
+      footerTone: saving() === "turn_summary" ? "running" : "selection",
       keywords: `turn summary agent model duration ${props.settings().turn_summary}`,
       key: "turn_summary",
     },
@@ -687,6 +694,7 @@ export function RunSettingsBody(props: {
       category: "Terminal",
       display: "Footer details",
       footer: saving() === "footer" ? "saving" : props.settings().footer,
+      footerTone: saving() === "footer" ? "running" : "selection",
       keywords: `footer status activity model context usage ${props.settings().footer}`,
       key: "footer",
     },
@@ -694,6 +702,7 @@ export function RunSettingsBody(props: {
       category: "Terminal",
       display: "Splash",
       footer: saving() === "splash" ? "saving" : props.settings().splash,
+      footerTone: saving() === "splash" ? "running" : "selection",
       keywords: `splash entry exit banner ${props.settings().splash}`,
       key: "splash",
     },
@@ -701,6 +710,7 @@ export function RunSettingsBody(props: {
       category: "Terminal",
       display: "Monochrome UI",
       footer: saving() === "mono" ? "saving" : props.settings().mono ? "on" : "off",
+      footerTone: saving() === "mono" ? "running" : "selection",
       keywords: `mono monochrome ascii legacy compat terminal ${props.settings().mono ? "on" : "off"}`,
       key: "mono",
     },
@@ -785,6 +795,12 @@ export function RunSubagentSelectBody(props: {
           display: title,
           description: title === item.label ? undefined : item.label,
           footer: subagentStatusLabel(item.status),
+          footerTone:
+            item.status === "running" || item.status === "error"
+              ? item.status
+              : item.status === "completed"
+                ? ("success" as const)
+                : undefined,
           keywords: `${item.label} ${item.description} ${item.title ?? ""} ${item.status}`,
           sessionID: item.sessionID,
           current: props.current() === item.sessionID,
@@ -984,6 +1000,7 @@ export function RunVariantSelectBody(props: {
       category: "",
       display: "Default",
       description: props.current() === undefined ? "current" : undefined,
+      descriptionTone: "selection",
       keywords: "default",
       variant: undefined,
       current: props.current() === undefined,
@@ -992,6 +1009,7 @@ export function RunVariantSelectBody(props: {
       category: "",
       display: variant,
       description: props.current() === variant ? "current" : undefined,
+      descriptionTone: "selection" as const,
       keywords: variant,
       variant,
       current: props.current() === variant,
@@ -1066,6 +1084,7 @@ export function RunModelSelectBody(props: {
               category: provider.name,
               display: title,
               footer,
+              footerTone: current ? ("selection" as const) : undefined,
               keywords: `${provider.id} ${provider.name} ${modelID} ${title} ${footer ?? ""}`,
               current,
             }
@@ -1104,12 +1123,13 @@ export function RunModelSelectBody(props: {
       inputRef={controller.inputRef}
       onQuery={controller.setQuery}
       mono={props.mono}
+      background={false}
     >
       <RunFooterMenu
         theme={props.theme}
         items={() =>
           controller.query().trim()
-            ? controller.items().map((item) => ({ ...item, footer: item.providerName }))
+            ? controller.items().map((item) => ({ ...item, footer: item.providerName, footerTone: undefined }))
             : controller.items()
         }
         selected={controller.menu.selected}
@@ -1121,7 +1141,6 @@ export function RunModelSelectBody(props: {
         paddingLeft={panelPad(props.mono)}
         paddingRight={panelPad(props.mono)}
         grouped={!controller.query().trim()}
-        background
         headerColor={props.theme().muted}
         mono={props.mono}
       />

@@ -119,6 +119,7 @@ export type RunInput = {
 }
 
 export type MiniHost = {
+  version: string
   terminal: {
     stdin: NodeJS.ReadStream
   }

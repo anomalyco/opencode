@@ -15,6 +15,7 @@ export function footerStatuslinePolicy(input: {
   agentWidth?: number
   contextWidths: number[]
   modelWidth?: number
+  providerWidth?: number
   variantWidth?: number
   usageWidth?: number
 }) {
@@ -29,11 +30,14 @@ export function footerStatuslinePolicy(input: {
     return true
   }
 
-  const showModel = include(input.modelWidth)
   const showAgent = include(input.agentWidth)
   const hiddenContext = input.contextWidths.findIndex((width) => !include(width))
   const contextCount = hiddenContext === -1 ? input.contextWidths.length : hiddenContext
   const contextComplete = contextCount === input.contextWidths.length
+  const showModel = input.width >= 80 && include(input.modelWidth)
+  const providerWidth = input.providerWidth
+  const showProvider = showModel && contextComplete && providerWidth !== undefined && remaining >= providerWidth
+  if (showProvider) remaining -= providerWidth
   const variantWidth = input.variantWidth
   const showVariant = showModel && contextComplete && variantWidth !== undefined && remaining >= variantWidth
   if (showVariant) remaining -= variantWidth
@@ -48,6 +52,7 @@ export function footerStatuslinePolicy(input: {
     showAgent,
     contextCount,
     showModel,
+    showProvider,
     showVariant,
     showUsage,
   }

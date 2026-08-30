@@ -35,7 +35,7 @@ import { SUBAGENT_INSPECTOR_ROWS } from "./footer.subagent"
 import { PROMPT_MAX_ROWS, TEXTAREA_MIN_ROWS } from "./footer.prompt"
 import { RunFooterView } from "./footer.view"
 import { RunScrollbackStream } from "./scrollback.surface"
-import { RUN_THEME_FALLBACK, resolveRunTheme, type RunTheme } from "./theme"
+import { resolveRunTheme, type RunTheme } from "./theme"
 import { modelInfo } from "./variant.shared"
 import type {
   FooterApi,
@@ -330,7 +330,6 @@ export class RunFooter implements FooterApi {
               providers: footer.providers,
               currentAgent: footer.currentAgent,
               currentAgentID: footer.currentAgentID,
-              currentAgentExplicit: () => selectedAgentID() !== undefined,
               currentModel: footer.currentModel,
               variants: footer.variants,
               currentVariant: footer.currentVariant,
@@ -959,17 +958,15 @@ export class RunFooter implements FooterApi {
     return true
   }
 
-  private handlePalette = (): void => {
-    void resolveRunTheme(this.renderer, this.options.tuiConfig.theme).then((theme) => {
+  private handlePalette = (): Promise<void> | undefined => {
+    if (this.isGone || this.paletteRefreshRunning) return
+    return resolveRunTheme(this.renderer, this.options.tuiConfig.theme).then((theme) => {
       if (this.isGone) {
         theme.block.syntax?.destroy()
         return
       }
 
-      // Keep the last known good theme when a runtime OSC probe times out.
-      if (theme === RUN_THEME_FALLBACK) {
-        return
-      }
+      if (theme === this.theme()) return
 
       this.themes.push(theme)
       this.setTheme(theme)
@@ -993,7 +990,7 @@ export class RunFooter implements FooterApi {
     return false
   }
 
-  private handleThemeRefresh = (): void => {
+  private handleThemeRefresh = (): Promise<void> | undefined => {
     if (this.isGone || this.options.mono) {
       return
     }
@@ -1006,22 +1003,23 @@ export class RunFooter implements FooterApi {
     this.paletteRefreshRunning = true
     const retry = this.renderer.paletteDetectionStatus === "detecting"
     this.renderer.clearPaletteCache()
-    void this.renderer
+    return this.renderer
       .getPalette({ size: 256 })
       .catch(() => {})
-      .finally(() => {
+      .then(() => {
         this.paletteRefreshRunning = false
         if (!retry && !this.paletteRefreshQueued) {
-          return
+          // Theme files can change without a new terminal palette.
+          return this.handlePalette()
         }
 
         this.paletteRefreshQueued = false
-        this.handleThemeRefresh()
+        return this.handleThemeRefresh()
       })
   }
 
-  public refreshTheme(): void {
-    this.handleThemeRefresh()
+  public refreshTheme() {
+    return this.handleThemeRefresh()
   }
 
   private handleThemeSignal = (): void => {

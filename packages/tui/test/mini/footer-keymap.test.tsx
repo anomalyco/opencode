@@ -57,7 +57,6 @@ async function renderSubagent(interrupt: "ctrl+i" | "none") {
           providers={() => undefined}
           currentAgent={() => "Build"}
           currentAgentID={() => "build"}
-          currentAgentExplicit={() => false}
           currentModel={() => undefined}
           variants={() => []}
           currentVariant={() => undefined}

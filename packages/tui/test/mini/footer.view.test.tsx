@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
-import { BoxRenderable, RGBA, type RootRenderable } from "@opentui/core"
+import { BoxRenderable, RGBA, type CliRenderer, type RootRenderable } from "@opentui/core"
 import { testRender } from "@opentui/solid"
 import { createSignal } from "solid-js"
 import type { FormInfo } from "@opencode-ai/client/promise"
@@ -19,7 +19,7 @@ import {
 } from "../../src/mini/footer.command"
 import { RunFooterView } from "../../src/mini/footer.view"
 import { RunEntryContent } from "../../src/mini/scrollback.writer"
-import { RUN_THEME_FALLBACK, type RunTheme } from "../../src/mini/theme"
+import { RUN_THEME_FALLBACK, resolveRunTheme, type RunTheme } from "../../src/mini/theme"
 import type {
   FooterQueuedPrompt,
   FooterState,
@@ -39,8 +39,30 @@ import type {
 import { selectedCommand } from "../../src/mini/footer.prompt"
 import { RejectField } from "../../src/mini/footer.permission"
 import { createTuiResolvedConfig } from "../fixture/tui-runtime"
+import { tmpdir } from "../fixture/fixture"
 
 const tuiConfig = createTuiResolvedConfig()
+
+async function nativeLightTheme() {
+  await using tmp = await tmpdir()
+  await Bun.write(`${tmp.path}/themes/mini-native-light.json`, JSON.stringify({ version: 2, light: {} }))
+  const previous = process.env.OPENCODE_CONFIG_DIR
+  process.env.OPENCODE_CONFIG_DIR = tmp.path
+  try {
+    return await resolveRunTheme(
+      {
+        themeMode: "light",
+        getPalette: async (): ReturnType<CliRenderer["getPalette"]> => {
+          throw new Error("Palette unavailable")
+        },
+      } as CliRenderer,
+      { name: "mini-native-light" },
+    )
+  } finally {
+    if (previous === undefined) delete process.env.OPENCODE_CONFIG_DIR
+    else process.env.OPENCODE_CONFIG_DIR = previous
+  }
+}
 
 function command(input: { name: string; description: string; source?: "command" | "mcp" | "skill" }) {
   return {
@@ -160,7 +182,6 @@ async function renderFooter(
           providers={() => input.providers}
           currentAgent={() => input.currentAgent ?? "Build"}
           currentAgentID={() => input.currentAgent?.toLowerCase() ?? "build"}
-          currentAgentExplicit={() => input.currentAgent !== undefined}
           currentModel={() => input.currentModel}
           variants={() => []}
           currentVariant={() => input.currentVariant}
@@ -215,13 +236,56 @@ async function renderFooter(
   }
 }
 
-test("direct footer shows the default model without the fallback agent", async () => {
+test("direct footer leads with the active agent and default model", async () => {
   const app = await renderFooter({ state: { model: "Default model" } })
   try {
     await app.renderOnce()
     const frame = app.captureCharFrame()
-    expect(frame).toContain("Default model")
-    expect(frame).not.toContain("Build")
+    expect(
+      frame
+        .split("\n")
+        .find((line) => line.includes("Default model"))
+        ?.trimEnd(),
+    ).toBe("Build · Default model")
+    expect(frame).not.toContain("BUILD")
+  } finally {
+    app.cleanup()
+  }
+})
+
+test("direct footer describes commands and context and shows the model provider", async () => {
+  const app = await renderFooter({
+    providers: [provider()],
+    currentModel: { providerID: "opencode", modelID: "gpt-5" },
+    state: { first: true },
+  })
+  try {
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("┃ Ask anything, / for commands, @ for context…")
+    expect(app.captureCharFrame()).toContain("Build · GPT-5 opencode")
+  } finally {
+    app.cleanup()
+  }
+})
+
+test.each([56, 160])("exit confirmation replaces routine footer details at %i columns", async (width) => {
+  const app = await renderFooter({
+    width,
+    currentAgent: "Build",
+    providers: [provider()],
+    currentModel: { providerID: "opencode", modelID: "gpt-5" },
+    currentVariant: "high",
+    state: { exit: 1, usage: "12K (10%)" },
+    queuedPrompts: [{ messageID: "queued", prompt: { text: "later", parts: [] }, delivery: "queue" }],
+  })
+  try {
+    await app.renderOnce()
+    const frame = app.captureCharFrame()
+    expect(frame).toContain("Press ctrl+c again to exit")
+    for (const text of ["Build", "GPT-5", "opencode", "high", "12K", "queued", "cmd"]) expect(frame).not.toContain(text)
+    app.setState((state) => ({ ...state, exit: 0 }))
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("Build")
   } finally {
     app.cleanup()
   }
@@ -281,7 +345,7 @@ test("direct footer preserves a partial multi-field form draft across permission
 function expectPaletteList(list: BoxRenderable, selectedIndex: number) {
   expect(list.backgroundColor.toInts()).toEqual((RUN_THEME_FALLBACK.footer.shade as RGBA).toInts())
   expect((list.getChildren()[selectedIndex] as BoxRenderable).backgroundColor.toInts()).toEqual(
-    (RUN_THEME_FALLBACK.footer.selected as RGBA).toInts(),
+    (RUN_THEME_FALLBACK.footer.actionFocusedBg as RGBA).toInts(),
   )
 }
 
@@ -303,10 +367,9 @@ function footerComposerFrame(root: BoxRenderable | RootRenderable) {
 }
 
 function footerStatusline(root: BoxRenderable | RootRenderable) {
-  const status = (RUN_THEME_FALLBACK.footer.status as RGBA).toInts()
   const boxes = root.getChildren().filter((item): item is BoxRenderable => item instanceof BoxRenderable)
   for (const box of boxes) {
-    if (box.backgroundColor?.toInts().every((value, index) => value === status[index])) return box
+    if (box.id === "mini-statusline") return box
     boxes.push(...box.getChildren().filter((item): item is BoxRenderable => item instanceof BoxRenderable))
   }
   throw new Error("Footer statusline not found")
@@ -1437,7 +1500,6 @@ test("direct footer shows authoritative queued work while running", async () => 
           providers={() => undefined}
           currentAgent={() => "Build"}
           currentAgentID={() => "build"}
-          currentAgentExplicit={() => false}
           currentModel={() => ({
             providerID: "opencode",
             modelID: "a-model-name-long-enough-to-force-responsive-truncation",
@@ -1502,13 +1564,12 @@ test("direct footer shows authoritative queued work while running", async () => 
     await app.renderOnce()
     const frame = app.captureCharFrame()
     const transparent = RGBA.fromValues(0, 0, 0, 0).toInts()
-    const tinted = (RUN_THEME_FALLBACK.footer.status as RGBA).toInts()
     const statusline = footerStatusline(app.renderer.root)
     const statusItems = statusline.getChildren().filter((item): item is BoxRenderable => item instanceof BoxRenderable)
     const main = statusItems[0]
     const spinner = main.getChildren()[0]
-    const background = statusItems[2]
-    const queued = statusItems[3]
+    const background = statusItems[3]
+    const queued = statusItems[4]
     const hint = statusItems.at(-1)!
 
     expect(spinner).toBeDefined()
@@ -1519,7 +1580,7 @@ test("direct footer shows authoritative queued work while running", async () => 
     expect(frame).toContain("ctrl+p cmd")
     expect(frame).toContain("subagents · ctrl+p cmd")
     expect(frame).not.toContain("1 agent")
-    expect(statusline.backgroundColor.toInts()).toEqual(tinted)
+    expect(statusline.backgroundColor.toInts()).toEqual(transparent)
     expect(main.backgroundColor.toInts()).toEqual(transparent)
     expect(background.backgroundColor.toInts()).toEqual(transparent)
     expect(queued.backgroundColor.toInts()).toEqual(transparent)
@@ -1531,12 +1592,12 @@ test("direct footer shows authoritative queued work while running", async () => 
   }
 })
 
-test("direct footer progressively adds model details after the command hint", async () => {
+test("direct footer keeps the agent on narrow screens and adds model details on wide screens", async () => {
   for (const expected of [
-    { width: 24, agent: false, model: false, variant: false },
-    { width: 32, agent: false, model: true, variant: false },
-    { width: 40, agent: true, model: true, variant: false },
-    { width: 48, agent: true, model: true, variant: true },
+    { width: 24, agent: true, model: false, variant: false },
+    { width: 56, agent: true, model: false, variant: false },
+    { width: 80, agent: true, model: true, variant: true },
+    { width: 112, agent: true, model: true, variant: true },
   ]) {
     const app = await renderFooter({
       currentAgent: "Plan",
@@ -1554,7 +1615,7 @@ test("direct footer progressively adds model details after the command hint", as
         agent: frame.includes("Plan"),
         model: frame.includes("GPT-5"),
         variant: frame.includes("xhigh"),
-      }).toEqual({ ...expected, command: true })
+      }).toEqual({ ...expected, command: false })
     } finally {
       app.cleanup()
     }
@@ -1658,7 +1719,7 @@ test("direct footer hides the subagent hint when only completed subagents remain
     await app.renderOnce()
     const frame = app.captureCharFrame()
 
-    expect(frame).toContain("ctrl+p cmd")
+    expect(frame).toContain("Build")
     expect(frame).not.toContain("↓ subagents")
   } finally {
     app.cleanup()
@@ -1713,7 +1774,8 @@ test("direct footer omits usage when it would fill the statusline", async () => 
     const frame = app.captureCharFrame()
 
     expect(frame).toContain("esc interrupt")
-    expect(frame).toContain("GPT-5.6 SoL high")
+    expect(frame).toContain("Build")
+    expect(frame).not.toContain("GPT-5.6 SoL")
     expect(frame).toContain("ctrl+p cmd")
     expect(frame).not.toContain("8.4K")
   } finally {
@@ -1773,23 +1835,6 @@ test("direct footer hides routine activity and shows explicit notices", async ()
   }
 })
 
-test("direct footer does not label normal mode as build", async () => {
-  const app = await renderFooter()
-
-  try {
-    await app.renderOnce()
-    const statusline = app
-      .captureCharFrame()
-      .split("\n")
-      .find((line) => line.includes("cmd"))
-
-    expect(statusline).toBeDefined()
-    expect(statusline).not.toContain("BUILD")
-  } finally {
-    app.cleanup()
-  }
-})
-
 test("direct permission rejection submits through keymap return binding", async () => {
   let text = ""
   const submits: string[] = []
@@ -1836,7 +1881,9 @@ test("direct permission rejection submits through keymap return binding", async 
   }
 })
 
-test("direct model panel renders current model selector", async () => {
+test("direct model panel keeps native V2 light search and options readable on a transparent background", async () => {
+  const theme = await nativeLightTheme()
+  const background = RGBA.fromHex("#ffffff")
   const [providers] = createSignal<RunProvider[] | undefined>([
     provider(),
     { id: "openai", name: "OpenAI", models: { "gpt-5": model({ id: "gpt-5", name: "GPT-5" }) } },
@@ -1845,9 +1892,9 @@ test("direct model panel renders current model selector", async () => {
 
   const app = await testRender(
     () => (
-      <box width={100} height={RUN_COMMAND_PANEL_ROWS}>
+      <box width={100} height={RUN_COMMAND_PANEL_ROWS} backgroundColor={background}>
         <RunModelSelectBody
-          theme={() => RUN_THEME_FALLBACK.footer}
+          theme={() => theme.footer}
           providers={providers}
           current={current}
           onClose={() => {}}
@@ -1876,7 +1923,16 @@ test("direct model panel renders current model selector", async () => {
     expect(frame).not.toContain("┌")
     expect(frame).not.toContain("┃")
     expect(frame).not.toContain("Old Model")
-    expectPaletteList(list, 2)
+    expect(frame).not.toContain("▀")
+    expect(
+      boxPath(app.renderer.root, "InputRenderable")
+        ?.slice(1)
+        .every((box) => box.backgroundColor.a === 0),
+    ).toBe(true)
+    expect(list.backgroundColor.a).toBe(0)
+    expect((list.getChildren()[2] as BoxRenderable).backgroundColor.toInts()).toEqual(
+      (theme.footer.actionFocusedBg as RGBA).toInts(),
+    )
 
     "gpt-5".split("").forEach((key) => app.mockInput.pressKey(key))
     await app.renderOnce()
@@ -1885,12 +1941,50 @@ test("direct model panel renders current model selector", async () => {
     expect(search.match(/GPT-5/g)).toHaveLength(2)
     expect(search).toContain("opencode")
     expect(search).toContain("OpenAI")
+    const spans = app.captureSpans().lines.flatMap((line) => line.spans)
+    const query = spans.find((span) => span.text.includes("gpt-5"))!
+    expect(query.fg.toInts()).toEqual((theme.footer.formfieldText as RGBA).toInts())
+    expect(query.bg.toInts()).toEqual(background.toInts())
+    expect(app.renderer.getCursorState().color.toInts()).toEqual(query.fg.toInts())
+    expect(
+      spans.filter((span) => span.text.includes("GPT-5")).map((span) => [span.fg.toInts(), span.bg.toInts()]),
+    ).toEqual([
+      [(theme.footer.actionFocusedText as RGBA).toInts(), (theme.footer.actionFocusedBg as RGBA).toInts()],
+      [(theme.footer.formfieldText as RGBA).toInts(), background.toInts()],
+    ])
   } finally {
     app.renderer.destroy()
+    theme.block.syntax?.destroy()
+  }
+})
+
+test("direct permission buttons use secondary text over the native V2 light pane", async () => {
+  const theme = await nativeLightTheme()
+  const app = await renderFooter({
+    theme: () => theme,
+    height: 16,
+    view: {
+      type: "permission",
+      request: { id: "per_light", sessionID: "ses_light", action: "read", resources: ["src/index.ts"] },
+    },
+  })
+  try {
+    await app.renderOnce()
+    const spans = app.captureSpans().lines.flatMap((line) => line.spans)
+    const inactive = spans.find((span) => span.text.includes("Reject"))!
+    const selected = spans.find((span) => span.text.includes("Allow once"))!
+    expect(inactive.fg.toInts()).toEqual((theme.footer.actionSecondaryText as RGBA).toInts())
+    expect(inactive.bg.toInts()).toEqual((theme.footer.pane as RGBA).toInts())
+    expect(selected.fg.toInts()).toEqual((theme.footer.actionFocusedText as RGBA).toInts())
+    expect(selected.bg.toInts()).toEqual((theme.footer.actionFocusedBg as RGBA).toInts())
+  } finally {
+    app.cleanup()
+    theme.block.syntax?.destroy()
   }
 })
 
 test("direct agent panel shows eligible agents and marks the current agent", async () => {
+  const theme = await nativeLightTheme()
   const [agents] = createSignal<RunAgent[]>([
     { id: "build", name: "Build", description: "Build software", mode: "all", hidden: false },
     { id: "review", name: "Review", description: "Review changes", mode: "primary", hidden: false },
@@ -1904,7 +1998,7 @@ test("direct agent panel shows eligible agents and marks the current agent", asy
     () => (
       <box width={100} height={RUN_COMMAND_PANEL_ROWS}>
         <RunAgentSelectBody
-          theme={() => RUN_THEME_FALLBACK.footer}
+          theme={() => theme.footer}
           agents={agents}
           current={current}
           onClose={() => {}}
@@ -1932,8 +2026,15 @@ test("direct agent panel shows eligible agents and marks the current agent", asy
 
     app.mockInput.pressEnter()
     expect(selected).toBe("review")
+    await app.mockInput.typeText("review")
+    await app.renderOnce()
+    const query = app.captureSpans().lines[3].spans.find((span) => span.text.includes("review"))!
+    expect(query.fg.toInts()).toEqual((theme.footer.formfieldFocusedText as RGBA).toInts())
+    expect(query.bg.toInts()).toEqual((theme.footer.formfieldFocusedBg as RGBA).toInts())
+    expect(app.renderer.getCursorState().color.toInts()).toEqual(query.fg.toInts())
   } finally {
     app.renderer.destroy()
+    theme.block.syntax?.destroy()
   }
 })
 

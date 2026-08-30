@@ -14,7 +14,7 @@ export const SUBAGENT_INSPECTOR_ROWS = 14
 
 function statusColor(theme: RunFooterTheme, status: FooterSubagentTab["status"]) {
   if (status === "completed") {
-    return theme.highlight
+    return theme.success
   }
 
   if (status === "cancelled") {
@@ -25,7 +25,7 @@ function statusColor(theme: RunFooterTheme, status: FooterSubagentTab["status"])
     return theme.error
   }
 
-  return theme.highlight
+  return theme.running
 }
 
 function statusIcon(status: FooterSubagentTab["status"], mono: boolean) {

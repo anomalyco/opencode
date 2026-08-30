@@ -50,7 +50,7 @@ function buttons(
           <box
             paddingLeft={1}
             paddingRight={1}
-            backgroundColor={option === selected ? theme.highlight : transparent}
+            backgroundColor={option === selected ? theme.actionFocusedBg : transparent}
             onMouseOver={() => {
               if (!disabled) onHover(option)
             }}
@@ -59,7 +59,7 @@ function buttons(
             }}
           >
             <text
-              fg={option === selected ? theme.surface : theme.muted}
+              fg={option === selected ? theme.actionFocusedText : theme.actionSecondaryText}
               attributes={option === selected && mono ? TextAttributes.INVERSE : undefined}
             >
               {permissionLabel(option)}
@@ -108,11 +108,11 @@ export function RejectField(props: {
       wrapMode="word"
       placeholder="Tell OpenCode what to do differently"
       placeholderColor={props.theme.muted}
-      textColor={props.theme.text}
-      focusedTextColor={props.theme.text}
+      textColor={props.theme.formfieldText}
+      focusedTextColor={props.theme.formfieldFocusedText}
       backgroundColor={props.theme.surface}
-      focusedBackgroundColor={props.theme.surface}
-      cursorColor={props.theme.text}
+      focusedBackgroundColor={props.theme.formfieldFocusedBg}
+      cursorColor={props.theme.formfieldFocusedText}
       focused={!props.disabled}
       onSubmit={props.onConfirm}
       onContentChange={() => {
@@ -284,9 +284,7 @@ export function RunPermissionBody(props: {
         flexShrink={0}
       >
         <box flexDirection="row" gap={1} paddingLeft={1}>
-          <text fg={state().stage === "reject" ? props.theme.error : props.theme.warning}>
-            {props.mono ? "!" : "△"}
-          </text>
+          <text fg={props.theme.permission}>{props.mono ? "!" : "△"}</text>
           <text fg={props.theme.text}>{title()}</text>
         </box>
         <Switch>
@@ -342,7 +340,7 @@ export function RunPermissionBody(props: {
               <Show
                 when={!busy()}
                 fallback={
-                  <text fg={props.theme.muted} wrapMode="word" flexShrink={0}>
+                  <text fg={props.theme.running} wrapMode="word" flexShrink={0}>
                     Waiting for permission event...
                   </text>
                 }
@@ -477,7 +475,7 @@ export function RunPermissionBody(props: {
           <Show
             when={!busy()}
             fallback={
-              <text fg={props.theme.muted} wrapMode="word" flexShrink={0}>
+              <text fg={props.theme.running} wrapMode="word" flexShrink={0}>
                 Waiting for permission event...
               </text>
             }

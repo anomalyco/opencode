@@ -13,8 +13,10 @@ export const FOOTER_MENU_ROWS = 8
 export type RunFooterMenuItem = {
   display: string
   description?: string
+  descriptionTone?: "selection"
   category?: string
   footer?: string
+  footerTone?: "selection" | "running" | "error" | "success"
 }
 
 type RunFooterMenuRow =
@@ -215,7 +217,7 @@ export function RunFooterMenu(props: {
             return (
               <box paddingLeft={props.paddingLeft ?? 1} paddingRight={props.paddingRight ?? 1}>
                 <text
-                  fg={props.headerColor ?? props.theme().highlight}
+                  fg={props.headerColor ?? props.theme().muted}
                   attributes={TextAttributes.BOLD}
                   wrapMode="none"
                   truncate
@@ -230,17 +232,11 @@ export function RunFooterMenu(props: {
           const attributes = () =>
             active() ? TextAttributes.BOLD | (props.mono ? TextAttributes.INVERSE : 0) : undefined
           const background = () =>
-            active()
-              ? props.background
-                ? props.theme().selected
-                : props.theme().shade
-              : props.background
-                ? props.theme().shade
-                : transparent
+            active() ? props.theme().actionFocusedBg : props.background ? props.theme().shade : transparent
           return (
             <box paddingRight={0} flexDirection="row" backgroundColor={background()}>
               {border() ? (
-                <text fg={props.theme().highlight} bg={background()} wrapMode="none">
+                <text fg={props.theme().actionFocusedText} bg={background()} wrapMode="none">
                   {active() ? (props.mono ? ">" : "▌") : " "}
                 </text>
               ) : undefined}
@@ -254,7 +250,7 @@ export function RunFooterMenu(props: {
                 <box width="100%" flexDirection="row" justifyContent="space-between" gap={1}>
                   <box flexDirection="row" gap={0} flexGrow={1} flexShrink={1}>
                     <text
-                      fg={active() ? props.theme().selectedText : props.theme().text}
+                      fg={active() ? props.theme().actionFocusedText : props.theme().formfieldText}
                       attributes={attributes()}
                       wrapMode="none"
                       truncate
@@ -265,14 +261,18 @@ export function RunFooterMenu(props: {
                     {row.item.description ? (
                       <>
                         <text
-                          fg={active() ? props.theme().selectedText : props.theme().muted}
+                          fg={active() ? props.theme().actionFocusedText : props.theme().muted}
                           wrapMode="none"
                           flexShrink={0}
                         >
                           {descriptionPad(row.item)}
                         </text>
                         <text
-                          fg={active() ? props.theme().selectedText : props.theme().muted}
+                          fg={
+                            active()
+                              ? props.theme().actionFocusedText
+                              : props.theme()[row.item.descriptionTone ?? "muted"]
+                          }
                           wrapMode="none"
                           truncate
                           flexGrow={1}
@@ -285,7 +285,7 @@ export function RunFooterMenu(props: {
                   </box>
                   {row.item.footer ? (
                     <text
-                      fg={active() ? props.theme().selectedText : props.theme().muted}
+                      fg={active() ? props.theme().actionFocusedText : props.theme()[row.item.footerTone ?? "muted"]}
                       attributes={attributes()}
                       wrapMode="none"
                       truncate

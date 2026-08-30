@@ -259,7 +259,7 @@ export function RunFormBody(props: {
     <box width="100%" height="100%" flexDirection="column" backgroundColor={props.theme.surface}>
       <box flexDirection="column" gap={1} paddingLeft={2} paddingRight={3} paddingTop={1} flexGrow={1} flexShrink={1}>
         <box flexDirection="row" gap={1} flexShrink={0}>
-          <text fg={unsupported() ? props.theme.warning : props.theme.highlight}>{props.mono ? "*" : "◆"}</text>
+          <text fg={unsupported() ? props.theme.warning : props.theme.question}>{props.mono ? "*" : "◆"}</text>
           <text fg={props.theme.text}>{props.request.title}</text>
           <Show when={!unsupported() && !formSingle(props.request)}>
             <text fg={props.theme.muted}>
@@ -284,10 +284,10 @@ export function RunFormBody(props: {
           {(field) => (
             <box flexDirection="column" gap={1}>
               <text fg={props.theme.text}>{field().description ?? formLabel(field())}</text>
-              <text fg={props.theme.highlight} wrapMode="word">
+              <text fg={props.theme.link} wrapMode="word">
                 {field().url}
               </text>
-              <text fg={props.theme.muted}>
+              <text fg={state().answers[field().key] === true ? props.theme.selection : props.theme.muted}>
                 {state().answers[field().key] === true
                   ? "Acknowledged"
                   : state().externalReady[field().key]
@@ -315,11 +315,11 @@ export function RunFormBody(props: {
                 initialValue={formInput(state(), current())}
                 placeholder={formPlaceholder(answerField())}
                 placeholderColor={props.theme.muted}
-                textColor={props.theme.text}
-                focusedTextColor={props.theme.text}
+                textColor={props.theme.formfieldText}
+                focusedTextColor={props.theme.formfieldFocusedText}
                 backgroundColor={props.theme.surface}
-                focusedBackgroundColor={props.theme.surface}
-                cursorColor={props.theme.text}
+                focusedBackgroundColor={props.theme.formfieldFocusedBg}
+                cursorColor={props.theme.formfieldFocusedText}
                 focused
                 onSubmit={commitInput}
                 onContentChange={() => {
@@ -351,15 +351,18 @@ export function RunFormBody(props: {
                         flexDirection="row"
                         gap={1}
                         onMouseOver={() => setState((previous) => formSetSelected(previous, index()))}
+                        backgroundColor={active() ? props.theme.formfieldFocusedBg : "transparent"}
                         onMouseUp={() => choose(index())}
                       >
-                        <text fg={active() ? props.theme.highlight : props.theme.muted}>
+                        <text fg={active() ? props.theme.formfieldFocusedText : props.theme.formfieldText}>
                           {props.mono ? `${active() ? ">" : " "}${index() + 1}.` : `${index() + 1}.`}
                         </text>
-                        <text fg={active() ? props.theme.text : props.theme.muted}>
-                          {multiple() ? `[${picked() ? "x" : " "}] ` : ""}
+                        <text fg={active() ? props.theme.formfieldFocusedText : props.theme.formfieldText}>
+                          <span style={{ fg: picked() ? props.theme.selection : undefined }}>
+                            {multiple() ? `[${picked() ? "x" : " "}] ` : ""}
+                          </span>
                           {row.label}
-                          {!multiple() && picked() ? " *" : ""}
+                          <span style={{ fg: props.theme.selection }}>{!multiple() && picked() ? " *" : ""}</span>
                         </text>
                         <Show when={row.description}>
                           <text fg={props.theme.muted}>{row.description}</text>
@@ -369,13 +372,32 @@ export function RunFormBody(props: {
                   }}
                 </For>
                 <Show when={custom()}>
-                  <box flexDirection="row" gap={1} onMouseUp={() => choose(rows().length)}>
-                    <text fg={state().selected === rows().length ? props.theme.highlight : props.theme.muted}>
+                  <box
+                    flexDirection="row"
+                    gap={1}
+                    backgroundColor={
+                      state().selected === rows().length ? props.theme.formfieldFocusedBg : "transparent"
+                    }
+                    onMouseUp={() => choose(rows().length)}
+                  >
+                    <text
+                      fg={
+                        state().selected === rows().length
+                          ? props.theme.formfieldFocusedText
+                          : props.theme.formfieldText
+                      }
+                    >
                       {props.mono
                         ? `${state().selected === rows().length ? ">" : " "}${rows().length + 1}.`
                         : `${rows().length + 1}.`}
                     </text>
-                    <text fg={state().selected === rows().length ? props.theme.text : props.theme.muted}>
+                    <text
+                      fg={
+                        state().selected === rows().length
+                          ? props.theme.formfieldFocusedText
+                          : props.theme.formfieldText
+                      }
+                    >
                       Type your own answer
                     </text>
                   </box>
@@ -409,7 +431,7 @@ export function RunFormBody(props: {
         paddingBottom={1}
         flexShrink={0}
       >
-        <text fg={props.theme.muted}>
+        <text fg={state().submitting ? props.theme.running : props.theme.muted}>
           {state().submitting
             ? "submitting..."
             : unsupported()

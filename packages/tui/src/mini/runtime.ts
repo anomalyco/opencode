@@ -480,11 +480,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
         footer.event({ type: "history", history: resumed.history })
         footer.event({ type: "first", first: resumed.first })
         if (footer.isClosed || runtimeController.signal.aborted) return
-        await shell.resetForReplay({
-          sessionTitle: state.sessionTitle,
-          sessionID: state.sessionID,
-          history: state.history,
-        })
+        await shell.resetForReplay()
       })
       .catch((error) => {
         if (footer.isClosed || runtimeController.signal.aborted) return
@@ -848,12 +844,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
         .then((item) =>
           item.handle.replayOnResize({
             localRows: () => state.localRows,
-            reset: () =>
-              shell.resetForReplay({
-                sessionTitle: state.sessionTitle,
-                sessionID: state.sessionID,
-                history: state.history,
-              }),
+            reset: () => shell.resetForReplay(),
           }),
         )
         .catch(() => {})

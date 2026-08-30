@@ -44,6 +44,7 @@ import type {
   RunReference,
   RunTuiConfig,
 } from "./types"
+import { EmptyBorder } from "../ui/border"
 
 const AUTOCOMPLETE_ROWS = FOOTER_MENU_ROWS
 const AUTOCOMPLETE_BOTTOM_ROWS = 1
@@ -118,6 +119,7 @@ export type PromptState = {
   openEditor: (input?: { value?: string }) => Promise<void>
   onKeyDown: (event: KeyEvent) => void
   onContentChange: () => void
+  onSizeChange: () => void
   replacePrompt: (prompt: RunPrompt) => void
   bind: (area?: TextareaRenderable) => void
 }
@@ -177,11 +179,14 @@ export function selectedCommand(text: string, command: RunPrompt["command"]) {
 export function RunPromptBody(props: {
   theme: () => RunFooterTheme
   background: () => ColorInput
+  rail: () => ColorInput
+  mono: boolean
   cursorStyle: RunTuiConfig["cursor"]
   placeholder: () => StyledText | string
   onSubmit: () => void
   onKeyDown: (event: KeyEvent) => void
   onContentChange: () => void
+  onSizeChange: () => void
   bind: (area?: TextareaRenderable) => void
 }) {
   const renderer = useRenderer()
@@ -227,8 +232,15 @@ export function RunPromptBody(props: {
   })
 
   return (
-    <box width="100%">
-      <box paddingTop={1} paddingBottom={1} paddingRight={2}>
+    <box width="100%" paddingTop={1} paddingBottom={1}>
+      <box
+        border={["left"]}
+        borderColor={props.rail()}
+        customBorderChars={{ ...EmptyBorder, vertical: props.mono ? "|" : "┃" }}
+        paddingLeft={1}
+        paddingRight={2}
+        onSizeChange={props.onSizeChange}
+      >
         <textarea
           width="100%"
           minHeight={TEXTAREA_MIN_ROWS}
@@ -268,7 +280,9 @@ export function createPromptState(input: PromptInput): PromptState {
       return ""
     }
 
-    return new StyledText([fg(input.theme().muted)('Ask anything... "Fix a TODO in the codebase"')])
+    return new StyledText([
+      fg(input.theme().muted)(`Ask anything, / for commands, @ for context${input.mono() ? "..." : "…"}`),
+    ])
   })
 
   let history = createPromptHistory(input.history?.())
@@ -1372,6 +1386,7 @@ export function createPromptState(input: PromptInput): PromptState {
       refresh()
       scheduleRows()
     },
+    onSizeChange: scheduleRows,
     replacePrompt: restore,
     bind,
   }
