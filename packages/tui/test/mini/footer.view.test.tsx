@@ -1,6 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
 import { BoxRenderable, RGBA, type CliRenderer, type RootRenderable } from "@opentui/core"
+import { createTestRenderer } from "@opentui/core/testing"
 import { testRender } from "@opentui/solid"
 import { createSignal } from "solid-js"
 import type { FormInfo } from "@opencode-ai/client/promise"
@@ -18,6 +19,7 @@ import {
   RunVariantSelectBody,
 } from "../../src/mini/footer.command"
 import { RunFooterView } from "../../src/mini/footer.view"
+import { RunFooter } from "../../src/mini/footer"
 import { RunEntryContent } from "../../src/mini/scrollback.writer"
 import { RUN_THEME_FALLBACK, resolveRunTheme, type RunTheme } from "../../src/mini/theme"
 import type {
@@ -246,7 +248,7 @@ test("direct footer leads with the active agent and default model", async () => 
         .split("\n")
         .find((line) => line.includes("Default model"))
         ?.trimEnd(),
-    ).toBe("Build · Default model")
+    ).toBe("Build · Default model · ctrl+p cmd")
     expect(frame).not.toContain("BUILD")
   } finally {
     app.cleanup()
@@ -501,6 +503,43 @@ test("run entry content preserves monochrome markdown grammar", async () => {
   }
 })
 
+test("run entry content toggles unchanged live markdown between color and monochrome", async () => {
+  const [mono, setMono] = createSignal(false)
+  const commit: StreamCommit = {
+    kind: "assistant",
+    text: "Active Café → …",
+    phase: "progress",
+    source: "assistant",
+    messageID: "msg-1",
+    partID: "part-1",
+  }
+  const app = await testRender(
+    () => (
+      <box width={60} height={4}>
+        <RunEntryContent commit={commit} theme={RUN_THEME_FALLBACK} opts={{ mono: mono() }} />
+      </box>
+    ),
+    { width: 60, height: 4 },
+  )
+
+  try {
+    await app.renderOnce()
+    const color = app.captureCharFrame()
+    expect(color).toContain("Active Café → …")
+
+    setMono(true)
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("Active Caf? -> ...")
+    expect(app.captureCharFrame()).not.toMatch(/[^\x00-\x7f]/)
+
+    setMono(false)
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toBe(color)
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 test("run entry content eagerly renders final monochrome markdown", async () => {
   const app = await testRender(
     () => (
@@ -566,7 +605,7 @@ test("direct command panel renders grouped actions without catalog commands", as
     ),
     {
       width: 100,
-      height: RUN_COMMAND_PANEL_ROWS,
+      height: RUN_COMMAND_PANEL_ROWS + 1,
     },
   )
 
@@ -914,7 +953,7 @@ test("direct subagent panel toggles between active and inactive subagents", asyn
     ),
     {
       width: 100,
-      height: RUN_SUBAGENT_PANEL_ROWS,
+      height: RUN_SUBAGENT_PANEL_ROWS + 1,
     },
   )
 
@@ -1471,133 +1510,42 @@ test.skip("direct footer clears the synthetic skills draft when the panel closes
 })
 
 test("direct footer shows authoritative queued work while running", async () => {
-  const [state] = createSignal<FooterState>({
-    phase: "running",
-    status: "",
-    notice: "",
-    model: "gpt-5",
-    usage: "",
-    first: false,
-    interrupt: 0,
-    exit: 0,
-  })
-  const [view] = createSignal<FooterView>({ type: "prompt" })
-  const [subagents] = createSignal<FooterSubagentState>({
-    tabs: [subagent({ sessionID: "s-1", label: "Explore", description: "Inspect auth flow" })],
-    details: {},
-    permissions: [],
-    forms: [],
-  })
-  function Harness() {
-    return (
-      <Keymap.Provider config={tuiConfig}>
-        <RunFooterView
-          directory={() => "/tmp"}
-          findFiles={async () => []}
-          agents={() => []}
-          references={() => []}
-          commands={() => []}
-          providers={() => undefined}
-          currentAgent={() => "Build"}
-          currentAgentID={() => "build"}
-          currentModel={() => ({
-            providerID: "opencode",
-            modelID: "a-model-name-long-enough-to-force-responsive-truncation",
-          })}
-          variants={() => []}
-          currentVariant={() => undefined}
-          state={state}
-          view={view}
-          subagent={subagents}
-          queuedPrompts={() => [
-            {
-              messageID: "m-queued",
-              prompt: { text: "follow up", parts: [] },
-              delivery: "queue",
-            },
-          ]}
-          theme={() => RUN_THEME_FALLBACK}
-          tuiConfig={tuiConfig}
-          miniSettings={() => ({
-            thinking: "hide",
-            shell_output: "hide",
-            turn_summary: "show",
-            footer: "show",
-            splash: "show",
-            mono: false,
-          })}
-          mono={false}
-          onSubmit={() => true}
-          onPermissionReply={() => {}}
-          onFormReply={() => {}}
-          onFormCancel={() => {}}
-          onCycle={() => {}}
-          onInterrupt={() => false}
-          onEditorOpen={async () => undefined}
-          onInputClear={() => {}}
-          onExit={() => {}}
-          onAgentSelect={() => {}}
-          onModelSelect={() => {}}
-          onVariantSelect={() => {}}
-          onRows={() => {}}
-          onLayout={() => {}}
-          onStatus={() => {}}
-          onMiniSettingChange={() => {}}
-        />
-      </Keymap.Provider>
-    )
-  }
-
-  const app = await testRender(
-    () => (
-      <box width={160} height={8}>
-        <Harness />
-      </box>
-    ),
-    {
-      width: 160,
-      height: 8,
+  const app = await renderFooter({
+    width: 160,
+    state: { phase: "running" },
+    currentModel: { providerID: "opencode", modelID: "a-model-name-long-enough-to-force-responsive-truncation" },
+    subagents: {
+      tabs: [subagent({ sessionID: "s-1", label: "Explore", description: "Inspect auth flow" })],
+      details: {},
+      permissions: [],
+      forms: [],
     },
-  )
+    queuedPrompts: [{ messageID: "m-queued", prompt: { text: "follow up", parts: [] }, delivery: "queue" }],
+  })
 
   try {
     await app.renderOnce()
     const frame = app.captureCharFrame()
     const transparent = RGBA.fromValues(0, 0, 0, 0).toInts()
     const statusline = footerStatusline(app.renderer.root)
-    const statusItems = statusline.getChildren().filter((item): item is BoxRenderable => item instanceof BoxRenderable)
-    const main = statusItems[0]
-    const spinner = main.getChildren()[0]
-    const background = statusItems[3]
-    const queued = statusItems[4]
-    const hint = statusItems.at(-1)!
-
-    expect(spinner).toBeDefined()
-    expect(frame).toContain("1 queued")
-    expect(frame).toContain("ctrl+b background")
-    expect(frame).toContain("ctrl+x q 1 queued")
-    expect(frame).toContain("↓ subagents")
-    expect(frame).toContain("ctrl+p cmd")
-    expect(frame).toContain("subagents · ctrl+p cmd")
+    expect(frame).toContain("ctrl+x q 1 queued · ↓ 1 subagent · ctrl+b background · ctrl+p cmd")
     expect(frame).not.toContain("1 agent")
     expect(statusline.backgroundColor.toInts()).toEqual(transparent)
-    expect(main.backgroundColor.toInts()).toEqual(transparent)
-    expect(background.backgroundColor.toInts()).toEqual(transparent)
-    expect(queued.backgroundColor.toInts()).toEqual(transparent)
-    expect(hint.backgroundColor.toInts()).toEqual(transparent)
   } finally {
-    app.renderer.currentFocusedRenderable?.blur()
-    app.renderer.currentFocusedEditor?.blur()
-    app.renderer.destroy()
+    app.cleanup()
   }
 })
 
-test("direct footer keeps the agent on narrow screens and adds model details on wide screens", async () => {
+test("direct footer fits whole identity and commands without a model breakpoint", async () => {
   for (const expected of [
-    { width: 24, agent: true, model: false, variant: false },
-    { width: 56, agent: true, model: false, variant: false },
-    { width: 80, agent: true, model: true, variant: true },
-    { width: 112, agent: true, model: true, variant: true },
+    { width: 16, agent: true, model: true, variant: false, command: false },
+    { width: 20, agent: true, model: true, variant: true, command: false },
+    { width: 24, agent: true, model: true, variant: true, command: false },
+    { width: 32, agent: true, model: true, variant: true, command: true },
+    { width: 40, agent: true, model: true, variant: true, command: true },
+    { width: 56, agent: true, model: true, variant: true, command: true },
+    { width: 80, agent: true, model: true, variant: true, command: true },
+    { width: 112, agent: true, model: true, variant: true, command: true },
   ]) {
     const app = await renderFooter({
       currentAgent: "Plan",
@@ -1615,10 +1563,248 @@ test("direct footer keeps the agent on narrow screens and adds model details on 
         agent: frame.includes("Plan"),
         model: frame.includes("GPT-5"),
         variant: frame.includes("xhigh"),
-      }).toEqual({ ...expected, command: false })
+      }).toEqual(expected)
+      expect(footerStatusline(app.renderer.root).height).toBe(1)
     } finally {
       app.cleanup()
     }
+  }
+})
+
+test.each([16, 20, 24, 32, 40, 56, 80, 112])(
+  "status takeovers retain complete instructions at %i columns",
+  async (width) => {
+    for (const mono of [false, true]) {
+      const app = await renderFooter({
+        width,
+        mono,
+        currentVariant: "high",
+        providers: [provider()],
+        currentModel: { providerID: "opencode", modelID: "gpt-5" },
+        state: { exit: 1, usage: "12K (10%)" },
+        queuedPrompts: [{ messageID: "queued", prompt: { text: "later", parts: [] }, delivery: "queue" }],
+      })
+      try {
+        for (const state of [
+          { phase: "idle" as const, exit: 1, interrupt: 0, notice: "", key: "ctrl+c", action: "exit" },
+          { phase: "running" as const, exit: 0, interrupt: 1, notice: "", key: "esc", action: "" },
+          { phase: "running" as const, exit: 0, interrupt: 0, notice: "failed to save settings", key: "", action: "" },
+        ]) {
+          app.setState((previous) => ({ ...previous, ...state }))
+          await app.renderOnce()
+          await app.renderOnce()
+          const statusline = footerStatusline(app.renderer.root)
+          const text = app
+            .captureCharFrame()
+            .split("\n")
+            .slice(statusline.y, statusline.y + statusline.height)
+            .map((line) => line.trim())
+            .join(" ")
+          if (state.notice) expect(text).toBe(state.notice)
+          if (state.key) {
+            expect(text).toContain(state.key)
+            expect(text).toMatch(state.action ? /exit/ : /stop|interrupt/)
+            expect(statusline.height).toBe(1)
+          }
+          for (const value of ["Build", "GPT-5", "opencode", "high", "12K", "queued", "cmd", "..."])
+            expect(text).not.toContain(value)
+          expect(boxPath(statusline, "SpinnerRenderable")).toBeUndefined()
+        }
+      } finally {
+        app.cleanup()
+      }
+    }
+  },
+)
+
+test.each([16, 20, 24, 32, 40, 56, 80, 112])(
+  "running status and optional values stay whole at %i columns",
+  async (width) => {
+    for (const field of ["agent", "model", "provider"] as const) {
+      const long = `long-${field}-`.repeat(20)
+      const app = await renderFooter({
+        width,
+        currentAgent: field === "agent" ? long : "Build",
+        currentVariant: "high",
+        currentModel: { providerID: "opencode", modelID: "gpt-5" },
+        providers: [
+          {
+            ...provider(),
+            name: field === "provider" ? long : "opencode",
+            models: { "gpt-5": model({ id: "gpt-5", name: field === "model" ? long : "GPT-5" }) },
+          },
+        ],
+        state: { phase: "running" },
+      })
+      try {
+        await app.renderOnce()
+        const frame = app.captureCharFrame()
+        expect(frame).toContain(width < 56 ? "esc stop" : "esc interrupt")
+        expect(frame).not.toContain(`long-${field}`)
+        expect(frame).not.toContain("...")
+        expect(footerStatusline(app.renderer.root).height).toBe(1)
+      } finally {
+        app.cleanup()
+      }
+    }
+  },
+)
+
+test.each([8, 12])("production footer grows for wrapped instructions in %i rows", async (height) => {
+  const app = await createTestRenderer({ width: 16, height, screenMode: "split-footer", footerHeight: 4 })
+  const footer = new RunFooter(app.renderer, {
+    directory: () => "/project",
+    findFiles: async () => [],
+    agents: [{ id: "build", name: "Build", mode: "primary", hidden: false }],
+    references: [],
+    agent: "build",
+    modelLabel: "GPT-5",
+    model: undefined,
+    variant: undefined,
+    first: false,
+    theme: RUN_THEME_FALLBACK,
+    tuiConfig: createTuiResolvedConfig({ keybinds: { "prompt.clear": "ctrl+shift+alt+x" } }),
+    miniSettings: {
+      current: {
+        thinking: "hide",
+        shell_output: "hide",
+        turn_summary: "show",
+        footer: "show",
+        splash: "show",
+        mono: false,
+      },
+    },
+    onPermissionReply: () => {},
+    onFormReply: () => {},
+    onFormCancel: () => {},
+    onEditorOpen: async () => undefined,
+    subscribeThemeSignal: () => () => {},
+  })
+  try {
+    await app.renderOnce()
+    const initial = app.renderer.footerHeight
+    footer.requestExit()
+    await app.renderOnce()
+    await app.renderOnce()
+    expect(app.renderer.footerHeight).toBe(initial + 1)
+    expect(app.captureCharFrame()).toContain("ctrl+shift+alt+x")
+    expect(app.captureCharFrame()).toContain("exit")
+    expect(app.captureCharFrame()).not.toContain("GPT-5")
+    footer.event({ type: "stream.patch", patch: { exit: 0, notice: "failed to save settings" } })
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("settings")
+    footer.event({ type: "stream.patch", patch: { notice: "" } })
+    await app.renderOnce()
+    expect(app.renderer.footerHeight).toBe(initial)
+  } finally {
+    footer.destroy()
+    app.renderer.destroy()
+  }
+})
+
+test("shorter context hints survive an oversized configured shortcut", async () => {
+  const app = await renderFooter({
+    width: 32,
+    tuiConfig: createTuiResolvedConfig({ keybinds: { "session.queued_prompts": "ctrl+shift+alt+q" } }),
+    queuedPrompts: [{ messageID: "queued", prompt: { text: "later", parts: [] }, delivery: "queue" }],
+    subagents: {
+      tabs: [subagent({ sessionID: "s-1", label: "Explore", description: "Inspect" })],
+      details: {},
+      permissions: [],
+      forms: [],
+    },
+    state: { phase: "running" },
+  })
+  try {
+    await app.renderOnce()
+    const frame = app.captureCharFrame()
+    expect(frame).toContain("esc stop · ↓ 1 sub · ctrl+b bg")
+    expect(frame).not.toContain("queued")
+    expect(frame).not.toContain("Build")
+    expect(frame).not.toContain("cmd")
+  } finally {
+    app.cleanup()
+  }
+})
+
+test.each(["ctrl+i", "none"])("takeovers preserve configured shortcuts with hidden details (%s)", async (key) => {
+  const app = await renderFooter({
+    width: 16,
+    tuiConfig: createTuiResolvedConfig({
+      keybinds: { "session.interrupt": key, "prompt.clear": key, "command.palette.show": "none" },
+    }),
+    state: { phase: "running", interrupt: 1 },
+    miniSettings: {
+      thinking: "hide",
+      shell_output: "hide",
+      turn_summary: "show",
+      footer: "hide",
+      splash: "show",
+      mono: false,
+    },
+  })
+  try {
+    for (const exit of [0, 1]) {
+      app.setState((state) => ({ ...state, exit }))
+      await app.renderOnce()
+      const frame = app.captureCharFrame()
+      expect(frame).toContain(
+        key === "none" ? (exit ? "Exit pending" : "Stop pending") : `${key} ${exit ? "exit" : "stop"}`,
+      )
+      for (const hidden of ["ctrl+c", "esc", "cmd", "Build", "gpt-5"]) expect(frame).not.toContain(hidden)
+    }
+  } finally {
+    app.cleanup()
+  }
+})
+
+test.each(["ctrl+g", "none"])("context actions use only configured bindings (%s)", async (queued) => {
+  const app = await renderFooter({
+    width: 40,
+    tuiConfig: createTuiResolvedConfig({
+      keybinds: {
+        "session.interrupt": "ctrl+i",
+        "session.queued_prompts": queued,
+        "session.child.first": "ctrl+j",
+        "session.background": "none",
+        "command.palette.show": "ctrl+y",
+      },
+    }),
+    queuedPrompts: [{ messageID: "queued", prompt: { text: "later", parts: [] }, delivery: "queue" }],
+    subagents: {
+      tabs: [subagent({ sessionID: "s-1", label: "Explore", description: "Inspect" })],
+      details: {},
+      permissions: [],
+      forms: [],
+    },
+    state: { phase: "running" },
+  })
+  try {
+    await app.renderOnce()
+    const frame = app.captureCharFrame()
+    expect(frame).toContain(
+      queued === "none" ? "ctrl+i stop · ctrl+j 1 sub · ctrl+y cmd" : "ctrl+i stop · ctrl+g 1 queued",
+    )
+    for (const hidden of ["ctrl+b", "ctrl+x", "ctrl+p", "esc", "↓"]) expect(frame).not.toContain(hidden)
+  } finally {
+    app.cleanup()
+  }
+})
+
+test("variant and usage precede a provider even when the provider alone would fit", async () => {
+  const app = await renderFooter({
+    width: 56,
+    providers: [{ ...provider(), name: "Long provider display name" }],
+    currentModel: { providerID: "opencode", modelID: "gpt-5" },
+    currentVariant: "high",
+    state: { usage: "12K (10%)" },
+  })
+  try {
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("Build · GPT-5 high · ctrl+p cmd · 12K (10%)")
+    expect(app.captureCharFrame()).not.toContain("Long provider")
+  } finally {
+    app.cleanup()
   }
 })
 
@@ -1645,7 +1831,7 @@ test("direct footer keeps commands and active work ahead of usage under width pr
 
     expect(frame).toContain("Plan")
     expect(frame).toContain("ctrl+b background")
-    expect(frame).toContain("↓ subagents")
+    expect(frame).toContain("↓ 1 subagent")
     expect(frame).toContain("ctrl+p cmd")
     expect(frame).not.toContain("a-model-name")
     expect(frame).not.toContain("159.6K")
@@ -1655,12 +1841,13 @@ test("direct footer keeps commands and active work ahead of usage under width pr
   }
 })
 
-test("direct footer keeps the command hint at its minimum width", async () => {
+test("direct footer keeps the stop action before commands at minimum width", async () => {
   const app = await renderFooter({ state: { phase: "running" }, width: 10 })
 
   try {
     await app.renderOnce()
-    expect(app.captureCharFrame()).toContain("ctrl+p cmd")
+    expect(app.captureCharFrame()).toContain("esc stop")
+    expect(app.captureCharFrame()).not.toContain("cmd")
   } finally {
     app.cleanup()
   }
@@ -1675,7 +1862,8 @@ test("direct footer keeps complete status text ahead of the spinner", async () =
 
   try {
     await app.renderOnce()
-    expect(app.captureCharFrame()).toContain("interrupt")
+    expect(app.captureCharFrame()).toContain("Running")
+    expect(app.captureCharFrame()).not.toContain("interrupt")
     expect(boxPath(footerStatusline(app.renderer.root), "SpinnerRenderable")).toBeUndefined()
   } finally {
     app.cleanup()
@@ -1697,7 +1885,7 @@ test("direct footer always offers backgrounding for a foreground subagent", asyn
     await app.renderOnce()
     const frame = app.captureCharFrame()
 
-    expect(frame).toContain("ctrl+b background · ↓ subagents · ctrl+p cmd")
+    expect(frame).toContain("↓ 1 subagent · ctrl+b background · ctrl+p cmd")
     expect(frame).not.toContain("queued")
   } finally {
     app.cleanup()
@@ -1720,7 +1908,7 @@ test("direct footer hides the subagent hint when only completed subagents remain
     const frame = app.captureCharFrame()
 
     expect(frame).toContain("Build")
-    expect(frame).not.toContain("↓ subagents")
+    expect(frame).not.toContain("subagents")
   } finally {
     app.cleanup()
   }
@@ -1736,9 +1924,10 @@ test("direct footer omits interrupt key hint when interrupt is unbound", async (
   try {
     await app.renderOnce()
     const frame = app.captureCharFrame()
-    const statusline = frame.split("\n").find((line) => line.includes("interrupt"))
+    const statusline = frame.split("\n").find((line) => line.includes("Running"))
 
-    expect(frame).toContain("interrupt")
+    expect(frame).toContain("Running")
+    expect(frame).not.toContain("interrupt")
     expect(frame).not.toContain("ctrl+l")
     expect(statusline).toMatch(/^\S/)
   } finally {
@@ -1761,7 +1950,7 @@ test("direct footer shows full usage metadata when room is available", async () 
   }
 })
 
-test("direct footer omits usage when it would fill the statusline", async () => {
+test("direct footer keeps model and variant when usage does not fit", async () => {
   const app = await renderFooter({
     state: { phase: "running", model: "GPT-5.6 SoL", usage: "8.4K (1%) · $0.01" },
     currentVariant: "high",
@@ -1775,7 +1964,7 @@ test("direct footer omits usage when it would fill the statusline", async () => 
 
     expect(frame).toContain("esc interrupt")
     expect(frame).toContain("Build")
-    expect(frame).not.toContain("GPT-5.6 SoL")
+    expect(frame).toContain("GPT-5.6 SoL high")
     expect(frame).toContain("ctrl+p cmd")
     expect(frame).not.toContain("8.4K")
   } finally {
@@ -1904,7 +2093,7 @@ test("direct model panel keeps native V2 light search and options readable on a 
     ),
     {
       width: 100,
-      height: RUN_COMMAND_PANEL_ROWS,
+      height: RUN_COMMAND_PANEL_ROWS + 1,
     },
   )
 
@@ -2028,7 +2217,7 @@ test("direct agent panel shows eligible agents and marks the current agent", asy
     expect(selected).toBe("review")
     await app.mockInput.typeText("review")
     await app.renderOnce()
-    const query = app.captureSpans().lines[3].spans.find((span) => span.text.includes("review"))!
+    const query = app.captureSpans().lines[app.renderer.currentFocusedRenderable!.y].spans.find((span) => span.text.includes("review"))!
     expect(query.fg.toInts()).toEqual((theme.footer.formfieldFocusedText as RGBA).toInts())
     expect(query.bg.toInts()).toEqual((theme.footer.formfieldFocusedBg as RGBA).toInts())
     expect(app.renderer.getCursorState().color.toInts()).toEqual(query.fg.toInts())

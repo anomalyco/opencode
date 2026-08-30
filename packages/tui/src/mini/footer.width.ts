@@ -6,11 +6,10 @@ export function footerWidthPolicy(width: number) {
   }
 }
 
-const USAGE_HEADROOM = 8
-
 export function footerStatuslinePolicy(input: {
   width: number
   mainWidth: number
+  running?: boolean
   commandWidth?: number
   agentWidth?: number
   contextWidths: number[]
@@ -18,42 +17,41 @@ export function footerStatuslinePolicy(input: {
   providerWidth?: number
   variantWidth?: number
   usageWidth?: number
+  spinnerWidth?: number
 }) {
-  let remaining = input.width - input.mainWidth - (input.commandWidth ?? 0)
-  let hasSection = input.commandWidth !== undefined
-  const include = (width: number | undefined, headroom = 0) => {
+  let remaining = input.width - input.mainWidth
+  let hasSection = input.mainWidth > 0
+  const include = (width: number | undefined, gap = 3) => {
     if (width === undefined) return false
-    const required = width + (hasSection ? 3 : 1)
-    if (remaining < required + headroom) return false
+    const required = width + (hasSection ? gap : 0)
+    if (remaining < required) return false
     remaining -= required
     hasSection = true
     return true
   }
 
-  const showAgent = include(input.agentWidth)
-  const hiddenContext = input.contextWidths.findIndex((width) => !include(width))
-  const contextCount = hiddenContext === -1 ? input.contextWidths.length : hiddenContext
-  const contextComplete = contextCount === input.contextWidths.length
-  const showModel = input.width >= 80 && include(input.modelWidth)
-  const providerWidth = input.providerWidth
-  const showProvider = showModel && contextComplete && providerWidth !== undefined && remaining >= providerWidth
-  if (showProvider) remaining -= providerWidth
-  const variantWidth = input.variantWidth
-  const showVariant = showModel && contextComplete && variantWidth !== undefined && remaining >= variantWidth
-  if (showVariant) remaining -= variantWidth
-  const showUsage =
-    (showModel || input.modelWidth === undefined) &&
-    (showAgent || input.agentWidth === undefined) &&
-    contextComplete &&
-    (showVariant || input.variantWidth === undefined) &&
-    include(input.usageWidth, USAGE_HEADROOM)
-
-  return {
-    showAgent,
-    contextCount,
-    showModel,
-    showProvider,
-    showVariant,
-    showUsage,
+  const result = {
+    showAgent: false,
+    showModel: false,
+    showVariant: false,
+    context: [] as boolean[],
+    showCommand: false,
+    showUsage: false,
+    showProvider: false,
+    showSpinner: false,
   }
+  const identity = () => {
+    result.showAgent = include(input.agentWidth)
+    result.showModel = include(input.modelWidth)
+    result.showVariant = result.showModel && include(input.variantWidth, 1)
+  }
+
+  if (!input.running) identity()
+  result.context = input.contextWidths.map((width) => include(width))
+  result.showCommand = include(input.commandWidth)
+  if (input.running) identity()
+  result.showUsage = include(input.usageWidth)
+  result.showProvider = result.showModel && include(input.providerWidth, 1)
+  result.showSpinner = include(input.spinnerWidth, 1)
+  return result
 }

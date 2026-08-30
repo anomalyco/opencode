@@ -8,7 +8,8 @@
 // All state comes from the parent RunFooter through SolidJS signals.
 // The view itself is stateless except for derived memos.
 /** @jsxImportSource @opentui/solid */
-import { useTerminalDimensions } from "@opentui/solid"
+import { useRenderer, useTerminalDimensions } from "@opentui/solid"
+import { TextBuffer, TextBufferView, type ColorInput } from "@opentui/core"
 import { For, Match, Show, Switch, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import { registerOpencodeSpinner } from "../component/register-spinner"
 import { createColors, createFrames } from "../ui/spinner"
@@ -121,6 +122,7 @@ type RunFooterViewProps = {
 }
 
 export function RunFooterView(props: RunFooterViewProps) {
+  const renderer = useRenderer()
   const term = useTerminalDimensions()
   const width = createMemo(() => term().width)
   const active = createMemo<FooterView>(() => props.view?.() ?? { type: "prompt" })
@@ -200,7 +202,8 @@ export function RunFooterView(props: RunFooterViewProps) {
   const armed = createMemo(() => props.state().interrupt > 0)
   const exiting = createMemo(() => props.state().exit > 0)
   const usage = createMemo(() => props.state().usage)
-  const footerDetails = createMemo(() => props.miniSettings().footer === "show" && !exiting())
+  const takeover = createMemo(() => exiting() || (busy() && armed()) || !!props.state().notice.trim())
+  const footerDetails = createMemo(() => props.miniSettings().footer === "show" && !takeover())
   const interruptLabel = createMemo(() => {
     if (!interrupt()) {
       return
@@ -370,6 +373,7 @@ export function RunFooterView(props: RunFooterViewProps) {
 
     openTab(next.sessionID)
   }
+  const [promptRows, setPromptRows] = createSignal(1)
   const composer = createPromptState({
     directory: props.directory,
     findFiles: props.findFiles,
@@ -380,6 +384,7 @@ export function RunFooterView(props: RunFooterViewProps) {
     view: promptView,
     prompt,
     width,
+    statusRows: () => (menu() ? 0 : statusRows()),
     theme,
     mono: () => props.mono,
     history: props.history,
@@ -394,49 +399,46 @@ export function RunFooterView(props: RunFooterViewProps) {
     onExit: props.onExit,
     onSkillMenu: openSkillMenu,
     onSettings: openSettings,
-    onRows: props.onRows,
+    onRows: setPromptRows,
     onStatus: props.onStatus,
   })
   const shell = createMemo(() => prompt() && composer.shell())
   const menu = createMemo(() => prompt() && composer.visible())
   const stateStatus = createMemo(() => props.state().status.trim())
   const notice = createMemo(() => props.state().notice.trim())
-  const modeLabel = createMemo(() => {
-    if (exiting()) {
-      return "EXIT"
-    }
-
-    return shell() ? "SHELL" : undefined
-  })
-  const modeColor = createMemo(() => {
-    if (exiting()) {
-      return theme().error
-    }
-
-    if (shell()) {
-      return theme().formfieldFocusedText
-    }
-
-    return theme().text
-  })
   const statusText = createMemo(() => {
-    if (exiting()) {
-      return `Press ${clearShortcut() || "ctrl+c"} again to exit`
+    if (exiting() || (busy() && armed())) {
+      const key = exiting() ? clearShortcut() : interruptLabel()
+      const action = exiting() ? "exit" : "stop"
+      if (!key) return exiting() ? "Exit pending" : "Stop pending"
+      const phrases = [
+        `Press ${key} again to ${exiting() ? "exit" : "interrupt"}`,
+        `${key} again to ${exiting() ? "exit" : "interrupt"}`,
+        `${key} again: ${action}`,
+        `${key} ${action}`,
+      ]
+      return phrases.find((text) => stringWidth(text) <= width()) ?? phrases[phrases.length - 1]!
     }
-
-    if (busy() && armed()) return "again to interrupt"
 
     if (notice()) return notice()
-
-    if (!footerDetails()) return shell() ? "Shell mode" : ""
-
-    if (busy()) return "interrupt"
-
-    if (stateStatus().length > 0) {
-      return stateStatus()
+    if (!footerDetails()) return shell() ? "Shell" : ""
+    if (busy()) {
+      return interruptLabel() ? `${interruptLabel()} ${width() < 56 ? "stop" : "interrupt"}` : "Running"
     }
-
-    return shell() ? "Shell mode" : ""
+    return stateStatus() || (shell() ? "Shell" : "")
+  })
+  const statusRows = createMemo(() => {
+    if (stringWidth(statusText()) <= width() && !statusText().includes("\n")) return 1
+    // Measure outside the clipped footer so wrapped notices can grow it.
+    const buffer = TextBuffer.create(renderer.widthMethod)
+    const view = TextBufferView.create(buffer)
+    buffer.setText(statusText())
+    view.setWrapMode("word")
+    view.setWrapWidth(Math.max(1, width()))
+    const rows = Math.max(1, view.getVirtualLineCount())
+    view.destroy()
+    buffer.destroy()
+    return rows
   })
   const activityMeta = createMemo(() => {
     if (!footerDetails()) return ""
@@ -476,74 +478,78 @@ export function RunFooterView(props: RunFooterViewProps) {
     }
 
     const items: Array<{ key: string; label: string }> = []
-    if (foregroundSubagents() && backgroundShortcut()) {
-      items.push({ key: backgroundShortcut(), label: "background" })
-    }
     if (queue().length > 0 && queuedShortcut()) {
       items.push({ key: queuedShortcut(), label: `${queue().length} queued` })
     }
     if (activeTabs().length > 0 && subagentShortcut()) {
-      items.push({ key: subagentShortcut(), label: "subagents" })
+      items.push({
+        key: subagentShortcut(),
+        label:
+          width() < 80
+            ? `${activeTabs().length} sub`
+            : `${activeTabs().length} subagent${activeTabs().length === 1 ? "" : "s"}`,
+      })
+    }
+    if (foregroundSubagents() && backgroundShortcut()) {
+      items.push({ key: backgroundShortcut(), label: width() < 80 ? "bg" : "background" })
     }
     return items
   })
   const commandHint = createMemo(() => {
-    if (!prompt() || exiting()) return
+    if (!prompt() || takeover()) return
 
     if (shell()) {
       return { key: "esc", label: "normal" }
     }
 
-    if (command() && (!footerDetails() || busy() || statusText() || contextHintCandidates().length > 0)) {
+    if (command()) {
       return { key: command(), label: "cmd" }
     }
-  })
-  const commandHintWidth = createMemo(() => {
-    const hint = commandHint()
-    return hint ? stringWidth(`${hint.key} ${hint.label}`) : 0
-  })
-  const statuslineText = createMemo(() =>
-    busy() && !exiting() && (footerDetails() || armed())
-      ? `${interruptLabel() ? `${interruptLabel()} ` : ""}${statusText()}`
-      : statusText(),
-  )
-  const statuslineMainWidth = createMemo(() => {
-    if (!statuslineText() && !(footerDetails() && busy())) return 0
-    const mode = modeLabel()
-    const modeWidth = mode ? stringWidth(mode) + (props.mono ? 1 : 2) : 0
-    const spinnerWidth = footerDetails() && busy() && !exiting() ? stringWidth(spin().frames[0] ?? "") + 1 : 0
-    return modeWidth + Math.max(12, (props.mono ? 1 : 2) + spinnerWidth + stringWidth(statuslineText()))
-  })
-  const visibleModeLabel = createMemo(() => {
-    const mode = modeLabel()
-    if (!mode || width() - commandHintWidth() < stringWidth(mode) + (props.mono ? 1 : 2)) return undefined
-    return mode
-  })
-  const statuslineMainAvailable = createMemo(() => {
-    const mode = visibleModeLabel()
-    return width() - commandHintWidth() - (mode ? stringWidth(mode) + (props.mono ? 1 : 2) : 0)
   })
   const statuslineLayout = createMemo(() => {
     const agent = agentStatus()
     const info = modelStatus()
+    const hint = commandHint()
     return footerStatuslinePolicy({
       width: width(),
-      mainWidth: statuslineMainWidth(),
-      commandWidth: commandHint() ? commandHintWidth() : undefined,
+      mainWidth: stringWidth(statusText()),
+      running: busy(),
+      commandWidth: hint ? stringWidth(`${hint.key} ${hint.label}`) : undefined,
       agentWidth: agent ? stringWidth(agent) : undefined,
       contextWidths: contextHintCandidates().map((item) => stringWidth(`${item.key} ${item.label}`)),
       modelWidth: info ? stringWidth(info.model) : undefined,
-      providerWidth: info?.provider ? stringWidth(` ${info.provider}`) : undefined,
-      variantWidth: info?.variant ? stringWidth(` ${info.variant}`) : undefined,
+      providerWidth: info?.provider ? stringWidth(info.provider) : undefined,
+      variantWidth: info?.variant ? stringWidth(info.variant) : undefined,
       usageWidth: activityMeta() ? stringWidth(activityMeta()) : undefined,
+      spinnerWidth: footerDetails() && busy() ? stringWidth(spin().frames[0] ?? "") : undefined,
     })
   })
-  const contextHints = createMemo(() => contextHintCandidates().slice(0, statuslineLayout().contextCount))
-  const hasStatuslineInfo = createMemo(() => {
+  const statusSections = createMemo(() => {
     const layout = statuslineLayout()
-    return layout.showUsage || layout.showAgent || layout.showModel
+    const info = modelStatus()
+    const identity: Array<Array<{ text: string; fg: ColorInput }>> = []
+    if (layout.showAgent) identity.push([{ text: agentStatus()!, fg: agentColor() }])
+    if (layout.showModel && info) {
+      identity.push([
+        { text: info.model, fg: theme().text },
+        ...(layout.showVariant ? [{ text: ` ${info.variant}`, fg: theme().variant }] : []),
+        ...(layout.showProvider ? [{ text: ` ${info.provider}`, fg: theme().muted }] : []),
+      ])
+    }
+    const hints = contextHintCandidates().filter((_, index) => layout.context[index])
+    if (layout.showCommand) hints.push(commandHint()!)
+    const actions = hints.map((hint) => [
+      { text: hint.key, fg: theme().text },
+      { text: ` ${hint.label}`, fg: theme().muted },
+    ])
+    return [
+      ...(busy() ? [...actions, ...identity] : [...identity, ...actions]),
+      ...(layout.showUsage ? [[{ text: activityMeta(), fg: theme().muted }]] : []),
+    ]
   })
-  const sectionSeparator = () => <span style={{ fg: theme().muted }}>{props.mono ? "- " : "· "}</span>
+  createEffect(() => {
+    props.onRows(promptRows() + (!panel() && !menu() && !inspecting() ? statusRows() : 0) - 1)
+  })
 
   createEffect(() => {
     props.onRequestExit?.(composer.requestExit)
@@ -950,126 +956,29 @@ export function RunFooterView(props: RunFooterViewProps) {
               <box
                 id="mini-statusline"
                 width="100%"
-                height={1}
                 flexDirection="row"
-                gap={0}
+                gap={1}
                 flexShrink={0}
                 backgroundColor="transparent"
               >
-                <Show when={visibleModeLabel()}>
-                  {(label) => (
-                    <box
-                      paddingLeft={props.mono ? 0 : 1}
-                      paddingRight={1}
-                      backgroundColor={theme().statusAccent}
-                      flexShrink={0}
-                    >
-                      <text wrapMode="none" truncate>
-                        <span style={{ fg: modeColor(), bold: true }}>{label()}</span>
-                      </text>
-                    </box>
-                  )}
-                </Show>
-
-                <Show when={statuslineText() || (footerDetails() && busy())}>
-                  <box
-                    flexDirection="row"
-                    gap={1}
-                    flexGrow={1}
-                    flexShrink={1}
-                    minWidth={0}
-                    paddingLeft={statuslineMainAvailable() >= 2 && !props.mono ? 1 : 0}
-                    paddingRight={statuslineMainAvailable() >= (props.mono ? 1 : 2) ? 1 : 0}
-                    backgroundColor="transparent"
-                    overflow="hidden"
-                  >
-                    <Show
-                      when={
-                        footerDetails() &&
-                        busy() &&
-                        !exiting() &&
-                        statuslineMainAvailable() >=
-                          (props.mono ? 1 : 2) + stringWidth(spin().frames[0] ?? "") + 1 + stringWidth(statuslineText())
-                      }
-                    >
-                      <box flexShrink={0}>
-                        <spinner color={spin().color} frames={spin().frames} interval={40} />
-                      </box>
-                    </Show>
-
-                    <text fg={statusColor()} wrapMode="none" truncate flexGrow={1} flexShrink={1}>
-                      <Show when={busy() && !exiting() && (footerDetails() || armed())} fallback={statusText()}>
-                        <Show when={interruptLabel()}>
-                          {(label) => <span style={{ fg: armed() ? statusColor() : theme().muted }}>{label()} </span>}
-                        </Show>
-                        {statusText()}
-                      </Show>
-                    </text>
+                <Show when={statuslineLayout().showSpinner}>
+                  <box flexShrink={0}>
+                    <spinner color={spin().color} frames={spin().frames} interval={40} />
                   </box>
                 </Show>
-
-                <Show when={statuslineLayout().showAgent && agentStatus()}>
-                  {(agent) => (
-                    <box paddingRight={1} backgroundColor="transparent" flexShrink={0}>
-                      <text fg={agentColor()} wrapMode="none">
-                        {agent()}
-                      </text>
-                    </box>
-                  )}
-                </Show>
-
-                <Show when={statuslineLayout().showModel && modelStatus()}>
-                  {(info) => (
-                    <box paddingRight={1} backgroundColor="transparent" flexShrink={0}>
-                      <text fg={theme().text} wrapMode="none">
-                        <Show when={statuslineLayout().showAgent}>{sectionSeparator()}</Show>
-                        {info().model}
-                        <Show when={statuslineLayout().showProvider && info().provider}>
-                          {(provider) => <span style={{ fg: theme().muted }}> {provider()}</span>}
+                <text fg={statusColor()} wrapMode="word" flexGrow={1} flexShrink={1} height={statusRows()}>
+                  {statusText()}
+                  <For each={statusSections()}>
+                    {(section, index) => (
+                      <>
+                        <Show when={statusText() || index() > 0}>
+                          <span style={{ fg: theme().muted }}>{props.mono ? " - " : " · "}</span>
                         </Show>
-                        <Show when={statuslineLayout().showVariant && info().variant}>
-                          {(variant) => <span style={{ fg: theme().variant }}> {variant()}</span>}
-                        </Show>
-                      </text>
-                    </box>
-                  )}
-                </Show>
-
-                <Show when={statuslineLayout().showUsage && activityMeta()}>
-                  {(usage) => (
-                    <box paddingRight={1} backgroundColor="transparent" flexShrink={0}>
-                      <text fg={theme().muted} wrapMode="none">
-                        <Show when={statuslineLayout().showAgent || statuslineLayout().showModel}>
-                          {sectionSeparator()}
-                        </Show>
-                        {usage()}
-                      </text>
-                    </box>
-                  )}
-                </Show>
-
-                <For each={contextHints()}>
-                  {(hint, index) => (
-                    <box paddingRight={1} backgroundColor="transparent" flexShrink={0}>
-                      <text fg={theme().text} wrapMode="none">
-                        <Show when={index() > 0 || (hasStatuslineInfo() && index() === 0)}>{sectionSeparator()}</Show>
-                        <span style={{ fg: theme().text }}>{hint.key}</span>{" "}
-                        <span style={{ fg: theme().muted }}>{hint.label}</span>
-                      </text>
-                    </box>
-                  )}
-                </For>
-                <Show when={commandHint()}>
-                  {(hint) => (
-                    <box backgroundColor="transparent" flexShrink={0}>
-                      <text fg={theme().text} wrapMode="none">
-                        <Show when={hasStatuslineInfo() || contextHints().length > 0}>{sectionSeparator()}</Show>
-                        <span style={{ fg: theme().text }}>{hint().key}</span>{" "}
-                        <span style={{ fg: theme().muted }}>{hint().label}</span>
-                      </text>
-                    </box>
-                  )}
-                </Show>
+                        <For each={section}>{(part) => <span style={{ fg: part.fg }}>{part.text}</span>}</For>
+                      </>
+                    )}
+                  </For>
+                </text>
               </box>
             </Show>
           </box>

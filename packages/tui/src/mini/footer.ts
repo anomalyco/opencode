@@ -24,16 +24,17 @@
 // Ctrl-c clears a live prompt draft first; otherwise interrupt and exit use a
 // two-press pattern where the first press shows a hint and the second press
 // within 5 seconds actually fires the action.
-import { CliRenderEvents, type CliRenderer } from "@opentui/core"
+import { CliRenderEvents, type CliRenderer, type CliRendererExternalOutputEvent } from "@opentui/core"
 import { render } from "@opentui/solid"
-import { createComponent, createSignal, type Accessor, type Setter } from "solid-js"
+import { batch, createComponent, createSignal, type Accessor, type Setter } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { Keymap } from "../context/keymap"
 import { Locale } from "../util/locale"
-import { RUN_COMMAND_PANEL_ROWS, RUN_SUBAGENT_PANEL_ROWS } from "./footer.command"
+import { RUN_SUBAGENT_PANEL_ROWS, footerPanelLayout } from "./footer.command"
 import { SUBAGENT_INSPECTOR_ROWS } from "./footer.subagent"
-import { PROMPT_MAX_ROWS, TEXTAREA_MIN_ROWS } from "./footer.prompt"
+import { TEXTAREA_MIN_ROWS, footerPromptLayout } from "./footer.prompt"
 import { RunFooterView } from "./footer.view"
+import { monoSnapshot } from "./mono"
 import { RunScrollbackStream } from "./scrollback.surface"
 import { resolveRunTheme, type RunTheme } from "./theme"
 import { modelInfo } from "./variant.shared"
@@ -82,12 +83,12 @@ type RunFooterOptions = {
   first: boolean
   history?: RunPrompt[]
   theme: RunTheme
-  mono: boolean
   tuiConfig: RunTuiConfig
   miniSettings: {
     current: MiniSettings
     update?: (change: MiniSettingChange) => Promise<MiniSettings>
   }
+  onMonoChange?: (mono: boolean) => void
   onPermissionReply: (input: PermissionReply) => void | Promise<void>
   onFormReply: (input: FormReply) => void | Promise<void>
   onFormCancel: (input: FormCancel) => void | Promise<void>
@@ -225,7 +226,7 @@ export class RunFooter implements FooterApi {
           .finally(() => this.destroyTheme(theme))
       },
       shellOutput: () => this.miniSettings().shell_output === "show",
-      mono: this.options.mono,
+      mono: this.miniSettings().mono,
     })
   }
 
@@ -304,12 +305,12 @@ export class RunFooter implements FooterApi {
     this.scrollback = this.createScrollback(options.wrote ?? false)
 
     this.renderer.on(CliRenderEvents.DESTROY, this.handleDestroy)
-    if (!options.mono) {
-      this.renderer.on(CliRenderEvents.PALETTE, this.handlePalette)
-      this.renderer.on(CliRenderEvents.THEME_MODE, this.handleThemeRefresh)
-      this.renderer.prependInputHandler(this.handleThemeNotification)
-      this.unsubscribeThemeSignal = options.subscribeThemeSignal(this.handleThemeSignal)
-    }
+    this.renderer.on(CliRenderEvents.RESIZE, this.handleResize)
+    this.renderer.on(CliRenderEvents.EXTERNAL_OUTPUT, this.handleExternalOutput)
+    this.renderer.on(CliRenderEvents.PALETTE, this.handlePalette)
+    this.renderer.on(CliRenderEvents.THEME_MODE, this.handleThemeRefresh)
+    this.renderer.prependInputHandler(this.handleThemeNotification)
+    this.unsubscribeThemeSignal = options.subscribeThemeSignal(this.handleThemeSignal)
 
     const footer = this
     void render(
@@ -335,7 +336,9 @@ export class RunFooter implements FooterApi {
               currentVariant: footer.currentVariant,
               theme: footer.theme,
               tuiConfig: options.tuiConfig,
-              mono: options.mono,
+              get mono() {
+                return footer.miniSettings().mono
+              },
               miniSettings: footer.miniSettings,
               history: footer.history,
               onSubmit: footer.handlePrompt,
@@ -692,23 +695,31 @@ export class RunFooter implements FooterApi {
     this.patch({ interrupt: 0, exit: 0 })
   }
 
-  // Resizes the footer to fit the current view. Permission and form views
-  // get fixed extra rows; the prompt view scales with textarea line count.
+  private handleResize = (): void => {
+    if (!this.isGone) this.applyHeight()
+  }
+
   private applyHeight(): void {
     const type = this.view().type
     const route = this.promptRoute.type
-    const height =
+    const panel = footerPanelLayout(this.renderer.terminalHeight)
+    const prompt = footerPromptLayout(this.renderer.terminalHeight)
+    const desired =
       type === "permission"
         ? this.base + PERMISSION_ROWS
         : type === "form"
           ? this.base + FORM_ROWS
           : ["command", "skill", "agent", "model", "variant", "settings"].includes(route)
-            ? 1 + RUN_COMMAND_PANEL_ROWS
+            ? 1 + panel.frame + panel.limit
             : route === "queued-menu" || route === "subagent-menu"
               ? 1 + this.subagentMenuRows
               : route === "subagent"
                 ? this.base + SUBAGENT_INSPECTOR_ROWS
-                : this.base + Math.max(TEXTAREA_MIN_ROWS, Math.min(PROMPT_MAX_ROWS, this.rows))
+                : prompt.padding * 2 + 1 + this.rows
+    const height = Math.max(
+      1,
+      Math.min(desired, this.renderer.terminalHeight - (type === "prompt" && route === "composer" ? 1 : 0)),
+    )
 
     if (height !== this.renderer.footerHeight) {
       this.renderer.footerHeight = height
@@ -720,7 +731,7 @@ export class RunFooter implements FooterApi {
       return
     }
 
-    const rows = Math.max(TEXTAREA_MIN_ROWS, Math.min(PROMPT_MAX_ROWS, value))
+    const rows = Math.max(TEXTAREA_MIN_ROWS, value)
     if (rows === this.rows) {
       return
     }
@@ -860,8 +871,29 @@ export class RunFooter implements FooterApi {
     }
 
     try {
-      this.setMiniSettings(await this.options.miniSettings.update(change))
-      this.setNotice(change.key === "mono" ? "Mono applies after restart" : "settings updated")
+      const settings = await this.options.miniSettings.update(change)
+      if (this.isClosed) return
+      if (settings.mono === this.miniSettings().mono) {
+        this.setMiniSettings(settings)
+        this.setNotice("settings updated")
+        return
+      }
+      const theme = await resolveRunTheme(this.renderer, this.options.tuiConfig.theme, settings.mono)
+      this.flush()
+      this.flushing = this.flushing.then(async () => {
+        if (this.isClosed) {
+          theme.block.syntax?.destroy()
+          return
+        }
+        await this.scrollback.setMono(settings.mono)
+        batch(() => {
+          this.setMiniSettings(settings)
+          this.applyTheme(theme)
+          this.options.onMonoChange?.(settings.mono)
+        })
+      })
+      await this.flushing
+      this.setNotice("settings updated")
     } catch (error) {
       this.setNotice("failed to save settings")
       throw error
@@ -958,24 +990,34 @@ export class RunFooter implements FooterApi {
     return true
   }
 
+  private applyTheme(theme: RunTheme): void {
+    if (theme === this.theme()) return
+    this.themes.push(theme)
+    this.setTheme(theme)
+    this.renderer.setBackgroundColor(theme.background)
+    this.scrollback.setTheme(theme)
+  }
+
+  private handleExternalOutput = (event: CliRendererExternalOutputEvent): void => {
+    if (this.miniSettings().mono) monoSnapshot(event)
+  }
+
   private handlePalette = (): Promise<void> | undefined => {
     if (this.isGone || this.paletteRefreshRunning) return
-    return resolveRunTheme(this.renderer, this.options.tuiConfig.theme).then((theme) => {
-      if (this.isGone) {
-        theme.block.syntax?.destroy()
-        return
-      }
-
-      if (theme === this.theme()) return
-
-      this.themes.push(theme)
-      this.setTheme(theme)
-      this.renderer.setBackgroundColor(theme.background)
+    const mono = this.miniSettings().mono
+    return resolveRunTheme(this.renderer, this.options.tuiConfig.theme, mono).then((theme) => {
       this.flushing = this.flushing
-        .then(() => this.scrollback.setTheme(theme))
+        .then(() => {
+          if (this.isGone || mono !== this.miniSettings().mono) {
+            theme.block.syntax?.destroy()
+            return
+          }
+          this.applyTheme(theme)
+        })
         .catch((error) => {
           this.flushError = error
         })
+      return this.flushing
     })
   }
 
@@ -991,9 +1033,10 @@ export class RunFooter implements FooterApi {
   }
 
   private handleThemeRefresh = (): Promise<void> | undefined => {
-    if (this.isGone || this.options.mono) {
+    if (this.isGone) {
       return
     }
+    if (this.miniSettings().mono) return this.handlePalette()
 
     if (this.paletteRefreshRunning) {
       this.paletteRefreshQueued = true
@@ -1044,6 +1087,8 @@ export class RunFooter implements FooterApi {
     this.clearExitTimer()
     this.clearNoticeTimer()
     this.renderer.off(CliRenderEvents.DESTROY, this.handleDestroy)
+    this.renderer.off(CliRenderEvents.RESIZE, this.handleResize)
+    this.renderer.off(CliRenderEvents.EXTERNAL_OUTPUT, this.handleExternalOutput)
     this.renderer.off(CliRenderEvents.PALETTE, this.handlePalette)
     this.renderer.off(CliRenderEvents.THEME_MODE, this.handleThemeRefresh)
     this.renderer.removeInputHandler(this.handleThemeNotification)

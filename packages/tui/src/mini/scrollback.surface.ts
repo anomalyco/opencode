@@ -113,6 +113,21 @@ export class RunScrollbackStream {
 
   private onThemeRelease: ((theme: RunTheme) => void) | undefined
 
+  public async setMono(mono: boolean): Promise<void> {
+    if (this.mono === mono) return
+    const active = this.active
+    if (active?.body.type !== "markdown") await this.complete()
+    this.mono = mono
+    if (active?.body.type !== "markdown") return
+
+    // Rebuild the Markdown tree, keeping its source and printed block boundary.
+    // Mono hooks are one-way, and ending the entry would lose open fence/list context.
+    const next = this.createEntry(active.commit, active.body)
+    this.active = { ...active, surface: next.surface, renderable: next.renderable }
+    active.surface.destroy()
+    this.releasePendingThemes()
+  }
+
   private releasePendingThemes(): void {
     if (this.pendingThemes.length === 0) {
       return

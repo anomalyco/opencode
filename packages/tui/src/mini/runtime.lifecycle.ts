@@ -9,7 +9,13 @@
 // Also wires SIGINT so Ctrl-c clears a live prompt draft first, then falls
 // back to the usual two-press exit sequence through RunFooter.requestExit().
 import path from "path"
-import { CliRenderEvents, createCliRenderer, type CliRenderer, type ScrollbackWriter } from "@opentui/core"
+import {
+  CliRenderEvents,
+  buildKittyKeyboardFlags,
+  createCliRenderer,
+  type CliRenderer,
+  type ScrollbackWriter,
+} from "@opentui/core"
 import { isFallbackTitle } from "@opencode-ai/util/session-title-fallback"
 import { monoSnapshot } from "./mono"
 import { entrySplash, exitSplash } from "./splash"
@@ -192,6 +198,7 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
       : undefined,
   )
   await renderer.idle().catch(() => {})
+  if (mono) renderer.off(CliRenderEvents.EXTERNAL_OUTPUT, monoSnapshot)
 
   const { RunFooter } = await footerTask
   let closed = false
@@ -210,7 +217,6 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
     first: input.first,
     history: input.history,
     theme,
-    mono,
     // The transcript always starts one row below the terminal's prior output,
     // even when the entry splash itself is hidden.
     wrote: wrote || miniSettings.splash === "hide",
@@ -218,6 +224,13 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
     miniSettings: {
       current: miniSettings,
       update: input.onMiniSettingChange,
+    },
+    onMonoChange: (mono) => {
+      if (mono) {
+        renderer.disableKittyKeyboard()
+        return
+      }
+      renderer.enableKittyKeyboard(buildKittyKeyboardFlags({ events: input.host.platform === "win32" }))
     },
     onPermissionReply: input.onPermissionReply,
     onFormReply: input.onFormReply,
@@ -306,7 +319,7 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
             title: splashTitle(next.sessionTitle ?? input.sessionTitle, next.history ?? input.history),
             session_id: sessionID,
             theme: footer.currentTheme().splash,
-            mono,
+            mono: footer.currentMiniSettings().mono,
           }),
         )
         await renderer.idle().catch(() => {})
@@ -316,7 +329,6 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
       await footer.idle().catch(() => {})
       footer.destroy()
       if (input.host.platform === "linux") renderer.setTerminalTitle("")
-      if (mono) renderer.off(CliRenderEvents.EXTERNAL_OUTPUT, monoSnapshot)
       shutdown(renderer)
       if (!wroteExit) {
         input.host.stdout.write("\n")
@@ -362,7 +374,7 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
           version: input.host.version,
           theme: footer.currentTheme().splash,
           detail: directoryLabel(input.getDirectory(), input.host.paths.home),
-          mono,
+          mono: footer.currentMiniSettings().mono,
         }),
       )
       renderer.requestRender()

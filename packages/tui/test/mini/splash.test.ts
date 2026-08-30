@@ -1,117 +1,172 @@
 import { expect, test } from "bun:test"
-import { RGBA, TextAttributes } from "@opentui/core"
+import { RGBA, TextAttributes, type ScrollbackWriter } from "@opentui/core"
 import { createTestRenderer } from "@opentui/core/testing"
 import { entrySplash, exitSplash } from "../../src/mini/splash"
-import { RUN_THEME_FALLBACK } from "../../src/mini/theme"
 import { stringWidth } from "../../src/util/string-width"
 
-const version = "local"
+const sizes = [16, 20, 24, 32, 40, 56, 80, 112].flatMap((width) => [false, true].map((mono) => ({ width, mono })))
+const preview = "1.18.4-preview.abcd1234567890"
+const marker = "▪"
+const sessionID = "ses_fac1eb1b0ffeOk15TDttH2E1Oy"
+const theme = {
+  left: RGBA.fromIndex(8, "#666666"),
+  right: RGBA.defaultForeground("#cccccc"),
+  leftShadow: RGBA.defaultBackground("#111111"),
+}
 
-test.each([false, true])("exit metadata stays readable without dim attributes (mono=%s)", async (mono) => {
-  const app = await createTestRenderer({ width: 80, height: 8 })
+async function renderSplash(writer: ScrollbackWriter, width: number) {
+  const app = await createTestRenderer({ width, height: 8, footerHeight: 4 })
   try {
-    const snapshot = exitSplash({
-      title: "Review mini layout",
-      session_id: "ses_mini",
-      theme: RUN_THEME_FALLBACK.splash,
-      mono,
-    })({ width: 80, widthMethod: app.renderer.widthMethod, tailColumn: 0, renderContext: app.renderer })
+    const snapshot = writer({
+      width,
+      widthMethod: app.renderer.widthMethod,
+      tailColumn: 0,
+      renderContext: app.renderer,
+    })
     app.renderer.root.add(snapshot.root)
     await app.renderOnce()
 
-    expect(app.captureCharFrame()).toContain("opencode mini -s ses_mini")
-    expect(
-      app
-        .captureSpans()
-        .lines.flatMap((line) => line.spans)
-        .every((span) => !(span.attributes & TextAttributes.DIM)),
-    ).toBe(true)
-    expect(snapshot.startOnNewLine).toBe(true)
-    expect(snapshot.trailingNewline).toBe(false)
-  } finally {
-    app.renderer.destroy()
-  }
-})
-
-test.each([
-  { width: 120, detail: "~/project", mono: false },
-  { width: 60, detail: "/home/simon/.cache/tmp/opencode/mini/header/samples/project", mono: false },
-  { width: 44, detail: "/home/研究/長いディレクトリ/画面/設定/mini/project", mono: false },
-  { width: 120, detail: "~/project", mono: true },
-  { width: 44, detail: "/home/simon/.cache/tmp/opencode/mini/header/samples/project", mono: true },
-])("entry header fits one line without clipping the path (%o)", async (input) => {
-  const app = await createTestRenderer({ width: input.width, height: 5 })
-  const theme = { ...RUN_THEME_FALLBACK.splash, left: RGBA.fromHex("#666666"), right: RGBA.fromHex("#cccccc") }
-  try {
-    const snapshot = entrySplash({
-      version,
-      detail: input.detail,
-      theme,
-      mono: input.mono,
-    })({ width: input.width, widthMethod: app.renderer.widthMethod, tailColumn: 0, renderContext: app.renderer })
-    app.renderer.root.add(snapshot.root)
-    await app.renderOnce()
-
-    const rows = app
+    const frame = app
       .captureCharFrame()
       .split("\n")
       .map((row) => row.trimEnd())
-    const prefix = `${input.mono ? "#" : "▪"} oc mini v${version} ${input.mono ? "-" : "·"} `
-    expect(rows[0]).toBe("")
-    expect(rows[1].startsWith(prefix)).toBe(true)
-    expect(rows[1].endsWith("/project")).toBe(true)
-    expect(stringWidth(rows[1])).toBeLessThanOrEqual(input.width)
-    expect(rows.slice(2).every((row) => row === "")).toBe(true)
-    if (stringWidth(prefix + input.detail) <= input.width) {
-      expect(rows[1]).toBe(prefix + input.detail)
-    } else {
-      expect(rows[1]).toContain(input.mono ? "..." : "…")
-      expect(rows[1]).toContain("/home/")
-    }
-    if (input.mono) expect(rows[1]).not.toMatch(/[^\x20-\x7e]/)
-
+    const rows = frame.slice(0, snapshot.height)
     const spans = app.captureSpans().lines.flatMap((line) => line.spans)
-    expect(spans.find((span) => span.text.includes("oc mini"))?.fg.toInts()).toEqual(theme.right.toInts())
-    expect(spans.find((span) => span.text.includes(`v${version}`))?.fg.toInts()).toEqual(theme.left.toInts())
-    expect(spans.every((span) => !(span.attributes & (TextAttributes.BOLD | TextAttributes.DIM)))).toBe(true)
-    expect(snapshot.height).toBe(2)
-    expect(snapshot.rowColumns).toBe(input.width)
-    expect(snapshot.startOnNewLine).toBe(true)
-    expect(snapshot.trailingNewline).toBe(false)
-  } finally {
-    app.renderer.destroy()
-  }
-})
+    expect(frame.slice(snapshot.height).every((row) => row === "")).toBe(true)
+    expect(rows[0]).toBe("")
+    expect(rows.every((row) => stringWidth(row) <= width)).toBe(true)
+    expect(spans.every((span) => !(span.attributes & TextAttributes.DIM))).toBe(true)
+    snapshot.root.destroyRecursively()
 
-test.each(["local", "1.18.4-preview.abcd123"])("entry header renders the injected version %s", async (version) => {
-  const app = await createTestRenderer({
-    width: 80,
-    height: 8,
-    screenMode: "split-footer",
-    footerHeight: 4,
-    externalOutputMode: "capture-stdout",
-  })
-  try {
-    app.renderer.writeToScrollback(
-      entrySplash({
-        version,
-        detail: "~/project",
-        theme: RUN_THEME_FALLBACK.splash,
-      }),
-    )
+    app.renderer.screenMode = "split-footer"
+    app.renderer.externalOutputMode = "capture-stdout"
+    app.renderer.writeToScrollback(writer)
     await app.renderOnce()
-
     expect(app.externalOutput.take()).toMatchObject([
       {
-        width: 80,
-        height: 2,
-        rowColumns: 80,
-        rows: ["", `▪ oc mini v${version} · ~/project`],
+        width,
+        height: snapshot.height,
+        rowColumns: width,
+        rows,
         startOnNewLine: true,
         trailingNewline: false,
       },
     ])
+    app.resize(width + 5, 8)
+    await app.renderOnce()
+    expect(app.externalOutput.take()).toEqual([])
+    return { rows, spans }
   } finally {
     app.renderer.destroy()
   }
+}
+
+test.each(
+  sizes.flatMap((size) =>
+    ["local", preview].flatMap((version) =>
+      [
+        { detail: "~/src/wt/oc-mini-v2", leaf: "oc-mini-v2" },
+        { detail: "/home/研究/長いディレクトリ/画面/設定/界e\u0301🙂", leaf: "界e\u0301🙂" },
+        {
+          detail: "~/src/project-directory-that-cannot-meaningfully-fit",
+          leaf: "project-directory-that-cannot-meaningfully-fit",
+        },
+      ].map((path) => ({ ...size, ...path, version })),
+    ),
+  ),
+)("entry discloses complete useful metadata (%o)", async (input) => {
+  const result = await renderSplash(entrySplash({ ...input, theme }), input.width)
+  const label = `${input.mono ? "[O]" : marker} oc mini`
+  const separator = ` ${input.mono ? "-" : "·"} `
+  const row = result.rows[1]
+  const path = row.split(separator)[1]
+  expect(result.rows).toHaveLength(2)
+  expect(row.startsWith(label)).toBe(true)
+  expect(["", ` v${input.version}`]).toContain(row.slice(label.length).split(separator)[0])
+  if (stringWidth(label + separator + input.leaf) <= input.width) {
+    expect(path).toBeDefined()
+    expect(path!.endsWith(input.leaf)).toBe(true)
+    const suffix = path!.replace(/^(?:…|\.\.\.)\//, "")
+    expect(path === input.detail || input.detail.endsWith("/" + suffix)).toBe(true)
+  } else {
+    expect(path).toBeUndefined()
+  }
+  if (stringWidth(label + ` v${input.version}` + separator + input.detail) <= input.width) {
+    expect(row).toBe(label + ` v${input.version}` + separator + input.detail)
+  }
+  if (input.mono) expect(row.replace(path ?? "", "")).not.toMatch(/[^\x20-\x7e]/)
+  // Foreground roles are measured in terminal cells, not code-unit offsets.
+  const labelStyle = result.spans.find((span) => span.fg.intent === "default")
+  expect(labelStyle?.width).toBe(stringWidth(label))
+  expect(labelStyle?.fg.toInts()).toEqual(theme.right.toInts())
+  const metadata = result.spans.find((span) => span.fg.intent === "indexed")
+  if (metadata) {
+    expect(metadata.fg.intent).toBe("indexed")
+    expect(metadata.fg.toInts()).toEqual(theme.left.toInts())
+  }
+  expect(result.spans.every((span) => !(span.attributes & TextAttributes.BOLD))).toBe(true)
 })
+
+test.each([
+  { width: 20, mono: false, version: "local", expected: `${marker} oc mini vlocal` },
+  { width: 20, mono: false, version: preview, expected: `${marker} oc mini` },
+  { width: 24, mono: false, version: preview, expected: `${marker} oc mini · oc-mini-v2` },
+  { width: 24, mono: true, version: preview, expected: "[O] oc mini - oc-mini-v2" },
+  { width: 32, mono: false, version: preview, expected: `${marker} oc mini · ~/src/wt/oc-mini-v2` },
+])("entry uses spare columns for the location before the version (%o)", async (input) => {
+  const result = await renderSplash(entrySplash({ ...input, detail: "~/src/wt/oc-mini-v2", theme }), input.width)
+  expect(result.rows).toEqual(["", input.expected])
+})
+
+test.each([
+  { width: 1, normal: "o", mono: "o" },
+  { width: 2, normal: "oc", mono: "oc" },
+  { width: 6, normal: "oc min", mono: "oc min" },
+  { width: 7, normal: "oc mini", mono: "oc mini" },
+  { width: 8, normal: "oc mini", mono: "oc mini" },
+  { width: 9, normal: "oc mini", mono: "oc mini" },
+  { width: 10, normal: `${marker} oc mini`, mono: "oc mini" },
+  { width: 11, normal: `${marker} oc mini`, mono: "[O] oc mini" },
+])("entry drops the marker before clipping the app name (%o)", async (input) => {
+  for (const mono of [false, true]) {
+    const result = await renderSplash(entrySplash({ version: preview, detail: "~/project", theme, mono }), input.width)
+    expect(result.rows).toEqual(["", mono ? input.mono : input.normal])
+  }
+})
+
+test.each([undefined, "", "/", "~/", "C:\\projects\\mini\\"])(
+  "entry handles absent and root locations (%s)",
+  async (detail) => {
+    const result = await renderSplash(entrySplash({ version: "local", detail, theme }), 80)
+    expect(result.rows).toEqual(["", `${marker} oc mini vlocal` + (detail ? ` · ${detail}` : "")])
+  },
+)
+
+test.each(sizes.flatMap((size) => [false, true].map((showSession) => ({ ...size, showSession }))))(
+  "exit retains the complete resume command (%o)",
+  async (input) => {
+    const result = await renderSplash(
+      exitSplash({ ...input, title: "Review mini layout", session_id: sessionID, theme }),
+      input.width,
+    )
+    const command = `opencode mini -s ${sessionID}`
+    const commandRows =
+      input.width >= 80 ? [result.rows[2].slice(result.rows[2].indexOf("opencode"))] : result.rows.slice(1)
+    const reconstructed = commandRows
+      .map((row, index) => (index < commandRows.length - 1 ? row.padEnd(input.width) : row))
+      .join("")
+    expect(reconstructed).toBe(command)
+    expect(reconstructed.slice("opencode mini -s ".length)).toBe(sessionID)
+    if (input.width >= 80) {
+      expect(result.rows[1].startsWith(input.mono ? "[O]" : "█▀▀█")).toBe(true)
+      expect(result.rows[1].includes("Session  Review mini layout")).toBe(input.showSession)
+      expect(result.rows[2]).toContain("Continue " + command)
+    } else {
+      expect(result.rows.join("\n")).not.toMatch(/Session|Continue|Review mini layout|█|\[O\]/)
+      expect(result.rows).toHaveLength(1 + Math.ceil(command.length / input.width))
+    }
+    if (input.mono) expect(result.rows.join("")).not.toMatch(/[^\x20-\x7e]/)
+    expect(result.spans.find((span) => span.text.includes("opencode"))?.fg.intent).toBe("default")
+    expect(result.spans.find((span) => span.text.includes("opencode"))?.fg.toInts()).toEqual(theme.right.toInts())
+  },
+)

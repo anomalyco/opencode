@@ -6,13 +6,12 @@
 // composer while the footer view renders any active menus below it.
 /** @jsxImportSource @opentui/solid */
 import { StyledText, fg, type ColorInput, type KeyEvent, type TextareaRenderable } from "@opentui/core"
-import { useRenderer } from "@opentui/solid"
+import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { normalizePromptContent } from "../prompt/content"
 import fuzzysort from "fuzzysort"
 import path from "path"
 import { pathToFileURL } from "node:url"
 import { createEffect, createMemo, createResource, createSignal, onCleanup, onMount, type Accessor } from "solid-js"
-import { Locale } from "../util/locale"
 import { stringWidth } from "../util/string-width"
 import {
   createPromptHistory,
@@ -30,8 +29,7 @@ import {
 import { parseFileLineRange, parseSlashHead, stripFileLineRange } from "../prompt/parse"
 import { Keymap } from "../context/keymap"
 import { realignEditorPromptParts, resolveEditorSlashValue } from "./prompt.editor"
-import { monoTruncateMiddle } from "./mono"
-import { FOOTER_MENU_ROWS, createFooterMenuState, type RunFooterMenuItem } from "./footer.menu"
+import { FOOTER_COMPACT_WIDTH, FOOTER_MENU_ROWS, createFooterMenuState, type RunFooterMenuItem } from "./footer.menu"
 import type { RunFooterTheme } from "./theme"
 import type {
   FooterQueuedPrompt,
@@ -47,11 +45,20 @@ import type {
 import { EmptyBorder } from "../ui/border"
 
 const AUTOCOMPLETE_ROWS = FOOTER_MENU_ROWS
-const AUTOCOMPLETE_BOTTOM_ROWS = 1
 
 export const TEXTAREA_MIN_ROWS = 1
 const TEXTAREA_MAX_ROWS = 6
-export const PROMPT_MAX_ROWS = TEXTAREA_MAX_ROWS + AUTOCOMPLETE_ROWS - 1 + AUTOCOMPLETE_BOTTOM_ROWS
+export const PROMPT_MAX_ROWS = TEXTAREA_MAX_ROWS + AUTOCOMPLETE_ROWS
+
+export function footerPromptLayout(height: number, lines = TEXTAREA_MIN_ROWS, options = 0, statusRows = 1) {
+  const padding = height >= PROMPT_MAX_ROWS + 4 ? 1 : 0
+  // Reserve status and, where possible, one transcript row.
+  const available = Math.max(1, height - 1 - statusRows - padding * 2)
+  const textarea = Math.max(1, Math.min(TEXTAREA_MAX_ROWS, available - (options > 0 ? 1 : 0)))
+  const rows = Math.min(textarea, Math.max(1, lines))
+  const menu = options > 0 ? Math.max(1, Math.min(AUTOCOMPLETE_ROWS, options, available - rows)) : 0
+  return { padding, textarea, menu, rows: rows + menu }
+}
 
 type Mention = Extract<RunPromptPart, { type: "file" | "agent" | "skill" }>
 
@@ -87,6 +94,7 @@ type PromptInput = {
   view: Accessor<string>
   prompt: Accessor<boolean>
   width: Accessor<number>
+  statusRows: Accessor<number>
   theme: Accessor<RunFooterTheme>
   mono: Accessor<boolean>
   history?: Accessor<RunPrompt[]>
@@ -122,10 +130,6 @@ export type PromptState = {
   onSizeChange: () => void
   replacePrompt: (prompt: RunPrompt) => void
   bind: (area?: TextareaRenderable) => void
-}
-
-function clamp(rows: number): number {
-  return Math.max(TEXTAREA_MIN_ROWS, Math.min(TEXTAREA_MAX_ROWS, rows))
 }
 
 function emptyPrompt(shell: boolean): RunPrompt {
@@ -190,6 +194,11 @@ export function RunPromptBody(props: {
   bind: (area?: TextareaRenderable) => void
 }) {
   const renderer = useRenderer()
+  const term = useTerminalDimensions()
+  const layout = createMemo(() => {
+    term()
+    return footerPromptLayout(renderer.terminalHeight)
+  })
   let area: TextareaRenderable | undefined
   let pasteTick: ReturnType<typeof setTimeout> | undefined
 
@@ -232,7 +241,7 @@ export function RunPromptBody(props: {
   })
 
   return (
-    <box width="100%" paddingTop={1} paddingBottom={1}>
+    <box width="100%" paddingTop={layout().padding} paddingBottom={layout().padding}>
       <box
         border={["left"]}
         borderColor={props.rail()}
@@ -244,7 +253,7 @@ export function RunPromptBody(props: {
         <textarea
           width="100%"
           minHeight={TEXTAREA_MIN_ROWS}
-          maxHeight={TEXTAREA_MAX_ROWS}
+          maxHeight={layout().textarea}
           wrapMode="word"
           placeholder={props.placeholder()}
           placeholderColor={props.theme().muted}
@@ -270,6 +279,10 @@ export function RunPromptBody(props: {
 }
 
 export function createPromptState(input: PromptInput): PromptState {
+  const renderer = useRenderer()
+  const term = useTerminalDimensions()
+  const [lines, setLines] = createSignal(TEXTAREA_MIN_ROWS)
+  const [statusRows, setStatusRows] = createSignal(1)
   const [shell, setShell] = createSignal(false)
   const placeholder = createMemo(() => {
     if (shell()) {
@@ -308,7 +321,7 @@ export function createPromptState(input: PromptInput): PromptState {
     draft = value ? { ...draft, mode: "shell" } : { text: draft.text, parts: structuredClone(draft.parts) }
   }
 
-  const width = createMemo(() => Math.max(20, input.width() - 8))
+  const width = createMemo(() => Math.max(0, input.width() - (input.width() < FOOTER_COMPACT_WIDTH ? 2 : 4)))
   const agents = createMemo<Auto[]>(() => {
     return input
       .agents()
@@ -331,9 +344,7 @@ export function createPromptState(input: PromptInput): PromptState {
   const references = createMemo<Auto[]>(() => {
     return input.references().map((item) => ({
       kind: "mention",
-      display: input.mono()
-        ? monoTruncateMiddle("@" + item.name, width(), true)
-        : Locale.truncateMiddle("@" + item.name, width()),
+      display: "@" + item.name,
       value: item.name,
       description: item.description ?? (item.source.type === "git" ? item.source.repository : item.source.path),
       part: {
@@ -353,7 +364,7 @@ export function createPromptState(input: PromptInput): PromptState {
       },
     }))
   })
-  const [files] = createResource(
+  const [fileResults] = createResource(
     query,
     async (value) => {
       if (!visible() || mode() !== "mention") {
@@ -375,9 +386,7 @@ export function createPromptState(input: PromptInput): PromptState {
 
         return {
           kind: "mention",
-          display: input.mono()
-            ? monoTruncateMiddle("@" + filename, width(), true)
-            : Locale.truncateMiddle("@" + filename, width()),
+          display: "@" + filename,
           value: filename,
           directory: item.endsWith("/"),
           part: {
@@ -399,6 +408,15 @@ export function createPromptState(input: PromptInput): PromptState {
       })
     },
     { initialValue: [] as Auto[] },
+  )
+  const files = createMemo(() =>
+    fileResults().map((item) => {
+      const parts = item.value.split("/")
+      const paths = parts
+        .slice(0, item.directory ? -1 : undefined)
+        .map((_, index) => "@" + parts.slice(index).join("/"))
+      return { ...item, display: paths.find((value) => stringWidth(value) <= width()) ?? paths.at(-1) ?? item.display }
+    }),
   )
   const mentionOptions = createMemo(() => [...agents(), ...files(), ...references()])
   const skillCommands = createMemo(() => (input.commands() ?? []).filter((item) => item.source === "skill"))
@@ -496,10 +514,16 @@ export function createPromptState(input: PromptInput): PromptState {
       })
       .map((item) => item.obj)
   })
-  const menu = createFooterMenuState({ count: () => options().length, limit: AUTOCOMPLETE_ROWS })
-  const popup = createMemo(() => {
-    return visible() ? menu.rows() - 1 + AUTOCOMPLETE_BOTTOM_ROWS : 0
+  const layout = createMemo(() => {
+    term()
+    return footerPromptLayout(
+      renderer.terminalHeight,
+      lines(),
+      visible() ? Math.max(1, options().length) : 0,
+      statusRows(),
+    )
   })
+  const menu = createFooterMenuState({ count: () => options().length, limit: () => Math.max(1, layout().menu) })
 
   const hide = () => {
     setMode(false)
@@ -512,7 +536,9 @@ export function createPromptState(input: PromptInput): PromptState {
       return
     }
 
-    input.onRows(clamp(Math.max(area.lineCount, area.virtualLineCount)) + popup())
+    setLines(Math.max(area.lineCount, area.virtualLineCount))
+    area.maxHeight = layout().textarea
+    input.onRows(layout().rows)
   }
 
   const scheduleRows = () => {
@@ -1319,8 +1345,12 @@ export function createPromptState(input: PromptInput): PromptState {
   })
 
   createEffect(() => {
+    setStatusRows(input.statusRows())
+  })
+
+  createEffect(() => {
     input.width()
-    popup()
+    layout()
     if (input.prompt()) {
       scheduleRows()
     }

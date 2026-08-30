@@ -6,12 +6,20 @@ import { transparent, type RunFooterTheme } from "./theme"
 import { Locale } from "../util/locale"
 import { stringWidth } from "../util/string-width"
 import { moveSelection, moveSelectionOffset, reconcileSelection, revealSelectionOffset } from "../ui/select-controller"
-import { monoTruncate } from "./mono"
 
 export const FOOTER_MENU_ROWS = 8
+export const FOOTER_COMPACT_WIDTH = 40
+
+export function footerMenuText(text: string, width: number, mono = false) {
+  if (!mono) return Locale.truncateWidth(text, width)
+  if (stringWidth(text) <= width) return text
+  const suffix = ".".repeat(Math.min(3, Math.max(0, width)))
+  return Locale.takeWidth(text, width - suffix.length) + suffix
+}
 
 export type RunFooterMenuItem = {
   display: string
+  current?: boolean
   description?: string
   descriptionTone?: "selection"
   category?: string
@@ -24,10 +32,10 @@ type RunFooterMenuRow =
   | { type: "item"; item: RunFooterMenuItem; index: number }
   | { type: "spacer" }
 
-export function createFooterMenuState(input: { count: Accessor<number>; limit?: number }) {
+export function createFooterMenuState(input: { count: Accessor<number>; limit?: number | Accessor<number> }) {
   const [selected, setSelected] = createSignal(0)
   const [offset, setOffset] = createSignal(0)
-  const limit = () => input.limit ?? FOOTER_MENU_ROWS
+  const limit = () => Math.max(1, typeof input.limit === "function" ? input.limit() : (input.limit ?? FOOTER_MENU_ROWS))
   const rows = createMemo(() => Math.max(1, Math.min(limit(), input.count())))
 
   const reveal = (index: number) => {
@@ -60,6 +68,7 @@ export function createFooterMenuState(input: { count: Accessor<number>; limit?: 
     selected,
     offset,
     rows,
+    limit,
     reveal,
     reset,
     move,
@@ -78,13 +87,17 @@ export function RunFooterMenu(props: {
   paddingLeft?: number
   paddingRight?: number
   grouped?: boolean
+  compact?: boolean
   background?: boolean
   headerColor?: ColorInput
   mono?: boolean
 }) {
   const term = useTerminalDimensions()
-  const limit = () => props.limit ?? FOOTER_MENU_ROWS
+  const limit = () => Math.max(1, Math.min(props.rows(), props.limit ?? FOOTER_MENU_ROWS))
   const border = () => props.border ?? true
+  const paddingLeft = () => Math.min(props.paddingLeft ?? 1, term().width < FOOTER_COMPACT_WIDTH ? 1 : Infinity)
+  const paddingRight = () => Math.min(props.paddingRight ?? 0, term().width < FOOTER_COMPACT_WIDTH ? 1 : Infinity)
+  const width = () => Math.max(0, term().width - (border() ? 1 : 0) - paddingLeft() - paddingRight())
   const [groupOffset, setGroupOffset] = createSignal(0)
   let previous = -1
   const groupedRows = createMemo<RunFooterMenuRow[]>(() => {
@@ -92,12 +105,12 @@ export function RunFooterMenu(props: {
     let category = ""
     props.items().forEach((item, index) => {
       if (item.category && item.category !== category) {
-        if (all.length > 0) {
+        if (all.length > 0 && !props.compact) {
           all.push({ type: "spacer" })
         }
 
         category = item.category
-        all.push({ type: "header", label: item.category })
+        if (!props.compact) all.push({ type: "header", label: item.category })
       }
 
       all.push({ type: "item", item, index })
@@ -153,34 +166,11 @@ export function RunFooterMenu(props: {
     )
     return width === 0 ? 0 : width + 2
   })
-  const descriptionPad = (item: RunFooterMenuItem) => {
-    if (!item.description) {
-      return ""
-    }
-
-    return " ".repeat(Math.max(1, descriptionColumn() - stringWidth(item.display)))
-  }
-  const descriptionText = (item: RunFooterMenuItem) => {
-    if (!item.description) {
-      return
-    }
-
-    const footerWidth = item.footer ? stringWidth(item.footer) + 1 : 0
-    const available =
-      term().width -
-      (border() ? 1 : 0) -
-      (props.paddingLeft ?? 1) -
-      (props.paddingRight ?? 0) -
-      descriptionColumn() -
-      footerWidth -
-      4
-    const width = Math.max(12, available)
-    return props.mono ? monoTruncate(item.description, width, true) : Locale.truncate(item.description, width)
-  }
   return (
     <box
       width="100%"
       height={props.rows()}
+      flexShrink={0}
       backgroundColor={props.background ? props.theme().shade : transparent}
       flexDirection="column"
     >
@@ -198,8 +188,8 @@ export function RunFooterMenu(props: {
           <box
             flexGrow={1}
             flexShrink={1}
-            paddingLeft={props.paddingLeft ?? 1}
-            paddingRight={props.paddingRight ?? 0}
+            paddingLeft={paddingLeft()}
+            paddingRight={paddingRight()}
             backgroundColor={props.background ? props.theme().shade : transparent}
           >
             <text fg={props.theme().muted} wrapMode="none" truncate>
@@ -215,7 +205,7 @@ export function RunFooterMenu(props: {
 
           if (row.type === "header") {
             return (
-              <box paddingLeft={props.paddingLeft ?? 1} paddingRight={props.paddingRight ?? 1}>
+              <box height={1} flexShrink={0} paddingLeft={paddingLeft()} paddingRight={paddingRight()}>
                 <text
                   fg={props.headerColor ?? props.theme().muted}
                   attributes={TextAttributes.BOLD}
@@ -233,8 +223,22 @@ export function RunFooterMenu(props: {
             active() ? TextAttributes.BOLD | (props.mono ? TextAttributes.INVERSE : 0) : undefined
           const background = () =>
             active() ? props.theme().actionFocusedBg : props.background ? props.theme().shade : transparent
+          const footer = () => {
+            if (!row.item.footer) return
+            const title = stringWidth(row.item.display)
+            const primary = row.item.footerTone && !(row.item.current && row.item.footerTone === "selection")
+            return (primary ? Math.min(8, title) : title) + 1 + stringWidth(row.item.footer) <= width()
+              ? row.item.footer
+              : undefined
+          }
+          const description = () => {
+            if (!row.item.description) return
+            const available = width() - descriptionColumn() - (footer() ? stringWidth(footer()!) + 1 : 0)
+            if (available < Math.min(12, stringWidth(row.item.description))) return
+            return footerMenuText(row.item.description, available, props.mono)
+          }
           return (
-            <box paddingRight={0} flexDirection="row" backgroundColor={background()}>
+            <box height={1} flexShrink={0} paddingRight={0} flexDirection="row" backgroundColor={background()}>
               {border() ? (
                 <text fg={props.theme().actionFocusedText} bg={background()} wrapMode="none">
                   {active() ? (props.mono ? ">" : "▌") : " "}
@@ -243,8 +247,8 @@ export function RunFooterMenu(props: {
               <box
                 flexGrow={1}
                 flexShrink={1}
-                paddingLeft={props.paddingLeft ?? 1}
-                paddingRight={props.paddingRight ?? 0}
+                paddingLeft={paddingLeft()}
+                paddingRight={paddingRight()}
                 backgroundColor={background()}
               >
                 <box width="100%" flexDirection="row" justifyContent="space-between" gap={1}>
@@ -253,19 +257,22 @@ export function RunFooterMenu(props: {
                       fg={active() ? props.theme().actionFocusedText : props.theme().formfieldText}
                       attributes={attributes()}
                       wrapMode="none"
-                      truncate
                       flexShrink={0}
                     >
-                      {row.item.display}
+                      {footerMenuText(
+                        row.item.display,
+                        width() - (footer() ? stringWidth(footer()!) + 1 : 0),
+                        props.mono,
+                      )}
                     </text>
-                    {row.item.description ? (
+                    {description() ? (
                       <>
                         <text
                           fg={active() ? props.theme().actionFocusedText : props.theme().muted}
                           wrapMode="none"
                           flexShrink={0}
                         >
-                          {descriptionPad(row.item)}
+                          {" ".repeat(Math.max(1, descriptionColumn() - stringWidth(row.item.display)))}
                         </text>
                         <text
                           fg={
@@ -274,24 +281,22 @@ export function RunFooterMenu(props: {
                               : props.theme()[row.item.descriptionTone ?? "muted"]
                           }
                           wrapMode="none"
-                          truncate
                           flexGrow={1}
                           flexShrink={1}
                         >
-                          {descriptionText(row.item)}
+                          {description()}
                         </text>
                       </>
                     ) : undefined}
                   </box>
-                  {row.item.footer ? (
+                  {footer() ? (
                     <text
                       fg={active() ? props.theme().actionFocusedText : props.theme()[row.item.footerTone ?? "muted"]}
                       attributes={attributes()}
                       wrapMode="none"
-                      truncate
                       flexShrink={0}
                     >
-                      {row.item.footer}
+                      {footer()}
                     </text>
                   ) : undefined}
                 </box>

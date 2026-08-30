@@ -11,7 +11,7 @@
 // The diff view (when available) uses the same diff component as scrollback
 // tool snapshots.
 /** @jsxImportSource @opentui/solid */
-import { TextAttributes, type TextareaRenderable } from "@opentui/core"
+import { TextAttributes, type ScrollBoxRenderable, type TextareaRenderable } from "@opentui/core"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import { For, Match, Show, Switch, createEffect, createMemo, createSignal } from "solid-js"
 import {
@@ -28,7 +28,7 @@ import {
   permissionShift,
   type PermissionOption,
 } from "./permission.shared"
-import { footerWidthPolicy } from "./footer.width"
+import { stringWidth } from "../util/string-width"
 import { toolFiletype } from "./tool"
 import { transparent, type RunBlockTheme, type RunFooterTheme } from "./theme"
 import type { MiniPermissionRequest, PermissionReply } from "./types"
@@ -44,10 +44,13 @@ function buttons(
   mono: boolean,
 ) {
   return (
-    <box flexDirection="row" gap={1} flexShrink={0}>
+    <box width="100%" flexDirection="row" flexWrap="wrap" columnGap={1} flexShrink={0}>
       <For each={list}>
         {(option) => (
           <box
+            width={stringWidth(permissionLabel(option)) + 2}
+            height={1}
+            flexShrink={0}
             paddingLeft={1}
             paddingRight={1}
             backgroundColor={option === selected ? theme.actionFocusedBg : transparent}
@@ -59,6 +62,7 @@ function buttons(
             }}
           >
             <text
+              wrapMode="none"
               fg={option === selected ? theme.actionFocusedText : theme.actionSecondaryText}
               attributes={option === selected && mono ? TextAttributes.INVERSE : undefined}
             >
@@ -144,10 +148,12 @@ export function RunPermissionBody(props: {
   mono?: boolean
 }) {
   const dims = useTerminalDimensions()
+  const [width, setWidth] = createSignal(dims().width)
   const [state, setState] = createSignal(createPermissionBodyState(props.request))
+  const stage = createMemo(() => state().stage)
   const info = createMemo(() => permissionInfo(props.request, props.directory?.(), props.mono))
   const ft = createMemo(() => toolFiletype(info().file))
-  const narrow = createMemo(() => footerWidthPolicy(dims().width).dialog.narrow)
+  let scroll: ScrollBoxRenderable | undefined
   const scrollbar = createMemo(() => ({
     visible: !props.mono,
     trackOptions: {
@@ -156,19 +162,19 @@ export function RunPermissionBody(props: {
     },
   }))
   const opts = createMemo(() =>
-    permissionOptions(state().stage).filter((option) => option !== "always" || (props.request.save?.length ?? 0) > 0),
+    permissionOptions(stage()).filter((option) => option !== "always" || (props.request.save?.length ?? 0) > 0),
   )
   const busy = createMemo(() => state().submitting)
   const title = createMemo(() => {
-    if (state().stage === "always") {
+    if (stage() === "always") {
       return "Always allow"
     }
 
-    if (state().stage === "reject") {
-      return "Reject permission"
+    if (stage() === "reject") {
+      return width() < 24 ? "Reject" : "Reject permission"
     }
 
-    return "Permission required"
+    return width() < 24 ? "Permission" : "Permission required"
   })
 
   createEffect(() => {
@@ -183,6 +189,12 @@ export function RunPermissionBody(props: {
   const shift = (dir: -1 | 1) => {
     setState((prev) => permissionShift(prev, dir, opts()))
   }
+
+  createEffect(() => {
+    stage()
+    props.request.id
+    if (scroll && !scroll.isDestroyed) scroll.scrollTo(0)
+  })
 
   const submit = async (next: PermissionReply) => {
     setState((prev) => ({
@@ -233,6 +245,12 @@ export function RunPermissionBody(props: {
       return
     }
 
+    if (event.name === "pageup" || event.name === "pagedown") {
+      scroll?.scrollBy(event.name === "pageup" ? -1 : 1, "viewport")
+      event.preventDefault()
+      return
+    }
+
     if (cur.submitting) {
       if (["left", "right", "h", "l", "tab", "return", "escape"].includes(event.name)) {
         event.preventDefault()
@@ -273,135 +291,126 @@ export function RunPermissionBody(props: {
   })
 
   return (
-    <box width="100%" height="100%" flexDirection="column" backgroundColor={props.theme.surface}>
-      <box
-        flexDirection="column"
-        gap={1}
-        paddingLeft={1}
-        paddingRight={2}
-        paddingTop={1}
-        paddingBottom={1}
-        flexShrink={0}
-      >
-        <box flexDirection="row" gap={1} paddingLeft={1}>
-          <text fg={props.theme.permission}>{props.mono ? "!" : "△"}</text>
-          <text fg={props.theme.text}>{title()}</text>
-        </box>
-        <Switch>
-          <Match when={state().stage === "permission"}>
-            <box flexDirection="row" gap={1} paddingLeft={2}>
-              <text fg={props.theme.muted} flexShrink={0}>
-                {info().icon}
-              </text>
-              <text fg={props.theme.text} wrapMode="word">
-                {info().title}
-              </text>
-            </box>
-          </Match>
-          <Match when={state().stage === "reject"}>
-            <box paddingLeft={1}>
-              <text fg={props.theme.muted}>Tell OpenCode what to do differently</text>
-            </box>
-          </Match>
-        </Switch>
-      </box>
+    <box
+      width="100%"
+      height="100%"
+      minHeight={0}
+      flexDirection="column"
+      backgroundColor={props.theme.surface}
+      onSizeChange={function () {
+        setWidth(this.width)
+      }}
+    >
+      <text height={1} fg={props.theme.text} wrapMode="none" truncate flexShrink={0}>
+        <span style={{ fg: props.theme.permission }}>{props.mono ? "! " : "△ "}</span>
+        {title()}
+      </text>
 
       <Show
-        when={state().stage !== "reject"}
+        when={stage() !== "reject"}
         fallback={
-          <box width="100%" flexGrow={1} flexShrink={1} justifyContent="flex-end">
-            <box
-              flexDirection={narrow() ? "column" : "row"}
-              flexShrink={0}
-              backgroundColor={props.theme.line}
-              paddingTop={1}
-              paddingLeft={2}
-              paddingRight={3}
-              paddingBottom={1}
-              justifyContent={narrow() ? "flex-start" : "space-between"}
-              alignItems={narrow() ? "flex-start" : "center"}
-              gap={1}
-            >
-              <box width={narrow() ? "100%" : undefined} flexGrow={1} flexShrink={1}>
-                <RejectField
-                  theme={props.theme}
-                  text={state().message}
-                  disabled={busy()}
-                  onChange={(text) => {
-                    setState((prev) => ({
-                      ...prev,
-                      message: text,
-                    }))
-                  }}
-                  onConfirm={reject}
-                  onCancel={cancelReject}
-                />
-              </box>
-              <Show
-                when={!busy()}
-                fallback={
-                  <text fg={props.theme.running} wrapMode="word" flexShrink={0}>
-                    Waiting for permission event...
-                  </text>
-                }
-              >
-                <box flexDirection="row" gap={2} flexShrink={0}>
-                  <text fg={props.theme.text}>
-                    enter <span style={{ fg: props.theme.muted }}>confirm</span>
-                  </text>
-                  <text fg={props.theme.text}>
-                    esc <span style={{ fg: props.theme.muted }}>cancel</span>
-                  </text>
-                </box>
-              </Show>
+          <box width="100%" flexGrow={1} minHeight={0}>
+            <box flexGrow={1} minHeight={0} justifyContent="flex-end">
+              <RejectField
+                theme={props.theme}
+                text={state().message}
+                disabled={busy()}
+                onChange={(text) => {
+                  setState((prev) => ({
+                    ...prev,
+                    message: text,
+                  }))
+                }}
+                onConfirm={reject}
+                onCancel={cancelReject}
+              />
             </box>
+            <Show
+              when={!busy()}
+              fallback={
+                <text fg={props.theme.running} height={1} wrapMode="none" truncate flexShrink={0}>
+                  Waiting...
+                </text>
+              }
+            >
+              <box flexDirection="row" flexWrap="wrap" columnGap={1} flexShrink={0}>
+                <text fg={props.theme.text} height={1} wrapMode="none" flexShrink={0}>
+                  enter <span style={{ fg: props.theme.muted }}>reject</span>
+                </text>
+                <text fg={props.theme.text} height={1} wrapMode="none" flexShrink={0}>
+                  esc <span style={{ fg: props.theme.muted }}>back</span>
+                </text>
+              </box>
+            </Show>
           </box>
         }
       >
-        <box width="100%" flexGrow={1} flexShrink={1} paddingLeft={1} paddingRight={3} paddingBottom={1}>
+        <scrollbox
+          width="100%"
+          flexGrow={1}
+          minHeight={0}
+          viewportOptions={{ paddingRight: props.mono ? 0 : 1 }}
+          verticalScrollbarOptions={scrollbar()}
+          ref={(item) => {
+            scroll = item
+          }}
+        >
           <Switch>
-            <Match when={state().stage === "permission"}>
-              <scrollbox width="100%" height="100%" verticalScrollbarOptions={scrollbar()}>
-                <box width="100%" flexDirection="column" gap={1}>
-                  <Show
-                    when={info().diff}
-                    fallback={
-                      <Show
-                        when={info().patch}
-                        fallback={
-                          <box width="100%" flexDirection="column" gap={1} paddingLeft={1}>
-                            <For each={info().lines}>
-                              {(line) => (
-                                <text fg={props.theme.text} wrapMode="word">
-                                  {line}
-                                </text>
-                              )}
-                            </For>
-                          </box>
-                        }
-                      >
-                        {(patch) => (
-                          <Show
-                            when={props.block.syntax}
-                            fallback={
-                              <text fg={props.theme.muted} wrapMode="word">
-                                {patch()}
+            <Match when={stage() === "permission"}>
+              <box width="100%" flexDirection="column" flexShrink={0}>
+                <text width="100%" fg={props.theme.text} wrapMode="word" flexShrink={0}>
+                  {info().icon} {info().title}
+                </text>
+                <Show
+                  when={info().diff}
+                  fallback={
+                    <Show
+                      when={info().patch}
+                      fallback={
+                        <box width="100%" flexDirection="column" flexShrink={0}>
+                          <For each={info().lines}>
+                            {(line) => (
+                              <text width="100%" fg={props.theme.text} wrapMode="word" flexShrink={0}>
+                                {line}
                               </text>
-                            }
-                          >
-                            {(syntax) => (
-                              <code
-                                filetype="diff"
-                                drawUnstyledText={false}
-                                streaming={true}
-                                syntaxStyle={syntax()}
-                                content={patch()}
-                                fg={props.theme.muted}
-                              />
                             )}
-                          </Show>
-                        )}
-                      </Show>
+                          </For>
+                        </box>
+                      }
+                    >
+                      {(patch) => (
+                        <Show
+                          when={props.block.syntax}
+                          fallback={
+                            <text width="100%" fg={props.theme.muted} wrapMode="word" flexShrink={0}>
+                              {patch()}
+                            </text>
+                          }
+                        >
+                          {(syntax) => (
+                            <code
+                              width="100%"
+                              flexShrink={0}
+                              wrapMode="word"
+                              filetype="diff"
+                              drawUnstyledText={false}
+                              streaming={true}
+                              syntaxStyle={syntax()}
+                              content={patch()}
+                              fg={props.theme.muted}
+                            />
+                          )}
+                        </Show>
+                      )}
+                    </Show>
+                  }
+                >
+                  <Show
+                    when={width() >= 40}
+                    fallback={
+                      <text width="100%" fg={props.theme.text} wrapMode="word" flexShrink={0}>
+                        {info().diff}
+                      </text>
                     }
                   >
                     <PatchDiff
@@ -412,6 +421,7 @@ export function RunPermissionBody(props: {
                       syntaxStyle={props.block.syntax}
                       showLineNumbers={true}
                       width="100%"
+                      flexShrink={0}
                       wrapMode="word"
                       fg={props.theme.text}
                       addedBg={props.block.diffAddedBg}
@@ -425,42 +435,29 @@ export function RunPermissionBody(props: {
                       removedLineNumberBg={props.block.diffRemovedLineNumberBg}
                     />
                   </Show>
-                  <Show when={!info().diff && !info().patch && info().lines.length === 0}>
-                    <box paddingLeft={1}>
-                      <text fg={props.theme.muted}>No diff provided</text>
-                    </box>
-                  </Show>
-                </box>
-              </scrollbox>
+                </Show>
+                <Show when={!info().diff && !info().patch && info().lines.length === 0}>
+                  <text width="100%" fg={props.theme.muted} flexShrink={0}>
+                    No diff provided
+                  </text>
+                </Show>
+              </box>
             </Match>
             <Match when={true}>
-              <scrollbox width="100%" height="100%" verticalScrollbarOptions={scrollbar()}>
-                <box width="100%" flexDirection="column" gap={1} paddingLeft={1}>
-                  <For each={permissionAlwaysLines(props.request)}>
-                    {(line) => (
-                      <text fg={props.theme.text} wrapMode="word">
-                        {line}
-                      </text>
-                    )}
-                  </For>
-                </box>
-              </scrollbox>
+              <box width="100%" flexDirection="column" flexShrink={0}>
+                <For each={permissionAlwaysLines(props.request)}>
+                  {(line) => (
+                    <text width="100%" fg={props.theme.text} wrapMode="word" flexShrink={0}>
+                      {line}
+                    </text>
+                  )}
+                </For>
+              </box>
             </Match>
           </Switch>
-        </box>
+        </scrollbox>
 
-        <box
-          flexDirection={narrow() ? "column" : "row"}
-          flexShrink={0}
-          backgroundColor={props.theme.pane}
-          gap={1}
-          paddingTop={1}
-          paddingLeft={2}
-          paddingRight={3}
-          paddingBottom={1}
-          justifyContent={narrow() ? "flex-start" : "space-between"}
-          alignItems={narrow() ? "flex-start" : "center"}
-        >
+        <box width="100%" flexDirection="column" flexShrink={0} backgroundColor={props.theme.pane}>
           {buttons(
             opts(),
             state().selected,
@@ -475,22 +472,16 @@ export function RunPermissionBody(props: {
           <Show
             when={!busy()}
             fallback={
-              <text fg={props.theme.running} wrapMode="word" flexShrink={0}>
-                Waiting for permission event...
+              <text fg={props.theme.running} height={1} wrapMode="none" truncate flexShrink={0}>
+                Waiting...
               </text>
             }
           >
-            <box flexDirection="row" gap={2} flexShrink={0}>
-              <text fg={props.theme.text}>
-                {props.mono ? "left/right" : "⇆"} <span style={{ fg: props.theme.muted }}>select</span>
+            <Show when={width() >= 56}>
+              <text fg={props.theme.muted} height={1} wrapMode="none" flexShrink={0}>
+                left/right select enter confirm pgup/pgdn scroll
               </text>
-              <text fg={props.theme.text}>
-                enter <span style={{ fg: props.theme.muted }}>confirm</span>
-              </text>
-              <text fg={props.theme.text}>
-                esc <span style={{ fg: props.theme.muted }}>{state().stage === "always" ? "cancel" : "reject"}</span>
-              </text>
-            </box>
+            </Show>
           </Show>
         </box>
       </Show>

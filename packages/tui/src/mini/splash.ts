@@ -181,32 +181,28 @@ function buildExit(input: SplashWriterInput, ctx: ScrollbackRenderContext): Scro
   const body_left = (mark[0]?.length ?? 0) + 2
   const session = "Session  "
   const label = "Continue "
+  const command = `opencode mini -s ${meta.session_id}`
+  const wide = body_left + stringWidth(label + command) <= width
+  const commandHeight = wide ? 1 : Math.ceil(stringWidth(command) / width)
 
-  for (let i = 0; i < mark.length; i += 1) {
-    draw(lines, mark[i] ?? "", {
-      left: 0,
-      top: top + i,
-      fg: left,
-      shadow: leftShadow,
-    })
+  if (wide) {
+    for (let i = 0; i < mark.length; i += 1) {
+      draw(lines, mark[i] ?? "", {
+        left: 0,
+        top: top + i,
+        fg: left,
+        shadow: leftShadow,
+      })
+    }
+
+    if (input.showSession !== false) {
+      push(lines, body_left, top, session, left)
+      push(lines, body_left + session.length, top, meta.title, right, undefined, TextAttributes.BOLD)
+    }
+    push(lines, body_left, top + 1, label, left)
   }
 
-  if (input.showSession !== false) {
-    push(lines, body_left, top, session, left)
-    push(lines, body_left + session.length, top, meta.title, right, undefined, TextAttributes.BOLD)
-  }
-
-  push(lines, body_left, top + 1, label, left)
-  push(
-    lines,
-    body_left + label.length,
-    top + 1,
-    `opencode mini -s ${meta.session_id}`,
-    right,
-    undefined,
-    TextAttributes.BOLD,
-  )
-  const height = top + Math.max(mark.length, 2)
+  const height = top + (wide ? Math.max(mark.length, 2) : commandHeight)
   const root = new BoxRenderable(ctx.renderContext, {
     position: "absolute",
     left: 0,
@@ -218,6 +214,19 @@ function buildExit(input: SplashWriterInput, ctx: ScrollbackRenderContext): Scro
   for (const line of lines) {
     write(root, ctx, line)
   }
+  root.add(
+    new TextRenderable(ctx.renderContext, {
+      position: "absolute",
+      left: wide ? body_left + label.length : 0,
+      top: wide ? top + 1 : top,
+      width: wide ? width - body_left - label.length : width,
+      height: commandHeight,
+      wrapMode: "char",
+      content: command,
+      fg: right,
+      attributes: TextAttributes.BOLD,
+    }),
+  )
 
   return {
     root,
@@ -244,25 +253,25 @@ export function entrySplash(input: {
 }): ScrollbackWriter {
   return (ctx) => {
     const width = Math.max(1, ctx.width)
-    const label = `${input.mono ? "#" : "▪"} oc mini`
-    const metadata = ` v${input.version}${input.detail ? ` ${input.mono ? "-" : "·"} ` : ""}`
-    const available = Math.max(0, width - stringWidth(label + metadata))
+    const marked = `${input.mono ? "[O]" : "▪"} oc mini`
+    const label = stringWidth(marked) <= width ? marked : Locale.takeWidth("oc mini", width)
+    const available = width - stringWidth(label)
     const detail = input.detail ?? ""
+    const segments = detail.split(/[/\\]/).filter(Boolean)
+    const leaf = segments.at(-1) ?? detail
+    const separator = ` ${input.mono ? "-" : "·"} `
+    const showPath = leaf !== "" && stringWidth(separator + leaf) <= available
+    const version = ` v${input.version}`
+    // Reserve the whole basename before considering a long preview version.
+    const metadata = stringWidth(version) + (showPath ? stringWidth(separator + leaf) : 0) <= available ? version : ""
     const ellipsis = input.mono ? "..." : "…"
-    const suffix = Locale.graphemes(
-      Locale.takeWidth(
-        Locale.graphemes(detail).reverse().join(""),
-        Math.max(0, Math.floor((available - ellipsis.length) / 2)),
-      ),
-    )
-      .reverse()
-      .join("")
+    const slash = detail.includes("\\") ? "\\" : "/"
     const path =
-      stringWidth(detail) <= available
-        ? detail
-        : available <= ellipsis.length
-          ? ellipsis.slice(0, available)
-          : Locale.takeWidth(detail, available - ellipsis.length - stringWidth(suffix)) + ellipsis + suffix
+      [
+        detail,
+        ...segments.slice(1).map((_, index) => ellipsis + slash + segments.slice(index + 1).join(slash)),
+        leaf,
+      ].find((value) => stringWidth(metadata + separator + value) <= available) ?? ""
     const root = new BoxRenderable(ctx.renderContext, {
       width,
       height: 2,
@@ -272,7 +281,10 @@ export function entrySplash(input: {
     })
     root.add(
       new TextRenderable(ctx.renderContext, {
-        content: new StyledText([fg(input.theme.right)(label), fg(input.theme.left)(metadata + path)]),
+        content: new StyledText([
+          fg(input.theme.right)(label),
+          fg(input.theme.left)(metadata + (path ? separator + path : "")),
+        ]),
         width,
         height: 1,
         wrapMode: "none",

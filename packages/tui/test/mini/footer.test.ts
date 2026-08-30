@@ -1,10 +1,11 @@
 import { expect, test } from "bun:test"
 import { createTestRenderer } from "@opentui/core/testing"
-import { RGBA } from "@opentui/core"
+import { CliRenderEvents, RGBA, TextRenderable } from "@opentui/core"
 import path from "node:path"
 import { coalesceProgressCommit, resolveRunAgent, RunFooter } from "../../src/mini/footer"
+import { resolveMiniSettings } from "../../src/mini/runtime.boot"
 import { RUN_THEME_FALLBACK, RUN_THEME_FALLBACK_LIGHT, RUN_THEME_MONO } from "../../src/mini/theme"
-import type { RunAgent, RunTuiConfig, StreamCommit } from "../../src/mini/types"
+import type { MiniSettingChange, MiniSettings, RunAgent, RunTuiConfig, StreamCommit } from "../../src/mini/types"
 import { createTuiResolvedConfig } from "../fixture/tui-runtime"
 import { tmpdir } from "../fixture/fixture"
 
@@ -43,9 +44,21 @@ test("falls back only when no agent is selected", () => {
   expect(resolveRunAgent(agents, "missing")).toBeUndefined()
 })
 
-async function setup(input: { mono?: boolean; theme?: RunTuiConfig["theme"] } = {}) {
+async function setup(
+  input: {
+    mono?: boolean
+    theme?: RunTuiConfig["theme"]
+    update?: (change: MiniSettingChange) => Promise<MiniSettings>
+  } = {},
+) {
   const mono = input.mono ?? true
-  const app = await createTestRenderer({ width: 112, height: 24, screenMode: "split-footer", footerHeight: 4 })
+  const app = await createTestRenderer({
+    width: 112,
+    height: 24,
+    screenMode: "split-footer",
+    footerHeight: 4,
+    externalOutputMode: "capture-stdout",
+  })
   const footer = new RunFooter(app.renderer, {
     directory: () => "/project",
     findFiles: async () => [],
@@ -57,10 +70,10 @@ async function setup(input: { mono?: boolean; theme?: RunTuiConfig["theme"] } = 
     variant: undefined,
     first: true,
     theme: mono ? RUN_THEME_MONO : RUN_THEME_FALLBACK,
-    mono,
     tuiConfig: createTuiResolvedConfig({ theme: input.theme }),
     miniSettings: {
       current: { thinking: "hide", shell_output: "hide", turn_summary: "show", footer: "show", splash: "show", mono },
+      update: input.update,
     },
     onPermissionReply: () => {},
     onFormReply: () => {},
@@ -70,6 +83,94 @@ async function setup(input: { mono?: boolean; theme?: RunTuiConfig["theme"] } = 
   })
   return { ...app, footer }
 }
+
+test.each([false, true])("command menu uses its full height on first open (mono=%s)", async (mono) => {
+  const app = await setup({ mono })
+  try {
+    await app.renderOnce()
+    app.mockInput.pressKey("p", { ctrl: true })
+    await app.renderOnce()
+    await app.renderOnce()
+    const frame = app.captureCharFrame()
+    expect(frame).toContain("Open editor")
+    expect(frame).toContain("Show status")
+    expect(frame).toContain("Compact session")
+    expect(frame).toContain("New session")
+    expect(frame).toContain("Skills")
+    app.mockInput.pressKey("END")
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("Exit")
+    expect(app.footer.isClosed).toBe(false)
+  } finally {
+    app.footer.destroy()
+    app.renderer.destroy()
+  }
+})
+
+test.each([false, true])("monochrome toggles live without replacing the footer (initial=%s)", async (mono) => {
+  const changes: MiniSettingChange[] = []
+  const app = await setup({
+    mono,
+    theme: { name: "system" },
+    update: async (change) => {
+      changes.push(change)
+      return { ...resolveMiniSettings(), [change.key]: change.value }
+    },
+  })
+  app.renderer.getPalette = async () => {
+    throw new Error("no OSC response")
+  }
+  const output: string[] = []
+  app.renderer.on(CliRenderEvents.EXTERNAL_OUTPUT, (event) => {
+    output.push(new TextDecoder().decode(event.snapshot.getRealCharBytes(true)))
+  })
+  try {
+    await app.mockInput.pressKeys(["\x1b]10;rgb:ffff/ffff/ffff\x07", "\x1b]11;rgb:0000/0000/0000\x07"])
+    expect(app.renderer.themeMode).toBe("dark")
+    await app.renderOnce()
+    await app.mockInput.typeText("draft")
+    app.mockInput.pressKey("p", { ctrl: true })
+    await app.renderOnce()
+    await app.mockInput.typeText("settings")
+    await app.renderOnce()
+    app.mockInput.pressEnter()
+    await app.renderOnce()
+    await app.mockInput.typeText("monochrome")
+    await app.renderOnce()
+    const search = app.renderer.currentFocusedRenderable
+    for (const next of [!mono, mono]) {
+      app.mockInput.pressKey("ARROW_RIGHT")
+      await app.flush()
+      await app.footer.idle()
+      await app.renderOnce()
+      expect(app.footer.currentMiniSettings().mono).toBe(next)
+      expect(app.footer.currentTheme()).toBe(next ? RUN_THEME_MONO : RUN_THEME_FALLBACK)
+      expect(app.renderer.currentFocusedRenderable).toBe(search)
+      expect(app.captureCharFrame()).toContain("monochrome")
+      expect(app.captureCharFrame()).not.toContain("restart")
+      app.footer.append({ kind: "user", text: "new output", phase: "start", source: "system" })
+      await app.footer.idle()
+      expect(output.at(-1)).toContain(next ? "> new output" : "\u203a new output")
+      app.renderer.writeToScrollback((ctx) => ({
+        root: new TextRenderable(ctx.renderContext, { content: "external \u2192", width: ctx.width, height: 1 }),
+        height: 1,
+      }))
+      expect(output.at(-1)).toContain(next ? "external ?" : "external \u2192")
+    }
+    expect(changes).toEqual([
+      { key: "mono", value: !mono },
+      { key: "mono", value: mono },
+    ])
+    expect(output.filter((text) => text.includes("new output"))).toHaveLength(2)
+    app.mockInput.pressKey("c", { ctrl: true })
+    await app.renderOnce()
+    expect(app.renderer.currentFocusedEditor?.plainText).toBe("draft")
+    expect(app.captureCharFrame()).toContain(mono ? "| draft" : "\u2503 draft")
+  } finally {
+    app.footer.destroy()
+    app.renderer.destroy()
+  }
+})
 
 test.each([false, true])("production footer preserves wrapped input and status on resize (mono=%s)", async (mono) => {
   const app = await setup({ mono })
@@ -89,7 +190,7 @@ test.each([false, true])("production footer preserves wrapped input and status o
       )
       expect(app.renderer.currentFocusedEditor!.virtualLineCount).toBeGreaterThan(1)
       expect(frame).toContain("Build")
-      expect(frame.includes("GPT-5")).toBe(width >= 80)
+      expect(frame).toContain("GPT-5")
     }
   } finally {
     app.footer.destroy()
