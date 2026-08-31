@@ -1112,7 +1112,7 @@ const layer = Layer.effect(
         return message
       }
 
-      // 1. Classify task and register in background fiber so prompt streaming starts instantly without blocking
+      // 1. Await pure LLM task classification before streaming so the domain harness is registered
       yield* Effect.gen(function* () {
         const taskModel = yield* getModel(message.info.model.providerID, message.info.model.modelID, input.sessionID)
         const prov = yield* provider.getProvider(message.info.model.providerID).pipe(Effect.orElseSucceed(() => undefined))
@@ -1125,6 +1125,7 @@ const layer = Layer.effect(
         if (Option.isNone(judgeModel)) return
 
         const classification = yield* judge.classify(originalPrompt, judgeModel.value).pipe(
+          Effect.timeout("15 seconds"),
           Effect.orElseSucceed(() => ({
             isTask: true,
             taskType: "general",
@@ -1147,7 +1148,6 @@ const layer = Layer.effect(
         Effect.tapError((error) => Effect.logError("session task classification failed", { error })),
         Effect.orElseSucceed(() => undefined),
         Effect.orDie,
-        Effect.forkIn(scope),
       )
 
       // 2. Stream assistant execution immediately
