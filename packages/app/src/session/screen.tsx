@@ -15,7 +15,6 @@ import createPresence from "solid-presence"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { SessionHeader } from "@/session/header/session-header"
 import { useLayout } from "@/shell/state/layout"
-import { useSettings } from "@/settings/model"
 import { MessageTimeline, SessionSummaryPanel } from "@/session/timeline/message-timeline"
 import { useServer } from "@/runtime/server/current"
 import { projectForSession } from "@/shell/layout/helpers"
@@ -41,14 +40,12 @@ const SessionMobileFiles = lazy(async () => {
 export function SessionScreen(props: { session: SessionModel }) {
   const session = props.session
   const layout = useLayout()
-  const settings = useSettings()
   const server = useServer()
   const detailsProject = createMemo(() => {
     const info = session.data.info()
     return info ? projectForSession(info, server.ctx.sync.data.project) : undefined
   })
   const isDesktop = session.isDesktop
-  const mobileTabsBottom = () => !isDesktop() && settings.general.mobileTitlebarPosition() === "bottom"
   const screen = createSessionScreenLayout(session)
   const timeline = createSessionTimelineInteraction(session)
   const messagesReady = timeline.ready
@@ -127,7 +124,6 @@ export function SessionScreen(props: { session: SessionModel }) {
       {(_key) => (
         <SessionMobileViewTabs
           current={mobileView()}
-          bottom={mobileTabsBottom()}
           onDetailsOpenChange={review.details.setOpen}
           details={
             !session.data.isChild() && detailsProject()
@@ -178,7 +174,7 @@ export function SessionScreen(props: { session: SessionModel }) {
 
   const sessionPanelContent = () => (
     <>
-      <Show when={!isDesktop() && !!session.identity.params.id && !mobileTabsBottom()}>{mobileTabs()}</Show>
+      <Show when={!isDesktop() && !!session.identity.params.id}>{mobileTabs()}</Show>
       {/* Surface query errors without suspending session metadata while messages load. */}
       <Show when={timeline.resource.error}>
         {(error) => {
@@ -248,7 +244,6 @@ export function SessionScreen(props: { session: SessionModel }) {
           <ActiveSessionComposerRegion model={composer} session={session} onResponseSubmit={timeline.actions.resume} />
         )}
       </Show>
-      <Show when={!!session.identity.params.id && mobileTabsBottom()}>{mobileTabs()}</Show>
     </>
   )
 

@@ -73,9 +73,8 @@ for (const position of ["top", "bottom"] as const) {
       .poll(async () => {
         const bar = await tabs.boundingBox()
         const input = await composer.boundingBox()
-        return (
-          !!bar && !!input && (position === "bottom" ? bar.y >= input.y + input.height : bar.y + bar.height <= input.y)
-        )
+        const panel = await page.locator('[data-slot="session-chat-panel"]').boundingBox()
+        return !!bar && !!input && !!panel && Math.abs(bar.y - panel.y) <= 1 && bar.y + bar.height <= input.y
       })
       .toBe(true)
     await expect(page.locator("[data-session-title]")).toHaveCount(0)
@@ -98,6 +97,10 @@ for (const position of ["top", "bottom"] as const) {
     await page.getByRole("menuitem", { name: "Usage", exact: true }).click()
     await expect(picker).toHaveCount(0)
     await expect(page.getByText("Total Cost", { exact: true })).toBeVisible()
+    const usage = page.locator('[data-slot="session-usage-content"]')
+    await expect(usage).toHaveCSS("padding-top", "16px")
+    await expect(usage).toHaveCSS("padding-inline-start", "16px")
+    await expect(usage).toHaveCSS("padding-inline-end", "16px")
     await expect(composer).toBeHidden()
 
     await more.click()

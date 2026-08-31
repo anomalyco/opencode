@@ -26,7 +26,6 @@ const MobilePanelDrawer = lazy(async () => {
 export function SessionMobileViewTabs(props: {
   current: "session" | "changes" | "files" | "usage" | "terminal"
   onSelect: (view: "session" | "changes" | "files" | "usage" | "terminal") => void
-  bottom?: boolean
   details?: (close: () => void) => JSX.Element
   onDetailsOpenChange?: (open: boolean) => void
 }) {
@@ -44,8 +43,7 @@ export function SessionMobileViewTabs(props: {
   let trigger: HTMLButtonElement | undefined
   return (
     <div
-      class="relative flex shrink-0 items-center before:pointer-events-none before:absolute before:inset-x-0 before:h-px before:bg-v2-border-border-base before:content-['']"
-      classList={{ "before:top-0": props.bottom, "before:bottom-0": !props.bottom }}
+      class="relative flex shrink-0 items-center before:pointer-events-none before:absolute before:inset-x-0 before:bottom-0 before:h-px before:bg-v2-border-border-base before:content-['']"
       data-slot="session-mobile-view-navigation"
     >
       <Tabs value={props.current} variant="line" class="!h-auto min-w-0 flex-1" data-slot="session-mobile-view-tabs">
@@ -57,10 +55,6 @@ export function SessionMobileViewTabs(props: {
                 class="min-w-0 flex-1"
                 classes={{ button: "w-full justify-center" }}
                 onClick={() => props.onSelect(view)}
-                classList={{
-                  "!border-b-0 border-t border-transparent [&:has([data-selected])]:border-t-v2-text-text-faint":
-                    props.bottom,
-                }}
               >
                 {view === "session"
                   ? language.t("session.tab.session")
@@ -77,7 +71,7 @@ export function SessionMobileViewTabs(props: {
       <Menu
         appearance="standard"
         modal={false}
-        placement={props.bottom ? "top-end" : "bottom-end"}
+        placement="bottom-end"
         gutter={4}
         open={store.menu}
         onOpenChange={(open) => setStore("menu", open)}

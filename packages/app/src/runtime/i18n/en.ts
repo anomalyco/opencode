@@ -982,7 +982,7 @@ export const dict = {
   "settings.general.row.showProjectIcon.description": "Show the project icon in the session header",
   "settings.general.row.mobileTitlebarBottom.title": "Bottom navigation",
   "settings.general.row.mobileTitlebarBottom.description":
-    "Place the title bar and session tabs at the bottom of the screen on mobile",
+    "Place the title bar at the bottom of the screen on mobile",
   "settings.general.row.showCustomAgents.title": "Show agent",
   "settings.general.row.showCustomAgents.description":
     "Switch between agents in the composer. When hidden, defaults to Build agent.",
