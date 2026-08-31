@@ -534,6 +534,7 @@ describe("Tool", () => {
     Effect.gen(function* () {
       const service = yield* Tool.Service
       yield* service.transform((draft) => {
+        draft.namespace({ name: "invalid..namespace", description: "Invalid" })
         draft.add({ ...make(), name: "first", options: { codemode: false } })
         draft.add({ ...make(), name: "second", options: { namespace: "invalid..namespace", codemode: false } })
         draft.add({ ...make(), name: "second", options: { namespace: "invalid__namespace" } })
@@ -542,6 +543,32 @@ describe("Tool", () => {
       const snapshot = yield* service.snapshot()
       expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["first", "execute"])
       expect(snapshot.codeModeCatalog?.map((tool) => tool.path)).toEqual(["invalid__namespace.second"])
+    }),
+  )
+
+  it.effect("registers namespace descriptions separately from namespaced tools", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      yield* service.transform((draft) => {
+        draft.namespace({ name: "registry", description: "Package publishing and discovery" })
+        draft.add({ ...make(), name: "plain", options: { namespace: "legacy" } })
+        draft.add({ ...make(), name: "direct", options: { namespace: "registry", codemode: false } })
+        draft.add({ ...make(), name: "search", description: "Search packages", options: { namespace: "registry" } })
+      })
+
+      const snapshot = yield* service.snapshot()
+      expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["registry_direct", "execute"])
+      expect(snapshot.codeModeCatalog?.map((tool) => tool.path)).toEqual(["legacy.plain", "registry.search"])
+      const result = yield* snapshot.execute({
+        ...call("execute"),
+        call: {
+          type: "tool-call",
+          id: "namespace-search",
+          name: "execute",
+          input: { code: 'return search({ query: "publishing discovery" })' },
+        },
+      })
+      expect(result.output).toMatchObject({ output: expect.stringContaining("tools.registry.search") })
     }),
   )
 

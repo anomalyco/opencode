@@ -465,6 +465,7 @@ export function fromPromise(plugin: Plugin) {
                       const tool = draft.get(id)
                       return tool ? { ...tool, execute: promiseExecutor(tool.execute) } : undefined
                     },
+                    namespace: draft.namespace,
                     add: (tool: Info) =>
                       draft.add({
                         ...tool,

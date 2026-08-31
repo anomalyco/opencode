@@ -1,7 +1,15 @@
 export * as CodeModeTool from "./tool.js"
 
-import { CodeMode, Tool, toolError } from "@opencode-ai/codemode"
-import type { Content, Context, Error, Info, Metadata, Result } from "@opencode-ai/schema/tool"
+import { CodeMode, Namespace, Tool, toolError } from "@opencode-ai/codemode"
+import type {
+  Content,
+  Context,
+  Error,
+  Info,
+  Metadata,
+  Namespace as ToolNamespace,
+  Result,
+} from "@opencode-ai/schema/tool"
 import { Effect, Ref, Schema, Semaphore } from "effect"
 import { definition, normalizedName } from "../tool/runtime.js"
 
@@ -44,6 +52,7 @@ const description = [
 export const create = (
   registrations: ReadonlyMap<string, Info>,
   executeTool: (name: string, tool: Info, input: unknown, context: Context) => Effect.Effect<Result, Error>,
+  namespaces: ReadonlyMap<string, ToolNamespace> = new Map(),
 ) => {
   return {
     name: "execute",
@@ -62,6 +71,7 @@ export const create = (
           )
         const result = yield* runtime(
           registrations,
+          namespaces,
           (name, tool, input) =>
             Effect.gen(function* () {
               const index = yield* Ref.getAndUpdate(callIndex, (index) => index + 1)
@@ -132,23 +142,27 @@ export const create = (
   } satisfies Info
 }
 
-export const catalog = (registrations: ReadonlyMap<string, Info>) => {
+export const catalog = (
+  registrations: ReadonlyMap<string, Info>,
+  namespaces: ReadonlyMap<string, ToolNamespace> = new Map(),
+) => {
   const pinned = new Set(
     Array.from(registrations.values())
       .filter((registration) => registration.options?.pinned === true)
       .map(qualifiedName),
   )
-  return runtime(registrations, () => Effect.fail(toolError("Execute context is unavailable")))
+  return runtime(registrations, namespaces, () => Effect.fail(toolError("Execute context is unavailable")))
     .catalog()
     .map((entry) => ({ ...entry, pinned: pinned.has(entry.path) }))
 }
 
 function runtime(
   registrations: ReadonlyMap<string, Info>,
+  namespaces: ReadonlyMap<string, ToolNamespace>,
   executeTool: (name: string, tool: Info, input: unknown) => Effect.Effect<unknown, unknown>,
   hooks?: CodeMode.ToolCallHooks,
 ) {
-  const tools: Record<string, Tool.Tool<never>> = {}
+  const tools: Record<string, Tool.Tool<never> | Namespace.Namespace<never>> = {}
   for (const [name, registration] of registrations) {
     const child = definition(registration)
     const path = qualifiedName(registration)
@@ -159,6 +173,9 @@ function runtime(
       execute: (input) => executeTool(name, registration, input),
     })
   }
+  for (const namespace of namespaces.values())
+    if (!Object.hasOwn(tools, namespace.name))
+      tools[namespace.name] = Namespace.make({ description: namespace.description, tools: {} })
   return CodeMode.make<typeof tools>({ tools, ...hooks })
 }
 

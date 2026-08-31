@@ -838,6 +838,10 @@ effect: (ctx) =>
   Effect.gen(function* () {
     const tool = ctx.tool
     yield* tool.transform((draft) => {
+      draft.namespace({
+        name: "acme",
+        description: "Customer account tools",
+      })
       draft.add({
         name: "greeting",
         description: "Create a greeting",
@@ -853,6 +857,9 @@ effect: (ctx) =>
     })
   }),
 ```
+
+Register a namespace once to add model-visible search context for every CodeMode tool assigned to it. Tools continue
+to reference the namespace by its string name. Namespace registration is optional when no description is needed.
 
 Call `yield* ctx.tool.reload()` after changing source data captured by the callback. Reload replays active transforms
 without changing their order; it does not rerun the plugin effect.
@@ -889,6 +896,7 @@ Schemas: [`Tool.Content`](/api#schema-Tool.Content), [`Tool.TextContent`](/api#s
 interface ToolDraft {
   list(): readonly (Tool.Info & { readonly id: string })[]
   get(id: string): (Tool.Info & { readonly id: string }) | undefined
+  namespace(namespace: Tool.Namespace): void
   add<Input extends Tool.ValueSchema<any>, Output extends Tool.ValueSchema<any> | undefined>(
     tool: Tool.Info<Input, Output>,
   ): void

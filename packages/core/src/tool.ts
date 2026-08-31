@@ -1,6 +1,6 @@
 export * as Tool from "./tool.js"
 export { CallID, Content, Error, FileContent, TextContent } from "@opencode-ai/schema/tool"
-export type { Context, Metadata, Options, Result } from "@opencode-ai/schema/tool"
+export type { Context, Metadata, Namespace, Options, Result } from "@opencode-ai/schema/tool"
 
 import { ToolDefinition, type ToolCall } from "@opencode-ai/ai"
 import { Tool } from "@opencode-ai/schema/tool"
@@ -26,6 +26,7 @@ export class RegistrationError extends Schema.TaggedError<RegistrationError>()("
 export interface Draft {
   readonly list: () => readonly (Tool.Info & { readonly id: string })[]
   readonly get: (id: string) => (Tool.Info & { readonly id: string }) | undefined
+  readonly namespace: (namespace: Tool.Namespace) => void
   readonly add: (tool: Tool.Info) => void
   readonly update: (id: string, update: (tool: Types.Mutable<Tool.Info>) => void) => void
   readonly remove: (id: string) => void
@@ -33,7 +34,8 @@ export interface Draft {
 
 type Data = {
   tools: Map<string, Tool.Info & { readonly id: string }>
-  errors: { tool: Tool.Info; error: RegistrationError }[]
+  namespaces: Map<string, Tool.Namespace>
+  errors: { kind: "tool" | "namespace"; name: string; namespace?: string; error: RegistrationError }[]
 }
 
 export interface Interface extends State.Transformable<Draft> {
@@ -151,15 +153,24 @@ const layer = Layer.effect(
       name: "tool",
       initial: () => ({
         tools: new Map(),
+        namespaces: new Map(),
         errors: [],
       }),
       draft: (draft) => ({
         list: () => Array.from(draft.tools.values()),
         get: (id) => draft.tools.get(id),
+        namespace: (namespace) => {
+          const error = namespaceError(namespace.name)
+          if (error) {
+            draft.errors.push({ kind: "namespace", name: namespace.name, namespace: namespace.name, error })
+            return
+          }
+          draft.namespaces.set(namespace.name, { ...namespace })
+        },
         add: (tool) => {
           const error = registrationError(tool)
           if (error) {
-            draft.errors.push({ tool, error })
+            draft.errors.push({ kind: "tool", name: tool.name, namespace: tool.options?.namespace, error })
             return
           }
           const id = effectiveName(tool)
@@ -176,7 +187,7 @@ const layer = Layer.effect(
             tool.options = { ...tool.options, namespace: current.options?.namespace }
           const error = registrationError(tool)
           if (error) {
-            draft.errors.push({ tool, error })
+            draft.errors.push({ kind: "tool", name: tool.name, namespace: tool.options?.namespace, error })
             return
           }
           draft.tools.set(id, tool)
@@ -188,10 +199,10 @@ const layer = Layer.effect(
       finalize: () =>
         Effect.forEach(
           state.get().errors,
-          ({ tool, error }) =>
-            Effect.logError("Skipping invalid tool registration", {
-              name: tool.name,
-              namespace: tool.options?.namespace,
+          ({ kind, name, namespace, error }) =>
+            Effect.logError(`Skipping invalid ${kind} registration`, {
+              name,
+              namespace,
               error: error.message,
             }),
           { discard: true },
@@ -213,13 +224,16 @@ const layer = Layer.effect(
           const codemode = new Map(Array.from(active).filter(([, tool]) => tool.options?.codemode !== false))
           const codemodeEnabled = !whollyDisabled("execute", rules)
           const codemodeTool = codemodeEnabled
-            ? CodeModeTool.create(codemode, (name, tool, input, context) =>
-                beforeExecute(name, input, context).pipe(
-                  Effect.flatMap((event) => executeTool(tool, name, event.input, context)),
-                ),
+            ? CodeModeTool.create(
+                codemode,
+                (name, tool, input, context) =>
+                  beforeExecute(name, input, context).pipe(
+                    Effect.flatMap((event) => executeTool(tool, name, event.input, context)),
+                  ),
+                state.get().namespaces,
               )
             : undefined
-          const codeModeCatalog = codemodeEnabled ? CodeModeTool.catalog(codemode) : undefined
+          const codeModeCatalog = codemodeEnabled ? CodeModeTool.catalog(codemode, state.get().namespaces) : undefined
           return {
             ...(codeModeCatalog === undefined ? {} : { codeModeCatalog }),
             definitions: [
@@ -269,8 +283,10 @@ function schemaMakeError(error: unknown) {
 
 function registrationError(tool: Tool.Info) {
   const namespace = tool.options?.namespace
-  if (namespace !== undefined && !namespace.split(".").every((segment) => /^[A-Za-z0-9_-]{1,64}$/.test(segment)))
-    return new RegistrationError({ name: namespace, message: `Invalid tool namespace: ${JSON.stringify(namespace)}` })
+  if (namespace !== undefined) {
+    const error = namespaceError(namespace)
+    if (error) return error
+  }
   const name = normalizedName(tool)
   if (!/^[A-Za-z0-9_-]{1,64}$/.test(name)) return new RegistrationError({ name, message: `Invalid tool name: ${name}` })
   const id = effectiveName(tool)
@@ -282,6 +298,11 @@ function registrationError(tool: Tool.Info) {
       new RegistrationError({ name: id, message: `Invalid tool definition ${id}: ${schemaMakeError(error)}` }),
   })
   return Result.isFailure(result) ? result.failure : undefined
+}
+
+function namespaceError(name: string) {
+  if (name.split(".").every((segment) => /^[A-Za-z0-9_-]{1,64}$/.test(segment))) return
+  return new RegistrationError({ name, message: `Invalid tool namespace: ${JSON.stringify(name)}` })
 }
 
 export const node = makeLocationNode({
