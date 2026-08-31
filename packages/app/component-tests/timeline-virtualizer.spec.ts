@@ -8,6 +8,30 @@ story.beforeEach(async ({ mount }) => {
   await expect(component.getByRole("textbox", { name: "Prompt", exact: true })).toBeVisible()
 })
 
+story("spaces the first mobile message without changing desktop spacing", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.evaluate(async (fixture) => {
+    const { mountTimelineVirtualizer } = await import(fixture)
+    mountTimelineVirtualizer({ count: 1, rowHeight: 60, immediate: true })
+  }, fixture)
+  const root = page.getByTestId("timeline-virtualizer-fixture")
+  await root.getByRole("button", { name: "Complete Markdown", exact: true }).click()
+  const content = root.locator("[data-timeline-virtual-content]")
+  await expect(content).toHaveCSS("visibility", "visible")
+  const gap = () =>
+    root.locator('[data-timeline-key="user-message:message-0"]').evaluate((element) => {
+      const viewport = element.closest("[data-scrollable]")!
+      return element.getBoundingClientRect().top - viewport.getBoundingClientRect().top
+    })
+  await expect.poll(gap).toBe(16)
+  await root.evaluate((element) => element.setAttribute("dir", "rtl"))
+  await expect.poll(gap).toBe(16)
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await expect.poll(gap).toBe(0)
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect.poll(gap).toBe(16)
+})
+
 story("bounds the cheap suffix and reveals only ready measured rows", async ({ page }) => {
   await page.evaluate(async (fixture) => {
     const { mountTimelineVirtualizer } = await import(fixture)

@@ -36,6 +36,28 @@ describe("createOpenReviewFile", () => {
 
     expect(calls).toEqual(["show", "load:src/a.ts", "tab:src/a.ts", "open:file://src/a.ts", "active:file://src/a.ts"])
   })
+
+  test("selects immediately and does not steal focus when loading finishes", async () => {
+    const loading = Promise.withResolvers<void>()
+    const state = { active: "file://previous.ts", opened: [] as string[] }
+    const openReviewFile = createOpenReviewFile({
+      showAllFiles: () => undefined,
+      tabForPath: (path) => `file://${path}`,
+      openTab: (tab) => state.opened.push(tab),
+      setActive: (tab) => {
+        state.active = tab
+      },
+      loadFile: () => loading.promise,
+    })
+
+    openReviewFile("requested.ts")
+    expect(state.opened).toEqual(["file://requested.ts"])
+    expect(state.active).toBe("file://requested.ts")
+    state.active = "file://previous.ts"
+    loading.resolve()
+    await loading.promise
+    expect(state.active).toBe("file://previous.ts")
+  })
 })
 
 describe("createOpenSessionFileTab", () => {

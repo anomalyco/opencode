@@ -468,6 +468,7 @@ export function Prompt(props: PromptProps) {
           event?.preventDefault()
           event?.stopPropagation()
           if (!input.focused) return
+          if (auto()?.visible && !auto()?.completeQueueableCommand()) return
           const handled = await submit("queue")
           if (!handled) return
           dialog.clear()

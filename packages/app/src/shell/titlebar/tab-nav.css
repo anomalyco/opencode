@@ -57,9 +57,10 @@
   margin-block: auto;
 }
 
-[data-titlebar-tab]:is(:hover, :has(> [data-slot="tab-link"]:focus-visible)):not([data-state="pressed"]):not(
-    [data-dragging="true"]
-  ):not([data-editing="true"]) {
+[data-titlebar-tab]:not(:where([data-slot="mobile-tabs-drawer"] *)):is(
+    :hover,
+    :has(> [data-slot="tab-link"]:focus-visible)
+  ):not([data-state="pressed"]):not([data-dragging="true"]):not([data-editing="true"]) {
   --tab-base: var(--v2-background-bg-layer-02);
   --tab-overlay: var(--v2-overlay-simple-overlay-hover);
 }
@@ -183,11 +184,52 @@
   display: none;
 }
 
+@media (hover: none) {
+  [data-titlebar-tab] [data-slot="tab-close"] {
+    background: linear-gradient(var(--tab-overlay), var(--tab-overlay)), var(--tab-base);
+  }
+
+  [data-titlebar-tab]:not([data-editing="true"]) [data-slot="tab-link"],
+  [data-titlebar-tab][data-title-overflow="true"]:not([data-editing="true"]) [data-slot="tab-link"] {
+    --tab-title-fade-offset: 24px;
+    --tab-title-fade-direction: to right;
+    -webkit-mask-image: linear-gradient(
+      var(--tab-title-fade-direction),
+      black 0,
+      black calc(100% - var(--tab-title-fade-offset) - 16px),
+      transparent calc(100% - var(--tab-title-fade-offset)),
+      transparent 100%
+    );
+    mask-image: linear-gradient(
+      var(--tab-title-fade-direction),
+      black 0,
+      black calc(100% - var(--tab-title-fade-offset) - 16px),
+      transparent calc(100% - var(--tab-title-fade-offset)),
+      transparent 100%
+    );
+  }
+
+  [data-titlebar-tab]:dir(rtl) [data-slot="tab-link"] {
+    --tab-title-fade-direction: to left;
+  }
+}
+
 @container (max-width: 64px) {
   [data-titlebar-tab]:not([data-orientation="vertical"]) [data-titlebar-tab-link] {
     justify-content: center;
     gap: 0;
     padding-inline: 0;
+  }
+
+  @media (hover: none) {
+    [data-titlebar-tab]:not([data-orientation="vertical"]):not([data-editing="true"]) [data-slot="tab-link"],
+    [data-titlebar-tab][data-title-overflow="true"]:not([data-orientation="vertical"]):not([data-editing="true"]):dir(
+        rtl
+      )
+      [data-slot="tab-link"] {
+      -webkit-mask-image: none;
+      mask-image: none;
+    }
   }
 
   [data-titlebar-tab]:not([data-orientation="vertical"]) [data-titlebar-tab-title] {

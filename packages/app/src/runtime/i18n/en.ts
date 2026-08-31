@@ -643,6 +643,7 @@ export const dict = {
   "home.empty.description": "Get started by opening a local project",
   "home.title": "Home",
   "home.projects": "Projects",
+  "home.projects.all": "All projects",
   "home.project.add": "Add project",
   "home.recentlyClosed": "Recently closed",
   "home.server.collapse": "Collapse server projects",
@@ -659,6 +660,10 @@ export const dict = {
   "home.providerTip": "Connect to 75+ providers to use other models, including Claude, GPT, Gemini, etc",
 
   "session.tab.session": "Session",
+  "session.tab.files": "Files",
+  "session.files.openTabs": "Open files",
+  "session.tab.usage": "Usage",
+  "session.view.select": "Session view",
   "session.tab.review": "Review",
   "session.tab.context": "Context",
   "session.tab.unknown": "Unknown Session",
@@ -697,6 +702,7 @@ export const dict = {
   "session.review.change.one": "Change",
   "session.review.change.other": "Changes",
   "session.review.loadingChanges": "Loading changes...",
+  "session.review.wrapLines": "Wrap lines",
   "session.review.empty": "No changes in this session yet",
   "session.review.noVcs": "No Git Version Control System detected, changes not displayed",
   "session.review.noVcs.createGit.title": "Create a Git repository",
@@ -799,6 +805,7 @@ export const dict = {
   "terminal.connectTicket.statusError": "PTY connect ticket failed with {{status}}",
 
   "titlebar.update": "Update",
+  "titlebar.tabs": "Tabs",
   "titlebar.updateVersion": "Update {{version}}",
 
   "common.closeTab": "Close tab",
@@ -976,7 +983,9 @@ export const dict = {
   "settings.general.row.showProjectIcon.description": "Show the project icon in the session header",
   "settings.general.row.mobileTitlebarBottom.title": "Bottom navigation",
   "settings.general.row.mobileTitlebarBottom.description":
-    "Place the title bar and session tabs at the bottom of the screen on mobile",
+    "Place the title bar at the bottom of the screen on mobile",
+  "settings.general.row.mobileDiffWrap.description":
+    "Wrap long lines in mobile diffs instead of scrolling horizontally",
   "settings.general.row.showCustomAgents.title": "Show agent",
   "settings.general.row.showCustomAgents.description":
     "Switch between agents in the composer. When hidden, defaults to Build agent.",

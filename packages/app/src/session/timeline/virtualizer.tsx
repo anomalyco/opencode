@@ -22,6 +22,7 @@ import {
   type JSX,
 } from "solid-js"
 import { createStore } from "solid-js/store"
+import { createMediaQuery } from "@solid-primitives/media"
 import type { createTimelineProjection } from "./projection"
 import { observeElementOffsetReconnectAware } from "./observe-element-offset"
 import { filterVirtualIndexes } from "./virtual-items"
@@ -73,6 +74,8 @@ type ViewProps = {
 
 export function createTimelineVirtualizer(input: Input) {
   const language = useLanguage()
+  const isDesktop = createMediaQuery("(min-width: 768px)")
+  const topOffset = () => (input.showHeader() ? 64 : isDesktop() ? 0 : 16)
   const ownerSessionKey = input.sessionKey()
   const cached = cache.get(ownerSessionKey)
   const initialMeasurements = cached?.measurements
@@ -186,7 +189,7 @@ export function createTimelineVirtualizer(input: Input) {
     },
     scrollEndThreshold: 80,
     get scrollMargin() {
-      return input.showHeader() ? 64 : 0
+      return topOffset()
     },
     paddingEnd: 64,
     get rangeExtractor() {
@@ -446,7 +449,7 @@ export function createTimelineVirtualizer(input: Input) {
           data-timeline-key={rowProps.rowKey}
           style={{
             position: "absolute",
-            top: `${item().start - (input.showHeader() ? 64 : 0)}px`,
+            top: `${item().start - topOffset()}px`,
             left: "0",
             width: "100%",
             height: `${item().size}px`,
@@ -516,7 +519,9 @@ export function createTimelineVirtualizer(input: Input) {
           class="relative min-w-0 w-full h-full"
           style={{ "--sticky-accordion-top": input.showHeader() ? "48px" : "0px" }}
         >
-          <Show when={input.showHeader()}>{props.header}</Show>
+          <Show when={input.showHeader()} fallback={<div aria-hidden="true" class="h-4 md:hidden" />}>
+            {props.header}
+          </Show>
           <div
             data-timeline-virtual-content
             ref={(element) => {
