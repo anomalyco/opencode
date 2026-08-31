@@ -8,6 +8,7 @@ import {
   inputTypeScript,
   outputTypeScript,
 } from "./tool-schema.js"
+import { isNamespace } from "./namespace.js"
 import { isTool, type Tool } from "./tool.js"
 import type { Tools } from "./tools.js"
 import {
@@ -277,6 +278,7 @@ export const copyOut = (value: unknown, mode: CopyOutMode): unknown => {
 // Dots in tool names are namespace separators; the last tool for a canonical path wins.
 type ToolNode<R> = {
   tool?: Tool<R>
+  description?: string
   readonly children: Map<string, ToolNode<R>>
 }
 
@@ -292,7 +294,10 @@ const toolTrie = <R>(tools: Tools<R>): ToolNode<R> => {
         current = child
       }
       if (isTool<R>(value)) current.tool = value
-      else insert(current, value)
+      else if (isNamespace<R>(value)) {
+        current.description = value.description
+        insert(current, value.tools)
+      } else insert(current, value)
     }
   }
   insert(root, tools)
@@ -305,9 +310,16 @@ const canonicalSegments = (path: ReadonlyArray<string>): ReadonlyArray<string> =
 const flattenTools = <R>(
   node: ToolNode<R>,
   path: ReadonlyArray<string> = [],
-): Array<{ path: string; tool: Tool<R> }> => [
-  ...(node.tool === undefined ? [] : [{ path: path.join("."), tool: node.tool }]),
-  ...Array.from(node.children, ([name, child]) => flattenTools(child, [...path, name])).flat(),
+  namespaceDescriptions: ReadonlyArray<string> = [],
+): Array<{ path: string; tool: Tool<R>; namespaceDescriptions: ReadonlyArray<string> }> => [
+  ...(node.tool === undefined ? [] : [{ path: path.join("."), tool: node.tool, namespaceDescriptions }]),
+  ...Array.from(node.children, ([name, child]) =>
+    flattenTools(
+      child,
+      [...path, name],
+      child.description === undefined ? namespaceDescriptions : [...namespaceDescriptions, child.description],
+    ),
+  ).flat(),
 ]
 
 const describeTool = <R>(path: string, tool: Tool<R>): ToolDescription => ({
@@ -320,9 +332,10 @@ const describeTool = <R>(path: string, tool: Tool<R>): ToolDescription => ({
 const visibleTools = <R>(tools: Tools<R>) =>
   flattenTools(toolTrie(tools))
     .sort((left, right) => compareText(left.path, right.path))
-    .map(({ path, tool }) => ({
+    .map(({ path, tool, namespaceDescriptions }) => ({
       path,
       tool,
+      namespaceDescriptions,
       description: describeTool(path, tool),
     }))
 
@@ -420,11 +433,17 @@ export const searchSignature = (() => {
   return `search(input: ${inputTypeScript(tool, true)}): ${outputTypeScript(tool, true)}`
 })()
 
-const toSearchEntry = <R>(path: string, tool: Tool<R>, description: ToolDescription): SearchEntry => ({
+const toSearchEntry = <R>(
+  path: string,
+  tool: Tool<R>,
+  description: ToolDescription,
+  namespaceDescriptions: ReadonlyArray<string>,
+): SearchEntry => ({
   description,
   searchText: [
     path,
     tool.description,
+    ...namespaceDescriptions,
     ...inputProperties(tool).flatMap(({ name, description: property }) =>
       property === undefined ? [name] : [name, property],
     ),
@@ -434,13 +453,17 @@ const toSearchEntry = <R>(path: string, tool: Tool<R>, description: ToolDescript
 })
 
 export const searchIndex = <R>(tools: Tools<R>): ReadonlyArray<SearchEntry> =>
-  visibleTools(tools).map(({ path, tool, description }) => toSearchEntry(path, tool, description))
+  visibleTools(tools).map(({ path, tool, description, namespaceDescriptions }) =>
+    toSearchEntry(path, tool, description, namespaceDescriptions),
+  )
 
 export const prepare = <R>(tools: Tools<R>): DiscoveryPlan => {
   const visible = visibleTools(tools)
   return {
     catalog: visible.map(({ description }) => description),
-    searchIndex: visible.map(({ path, tool, description }) => toSearchEntry(path, tool, description)),
+    searchIndex: visible.map(({ path, tool, description, namespaceDescriptions }) =>
+      toSearchEntry(path, tool, description, namespaceDescriptions),
+    ),
   }
 }
 
