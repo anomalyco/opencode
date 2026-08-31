@@ -1071,65 +1071,97 @@ const layer = Layer.effect(
       }
 
       if (input.noReply === true) return message
-      if ((message.info as any).isFeedback === true && (message.info as any).isSatisfied === true) {
-        return message
-      }
       const originalPrompt = input.parts
         .filter((part) => part.type === "text")
         .map((part) => part.text)
         .join("\n")
         .trim()
+
+      if ((message.info as any).isFeedback === true) {
+        const ctx = yield* InstanceState.context
+        const feedbackText = originalPrompt
+          .replace(/^(?:no|n|nope|not good|unsatisfied|wrong|different|dislike|failed|needs work)\s*[:\s-]*/i, "")
+          .trim()
+        const acknowledgement = (message.info as any).isSatisfied === true
+          ? "✅ Feedback recorded: Task confirmed as satisfactory. Harness version validated. Ready for your next task!"
+          : `✅ Feedback recorded: "${feedbackText || "Dissatisfaction recorded"}". Lessons extracted and updated harness synthesized in SQLite. Ready for your next task!`
+
+        const assistantMessage: SessionV1.Assistant = yield* sessions.updateMessage({
+          id: MessageID.ascending(),
+          role: "assistant",
+          parentID: message.info.id,
+          sessionID: input.sessionID,
+          mode: message.info.agent,
+          agent: message.info.agent,
+          variant: message.info.model.variant,
+          path: { cwd: ctx.directory, root: ctx.worktree },
+          cost: 0,
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          modelID: message.info.model.modelID,
+          providerID: message.info.model.providerID,
+          time: { created: Date.now() },
+        })
+        yield* sessions.updatePart({
+          id: PartID.ascending(),
+          messageID: assistantMessage.id,
+          sessionID: assistantMessage.sessionID,
+          type: "text",
+          text: acknowledgement,
+          time: { start: Date.now(), end: Date.now() },
+        })
+        return message
+      }
+
+      // 1. Classify task and run Judge evaluation concurrently so harness_task is in SQLite while model streams
+      yield* Effect.gen(function* () {
+        const taskModel = yield* getModel(message.info.model.providerID, message.info.model.modelID, input.sessionID)
+        const prov = yield* provider.getProvider(message.info.model.providerID).pipe(Effect.orElseSucceed(() => undefined))
+        const baseURL = (prov?.options?.baseURL as string | undefined) || undefined
+        const apiKey = (prov?.options?.apiKey as string | undefined) || prov?.key || undefined
+        const judgeModel = yield* Effect.try({
+          try: () => nativeModel({ model: taskModel, baseURL, apiKey }),
+          catch: (error) => error,
+        }).pipe(Effect.option)
+        if (Option.isNone(judgeModel)) return
+        const classification = yield* judge.classify(originalPrompt, judgeModel.value).pipe(
+          Effect.orElseSucceed(() => ({
+            isTask: true,
+            taskType: "general",
+            taskSubType: undefined,
+            taskSubTypes: ["general"],
+            summary: originalPrompt,
+          })),
+        )
+        if (!classification.isTask) return
+        const taskID = yield* judge.registerTask({
+          prompt: originalPrompt,
+          taskType: classification.taskType || "general",
+          taskSubType: classification.taskSubType,
+          taskSubTypes: classification.taskSubTypes,
+          taskModel: `${message.info.model.providerID}/${message.info.model.modelID}`,
+          sessionID: input.sessionID,
+        })
+        yield* judge.evaluate(
+          { taskID, sessionID: input.sessionID, originalPrompt },
+          judgeModel.value,
+        )
+      }).pipe(
+        Effect.tapError((error) => Effect.logError("session task evaluation failed", { error })),
+        Effect.orElseSucceed(() => undefined),
+        Effect.orDie,
+        Effect.forkIn(scope),
+      )
+
+      // 2. Stream assistant execution
       const execution = yield* loop({ sessionID: input.sessionID }).pipe(Effect.exit)
 
-      // 1. Completion marker reached: Immediately run deterministic QualityGate
+      // 3. Completion marker reached: Immediately run deterministic QualityGate
       yield* qualityGate.evaluateSession(input.sessionID).pipe(
         Effect.tapError((error) => Effect.logError("quality gate evaluation failed", { error })),
         Effect.orElseSucceed(() => undefined),
         Effect.orDie,
       )
 
-      // 2. Classify task and run Judge evaluation in background
-      // Only register a new task if this is NOT an iterative feedback message
-      if (!(message.info as any).isFeedback) {
-        yield* Effect.gen(function* () {
-          const taskModel = yield* getModel(message.info.model.providerID, message.info.model.modelID, input.sessionID)
-          const prov = yield* provider.getProvider(message.info.model.providerID).pipe(Effect.orElseSucceed(() => undefined))
-          const baseURL = (prov?.options?.baseURL as string | undefined) || undefined
-          const apiKey = (prov?.options?.apiKey as string | undefined) || prov?.key || undefined
-          const judgeModel = yield* Effect.try({
-            try: () => nativeModel({ model: taskModel, baseURL, apiKey }),
-            catch: (error) => error,
-          }).pipe(Effect.option)
-          if (Option.isNone(judgeModel)) return
-          const classification = yield* judge.classify(originalPrompt, judgeModel.value).pipe(
-            Effect.orElseSucceed(() => ({
-              isTask: true,
-              taskType: "general",
-              taskSubType: undefined,
-              taskSubTypes: ["general"],
-              summary: originalPrompt,
-            })),
-          )
-          if (!classification.isTask) return
-          const taskID = yield* judge.registerTask({
-            prompt: originalPrompt,
-            taskType: classification.taskType || "general",
-            taskSubType: classification.taskSubType,
-            taskSubTypes: classification.taskSubTypes,
-            taskModel: `${message.info.model.providerID}/${message.info.model.modelID}`,
-            sessionID: input.sessionID,
-          })
-          yield* judge.evaluate(
-            { taskID, sessionID: input.sessionID, originalPrompt },
-            judgeModel.value,
-          )
-        }).pipe(
-          Effect.tapError((error) => Effect.logError("session task evaluation failed", { error })),
-          Effect.orElseSucceed(() => undefined),
-          Effect.orDie,
-          Effect.forkIn(scope),
-        )
-      }
       return yield* execution
     })
 

@@ -471,45 +471,15 @@ const layer = Layer.effect(
                     ),
                 ).catch(() => undefined)
 
-              // 2. Create task if one does not exist
+              // 2. If not found in current session, look up most recent task in database
               if (!recentTask) {
-                const autoTaskID =
-                  `task_${Date.now()}_${Math.random()
-                    .toString(36)
-                    .slice(2, 7)}`
-
-                await Effect.runPromise(
-                  db
-                    .insert(harness_task)
-                    .values({
-                      task_id: autoTaskID,
-                      task_prompt:
-                        "Interactive session task",
-                      task_type:
-                        domainCategory || "general",
-                      task_model:
-                        selectedModel,
-                      task_status:
-                        "running",
-                      task_sub_status:
-                        "in_progress",
-                      session_id:
-                        input.sessionID,
-                    })
-                    .run()
-                    .pipe(Effect.orDie),
-                )
-
                 recentTask =
                   await Effect.runPromise(
                     db
                       .select()
                       .from(harness_task)
-                      .where(
-                        eq(
-                          harness_task.task_id,
-                          autoTaskID,
-                        ),
+                      .orderBy(
+                        desc(harness_task.task_id),
                       )
                       .get()
                       .pipe(
@@ -520,8 +490,8 @@ const layer = Layer.effect(
                   ).catch(() => undefined)
               }
 
+              // 3. If still no task exists anywhere in database, stop here without creating dummy tasks
               if (!recentTask) {
-
                 return
               }
 
@@ -709,11 +679,13 @@ const layer = Layer.effect(
 
               if (!targetModel) return
 
-              // 7. Run finalizer and WAIT for it.
-              //
-              // This is intentional. We need to see the
-              // actual error instead of losing it in a
-              // fire-and-forget Promise.
+              // 7. Only evolve prompt harness if user requested changes / reported dissatisfaction
+              if (isSatisfied) {
+                // User confirmed satisfaction: existing harness is validated, no new version candidate needed
+                return
+              }
+
+              // 8. Run finalizer on negative feedback to extract lessons and evolve harness
               const finalizerResult =
                 await Effect.runPromise(
                   finalizerSvc.finalizeAndEvolve(
@@ -721,8 +693,6 @@ const layer = Layer.effect(
                     targetModel,
                   ),
                 ).catch((error) => {
-
-
                   return undefined
                 })
 
