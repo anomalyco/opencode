@@ -9,12 +9,12 @@ import { Database } from "../database/database"
 import { makeLocationNode } from "../effect/app-node"
 import { LayerNodePlatform } from "../effect/app-node-platform"
 import { harness_task, harness_subtask_feedback } from "./schema"
-import { SessionTable } from "../session/sql"
+import { SessionTable, PartTable } from "../session/sql"
 import { SessionSchema } from "../session/schema"
 import { SessionStore } from "../session/store"
 import { SessionRunnerModel } from "../session/runner/model"
 import { LocationServiceMap } from "../location-service-map"
-import { eq, desc } from "drizzle-orm"
+import { eq, desc, and } from "drizzle-orm"
 
 export const FeedbackClassification = Schema.Struct({
   isFeedback: Schema.Boolean,
@@ -88,6 +88,7 @@ const layer = Layer.effect(
         ) => {
           if (!sessionID) return activeVersion
 
+          // 1. Check if harness_task has already recorded the domain for this session
           let task = await Effect.runPromise(
             db
               .select()
@@ -100,19 +101,6 @@ const layer = Layer.effect(
               ),
           ).catch(() => undefined)
 
-          if (!task) {
-            task = await Effect.runPromise(
-              db
-                .select()
-                .from(harness_task)
-                .orderBy(desc(harness_task.task_id))
-                .get()
-                .pipe(
-                  Effect.orElseSucceed(() => undefined),
-                ),
-            ).catch(() => undefined)
-          }
-
           if (task?.task_type) {
             const specificVer = await Effect.runPromise(
               versionSvc
@@ -123,6 +111,41 @@ const layer = Layer.effect(
             ).catch(() => null)
 
             if (specificVer) return specificVer
+          }
+
+          // 2. If task classification is running concurrently in the background, inspect the user prompt text in SQLite part table
+          const userPart = await Effect.runPromise(
+            db
+              .select()
+              .from(PartTable)
+              .where(eq(PartTable.session_id, SessionSchema.ID.make(sessionID)))
+              .orderBy(desc(PartTable.time_created))
+              .get()
+              .pipe(Effect.orElseSucceed(() => undefined)),
+          ).catch(() => undefined)
+
+          const promptText = userPart ? JSON.stringify(userPart.data).toLowerCase() : ""
+
+          if (promptText) {
+            // Find active version that matches the prompt stack
+            if (promptText.includes("react") || promptText.includes("hook") || promptText.includes("vitest")) {
+              const reactVer = await Effect.runPromise(
+                versionSvc.getActiveVersion("react_hook").pipe(Effect.orElseSucceed(() => null)),
+              ).catch(() => null)
+              if (reactVer) return reactVer
+            }
+            if (promptText.includes("mlp") || promptText.includes("pytorch") || promptText.includes("adamw") || promptText.includes("gradient")) {
+              const mlVer = await Effect.runPromise(
+                versionSvc.getActiveVersion("data_science_ml").pipe(Effect.orElseSucceed(() => null)),
+              ).catch(() => null)
+              if (mlVer) return mlVer
+            }
+            if (promptText.includes("python") || promptText.includes("pytest") || promptText.includes("def ")) {
+              const pyVer = await Effect.runPromise(
+                versionSvc.getActiveVersion("python_coding").pipe(Effect.orElseSucceed(() => null)),
+              ).catch(() => null)
+              if (pyVer) return pyVer
+            }
           }
 
           return activeVersion
