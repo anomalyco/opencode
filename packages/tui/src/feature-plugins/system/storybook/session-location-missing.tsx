@@ -2,12 +2,23 @@ import type { Plugin } from "@opencode-ai/plugin/tui"
 import { useTerminalDimensions } from "@opentui/solid"
 import { TextAttributes } from "@opentui/core"
 import { createSignal } from "solid-js"
-import { DialogMoveSession } from "../../../component/dialog-move-session"
+import { DialogMoveSession, type MoveSessionWorktrees } from "../../../component/dialog-move-session"
 import { SessionLocationUnavailable } from "../../../routes/session/location-missing"
 import type { Story } from "./index"
 import { StoryFooter } from "./footer"
 
 const directory = "/Users/kit/code/open-source/opencode-workerd-profile"
+const directories = [
+  { directory: "/Users/kit/code/open-source/opencode" },
+  {
+    directory: "/Users/kit/code/open-source/opencode-instruction-rename",
+    strategy: "git_worktree" as const,
+  },
+]
+const worktrees: MoveSessionWorktrees = {
+  list: async () => directories,
+  remove: async () => undefined,
+}
 
 function SessionLocationMissingStory(props: { context: Plugin.Context }) {
   const dimensions = useTerminalDimensions()
@@ -17,14 +28,8 @@ function SessionLocationMissingStory(props: { context: Plugin.Context }) {
     props.context.ui.dialog.show(() => (
       <DialogMoveSession
         projectID="fixture-project"
-        initialDirectories={[
-          { directory: "/Users/kit/code/open-source/opencode" },
-          {
-            directory: "/Users/kit/code/open-source/opencode-instruction-rename",
-            strategy: "git_worktree",
-          },
-        ]}
-        fixture
+        current={{ type: "directory", directory: directories[0].directory, subdirectory: false }}
+        worktrees={worktrees}
         onSelect={(selection) => {
           if (selection.type !== "directory") return
           setMessage(`Selected ${selection.directory}`)
