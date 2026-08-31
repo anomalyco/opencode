@@ -2,6 +2,7 @@ import { Schema, Effect } from "effect"
 import { LLM } from "@opencode-ai/llm"
 import type { ProfileDelta, UserProfileData } from "./profile"
 import type { MemoryItem } from "./memory"
+import { logPersonalization } from "./logger"
 
 export const ExtractedMemorySchema = Schema.Struct({
   category: Schema.String.annotate({
@@ -180,6 +181,11 @@ ${JSON.stringify(input.currentProfile ?? {}, null, 2)}
       generation: { temperature: 0 },
     }).pipe(
       Effect.map((r) => r.object),
+      Effect.tapError((err) =>
+        Effect.sync(() => {
+          logPersonalization("extractSignalsWithLLM:error", err)
+        }),
+      ),
       Effect.orElseSucceed(() => ({
         hasUpdates: false,
         preferenceMemories: [],
