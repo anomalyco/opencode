@@ -122,8 +122,8 @@ test("loads an advertised package TUI entrypoint only from the local cache", asy
       {
         id: "test.server",
         source: { type: "package", package: "test-plugin@1.0.0" },
-        status: "active",
-        tui: true,
+        state: { status: "active" },
+        features: { server: true, tui: true },
       },
     ],
     resolve: async (spec, install) => {
@@ -144,6 +144,31 @@ test("loads an advertised package TUI entrypoint only from the local cache", asy
   await app.task
 })
 
+test("loads an advertised local TUI entrypoint beside its server entrypoint", async () => {
+  await using tmp = await tmpdir()
+  const marker = path.join(tmp.path, "marker.txt")
+  const plugin = path.join(tmp.path, "external", "plugin")
+  await mkdir(plugin, { recursive: true })
+  await writeFile(path.join(plugin, "index.ts"), "export default {}")
+  await writeFile(path.join(plugin, "tui.ts"), lifecycleSource(marker, "test.local", "local"))
+
+  await using app = await bootApp(tmp.path, {
+    plugins: [
+      {
+        id: "test.server",
+        source: { type: "local", path: path.join(plugin, "index.ts") },
+        state: { status: "active" },
+        features: { server: true, tui: true },
+      },
+    ],
+  })
+
+  expect(await until(() => readFile(marker, "utf8"), (value) => value === "local:setup\n")).toBe("local:setup\n")
+
+  process.emit("SIGHUP")
+  await app.task
+})
+
 test("discovers an ancestor TUI plugin directory created after startup", async () => {
   await using tmp = await tmpdir()
   const cwd = path.join(tmp.path, "repo", "packages", "app")
@@ -151,9 +176,8 @@ test("discovers an ancestor TUI plugin directory created after startup", async (
   await mkdir(path.join(tmp.path, "repo", ".git"))
   const ready = path.join(tmp.path, "ready.txt")
   const marker = path.join(tmp.path, "marker.txt")
-  const initial = path.join(cwd, ".opencode", "plugins", "tui")
-  await mkdir(initial, { recursive: true })
-  await writeFile(path.join(initial, "ready.ts"), lifecycleSource(ready, "test.ready", "ready"))
+  const initial = path.join(cwd, ".opencode", "plugins")
+  await writeLocalPlugin(initial, "ready", lifecycleSource(ready, "test.ready", "ready"))
 
   await using app = await bootApp(cwd)
   expect(
@@ -162,9 +186,8 @@ test("discovers an ancestor TUI plugin directory created after startup", async (
       (value) => value === "ready:setup\n",
     ),
   ).toBe("ready:setup\n")
-  const directory = path.join(tmp.path, "repo", ".opencode", "plugins", "tui")
-  await mkdir(directory, { recursive: true })
-  await writeFile(path.join(directory, "hot.ts"), lifecycleSource(marker, "test.hot", "v1"))
+  const directory = path.join(tmp.path, "repo", ".opencode", "plugins")
+  await writeLocalPlugin(directory, "hot", lifecycleSource(marker, "test.hot", "v1"))
 
   expect(
     await until(
@@ -179,11 +202,9 @@ test("discovers an ancestor TUI plugin directory created after startup", async (
 
 test("editing a discovered TUI plugin hot-reloads its fresh module", async () => {
   await using tmp = await tmpdir()
-  const directory = path.join(tmp.path, ".opencode", "plugins", "tui")
-  await mkdir(directory, { recursive: true })
+  const directory = path.join(tmp.path, ".opencode", "plugins")
   const marker = path.join(tmp.path, "marker.txt")
-  const source = path.join(directory, "hot.ts")
-  await writeFile(source, lifecycleSource(marker, "test.hot", "v1"))
+  const source = await writeLocalPlugin(directory, "hot", lifecycleSource(marker, "test.hot", "v1"))
 
   await using app = await bootApp(tmp.path)
   const read = () => readFile(marker, "utf8")
@@ -198,13 +219,11 @@ test("editing a discovered TUI plugin hot-reloads its fresh module", async () =>
 
 test("does not activate a local plugin whose source changes during import", async () => {
   await using tmp = await tmpdir()
-  const directory = path.join(tmp.path, ".opencode", "plugins", "tui")
-  await mkdir(directory, { recursive: true })
+  const directory = path.join(tmp.path, ".opencode", "plugins")
   const marker = path.join(tmp.path, "marker.txt")
   const ready = path.join(tmp.path, "ready.txt")
   const gate = path.join(tmp.path, "gate.txt")
-  const source = path.join(directory, "hot.ts")
-  await writeFile(source, lifecycleSource(marker, "test.hot", "v1"))
+  const source = await writeLocalPlugin(directory, "hot", lifecycleSource(marker, "test.hot", "v1"))
 
   await using app = await bootApp(tmp.path)
   const read = () => readFile(marker, "utf8")
@@ -232,14 +251,13 @@ test("does not activate a local plugin whose source changes during import", asyn
 
 test("a plugin whose slot render throws does not take down the TUI", async () => {
   await using tmp = await tmpdir()
-  const directory = path.join(tmp.path, ".opencode", "plugins", "tui")
-  await mkdir(directory, { recursive: true })
+  const directory = path.join(tmp.path, ".opencode", "plugins")
   const markerA = path.join(tmp.path, "a.txt")
   const markerCrash = path.join(tmp.path, "crash.txt")
-  const sourceA = path.join(directory, "a.ts")
-  await writeFile(sourceA, lifecycleSource(markerA, "test.a", "a1"))
-  await writeFile(
-    path.join(directory, "crash.ts"),
+  const sourceA = await writeLocalPlugin(directory, "a", lifecycleSource(markerA, "test.a", "a1"))
+  await writeLocalPlugin(
+    directory,
+    "crash",
     `
 import { appendFile } from "node:fs/promises"
 export default {
@@ -283,14 +301,11 @@ export default {
 
 test("editing one plugin leaves others untouched and a broken save keeps the last good version", async () => {
   await using tmp = await tmpdir()
-  const directory = path.join(tmp.path, ".opencode", "plugins", "tui")
-  await mkdir(directory, { recursive: true })
+  const directory = path.join(tmp.path, ".opencode", "plugins")
   const markerA = path.join(tmp.path, "a.txt")
   const markerB = path.join(tmp.path, "b.txt")
-  const sourceA = path.join(directory, "a.ts")
-  const sourceB = path.join(directory, "b.ts")
-  await writeFile(sourceA, lifecycleSource(markerA, "test.a", "a1"))
-  await writeFile(sourceB, lifecycleSource(markerB, "test.b", "b1"))
+  const sourceA = await writeLocalPlugin(directory, "a", lifecycleSource(markerA, "test.a", "a1"))
+  const sourceB = await writeLocalPlugin(directory, "b", lifecycleSource(markerB, "test.b", "b1"))
 
   await using app = await bootApp(tmp.path)
   const readA = () => readFile(markerA, "utf8")
@@ -324,14 +339,11 @@ test("editing one plugin leaves others untouched and a broken save keeps the las
 
 test("a save whose setup throws restores the previous version", async () => {
   await using tmp = await tmpdir()
-  const directory = path.join(tmp.path, ".opencode", "plugins", "tui")
-  await mkdir(directory, { recursive: true })
+  const directory = path.join(tmp.path, ".opencode", "plugins")
   const marker = path.join(tmp.path, "a.txt")
   const markerB = path.join(tmp.path, "b.txt")
-  const source = path.join(directory, "a.ts")
-  const sourceB = path.join(directory, "b.ts")
-  await writeFile(source, lifecycleSource(marker, "test.a", "a1"))
-  await writeFile(sourceB, lifecycleSource(markerB, "test.b", "b1"))
+  const source = await writeLocalPlugin(directory, "a", lifecycleSource(marker, "test.a", "a1"))
+  const sourceB = await writeLocalPlugin(directory, "b", lifecycleSource(markerB, "test.b", "b1"))
 
   await using app = await bootApp(tmp.path)
   const read = () => readFile(marker, "utf8")
@@ -373,16 +385,17 @@ export default {
 
 test("editing a symlinked plugin's target hot-reloads it", async () => {
   await using tmp = await tmpdir()
-  const directory = path.join(tmp.path, ".opencode", "plugins", "tui")
+  const directory = path.join(tmp.path, ".opencode", "plugins")
   await mkdir(directory, { recursive: true })
   const marker = path.join(tmp.path, "a.txt")
   // The real source lives outside the discovery directory; only a symlink
   // is discovered. Edits land at the target, which emits no event in the
   // plugin directory itself.
-  const target = path.join(tmp.path, "elsewhere", "a.ts")
+  const target = path.join(tmp.path, "elsewhere", "a", "tui.ts")
   await mkdir(path.dirname(target), { recursive: true })
+  await writeFile(path.join(path.dirname(target), "index.ts"), "export default {}")
   await writeFile(target, lifecycleSource(marker, "test.a", "a1"))
-  await symlink(target, path.join(directory, "a.ts"))
+  await symlink(path.dirname(target), path.join(directory, "a"))
 
   await using app = await bootApp(tmp.path)
   const read = () => readFile(marker, "utf8")
@@ -397,10 +410,8 @@ test("editing a symlinked plugin's target hot-reloads it", async () => {
 
 test("memory storage survives hot reload while disk storage persists", async () => {
   await using tmp = await tmpdir()
-  const directory = path.join(tmp.path, ".opencode", "plugins", "tui")
-  await mkdir(directory, { recursive: true })
+  const directory = path.join(tmp.path, ".opencode", "plugins")
   const marker = path.join(tmp.path, "counter.txt")
-  const source = path.join(directory, "counter.ts")
   const counterSource = (note: string) => `
 import { appendFile } from "node:fs/promises"
 // ${note}
@@ -415,7 +426,7 @@ export default {
   },
 }
 `
-  await writeFile(source, counterSource("v1"))
+  const source = await writeLocalPlugin(directory, "counter", counterSource("v1"))
 
   await using app = await bootApp(tmp.path)
   const read = () => readFile(marker, "utf8")
@@ -428,3 +439,12 @@ export default {
   process.emit("SIGHUP")
   await app.task
 })
+
+async function writeLocalPlugin(directory: string, name: string, source: string) {
+  const plugin = path.join(directory, name)
+  await mkdir(plugin, { recursive: true })
+  await writeFile(path.join(plugin, "index.ts"), "export default {}")
+  const entrypoint = path.join(plugin, "tui.ts")
+  await writeFile(entrypoint, source)
+  return entrypoint
+}

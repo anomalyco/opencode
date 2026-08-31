@@ -22,6 +22,7 @@ import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { PluginRuntime } from "@opencode-ai/core/plugin/runtime"
 import { Permission } from "@opencode-ai/core/permission"
 import { Reference } from "@opencode-ai/core/reference"
+import { Rpc } from "@opencode-ai/core/rpc"
 import { Skill } from "@opencode-ai/core/skill"
 import { SkillDiscovery } from "@opencode-ai/core/skill/discovery"
 import { Watcher } from "@opencode-ai/core/filesystem/watcher"
@@ -79,6 +80,7 @@ export const PluginTestLayer = LayerNode.compile(
     Permission.node,
     PluginHooks.node,
     Reference.node,
+    Rpc.node,
     Skill.node,
     SkillDiscovery.node,
     Tool.node,

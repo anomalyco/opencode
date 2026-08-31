@@ -185,6 +185,8 @@ import type {
   CommandListOutput,
   SkillListInput,
   SkillListOutput,
+  RpcCallInput,
+  RpcCallOutput,
   EventSubscribeOutput,
   PtyListInput,
   PtyListOutput,
@@ -1166,6 +1168,17 @@ const EndpointSkillList = (raw: RawClient["server.skill"]) => (input?: SkillList
 
 const adaptGroupSkill = (raw: RawClient["server.skill"]) => ({ list: EndpointSkillList(raw) })
 
+const EndpointRpcCall = (raw: RawClient["server.rpc"]) => (input: RpcCallInput) =>
+  preserveEffect<RpcCallOutput>()(
+    raw["rpc.call"]({
+      params: { rpcID: input["rpcID"], method: input["method"] },
+      query: { location: input["location"] },
+      payload: { input: input["input"] },
+    }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const adaptGroupRpc = (raw: RawClient["server.rpc"]) => ({ call: EndpointRpcCall(raw) })
+
 const EndpointEventSubscribe = (raw: RawClient["server.event"]) => () =>
   preserveStream<EventSubscribeOutput>()(
     Stream.unwrap(
@@ -1564,6 +1577,7 @@ const adaptClient = (raw: RawClient) => ({
   file: adaptGroupFile(raw["server.fs"]),
   command: adaptGroupCommand(raw["server.command"]),
   skill: adaptGroupSkill(raw["server.skill"]),
+  rpc: adaptGroupRpc(raw["server.rpc"]),
   event: adaptGroupEvent(raw["server.event"]),
   pty: adaptGroupPty(raw["server.pty"]),
   experimental: adaptGroupExperimental(raw["server.experimental"]),

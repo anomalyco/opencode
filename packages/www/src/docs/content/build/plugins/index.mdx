@@ -5,7 +5,7 @@ title: "Overview"
 Plugins can modify OpenCode's behavior and add new features. To change the terminal UI, build a [CLI
 plugin](/build/plugins/cli).
 
-```ts title=".opencode/plugins/example.ts"
+```ts title=".opencode/plugins/example/index.ts"
 import { Plugin } from "@opencode-ai/plugin"
 
 export default Plugin.define({
@@ -17,7 +17,7 @@ export default Plugin.define({
 ```
 
 Plugins under `.opencode/plugins/` are loaded automatically, like the local example above. To load published packages
-or files from other locations, add them to `plugins` in `opencode.json(c)`:
+or plugin directories from other locations, add them to `plugins` in `opencode.json(c)`:
 
 ```jsonc title="opencode.jsonc"
 {
@@ -26,10 +26,10 @@ or files from other locations, add them to `plugins` in `opencode.json(c)`:
     "opencode-acme-plugin",
     "opencode-acme-plugin@1.2.0",
     "@acme/opencode-plugin",
-    "./plugins/local.ts",
-    "../shared/plugin.ts",
-    "/absolute/path/plugin.ts",
-    "file:///home/me/plugins/local.ts",
+    "./plugins/local",
+    "../shared/plugin",
+    "/absolute/path/plugin",
+    "file:///home/me/plugins/local",
     {
       "package": "@acme/opencode-plugin",
       "options": {
@@ -93,18 +93,18 @@ Pass plugin options with the object form in `opencode.json(c)`.
 {
   "plugins": [
     {
-      "package": "./plugins/company.ts",
+      "package": "./plugins/company",
       "options": {
-        "strict": true
-      }
-    }
-  ]
+        "strict": true,
+      },
+    },
+  ],
 }
 ```
 
 Read those values from `ctx.options` during `setup`.
 
-```ts title="plugins/company.ts"
+```ts title="plugins/company/index.ts"
 import { Plugin } from "@opencode-ai/plugin"
 
 export default Plugin.define({
@@ -122,7 +122,7 @@ transforms and each builds on the changes made before it.
 
 Say we have a plugin that adds one model to the catalog.
 
-```ts title="plugins/models.ts"
+```ts title="plugins/models/index.ts"
 import { Plugin } from "@opencode-ai/plugin"
 
 export default Plugin.define({
@@ -140,7 +140,7 @@ export default Plugin.define({
 
 A later plugin can enforce a maximum output price across every model, including models added by earlier plugins.
 
-```ts title="plugins/model-budget.ts"
+```ts title="plugins/model-budget/index.ts"
 import { Plugin } from "@opencode-ai/plugin"
 
 export default Plugin.define({
@@ -162,7 +162,7 @@ export default Plugin.define({
 Now say the first plugin dynamically fetches can fetch its model list from a
 dynamic source. It can call `reload` when that list changes.
 
-```ts title="plugins/models.ts"
+```ts title="plugins/models/index.ts"
 import { Plugin } from "@opencode-ai/plugin"
 
 export default Plugin.define({
@@ -468,14 +468,23 @@ interface IntegrationContext {
     key(input: IntegrationConnectKeyInput, requestOptions?: RequestOptions): Promise<void>
   }
   oauth: {
-    connect(input: IntegrationOauthConnectInput, requestOptions?: RequestOptions): Promise<IntegrationOauthConnectOutput>
+    connect(
+      input: IntegrationOauthConnectInput,
+      requestOptions?: RequestOptions,
+    ): Promise<IntegrationOauthConnectOutput>
     status(input: IntegrationOauthStatusInput, requestOptions?: RequestOptions): Promise<IntegrationOauthStatusOutput>
     complete(input: IntegrationOauthCompleteInput, requestOptions?: RequestOptions): Promise<void>
     cancel(input: IntegrationOauthCancelInput, requestOptions?: RequestOptions): Promise<void>
   }
   command: {
-    connect(input: IntegrationCommandConnectInput, requestOptions?: RequestOptions): Promise<IntegrationCommandConnectOutput>
-    status(input: IntegrationCommandStatusInput, requestOptions?: RequestOptions): Promise<IntegrationCommandStatusOutput>
+    connect(
+      input: IntegrationCommandConnectInput,
+      requestOptions?: RequestOptions,
+    ): Promise<IntegrationCommandConnectOutput>
+    status(
+      input: IntegrationCommandStatusInput,
+      requestOptions?: RequestOptions,
+    ): Promise<IntegrationCommandStatusOutput>
     cancel(input: IntegrationCommandCancelInput, requestOptions?: RequestOptions): Promise<void>
   }
   transform(callback: (draft: IntegrationDraft) => void): Promise<Registration>
@@ -995,7 +1004,7 @@ Schema: [`V2EventEncoded`](/api#schema-V2EventEncoded)
 
 ```ts
 interface EventContext {
-  subscribe(requestOptions?: RequestOptions): AsyncIterable<OpenCodeEvent>
+  subscribe(options?: { signal?: AbortSignal }): AsyncIterable<OpenCodeEvent>
 }
 ```
 
@@ -1237,10 +1246,7 @@ await ctx.shell.hook("create.before", (event) => {
 
 ```ts
 interface ShellHookContext {
-  hook(
-    name: "create.before",
-    callback: (event: ShellCreateBefore) => Promise<void> | void,
-  ): Promise<Registration>
+  hook(name: "create.before", callback: (event: ShellCreateBefore) => Promise<void> | void): Promise<Registration>
 }
 
 interface ShellCreateBefore {
@@ -1287,6 +1293,115 @@ interface ToolHookContext {
 }
 ```
 
+## RPC
+
+Expose typed methods and custom events through a shared RPC definition. Keep
+the contract in a browser-safe module, separate from plugin setup and server code.
+`Rpc.define` is synchronous and independent of Promise or Effect execution.
+
+```ts title="src/rpc.ts"
+import { Rpc } from "@opencode-ai/plugin/rpc"
+import { z } from "zod"
+
+export const Acme = Rpc.define({
+  id: "acme",
+  methods: {
+    search: {
+      input: z.object({ query: z.string() }),
+      output: z.object({ text: z.string() }),
+      errors: {
+        not_found: z.object({ query: z.string() }),
+      },
+    },
+  },
+  events: {
+    updated: {
+      schema: z.object({ itemID: z.string(), text: z.string() }),
+    },
+  },
+})
+```
+
+Promise plugin contracts accept Standard Schema such as Zod or plain JSON Schema.
+Standard Schema infers types; plain JSON Schema uses `unknown` while still
+validating at runtime. Effect Schema is supported only by the Effect plugin and
+client APIs. Use Standard or JSON Schema when both API styles consume a contract.
+Every method declares `input` and `output` and may declare an `errors` map.
+Error keys become literal error `type` values, while each schema validates and
+transforms that error's `data`. Names starting with `rpc.` are reserved for
+framework failures. Schemas own parsing, transformations, and Effect encoding.
+RPC does not add a second generic JSON validation pass.
+
+Custom event schemas must produce JSON objects. Scalars, arrays, `null`, and
+`undefined` are not valid event data. Plain JSON Schema event definitions are
+checked at emission even though they do not infer a TypeScript payload type.
+
+Plain JSON Schema is interpreted as Draft 2020-12 and delegated directly to
+Effect's JSON Schema importer and decoder. Use Standard Schema when another
+dialect or parser is required.
+
+Use `{}` for an empty event payload; only omitted method input/output represents
+no value.
+
+Register the implementation inside `setup`:
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode-ai/plugin"
+import { Acme } from "./rpc.js"
+
+export default Plugin.define({
+  id: "acme-plugin",
+  async setup(ctx) {
+    const registration = await ctx.rpc.register(Acme, {
+      search: async ({ query }, context) => {
+        const text = await findText(query, { signal: context.signal })
+        if (!text) return context.error("not_found", "Result not found", { query })
+        return { text }
+      },
+    })
+
+    await registration.events.emit("updated", { itemID: "item-1", text: "ready" })
+  },
+})
+```
+
+Promise handlers receive a general second context argument with `signal` and a
+typed `error(type, message, data)` constructor. They may return or throw the
+constructed error; both reject callers with `{ type, message, data? }`. RPC IDs
+are independent of plugin IDs. One plugin can implement several RPCs, and later registrations override earlier ones
+at the same location. Disposal or unload removes only that registration and
+reveals the previous implementation. In-flight calls retain their original handler.
+
+Other server plugins can obtain a handle without implementing the RPC:
+
+```ts
+const acme = ctx.rpc(Acme)
+const result = await acme.search({ query: "hello" })
+
+const unsubscribe = acme.events.on("updated", (event) => {
+  console.log(event.type, event.location.directory, event.data.text)
+})
+```
+
+Handles are immediate; each call finds the current registration. Server-plugin
+handles call and subscribe within their own location and cannot override it.
+`events.subscribe("updated")` returns an async iterable; `events.on` is a
+callback convenience returning unsubscribe. Plugin unload closes its subscriptions.
+
+Event keys are local names. Subscribers see normal prefixed types such as
+`rpc.acme.updated`, with `id`, `created`, direct `data`, required `location`, and optional
+`metadata`. Events publish through the normal ephemeral Bus path.
+
+Subscriptions remain live-only: there is no plugin log/replay API yet, and events
+while disconnected are missed. The method name `events` is reserved for the
+subclient's event API.
+
+External [clients](/build/client#plugin-rpc) use `client.rpc(Acme)` and receive
+that RPC's events across all locations. The native `/api/event` stream and
+typed subclients observe the same direct `rpc.<rpcID>.<event>` envelope.
+Neither importing the contract nor constructing a handle loads the server implementation.
+Configure the plugin on the server separately.
+
 ## Publish
 
 A package plugin uses the same default export as a local plugin. A minimal
@@ -1298,13 +1413,17 @@ manifest is:
   "version": "1.0.0",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./rpc": "./src/rpc.ts"
   },
   "dependencies": {
     "@opencode-ai/plugin": "beta"
   }
 }
 ```
+
+The `./rpc` export is optional; include it when publishing a shared RPC contract
+for other plugins and clients to import without loading your implementation.
 
 Use versions compatible with the OpenCode release you target and test the
 installed package, not only a workspace-linked copy. Because the plugin API is

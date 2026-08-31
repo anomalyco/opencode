@@ -81,7 +81,7 @@ import { TestClock } from "effect/testing"
 import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { asc, desc, eq, sql } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
-import { promptLocationLayer } from "./fixture/prompt-location"
+import { promptLocationNode } from "./fixture/prompt-location"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import { Expected } from "./lib/session-message"
 import { permissionLayer } from "./lib/permission"
@@ -447,6 +447,7 @@ const layer = Layer.unwrap(
         })
         return SessionExecution.Service.of({
           active: coordinator.active,
+          isActive: coordinator.isActive,
           resume: coordinator.run,
           wake: coordinator.wake,
           interrupt: (sessionID) => coordinator.interrupt(sessionID),
@@ -461,6 +462,7 @@ const layer = Layer.unwrap(
         Form.node,
         SessionProjector.node,
         SessionStore.node,
+        SessionInbox.node,
         Agent.node,
         Catalog.node,
         Tool.node,
@@ -484,7 +486,7 @@ const layer = Layer.unwrap(
       [
         ...replacements,
         [Bus.node, Bus.configured({ persist: true })],
-        [LocationServiceMap.node, promptLocationLayer],
+        [LocationServiceMap.node, promptLocationNode],
         [Catalog.node, promptCatalog],
         [SessionExecution.node, execution],
       ],
@@ -516,6 +518,7 @@ const insertSession = (id: Session.ID) =>
 const setup = Effect.gen(function* () {
   const { db } = yield* Database.Service
   const bus = yield* Bus.Service
+  const sessionInbox = yield* SessionInbox.Service
   const agents = yield* Agent.Service
   const catalog = yield* Catalog.Service
   const hooks = yield* PluginHooks.Service
@@ -547,6 +550,7 @@ const setup = Effect.gen(function* () {
   return Object.assign(state, {
     db,
     bus,
+    sessionInbox,
     session,
     llm,
     requests: llm.requests,
@@ -1387,12 +1391,12 @@ describe("SessionRunnerLLM", () => {
     s.systemLoadHook = Effect.sync(() => {
       reads++
     })
-    const compaction = yield* SessionInbox.admitCompaction(s.db, s.bus, {
+    const compaction = yield* s.sessionInbox.admitCompaction({
       id: SessionMessage.ID.create(),
       sessionID,
       delivery: "queue",
     })
-    yield* SessionInbox.admit(s.db, s.bus, {
+    yield* s.sessionInbox.admit({
       id: SessionMessage.ID.create(),
       sessionID,
       item: {
@@ -1420,7 +1424,7 @@ describe("SessionRunnerLLM", () => {
 
   scenario("delivers a queued move atomically at the idle boundary", function* (s) {
     const inboxID = SessionMessage.ID.create()
-    yield* SessionInbox.admit(s.db, s.bus, {
+    yield* s.sessionInbox.admit({
       id: inboxID,
       sessionID,
       item: {
@@ -1456,7 +1460,7 @@ describe("SessionRunnerLLM", () => {
     const tools = yield* s.blockTools()
     const run = yield* s.resume.pipe(Effect.forkChild)
     yield* tools.started
-    yield* SessionInbox.admit(s.db, s.bus, {
+    yield* s.sessionInbox.admit({
       id: SessionMessage.ID.create(),
       sessionID,
       item: {
@@ -1488,7 +1492,7 @@ describe("SessionRunnerLLM", () => {
     const run = yield* s.resume.pipe(Effect.forkChild)
     yield* tools.started
     yield* s.session.prompt({ sessionID, text: "Queued for later", delivery: "queue", resume: false })
-    yield* SessionInbox.admit(s.db, s.bus, {
+    yield* s.sessionInbox.admit({
       id: SessionMessage.ID.create(),
       sessionID,
       item: {
@@ -1521,12 +1525,12 @@ describe("SessionRunnerLLM", () => {
     const stream = yield* s.llm.gate
     const run = yield* runner.drain({ sessionID, force: false }).pipe(Effect.forkChild)
     yield* stream.started
-    const compaction = yield* SessionInbox.admitCompaction(s.db, s.bus, {
+    const compaction = yield* s.sessionInbox.admitCompaction({
       id: SessionMessage.ID.create(),
       sessionID,
       delivery: "queue",
     })
-    yield* SessionInbox.admit(s.db, s.bus, {
+    yield* s.sessionInbox.admit({
       id: SessionMessage.ID.create(),
       sessionID,
       item: {
@@ -3207,7 +3211,7 @@ describe("SessionRunnerLLM", () => {
     const run = yield* runner.drain({ sessionID, force: false }).pipe(Effect.forkChild)
     yield* stream.started
 
-    yield* SessionInbox.admit(s.db, s.bus, {
+    yield* s.sessionInbox.admit({
       id: SessionMessage.ID.create(),
       sessionID,
       item: {
@@ -3319,7 +3323,7 @@ describe("SessionRunnerLLM", () => {
 
   scenario("a steer-scoped drain runs a queued manual compaction next in line", function* (s) {
     // Admit without waking so the steer-scoped drain below is the first consumer.
-    const compaction = yield* SessionInbox.admitCompaction(s.db, s.bus, {
+    const compaction = yield* s.sessionInbox.admitCompaction({
       id: SessionMessage.ID.create(),
       sessionID,
       delivery: "queue",
@@ -3340,7 +3344,7 @@ describe("SessionRunnerLLM", () => {
 
   scenario("a steer-scoped drain leaves a compaction parked behind a queued prompt", function* (s) {
     yield* s.session.prompt({ sessionID, text: "Queue for later", delivery: "queue", resume: false })
-    const compaction = yield* SessionInbox.admitCompaction(s.db, s.bus, {
+    const compaction = yield* s.sessionInbox.admitCompaction({
       id: SessionMessage.ID.create(),
       sessionID,
       delivery: "queue",
@@ -5535,6 +5539,29 @@ describe("SessionRunnerLLM", () => {
       Expected.user("Two blocks"),
       Expected.assistant({}, [Expected.text("First"), Expected.text("Second")]),
     ])
+  })
+
+  scenario("broadcasts pending text while the provider stream is paused", function* (s) {
+    const paused = yield* Deferred.make<void>()
+    yield* s.admit("Check before running a command")
+    yield* s.llm.push(
+      Stream.concat(
+        Stream.fromIterable([
+          LLMEvent.textStart({ id: "text" }),
+          LLMEvent.textDelta({ id: "text", text: "Checking the project." }),
+        ]),
+        Stream.fromEffect(Deferred.succeed(paused, undefined)).pipe(Stream.flatMap(() => Stream.never)),
+      ),
+    )
+    const deltas = yield* s.bus
+      .subscribe(SessionEvent.Text.Delta)
+      .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
+    const running = yield* s.resume.pipe(Effect.forkScoped)
+    yield* Deferred.await(paused)
+    yield* TestClock.adjust("100 millis")
+    expect(deltas.pollUnsafe()).toBeDefined()
+    expect(Array.from(yield* Fiber.join(deltas)).map((event) => event.data.delta)).toEqual(["Checking the project."])
+    yield* Fiber.interrupt(running)
   })
 
   for (const kind of fragmentKinds) {

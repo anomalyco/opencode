@@ -347,7 +347,7 @@ describe("LocationServiceMap", () => {
           yield* Effect.promise(() =>
             fs.writeFile(
               file,
-              JSON.stringify({ plugins: [path.join(import.meta.dir, "plugin/fixtures/config-effect-plugin.ts")] }),
+              JSON.stringify({ plugins: [path.join(import.meta.dir, "plugin/fixtures/config-effect")] }),
             ),
           )
           yield* Fiber.join(updated)
@@ -561,21 +561,20 @@ describe("LocationServiceMap", () => {
               fs.writeFile(
                 file,
                 JSON.stringify({
-                  plugins: ["-*", path.join(import.meta.dir, "plugin/fixtures/failing-plugin.ts")],
+                  plugins: ["-*", path.join(import.meta.dir, "plugin/fixtures/failing")],
                 }),
               ),
             )
             for (let attempt = 0; attempt < 100; attempt++) {
-              if ((yield* registry.list()).some((plugin) => plugin.status === "failed")) break
+              if ((yield* registry.list()).some((plugin) => plugin.state.status === "failed")) break
               yield* Effect.sleep("20 millis")
             }
             expect(yield* registry.list()).toEqual([
               {
                 id: Plugin.ID.make("failing-plugin"),
-                source: { type: "local", path: path.join(import.meta.dir, "plugin/fixtures/failing-plugin.ts") },
-                status: "failed",
-                error: expect.stringContaining("plugin failed"),
-                tui: false,
+                source: { type: "local", path: path.join(import.meta.dir, "plugin/fixtures/failing/index.ts") },
+                state: { status: "failed", error: expect.stringContaining("plugin failed") },
+                features: { server: true },
               },
             ])
 

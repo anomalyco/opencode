@@ -51,6 +51,7 @@
 
   box-sizing: border-box;
   display: flex;
+  flex-shrink: 0;
   flex-direction: row;
   align-items: center;
   gap: 8px;

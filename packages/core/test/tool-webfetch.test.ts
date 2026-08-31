@@ -128,6 +128,15 @@ describe("WebFetchTool helpers", () => {
     expect(output).toHaveLength(WebFetchTool.MAX_RESPONSE_BYTES - 64 * 1024)
   })
 
+  test.each(["x", "\u00e9", "\u{1f600}"])("preserves UTF-8 boundaries at the content limit for %s", (character) => {
+    const budget = WebFetchTool.MAX_RESPONSE_BYTES - 64 * 1024
+    const fitting = "aa" + character.repeat(Math.floor((budget - 2) / Buffer.byteLength(character)))
+    expect(WebFetchTool.convertHTMLToMarkdown(fitting)).toBe(fitting)
+    const truncated = WebFetchTool.convertHTMLToMarkdown(fitting + character)
+    expect(truncated).toBe(fitting)
+    expect(Buffer.byteLength(truncated)).toBe(Buffer.byteLength(fitting))
+  })
+
   test("bounds deeply nested list output and fragmented code fences", () => {
     const lists = `${"<ul><li>item".repeat(2_000)}${"</li></ul>".repeat(2_000)}`
     const quotes = `${"<blockquote><p>item".repeat(2_000)}${"</p></blockquote>".repeat(2_000)}`

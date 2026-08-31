@@ -58,6 +58,34 @@ function withFormatter<A, E, R>(
 }
 
 describe("Formatter", () => {
+  ;[
+    { file: "test.match", extension: ".match", matches: true },
+    { file: "test.other", extension: ".match", matches: false },
+    { file: "test.MATCH", extension: ".match", matches: false },
+    { file: "test.MATCH", extension: ".MATCH", matches: true },
+    { file: ".match", extension: ".match", matches: false },
+    { file: ".match", extension: "", matches: true },
+    { file: "README", extension: ".match", matches: false },
+    { file: "README", extension: "", matches: true },
+    { file: "test.part.match", extension: ".match", matches: true },
+    { file: "test.part.match", extension: ".part.match", matches: false },
+  ].forEach((entry) =>
+    it.live(`matches ${entry.file} against ${JSON.stringify(entry.extension)}: ${entry.matches}`, () =>
+      withFormatter(
+        {
+          matching: {
+            command: [process.execPath, "-e", "process.exit(0)", "$FILE"],
+            extensions: [entry.extension],
+          },
+        },
+        (formatter, directory) =>
+          Effect.gen(function* () {
+            expect(yield* formatter.file(path.join(directory, entry.file))).toBe(entry.matches)
+          }),
+      ),
+    ),
+  )
+
   it.live("does not run formatters marked as disabled in config", () =>
     withFormatter(
       {

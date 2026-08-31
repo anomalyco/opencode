@@ -577,10 +577,8 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
     }
 
     if (message.role === "user") {
-      input.push({
-        role: "user",
-        content: yield* Effect.forEach(message.content, (part) => lowerUserContent(part, request, extension)),
-      })
+      const content = yield* Effect.forEach(message.content, (part) => lowerUserContent(part, request, extension))
+      if (content.length > 0) input.push({ role: "user", content })
       continue
     }
 

@@ -35,8 +35,8 @@ import { Workspace } from "@opencode-ai/core/workspace"
 import { Expected } from "./lib/session-message"
 import { testEffect } from "./lib/effect"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
-import { promptLocationLayer } from "./fixture/prompt-location"
-import { globalProjectLayer } from "./lib/project"
+import { promptLocationNode } from "./fixture/prompt-location"
+import { globalProjectNode } from "./lib/project"
 import { tmpdirScoped } from "./fixture/tmpdir"
 
 const it = testEffect(
@@ -52,8 +52,8 @@ const it = testEffect(
     ]),
     [
       [Bus.node, Bus.configured({ persist: true })],
-      [Project.node, globalProjectLayer],
-      [LocationServiceMap.node, promptLocationLayer],
+      [Project.node, globalProjectNode],
+      [LocationServiceMap.node, promptLocationNode],
       [SessionExecution.node, SessionExecution.noopLayer],
     ],
   ),
@@ -73,7 +73,7 @@ const projectIt = testEffect(
     [
       [Bus.node, Bus.configured({ persist: true })],
       // Project adoption needs plain-prompt admission, not live plugin/provider startup.
-      [LocationServiceMap.node, promptLocationLayer],
+      [LocationServiceMap.node, promptLocationNode],
       [SessionExecution.node, SessionExecution.noopLayer],
     ],
   ),

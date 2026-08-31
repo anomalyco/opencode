@@ -104,7 +104,7 @@ describe("PluginSupervisor config", () => {
         plugins: [
           "-*",
           {
-            package: path.join(import.meta.dir, "../plugin/fixtures/config-promise-plugin.ts"),
+            package: path.join(import.meta.dir, "../plugin/fixtures/config-promise"),
             options: { description: "Loaded from config" },
           },
         ],
@@ -121,17 +121,17 @@ describe("PluginSupervisor config", () => {
           id: Plugin.ID.make("config-promise-plugin"),
           source: {
             type: "local",
-            path: path.join(import.meta.dir, "../plugin/fixtures/config-promise-plugin.ts"),
+            path: path.join(import.meta.dir, "../plugin/fixtures/config-promise/index.ts"),
           },
-          status: "active",
-          tui: true,
+          state: { status: "active" },
+          features: { server: true, tui: true },
         })
       }),
     ),
   )
 
   it.live("disables configured plugins by exported ID", () => {
-    const plugin = path.join(import.meta.dir, "../plugin/fixtures/config-promise-plugin.ts")
+    const plugin = path.join(import.meta.dir, "../plugin/fixtures/config-promise")
     return withLocation(
       { plugins: [plugin, "-config-promise-plugin"] },
       Effect.gen(function* () {
@@ -145,7 +145,7 @@ describe("PluginSupervisor config", () => {
   })
 
   it.live("does not disable configured plugins by package target", () => {
-    const plugin = path.join(import.meta.dir, "../plugin/fixtures/config-promise-plugin.ts")
+    const plugin = path.join(import.meta.dir, "../plugin/fixtures/config-promise")
     return withLocation(
       { plugins: [plugin, `-${plugin}`] },
       Effect.gen(function* () {
@@ -162,7 +162,7 @@ describe("PluginSupervisor config", () => {
         plugins: [
           "-*",
           {
-            package: path.join(import.meta.dir, "../plugin/fixtures/config-effect-plugin.ts"),
+            package: path.join(import.meta.dir, "../plugin/fixtures/config-effect"),
             options: { description: "Effect plugin from config" },
           },
         ],
@@ -191,9 +191,9 @@ describe("PluginSupervisor config", () => {
         plugins: [
           "-*",
           path.join(import.meta.dir, "../plugin/fixtures/missing-plugin.ts"),
-          path.join(import.meta.dir, "../plugin/fixtures/invalid-plugin.ts"),
+          path.join(import.meta.dir, "../plugin/fixtures/invalid"),
           {
-            package: path.join(import.meta.dir, "../plugin/fixtures/config-promise-plugin.ts"),
+            package: path.join(import.meta.dir, "../plugin/fixtures/config-promise"),
             options: { description: "Loaded after invalid plugins" },
           },
         ],
@@ -207,13 +207,13 @@ describe("PluginSupervisor config", () => {
         })
         expect(output).toEqual([
           path.join(import.meta.dir, "../plugin/fixtures/missing-plugin.ts"),
-          path.join(import.meta.dir, "../plugin/fixtures/invalid-plugin.ts"),
+          path.join(import.meta.dir, "../plugin/fixtures/invalid/index.ts"),
         ])
         expect(
-          (yield* plugins.list()).filter((plugin) => plugin.status === "failed").map((plugin) => plugin.source),
+          (yield* plugins.list()).filter((plugin) => plugin.state.status === "failed").map((plugin) => plugin.source),
         ).toEqual([
           { type: "local", path: path.join(import.meta.dir, "../plugin/fixtures/missing-plugin.ts") },
-          { type: "local", path: path.join(import.meta.dir, "../plugin/fixtures/invalid-plugin.ts") },
+          { type: "local", path: path.join(import.meta.dir, "../plugin/fixtures/invalid/index.ts") },
         ])
       }),
     ).pipe(Effect.provide(Logger.layer([logger])))
@@ -233,35 +233,23 @@ describe("PluginSupervisor config", () => {
     ),
   )
 
-  it.live("loads auto-discovered plugin package entrypoints in order", () =>
+  it.live("loads conventional auto-discovered plugin entrypoints", () =>
     withLocation(
       undefined,
       Effect.gen(function* () {
         yield* ready()
         const plugins = yield* Plugin.Service
         const ids = (yield* plugins.list()).map((plugin) => String(plugin.id))
-        expect(ids).toContain("package-exports")
-        expect(ids).toContain("package-module")
-        expect(ids).toContain("package-main")
-        expect(ids).toContain("package-index")
+        expect(ids).toContain("package-index-ts")
+        expect(ids).toContain("package-index-js")
+        expect(ids).not.toContain("package-custom-entry")
       }),
       false,
       async (directory) => {
         await Promise.all([
-          writeDiscoveredPackage(directory, "exports", { exports: "./entry.ts" }, { "entry.ts": "package-exports" }),
-          writeDiscoveredPackage(
-            directory,
-            "module",
-            { exports: "./missing.js", module: "./entry.js" },
-            { "entry.js": "package-module" },
-          ),
-          writeDiscoveredPackage(
-            directory,
-            "main",
-            { exports: { import: "./missing.js" }, module: "./missing.js", main: "./entry.js" },
-            { "entry.js": "package-main" },
-          ),
-          writeDiscoveredPackage(directory, "index", undefined, { "index.js": "package-index" }),
+          writeDiscoveredPackage(directory, "ts", { "index.ts": "package-index-ts" }),
+          writeDiscoveredPackage(directory, "js", { "index.js": "package-index-js" }),
+          writeDiscoveredPackage(directory, "custom", { "entry.ts": "package-custom-entry" }),
         ])
       },
     ),
@@ -282,21 +270,11 @@ describe("PluginSupervisor config", () => {
       async (directory) => {
         await fs.mkdir(path.join(directory, ".opencode"), { recursive: true })
         await fs.writeFile(path.join(directory, ".opencode", "escape.js"), discoveredPlugin("escaped-entrypoint"))
-        await writeDiscoveredPackage(
-          directory,
-          "contained",
-          { exports: "../../escape.js" },
-          { "index.js": "contained-fallback" },
-        )
-        await writeDiscoveredPackage(
-          directory,
-          "symlink",
-          { exports: "./entry.js" },
-          { "index.js": "symlink-fallback" },
-        )
+        await writeDiscoveredPackage(directory, "contained", { "index.js": "contained-fallback" })
+        await writeDiscoveredPackage(directory, "symlink", { "index.js": "symlink-fallback" })
         await fs.symlink(
           path.join(directory, ".opencode", "escape.js"),
-          path.join(directory, ".opencode", "plugins", "symlink", "entry.js"),
+          path.join(directory, ".opencode", "plugins", "symlink", "index.ts"),
         )
       },
     ),
@@ -307,7 +285,7 @@ describe("PluginSupervisor config", () => {
       const sdk = yield* SdkPlugins.Service
       yield* sdk.register(define({ id: "static-sdk", effect: () => Effect.void }))
       yield* withLocation(
-        { plugins: ["-*", path.join(import.meta.dir, "../plugin/fixtures/config-promise-plugin.ts")] },
+        { plugins: ["-*", path.join(import.meta.dir, "../plugin/fixtures/config-promise")] },
         Effect.gen(function* () {
           yield* ready()
           const plugins = yield* Plugin.Service
@@ -365,15 +343,15 @@ describe("PluginSupervisor config", () => {
     ),
   )
 
-  it.live("reloads a configured plugin when its source file changes", () =>
+  it.live("reloads a configured plugin when its entrypoint changes", () =>
     withLocation(
-      { plugins: ["-*", "./external/mutable.ts"] },
+      { plugins: ["-*", "./external"] },
       Effect.gen(function* () {
         yield* ready()
         const agents = yield* Agent.Service
         const bus = yield* Bus.Service
         const location = yield* Location.Service
-        const file = path.join(location.directory, "external", "mutable.ts")
+        const file = path.join(location.directory, "external", "index.ts")
 
         expect((yield* agents.get(Agent.ID.make("mutable")))?.description).toBe("first")
 
@@ -395,8 +373,19 @@ describe("PluginSupervisor config", () => {
         // configured-entrypoint watch can observe the edit.
         const external = path.join(directory, "external")
         await fs.mkdir(external, { recursive: true })
-        await fs.writeFile(path.join(external, "mutable.ts"), mutablePlugin("first"))
+        await fs.writeFile(path.join(external, "index.ts"), mutablePlugin("first"))
       },
+    ),
+  )
+
+  it.live("skips configured local files", () =>
+    withLocation(
+      { plugins: ["-*", path.join(import.meta.dir, "../plugin/fixtures/config-promise-plugin.ts")] },
+      Effect.gen(function* () {
+        yield* ready()
+        const plugins = yield* Plugin.Service
+        expect((yield* plugins.list()).map((plugin) => String(plugin.id))).not.toContain("config-promise-plugin")
+      }),
     ),
   )
 
@@ -419,8 +408,8 @@ describe("PluginSupervisor config", () => {
       yield* withLocation(
         {
           plugins: [
-            path.join(import.meta.dir, "../plugin/fixtures/config-promise-plugin.ts"),
-            path.join(import.meta.dir, "../plugin/fixtures/variant-source-plugin.ts"),
+            path.join(import.meta.dir, "../plugin/fixtures/config-promise"),
+            path.join(import.meta.dir, "../plugin/fixtures/variant-source"),
           ],
         },
         Effect.gen(function* () {
@@ -448,7 +437,7 @@ describe("PluginSupervisor config", () => {
   it.live("allows variant generation to be disabled", () =>
     withLocation(
       {
-        plugins: [path.join(import.meta.dir, "../plugin/fixtures/variant-source-plugin.ts"), "-opencode.variant"],
+        plugins: [path.join(import.meta.dir, "../plugin/fixtures/variant-source"), "-opencode.variant"],
       },
       Effect.gen(function* () {
         yield* ready()
@@ -592,13 +581,9 @@ function discoveredPlugin(id: string) {
 async function writeDiscoveredPackage(
   directory: string,
   name: string,
-  manifest: Record<string, unknown> | undefined,
   files: Record<string, string>,
 ) {
   const plugin = path.join(directory, ".opencode", "plugins", name)
   await fs.mkdir(plugin, { recursive: true })
-  await Promise.all([
-    ...(manifest ? [fs.writeFile(path.join(plugin, "package.json"), JSON.stringify(manifest))] : []),
-    ...Object.entries(files).map(([file, id]) => fs.writeFile(path.join(plugin, file), discoveredPlugin(id))),
-  ])
+  await Promise.all(Object.entries(files).map(([file, id]) => fs.writeFile(path.join(plugin, file), discoveredPlugin(id))))
 }

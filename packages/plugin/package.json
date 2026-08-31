@@ -6,7 +6,7 @@
   "license": "MIT",
   "scripts": {
     "test": "bun test --timeout 5000",
-    "typecheck": "tsgo --noEmit",
+    "typecheck": "tsgo --noEmit -p tsconfig.tests.json",
     "build": "tsc -p tsconfig.build.json"
   },
   "exports": {

@@ -42,7 +42,7 @@ import { HttpClient, HttpClientResponse } from "effect/unstable/http"
 import path from "node:path"
 import { testEffect } from "./lib/effect"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
-import { promptLocationLayer } from "./fixture/prompt-location"
+import { promptLocationNode } from "./fixture/prompt-location"
 import { permissionLayer } from "./lib/permission"
 import { agentHost, catalogHost, host } from "./plugin/host"
 
@@ -125,6 +125,7 @@ const execution = (llmClient: Layer.Layer<typeof LLMClient.Service>) =>
       })
       return SessionExecution.Service.of({
         active: coordinator.active,
+        isActive: coordinator.isActive,
         resume: coordinator.run,
         wake: coordinator.wake,
         interrupt: (sessionID) => coordinator.interrupt(sessionID),
@@ -155,7 +156,7 @@ const testLayer = (llmClient: Layer.Layer<typeof LLMClient.Service>) =>
     ]),
     [
       [Bus.node, Bus.configured({ persist: true })],
-      [LocationServiceMap.node, promptLocationLayer],
+      [LocationServiceMap.node, promptLocationNode],
       [LayerNodePlatform.llmClient, llmClient],
       [Permission.node, permission],
       [Catalog.node, promptCatalog],

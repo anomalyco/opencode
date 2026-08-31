@@ -58,10 +58,12 @@ interface LocationCollection<Value> {
   invalidate(location?: LocationRef): void
 }
 
+type OpenCodeEventMap = { [Type in OpenCodeEvent["type"]]: Extract<OpenCodeEvent, { type: Type }> }
+
 export interface Data {
   readonly on: <Type extends OpenCodeEvent["type"]>(
     type: Type,
-    handler: (event: Extract<OpenCodeEvent, { type: Type }>) => void,
+    handler: (event: OpenCodeEventMap[Type]) => void,
   ) => () => void
   readonly listen: (handler: (event: { details: OpenCodeEvent }) => void) => () => void
   readonly session: {

@@ -3,7 +3,7 @@ import type { Agent } from "@opencode-ai/schema/agent"
 import type { Model } from "@opencode-ai/schema/model"
 import type { RelativePath } from "@opencode-ai/schema/schema"
 import type { Snapshot } from "@opencode-ai/schema/snapshot"
-import { Clock, Effect, Iterable } from "effect"
+import { Effect, Fiber, Iterable } from "effect"
 import { isArrayNonEmpty, isReadonlyArrayNonEmpty } from "effect/Array"
 import { Bus } from "../../bus.js"
 import { SessionEvent } from "../event.js"
@@ -130,7 +130,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
       readonly ordinal: number
       readonly values: string[]
       pending: string
-      publishedAt?: number
+      timer?: Fiber.Fiber<void>
       state?: Record<string, unknown>
     }
     const chunks = new Map<string, Fragment>()
@@ -143,36 +143,46 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
         chunks.set(id, { ordinal, values: [], pending: "", state })
         return Effect.succeed(ordinal)
       })
-    const publishDelta = Effect.fnUntraced(function* (id: string, force = false) {
+    const publishDelta = Effect.fnUntraced(function* (id: string) {
       if (!delta) return undefined
       const current = chunks.get(id)
       if (!current) return yield* Effect.die(new Error(`${name} delta before start: ${id}`))
       if (!current.pending) return undefined
-      const now = yield* Clock.currentTimeMillis
-      if (!force && current.publishedAt === undefined) {
-        current.publishedAt = now
-        return undefined
-      }
-      if (!force && current.publishedAt !== undefined && now - current.publishedAt < deltaBatchInterval)
-        return undefined
-      yield* delta(id, current.pending, current.ordinal)
+      const value = current.pending
+      // New chunks can arrive while the timer is publishing this batch.
       current.pending = ""
-      current.publishedAt = now
+      yield* delta(id, value, current.ordinal)
       return undefined
-    })
+    }, Effect.uninterruptible)
     const append = Effect.fnUntraced(function* (id: string, value: string, state?: Record<string, unknown>) {
       const current = chunks.get(id)
       if (!current) return yield* Effect.die(new Error(`${name} delta before start: ${id}`))
       current.values.push(value)
       if (delta) current.pending += value
       if (state !== undefined) current.state = { ...current.state, ...state }
-      yield* publishDelta(id)
+      if (current.pending && !current.timer) {
+        // Own the trailing flush in the provider fiber, even if no more chunks arrive.
+        current.timer = yield* Effect.gen(function* () {
+          while (current.pending) {
+            yield* Effect.sleep(deltaBatchInterval)
+            yield* publishDelta(id)
+          }
+        }).pipe(
+          Effect.ensuring(
+            Effect.sync(() => {
+              current.timer = undefined
+            }),
+          ),
+          Effect.forkChild({ startImmediately: true }),
+        )
+      }
       return current.ordinal
     })
     const end = Effect.fnUntraced(function* (id: string, state?: Record<string, unknown>, value?: string) {
       const current = chunks.get(id)
       if (!current) return yield* Effect.die(new Error(`${name} end before start: ${id}`))
-      yield* publishDelta(id, true)
+      if (current.timer) yield* Fiber.interrupt(current.timer)
+      yield* publishDelta(id)
       yield* ended(
         id,
         value ?? current.values.join(""),

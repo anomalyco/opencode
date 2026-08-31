@@ -19,7 +19,10 @@ export function SessionHeader() {
   const isDesktop = createMediaQuery("(min-width: 768px)")
 
   const actions = createMemo<SessionHeaderActionsState>(() => ({
-    status: status() ? { label: language.t("status.popover.trigger"), content: () => <StatusPopover /> } : undefined,
+    status:
+      isDesktop() && status()
+        ? { label: language.t("status.popover.trigger"), content: () => <StatusPopover /> }
+        : undefined,
     reviewLabel: language.t("command.review.toggle"),
     reviewKeybind: reviewTooltipKeybind(command),
     reviewVisible: isDesktop(),

@@ -9,6 +9,14 @@
 - Do not add a documentation frontend framework; this folder owns the UI directly.
 - Keep internal Markdown links docs-root-relative, for example `/config`; `remark-links.ts` applies the site and docs base paths.
 
+## Writing Style
+
+- Keep prose sections brief and focused on one idea. Prefer one to three sentences over large paragraphs.
+- Interleave explanations with concrete code, configuration, command, or output examples so pages do not become walls of text.
+- Put the relevant example immediately after the text that introduces it, following `content/build/plugins/cli.mdx` as the reference pattern.
+- Split long explanations with meaningful headings and examples rather than accumulating caveats in one paragraph.
+- Lead with the common task and working example; place edge cases and supporting details afterward.
+
 ## Validation
 
 - Run `bun typecheck` and `bun run build` from `packages/www` after changes.

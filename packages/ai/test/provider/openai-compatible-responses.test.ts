@@ -96,6 +96,27 @@ describe("Open Responses-compatible route", () => {
     }),
   )
 
+  it.effect("omits user messages with no content", () =>
+    Effect.gen(function* () {
+      const model = configure({
+        apiKey: "test-key",
+        baseURL: "https://responses.example.test/v1",
+        provider: "example",
+      }).model("example-model")
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [Message.user("Before."), Message.user([]), Message.user("After.")],
+        }),
+      )
+
+      expect(prepared.body.input).toEqual([
+        { role: "user", content: [{ type: "input_text", text: "Before." }] },
+        { role: "user", content: [{ type: "input_text", text: "After." }] },
+      ])
+    }),
+  )
+
   it.effect("uses data URLs for embedded PDF messages and tool results", () =>
     Effect.gen(function* () {
       const model = configure({

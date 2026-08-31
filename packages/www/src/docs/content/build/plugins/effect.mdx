@@ -12,7 +12,7 @@ bun add @opencode-ai/plugin@beta effect
 
 Export an Effect plugin from `.opencode/plugins/` to load it automatically.
 
-```ts title=".opencode/plugins/concise.ts"
+```ts title=".opencode/plugins/concise/index.ts"
 import { Plugin } from "@opencode-ai/plugin/effect"
 import { Effect } from "effect"
 
@@ -26,7 +26,7 @@ export default Plugin.define({
 })
 ```
 
-Published packages and files outside `.opencode/plugins/` use the same `plugins` configuration as other server
+Published packages and plugin directories outside `.opencode/plugins/` use the same `plugins` configuration as other server
 plugins.
 
 ```jsonc title="opencode.jsonc"
@@ -36,18 +36,18 @@ plugins.
     "opencode-acme-effect-plugin",
     "opencode-acme-effect-plugin@1.2.0",
     "@acme/opencode-effect-plugin",
-    "./plugins/local-effect.ts",
+    "./plugins/local-effect",
     {
       "package": "@acme/opencode-effect-plugin",
-      "options": { "agent": "reviewer", "strict": true }
-    }
-  ]
+      "options": { "agent": "reviewer", "strict": true },
+    },
+  ],
 }
 ```
 
 See [Configure plugins](/plugins) for enablement, package resolution, and configuration precedence.
 
-```ts title="plugins/local-effect.ts"
+```ts title="plugins/local-effect/index.ts"
 import { Plugin } from "@opencode-ai/plugin/effect"
 import { Effect } from "effect"
 
@@ -120,6 +120,7 @@ interface Context {
   readonly mcp: MCPDomain
   readonly plugin: PluginApi<unknown>
   readonly reference: ReferenceDomain
+  readonly rpc: RpcDomain
   readonly session: SessionDomain
   readonly shell: ShellDomain
   readonly skill: SkillDomain
@@ -131,7 +132,6 @@ interface Context {
 
 interface Plugin<R = Scope.Scope> {
   readonly id: string
-  readonly tui?: boolean
   readonly effect: (context: Context) => Effect.Effect<void, never, R>
 }
 ```
@@ -144,16 +144,16 @@ Pass options with the object form in `opencode.json(c)`.
 {
   "plugins": [
     {
-      "package": "./plugins/company-effect.ts",
-      "options": { "strict": true }
-    }
-  ]
+      "package": "./plugins/company-effect",
+      "options": { "strict": true },
+    },
+  ],
 }
 ```
 
 Read options from `ctx.options`. Narrow unknown values before use.
 
-```ts title="plugins/company-effect.ts"
+```ts title="plugins/company-effect/index.ts"
 import { Plugin } from "@opencode-ai/plugin/effect"
 import { Effect } from "effect"
 
@@ -172,7 +172,7 @@ export default Plugin.define({
 Transforms synchronously edit a mutable draft. OpenCode applies transforms in plugin order, so later transforms see
 earlier changes. Yielding the registration keeps it in the plugin scope.
 
-```ts title="plugins/models-effect.ts"
+```ts title="plugins/models-effect/index.ts"
 import { Plugin } from "@opencode-ai/plugin/effect"
 import { Effect } from "effect"
 
@@ -193,7 +193,7 @@ export default Plugin.define({
 
 A later transform can enforce policy across the composed catalog.
 
-```ts title="plugins/model-budget-effect.ts"
+```ts title="plugins/model-budget-effect/index.ts"
 effect: (ctx) =>
   Effect.gen(function* () {
     const catalog = ctx.catalog
@@ -211,7 +211,7 @@ effect: (ctx) =>
 
 Call `reload` when external state used by a transform changes. Reload replays every transform in order.
 
-```ts title="plugins/models-effect.ts"
+```ts title="plugins/models-effect/index.ts"
 effect: (ctx) =>
   Effect.gen(function* () {
     const catalog = ctx.catalog
@@ -630,6 +630,59 @@ interface Context {
   readonly plugin: PluginApi<unknown>
 }
 ```
+
+### RPC
+
+Use the same execution-neutral [`Rpc.define` builder](/build/plugins#rpc).
+Effect clients and plugins accept Effect Schema, Standard Schema, or plain JSON
+Schema. Promise consumers accept only the portable Standard and JSON formats.
+
+```ts
+import { Plugin } from "@opencode-ai/plugin/effect"
+import { Effect } from "effect"
+import { Acme } from "./rpc.js"
+
+export default Plugin.define({
+  id: "acme-effect-plugin",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      const registration = yield* ctx.rpc.register(Acme, {
+        search: ({ query }, context) =>
+          findText(query).pipe(
+            Effect.flatMap((text) =>
+              text
+                ? Effect.succeed({ text })
+                : Effect.fail(context.error("not_found", "Result not found", { query })),
+            ),
+          ),
+      })
+      yield* registration.events.emit("updated", { itemID: "item-1", text: "ready" })
+    }).pipe(Effect.orDie),
+})
+```
+
+Effect handlers use normal interruption. Registrations belong to the plugin
+scope; `yield* registration.dispose` removes one explicitly. Later registrations
+override earlier ones at the same location, without changing in-flight handlers.
+
+`ctx.rpc(Acme)` returns a local typed subclient. Its methods return Effects and
+`events.subscribe(name)` returns a Stream. Use scoped fibers when listening
+during plugin lifetime:
+
+```ts
+const acme = ctx.rpc(Acme)
+yield *
+  acme.events.subscribe("updated").pipe(
+    Stream.runForEach((event) => Effect.logInfo(event.data.text)),
+    Effect.forkScoped,
+  )
+```
+
+There is no Effect callback-style `on` API. Subscriptions are location-bound,
+live-only, and close when Stream consumption stops. Events use the normal
+ephemeral Bus path. Method `errors` maps become typed Effect error channels. Construct one
+with `context.error(...)` and fail it with `Effect.fail`; unexpected failures and
+transport errors remain separate from the declared method errors.
 
 ### References
 

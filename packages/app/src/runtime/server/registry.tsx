@@ -42,6 +42,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
+export function migrateServerAuthState(value: unknown) {
+  if (!isRecord(value) || !Array.isArray(value.list)) return value
+  return {
+    ...value,
+    list: value.list.map((server) => {
+      if (!isRecord(server)) return server
+      const http = isRecord(server.http) ? server.http : server
+      if (!("username" in http)) return server
+      const next = { ...http }
+      delete next.username
+      return http === server ? next : { ...server, http: next }
+    }),
+  }
+}
+
 export function migrateCanonicalLocalServerState(value: unknown, canonicalLocalServer?: ServerConnection.Key) {
   if (!canonicalLocalServer || canonicalLocalServer === "local") return value
   if (!isRecord(value)) return value
@@ -194,7 +209,6 @@ export namespace ServerConnection {
 
   export type HttpBase = {
     url: string
-    username?: string
     password?: string
   }
 
@@ -266,7 +280,7 @@ export const { use: useServers, provider: ServersProvider } = createSimpleContex
         ...Persist.global("server"),
         sync: true,
         previousKey: "server.v3",
-        migrate: (value) => migrateCanonicalLocalServerState(value, props.canonicalLocalServer),
+        migrate: (value) => migrateCanonicalLocalServerState(migrateServerAuthState(value), props.canonicalLocalServer),
       },
       createStore({
         list: [] as StoredServer[],

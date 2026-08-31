@@ -1,5 +1,6 @@
 import { describe, expect } from "bun:test"
-import { DateTime, Effect, Fiber, Layer, LayerMap, Schema, Stream } from "effect"
+import { Clock, DateTime, Duration, Effect, Fiber, Layer, LayerMap, Queue, Schema, Stream } from "effect"
+import { mkdir, symlink } from "fs/promises"
 import path from "path"
 import { pathToFileURL } from "url"
 import { eq } from "drizzle-orm"
@@ -7,8 +8,11 @@ import { Database } from "@opencode-ai/core/database/database"
 import { Agent } from "@opencode-ai/core/agent"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
+import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Bus } from "@opencode-ai/core/bus"
 import { EventTable } from "@opencode-ai/core/event/sql"
+import { Location } from "@opencode-ai/schema/location"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { Model } from "@opencode-ai/core/model"
 import { Provider } from "@opencode-ai/core/provider"
@@ -17,7 +21,9 @@ import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
 import { SessionMessage } from "@opencode-ai/core/session/message"
+import { SessionPrompt } from "@opencode-ai/core/session/prompt"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
+import { SessionRevert } from "@opencode-ai/core/session/revert"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionInbox } from "@opencode-ai/core/session/inbox"
 import { SessionInboxTable, SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
@@ -28,8 +34,15 @@ import { Image } from "@opencode-ai/core/image"
 import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { Snapshot } from "@opencode-ai/core/snapshot"
+import { Skill } from "@opencode-ai/core/skill"
 import { tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
+import { Reference } from "@opencode-ai/core/reference"
+import { RepositoryCache } from "@opencode-ai/core/repository-cache"
+import { Global } from "@opencode-ai/util/global"
+import { EffectFlock } from "@opencode-ai/util/effect-flock"
+import { KV } from "@opencode-ai/core/kv"
+import { gitRemote, git, commit, read } from "./fixture/git"
 
 const executionCalls: Session.ID[] = []
 const interruptCalls: Session.ID[] = []
@@ -40,6 +53,7 @@ const execution = Layer.succeed(
   SessionExecution.Service,
   SessionExecution.Service.of({
     active: Effect.sync(() => new Set(activeSessions)),
+    isActive: (sessionID) => Effect.sync(() => activeSessions.has(sessionID)),
     resume: (sessionID) =>
       Effect.sync(() => {
         executionCalls.push(sessionID)
@@ -57,47 +71,72 @@ const execution = Layer.succeed(
     awaitIdle: () => Effect.void,
   }),
 )
-const locations = Layer.effect(
-  LocationServiceMap.Service,
-  LayerMap.make(
-    () =>
-      // These operations resolve Location services lazily and must wait for plugin-projected state.
-      // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
-      Layer.unwrap(
-        Effect.sync(() => {
-          let ready = false
-          return Layer.mergeAll(
-            LayerNode.compile(PluginHooks.node),
-            Layer.mock(Image.Service, {
-              normalize: (_resource, content) =>
-                ready
-                  ? Effect.succeed(content.content.length > 5 * 1024 * 1024 ? { ...content, content: "AA==" } : content)
-                  : Effect.die(new Error("Image service used before plugins were ready")),
-            }),
-            Layer.mock(Snapshot.Service, {
-              capture: () =>
-                ready ? Effect.undefined : Effect.die(new Error("Snapshot used before plugins were ready")),
-              restore: () => (ready ? Effect.void : Effect.die(new Error("Snapshot used before plugins were ready"))),
-            }),
-            Layer.succeed(
-              PluginSupervisor.Service,
-              PluginSupervisor.Service.of({ flush: Effect.sync(() => (ready = true)) }),
-            ),
-          )
-        }),
-      ) as unknown as Layer.Layer<LocationServices>,
-  ),
-)
-const it = testEffect(
+const locations = (references: Layer.Layer<Reference.Service>) =>
+  makeGlobalNode({
+    service: LocationServiceMap.Service,
+    layer: Layer.effect(
+      LocationServiceMap.Service,
+      Effect.gen(function* () {
+        const database = yield* Database.Service
+        const bus = yield* Bus.Service
+        const fs = yield* FSUtil.Service
+        const shared = Layer.mergeAll(
+          Layer.succeed(Database.Service, database),
+          Layer.succeed(Bus.Service, bus),
+          Layer.succeed(FSUtil.Service, fs),
+        )
+        return yield* LayerMap.make(
+          (_ref: Location.Ref) =>
+            // These operations resolve Location services lazily and must wait for plugin-projected state.
+            // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
+            Layer.suspend(() => {
+              let ready = false
+              return Layer.merge(SessionRevert.layer, SessionPrompt.layer).pipe(
+                Layer.provideMerge(
+                  Layer.mergeAll(
+                    references,
+                    LayerNode.compile(LayerNode.group([PluginHooks.node, Skill.node]), [
+                      [Bus.node, Layer.succeed(Bus.Service, bus)],
+                    ]),
+                    Layer.mock(Image.Service, {
+                      normalize: (_resource, content) =>
+                        ready
+                          ? Effect.succeed(
+                              content.content.length > 5 * 1024 * 1024 ? { ...content, content: "AA==" } : content,
+                            )
+                          : Effect.die(new Error("Image service used before plugins were ready")),
+                    }),
+                    Layer.mock(Snapshot.Service, {
+                      capture: () =>
+                        ready ? Effect.undefined : Effect.die(new Error("Snapshot used before plugins were ready")),
+                      restore: () =>
+                        ready ? Effect.void : Effect.die(new Error("Snapshot used before plugins were ready")),
+                    }),
+                    Layer.succeed(
+                      PluginSupervisor.Service,
+                      PluginSupervisor.Service.of({ flush: Effect.sync(() => (ready = true)) }),
+                    ),
+                  ),
+                ),
+                Layer.provide(shared),
+                Layer.fresh,
+              )
+            }) as unknown as Layer.Layer<LocationServices>,
+        )
+      }),
+    ),
+    deps: [Database.node, Bus.node, FSUtil.node],
+  })
+const sessionLayer = (references = Layer.mock(Reference.Service, { refresh: () => Effect.void })) =>
   AppNodeBuilder.build(
     LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionStore.node, Session.node]),
     [
       [Bus.node, Bus.configured({ persist: true })],
       [SessionExecution.node, execution],
-      [LocationServiceMap.node, locations],
+      [LocationServiceMap.node, locations(references)],
     ],
-  ),
-)
+  )
+const it = testEffect(sessionLayer())
 const sessionID = Session.ID.make("ses_prompt_test")
 const messageID = SessionMessage.ID.create()
 
@@ -168,6 +207,118 @@ const assistantRow = (id: SessionMessage.ID, seq: number) => {
 }
 
 describe("Session.prompt", () => {
+  it.live("refreshes stale references after admission without blocking the prompt (#45562)", () =>
+    Effect.gen(function* () {
+      const root = (yield* tmpdirScoped("reference-refresh-")).path
+      const fixture = yield* Effect.promise(() => gitRemote(root))
+      yield* Effect.promise(async () => {
+        await mkdir(path.join(root, "owner"))
+        await symlink(path.join(root, "origin.git"), path.join(root, "owner", "repo.git"))
+      })
+      const previous = process.env.OPENCODE_REPO_CLONE_GITHUB_BASE_URL
+      process.env.OPENCODE_REPO_CLONE_GITHUB_BASE_URL = pathToFileURL(root + "/").href
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          if (previous === undefined) delete process.env.OPENCODE_REPO_CLONE_GITHUB_BASE_URL
+          else process.env.OPENCODE_REPO_CLONE_GITHUB_BASE_URL = previous
+        }),
+      )
+      yield* Effect.gen(function* () {
+        const cache = yield* RepositoryCache.Service
+        const kv = yield* KV.Service
+        const flock = yield* EffectFlock.Service
+        const completed = yield* Queue.unbounded<void>()
+        yield* Effect.gen(function* () {
+          const references = yield* Reference.Service
+          yield* references.transform((editor) =>
+            editor.add("example", Reference.GitSource.make({ type: "git", repository: "owner/repo", branch: "main" })),
+          )
+          yield* Queue.take(completed).pipe(Effect.timeout("5 seconds"))
+          const initial = (yield* references.list())[0]
+          expect(yield* read(path.join(initial.path, "README.md"))).toBe("one\n")
+          yield* Effect.promise(async () => {
+            await Bun.write(path.join(fixture.source, "new-file.txt"), "new\n")
+            await git(fixture.source, "add", "new-file.txt")
+            await commit(fixture.source, "two\n", "advance main")
+          })
+          yield* Effect.gen(function* () {
+            yield* setup
+            const session = yield* Session.Service
+            const database = yield* Database.Service
+            const attach = () =>
+              session.prompt({
+                sessionID,
+                text: "Inspect @example",
+                files: [
+                  { uri: pathToFileURL(initial.path).href, name: initial.name },
+                  { uri: pathToFileURL(path.join(initial.path, "README.md")).href, name: "README.md" },
+                ],
+                resume: false,
+              })
+            // A same-day prompt and config reload must keep the existing checkout.
+            const cached = yield* attach()
+            yield* Queue.take(completed).pipe(Effect.timeout("2 seconds"))
+            yield* references.reload()
+            yield* Queue.take(completed).pipe(Effect.timeout("2 seconds"))
+            expect(
+              cached.payload.files?.map((file) =>
+                Buffer.from(file.data, "base64").toString("utf8").replace(/\r\n/g, "\n"),
+              ),
+            ).toEqual([`.git${path.sep}\nREADME.md`, "one\n"])
+            expect(yield* read(path.join(initial.path, "README.md"))).toBe("one\n")
+
+            const key = `repository-cache:${initial.path}`
+            const yesterday = (yield* Clock.currentTimeMillis) - Duration.toMillis(Duration.days(1))
+            yield* kv.set(key, { attemptedAt: yesterday, refreshedAt: yesterday })
+            const admitted = yield* Effect.gen(function* () {
+              // Hold the checkout lock to prove admission doesn't wait for Git.
+              yield* flock.acquire(key)
+              const message = yield* attach().pipe(Effect.scoped, Effect.timeout("2 seconds"))
+              expect(yield* SessionInbox.find(database.db, message.id)).toBeDefined()
+              expect(
+                message.payload.files?.map((file) =>
+                  Buffer.from(file.data, "base64").toString("utf8").replace(/\r\n/g, "\n"),
+                ),
+              ).toEqual([`.git${path.sep}\nREADME.md`, "one\n"])
+              return message
+            }).pipe(Effect.scoped)
+
+            // The background refresh survives the submitting request's scope.
+            yield* Queue.take(completed).pipe(Effect.timeout("5 seconds"))
+            const reloaded = yield* attach()
+            expect(
+              reloaded.payload.files?.map((file) =>
+                Buffer.from(file.data, "base64").toString("utf8").replace(/\r\n/g, "\n"),
+              ),
+            ).toEqual([`.git${path.sep}\nnew-file.txt\nREADME.md`, "two\n"])
+            expect(
+              (yield* session.prompt({ sessionID, id: admitted.id, text: "retry", resume: false })).payload,
+            ).toEqual(admitted.payload)
+          }).pipe(Effect.provide(sessionLayer(Layer.succeed(Reference.Service, references)).pipe(Layer.fresh)))
+        }).pipe(
+          Effect.provide(
+            AppNodeBuilder.build(Reference.node, [
+              [Global.node, Global.layerWith({ state: path.join(root, "state"), repos: path.join(root, "repos") })],
+              [
+                RepositoryCache.node,
+                Layer.succeed(RepositoryCache.Service, {
+                  ensure: (input) => cache.ensure(input).pipe(Effect.tap(() => Queue.offer(completed, undefined))),
+                }),
+              ],
+            ]),
+          ),
+        )
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(
+          AppNodeBuilder.build(LayerNode.group([RepositoryCache.node, KV.node, EffectFlock.node]), [
+            [Global.node, Global.layerWith({ state: path.join(root, "state"), repos: path.join(root, "repos") })],
+          ]),
+        ),
+      )
+    }),
+  )
+
   it.effect("exposes the execution registry", () =>
     Effect.gen(function* () {
       const session = yield* Session.Service

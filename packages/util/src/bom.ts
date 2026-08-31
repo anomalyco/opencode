@@ -27,7 +27,7 @@ export function decodeBytes(content: Uint8Array) {
 export function syncBytes(content: Uint8Array, bom: boolean) {
   const decoded = decode(content)
   const current = split(decoded)
-  const canonical = join(current.text, bom)
+  const canonical = bom ? value + current.text : current.text
   return { text: current.text, bytes: decoded === canonical ? undefined : new TextEncoder().encode(canonical) }
 }
 

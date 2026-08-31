@@ -5,6 +5,7 @@ type EventMetadata = {
   directory: string | undefined
   workspace: string | undefined
 }
+type OpenCodeEventMap = { [Type in OpenCodeEvent["type"]]: Extract<OpenCodeEvent, { type: Type }> }
 
 export function useEvent() {
   const client = useClient()
@@ -18,7 +19,7 @@ export function useEvent() {
 
   function on<T extends OpenCodeEvent["type"]>(
     type: T,
-    handler: (event: Extract<OpenCodeEvent, { type: T }>, metadata: EventMetadata) => void,
+    handler: (event: OpenCodeEventMap[T], metadata: EventMetadata) => void,
   ) {
     return client.event.on(type, (event) => {
       handler(event, { directory: event.location?.directory, workspace: event.location?.workspaceID })
