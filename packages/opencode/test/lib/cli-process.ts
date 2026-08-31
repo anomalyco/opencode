@@ -106,7 +106,9 @@ export type RunOpts = SpawnOpts & {
 // `opencode serve` is a long-lived process — it never exits on its own.
 // `serve(opts)` therefore returns a handle inside the caller's Scope: the
 // subprocess is killed when the scope closes (test end), and the URL the
-// server actually bound to (port 0 means OS-assigned) is parsed off stdout.
+// server actually bound to is parsed off stdout. Note `--port 0` does not mean
+// "OS-assigned": the server asks for 4096 first and only falls back to an
+// OS-assigned port if that bind fails (src/server/server.ts).
 export type ServeOpts = SpawnOpts & {
   readonly port?: number
   readonly hostname?: string
@@ -211,7 +213,7 @@ export function withCliFixture<A, E>(
       // on `Bun.stdin.text()` (see src/cli/cmd/run.ts — non-TTY stdin is
       // consumed as the prompt). The old Process.run wrapper defaulted to
       // ignore; ChildProcess.make defaults to pipe, so we set it explicitly.
-      const command = ChildProcess.make("bun", ["run", "--conditions=browser", cliEntry, ...args], {
+      const command = ChildProcess.make(process.execPath, ["run", "--conditions=browser", cliEntry, ...args], {
         cwd: home,
         env: { ...env, ...opts?.env },
         extendEnv: true,
@@ -283,7 +285,7 @@ export function withCliFixture<A, E>(
       const options = runOpts(opts)
       const proc = yield* Effect.acquireRelease(
         Effect.sync(() =>
-          Bun.spawn(["bun", "run", "--conditions=browser", cliEntry, ...runArgs(message, opts)], {
+          Bun.spawn([process.execPath, "run", "--conditions=browser", cliEntry, ...runArgs(message, opts)], {
             cwd: home,
             env: { ...process.env, ...env, ...options?.env },
             stdin: "ignore",
@@ -313,8 +315,10 @@ export function withCliFixture<A, E>(
 
     const serve = Effect.fn("opencode.serve")(function* (opts?: ServeOpts) {
       const argv = ["serve"]
-      // Default port 0 — let the OS pick a free port, parse the actual one
-      // off stdout. Hard-coded ports flake under parallel tests.
+      // Default port 0 — the server tries 4096 first and falls back to an
+      // OS-assigned port only if that bind fails (src/server/server.ts); the
+      // actual port is parsed off stdout. Hard-coded ports flake under
+      // parallel tests.
       argv.push("--port", String(opts?.port ?? 0))
       if (opts?.hostname) argv.push("--hostname", opts.hostname)
       if (opts?.extraArgs) argv.push(...opts.extraArgs)
@@ -324,7 +328,7 @@ export function withCliFixture<A, E>(
       // as a finalizer error during test teardown.
       const proc = yield* Effect.acquireRelease(
         Effect.sync(() =>
-          Bun.spawn(["bun", "run", "--conditions=browser", cliEntry, ...argv], {
+          Bun.spawn([process.execPath, "run", "--conditions=browser", cliEntry, ...argv], {
             cwd: home,
             env: { ...process.env, ...env, ...opts?.env },
             stdout: "pipe",
@@ -395,7 +399,7 @@ export function withCliFixture<A, E>(
       // Either way we await proc.exited so the test scope doesn't leak.
       const proc = yield* Effect.acquireRelease(
         Effect.sync(() =>
-          Bun.spawn(["bun", "run", "--conditions=browser", cliEntry, ...argv], {
+          Bun.spawn([process.execPath, "run", "--conditions=browser", cliEntry, ...argv], {
             cwd: opts?.cwd ?? home,
             env: { ...process.env, ...env, ...opts?.env },
             stdin: "pipe",
