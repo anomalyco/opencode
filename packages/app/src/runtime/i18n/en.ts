@@ -368,6 +368,24 @@ export const dict = {
   "dialog.server.add.password": "Password (optional)",
   "dialog.server.add.passwordPlaceholder": "password",
   "dialog.server.edit.title": "Edit server",
+  "dialog.server.pair.description":
+    "Run {{command}} on the server, then scan its QR code or choose an image to fill in the connection details.",
+  "dialog.server.pair.scan": "Scan QR code",
+  "dialog.server.pair.stop": "Stop camera",
+  "dialog.server.pair.image": "Choose QR image",
+  "dialog.server.pair.reading": "Reading image...",
+  "dialog.server.pair.camera": "QR code camera preview",
+  "dialog.server.pair.cameraError":
+    "Camera unavailable. Check camera permissions and use HTTPS or localhost, or choose a QR image.",
+  "dialog.server.pair.imageError":
+    "Could not read a QR code from this image. Try another image or enter the details manually.",
+  "dialog.server.pair.invalid": "This is not an OpenCode pairing code. Run opencode2 pair on the server to get one.",
+  "dialog.server.pair.addresses": "Addresses from the pairing code",
+  "dialog.server.pair.review": "Connection details filled in. Review the server address, then select Add server.",
+  "dialog.server.pair.loopback":
+    "This address only works on the server's device. To connect from another device, configure the server to listen on a LAN or tailnet address.",
+  "dialog.server.pair.http":
+    "Your browser may block this HTTP address from an HTTPS page. Use a trusted HTTPS server address if the connection fails.",
   "dialog.server.default.title": "Default server",
   "dialog.server.default.description":
     "Connect to this server on app launch instead of starting a local server. Requires restart.",
