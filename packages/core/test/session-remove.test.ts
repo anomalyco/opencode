@@ -43,7 +43,7 @@ const it = testEffect(
       SessionStore.node,
       SessionEnvironment.node,
       Session.node,
-      Instance.node,
+      Instance.byLocationNode,
       LocationServiceMap.node,
     ]),
     [

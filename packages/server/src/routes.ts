@@ -57,7 +57,7 @@ const applicationServiceNodes = [
   Project.node,
   Worktree.node,
   Session.node,
-  Instance.node,
+  Instance.byLocationNode,
   SessionTransfer.node,
   PluginRuntime.providerNode,
   SdkPlugins.node,

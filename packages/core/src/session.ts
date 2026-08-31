@@ -531,7 +531,7 @@ export const node = makeGlobalNode({
     Project.node,
     SessionExecution.node,
     SessionStore.node,
-    Instance.node,
+    Instance.byLocationNode,
     SessionInbox.node,
     LocationServiceMap.node,
     SessionProjector.node,

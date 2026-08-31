@@ -39,4 +39,4 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeGlobalNode({ service: Service, layer, deps: [LocationServiceMap.node] })
+export const byLocationNode = makeGlobalNode({ service: Service, layer, deps: [LocationServiceMap.node] })

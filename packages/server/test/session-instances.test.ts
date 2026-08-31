@@ -63,7 +63,7 @@ it.live(
         [llmClient, Layer.succeed(LLMClient.Service, llm)],
         [SessionRunnerModel.node, Layer.succeed(SessionRunnerModel.Service, { resolve: () => Effect.succeed(model) })],
         [
-          Instance.node,
+          Instance.byLocationNode,
           Layer.effect(
             Instance.Service,
             Effect.gen(function* () {

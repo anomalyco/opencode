@@ -55,7 +55,7 @@ import { ToolOutput } from "./tool-output.js"
 import { Vcs } from "./vcs.js"
 
 export * as Instance from "./instance.js"
-export { Service, node, type Interface } from "./instance/service.js"
+export { Service, byLocationNode, type Interface } from "./instance/service.js"
 
 const nodes = [
   Location.node,
