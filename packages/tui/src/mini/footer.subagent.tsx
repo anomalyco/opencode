@@ -53,6 +53,12 @@ export function RunFooterSubagentBody(props: {
   detail: () => FooterSubagentDetail | undefined
   onCycle: (dir: -1 | 1) => void
   onClose: () => void
+  // Returns true when the inspector's composer consumed Esc to clear its
+  // draft, keeping the inspector open for a second Esc.
+  onEscape?: () => boolean
+  // True while the inspector's composer holds text: arrow keys then move the
+  // text cursor instead of scrolling, and letters always type.
+  composerOccupied?: () => boolean
   // Formatted interrupt shortcut from the registered keymap binding; the
   // command itself is dispatched through the keymap in footer.view.
   interrupt?: () => string | undefined
@@ -110,6 +116,10 @@ export function RunFooterSubagentBody(props: {
 
     if (event.name === "escape") {
       event.preventDefault()
+      if (props.onEscape?.()) {
+        return
+      }
+
       props.onClose()
       return
     }
@@ -120,13 +130,20 @@ export function RunFooterSubagentBody(props: {
       return
     }
 
-    if (event.name === "up" || event.name === "k") {
+    // Letters must reach the composer, so k/j are no longer scroll keys and
+    // arrows only scroll while the draft is empty; with text they move the
+    // text cursor instead.
+    if (props.composerOccupied?.()) {
+      return
+    }
+
+    if (event.name === "up") {
       event.preventDefault()
       scroll?.scrollBy(-1)
       return
     }
 
-    if (event.name === "down" || event.name === "j") {
+    if (event.name === "down") {
       event.preventDefault()
       scroll?.scrollBy(1)
     }

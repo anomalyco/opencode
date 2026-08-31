@@ -8,6 +8,7 @@
 // All state comes from the parent RunFooter through SolidJS signals.
 // The view itself is stateless except for derived memos.
 /** @jsxImportSource @opentui/solid */
+import type { TextareaRenderable } from "@opentui/core"
 import { useTerminalDimensions } from "@opentui/solid"
 import { For, Match, Show, Switch, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import { registerOpencodeSpinner } from "../component/register-spinner"
@@ -25,7 +26,7 @@ import {
 } from "./footer.command"
 import { FOOTER_MENU_ROWS, RunFooterMenu } from "./footer.menu"
 import { RunFooterSubagentBody } from "./footer.subagent"
-import { RunPromptBody, createPromptState } from "./footer.prompt"
+import { TEXTAREA_MAX_ROWS, TEXTAREA_MIN_ROWS, RunPromptBody, createPromptState } from "./footer.prompt"
 import { RunPermissionBody } from "./footer.permission"
 import { RunFormBody } from "./footer.form"
 import { createFormBodyState, type FormBodyState } from "./form.shared"
@@ -60,6 +61,10 @@ import type {
 import type { RunTheme } from "./theme"
 
 registerOpencodeSpinner()
+
+// Rows the subagent composer reserves besides its textarea: the failure line
+// plus the textarea's vertical padding.
+export const SUBAGENT_COMPOSER_ROWS = 3
 
 const EMPTY_BORDER = {
   topLeft: "",
@@ -114,11 +119,12 @@ type RunFooterViewProps = {
   onModelSelect: (model: NonNullable<RunInput["model"]>) => void
   onVariantSelect: (variant: string | undefined) => void
   onRows: (rows: number) => void
-  onLayout: (input: { route: FooterPromptRoute; subagentRows: number }) => void
+  onLayout: (input: { route: FooterPromptRoute; subagentRows: number; subagentComposerRows: number }) => void
   onStatus: (text: string) => void
   onMiniSettingChange: (change: MiniSettingChange) => void | Promise<void>
   onSubagentSelect?: (sessionID: string | undefined) => void
   onSubagentInterrupt?: (sessionID: string) => void
+  onSubagentPrompt?: (sessionID: string, prompt: RunPrompt) => boolean | void | Promise<boolean | void>
 }
 
 export function RunFooterView(props: RunFooterViewProps) {
@@ -338,9 +344,121 @@ export function RunFooterView(props: RunFooterViewProps) {
     return result ?? false
   }
 
+  const [childError, setChildError] = createSignal<string | undefined>(undefined)
+  const [childRows, setChildRows] = createSignal(TEXTAREA_MIN_ROWS)
+  const childDrafts = new Map<string, string>()
+  let childArea: TextareaRenderable | undefined
+  const childPlaceholder = createMemo(() => `Message ${selectedTab()?.label ?? "subagent"}...`)
+
+  const syncChildRows = () => {
+    if (!childArea || childArea.isDestroyed) {
+      return
+    }
+
+    const rows = Math.max(
+      TEXTAREA_MIN_ROWS,
+      Math.min(TEXTAREA_MAX_ROWS, Math.max(childArea.lineCount, childArea.virtualLineCount)),
+    )
+    setChildRows(rows)
+  }
+
+  const syncChildDraft = () => {
+    const sessionID = selected()
+    if (!sessionID) {
+      return
+    }
+
+    childDrafts.set(sessionID, childArea && !childArea.isDestroyed ? childArea.plainText : "")
+  }
+
+  const restoreChildDraft = (sessionID: string, text: string) => {
+    childDrafts.set(sessionID, text)
+    if (selected() !== sessionID || !childArea || childArea.isDestroyed) {
+      return
+    }
+
+    childArea.setText(text)
+  }
+
+  const bindChildArea = (next?: TextareaRenderable) => {
+    if (childArea && !childArea.isDestroyed) {
+      childArea.off("line-info-change", syncChildRows)
+    }
+
+    childArea = next
+    if (!next || next.isDestroyed) {
+      return
+    }
+
+    next.on("line-info-change", syncChildRows)
+    const sessionID = selected()
+    next.setText(sessionID ? (childDrafts.get(sessionID) ?? "") : "")
+    next.focus()
+  }
+
+  // Esc clears a non-empty child draft first; a second Esc then closes the
+  // inspector. Returning true marks the key as consumed for the inspector's
+  // global key handler.
+  const escapeChildComposer = () => {
+    if (!childArea || childArea.isDestroyed || childArea.plainText.length === 0) {
+      return false
+    }
+
+    childArea.setText("")
+    syncChildDraft()
+    return true
+  }
+
+  const submitChildPrompt = () => {
+    const tab = selectedTab()
+    if (!tab) {
+      return
+    }
+
+    const text = childArea && !childArea.isDestroyed ? childArea.plainText : ""
+    if (!text.trim()) {
+      return
+    }
+
+    const run = props.onSubagentPrompt
+    if (!run) {
+      return
+    }
+
+    const sessionID = tab.sessionID
+    setChildError(undefined)
+    childDrafts.delete(sessionID)
+    if (childArea && !childArea.isDestroyed) {
+      childArea.setText("")
+    }
+
+    Promise.resolve()
+      .then(() => run(sessionID, { text, parts: [] }))
+      .then(
+        (accepted) => {
+          if (accepted !== false) {
+            return
+          }
+
+          restoreChildDraft(sessionID, text)
+        },
+        (error) => {
+          setChildError(errorMessage(error))
+          restoreChildDraft(sessionID, text)
+        },
+      )
+  }
+
   const openTab = (sessionID: string) => {
     setRoute({ type: "subagent", sessionID })
     props.onSubagentSelect?.(sessionID)
+    setChildError(undefined)
+    if (!childArea || childArea.isDestroyed) {
+      return
+    }
+
+    childArea.setText(childDrafts.get(sessionID) ?? "")
+    childArea.focus()
   }
 
   const closeTab = () => {
@@ -679,6 +797,7 @@ export function RunFooterView(props: RunFooterViewProps) {
     props.onLayout({
       route: route(),
       subagentRows: subagentMenuRows(),
+      subagentComposerRows: childRows(),
     })
   })
 
@@ -1076,9 +1195,46 @@ export function RunFooterView(props: RunFooterViewProps) {
             detail={detail}
             onCycle={cycleTab}
             onClose={closeTab}
+            onEscape={escapeChildComposer}
+            composerOccupied={() =>
+              Boolean(childArea && !childArea.isDestroyed && childArea.plainText.length > 0)
+            }
             interrupt={() => subagentInterruptShortcut() || undefined}
             shellOutput={() => props.miniSettings().shell_output === "show"}
             mono={props.mono}
+          />
+        </box>
+        <box
+          width="100%"
+          flexShrink={0}
+          flexDirection="column"
+          border={["left"]}
+          borderColor={theme().highlight}
+          customBorderChars={{
+            ...EMPTY_BORDER,
+            vertical: props.mono ? "|" : "┃",
+          }}
+        >
+          <box width="100%" height={1} flexShrink={0}>
+            <Show when={childError()}>
+              {(error) => (
+                <text fg={theme().error} wrapMode="none" truncate>
+                  {error()}
+                </text>
+              )}
+            </Show>
+          </box>
+          <RunPromptBody
+            theme={theme}
+            cursorStyle={props.tuiConfig.cursor}
+            background={() => runTheme().background}
+            placeholder={childPlaceholder}
+            onSubmit={submitChildPrompt}
+            onContentChange={() => {
+              syncChildDraft()
+              syncChildRows()
+            }}
+            bind={bindChildArea}
           />
         </box>
       </Show>

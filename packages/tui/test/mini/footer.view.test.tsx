@@ -21,6 +21,7 @@ import { RunFooterView } from "../../src/mini/footer.view"
 import { RunEntryContent } from "../../src/mini/scrollback.writer"
 import { RUN_THEME_FALLBACK, type RunTheme } from "../../src/mini/theme"
 import type {
+  FooterPromptRoute,
   FooterQueuedPrompt,
   FooterState,
   FooterSubagentState,
@@ -130,6 +131,10 @@ async function renderFooter(
     onMiniSettingChange?: (change: MiniSettingChange) => void
     queuedPrompts?: FooterQueuedPrompt[]
     onQueuedPromptAction?: (action: "steer" | "cancel", inboxID: string) => Promise<void>
+    onSubagentSelect?: (sessionID: string | undefined) => void
+    onSubagentInterrupt?: (sessionID: string) => void
+    onSubagentPrompt?: (sessionID: string, prompt: RunPrompt) => boolean | void | Promise<boolean | void>
+    onLayout?: (input: { route: FooterPromptRoute; subagentRows: number; subagentComposerRows: number }) => void
   } = {},
 ) {
   const [view, setView] = createSignal<FooterView>(input.view ?? { type: "prompt" })
@@ -186,9 +191,12 @@ async function renderFooter(
           onModelSelect={() => {}}
           onVariantSelect={() => {}}
           onRows={() => {}}
-          onLayout={() => {}}
+          onLayout={(value) => input.onLayout?.(value)}
           onStatus={(status) => input.onStatus?.(status)}
           onMiniSettingChange={(change) => input.onMiniSettingChange?.(change)}
+          onSubagentSelect={input.onSubagentSelect}
+          onSubagentInterrupt={input.onSubagentInterrupt}
+          onSubagentPrompt={input.onSubagentPrompt}
         />
       </Keymap.Provider>
     )
@@ -916,6 +924,185 @@ test("direct subagent panel closes when moving up from the first item", async ()
     expect(closed).toBe(1)
   } finally {
     app.renderer.destroy()
+  }
+})
+
+function twoSubagents(): FooterSubagentState {
+  return {
+    tabs: [
+      subagent({ sessionID: "s-1", label: "Explore", description: "Inspect auth flow" }),
+      subagent({ sessionID: "s-2", label: "General", description: "Write migration plan" }),
+    ],
+    details: {},
+    permissions: [],
+    forms: [],
+  }
+}
+
+// Opens the subagent picker and selects the first tab, leaving the inspector
+// composer focused.
+async function openInspector(app: Awaited<ReturnType<typeof renderFooter>>) {
+  await app.renderOnce()
+  app.mockInput.pressArrow("down")
+  await app.renderOnce()
+  app.mockInput.pressEnter()
+  await app.renderOnce()
+}
+
+function childText(app: Awaited<ReturnType<typeof renderFooter>>) {
+  return app.renderer.currentFocusedEditor?.plainText
+}
+
+test("direct subagent inspector steers the selected child from its composer", async () => {
+  const prompts: Array<{ sessionID: string; prompt: RunPrompt }> = []
+  const app = await renderFooter({
+    height: 24,
+    subagents: twoSubagents(),
+    onSubagentPrompt: (sessionID, prompt) => {
+      prompts.push({ sessionID, prompt })
+    },
+  })
+
+  try {
+    await openInspector(app)
+    expect(app.captureCharFrame()).toContain("Message Explore...")
+    await app.mockInput.typeText("hello child")
+    app.mockInput.pressEnter()
+    await Bun.sleep(1)
+    expect(prompts).toEqual([{ sessionID: "s-1", prompt: { text: "hello child", parts: [] } }])
+    expect(childText(app)).toBe("")
+  } finally {
+    app.cleanup()
+  }
+})
+
+test("direct subagent inspector reports composer rows through onLayout", async () => {
+  const layouts: Array<{ route: FooterPromptRoute; subagentRows: number; subagentComposerRows: number }> = []
+  const app = await renderFooter({
+    height: 24,
+    subagents: twoSubagents(),
+    onLayout: (value) => layouts.push(value),
+  })
+
+  try {
+    await openInspector(app)
+    expect(layouts.at(-1)).toMatchObject({ route: { type: "subagent", sessionID: "s-1" }, subagentComposerRows: 1 })
+  } finally {
+    app.cleanup()
+  }
+})
+
+test("direct subagent inspector keeps the composer targeted after an interrupt", async () => {
+  const interrupted: string[] = []
+  const prompted: string[] = []
+  const app = await renderFooter({
+    height: 24,
+    subagents: twoSubagents(),
+    onSubagentInterrupt: (sessionID) => {
+      interrupted.push(sessionID)
+    },
+    onSubagentPrompt: (sessionID) => {
+      prompted.push(sessionID)
+    },
+  })
+
+  try {
+    await openInspector(app)
+    app.mockInput.pressKey("d", { ctrl: true })
+    expect(interrupted).toEqual(["s-1"])
+    expect(app.captureCharFrame()).toContain("Inspect auth flow")
+    expect(childText(app)).toBe("")
+
+    await app.mockInput.typeText("wake up")
+    app.mockInput.pressEnter()
+    await Bun.sleep(1)
+    expect(prompted).toEqual(["s-1"])
+  } finally {
+    app.cleanup()
+  }
+})
+
+test("direct subagent inspector keeps drafts per child across cycling", async () => {
+  const prompted: Array<{ sessionID: string; text: string }> = []
+  const app = await renderFooter({
+    height: 24,
+    subagents: twoSubagents(),
+    onSubagentPrompt: (sessionID, prompt) => {
+      prompted.push({ sessionID, text: prompt.text })
+    },
+  })
+
+  try {
+    await openInspector(app)
+    await app.mockInput.typeText("draft a")
+    app.mockInput.pressTab()
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("Message General...")
+    expect(childText(app)).toBe("")
+
+    await app.mockInput.typeText("draft b")
+    app.mockInput.pressEnter()
+    await Bun.sleep(1)
+    expect(prompted).toEqual([{ sessionID: "s-2", text: "draft b" }])
+    expect(childText(app)).toBe("")
+
+    app.mockInput.pressTab()
+    await app.renderOnce()
+    expect(childText(app)).toBe("draft a")
+  } finally {
+    app.cleanup()
+  }
+})
+
+test("direct subagent inspector surfaces child prompt failures inline", async () => {
+  const app = await renderFooter({
+    height: 24,
+    subagents: twoSubagents(),
+    onSubagentPrompt: () => Promise.reject(new Error("child refused the prompt")),
+  })
+
+  try {
+    await openInspector(app)
+    await app.mockInput.typeText("boom")
+    app.mockInput.pressEnter()
+    await Bun.sleep(1)
+    const frame = app.captureCharFrame()
+    expect(frame).toContain("child refused the prompt")
+    expect(childText(app)).toBe("boom")
+
+    app.mockInput.pressTab()
+    await app.renderOnce()
+    expect(app.captureCharFrame()).not.toContain("child refused the prompt")
+  } finally {
+    app.cleanup()
+  }
+})
+
+test("direct subagent inspector clears the child draft with escape before closing", async () => {
+  const app = await renderFooter({
+    height: 24,
+    subagents: twoSubagents(),
+  })
+
+  try {
+    await app.renderOnce()
+    await app.mockInput.typeText("parent draft")
+    await openInspector(app)
+    await app.mockInput.typeText("child draft")
+    expect(childText(app)).toBe("child draft")
+
+    app.mockInput.pressEscape()
+    await app.renderOnce()
+    expect(childText(app)).toBe("")
+    expect(app.captureCharFrame()).toContain("Inspect auth flow")
+
+    app.mockInput.pressEscape()
+    await app.renderOnce()
+    expect(app.captureCharFrame()).not.toContain("Inspect auth flow")
+    await Bun.sleep(0)
+    expect(childText(app)).toBe("parent draft")
+  } finally {
+    app.cleanup()
   }
 })
 
@@ -1974,5 +2161,26 @@ test("direct variant panel renders current variant selector", async () => {
     expectPaletteList(list, 1)
   } finally {
     app.renderer.destroy()
+  }
+})
+
+test("direct subagent inspector types letters with the scroll keys present", async () => {
+  const prompts: Array<{ sessionID: string; prompt: RunPrompt }> = []
+  const app = await renderFooter({
+    height: 24,
+    subagents: twoSubagents(),
+    onSubagentPrompt: (sessionID, prompt) => {
+      prompts.push({ sessionID, prompt })
+    },
+  })
+
+  try {
+    await openInspector(app)
+    "just keep it".split("").forEach((key) => app.mockInput.pressKey(key))
+    app.mockInput.pressEnter()
+    await Bun.sleep(1)
+    expect(prompts).toEqual([{ sessionID: "s-1", prompt: { text: "just keep it", parts: [] } }])
+  } finally {
+    app.cleanup()
   }
 })

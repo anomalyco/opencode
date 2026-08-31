@@ -33,7 +33,7 @@ import { Locale } from "../util/locale"
 import { RUN_COMMAND_PANEL_ROWS, RUN_SUBAGENT_PANEL_ROWS } from "./footer.command"
 import { SUBAGENT_INSPECTOR_ROWS } from "./footer.subagent"
 import { PROMPT_MAX_ROWS, TEXTAREA_MIN_ROWS } from "./footer.prompt"
-import { RunFooterView } from "./footer.view"
+import { SUBAGENT_COMPOSER_ROWS, RunFooterView } from "./footer.view"
 import { RunScrollbackStream } from "./scrollback.surface"
 import { RUN_THEME_FALLBACK, resolveRunTheme, type RunTheme } from "./theme"
 import { modelInfo } from "./variant.shared"
@@ -101,6 +101,7 @@ type RunFooterOptions = {
   onEditorOpen: (input: { value: string }) => Promise<string | undefined>
   onSubagentSelect?: (sessionID: string | undefined) => void
   onSubagentInterrupt?: (sessionID: string) => void
+  onSubagentPrompt?: (sessionID: string, prompt: RunPrompt) => boolean | void | Promise<boolean | void>
   subscribeThemeSignal: (listener: () => void) => () => void
 }
 
@@ -203,6 +204,7 @@ export class RunFooter implements FooterApi {
   private setMiniSettings: Setter<MiniSettings>
   private promptRoute: FooterPromptRoute = { type: "composer" }
   private subagentMenuRows = SUBAGENT_ROWS
+  private subagentComposerRows = TEXTAREA_MIN_ROWS
   private interruptTimeout: NodeJS.Timeout | undefined
   private exitTimeout: NodeJS.Timeout | undefined
   private noticeTimeout: NodeJS.Timeout | undefined
@@ -361,6 +363,7 @@ export class RunFooter implements FooterApi {
               onMiniSettingChange: footer.handleMiniSettingChange,
               onSubagentSelect: options.onSubagentSelect,
               onSubagentInterrupt: options.onSubagentInterrupt,
+              onSubagentPrompt: options.onSubagentPrompt,
             })
           },
         }),
@@ -708,7 +711,7 @@ export class RunFooter implements FooterApi {
             : route === "queued-menu" || route === "subagent-menu"
               ? 1 + this.subagentMenuRows
               : route === "subagent"
-                ? this.base + SUBAGENT_INSPECTOR_ROWS
+                ? this.base + SUBAGENT_INSPECTOR_ROWS + SUBAGENT_COMPOSER_ROWS + this.subagentComposerRows
                 : this.base + Math.max(TEXTAREA_MIN_ROWS, Math.min(PROMPT_MAX_ROWS, this.rows))
 
     if (height !== this.renderer.footerHeight) {
@@ -732,9 +735,14 @@ export class RunFooter implements FooterApi {
     }
   }
 
-  private syncLayout = (next: { route: FooterPromptRoute; subagentRows: number }): void => {
+  private syncLayout = (next: {
+    route: FooterPromptRoute
+    subagentRows: number
+    subagentComposerRows: number
+  }): void => {
     this.promptRoute = next.route
     this.subagentMenuRows = next.subagentRows
+    this.subagentComposerRows = next.subagentComposerRows
     if (this.view().type === "prompt") {
       this.applyHeight()
     }

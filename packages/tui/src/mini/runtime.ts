@@ -161,6 +161,32 @@ function formAlreadySettled(error: unknown) {
   return !!error && typeof error === "object" && Reflect.get(error, "_tag") === "FormAlreadySettledError"
 }
 
+// Builds the session.prompt payload for steering a subagent child Session.
+// The child composer submits plain text today, but RunPrompt parts map onto
+// the prompt API's files/agents/skills fields.
+function subagentPromptInput(sessionID: string, prompt: RunPrompt) {
+  const mention = (source: { start: number; end: number; value: string } | undefined) =>
+    source ? { start: source.start, end: source.end, text: source.value } : undefined
+  const files = prompt.parts.flatMap((part) =>
+    part.type === "file" ? [{ uri: part.url, name: part.filename, mention: mention(part.source?.text) }] : [],
+  )
+  const agents = prompt.parts.flatMap((part) =>
+    part.type === "agent" ? [{ name: part.name, mention: mention(part.source) }] : [],
+  )
+  const skills = prompt.parts.flatMap((part) =>
+    part.type === "skill" ? [{ id: part.id, mention: mention(part.source) }] : [],
+  )
+  return {
+    sessionID,
+    id: SessionMessage.ID.create(),
+    text: prompt.text,
+    ...(files.length ? { files } : {}),
+    ...(agents.length ? { agents } : {}),
+    ...(skills.length ? { skills } : {}),
+    delivery: "steer" as const,
+  }
+}
+
 const RESIZE_DELAY = 250
 const LOCAL_REPLAY_ROW_LIMIT = 100
 
@@ -399,6 +425,10 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     onSubagentInterrupt: (sessionID) => {
       log?.write("send.subagent.interrupt", { sessionID })
       void state.sdk.session.interrupt({ sessionID }).catch(() => {})
+    },
+    onSubagentPrompt: (sessionID, prompt) => {
+      log?.write("send.subagent.prompt", { sessionID, delivery: "steer" })
+      return state.sdk.session.prompt(subagentPromptInput(sessionID, prompt)).then(() => undefined)
     },
     onSubagentSelect: (sessionID) => {
       state.selectSubagent?.(sessionID)
