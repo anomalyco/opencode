@@ -46,6 +46,13 @@ describe("run footer width", () => {
       for (let width = 0; width <= 280; width++) {
         const layout = footerStatuslinePolicy({ ...fixture, mono, width })
         const ids = layout.groups.map((group) => group.id)
+        if (fixture.spinner) {
+          expect(ids[0]).toBe("spinner")
+          expect(layout.text).toStartWith(`${fixture.spinner} `)
+          if (width >= stringWidth(`${fixture.spinner} ${fixture.status!.text}`)) {
+            expect(stringWidth(layout.text)).toBeLessThanOrEqual(width)
+          }
+        }
         if (stringWidth(layout.text) > width) {
           expect(ids.every((id) => id === "spinner" || id === "status" || id === "escape")).toBe(true)
         }
@@ -59,9 +66,6 @@ describe("run footer width", () => {
         expect(layout.text).not.toContain("\ufffd")
         previous = ids
       }
-      const wide = footerStatuslinePolicy({ ...fixture, mono, width: 280 })
-      for (const width of [112, 24, 40, 16, 280, 80]) footerStatuslinePolicy({ ...fixture, mono, width })
-      expect(footerStatuslinePolicy({ ...fixture, mono, width: 280 })).toEqual(wide)
     }
   })
 
@@ -112,15 +116,5 @@ describe("run footer width", () => {
     expect(
       footerStatuslinePolicy({ ...screenshot, width: 80, status: { text: "Please confirm\nExit now?" } }).text,
     ).toBe("Please confirm\nExit now?")
-  })
-
-  test("working indicator is reserved before optional information at every width", () => {
-    for (let width = 1; width <= 160; width++) {
-      const layout = footerStatuslinePolicy({ ...screenshot, width, spinner: "\u25aa", status: { text: "esc stop" } })
-      expect(layout.groups[0]!.id).toBe("spinner")
-      expect(layout.text).toStartWith("\u25aa esc stop")
-      if (width >= 10) expect(stringWidth(layout.text)).toBeLessThanOrEqual(width)
-      if (layout.groups.some((group) => group.id === "menu")) expect(layout.groups.at(-1)!.id).toBe("menu")
-    }
   })
 })

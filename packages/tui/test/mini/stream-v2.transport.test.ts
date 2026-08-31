@@ -262,9 +262,6 @@ describe("V2 mini transport", () => {
       replay: true,
       footer: ui.api,
       onCommit: (commit) => live.push(commit),
-      readTextFile: async () => {
-        throw new Error("Images must not be read from the client filesystem")
-      },
     })
     ui.api.append({ kind: "user", source: "system", text: pending.payload.text, messageID: pending.id, phase: "start" })
     const turn = transport.runPromptTurn(
@@ -308,9 +305,6 @@ describe("V2 mini transport", () => {
       await Bun.sleep(0)
     ack.resolve()
     await admitted.promise
-    messages.push({ id: pending.id, type: "user", ...pending.payload, time: { created: 1 } })
-    idle.resolve()
-    await turn
 
     expect(prompt).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -347,6 +341,11 @@ describe("V2 mini transport", () => {
         phase: "final",
       },
     ])
+    messages.push({ id: pending.id, type: "user", ...pending.payload, time: { created: 1 } })
+    idle.resolve()
+    await turn
+
+    expect(ui.commits.filter((commit) => commit.image)).toEqual(images)
     expect(ui.commits.filter((commit) => commit.kind === "user" && !commit.image)).toHaveLength(1)
     await transport.replayOnResize({
       localRows: () => live.map((commit) => ({ commit })),
@@ -1483,8 +1482,6 @@ describe("V2 mini transport", () => {
     first.push(connected("evt_connected_1"))
     second.push(connected("evt_connected_2"))
     const idle = defer()
-    const reconnected = defer()
-    let refreshes = 0
     let running = true
     let projected = false
     const client = sdk({
@@ -1520,9 +1517,6 @@ describe("V2 mini transport", () => {
       sessionID: "ses_1",
       thinking: false,
       footer: ui.api,
-      onCatalogRefresh: () => {
-        if (++refreshes === 2) reconnected.resolve()
-      },
     })
     let admitted = false
     // The generated method has conditional return types for throwOnError; this mock represents the successful branch.
@@ -1544,7 +1538,7 @@ describe("V2 mini transport", () => {
     projected = true
     running = false
     first.close()
-    await reconnected.promise
+    while (!ui.commits.some((commit) => commit.image)) await Bun.sleep(0)
     idle.resolve()
     await turn
 

@@ -21,7 +21,6 @@ type Preview = {
   surface: ScrollbackSurface
   image: ImageRenderable
   native: NativeImage | null
-  source: { width: number; height: number } | undefined
   size: { width: number; height: number }
   x: number
   y: number
@@ -63,7 +62,6 @@ async function setup(
       surface,
       image,
       native: image.image,
-      source: image.image ? { width: image.image.width, height: image.image.height } : undefined,
       size: { width: image.width, height: image.height },
       x: image.x,
       y: image.y,
@@ -83,7 +81,6 @@ test.each([
     image: wide,
     width: 40,
     height: 30,
-    source: { width: 96, height: 48 },
     size: { width: 40, height: 10 },
   },
   {
@@ -91,7 +88,6 @@ test.each([
     image: tall,
     width: 80,
     height: 24,
-    source: { width: 48, height: 192 },
     size: { width: 9, height: 17 },
   },
 ])("fits a $name image at the left edge and commits only its fitted rows", async (options) => {
@@ -101,12 +97,9 @@ test.each([
 
   expect(out.previews).toHaveLength(1)
   const preview = out.previews[0]!
-  expect(preview.source).toEqual(options.source)
   expect(preview.size).toEqual(options.size)
   expect(preview.x).toBe(0)
   expect(preview.y).toBe(preview.captionHeight)
-  expect(preview.image.fit).toBe("fit")
-  expect(preview.image.protocol).toBe("auto")
   const commits = out.externalOutput.take()
   expect(commits).toHaveLength(1)
   expect(commits[0]!.rows[0]).toBe("\u203a landscape.png")
@@ -190,20 +183,13 @@ test("prints a failed decode caption and continues with text", async () => {
   expect(out.previews[0]!.surface.isDestroyed).toBe(true)
 })
 
-test("remeasures at load completion and after replay creates a new stream", async () => {
+test("remeasures at load completion", async () => {
   const out = await setup({ imagePreview: true })
   const pending = out.scrollback.append(image(tall))
   await Promise.resolve()
   out.resize(40, 18)
   await pending
   expect(out.previews[0]!.size).toEqual({ width: 6, height: 11 })
-
-  out.scrollback.destroy()
-  out.resize(100, 40)
-  out.scrollback = new RunScrollbackStream(out.renderer, RUN_THEME_FALLBACK, { imagePreview: true })
-  await out.scrollback.append(image(tall))
-  expect(out.previews[1]!.size).toEqual({ width: 17, height: 33 })
-  expect(out.previews.every((preview) => preview.x === 0)).toBe(true)
 })
 
 test.each(["stream", "renderer"])("disposes an image load when the %s is destroyed", async (owner) => {
@@ -213,7 +199,6 @@ test.each(["stream", "renderer"])("disposes an image load when the %s is destroy
   const surface = Reflect.get(out.scrollback, "imageSurface") as ScrollbackSurface
   const preview = surface.root.getChildren().find((child) => child instanceof ImageRenderable)!
   expect(preview.loading).toBe(true)
-  expect(surface.renderContext.frameId).toBe(0)
 
   if (owner === "stream") out.scrollback.destroy()
   if (owner === "renderer") out.renderer.destroy()

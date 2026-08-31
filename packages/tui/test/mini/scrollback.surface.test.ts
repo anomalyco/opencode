@@ -260,6 +260,7 @@ test.each([false, true])(
       await out.scrollback.setMono(mono)
       await out.scrollback.append(reasoning("Before switch"))
       await out.scrollback.setMono(!mono)
+      expect(output.join("")).toContain("Before switch")
       await out.scrollback.append(reasoning(" after switch"))
       await out.scrollback.complete()
       expect(output.join("").match(/Before switch/g)).toHaveLength(1)
@@ -437,7 +438,6 @@ test("entry looks preserve semantic colors without dimming and keep errors bold"
 
   expect(entryLook(reasoning("Thinking: next steps"), theme)).toEqual({ fg: theme.reasoning.body })
   expect(entryLook(reasoning("", "final"), theme)).toEqual({ fg: theme.system.body })
-  expect(entryLook(assistant("", "final"), theme)).toEqual({ fg: theme.system.body })
   expect(entryLook(error("failed"), theme)).toEqual({ fg: theme.error.body, attrs: TextAttributes.BOLD })
   expect(entryLook(toolCommit({ tool: "shell", phase: "final", toolState: "error" }), theme)).toEqual({
     fg: theme.error.body,

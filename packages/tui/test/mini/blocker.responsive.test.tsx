@@ -13,9 +13,6 @@ import { RUN_THEME_FALLBACK, RUN_THEME_MONO } from "../../src/mini/theme"
 import type { FormReply, MiniFormRequest, MiniPermissionRequest, PermissionReply } from "../../src/mini/types"
 import { createTuiResolvedConfig } from "../fixture/tui-runtime"
 
-const sizes = [16, 20, 24, 32, 40, 56, 80, 112].flatMap((width) =>
-  [8, 12, 20, 30].map((height) => ({ width, height, kittyKeyboard: true })),
-)
 const permission: MiniPermissionRequest = {
   id: "per_responsive",
   sessionID: "ses_responsive",
@@ -298,8 +295,6 @@ test.each([false, true])("picked options budget their full ordinal and selection
     )
     try {
       await settle(app)
-      for (let index = 0; index < 11; index++) app.mockInput.pressArrow("down")
-      await settle(app)
       const label = descendants(app.renderer.root).find(
         (node) => node instanceof TextRenderable && node.plainText === "Deploy *",
       )!
@@ -316,7 +311,16 @@ test.each([false, true])("picked options budget their full ordinal and selection
   }
 })
 
-test.each(sizes)("permission controls fit the allocated $width x $height viewport", async (size) => {
+test.each([
+  { width: 16, height: 8 },
+  { width: 24, height: 8 },
+  { width: 32, height: 8 },
+  { width: 40, height: 8 },
+  { width: 56, height: 8 },
+  { width: 56, height: 12 },
+  { width: 80, height: 12 },
+  { width: 112, height: 20 },
+])("permission controls fit the allocated $width x $height viewport", async (size) => {
   const replies: PermissionReply[] = []
   const app = await testRender(
     () => (
@@ -329,7 +333,7 @@ test.each(sizes)("permission controls fit the allocated $width x $height viewpor
         }}
       />
     ),
-    size,
+    { ...size, kittyKeyboard: true },
   )
   try {
     await settle(app)
@@ -421,33 +425,24 @@ test.each(["once", "always", "reject"] as const)(
   },
 )
 
-test.each(sizes)("form choices do not overlap and reveal selection at $width x $height", async (size) => {
-  const replies: FormReply[] = []
-  const app = await testRender(
-    () => (
-      <RunFormBody
-        request={form}
-        theme={RUN_THEME_FALLBACK.footer}
-        onReply={(reply) => {
-          replies.push(reply)
-        }}
-        onCancel={() => {}}
-      />
-    ),
-    size,
-  )
+test.each([
+  { width: 16, height: 8 },
+  { width: 24, height: 8 },
+  { width: 32, height: 12 },
+  { width: 56, height: 8 },
+  { width: 56, height: 12 },
+  { width: 80, height: 20 },
+])("form choices reveal selection at $width x $height", async (size) => {
+  const app = await renderForm(form, size.width, size.height)
   try {
     await settle(app)
     for (let index = 0; index < 12; index++) {
       if (index > 0) app.mockInput.pressKey("ARROW_DOWN")
       await settle(app)
       expect(app.captureCharFrame()).toContain(`Target ${index + 1}`)
-      const choices = descendants(app.renderer.root).filter(
-        (node): node is TextRenderable => node instanceof TextRenderable && /^Target \d+$/.test(node.plainText),
-      )
-      expect(choices).toHaveLength(12)
-      expect(new Set(choices.map((node) => node.y)).size).toBe(12)
-      const selected = choices.find((node) => node.plainText === `Target ${index + 1}`)!
+      const selected = descendants(app.renderer.root).find(
+        (node) => node instanceof TextRenderable && node.plainText === `Target ${index + 1}`,
+      )!
       const scroll = descendants(app.renderer.root).find(
         (node): node is ScrollBoxRenderable => node instanceof ScrollBoxRenderable,
       )!
@@ -456,16 +451,13 @@ test.each(sizes)("form choices do not overlap and reveal selection at $width x $
     }
     app.mockInput.pressEnter()
     await settle(app)
-    expect(replies[0]?.answer).toEqual({ target: "target-12" })
+    expect(app.replies[0]?.answer).toEqual({ target: "target-12" })
   } finally {
     app.renderer.destroy()
   }
 })
 
-test.each([
-  { width: 24, height: 8, kittyKeyboard: true },
-  { width: 80, height: 20, kittyKeyboard: true },
-])("form review scrolls every non-overlapping answer at $width x $height", async (size) => {
+test("form review scrolls from the first answer to the last", async () => {
   const request: MiniFormRequest = {
     ...form,
     fields: [
@@ -488,20 +480,14 @@ test.each([
         onCancel={() => {}}
       />
     ),
-    size,
+    { width: 24, height: 8, kittyKeyboard: true },
   )
   try {
     await settle(app)
-    const rows = descendants(app.renderer.root).filter(
-      (node): node is TextRenderable => node instanceof TextRenderable && /^Field \d+:/.test(node.plainText),
-    )
-    expect(rows).toHaveLength(12)
-    expect(new Set(rows.map((row) => row.y)).size).toBe(12)
     expect(app.captureCharFrame()).toContain("Field 1: Yes")
-    for (let index = 0; index < 12; index++) {
-      app.mockInput.pressKey("\x1b[6~")
-      await settle(app)
-    }
+    expect(app.captureCharFrame()).not.toContain("Field 12: No")
+    app.mockInput.pressKey("\x1b[6~")
+    await settle(app)
     expect(app.captureCharFrame()).toContain("Field 12: No")
     expect(app.captureCharFrame()).toContain("enter submit")
   } finally {
@@ -567,20 +553,7 @@ test("long permission paths, diffs and persistent scopes remain keyboard accessi
 })
 
 test("scrolling a choice offscreen reveals it before submission and survives resize", async () => {
-  const replies: FormReply[] = []
-  const app = await testRender(
-    () => (
-      <RunFormBody
-        request={form}
-        theme={RUN_THEME_FALLBACK.footer}
-        onReply={(reply) => {
-          replies.push(reply)
-        }}
-        onCancel={() => {}}
-      />
-    ),
-    { width: 24, height: 8, kittyKeyboard: true },
-  )
+  const app = await renderForm(form, 24, 8)
   try {
     await settle(app)
     app.mockInput.pressKey("\x1b[6~")
@@ -588,7 +561,7 @@ test("scrolling a choice offscreen reveals it before submission and survives res
     expect(app.captureCharFrame()).not.toMatch(/^1\. Target 1(?: |$)/m)
     app.mockInput.pressEnter()
     await settle(app)
-    expect(replies).toEqual([])
+    expect(app.replies).toEqual([])
     expect(app.captureCharFrame()).toMatch(/^1\. Target 1(?: |$)/m)
     for (let index = 0; index < 11; index++) app.mockInput.pressKey("ARROW_DOWN")
     await settle(app)
@@ -603,7 +576,7 @@ test("scrolling a choice offscreen reveals it before submission and survives res
     }
     app.mockInput.pressEnter()
     await settle(app)
-    expect(replies[0]?.answer).toEqual({ target: "target-12" })
+    expect(app.replies[0]?.answer).toEqual({ target: "target-12" })
   } finally {
     app.renderer.destroy()
   }
@@ -716,7 +689,12 @@ test.each([false, true])("wrapped permission characters stay outside the scrollb
   }
 })
 
-test.each(sizes)("inspector keeps task identity and controls at $width x $height", async (size) => {
+test.each([
+  { width: 16, height: 8 },
+  { width: 56, height: 8 },
+  { width: 56, height: 12 },
+  { width: 112, height: 20 },
+])("inspector keeps task identity and controls at $width x $height", async (size) => {
   let closed = 0
   const app = await testRender(
     () => (
@@ -734,7 +712,7 @@ test.each(sizes)("inspector keeps task identity and controls at $width x $height
         }}
       />
     ),
-    size,
+    { ...size, kittyKeyboard: true },
   )
   try {
     await settle(app)

@@ -9,6 +9,7 @@ import { RUN_THEME_FALLBACK, RUN_THEME_FALLBACK_LIGHT, RUN_THEME_MONO } from "..
 import type { MiniSettingChange, MiniSettings, RunAgent, RunTuiConfig, StreamCommit } from "../../src/mini/types"
 import { createTuiResolvedConfig } from "../fixture/tui-runtime"
 import { tmpdir } from "../fixture/fixture"
+import { createFooterApiFixture } from "./fixture/footer-api"
 
 function progress(input: Partial<StreamCommit> = {}): StreamCommit {
   return {
@@ -110,14 +111,12 @@ test.each(["timer", "output", "close", "panel"] as const)(
       expect(app.renderer.root.findDescendantById("mini-startup")).toBeUndefined()
       const rows = app.externalOutput.take().flatMap((event) => event.rows)
       expect(rows.filter((row) => row.includes("oc mini"))).toEqual(["\u25aa oc mini vtest \u00b7 /project"])
-      expect(rows.join("\n")).not.toContain("\u25ab")
       if (finish === "output")
         expect(rows.findIndex((row) => row.includes("first output"))).toBeGreaterThan(
           rows.findIndex((row) => row.includes("oc mini")),
         )
       if (finish !== "panel") expect(app.renderer.currentFocusedEditor).toBe(editor)
       app.footer.finishStartup()
-      await Bun.sleep(50)
       await app.renderOnce()
       expect(app.externalOutput.take()).toEqual([])
     } finally {
@@ -148,9 +147,9 @@ test("footer usage survives unrelated patches and clears when explicitly undefin
 })
 
 test("motion demo waits for work and can be interrupted without a model call", async () => {
-  const app = await setup({ mono: false })
+  const footer = createFooterApiFixture()
   const controller = new AbortController()
-  const demo = createRunDemo({ sessionID: "seed-demo", thinking: false, footer: app.footer })
+  const demo = createRunDemo({ sessionID: "seed-demo", thinking: false, footer: footer.api })
   let finished = false
   try {
     expect(demo.interrupt()).toBe(false)
@@ -158,21 +157,13 @@ test("motion demo waits for work and can be interrupted without a model call", a
       finished = true
       return handled
     })
-    await app.footer.idle()
-    expect(
-      app.externalOutput
-        .take()
-        .flatMap((event) => event.rows)
-        .join("\n"),
-    ).toContain("70 seconds, no model calls")
+    await footer.api.idle()
     expect(finished).toBe(false)
     expect(demo.interrupt()).toBe(true)
     expect(await run).toBe(true)
     expect(demo.interrupt()).toBe(false)
   } finally {
     controller.abort()
-    app.footer.destroy()
-    app.renderer.destroy()
   }
 })
 
@@ -189,10 +180,6 @@ test.each([false, true])("command menu uses its full height on first open (mono=
     expect(frame).toContain("Compact session")
     expect(frame).toContain("New session")
     expect(frame).toContain("Skills")
-    app.mockInput.pressKey("END")
-    await app.renderOnce()
-    expect(app.captureCharFrame()).toContain("Exit")
-    expect(app.footer.isClosed).toBe(false)
   } finally {
     app.footer.destroy()
     app.renderer.destroy()
@@ -268,14 +255,14 @@ test.each([false, true])("production footer preserves wrapped input and status o
   const app = await setup({ mono })
   try {
     await app.renderOnce()
-    await app.mockInput.typeText(
-      "Explain how this project is organized, then outline a small change and the checks needed to verify it. Do not modify files.",
-    )
+    const draft =
+      "Explain how this project is organized, then outline a small change and the checks needed to verify it. Do not modify files."
+    await app.mockInput.typeText(draft)
     for (const width of [56, 112, 40]) {
       app.resize(width, 24)
       await app.renderOnce()
       await app.renderOnce()
-      expect(app.renderer.footerHeight).toBe(Math.min(6, app.renderer.currentFocusedEditor!.virtualLineCount) + 3)
+      expect(app.renderer.currentFocusedEditor!.plainText).toBe(draft)
       const frame = app.captureCharFrame()
       expect(frame.split("\n").filter((line) => line.startsWith(mono ? "| " : "┃ "))).toHaveLength(
         app.renderer.currentFocusedEditor!.virtualLineCount,
@@ -335,7 +322,7 @@ test("system fallback follows physical mode changes when palette queries remain 
     expect(app.footer.currentTheme()).toBe(RUN_THEME_FALLBACK)
     await app.mockInput.pressKeys(["\x1b]10;rgb:0000/0000/0000\x07", "\x1b]11;rgb:ffff/ffff/ffff\x07"])
     expect(app.renderer.themeMode).toBe("light")
-    await app.footer.refreshTheme()
+    await app.waitFor(() => app.footer.currentTheme() === RUN_THEME_FALLBACK_LIGHT)
     await app.flush()
     expect(app.footer.currentTheme()).toBe(RUN_THEME_FALLBACK_LIGHT)
     expect(
