@@ -33,6 +33,7 @@ import vercel from "./assets/vercel.json" with { type: "json" }
 import vesper from "./assets/vesper.json" with { type: "json" }
 import zenburn from "./assets/zenburn.json" with { type: "json" }
 import ziqDark from "./assets/ziq-dark.json" with { type: "json" }
+import ziqLight from "./assets/ziq-light.json" with { type: "json" }
 
 export type Theme = {
   readonly primary: RGBA
@@ -163,6 +164,7 @@ export const DEFAULT_THEMES: Record<string, ThemeJson> = {
   zenburn,
   carbonfox,
   ["ziq-dark"]: ziqDark,
+  ["ziq-light"]: ziqLight,
 }
 
 const pluginThemes: Record<string, ThemeJson> = {}

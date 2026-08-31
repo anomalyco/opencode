@@ -1406,9 +1406,12 @@ function UserMessage(props: {
               setHover(false)
             }}
             onMouseUp={props.onMouseUp}
+            border={["top", "bottom", "left", "right"]}
+            borderColor={hover() ? theme.borderActive : theme.borderSubtle}
             paddingTop={1}
             paddingBottom={1}
             paddingLeft={2}
+            paddingRight={2}
             backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
             flexShrink={0}
           >
