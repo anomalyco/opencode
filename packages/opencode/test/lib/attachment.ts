@@ -77,6 +77,8 @@ export const settleTerminal = Effect.fn("AttachmentTest.settleTerminal")(functio
 export function inertCoordinator(): AttachmentCoordinator.Interface {
   return {
     locate: () => Effect.succeed(undefined),
+    locateBorrowable: () =>
+      Effect.die("inertCoordinator: locateBorrowable() reached — this fixture needs a real coordinator"),
     captureFence: () => Effect.succeed(false),
     claimCancellationAtFence: () => Effect.succeed(false),
     open: () => Effect.die("inertCoordinator: open() reached — this fixture needs a real coordinator"),

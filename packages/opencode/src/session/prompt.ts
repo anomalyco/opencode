@@ -1182,6 +1182,24 @@ const layer = Layer.effect(
               }),
             )
           }),
+          // CP-032 R-08. A degraded or cancelled scope throws above; a scope that has already
+          // published its resolution refuses by returning false, and that case has to fail here too.
+          // It cannot be ruled out by checking borrowability before the prompt: this site runs after
+          // `revert.cleanup` and `createUserMessage`, so the scope can resolve in between. Without
+          // this arm the supplement would proceed on a dead scope, `result()` would replay the
+          // earlier resolution, and its own distinct answer would file into a position the guard
+          // already holds — lost with no note and no error. Refusing pre-admission instead routes it
+          // to the sanctioned supplemental note, because `onAdmitted` has not run yet.
+          Effect.flatMap((owned) =>
+            owned
+              ? Effect.void
+              : Effect.fail(
+                  new ScopeOwnRefused({
+                    sessionID: input.sessionID,
+                    reason: "attachment scope had already resolved its return",
+                  }),
+                ),
+          ),
         )
       // Admission has happened: the user message and its parts are persisted and the conditional
       // claim succeeded. This runs before the runner is entered.

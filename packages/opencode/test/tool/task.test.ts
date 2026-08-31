@@ -197,6 +197,9 @@ const taskClosure = admittingClosure(leaseLog(), "task")
 const inertCoordinator = (): AttachmentCoordinator.TaskInterface => ({
   open: () => Effect.die("unused"),
   locate: () => Effect.succeed(undefined),
+  // Flag-on only: it sits past `executeSupplement`'s feature guard, so reaching it here means the
+  // fixture is exercising attachment behaviour and wants a real coordinator.
+  locateBorrowable: () => Effect.die("unused"),
   // The same-ID claim is reached in both feature modes, because it orders admission between an
   // owner and a supplemental prompt whether or not attachment machinery exists. These fixtures
   // drive one call per task id, so that call is always the owner and nothing ever awaits it.

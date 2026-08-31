@@ -44,7 +44,16 @@ export type ObserverClaim =
 
 export interface Scope extends AttachmentContract.Scope {
   readonly sessionID: SessionID
-  readonly own: (messageID: MessageID) => Effect.Effect<void>
+  /**
+   * Claims a message for this scope, invalidating the turn's prior evidence.
+   *
+   * Returns whether ownership was taken. `false` means the scope had already published its
+   * resolution and can no longer accept one — the admission boundary converts that into the typed
+   * `SessionScopeOwnRefused`, while non-admission callers ignore it and keep the historical no-op.
+   * A degraded or cancelled scope that has NOT resolved still throws, which is CP-031's existing
+   * recoverable admission failure and is deliberately unchanged.
+   */
+  readonly own: (messageID: MessageID) => Effect.Effect<boolean>
   readonly owns: (messageID: MessageID) => boolean
   readonly reserve: (jobID: SessionID) => Effect.Effect<Reservation>
   readonly reject: (reservation: Reservation) => Effect.Effect<void>
@@ -75,6 +84,20 @@ export interface TaskInterface {
    * is necessarily an effectful read.
    */
   readonly locate: (sessionID: SessionID) => Effect.Effect<Scope | undefined>
+  /**
+   * CP-032 R-08: the BORROW lookup, deliberately distinct from `locate`.
+   *
+   * A scope that has published its resolution stays registered until `closeNow` unregisters it, and
+   * in that window it is unusable: `reserve` throws, `own` returns silently on the `closed` guard
+   * (so no typed refusal is minted), and `result` hands back the EARLIER resolution and fallback. A
+   * supplement that borrowed one would therefore file the earlier position, which the filing guard
+   * already holds, and lose its own answer with no note and no error.
+   *
+   * `locate` keeps returning it on purpose. `tool/task.ts` reconciles the carried parent scope
+   * against the registry by object identity and treats disagreement as a coordination fault, so
+   * hiding a resolved scope there would fail delegated calls rather than protect them.
+   */
+  readonly locateBorrowable: (sessionID: SessionID) => Effect.Effect<Scope | undefined>
   readonly claim: (sessionID: SessionID) => Effect.Effect<Claim>
   readonly settleClaim: (claim: Claim, active: boolean) => Effect.Effect<void>
   readonly awaitClaim: (claim: Claim) => Effect.Effect<boolean>
@@ -164,6 +187,16 @@ type RegistryState = {
     {
       readonly scope: Scope
       readonly captureFence: (ref: Ports.ParticipantFenceRef) => boolean
+      /**
+       * CP-032 R-08: this scope has published its resolution, which is the ONLY replaceable state.
+       * Kept as a private thunk over the owning scope's `state` rather than exposed on `Current`,
+       * so no public contract widens and no existing `current()` consumer changes.
+       *
+       * Deliberately NOT `closed`: `closeNow` already unregisters, so a closed scope is absent from
+       * this map. Deliberately NOT `degraded`/`cancelled` while unresolved — those still throw from
+       * `own()` and remain CP-031's recoverable admission failure, which R-23 preserves.
+       */
+      readonly resolved: () => boolean
     }
   >
   /** Core owns each ref's strong fence-lifetime root; historical snapshots therefore key weakly. */
@@ -296,12 +329,26 @@ export const make = Effect.gen(function* () {
 
     const own: Scope["own"] = (messageID) =>
       apply(() => {
-        if (state.closed) return
+        // CP-032 R-08. Ownership is REFUSED here, not silently dropped, and the caller learns which.
+        //
+        // A resolved scope reaches this branch (`gate()` sets `closed` at every resolution), and a
+        // borrow check performed earlier cannot have caught it: the admission path yields through
+        // `revert.cleanup` and `createUserMessage` between discovery and this call, so a scope that
+        // was live at lookup can resolve before ownership. Returning `false` — rather than the
+        // former bare `return` — is what lets the admission boundary convert that into the typed
+        // refusal instead of proceeding onto a dead scope and replaying its earlier answer.
+        //
+        // The no-op itself is preserved and load-bearing: taking ownership here would `invalidate()`
+        // a settled candidate and let a later `result()` fall through to a different fallback, so a
+        // completed scope's selected answer must stay immutable. Non-admission callers ignore the
+        // result and keep exactly that behaviour.
+        if (state.closed) return false
         if (state.degraded || state.cancelled || state.resolution) {
           throw new Error(`Attachment scope ${state.scopeID} cannot own another message`)
         }
         state.messages.add(messageID)
         invalidate()
+        return true
       })
 
     const owns: Scope["owns"] = (messageID) => transition(() => state.messages.has(messageID))
@@ -536,9 +583,36 @@ export const make = Effect.gen(function* () {
       close,
     }
 
+    const entry = {
+      scope: handle,
+      captureFence,
+      resolved: () => state.resolution !== undefined,
+    }
+
+    // CP-032 R-08. One synchronous critical section, so check-and-replace is atomic by
+    // construction: `Effect.sync` cannot yield, and `closeNow`'s delete runs inside `transition`,
+    // which cannot either. No new lock is needed.
+    //
+    // A LIVE incumbent still refuses the open — CP-031's exclusivity, unchanged, and the path that
+    // keeps producing the typed `SessionScopeOwnRefused` note for a degraded-but-unresolved scope.
+    // A RESOLVED incumbent is replaced in place: it can no longer serve a borrower, and leaving it
+    // registered is exactly what made a later supplement's distinct answer vanish into the earlier
+    // filed position with no note and no error.
+    //
+    // The predecessor is not closed here; its own finalizer still runs and is identity-safe.
+    // `closeNow` deletes only while the registered scope id is still its own, and `scopeID` is a
+    // fresh UUID per open, so the predecessor cannot evict the successor.
     const registered = yield* Effect.sync(() => {
-      if (registry.scopes.has(sessionID)) return false
-      registry.scopes.set(sessionID, { scope: handle, captureFence })
+      const incumbent = registry.scopes.get(sessionID)
+      if (incumbent && !incumbent.resolved()) return false
+      // The predecessor's fence snapshot is deliberately left bound to the predecessor. A fence ref
+      // authorizes the exact scope generation it was captured on, never the session's future
+      // successor — the standing contract proved by "captureFence and claimCancellationAtFence bind
+      // exact scope generations". Deleting or forwarding it here would manufacture authority over a
+      // generation the ref never named. The successor stays fence-capable because `captureFence`
+      // resolves an unretained ref through `registry.scopes.get(sessionID)`, which is now the
+      // successor.
+      registry.scopes.set(sessionID, entry)
       return true
     })
     if (!registered) return yield* Effect.fail(new Error(`Attachment scope already open for session ${sessionID}`))
@@ -579,6 +653,20 @@ export const make = Effect.gen(function* () {
     return registry.scopes.get(sessionID)?.scope
   })
 
+  // CP-032 R-08. Raw `locate` stays raw because two of its three production consumers need registry
+  // truth rather than usability: `tool/task.ts` reconciles the carried parent scope by object
+  // identity and fails the call on disagreement, and `attachment/participant.ts` reports covered
+  // edges for closure proof and must not narrow the proven set. Only `executeSupplement`'s borrow
+  // needs the qualified answer, so the qualification lives here rather than inside `locate`.
+  const locateBorrowable: Interface["locateBorrowable"] = Effect.fn("AttachmentCoordinator.locateBorrowable")(
+    function* (sessionID) {
+      const registry = yield* InstanceState.get(registries)
+      const entry = registry.scopes.get(sessionID)
+      if (!entry || entry.resolved()) return undefined
+      return entry.scope
+    },
+  )
+
   const captureFence: Interface["captureFence"] = Effect.fn("AttachmentCoordinator.captureFence")(
     function* (sessionID, ref) {
       const registry = yield* InstanceState.get(registries)
@@ -601,6 +689,7 @@ export const make = Effect.gen(function* () {
   return Service.of({
     open,
     locate,
+    locateBorrowable,
     captureFence,
     claimCancellationAtFence,
     claim,

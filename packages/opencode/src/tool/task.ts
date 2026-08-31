@@ -394,9 +394,11 @@ export const TaskTool = Tool.define(
        * A supplemental prompt: a second call naming a running task's `task_id` joins that task's
        * conversation rather than starting another one.
        *
-       * With the feature on it resolves the child scope once - borrowing the live scope so claiming
-       * the message invalidates the turn's evidence, or opening and finalizing its own when none is
-       * live. With it off no scope exists and it prompts without one.
+       * With the feature on it resolves the child scope once - borrowing a live UNRESOLVED scope so
+       * claiming the message invalidates the turn's evidence, or opening and finalizing its own when
+       * there is no live unresolved scope. A registered scope that has already published its
+       * resolution is not borrowable (CP-032 R-08): the open atomically replaces it. With the
+       * feature off no scope exists and it prompts without one.
        *
        * Classification consults an `admitted` flag set by its own hook, which fires after the prompt
        * is durably persisted and the conditional claim succeeds. An interrupt rethrows; a failure
@@ -455,7 +457,15 @@ export const TaskTool = Tool.define(
               return toDetected(outcome.result)
             })
           if (!flags.experimentalBackgroundSubagents) return yield* attempt()
-          const located = yield* attachments.locate(nextSession.id)
+          // CP-032 R-08: BORROW, so this asks `locateBorrowable`, not raw `locate`. A scope that has
+          // published its resolution stays registered until its finalizer unregisters it, and once
+          // eligibility parks the owner run inside `Scope.result()` that window covers every
+          // concurrent sequence. Borrowing one is silent loss: `own()` returns on the `closed` guard
+          // without minting a refusal, and `result()` replays the earlier resolution, so this run
+          // files the earlier position the guard already holds and its own answer disappears.
+          // Raw `locate` keeps registry truth for the parent identity check above and for closure
+          // participant discovery; only the borrow is qualified.
+          const located = yield* attachments.locateBorrowable(nextSession.id)
           if (located) return yield* attempt(located)
           const opened = yield* attachments.open(nextSession.id).pipe(Effect.exit)
           if (Exit.isFailure(opened)) {

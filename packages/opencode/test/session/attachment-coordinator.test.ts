@@ -667,6 +667,220 @@ describe("attachment coordinator", () => {
     )
   })
 
+  // CP-032 R-08. `resolve` drives a never-attached scope through `result()`'s immediate arm, which
+  // publishes a resolution and sets `closed` WITHOUT unregistering — only `closeNow` unregisters.
+  // That is the registered-but-unusable window, and once B-1 parks an owner run inside
+  // `Scope.result()` it covers every concurrent supplemental sequence rather than a few fiber hops.
+  const resolve = (scope: AttachmentCoordinator.Scope, sessionID: SessionID, text: string) =>
+    scope.result(assistant(sessionID, text))
+
+  test("R-08: a resolved scope stays discoverable, is not borrowable, and is atomically replaced", async () => {
+    await runAttached(
+      Effect.gen(function* () {
+        const coordinator = yield* AttachmentCoordinator.make
+        const sessionID = SessionID.create()
+        const old = yield* coordinator.open(sessionID)
+        yield* resolve(old, sessionID, "first")
+
+        // RAW DISCOVERY IS PRESERVED, and this assertion is load-bearing rather than incidental.
+        // Two of `locate`'s three production consumers need registry truth, not usability:
+        // `tool/task.ts` reconciles the carried parent scope by object identity and fails the call
+        // on disagreement, and `session/attachment/participant.ts` reports covered edges for closure
+        // proof and must not narrow the proven set. A global resolved-filter inside `locate` would
+        // regress both; this test fails if anyone reintroduces one.
+        expect(yield* coordinator.locate(sessionID)).toBe(old)
+        // ...but it is not borrowable.
+        expect(yield* coordinator.locateBorrowable(sessionID)).toBeUndefined()
+
+        const replacement = yield* coordinator.open(sessionID)
+        expect(replacement.id).not.toBe(old.id)
+        expect(yield* coordinator.locate(sessionID)).toBe(replacement)
+        expect(yield* coordinator.locateBorrowable(sessionID)).toBe(replacement)
+      }),
+    )
+  })
+
+  test("R-08: borrowing a resolved scope replays the earlier answer; the successor files its own", async () => {
+    await runAttached(
+      Effect.gen(function* () {
+        const coordinator = yield* AttachmentCoordinator.make
+        const sessionID = SessionID.create()
+        const old = yield* coordinator.open(sessionID)
+        expect(selectedText(yield* resolve(old, sessionID, "first"))).toBe("first")
+
+        // THE DEFECT, demonstrated rather than asserted against private state. A borrower of the
+        // resolved scope gets the EARLIER resolution back: `own()` returns on the `closed` guard
+        // without minting a typed refusal, and `result()` short-circuits on `state.resolution`. Its
+        // own distinct answer never reaches selection, so it files a position the guard already
+        // holds and disappears with no note and no error.
+        expect(selectedText(yield* resolve(old, sessionID, "second"))).toBe("first")
+
+        // THE REPAIR: the borrow lookup refuses it, so the supplement opens its own scope and its
+        // distinct answer is the one selected.
+        expect(yield* coordinator.locateBorrowable(sessionID)).toBeUndefined()
+        const replacement = yield* coordinator.open(sessionID)
+        expect(selectedText(yield* resolve(replacement, sessionID, "second"))).toBe("second")
+      }),
+    )
+  })
+
+  test("R-08: a degraded-but-unresolved scope stays borrowable and keeps refusing admission", async () => {
+    await runAttached(
+      Effect.gen(function* () {
+        const coordinator = yield* AttachmentCoordinator.make
+        const sessionID = SessionID.create()
+        const scope = yield* coordinator.open(sessionID)
+        // Degrading alone cannot resolve: the degraded gate needs candidate, observed, or fallback,
+        // and a fresh scope has none. So this is registered, degraded, and UNRESOLVED.
+        yield* scope.degrade()
+
+        // Replacement is scoped to resolved scopes only. This one is still the incumbent, so the
+        // exclusive open still loses and CP-031's recoverable admission failure is untouched:
+        // R-23 preserves it, and only R-08's resolved case is carved out.
+        expect(yield* coordinator.locateBorrowable(sessionID)).toBe(scope)
+        expect(Exit.isFailure(yield* coordinator.open(sessionID).pipe(Effect.exit))).toBe(true)
+        // `own()` still throws here — the typed `SessionScopeOwnRefused` that `promptAdmitted`
+        // mints, which is what turns this case into a sanitized note instead of silent loss.
+        expect(Exit.isFailure(yield* scope.own(MessageID.ascending()).pipe(Effect.exit))).toBe(true)
+      }),
+    )
+  })
+
+  test("R-08: a predecessor's finalizer cannot evict its successor, in either order", async () => {
+    await runAttached(
+      Effect.gen(function* () {
+        const coordinator = yield* AttachmentCoordinator.make
+
+        // Replace-then-close: the predecessor closes while the successor holds the registration.
+        // `closeNow` deletes only while the registered scope id is still its own, and `scopeID` is a
+        // fresh UUID per open, so the stale finalizer is a no-op against the registry.
+        const replaceFirst = SessionID.create()
+        const oldA = yield* coordinator.open(replaceFirst)
+        yield* resolve(oldA, replaceFirst, "first")
+        const successorA = yield* coordinator.open(replaceFirst)
+        yield* oldA.close()
+        expect(yield* coordinator.locate(replaceFirst)).toBe(successorA)
+        expect(yield* coordinator.locateBorrowable(replaceFirst)).toBe(successorA)
+        expect(successorA.current().cancelled).toBe(false)
+
+        // Close-then-replace: the pre-existing ordering, still an ordinary unregister-then-open.
+        const closeFirst = SessionID.create()
+        const oldB = yield* coordinator.open(closeFirst)
+        yield* resolve(oldB, closeFirst, "first")
+        yield* oldB.close()
+        expect(yield* coordinator.locate(closeFirst)).toBeUndefined()
+        const successorB = yield* coordinator.open(closeFirst)
+        expect(successorB.id).not.toBe(oldB.id)
+        expect(yield* coordinator.locate(closeFirst)).toBe(successorB)
+      }),
+    )
+  })
+
+  test("R-08: two concurrent replacements of one resolved scope yield exactly one successor", async () => {
+    await runAttached(
+      Effect.gen(function* () {
+        const coordinator = yield* AttachmentCoordinator.make
+        const sessionID = SessionID.create()
+        const old = yield* coordinator.open(sessionID)
+        yield* resolve(old, sessionID, "first")
+
+        // `open` yields before it registers, so these genuinely interleave. The check-and-swap is
+        // one synchronous critical section: whichever lands first becomes the unresolved incumbent,
+        // and the other must then lose the exclusive open rather than replace a live scope.
+        const outcomes = yield* Effect.all(
+          [coordinator.open(sessionID).pipe(Effect.exit), coordinator.open(sessionID).pipe(Effect.exit)],
+          { concurrency: "unbounded" },
+        )
+        const winners = outcomes.filter(Exit.isSuccess)
+        expect(winners).toHaveLength(1)
+        expect(outcomes.filter(Exit.isFailure)).toHaveLength(1)
+
+        const registered = yield* coordinator.locate(sessionID)
+        expect(registered).toBe(winners[0]!.value)
+        expect(registered).not.toBe(old)
+      }),
+    )
+  })
+
+  test("R-08: replacement before the predecessor closes preserves exact fence generations", async () => {
+    await runAttached(
+      Effect.gen(function* () {
+        const coordinator = yield* AttachmentCoordinator.make
+        const sessionID = SessionID.create()
+        const old = yield* coordinator.open(sessionID)
+        const oldRef = fenceRef()
+        expect(yield* coordinator.captureFence(sessionID, oldRef)).toBe(true)
+
+        // The new ordering R-08 introduces. The standing generation test replaces AFTER `close()`;
+        // here the predecessor is resolved and swapped out while still unclosed, so its fence
+        // snapshot is still reachable through the WeakMap when the successor takes over.
+        yield* resolve(old, sessionID, "first")
+        const replacement = yield* coordinator.open(sessionID)
+
+        const freshRef = fenceRef()
+        expect(yield* coordinator.captureFence(sessionID, freshRef)).toBe(true)
+
+        // The predecessor's ref keeps authorizing the predecessor and nothing else. It is neither
+        // deleted nor forwarded: a ref authorizes the exact generation it was captured on, and
+        // replacement does not hand it jurisdiction over a generation it never named. The snapshot
+        // has to survive the predecessor's close, because participant cancellation runs after the
+        // physical signals closure core dispatches against exact Runner/BackgroundJob targets.
+        expect(yield* coordinator.claimCancellationAtFence(sessionID, oldRef)).toBe(true)
+        expect(old.current().cancelled).toBe(true)
+        expect(replacement.current().cancelled).toBe(false)
+
+        // A LATE predecessor finalizer, arriving after the swap, is a no-op against the registry:
+        // `closeNow` deletes only while the registered scope id is still its own. The successor
+        // stays registered, stays borrowable, and keeps its own fence binding.
+        yield* old.close()
+        expect(yield* coordinator.locate(sessionID)).toBe(replacement)
+        expect(yield* coordinator.locateBorrowable(sessionID)).toBe(replacement)
+
+        expect(yield* coordinator.claimCancellationAtFence(sessionID, freshRef)).toBe(true)
+        expect(replacement.current().cancelled).toBe(true)
+      }),
+    )
+  })
+
+  test("R-08: a scope resolving between borrow discovery and ownership refuses instead of replaying", async () => {
+    await runAttached(
+      Effect.gen(function* () {
+        const coordinator = yield* AttachmentCoordinator.make
+        const sessionID = SessionID.create()
+        const scope = yield* coordinator.open(sessionID)
+        const reservation = yield* scope.reserve(SessionID.create())
+        yield* owner(scope, reservation)
+        const marker = yield* markTerminal(scope, reservation)
+        yield* scope.observeTurn({ assistant: assistant(sessionID, "settled answer"), clean: true })
+
+        // PHASE 1 — discovery. The scope is live and unresolved, so the borrow legitimately wins.
+        // Atomic replacement cannot help here: there is nothing resolved to replace yet.
+        expect(yield* coordinator.locateBorrowable(sessionID)).toBe(scope)
+
+        // PHASE 2 — the capture-to-use window. In production this is where `promptAdmitted` runs
+        // `revert.cleanup` and `createUserMessage`, durably persisting the supplement's User
+        // message. The owner's outstanding work quiesces underneath it and the gate resolves.
+        yield* scope.settleTerminal(marker)
+        yield* scope.finishContinuation()
+
+        // PHASE 3 — ownership, now against a scope that resolved mid-flight. It must REPORT the
+        // refusal rather than silently drop the claim: a bare no-op here is what let the run
+        // continue onto a dead scope and replay its earlier answer.
+        const persisted = MessageID.ascending()
+        expect(yield* scope.own(persisted)).toBe(false)
+        expect(scope.owns(persisted)).toBe(false)
+
+        // Both halves hold at once. The settled answer stays immutable — had ownership been taken,
+        // `invalidate()` would have cleared the candidate and this would read "stale replay" — and
+        // the caller still gets a signal it can act on. `promptAdmitted` turns that `false` into
+        // `SessionScopeOwnRefused` before `onAdmitted` fires, so the supplement receives the
+        // sanctioned pre-admission note instead of filing into the earlier position.
+        expect(selectedText(yield* scope.result(assistant(sessionID, "stale replay")))).toBe("settled answer")
+        expect(yield* coordinator.locateBorrowable(sessionID)).toBeUndefined()
+      }),
+    )
+  })
+
   test("concurrent scope opens have exactly one winner", async () => {
     await runAttached(
       Effect.gen(function* () {
