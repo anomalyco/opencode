@@ -1,11 +1,11 @@
 export const logo = {
-  left: ["               ", "█▀▀▄ █▀▀▀ █  █ ", "█  █ █▀▀▀ █  █ ", "▀▀▀▀ ▀▀▀▀  ▀▀  "],
-  right: ["                       ", "█▀▀█ █▀▀▀ █▀▀▀ █▀▀█ ▀█▀", "█▀▀█ █ ▀█ █▀▀▀ █  █  █ ", "▀  ▀ ▀▀▀▀ ▀▀▀▀ ▀  ▀  ▀ "],
+  left: [] as string[],
+  right: [] as string[],
 }
 
 export const go = {
-  left: ["    ", "█▀▀▀", "█_^█", "▀▀▀▀"],
-  right: ["    ", "█▀▀█", "█__█", "▀▀▀▀"],
+  left: [] as string[],
+  right: [] as string[],
 }
 
 export const marks = "_^~,"
