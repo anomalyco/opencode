@@ -13,12 +13,8 @@ export type Options<R = never> = {
   readonly tools: Tools<R>
 }
 
-export const isNamespace = <R = never>(value: unknown): value is Namespace<R> =>
-  typeof value === "object" &&
-  value !== null &&
-  "_tag" in value &&
-  Object.hasOwn(value, "_tag") &&
-  value._tag === "CodeModeNamespace"
+export const isNamespace = <R = never>(value: Namespace<R> | Tools<R>): value is Namespace<R> =>
+  Object.hasOwn(value, "_tag") && value._tag === "CodeModeNamespace"
 
 /** Declares a namespace when descriptions or other namespace metadata are needed. */
 export const make = <R = never>(options: Options<R>): Namespace<R> => ({

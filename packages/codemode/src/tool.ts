@@ -1,4 +1,6 @@
 import { Effect, Schema } from "effect"
+import type { Namespace } from "./namespace.js"
+import type { Tools } from "./tools.js"
 
 /**
  * JSON Schema subset for model-visible signatures. CodeMode does not validate values against
@@ -50,13 +52,8 @@ export type Options<I extends SchemaType, O extends SchemaType | undefined, R = 
   readonly execute: (input: InputType<I>) => Effect.Effect<ResultType<O>, unknown, R>
 }
 
-// Object.hasOwn: an inherited _tag must not classify a namespace as a Tool.
-export const isTool = <R = never>(value: unknown): value is Tool<R> =>
-  typeof value === "object" &&
-  value !== null &&
-  "_tag" in value &&
-  Object.hasOwn(value, "_tag") &&
-  value._tag === "CodeModeTool"
+export const isTool = <R = never>(value: Tool<R> | Namespace<R> | Tools<R> | undefined): value is Tool<R> =>
+  value !== undefined && Object.hasOwn(value, "_tag") && value._tag === "CodeModeTool"
 
 /**
  * Declares one schema-described tool available to a CodeMode program through `tools.*`.

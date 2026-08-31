@@ -25,8 +25,12 @@ const happyPathSpec = async (): Promise<Document> => {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
 
-const toolAt = (tools: unknown, name: string) =>
-  name.split(".").reduce<unknown>((current, segment) => (isRecord(current) ? current[segment] : undefined), tools)
+const toolAt = (tools: OpenAPI.Tools, name: string) =>
+  name
+    .split(".")
+    .reduce<
+      Tool.Tool<HttpClient.HttpClient> | OpenAPI.Tools | undefined
+    >((current, segment) => (current !== undefined && !Tool.isTool(current) ? current[segment] : undefined), tools)
 
 const recordingClient = (respond: (request: HttpClientRequest.HttpClientRequest) => Response) => {
   const requests: Array<Recorded> = []
@@ -948,7 +952,7 @@ describe("OpenAPI.fromSpec", () => {
     expect(spec.security).toStrictEqual([])
     expect(isRecord(components.securitySchemes) ? Object.keys(components.securitySchemes) : []).toStrictEqual([])
     const health = toolAt(result.tools, "v2.health.get")
-    const healthInput = isRecord(health) ? health.input : undefined
+    const healthInput = Tool.isTool(health) && isRecord(health.input) ? health.input : undefined
     expect(healthInput).toMatchObject({ type: "object", properties: {} })
     const input = isRecord(healthInput) ? healthInput : {}
     expect(Object.keys(isRecord(input.properties) ? input.properties : {})).toStrictEqual([])
