@@ -38,6 +38,8 @@ import { monoSnapshot } from "./mono"
 import { RunScrollbackStream } from "./scrollback.surface"
 import { resolveRunTheme, type RunTheme } from "./theme"
 import { modelInfo } from "./variant.shared"
+import { entrySplash } from "./splash"
+import { SEED_LAUNCH } from "../ui/one-cell-motion"
 import type {
   FooterApi,
   FooterEvent,
@@ -76,6 +78,7 @@ type RunFooterOptions = {
   agents: RunAgent[]
   references: RunReference[]
   wrote?: boolean
+  startup?: { version: string; detail: string }
   agent: string | undefined
   modelLabel: string
   model: RunInput["model"]
@@ -209,6 +212,9 @@ export class RunFooter implements FooterApi {
   private noticeTimeout: NodeJS.Timeout | undefined
   private turnAgent: string | undefined
   private requestExitHandler: (() => boolean) | undefined
+  private startup: Accessor<RunFooterOptions["startup"]>
+  private setStartup: Setter<RunFooterOptions["startup"]>
+  private startupTimer: ReturnType<typeof setTimeout> | undefined
   private scrollback: RunScrollbackStream
   private themes: RunTheme[]
   private paletteRefreshRunning = false
@@ -240,7 +246,7 @@ export class RunFooter implements FooterApi {
       status: "",
       notice: "",
       model: options.modelLabel,
-      usage: "",
+      usage: undefined,
       first: options.first,
       interrupt: 0,
       exit: 0,
@@ -302,6 +308,9 @@ export class RunFooter implements FooterApi {
     const [miniSettings, setMiniSettings] = createSignal(options.miniSettings.current)
     this.miniSettings = miniSettings
     this.setMiniSettings = setMiniSettings
+    const [startup, setStartup] = createSignal(options.startup)
+    this.startup = startup
+    this.setStartup = setStartup
     this.base = Math.max(1, renderer.footerHeight - TEXTAREA_MIN_ROWS)
     this.scrollback = this.createScrollback(options.wrote ?? false)
 
@@ -322,6 +331,7 @@ export class RunFooter implements FooterApi {
             return createComponent(RunFooterView, {
               directory: options.directory,
               state: footer.state,
+              startup: footer.startup,
               view: footer.view,
               subagent: footer.subagent,
               queuedPrompts: footer.queuedPrompts,
@@ -350,7 +360,10 @@ export class RunFooter implements FooterApi {
               onInterrupt: footer.handleInterrupt,
               onBackground: options.onBackground,
               onQueuedPromptAction: options.onQueuedPromptAction,
-              onEditorOpen: options.onEditorOpen,
+              onEditorOpen: (input) => {
+                footer.finishStartup()
+                return options.onEditorOpen(input)
+              },
               onInputClear: footer.handleInputClear,
               onExitRequest: footer.handleExit,
               onRequestExit: footer.setRequestExitHandler,
@@ -373,6 +386,26 @@ export class RunFooter implements FooterApi {
         this.close()
       }
     })
+    if (options.startup)
+      this.startupTimer = setTimeout(() => this.finishStartup(), (SEED_LAUNCH.frames.length - 1) * SEED_LAUNCH.interval)
+  }
+
+  public finishStartup(): void {
+    const startup = this.startup()
+    if (!startup) return
+    clearTimeout(this.startupTimer)
+    this.startupTimer = undefined
+    this.setStartup(undefined)
+    if (this.isGone) return
+    this.applyHeight()
+    this.renderer.writeToScrollback(
+      entrySplash({
+        ...startup,
+        theme: this.theme().splash,
+        mono: this.miniSettings().mono,
+      }),
+    )
+    this.renderer.requestRender()
   }
 
   public get isClosed(): boolean {
@@ -418,6 +451,7 @@ export class RunFooter implements FooterApi {
     }
 
     if (next.type === "turn.duration") {
+      this.finishStartup()
       const agent = this.turnAgent ?? this.currentAgent()
       this.turnAgent = undefined
       if (this.miniSettings().turn_summary === "hide") return
@@ -519,7 +553,7 @@ export class RunFooter implements FooterApi {
       status: typeof next.status === "string" ? next.status : prev.status,
       notice: typeof next.notice === "string" ? next.notice : prev.notice,
       model: typeof next.model === "string" ? next.model : prev.model,
-      usage: typeof next.usage === "string" ? next.usage : prev.usage,
+      usage: "usage" in next ? next.usage : prev.usage,
       first: typeof next.first === "boolean" ? next.first : prev.first,
       interrupt:
         typeof next.interrupt === "number" && Number.isFinite(next.interrupt)
@@ -554,6 +588,7 @@ export class RunFooter implements FooterApi {
       return
     }
 
+    if (view.type !== "prompt") this.finishStartup()
     this.setView(view)
     this.applyHeight()
   }
@@ -567,6 +602,7 @@ export class RunFooter implements FooterApi {
       return
     }
 
+    this.finishStartup()
     const last = this.queue.at(-1)
     const merged = last ? coalesceProgressCommit(last, commit) : undefined
     if (merged) this.queue[this.queue.length - 1] = merged
@@ -617,6 +653,7 @@ export class RunFooter implements FooterApi {
       return
     }
 
+    this.finishStartup()
     this.scrollback.destroy()
     this.scrollback = this.createScrollback(wrote)
   }
@@ -644,6 +681,7 @@ export class RunFooter implements FooterApi {
       return
     }
 
+    this.finishStartup()
     this.flush()
     this.notifyClose()
   }
@@ -719,7 +757,10 @@ export class RunFooter implements FooterApi {
                 : prompt.padding * 2 + 1 + this.rows
     const height = Math.max(
       1,
-      Math.min(desired, this.renderer.terminalHeight - (type === "prompt" && route === "composer" ? 1 : 0)),
+      Math.min(
+        desired + (this.startup() ? 2 : 0),
+        this.renderer.terminalHeight - (type === "prompt" && route === "composer" ? 1 : 0),
+      ),
     )
 
     if (height !== this.renderer.footerHeight) {
@@ -744,6 +785,7 @@ export class RunFooter implements FooterApi {
   }
 
   private syncLayout = (next: { route: FooterPromptRoute; subagentRows: number }): void => {
+    if (next.route.type !== "composer") this.finishStartup()
     this.promptRoute = next.route
     this.subagentMenuRows = next.subagentRows
     if (this.view().type === "prompt") {
@@ -1081,6 +1123,8 @@ export class RunFooter implements FooterApi {
       return
     }
 
+    clearTimeout(this.startupTimer)
+    this.startupTimer = undefined
     this.flush()
     this.destroyed = true
     this.notifyClose()

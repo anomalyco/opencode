@@ -11,7 +11,6 @@ import type {
 } from "@opencode-ai/client/promise"
 import { Event } from "@opencode-ai/schema/event"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
-import { formatContextUsage } from "../util/session"
 import { blockerStatus, pickBlockerView } from "./session-data"
 import { writeSessionOutput } from "./stream"
 import { createFragmentReconciler, fragmentRef, type FragmentReconciler } from "./stream-v2.fragment"
@@ -22,6 +21,7 @@ import { normalizeTool, toolOutputText } from "./tool"
 import { toolDisplayContent } from "../util/tool-display"
 import type {
   FooterApi,
+  FooterPatch,
   FooterView,
   LocalReplayRow,
   MiniPermissionRequest,
@@ -160,8 +160,6 @@ type State = {
   stepModel: RunInput["model"]
   activeCompaction?: string
 }
-
-const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" })
 
 export function formatUnknownError(error: unknown): string {
   if (typeof error === "string") return error
@@ -544,7 +542,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     write([], { phase: "idle", status })
   }
 
-  const write = (commits: StreamCommit[], patch?: { phase?: "idle" | "running"; status?: string; usage?: string }) => {
+  const write = (commits: StreamCommit[], patch?: Pick<FooterPatch, "phase" | "status" | "usage">) => {
     if (state.closed || controller.signal.aborted || input.footer.isClosed) return
     if (!state.initial && state.buffered === undefined)
       commits.forEach((commit) => {
@@ -1323,9 +1321,15 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         event.data.tokens.cache.write
       const limit = state.stepModel ? input.contextLimit?.(state.stepModel) : undefined
       state.stepModel = undefined
-      const usage = total > 0 ? formatContextUsage(total, limit ? Math.round((total / limit) * 100) : undefined) : ""
       write([], {
-        usage: event.data.cost ? `${usage} · ${money.format(event.data.cost)}` : usage,
+        usage:
+          total > 0 || event.data.cost
+            ? {
+                tokens: total,
+                percent: limit ? Math.round((total / limit) * 100) : undefined,
+                cost: event.data.cost || undefined,
+              }
+            : undefined,
       })
       return
     }

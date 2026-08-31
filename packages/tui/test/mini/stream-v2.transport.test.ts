@@ -488,7 +488,7 @@ describe("V2 mini transport", () => {
     await transport.close()
   })
 
-  test("formats footer usage with compact tokens and context percentage", async () => {
+  test("preserves numeric footer tokens, context percentage, and cost-only usage", async () => {
     const events = feed()
     events.push(connected())
     const ui = footer()
@@ -527,7 +527,26 @@ describe("V2 mini transport", () => {
     })
 
     while (!ui.events.some((event) => event.type === "stream.patch" && event.patch.usage)) await Bun.sleep(0)
-    expect(ui.events).toContainEqual({ type: "stream.patch", patch: { usage: "7.5K (5%)" } })
+    expect(ui.events).toContainEqual({ type: "stream.patch", patch: { usage: { tokens: 7_508, percent: 5 } } })
+
+    events.push({
+      id: "evt_cost_only",
+      created: 3,
+      type: "session.step.ended",
+      durable: durable("ses_1", 3),
+      data: {
+        sessionID: "ses_1",
+        assistantMessageID: "msg_cost_only",
+        finish: "stop",
+        cost: 0.1234,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      },
+    })
+    while (!ui.events.some((event) => event.type === "stream.patch" && event.patch.usage?.cost)) await Bun.sleep(0)
+    expect(ui.events).toContainEqual({
+      type: "stream.patch",
+      patch: { usage: { tokens: 0, percent: undefined, cost: 0.1234 } },
+    })
     await transport.close()
   })
 

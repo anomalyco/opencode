@@ -22,7 +22,8 @@ import {
 import { RunFooterView } from "../../src/mini/footer.view"
 import { RunFooter } from "../../src/mini/footer"
 import { RunEntryContent } from "../../src/mini/scrollback.writer"
-import { RUN_THEME_FALLBACK, resolveRunTheme, type RunTheme } from "../../src/mini/theme"
+import { RUN_THEME_FALLBACK, RUN_THEME_FALLBACK_LIGHT, resolveRunTheme, type RunTheme } from "../../src/mini/theme"
+import { BLOCK_SOFT_SWEEP } from "../../src/ui/one-cell-motion"
 import type {
   FooterQueuedPrompt,
   FooterState,
@@ -125,7 +126,7 @@ function footerState(input: Partial<FooterState> = {}) {
     status: "",
     notice: "",
     model: "gpt-5",
-    usage: "",
+    usage: undefined,
     first: false,
     interrupt: 0,
     exit: 0,
@@ -139,6 +140,7 @@ async function renderFooter(
     commands?: RunCommand[]
     theme?: () => RunTheme
     providers?: RunProvider[]
+    agents?: RunAgent[]
     currentAgent?: string
     currentModel?: RunInput["model"]
     currentVariant?: string
@@ -165,7 +167,7 @@ async function renderFooter(
     input.subagents ?? { tabs: [], details: {}, permissions: [], forms: [] },
   )
   const [state, setState] = footerState(input.state)
-  const config = input.tuiConfig ?? tuiConfig
+  const config = { ...(input.tuiConfig ?? tuiConfig), animations: input.tuiConfig?.animations ?? false }
   const [miniSettings] = createSignal<MiniSettings>(
     input.miniSettings ?? {
       thinking: "hide",
@@ -182,7 +184,7 @@ async function renderFooter(
         <RunFooterView
           directory={() => "/tmp"}
           findFiles={async () => []}
-          agents={() => []}
+          agents={() => input.agents ?? []}
           references={() => []}
           commands={() => input.commands ?? []}
           providers={() => input.providers}
@@ -514,7 +516,7 @@ test("direct footer leads with the active agent and default model", async () => 
         .split("\n")
         .find((line) => line.includes("Default model"))
         ?.trimEnd(),
-    ).toBe("Build · Default model · ctrl+p cmd")
+    ).toBe("Build · Default model · ctrl+p menu")
     expect(frame).not.toContain("BUILD")
   } finally {
     app.cleanup()
@@ -530,7 +532,7 @@ test("direct footer describes commands and context and shows the model provider"
   try {
     await app.renderOnce()
     expect(app.captureCharFrame()).toContain("┃ Ask anything, / for commands, @ for context…")
-    expect(app.captureCharFrame()).toContain("Build · GPT-5 opencode")
+    expect(app.captureCharFrame()).toContain("Build · GPT-5 · opencode · ctrl+p menu")
   } finally {
     app.cleanup()
   }
@@ -543,20 +545,23 @@ test.each([56, 160])("exit confirmation replaces routine footer details at %i co
     providers: [provider()],
     currentModel: { providerID: "opencode", modelID: "gpt-5" },
     currentVariant: "high",
-    state: { usage: "12K (10%)" },
+    state: { usage: { tokens: 12000, percent: 10 } },
     queuedPrompts: [{ messageID: "queued", prompt: { text: "later", parts: [] }, delivery: "queue" }],
   })
   try {
     await app.renderOnce()
-    expect(app.captureCharFrame()).toContain("cmd")
+    const initial = app.captureCharFrame()
+    expect(initial).toContain("Build · GPT-5 [high] · 12.0K (10%)")
+    expect(initial.includes("ctrl+p menu")).toBe(width === 160)
     app.setState((state) => ({ ...state, exit: 1 }))
     await app.renderOnce()
     const frame = app.captureCharFrame()
     expect(frame).toContain("Press ctrl+c again to exit")
-    for (const text of ["Build", "GPT-5", "opencode", "high", "12K", "queued", "cmd"]) expect(frame).not.toContain(text)
+    for (const text of ["Build", "GPT-5", "opencode", "high", "12.0K", "queued", "menu"])
+      expect(frame).not.toContain(text)
     app.setState((state) => ({ ...state, exit: 0 }))
     await app.renderOnce()
-    expect(app.captureCharFrame()).toContain("Build")
+    expect(app.captureCharFrame()).toBe(initial)
   } finally {
     app.cleanup()
   }
@@ -1797,7 +1802,8 @@ test("direct footer shows authoritative queued work while running", async () => 
     const frame = app.captureCharFrame()
     const transparent = RGBA.fromValues(0, 0, 0, 0).toInts()
     const statusline = footerStatusline(app.renderer.root)
-    expect(frame).toContain("ctrl+x q 1 queued · ↓ 1 subagent · ctrl+b background · ctrl+p cmd")
+    expect(frame).toContain("esc stop · ctrl+x q 1 queued · ↓ 1 subagent · ctrl+b background · Build")
+    expect(frame).toMatch(/opencode · ctrl\+p menu *$/m)
     expect(frame).not.toContain("1 agent")
     expect(statusline.backgroundColor.toInts()).toEqual(transparent)
   } finally {
@@ -1805,16 +1811,20 @@ test("direct footer shows authoritative queued work while running", async () => 
   }
 })
 
-test("direct footer fits whole identity and commands without a model breakpoint", async () => {
+test("direct footer admits the model and variant together before the agent and trailing menu", async () => {
   for (const expected of [
-    { width: 16, agent: true, model: true, variant: false, command: false },
-    { width: 20, agent: true, model: true, variant: true, command: false },
-    { width: 24, agent: true, model: true, variant: true, command: false },
-    { width: 32, agent: true, model: true, variant: true, command: true },
-    { width: 40, agent: true, model: true, variant: true, command: true },
-    { width: 56, agent: true, model: true, variant: true, command: true },
-    { width: 80, agent: true, model: true, variant: true, command: true },
-    { width: 112, agent: true, model: true, variant: true, command: true },
+    { width: 12, text: "" },
+    { width: 13, text: "GPT-5 [xhigh]" },
+    { width: 16, text: "GPT-5 [xhigh]" },
+    { width: 19, text: "GPT-5 [xhigh]" },
+    { width: 20, text: "Plan · GPT-5 [xhigh]" },
+    { width: 24, text: "Plan · GPT-5 [xhigh]" },
+    { width: 32, text: "Plan · GPT-5 [xhigh]" },
+    { width: 34, text: "Plan · GPT-5 [xhigh] · ctrl+p menu" },
+    { width: 40, text: "Plan · GPT-5 [xhigh] · ctrl+p menu" },
+    { width: 56, text: "Plan · GPT-5 [xhigh] · ctrl+p menu" },
+    { width: 80, text: "Plan · GPT-5 [xhigh] · ctrl+p menu" },
+    { width: 112, text: "Plan · GPT-5 [xhigh] · ctrl+p menu" },
   ]) {
     const app = await renderFooter({
       currentAgent: "Plan",
@@ -1825,15 +1835,9 @@ test("direct footer fits whole identity and commands without a model breakpoint"
 
     try {
       await app.renderOnce()
-      const frame = app.captureCharFrame()
-      expect({
-        width: expected.width,
-        command: frame.includes("ctrl+p cmd"),
-        agent: frame.includes("Plan"),
-        model: frame.includes("GPT-5"),
-        variant: frame.includes("xhigh"),
-      }).toEqual(expected)
-      expect(footerStatusline(app.renderer.root).height).toBe(1)
+      const statusline = footerStatusline(app.renderer.root)
+      expect(app.captureCharFrame().split("\n")[statusline.y].trimEnd()).toBe(expected.text)
+      expect(statusline.height).toBe(1)
     } finally {
       app.cleanup()
     }
@@ -1850,7 +1854,7 @@ test.each([16, 20, 24, 32, 40, 56, 80, 112])(
         currentVariant: "high",
         providers: [provider()],
         currentModel: { providerID: "opencode", modelID: "gpt-5" },
-        state: { exit: 1, usage: "12K (10%)" },
+        state: { exit: 1, usage: { tokens: 12000, percent: 10 } },
         queuedPrompts: [{ messageID: "queued", prompt: { text: "later", parts: [] }, delivery: "queue" }],
       })
       try {
@@ -1869,15 +1873,15 @@ test.each([16, 20, 24, 32, 40, 56, 80, 112])(
             .slice(statusline.y, statusline.y + statusline.height)
             .map((line) => line.trim())
             .join(" ")
-          if (state.notice) expect(text).toBe(state.notice)
+          if (state.notice) expect(text.replace(/^[\u25aa*\-\\|/] /, "")).toBe(state.notice)
           if (state.key) {
             expect(text).toContain(state.key)
             expect(text).toMatch(state.action ? /exit/ : /stop|interrupt/)
             expect(statusline.height).toBe(1)
           }
-          for (const value of ["Build", "GPT-5", "opencode", "high", "12K", "queued", "cmd", "..."])
+          for (const value of ["Build", "GPT-5", "opencode", "high", "12.0K", "queued", "menu", "..."])
             expect(text).not.toContain(value)
-          expect(boxPath(statusline, "SpinnerRenderable")).toBeUndefined()
+          expect(!!statusline.findDescendantById("mini-work-spinner")).toBe(state.phase === "running")
         }
       } finally {
         app.cleanup()
@@ -1886,38 +1890,39 @@ test.each([16, 20, 24, 32, 40, 56, 80, 112])(
   },
 )
 
-test.each([16, 20, 24, 32, 40, 56, 80, 112])(
-  "running status and optional values stay whole at %i columns",
-  async (width) => {
-    for (const field of ["agent", "model", "provider"] as const) {
-      const long = `long-${field}-`.repeat(20)
-      const app = await renderFooter({
-        width,
-        currentAgent: field === "agent" ? long : "Build",
-        currentVariant: "high",
-        currentModel: { providerID: "opencode", modelID: "gpt-5" },
-        providers: [
-          {
-            ...provider(),
-            name: field === "provider" ? long : "opencode",
-            models: { "gpt-5": model({ id: "gpt-5", name: field === "model" ? long : "GPT-5" }) },
-          },
-        ],
-        state: { phase: "running" },
-      })
-      try {
-        await app.renderOnce()
-        const frame = app.captureCharFrame()
-        expect(frame).toContain(width < 56 ? "esc stop" : "esc interrupt")
-        expect(frame).not.toContain(`long-${field}`)
-        expect(frame).not.toContain("...")
-        expect(footerStatusline(app.renderer.root).height).toBe(1)
-      } finally {
-        app.cleanup()
-      }
-    }
+test.each([
+  { field: "agent", text: "esc stop · GPT-5 [high]" },
+  {
+    field: "model",
+    text: "esc stop · Build · long-model-long-model-lo… [high] · opencode · ctrl+p menu",
   },
-)
+  { field: "provider", text: "esc stop · Build · GPT-5 [high]" },
+])("running footer abbreviates only the model and stops at an oversized $field", async ({ field, text }) => {
+  const long = `long-${field}-`.repeat(20)
+  const app = await renderFooter({
+    width: 80,
+    currentAgent: field === "agent" ? long : "Build",
+    currentVariant: "high",
+    currentModel: { providerID: "opencode", modelID: "gpt-5" },
+    providers: [
+      {
+        ...provider(),
+        name: field === "provider" ? long : "opencode",
+        models: { "gpt-5": model({ id: "gpt-5", name: field === "model" ? long : "GPT-5" }) },
+      },
+    ],
+    state: { phase: "running" },
+  })
+  try {
+    await app.renderOnce()
+    const statusline = footerStatusline(app.renderer.root)
+    expect(app.captureCharFrame().split("\n")[statusline.y].trimEnd()).toBe("\u25aa " + text)
+    expect(statusline.height).toBe(1)
+    expect(statusline.findDescendantById("mini-work-spinner")?.width).toBe(1)
+  } finally {
+    app.cleanup()
+  }
+})
 
 test.each([8, 12])("production footer grows for wrapped instructions in %i rows", async (height) => {
   const app = await createTestRenderer({ width: 16, height, screenMode: "split-footer", footerHeight: 4 })
@@ -1971,7 +1976,7 @@ test.each([8, 12])("production footer grows for wrapped instructions in %i rows"
   }
 })
 
-test("shorter context hints survive an oversized configured shortcut", async () => {
+test("an oversized queue shortcut prevents backfilling shorter work and identity hints", async () => {
   const app = await renderFooter({
     width: 32,
     tuiConfig: createTuiResolvedConfig({ keybinds: { "session.queued_prompts": "ctrl+shift+alt+q" } }),
@@ -1986,11 +1991,8 @@ test("shorter context hints survive an oversized configured shortcut", async () 
   })
   try {
     await app.renderOnce()
-    const frame = app.captureCharFrame()
-    expect(frame).toContain("esc stop · ↓ 1 sub · ctrl+b bg")
-    expect(frame).not.toContain("queued")
-    expect(frame).not.toContain("Build")
-    expect(frame).not.toContain("cmd")
+    const statusline = footerStatusline(app.renderer.root)
+    expect(app.captureCharFrame().split("\n")[statusline.y].trimEnd()).toBe("\u25aa esc stop")
   } finally {
     app.cleanup()
   }
@@ -2020,7 +2022,7 @@ test.each(["ctrl+i", "none"])("takeovers preserve configured shortcuts with hidd
       expect(frame).toContain(
         key === "none" ? (exit ? "Exit pending" : "Stop pending") : `${key} ${exit ? "exit" : "stop"}`,
       )
-      for (const hidden of ["ctrl+c", "esc", "cmd", "Build", "gpt-5"]) expect(frame).not.toContain(hidden)
+      for (const hidden of ["ctrl+c", "esc", "menu", "Build", "gpt-5"]) expect(frame).not.toContain(hidden)
     }
   } finally {
     app.cleanup()
@@ -2029,7 +2031,7 @@ test.each(["ctrl+i", "none"])("takeovers preserve configured shortcuts with hidd
 
 test.each(["ctrl+g", "none"])("context actions use only configured bindings (%s)", async (queued) => {
   const app = await renderFooter({
-    width: 40,
+    width: 96,
     tuiConfig: createTuiResolvedConfig({
       keybinds: {
         "session.interrupt": "ctrl+i",
@@ -2052,7 +2054,9 @@ test.each(["ctrl+g", "none"])("context actions use only configured bindings (%s)
     await app.renderOnce()
     const frame = app.captureCharFrame()
     expect(frame).toContain(
-      queued === "none" ? "ctrl+i stop · ctrl+j 1 sub · ctrl+y cmd" : "ctrl+i stop · ctrl+g 1 queued",
+      queued === "none"
+        ? "ctrl+i interrupt · ctrl+j 1 subagent · Build · gpt-5 · ctrl+y menu"
+        : "ctrl+i interrupt · ctrl+g 1 queued · ctrl+j 1 subagent · Build · gpt-5 · ctrl+y menu",
     )
     for (const hidden of ["ctrl+b", "ctrl+x", "ctrl+p", "esc", "↓"]) expect(frame).not.toContain(hidden)
   } finally {
@@ -2060,24 +2064,24 @@ test.each(["ctrl+g", "none"])("context actions use only configured bindings (%s)
   }
 })
 
-test("variant and usage precede a provider even when the provider alone would fit", async () => {
+test("identity and context precede the provider and a non-fitting provider blocks the menu", async () => {
   const app = await renderFooter({
     width: 56,
     providers: [{ ...provider(), name: "Long provider display name" }],
     currentModel: { providerID: "opencode", modelID: "gpt-5" },
     currentVariant: "high",
-    state: { usage: "12K (10%)" },
+    state: { usage: { tokens: 12000, percent: 10 } },
   })
   try {
     await app.renderOnce()
-    expect(app.captureCharFrame()).toContain("Build · GPT-5 high · ctrl+p cmd · 12K (10%)")
-    expect(app.captureCharFrame()).not.toContain("Long provider")
+    const statusline = footerStatusline(app.renderer.root)
+    expect(app.captureCharFrame().split("\n")[statusline.y].trimEnd()).toBe("Build · GPT-5 [high] · 12.0K (10%)")
   } finally {
     app.cleanup()
   }
 })
 
-test("direct footer keeps commands and active work ahead of usage under width pressure", async () => {
+test("direct footer keeps compact work, model detail, and context ahead of cost and rich labels", async () => {
   const app = await renderFooter({
     currentAgent: "Plan",
     subagents: {
@@ -2089,40 +2093,137 @@ test("direct footer keeps commands and active work ahead of usage under width pr
     state: {
       phase: "running",
       model: "a-model-name-long-enough-to-force-responsive-truncation",
-      usage: "159.6K (16%) · $4.23",
+      usage: { tokens: 159600, percent: 16, cost: 4.23 },
     },
     width: 80,
   })
 
   try {
     await app.renderOnce()
-    const frame = app.captureCharFrame()
-
-    expect(frame).toContain("Plan")
-    expect(frame).toContain("ctrl+b background")
-    expect(frame).toContain("↓ 1 subagent")
-    expect(frame).toContain("ctrl+p cmd")
-    expect(frame).not.toContain("a-model-name")
-    expect(frame).not.toContain("159.6K")
-    expect(frame).not.toContain("$4.23")
+    const statusline = footerStatusline(app.renderer.root)
+    expect(app.captureCharFrame().split("\n")[statusline.y].trimEnd()).toBe(
+      "\u25aa esc stop · ↓ 1 sub · ctrl+b bg · Plan · a-model-name-long-enough… · 16% ctx",
+    )
   } finally {
     app.cleanup()
   }
 })
 
-test("direct footer keeps the stop action before commands at minimum width", async () => {
+test("direct footer keeps the stop action before the menu at minimum width", async () => {
   const app = await renderFooter({ state: { phase: "running" }, width: 10 })
 
   try {
     await app.renderOnce()
     expect(app.captureCharFrame()).toContain("esc stop")
-    expect(app.captureCharFrame()).not.toContain("cmd")
+    expect(app.captureCharFrame()).not.toContain("menu")
   } finally {
     app.cleanup()
   }
 })
 
-test("direct footer keeps complete status text ahead of the spinner", async () => {
+test.each([false, true])("working marker stays visible with animations=%s and stops at idle", async (animations) => {
+  const app = await renderFooter({
+    width: 24,
+    tuiConfig: createTuiResolvedConfig({ animations }),
+    state: { phase: "running" },
+  })
+  try {
+    await app.renderOnce()
+    const line = app.captureCharFrame().split("\n")[footerStatusline(app.renderer.root).y]
+    expect(line).toContain(" esc stop")
+    expect(animations ? BLOCK_SOFT_SWEEP.frames : ["\u25aa"]).toContain(Array.from(line)[0]!)
+    expect(app.renderer.root.findDescendantById("mini-work-spinner")?.width).toBe(1)
+    await app.renderer.idle()
+    app.setState((state) => ({ ...state, phase: "idle" }))
+    await app.renderOnce()
+    expect(app.renderer.root.findDescendantById("mini-work-spinner")).toBeUndefined()
+  } finally {
+    app.cleanup()
+  }
+})
+
+test.each(["Build", "Plan"])("working marker matches the %s label and prompt rail across themes", async (agent) => {
+  const [theme, setTheme] = createSignal(RUN_THEME_FALLBACK)
+  const app = await renderFooter({
+    currentAgent: agent,
+    agents: [
+      { id: "build", name: "Build", mode: "primary", hidden: false },
+      { id: "plan", name: "Plan", mode: "primary", hidden: false },
+    ],
+    theme,
+    tuiConfig: createTuiResolvedConfig({ animations: false }),
+    state: { phase: "running" },
+  })
+  try {
+    for (const current of [RUN_THEME_FALLBACK, RUN_THEME_FALLBACK_LIGHT]) {
+      setTheme(current)
+      await app.renderOnce()
+      const spans = app.captureSpans().lines.flatMap((line) => line.spans)
+      const expected = (current.footer.categorical[agent === "Build" ? 0 : 1] as RGBA).toInts()
+      expect(spans.find((span) => span.text.includes(agent))?.fg.toInts()).toEqual(expected)
+      expect(spans.find((span) => span.text.includes("\u2503"))?.fg.toInts()).toEqual(expected)
+      expect(spans.find((span) => span.text === "\u25aa")?.fg.toInts()).toEqual(expected)
+    }
+  } finally {
+    app.cleanup()
+  }
+})
+
+test("busy sweep resumes its phase after a temporary panel", async () => {
+  const app = await renderFooter({
+    tuiConfig: createTuiResolvedConfig({ animations: true }),
+    state: { phase: "running" },
+  })
+  try {
+    await app.renderOnce()
+    await Bun.sleep(250)
+    await app.renderOnce()
+    const row = footerStatusline(app.renderer.root).y
+    const color = app.captureSpans().lines[row].spans[0].fg.toInts()
+    expect(color).toEqual((RUN_THEME_FALLBACK.footer.categorical[0] as RGBA).toInts())
+    app.mockInput.pressKey("p", { ctrl: true })
+    await app.renderOnce()
+    expect(app.renderer.root.findDescendantById("mini-work-spinner")).toBeUndefined()
+    app.mockInput.pressKey("ESCAPE")
+    await app.renderOnce()
+    expect(app.captureSpans().lines[footerStatusline(app.renderer.root).y].spans[0].fg.toInts()).toEqual(color)
+    expect(Array.from(app.captureCharFrame().split("\n")[footerStatusline(app.renderer.root).y])[0]).not.toBe(
+      BLOCK_SOFT_SWEEP.frames[0],
+    )
+  } finally {
+    app.cleanup()
+  }
+})
+
+test("spinner repaints keep the prompt instance, cursor state, and footer height stable", async () => {
+  const app = await renderFooter({
+    tuiConfig: createTuiResolvedConfig({ animations: true }),
+    state: { phase: "running" },
+  })
+  try {
+    await app.renderOnce()
+    await app.mockInput.typeText("draft")
+    await app.renderOnce()
+    const editor = app.renderer.currentFocusedEditor
+    const cursor = app.renderer.getCursorState()
+    const height = app.renderer.footerHeight
+    const frames = new Set<string>()
+    for (let index = 0; index < 8; index++) {
+      await Bun.sleep(40)
+      await app.renderOnce()
+      expect(app.renderer.currentFocusedEditor).toBe(editor)
+      expect(editor?.plainText).toBe("draft")
+      expect(app.renderer.getCursorState()).toEqual(cursor)
+      expect(app.renderer.footerHeight).toBe(height)
+      frames.add(app.captureCharFrame())
+    }
+    expect(frames.size).toBeGreaterThan(1)
+  } finally {
+    app.cleanup()
+  }
+})
+
+test("direct footer reserves the working indicator beside complete status text", async () => {
   const app = await renderFooter({
     tuiConfig: createTuiResolvedConfig({ keybinds: { "session.interrupt": "none" } }),
     state: { phase: "running" },
@@ -2133,7 +2234,7 @@ test("direct footer keeps complete status text ahead of the spinner", async () =
     await app.renderOnce()
     expect(app.captureCharFrame()).toContain("Running")
     expect(app.captureCharFrame()).not.toContain("interrupt")
-    expect(boxPath(footerStatusline(app.renderer.root), "SpinnerRenderable")).toBeUndefined()
+    expect(footerStatusline(app.renderer.root).findDescendantById("mini-work-spinner")?.width).toBe(1)
   } finally {
     app.cleanup()
   }
@@ -2154,7 +2255,7 @@ test("direct footer always offers backgrounding for a foreground subagent", asyn
     await app.renderOnce()
     const frame = app.captureCharFrame()
 
-    expect(frame).toContain("↓ 1 subagent · ctrl+b background · ctrl+p cmd")
+    expect(frame).toContain("↓ 1 subagent · ctrl+b background · Build · gpt-5 · ctrl+p menu")
     expect(frame).not.toContain("queued")
   } finally {
     app.cleanup()
@@ -2206,7 +2307,7 @@ test("direct footer omits interrupt key hint when interrupt is unbound", async (
 
 test("direct footer shows full usage metadata when room is available", async () => {
   const app = await renderFooter({
-    state: { usage: "159.6K (16%) · $4.23" },
+    state: { usage: { tokens: 159600, percent: 16, cost: 4.23 } },
   })
 
   try {
@@ -2219,9 +2320,9 @@ test("direct footer shows full usage metadata when room is available", async () 
   }
 })
 
-test("direct footer keeps model and variant when usage does not fit", async () => {
+test("direct footer keeps model, variant, and usage before the menu and rich stop label", async () => {
   const app = await renderFooter({
-    state: { phase: "running", model: "GPT-5.6 SoL", usage: "8.4K (1%) · $0.01" },
+    state: { phase: "running", model: "GPT-5.6 SoL", usage: { tokens: 8400, percent: 1, cost: 0.01 } },
     currentVariant: "high",
     mono: true,
     width: 66,
@@ -2229,13 +2330,10 @@ test("direct footer keeps model and variant when usage does not fit", async () =
 
   try {
     await app.renderOnce()
-    const frame = app.captureCharFrame()
-
-    expect(frame).toContain("esc interrupt")
-    expect(frame).toContain("Build")
-    expect(frame).toContain("GPT-5.6 SoL high")
-    expect(frame).toContain("ctrl+p cmd")
-    expect(frame).not.toContain("8.4K")
+    const statusline = footerStatusline(app.renderer.root)
+    expect(app.captureCharFrame().split("\n")[statusline.y].trimEnd()).toBe(
+      "* esc stop - Build - GPT-5.6 SoL [high] - 8.4K (1%) - $0.01",
+    )
   } finally {
     app.cleanup()
   }
@@ -2244,7 +2342,7 @@ test("direct footer keeps model and variant when usage does not fit", async () =
 test("direct footer hides routine activity and shows explicit notices", async () => {
   let status = ""
   const app = await renderFooter({
-    state: { usage: "159.6K (16%) · $4.23" },
+    state: { usage: { tokens: 159600, percent: 16, cost: 4.23 } },
     currentAgent: "Plan",
     miniSettings: {
       thinking: "hide",
@@ -2262,7 +2360,7 @@ test("direct footer hides routine activity and shows explicit notices", async ()
   try {
     await app.renderOnce()
     const initial = app.captureCharFrame()
-    expect(initial).toContain("ctrl+p cmd")
+    expect(initial).toContain("ctrl+p menu")
     expect(initial).not.toContain("Plan")
     expect(initial).not.toContain("gpt-5")
     expect(initial).not.toContain("159.6K")

@@ -366,6 +366,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
       }
     },
     onInterrupt: () => {
+      if (state.demo?.interrupt()) return true
       if (!state.sessionID) {
         return false
       }
@@ -411,7 +412,10 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
   const thinking = () => input.thinking ?? configState.current.thinking === "show"
   const footer = shell.footer
   const firstPaint = footer.idle().catch(() => {})
-  const offRuntimeClose = footer.onClose(() => runtimeController.abort())
+  const offRuntimeClose = footer.onClose(() => {
+    state.demo?.interrupt()
+    runtimeController.abort()
+  })
   let clientGeneration = 0
   let clientController = new AbortController()
   let modelAttempt: AbortController | undefined
@@ -977,7 +981,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
                 type: "stream.patch",
                 patch: {
                   phase: "idle",
-                  usage: "",
+                  usage: undefined,
                   first: true,
                 },
               })

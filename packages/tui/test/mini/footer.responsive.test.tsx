@@ -74,17 +74,17 @@ async function setup(mono = false) {
   }
 }
 
-test.each([56, 160])("production footer confirms exit with visible command hints at %i columns", async (width) => {
+test.each([56, 160])("production footer confirms exit with a visible menu hint at %i columns", async (width) => {
   const app = await setup()
   try {
     app.resize(width, 30)
-    app.footer.event({ type: "stream.patch", patch: { phase: "running", usage: "14.1K (1%)" } })
+    app.footer.event({ type: "stream.patch", patch: { phase: "running", usage: { tokens: 14100, percent: 1 } } })
     await app.settle()
-    expect(app.captureCharFrame()).toContain("cmd")
+    expect(app.captureCharFrame()).toContain("ctrl+p menu")
     app.footer.requestExit()
     await app.settle()
     expect(app.captureCharFrame()).toContain("Press ctrl+c again to exit")
-    expect(app.captureCharFrame()).not.toContain("cmd")
+    expect(app.captureCharFrame()).not.toContain("menu")
     expect(app.footer.isClosed).toBe(false)
     app.footer.requestExit()
     expect(app.footer.isClosed).toBe(true)
@@ -92,6 +92,59 @@ test.each([56, 160])("production footer confirms exit with visible command hints
     app.cleanup()
   }
 })
+
+test.each([false, true])(
+  "production statusline restores identity and trailing menu after resizes (mono=%s)",
+  async (mono) => {
+    const app = await setup(mono)
+    const theme = mono ? RUN_THEME_MONO : RUN_THEME_FALLBACK
+    try {
+      app.footer.event({
+        type: "models",
+        providers: [
+          { id: "opencode", name: "Anomaly / OpenCode", models: { "gpt-5.6-sol": { name: "GPT-5.6 Sol (50% Off)" } } },
+        ],
+      })
+      app.footer.event({
+        type: "model",
+        model: "GPT-5.6 Sol (50% Off)",
+        selection: { providerID: "opencode", modelID: "gpt-5.6-sol" },
+      })
+      app.footer.event({ type: "variants", variants: ["max"], current: "max" })
+      app.footer.event({ type: "stream.patch", patch: { usage: { tokens: 14100, percent: 1, cost: 0.04 } } })
+      await app.settle()
+      const initial = app.captureCharFrame()
+      for (const [width, height] of sizes) {
+        app.resize(width, height)
+        await app.settle()
+        const statusline = app.renderer.root.findDescendantById("mini-statusline")!
+        const frame = app.captureCharFrame()
+        const row = frame.split("\n")[statusline.y].trimEnd()
+        const model = width === 112 ? "GPT-5.6 Sol (50% Off) [max]" : mono ? "GPT-5.6... [max]" : "GPT-5.6\u2026 [max]"
+        expect(row).toBe(
+          (width === 112
+            ? ["Build", model, "14.1K (1%)", "$0.04", "Anomaly / OpenCode", "ctrl+p menu"]
+            : width === 40
+              ? ["Build", model, "1% ctx"]
+              : ["Build", model]
+          ).join(mono ? " - " : " \u00b7 "),
+        )
+        expect(statusline.height).toBe(1)
+        expect(app.renderer.footerHeight).toBe(height === 30 ? 4 : 2)
+        const identity = app.captureSpans().lines[statusline.y].spans.find((span) => span.text.includes("[max]"))!
+        expect(identity.text).toContain(model)
+        expect(identity.fg.toInts()).toEqual((theme.footer.text as RGBA).toInts())
+        if (width === 112) {
+          expect(row).toEndWith("ctrl+p menu")
+          expect(frame).toBe(initial)
+        }
+        if (mono) expect(frame).not.toMatch(/[^\x00-\x7f]/)
+      }
+    } finally {
+      app.cleanup()
+    }
+  },
+)
 
 test.each([false, true])("production command menu keeps navigation visible across resizes (mono=%s)", async (mono) => {
   const app = await setup(mono)

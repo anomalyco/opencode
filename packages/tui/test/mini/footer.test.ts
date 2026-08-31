@@ -3,6 +3,7 @@ import { createTestRenderer } from "@opentui/core/testing"
 import { CliRenderEvents, RGBA, TextRenderable } from "@opentui/core"
 import path from "node:path"
 import { coalesceProgressCommit, resolveRunAgent, RunFooter } from "../../src/mini/footer"
+import { createRunDemo } from "../../src/mini/demo"
 import { resolveMiniSettings } from "../../src/mini/runtime.boot"
 import { RUN_THEME_FALLBACK, RUN_THEME_FALLBACK_LIGHT, RUN_THEME_MONO } from "../../src/mini/theme"
 import type { MiniSettingChange, MiniSettings, RunAgent, RunTuiConfig, StreamCommit } from "../../src/mini/types"
@@ -48,6 +49,7 @@ async function setup(
   input: {
     mono?: boolean
     theme?: RunTuiConfig["theme"]
+    startup?: { version: string; detail: string }
     update?: (change: MiniSettingChange) => Promise<MiniSettings>
   } = {},
 ) {
@@ -69,6 +71,8 @@ async function setup(
     model: undefined,
     variant: undefined,
     first: true,
+    startup: input.startup,
+    wrote: !!input.startup,
     theme: mono ? RUN_THEME_MONO : RUN_THEME_FALLBACK,
     tuiConfig: createTuiResolvedConfig({ theme: input.theme }),
     miniSettings: {
@@ -83,6 +87,94 @@ async function setup(
   })
   return { ...app, footer }
 }
+
+test.each(["timer", "output", "close", "panel"] as const)(
+  "startup stays editable and settles exactly once before %s",
+  async (finish) => {
+    const app = await setup({ mono: false, startup: { version: "test", detail: "/project" } })
+    try {
+      await app.renderOnce()
+      expect(app.renderer.root.findDescendantById("mini-startup")).toBeDefined()
+      const editor = app.renderer.currentFocusedEditor
+      await app.mockInput.typeText("draft")
+      expect(editor?.plainText).toBe("draft")
+      expect(app.externalOutput.take()).toEqual([])
+
+      if (finish === "timer") await Bun.sleep(850)
+      if (finish === "output")
+        app.footer.append({ kind: "system", text: "first output", phase: "start", source: "system" })
+      if (finish === "close") app.footer.close()
+      if (finish === "panel") app.mockInput.pressKey("p", { ctrl: true })
+      await app.footer.idle()
+      await app.renderOnce()
+      expect(app.renderer.root.findDescendantById("mini-startup")).toBeUndefined()
+      const rows = app.externalOutput.take().flatMap((event) => event.rows)
+      expect(rows.filter((row) => row.includes("oc mini"))).toEqual(["\u25aa oc mini vtest \u00b7 /project"])
+      expect(rows.join("\n")).not.toContain("\u25ab")
+      if (finish === "output")
+        expect(rows.findIndex((row) => row.includes("first output"))).toBeGreaterThan(
+          rows.findIndex((row) => row.includes("oc mini")),
+        )
+      if (finish !== "panel") expect(app.renderer.currentFocusedEditor).toBe(editor)
+      app.footer.finishStartup()
+      await Bun.sleep(50)
+      await app.renderOnce()
+      expect(app.externalOutput.take()).toEqual([])
+    } finally {
+      app.footer.destroy()
+      app.renderer.destroy()
+    }
+  },
+)
+
+test("footer usage survives unrelated patches and clears when explicitly undefined", async () => {
+  const app = await setup()
+  try {
+    await app.renderOnce()
+    expect(app.captureCharFrame()).not.toContain("7.5K")
+    app.footer.event({ type: "stream.patch", patch: { first: false, usage: { tokens: 7_508, percent: 5 } } })
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("7.5K")
+    app.footer.event({ type: "stream.patch", patch: { model: "GPT-5.1" } })
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("7.5K")
+    app.footer.event({ type: "stream.patch", patch: { usage: undefined } })
+    await app.renderOnce()
+    expect(app.captureCharFrame()).not.toContain("7.5K")
+  } finally {
+    app.footer.destroy()
+    app.renderer.destroy()
+  }
+})
+
+test("motion demo waits for work and can be interrupted without a model call", async () => {
+  const app = await setup({ mono: false })
+  const controller = new AbortController()
+  const demo = createRunDemo({ sessionID: "seed-demo", thinking: false, footer: app.footer })
+  let finished = false
+  try {
+    expect(demo.interrupt()).toBe(false)
+    const run = demo.prompt({ text: "/fmt motion", parts: [] }, controller.signal).then((handled) => {
+      finished = true
+      return handled
+    })
+    await app.footer.idle()
+    expect(
+      app.externalOutput
+        .take()
+        .flatMap((event) => event.rows)
+        .join("\n"),
+    ).toContain("70 seconds, no model calls")
+    expect(finished).toBe(false)
+    expect(demo.interrupt()).toBe(true)
+    expect(await run).toBe(true)
+    expect(demo.interrupt()).toBe(false)
+  } finally {
+    controller.abort()
+    app.footer.destroy()
+    app.renderer.destroy()
+  }
+})
 
 test.each([false, true])("command menu uses its full height on first open (mono=%s)", async (mono) => {
   const app = await setup({ mono })

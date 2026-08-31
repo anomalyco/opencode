@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { RGBA, TextAttributes, type ScrollbackWriter } from "@opentui/core"
 import { createTestRenderer } from "@opentui/core/testing"
-import { entrySplash, exitSplash } from "../../src/mini/splash"
+import { entrySplash, entrySplashLayout, exitSplash } from "../../src/mini/splash"
 import { stringWidth } from "../../src/util/string-width"
 
 const sizes = [16, 20, 24, 32, 40, 56, 80, 112].flatMap((width) => [false, true].map((mono) => ({ width, mono })))
@@ -108,12 +108,15 @@ test.each(
 })
 
 test.each([
-  { width: 20, mono: false, version: "local", expected: `${marker} oc mini vlocal` },
+  { width: 20, mono: false, version: "local", expected: `${marker} oc mini` },
+  { width: 22, mono: false, version: "local", expected: `${marker} oc mini · oc-mini-v2` },
+  { width: 29, mono: false, version: "local", expected: `${marker} oc mini vlocal · oc-mini-v2` },
+  { width: 31, mono: false, version: "local", expected: `${marker} oc mini vlocal · …/oc-mini-v2` },
   { width: 20, mono: false, version: preview, expected: `${marker} oc mini` },
-  { width: 24, mono: false, version: preview, expected: `${marker} oc mini · …/oc-mini-v2` },
+  { width: 24, mono: false, version: preview, expected: `${marker} oc mini · oc-mini-v2` },
   { width: 24, mono: true, version: preview, expected: "[O] oc mini - oc-mini-v2" },
-  { width: 32, mono: false, version: preview, expected: `${marker} oc mini · ~/src/wt/oc-mini-v2` },
-])("entry uses spare columns for the location before the version (%o)", async (input) => {
+  { width: 32, mono: false, version: preview, expected: `${marker} oc mini · oc-mini-v2` },
+])("entry progressively admits the basename, whole version, and parent directories (%o)", async (input) => {
   const result = await renderSplash(entrySplash({ ...input, detail: "~/src/wt/oc-mini-v2", theme }), input.width)
   expect(result.rows).toEqual(["", input.expected])
 })
@@ -139,6 +142,65 @@ test.each([undefined, "", "/", "~/", "C:\\projects\\mini\\"])(
   async (detail) => {
     const result = await renderSplash(entrySplash({ version: "local", detail, theme }), 80)
     expect(result.rows).toEqual(["", `${marker} oc mini vlocal` + (detail ? ` · ${detail}` : "")])
+  },
+)
+
+test.each([false, true])("entry layout preserves admitted information at every width (mono=%s)", (mono) => {
+  const suffix = (value: string) =>
+    value
+      .replace(/^(?:…|\.\.\.)[/\\]/, "")
+      .replace(/[\\/]+/g, "/")
+      .replace(/\/$/, "")
+  for (const detail of [
+    undefined,
+    "",
+    "/",
+    "~/",
+    "x/y",
+    "a/b/c",
+    "~/src/wt/oc-mini-v2",
+    "C:\\projects\\mini\\",
+    "/home/研究/画面/界e\u0301🙂",
+    "~/project-directory-that-cannot-meaningfully-fit",
+  ]) {
+    for (const version of ["", "local", preview]) {
+      let previous = entrySplashLayout({ width: 0, detail, version, mono })
+      for (let width = 1; width <= 160; width++) {
+        const layout = entrySplashLayout({ width, detail, version, mono })
+        expect(stringWidth(layout.label + layout.metadata)).toBeLessThanOrEqual(width)
+        expect(layout.version === "" || layout.version === version).toBe(true)
+        if (previous.version) expect(layout.version).toBe(previous.version)
+        if (previous.path) {
+          expect(layout.path).not.toBe("")
+          expect(suffix(layout.path)).toEndWith(suffix(previous.path))
+        }
+        if (layout.version && detail) expect(layout.path).not.toBe("")
+        if (layout.path) expect(suffix(detail!)).toEndWith(suffix(layout.path))
+        const marked = `${mono ? "[O]" : marker} oc mini`
+        expect(layout.label).toBe(stringWidth(marked) <= width ? marked : "oc mini".slice(0, width))
+        previous = layout
+      }
+      expect(previous.path).toBe(detail ?? "")
+      expect(previous.version).toBe(version)
+    }
+  }
+})
+
+test.each([false, true])("entry skips abbreviated paths that are longer than the full path (mono=%s)", (mono) => {
+  const label = `${mono ? "[O]" : marker} oc mini`
+  const metadata = mono ? " vlocal - a/b/c" : " vlocal · a/b/c"
+  expect(
+    entrySplashLayout({ width: stringWidth(label + metadata), version: "local", detail: "a/b/c", mono }),
+  ).toMatchObject({ label, metadata, path: "a/b/c" })
+})
+
+test.each([false, true])(
+  "entry writer chooses the same representation regardless of previous widths (mono=%s)",
+  async (mono) => {
+    const writer = entrySplash({ version: "local", detail: "~/src/wt/oc-mini-v2", theme, mono })
+    const first = await renderSplash(writer, 112)
+    for (const width of [24, 40, 16]) await renderSplash(writer, width)
+    expect((await renderSplash(writer, 112)).rows).toEqual(first.rows)
   },
 )
 

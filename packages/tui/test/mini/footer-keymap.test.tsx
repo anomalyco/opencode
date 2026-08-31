@@ -14,7 +14,7 @@ async function renderSubagent(interrupt: "ctrl+i" | "none") {
     status: "",
     notice: "",
     model: "gpt-5",
-    usage: "",
+    usage: undefined,
     first: false,
     interrupt: 0,
     exit: 0,

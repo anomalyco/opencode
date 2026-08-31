@@ -253,25 +253,7 @@ export function entrySplash(input: {
 }): ScrollbackWriter {
   return (ctx) => {
     const width = Math.max(1, ctx.width)
-    const marked = `${input.mono ? "[O]" : "▪"} oc mini`
-    const label = stringWidth(marked) <= width ? marked : Locale.takeWidth("oc mini", width)
-    const available = width - stringWidth(label)
-    const detail = input.detail ?? ""
-    const segments = detail.split(/[/\\]/).filter(Boolean)
-    const leaf = segments.at(-1) ?? detail
-    const separator = ` ${input.mono ? "-" : "·"} `
-    const showPath = leaf !== "" && stringWidth(separator + leaf) <= available
-    const version = ` v${input.version}`
-    // Reserve the whole basename before considering a long preview version.
-    const metadata = stringWidth(version) + (showPath ? stringWidth(separator + leaf) : 0) <= available ? version : ""
-    const ellipsis = input.mono ? "..." : "…"
-    const slash = detail.includes("\\") ? "\\" : "/"
-    const path =
-      [
-        detail,
-        ...segments.slice(1).map((_, index) => ellipsis + slash + segments.slice(index + 1).join(slash)),
-        leaf,
-      ].find((value) => stringWidth(metadata + separator + value) <= available) ?? ""
+    const layout = entrySplashLayout({ ...input, width })
     const root = new BoxRenderable(ctx.renderContext, {
       width,
       height: 2,
@@ -281,10 +263,7 @@ export function entrySplash(input: {
     })
     root.add(
       new TextRenderable(ctx.renderContext, {
-        content: new StyledText([
-          fg(input.theme.right)(label),
-          fg(input.theme.left)(metadata + (path ? separator + path : "")),
-        ]),
+        content: new StyledText([fg(input.theme.right)(layout.label), fg(input.theme.left)(layout.metadata)]),
         width,
         height: 1,
         wrapMode: "none",
@@ -292,6 +271,35 @@ export function entrySplash(input: {
     )
     return { root, width, height: 2, rowColumns: width, startOnNewLine: true, trailingNewline: false }
   }
+}
+
+export function entrySplashLayout(input: { width: number; version: string; detail?: string; mono?: boolean }) {
+  const detail = input.detail ?? ""
+  const segments = detail.split(/[/\\]/).filter(Boolean)
+  const leaf = segments.at(-1) ?? detail
+  const separator = input.mono ? " - " : " · "
+  const ellipsis = input.mono ? "..." : "…"
+  const slash = detail.includes("\\") ? "\\" : "/"
+  const paths = segments
+    .slice(1)
+    .map((_, index) => ellipsis + slash + segments.slice(index + 1).join(slash))
+    .reverse()
+    .filter((path) => stringWidth(path) < stringWidth(detail))
+  let layout = { label: Locale.takeWidth("oc mini", input.width), version: "", path: "", metadata: "" }
+  const stages = [
+    { label: `${input.mono ? "[O]" : "▪"} oc mini` },
+    ...(leaf ? [{ path: leaf }] : []),
+    ...(input.version ? [{ version: input.version }] : []),
+    ...paths.concat(detail ? [detail] : []).map((path) => ({ path })),
+  ]
+  // Stop at the first non-fitting stage instead of backfilling lower-priority metadata.
+  for (const stage of stages) {
+    const next = { ...layout, ...stage }
+    const metadata = (next.version ? ` v${next.version}` : "") + (next.path ? separator + next.path : "")
+    if (stringWidth(next.label + metadata) > input.width) break
+    layout = { ...next, metadata }
+  }
+  return layout
 }
 
 export function exitSplash(input: SplashWriterInput): ScrollbackWriter {
