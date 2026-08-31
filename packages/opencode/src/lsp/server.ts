@@ -1981,3 +1981,20 @@ export const JuliaLS: Info = {
     }
   },
 }
+
+export const Taplo: Info = {
+  id: "taplo",
+  extensions: [".toml"],
+  root: NearestRoot(["taplo.toml", ".taplo.toml", ".git"]),
+  async spawn(root) {
+    const bin = which("taplo")
+    if (!bin) {
+      return
+    }
+    return {
+      process: spawn(bin, ["lsp", "stdio"], {
+        cwd: root,
+      }),
+    }
+  },
+}
