@@ -1429,6 +1429,20 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
+  it.effect("rejects image media that is not valid base64", () =>
+    Effect.gen(function* () {
+      const error = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [Message.user({ type: "media", mediaType: "image/png", data: "https://example.test/image.png" })],
+        }),
+      ).pipe(Effect.flip)
+
+      expect(error).toMatchObject({ reason: { _tag: "InvalidRequest" } })
+      expect(error.message).toContain("Bedrock Converse media data must be valid base64")
+    }),
+  )
+
   it.effect("lowers document media into Bedrock document blocks with format and name", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
@@ -1549,6 +1563,37 @@ describe("Bedrock Converse route", () => {
           ],
         },
       ])
+    }),
+  )
+
+  it.effect("rejects remote media URLs in tool results", () =>
+    Effect.gen(function* () {
+      const error = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "read", input: {} })]),
+            Message.tool({
+              id: "call_1",
+              name: "read",
+              result: {
+                type: "content",
+                value: [
+                  {
+                    type: "file",
+                    uri: "https://example.test/report.pdf",
+                    mime: "application/pdf",
+                    name: "report.pdf",
+                  },
+                ],
+              },
+            }),
+          ],
+        }),
+      ).pipe(Effect.flip)
+
+      expect(error).toMatchObject({ reason: { _tag: "InvalidRequest" } })
+      expect(error.message).toContain("Bedrock Converse media data must be valid base64")
     }),
   )
 
