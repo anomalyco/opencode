@@ -241,6 +241,22 @@ describe("PatchTool", () => {
     ),
   )
 
+  it.live("replaces a file with a directory containing an added file", () =>
+    withTempTool((directory, registry) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(() => fs.writeFile(path.join(directory, "parent"), "before\n"))
+        const settled = yield* executeTool(
+          registry,
+          call("*** Begin Patch\n*** Delete File: parent\n*** Add File: parent/child.txt\n+after\n*** End Patch"),
+        )
+        expect(settled.status).toBe("completed")
+        expect(yield* Effect.promise(() => fs.readFile(path.join(directory, "parent/child.txt"), "utf8"))).toBe(
+          "after\n",
+        )
+      }),
+    ),
+  )
+
   it.live("counts deleted lines with and without a trailing newline", () =>
     withTempTool((directory, registry) =>
       Effect.gen(function* () {
