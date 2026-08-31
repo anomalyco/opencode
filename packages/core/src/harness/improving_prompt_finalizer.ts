@@ -13,7 +13,8 @@ import {
   harness_subtask_feedback,
   harness_version,
 } from "./schema"
-import { eq } from "drizzle-orm"
+import { eq, isNotNull } from "drizzle-orm"
+import similarity from "compute-cosine-similarity"
 
 const StringToRules = Schema.String.pipe(
   Schema.decodeTo(Schema.Array(Schema.String), {
@@ -234,12 +235,68 @@ ${task.task_error ?? "None"}
         ? JSON.stringify(modelOptionsObj)
         : strategy.modelOptions
 
-      const targetDomain =
-        (task.task_type && task.task_type !== "general")
-          ? task.task_type
-          : (strategy.taskCategory && strategy.taskCategory !== "general")
-            ? strategy.taskCategory
-            : "general"
+      let targetDomain = task.task_type && task.task_type !== "general" ? task.task_type : undefined
+
+      // 2. If task domain is general or missing, perform Vector Semantic Similarity search against active domains
+      if (!targetDomain) {
+        const activeDomainRows = yield* db
+          .select({ domain: harness_version.domain_category })
+          .from(harness_version)
+          .where(eq(harness_version.is_active, true))
+          .all()
+          .pipe(Effect.orElseSucceed(() => []))
+
+        const activeDomainSet = new Set(activeDomainRows.map((r) => r.domain).filter((d): d is string => Boolean(d && d !== "general")))
+
+        if (task.task_embeddings && activeDomainSet.size > 0) {
+          const tasksWithEmbeddings = yield* db
+            .select({
+              taskType: harness_task.task_type,
+              embedding: harness_task.task_embeddings,
+            })
+            .from(harness_task)
+            .where(isNotNull(harness_task.task_embeddings))
+            .all()
+            .pipe(Effect.orElseSucceed(() => []))
+
+          let bestScore = -1
+          let bestDomain: string | undefined
+
+          const currentVec = task.task_embeddings instanceof Float32Array
+            ? Array.from(task.task_embeddings)
+            : Array.isArray(task.task_embeddings)
+              ? task.task_embeddings
+              : undefined
+
+          if (currentVec) {
+            for (const t of tasksWithEmbeddings) {
+              if (!t.taskType || !activeDomainSet.has(t.taskType) || !t.embedding) continue
+              const taskVec = t.embedding instanceof Float32Array
+                ? Array.from(t.embedding)
+                : Array.isArray(t.embedding)
+                  ? t.embedding
+                  : undefined
+              if (!taskVec) continue
+
+              const score = similarity(currentVec, taskVec)
+              if (typeof score === "number" && !isNaN(score) && score > bestScore) {
+                bestScore = score
+                bestDomain = t.taskType
+              }
+            }
+          }
+
+          if (bestScore >= 0.70 && bestDomain) {
+            targetDomain = bestDomain
+          }
+        }
+      }
+
+      if (!targetDomain) {
+        targetDomain = (strategy.taskCategory && strategy.taskCategory !== "general")
+          ? strategy.taskCategory
+          : "general"
+      }
 
       const candidateVersionID =
         yield* versionSvc.proposeCandidate({
