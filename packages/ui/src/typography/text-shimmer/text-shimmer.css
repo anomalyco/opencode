@@ -36,10 +36,14 @@
 [data-component="text-shimmer"] [data-slot="text-shimmer-char-shimmer"] {
   grid-area: 1 / 1;
   white-space: pre;
-  transition: opacity var(--text-shimmer-swap) ease-out;
   font: inherit;
   letter-spacing: inherit;
   line-height: inherit;
+}
+
+[data-component="text-shimmer"]:where([data-active="true"]) [data-slot="text-shimmer-char-base"],
+[data-component="text-shimmer"]:where([data-active="true"]) [data-slot="text-shimmer-char-shimmer"] {
+  transition: opacity var(--text-shimmer-swap) ease-out;
 }
 
 [data-component="text-shimmer"] [data-slot="text-shimmer-char-base"] {
@@ -112,6 +116,7 @@
     color: inherit;
     -webkit-text-fill-color: currentColor;
     background-image: none;
+    opacity: 0 !important;
   }
 
   [data-component="text-shimmer"] [data-slot="text-shimmer-char-base"] {
