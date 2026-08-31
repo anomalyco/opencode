@@ -22,6 +22,7 @@ import { resolvePastedAttachments } from "../component/prompt/local-attachment"
 import { createTuiClipboard, type OwnedClipboardService } from "../clipboard"
 import type { ClipboardService } from "../context/clipboard"
 import fuzzysort from "fuzzysort"
+import { slashCommandMatches } from "../prompt/slash-command-match"
 import path from "path"
 import { pathToFileURL } from "node:url"
 import {
@@ -599,7 +600,7 @@ export function createPromptState(input: PromptInput): PromptState {
       ]
     }
 
-    return fuzzysort
+    const matches = fuzzysort
       .go(next, mixed, {
         keys: [
           (item) => (item.kind === "mention" ? item.value : item.kind === "skill" ? item.id : item.name).trimEnd(),
@@ -608,6 +609,13 @@ export function createPromptState(input: PromptInput): PromptState {
         ],
       })
       .map((item) => item.obj)
+
+    return slashCommandMatches({
+      query: next,
+      options: mixed,
+      matches,
+      names: (item) => [item.kind === "mention" ? item.value : item.kind === "skill" ? item.id : item.name],
+    })
   })
   const layout = createMemo(() => {
     term()
