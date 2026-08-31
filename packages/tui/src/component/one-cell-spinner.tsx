@@ -22,13 +22,6 @@ export function OneCellSpinner(props: {
   const frame = createMemo(() => oneCellFrame(props.animation, elapsed()))
   const complete = createMemo(() => frame().complete)
   const base = createMemo(() => parseColor(props.color))
-  const colors = createMemo(() =>
-    props.animation.levels?.map((level) => {
-      const color = RGBA.clone(base())
-      color.a *= level
-      return color
-    }),
-  )
   const color = createMemo(() => {
     if (props.glow === false) return base()
     if (sequenced()) {
@@ -36,7 +29,11 @@ export function OneCellSpinner(props: {
       color.a *= frame().level
       return color
     }
-    const palette = colors()
+    const palette = props.animation.levels?.map((level) => {
+      const color = RGBA.clone(base())
+      color.a *= level
+      return color
+    })
     return palette ? (frame: number) => palette[frame]! : base()
   })
 

@@ -196,7 +196,7 @@ export function entryBody(commit: StreamCommit, options?: ScrollbackOptions): Ru
 
   if (commit.image) {
     const caption = raw.trim() || "Image"
-    return commit.kind === "user" ? userBody(caption, mono) : textBody(mono ? monoToolText(caption, true) : caption)
+    return commit.kind === "user" ? userBody(caption, mono) : textBody(monoToolText(caption, mono))
   }
 
   if (commit.kind === "user") {

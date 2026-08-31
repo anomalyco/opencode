@@ -183,9 +183,7 @@ function createSearchablePanelController<T extends PanelEntry>(input: {
   })
 
   createEffect(() => {
-    term()
-    const desired = footerPanelLayout(renderer.terminalHeight, input.limit)
-    input.onRows?.(Math.max(1, Math.min(items().length, desired.limit)) + desired.frame)
+    input.onRows?.(menu.rows() + layout().frame)
   })
 
   useKeyboard((event) => {

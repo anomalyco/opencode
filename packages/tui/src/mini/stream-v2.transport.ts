@@ -1803,8 +1803,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         return
       }
       if (command) {
-        const pending = await admitPrompt(next, client, next.prompt.delivery ?? "steer")
-        if (pending) mergePending(pending)
+        await admitPrompt(next, client, next.prompt.delivery ?? "steer")
         admitted?.()
         return
       }

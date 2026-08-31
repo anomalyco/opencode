@@ -29,7 +29,6 @@ export type RunFooterTheme = {
   formfieldFocusedBg: ColorInput
   formfieldFocusedText: ColorInput
   selection: ColorInput
-  variant: ColorInput
   running: ColorInput
   question: ColorInput
   permission: ColorInput
@@ -40,7 +39,6 @@ export type RunFooterTheme = {
   error: ColorInput
   muted: ColorInput
   text: ColorInput
-  statusAccent: ColorInput
   shade: ColorInput
   surface: ColorInput
   pane: ColorInput
@@ -146,7 +144,6 @@ function map(
       formfieldFocusedBg: exact(elevated.background.formfield.focused),
       formfieldFocusedText: exact(elevated.text.formfield.focused),
       selection: exact(elevated.text.formfield.selected),
-      variant: exact(theme.text.subdued),
       running: exact(theme.text.status.running),
       question: exact(theme.text.status.question),
       permission: exact(theme.text.status.permission),
@@ -160,7 +157,6 @@ function map(
       error: exact(theme.text.feedback.error.default),
       muted: exact(theme.text.subdued),
       text: exact(theme.text.default),
-      statusAccent: exact(theme.background.surface.overlay),
       shade: exact(elevated.background.default),
       surface: exact(elevated.background.default),
       pane: exact(theme.contextual.overlay.background.default),
@@ -221,7 +217,6 @@ function monoTheme(mode: "dark" | "light"): RunTheme {
       formfieldFocusedBg: background,
       formfieldFocusedText: foreground,
       selection: foreground,
-      variant: foreground,
       running: foreground,
       question: foreground,
       permission: foreground,
@@ -232,7 +227,6 @@ function monoTheme(mode: "dark" | "light"): RunTheme {
       error: foreground,
       muted: foreground,
       text: foreground,
-      statusAccent: background,
       shade: background,
       surface: background,
       pane: background,

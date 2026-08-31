@@ -633,7 +633,6 @@ export function createPromptState(input: PromptInput): PromptState {
     }
 
     setLines(Math.max(area.lineCount, area.virtualLineCount))
-    area.maxHeight = layout().textarea
     input.onRows(layout().rows)
   }
 

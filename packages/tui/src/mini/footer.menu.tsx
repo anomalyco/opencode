@@ -22,7 +22,6 @@ export type RunFooterMenuItem = {
   icon?: (color: ColorInput) => JSX.Element
   current?: boolean
   description?: string
-  descriptionTone?: "selection"
   category?: string
   footer?: string
   footerTone?: "selection" | "running" | "error" | "success"
@@ -283,11 +282,7 @@ export function RunFooterMenu(props: {
                           {" ".repeat(Math.max(1, descriptionColumn() - stringWidth(row.item.display)))}
                         </text>
                         <text
-                          fg={
-                            active()
-                              ? props.theme().actionFocusedText
-                              : props.theme()[row.item.descriptionTone ?? "muted"]
-                          }
+                          fg={active() ? props.theme().actionFocusedText : props.theme().muted}
                           wrapMode="none"
                           flexGrow={1}
                           flexShrink={1}

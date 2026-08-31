@@ -969,7 +969,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                 flexShrink={0}
                 backgroundColor="transparent"
               >
-                <Show when={statuslineLayout().groups.some((group) => group.id === "spinner")}>
+                <Show when={busy()}>
                   <box id="mini-work-spinner" width={1} flexShrink={0}>
                     <OneCellSpinner
                       animation={props.mono ? SEED_MONO : WORK_SPINNERS[props.miniSettings().work_spinner]}

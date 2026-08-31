@@ -188,7 +188,7 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
     miniSettings.splash === "show" && !mono && tuiConfig.animations !== false
       ? { version: input.host.version, detail: directoryLabel(input.getDirectory(), input.host.paths.home) }
       : undefined
-  const wrote = queueSplash(
+  queueSplash(
     renderer,
     state,
     "entry",
@@ -223,7 +223,7 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
     theme,
     // The transcript always starts one row below the terminal's prior output,
     // even when the entry splash itself is hidden.
-    wrote: wrote || !!startup || miniSettings.splash === "hide",
+    wrote: true,
     startup,
     tuiConfig,
     miniSettings: {

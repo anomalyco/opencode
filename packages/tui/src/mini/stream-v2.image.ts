@@ -23,7 +23,7 @@ export function toolImageCommits(part: SessionMessageAssistantTool, messageID: s
   return toolDisplayContent(part.state)
     .flatMap((content) =>
       content.type === "file" && content.mime.startsWith("image/") && content.uri.startsWith("data:image/")
-        ? [{ uri: content.uri, name: content.name }]
+        ? [content]
         : [],
     )
     .map((content, index) => ({

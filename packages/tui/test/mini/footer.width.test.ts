@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { footerStatuslinePolicy, footerWidthPolicy, type FooterStatuslineGroup } from "../../src/mini/footer.width"
+import { footerStatuslinePolicy, type FooterStatuslineGroup } from "../../src/mini/footer.width"
 import { stringWidth } from "../../src/util/string-width"
 
 const screenshot = {
@@ -13,11 +13,6 @@ const screenshot = {
 } satisfies Omit<Parameters<typeof footerStatuslinePolicy>[0], "width">
 
 describe("run footer width", () => {
-  test("preserves the dialog breakpoint", () => {
-    expect(footerWidthPolicy(79).dialog.narrow).toBe(true)
-    expect(footerWidthPolicy(80).dialog.narrow).toBe(false)
-  })
-
   test.each([false, true])("progressive layouts fit and preserve information at every width (mono=%s)", (mono) => {
     const fixtures: Array<Omit<Parameters<typeof footerStatuslinePolicy>[0], "width">> = [
       { work: [] },

@@ -1,14 +1,6 @@
 import { Locale } from "../util/locale"
 import { stringWidth } from "../util/string-width"
 
-export function footerWidthPolicy(width: number) {
-  return {
-    dialog: {
-      narrow: width < 80,
-    },
-  }
-}
-
 type FooterAction = {
   key: string
   label: string
