@@ -12,6 +12,7 @@ import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { Storage } from "@/storage/storage"
 import { Snapshot } from "@/snapshot"
 import { Plugin } from "@/plugin"
+import { Recall } from "@opencode-ai/core/recall/indexer"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { Provider } from "@/provider/provider"
 import { ProviderAuth } from "@/provider/auth"
@@ -97,6 +98,7 @@ export const AppLayer = AppNodeBuilderV1.build(
     Truncate.node,
     ToolRegistry.node,
     Format.node,
+    Recall.node,
     InstanceStore.node,
     Project.node,
     Vcs.node,

@@ -1,0 +1,3 @@
+Search past conversation transcripts semantically.
+
+Use when the user references something discussed before ("what did we decide about X?", "find where we fixed Y", "that command I ran last week") or when earlier context from other sessions would help the current task. Queries are natural language; results come from local sessions across projects with relevance scores and source session ids. Prefer specific phrases over single keywords.
