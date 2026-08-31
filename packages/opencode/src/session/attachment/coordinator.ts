@@ -47,11 +47,13 @@ export interface Scope extends AttachmentContract.Scope {
   /**
    * Claims a message for this scope, invalidating the turn's prior evidence.
    *
-   * Returns whether ownership was taken. `false` means the scope had already published its
-   * resolution and can no longer accept one — the admission boundary converts that into the typed
-   * `SessionScopeOwnRefused`, while non-admission callers ignore it and keep the historical no-op.
-   * A degraded or cancelled scope that has NOT resolved still throws, which is CP-031's existing
-   * recoverable admission failure and is deliberately unchanged.
+   * `true` does NOT mean ownership was taken. It means the claim was not REFUSED, and covers two
+   * outcomes: ownership actually taken, and the historical no-op where a scope that closed without
+   * ever resolving accepts the call and does nothing. `false` is returned only when the scope had
+   * already published its resolution and can no longer accept one — the admission boundary converts
+   * that into the typed `SessionScopeOwnRefused`, while non-admission callers ignore it. A degraded
+   * or cancelled scope that has NOT resolved still throws, which is CP-031's existing recoverable
+   * admission failure and is deliberately unchanged.
    */
   readonly own: (messageID: MessageID) => Effect.Effect<boolean>
   /**

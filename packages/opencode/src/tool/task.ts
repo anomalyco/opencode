@@ -302,7 +302,17 @@ export const TaskTool = Tool.define(
           ? carried
           : undefined
       if (flags.experimentalBackgroundSubagents && (carried || located) && !parentScope) {
-        if (AttachmentCoordinator.isScope(located)) yield* located.degrade()
+        // Degrade the generation AT FAULT, which is the carried one whenever it is a scope at all.
+        // Before CP-032 R-08 a session held at most one generation, so degrading the registry
+        // occupant was the same thing. Atomic replacement makes two generations coexist: a resolved
+        // predecessor still referenced by an in-flight delegated call, and the live successor now
+        // registered. A stale call carrying the predecessor samples the successor here, and
+        // degrading `located` would punish an innocent generation that is correctly serving a
+        // different run. With no carried scope there is no faulting generation to name, so the
+        // registry occupant remains the only thing to degrade — the original behaviour. Either way
+        // the delegated call still fails closed.
+        const faulting = AttachmentCoordinator.isScope(carried) ? carried : located
+        if (AttachmentCoordinator.isScope(faulting)) yield* faulting.degrade()
         return yield* Effect.fail(new Error(`Attachment scope mismatch for Task ${nextSession.id}`))
       }
       const reservation = parentScope ? yield* parentScope.reserve(nextSession.id) : undefined

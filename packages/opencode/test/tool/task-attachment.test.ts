@@ -1787,4 +1787,90 @@ describe("task edge coordinates for branch closure", () => {
       yield* Deferred.succeed(release, undefined)
     }),
   )
+
+  // CP-032 R-08 made two attachment generations coexist for one session: a resolved predecessor an
+  // in-flight delegated call still carries, and the live successor that atomically replaced it in the
+  // registry. The mismatch branch degraded whatever the REGISTRY held, so a stale call punished the
+  // innocent successor. These two rows bound the blast radius of that branch without relaxing it --
+  // the delegated call still fails closed in both, only the degraded generation differs.
+  it.instance("a stale carried generation fails its own call without degrading the live successor", () =>
+    Effect.gen(function* () {
+      const coordinator = yield* AttachmentCoordinator.make
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      const answer = (text: string) => reply({ sessionID: chat.id } as SessionPrompt.PromptInput, text)
+
+      // Generation N, resolved through the never-attached immediate arm: registered and replaceable
+      // (R-08), not closed.
+      const predecessor = yield* coordinator.open(chat.id)
+      yield* predecessor.result(answer("predecessor answer"))
+      expect(predecessor.resolved()).toBe(true)
+
+      // Generation N+1 atomically replaces it.
+      const successor = yield* coordinator.open(chat.id)
+      expect(yield* coordinator.locate(chat.id)).toBe(successor)
+
+      let childPrompts = 0
+      const promptOps = basicOps({
+        attachments: coordinator,
+        prompt: (input) =>
+          Effect.sync(() => {
+            childPrompts += 1
+            return reply(input, "must not run")
+          }),
+      })
+
+      const exit = yield* Effect.exit(
+        def.execute(
+          { description: "stale", prompt: "run", subagent_type: "general" },
+          context({ sessionID: chat.id, messageID: assistant.id, promptOps, attachment: predecessor }),
+        ),
+      )
+
+      expect(Exit.isFailure(exit)).toBe(true)
+      // Refused before any provider work, so failing closed costs nothing downstream.
+      expect(childPrompts).toBe(0)
+      // The successor took no part in this call. Pre-fix, it was the scope that got degraded.
+      expect(successor.current().failed).toBe(false)
+      expect(successor.current().cancelled).toBe(false)
+      expect(yield* coordinator.locate(chat.id)).toBe(successor)
+      // Still able to speak for its own turn.
+      expect(selectedText(yield* successor.result(answer("successor answer")))).toBe("successor answer")
+    }),
+  )
+
+  it.instance("a mismatch with no carried generation still degrades the registered scope", () =>
+    Effect.gen(function* () {
+      const coordinator = yield* AttachmentCoordinator.make
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      const scope = yield* coordinator.open(chat.id)
+
+      let childPrompts = 0
+      const promptOps = basicOps({
+        attachments: coordinator,
+        prompt: (input) =>
+          Effect.sync(() => {
+            childPrompts += 1
+            return reply(input, "must not run")
+          }),
+      })
+
+      // No carried scope, but the registry holds one: there is no faulting generation to name, so the
+      // registry occupant remains the only thing to degrade. This is the original fail-closed
+      // behaviour and the row that keeps the fix from becoming a relaxation.
+      const exit = yield* Effect.exit(
+        def.execute(
+          { description: "uncarried", prompt: "run", subagent_type: "general" },
+          context({ sessionID: chat.id, messageID: assistant.id, promptOps }),
+        ),
+      )
+
+      expect(Exit.isFailure(exit)).toBe(true)
+      expect(childPrompts).toBe(0)
+      expect(scope.current().failed).toBe(true)
+    }),
+  )
 })
