@@ -8,7 +8,6 @@ import { SplitBorder } from "../../ui/border"
 import { useData } from "../../context/data"
 import { filetype } from "../../util/filetype"
 import { permissionAlwaysLines, permissionOptionLabel, permissionPresentation } from "../../util/permission"
-import { subagentLabel } from "../../util/session"
 import { getScrollAcceleration } from "../../util/scroll"
 import { useConfig } from "../../config"
 import { Keymap } from "../../context/keymap"
@@ -110,11 +109,7 @@ function EditBody(props: { file?: string; diff?: string; patch?: string }) {
   )
 }
 
-export function PermissionPrompt(props: {
-  request: PermissionRequest
-  directory?: string
-  pending?: { current: number; total: number }
-}) {
+export function PermissionPrompt(props: { request: PermissionRequest; directory?: string }) {
   const data = useData()
   const toast = useToast()
   const [store, setStore] = createStore({
@@ -122,10 +117,6 @@ export function PermissionPrompt(props: {
   })
   const pathFormatter = usePathFormatter()
   const session = createMemo(() => data.session.get(props.request.sessionID))
-  const owner = createMemo(() => {
-    const current = session()
-    return current?.parentID ? current : undefined
-  })
 
   const source = createMemo(() => {
     const tool = props.request.source
@@ -231,22 +222,7 @@ export function PermissionPrompt(props: {
               <box flexDirection="row" gap={1} flexShrink={0}>
                 <text fg={theme.text.feedback.warning.default}>{"△"}</text>
                 <text fg={theme.text.default}>Permission required</text>
-                <Show when={props.pending && props.pending.total > 1}>
-                  <box flexGrow={1} />
-                  <text fg={theme.text.subdued} wrapMode="none">
-                    {props.pending?.current} of {props.pending?.total}
-                  </text>
-                </Show>
               </box>
-              <Show when={owner()}>
-                {(current) => (
-                  <box paddingLeft={2} flexShrink={0}>
-                    <text fg={theme.text.subdued} wrapMode="none" truncate>
-                      {subagentLabel(current())}
-                    </text>
-                  </box>
-                )}
-              </Show>
               <Show when={props.request.action !== "shell" && current.title}>
                 <box flexDirection="row" gap={1} paddingLeft={2} flexShrink={0}>
                   <text fg={theme.text.subdued} flexShrink={0}>
@@ -261,11 +237,7 @@ export function PermissionPrompt(props: {
           const body = (
             <SessionQuestion
               title="Permission required"
-              semanticLabel={permissionSemanticLabel(
-                props.request.action,
-                current.title,
-                owner() ? subagentLabel(owner()!) : undefined,
-              )}
+              semanticLabel={permissionSemanticLabel(props.request.action, current.title)}
               instance={props.request.id}
               header={header()}
               body={presentationBody}
@@ -305,8 +277,8 @@ export function PermissionPrompt(props: {
   )
 }
 
-export function permissionSemanticLabel(action: string, title?: string, owner?: string) {
-  return `Permission required${owner ? ` from ${owner}` : ""}: ${title ?? action}`
+export function permissionSemanticLabel(action: string, title?: string) {
+  return `Permission required: ${title ?? action}`
 }
 
 function RejectPrompt(props: {
