@@ -383,6 +383,7 @@ test.each(["once", "always", "reject"] as const)(
           turn_summary: "hide",
           footer: "show",
           splash: "hide",
+          work_spinner: "block-soft-slide",
           mono: false,
         },
       },

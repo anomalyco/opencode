@@ -77,7 +77,7 @@ async function setup(
     theme: mono ? RUN_THEME_MONO : RUN_THEME_FALLBACK,
     tuiConfig: createTuiResolvedConfig({ theme: input.theme }),
     miniSettings: {
-      current: { thinking: "hide", shell_output: "hide", turn_summary: "show", footer: "show", splash: "show", mono },
+      current: { ...resolveMiniSettings(), mono },
       update: input.update,
     },
     onPermissionReply: () => {},

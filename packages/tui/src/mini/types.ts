@@ -406,6 +406,7 @@ export type MiniSettings = {
   turn_summary: "show" | "hide"
   footer: "show" | "hide"
   splash: "show" | "hide"
+  work_spinner: Config.MiniWorkSpinner
   mono: boolean
 }
 

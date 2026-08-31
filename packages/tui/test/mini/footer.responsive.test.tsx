@@ -2,6 +2,7 @@ import { expect, test } from "bun:test"
 import { RGBA, TextAttributes } from "@opentui/core"
 import { createTestRenderer } from "@opentui/core/testing"
 import { RunFooter } from "../../src/mini/footer"
+import { resolveMiniSettings } from "../../src/mini/runtime.boot"
 import { RUN_THEME_FALLBACK, RUN_THEME_MONO } from "../../src/mini/theme"
 import type { RunPrompt } from "../../src/mini/types"
 import { createTuiResolvedConfig } from "../fixture/tui-runtime"
@@ -36,7 +37,7 @@ async function setup(mono = false) {
     theme,
     tuiConfig: createTuiResolvedConfig(),
     miniSettings: {
-      current: { thinking: "hide", shell_output: "hide", turn_summary: "show", footer: "show", splash: "show", mono },
+      current: { ...resolveMiniSettings(), mono },
     },
     onPermissionReply: () => {},
     onFormReply: () => {},

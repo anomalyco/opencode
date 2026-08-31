@@ -23,7 +23,8 @@ import { RunFooterView } from "../../src/mini/footer.view"
 import { RunFooter } from "../../src/mini/footer"
 import { RunEntryContent } from "../../src/mini/scrollback.writer"
 import { RUN_THEME_FALLBACK, RUN_THEME_FALLBACK_LIGHT, resolveRunTheme, type RunTheme } from "../../src/mini/theme"
-import { BLOCK_SOFT_SWEEP } from "../../src/ui/one-cell-motion"
+import { BLOCK_SOFT_SLIDE } from "../../src/ui/one-cell-motion"
+import { resolveMiniSettings } from "../../src/mini/runtime.boot"
 import type {
   FooterQueuedPrompt,
   FooterState,
@@ -168,16 +169,7 @@ async function renderFooter(
   )
   const [state, setState] = footerState(input.state)
   const config = { ...(input.tuiConfig ?? tuiConfig), animations: input.tuiConfig?.animations ?? false }
-  const [miniSettings] = createSignal<MiniSettings>(
-    input.miniSettings ?? {
-      thinking: "hide",
-      shell_output: "hide",
-      turn_summary: "show",
-      footer: "show",
-      splash: "show",
-      mono: false,
-    },
-  )
+  const [miniSettings, setMiniSettings] = createSignal<MiniSettings>(input.miniSettings ?? resolveMiniSettings())
   function Harness() {
     return (
       <Keymap.Provider config={config}>
@@ -238,6 +230,7 @@ async function renderFooter(
     ...app,
     setView,
     setState,
+    setMiniSettings,
     cleanup() {
       app.renderer.currentFocusedRenderable?.blur()
       app.renderer.currentFocusedEditor?.blur()
@@ -929,15 +922,8 @@ test("direct command panel renders grouped actions without catalog commands", as
   }
 })
 
-test("direct settings panel changes Mini transcript preferences", async () => {
-  const [settings, setSettings] = createSignal<MiniSettings>({
-    thinking: "hide",
-    shell_output: "hide",
-    turn_summary: "show",
-    footer: "show",
-    splash: "show",
-    mono: false,
-  })
+test("direct settings panel changes Mini preferences", async () => {
+  const [settings, setSettings] = createSignal(resolveMiniSettings())
   const app = await testRender(
     () => (
       <box width={100} height={RUN_COMMAND_PANEL_ROWS}>
@@ -973,12 +959,8 @@ test("direct settings panel changes Mini transcript preferences", async () => {
     await app.renderOnce()
 
     expect(settings()).toEqual({
+      ...resolveMiniSettings(),
       thinking: "show",
-      shell_output: "hide",
-      turn_summary: "show",
-      footer: "show",
-      splash: "show",
-      mono: false,
     })
 
     app.mockInput.pressKey("ARROW_DOWN")
@@ -987,12 +969,9 @@ test("direct settings panel changes Mini transcript preferences", async () => {
     await app.renderOnce()
 
     expect(settings()).toEqual({
+      ...resolveMiniSettings(),
       thinking: "show",
-      shell_output: "hide",
       turn_summary: "hide",
-      footer: "show",
-      splash: "show",
-      mono: false,
     })
 
     app.mockInput.pressKey("ARROW_DOWN")
@@ -1005,6 +984,19 @@ test("direct settings panel changes Mini transcript preferences", async () => {
     app.mockInput.pressKey("ARROW_RIGHT")
     await app.renderOnce()
     expect(settings().mono).toBe(true)
+    await app.mockInput.typeText("spinner")
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("soft slide")
+    for (const [key, value] of [
+      ["ARROW_RIGHT", "block-soft-sweep"],
+      ["ARROW_LEFT", "block-soft-slide"],
+      ["ARROW_LEFT", "seed"],
+      ["ARROW_RIGHT", "block-soft-slide"],
+    ] as const) {
+      app.mockInput.pressKey(key)
+      await app.renderOnce()
+      expect(settings().work_spinner).toBe(value)
+    }
   } finally {
     app.renderer.destroy()
   }
@@ -1931,6 +1923,7 @@ test.each([8, 12])("production footer grows for wrapped instructions in %i rows"
         turn_summary: "show",
         footer: "show",
         splash: "show",
+        work_spinner: "block-soft-slide",
         mono: false,
       },
     },
@@ -1997,6 +1990,7 @@ test.each(["ctrl+i", "none"])("takeovers preserve configured shortcuts with hidd
       turn_summary: "show",
       footer: "hide",
       splash: "show",
+      work_spinner: "block-soft-slide",
       mono: false,
     },
   })
@@ -2117,8 +2111,11 @@ test.each([false, true])("working marker stays visible with animations=%s and st
     await app.renderOnce()
     const line = app.captureCharFrame().split("\n")[footerStatusline(app.renderer.root).y]
     expect(line).toContain(" esc stop")
-    expect(animations ? BLOCK_SOFT_SWEEP.frames : ["\u25aa"]).toContain(Array.from(line)[0]!)
+    expect(animations ? BLOCK_SOFT_SLIDE.frames : ["\u25aa"]).toContain(Array.from(line)[0]!)
     expect(app.renderer.root.findDescendantById("mini-work-spinner")?.width).toBe(1)
+    app.setMiniSettings((settings) => ({ ...settings, work_spinner: "seed" }))
+    await app.renderOnce()
+    expect(app.captureCharFrame().split("\n")[footerStatusline(app.renderer.root).y]).toStartWith("\u25aa ")
     await app.renderer.idle()
     app.setState((state) => ({ ...state, phase: "idle" }))
     await app.renderOnce()
@@ -2175,7 +2172,7 @@ test("spinner repaints keep the prompt instance, cursor state, and footer height
       expect(editor?.plainText).toBe("draft")
       expect(app.renderer.getCursorState()).toEqual(cursor)
       expect(app.renderer.footerHeight).toBe(height)
-      frames.add(app.captureCharFrame())
+      frames.add(JSON.stringify(app.captureSpans()))
     }
     expect(frames.size).toBeGreaterThan(1)
   } finally {
@@ -2310,6 +2307,7 @@ test("direct footer hides routine activity and shows explicit notices", async ()
       turn_summary: "show",
       footer: "hide",
       splash: "show",
+      work_spinner: "block-soft-slide",
       mono: true,
     },
     mono: true,

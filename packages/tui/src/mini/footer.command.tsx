@@ -4,6 +4,7 @@ import { useKeyboard, useRenderer, useTerminalDimensions, type JSX } from "@open
 import fuzzysort from "fuzzysort"
 import { createEffect, createMemo, createSignal, type Accessor } from "solid-js"
 import { Keymap } from "../context/keymap"
+import { Config } from "../config"
 import {
   FOOTER_COMPACT_WIDTH,
   RunFooterMenu,
@@ -759,13 +760,33 @@ export function RunSettingsBody(props: {
       keywords: `mono monochrome ascii legacy compat terminal ${props.settings().mono ? "on" : "off"}`,
       key: "mono",
     },
+    {
+      category: "Terminal",
+      display: "Work spinner",
+      footer:
+        saving() === "work_spinner"
+          ? "saving"
+          : props.settings().work_spinner.replace("block-", "").replaceAll("-", " "),
+      footerTone: saving() === "work_spinner" ? "running" : "selection",
+      keywords: `work spinner animation ${props.settings().work_spinner}`,
+      key: "work_spinner",
+    },
   ])
-  const change = (item: SettingEntry) => {
+  const change = (item: SettingEntry, direction = 1) => {
     if (saving()) return
+    const spinners = Config.MiniWorkSpinner.literals
     const next: MiniSettingChange =
-      item.key === "mono"
-        ? { key: "mono", value: !props.settings().mono }
-        : { key: item.key, value: props.settings()[item.key] === "show" ? "hide" : "show" }
+      item.key === "work_spinner"
+        ? {
+            key: "work_spinner",
+            value:
+              spinners[
+                (spinners.indexOf(props.settings().work_spinner) + direction + spinners.length) % spinners.length
+              ]!,
+          }
+        : item.key === "mono"
+          ? { key: "mono", value: !props.settings().mono }
+          : { key: item.key, value: props.settings()[item.key] === "show" ? "hide" : "show" }
     setSaving(item.key)
     void Promise.resolve(props.onChange(next))
       .catch(() => {})
@@ -780,7 +801,7 @@ export function RunSettingsBody(props: {
       const name = event.name.toLowerCase()
       if (name !== "left" && name !== "right") return false
       event.preventDefault()
-      if (item) change(item)
+      if (item) change(item, name === "left" ? -1 : 1)
       return true
     },
   })

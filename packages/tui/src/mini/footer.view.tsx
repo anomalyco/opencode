@@ -12,7 +12,7 @@ import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { TextBuffer, TextBufferView } from "@opentui/core"
 import { For, Match, Show, Switch, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import { OneCellSpinner } from "../component/one-cell-spinner"
-import { BLOCK_SOFT_SWEEP, SEED_LAUNCH, SEED_MONO } from "../ui/one-cell-motion"
+import { WORK_SPINNERS, SEED_LAUNCH, SEED_MONO } from "../ui/one-cell-motion"
 import { entrySplashLayout } from "./splash"
 import {
   RUN_SUBAGENT_PANEL_ROWS,
@@ -971,7 +971,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                 <Show when={statuslineLayout().groups.some((group) => group.id === "spinner")}>
                   <box id="mini-work-spinner" width={1} flexShrink={0}>
                     <OneCellSpinner
-                      animation={props.mono ? SEED_MONO : BLOCK_SOFT_SWEEP}
+                      animation={props.mono ? SEED_MONO : WORK_SPINNERS[props.miniSettings().work_spinner]}
                       color={agentColor()}
                       animations={props.tuiConfig.animations}
                       glow={!props.mono}

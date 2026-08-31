@@ -1,4 +1,4 @@
-import { BLOCK_LOW_COMET, BLOCK_SOFT_SWEEP, SEED_LAUNCH } from "../../../ui/one-cell-motion"
+import { BLOCK_LOW_COMET, BLOCK_SOFT_SLIDE, BLOCK_SOFT_SWEEP, SEED_LAUNCH } from "../../../ui/one-cell-motion"
 import { octantGlyph } from "../../../ui/subcell"
 import type { SpinnerFixture } from "./one-cell-spinner.fixtures"
 
@@ -94,11 +94,7 @@ const patterns = [
     name: "soft slide",
     description: "The middle bar softens before each sideways step.",
     blockOnly: true,
-    motion: {
-      frames: [0x14, 0x14, 0x14, 0x14, 0x14, 0x28, 0x28, 0x28, 0x28, 0x28].map(octantGlyph),
-      interval: 100,
-      levels: [0.55, 0.85, 1, 0.85, 0.55, 0.55, 0.85, 1, 0.85, 0.55],
-    },
+    motion: BLOCK_SOFT_SLIDE,
   },
 ]
 

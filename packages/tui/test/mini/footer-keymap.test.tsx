@@ -71,6 +71,7 @@ async function renderSubagent(interrupt: "ctrl+i" | "none") {
             turn_summary: "show",
             footer: "show",
             splash: "show",
+            work_spinner: "block-soft-slide",
             mono: false,
           })}
           mono={false}

@@ -1,4 +1,5 @@
 import { octantGlyph } from "./subcell"
+import type { Config } from "../config"
 
 export type OneCellMotion = {
   frames: string[]
@@ -65,6 +66,19 @@ export const BLOCK_SOFT_SWEEP: OneCellMotion = {
   interval: 100,
   pace: WORK_PACE,
 }
+
+export const BLOCK_SOFT_SLIDE: OneCellMotion = {
+  frames: [0x14, 0x14, 0x14, 0x14, 0x14, 0x28, 0x28, 0x28, 0x28, 0x28].map(octantGlyph),
+  interval: 100,
+  levels: [0.55, 0.85, 1, 0.85, 0.55, 0.55, 0.85, 1, 0.85, 0.55],
+}
+
+export const WORK_SPINNERS = {
+  "block-soft-slide": BLOCK_SOFT_SLIDE,
+  "block-soft-sweep": BLOCK_SOFT_SWEEP,
+  "block-low-comet": BLOCK_LOW_COMET,
+  seed: SEED_WORK,
+} satisfies Record<Config.MiniWorkSpinner, OneCellMotion>
 
 export const SEED_LAUNCH: OneCellMotion = {
   frames: Array.from({ length: 21 }, (_, index) => (index < 10 ? "\u25ab" : "\u25aa")),
