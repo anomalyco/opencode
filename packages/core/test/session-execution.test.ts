@@ -1374,7 +1374,9 @@ function buildExecution(
         Layer.provide(Layer.succeed(Job.Service, jobs)),
         // Do not reuse the outer harness's selector with its already-captured Location map.
         Layer.provide(
-          LayerNode.compile(Instance.byLocationNode, [[LocationServiceMap.node, locations]]).pipe(Layer.fresh),
+          LayerNode.compile(Instance.byLocationNode, {
+            replacements: [LocationServiceMap.node.replace(locations)],
+          }).pipe(Layer.fresh),
         ),
       ),
       scope,
