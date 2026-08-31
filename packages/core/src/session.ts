@@ -468,7 +468,8 @@ const layer = Layer.effect(
           Effect.gen(function* () {
             const latest = yield* result.get(input.sessionID)
             const source = yield* fs.stat(latest.location.directory).pipe(Effect.orElseSucceed(() => undefined))
-            if (!source || source.type !== "Directory") {
+            // Active runners must hand off at a step boundary to retain their continuation.
+            if ((!source || source.type !== "Directory") && !(yield* execution.isActive(input.sessionID))) {
               const cancellations = (yield* SessionInbox.moveIDs(db, input.sessionID)).map(
                 (item) => [SessionEvent.InboxCancelled, { sessionID: input.sessionID, inboxID: item.id }] as const,
               )
