@@ -6,12 +6,69 @@ import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { uuid } from "@/utils/uuid"
 import { getCursorPosition } from "./editor-dom"
-import { createBlobReference, type DraftStore } from "@/utils/draft-store"
+import { createBlobReference, type BlobReference, type DraftStore } from "@/utils/draft-store"
 import { attachmentMime } from "./files"
 import { normalizePaste, pasteMode } from "./paste"
 
 type PromptTarget = Pick<ReturnType<ReturnType<typeof usePrompt>["capture"]>, "current" | "cursor" | "set">
 type AttachmentTarget = { prompt: PromptTarget; cursor: number | undefined }
+
+const MAX_IMAGE_DIM = 1920
+const IMAGE_QUALITY = 0.82
+
+// Downscale and re-encode an image client-side. Converts HEIC/WebP/JPEG to JPEG so the
+// payload stays small across slow/remote links and the vision model receives a supported
+// format. PNG is kept as PNG to preserve transparency. Returns null when the image can't
+// be decoded or the size wasn't reduced, so callers fall back to the original file.
+async function optimizeImage(file: File, mime: string): Promise<{ blob: Blob; mime: string } | null> {
+  if (!mime.startsWith("image/") || mime === "image/svg+xml" || mime === "image/gif") return null
+  try {
+    const bitmap = await createImageBitmap(file)
+    const scale = Math.min(MAX_IMAGE_DIM / bitmap.width, MAX_IMAGE_DIM / bitmap.height, 1)
+    const width = Math.max(1, Math.round(bitmap.width * scale))
+    const height = Math.max(1, Math.round(bitmap.height * scale))
+    const canvas = document.createElement("canvas")
+    canvas.width = width
+    canvas.height = height
+    const ctx = canvas.getContext("2d")
+    if (!ctx) {
+      bitmap.close()
+      return null
+    }
+    ctx.drawImage(bitmap, 0, 0, width, height)
+    bitmap.close()
+    const keepPng = mime === "image/png"
+    const outMime = keepPng ? "image/png" : "image/jpeg"
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, outMime, keepPng ? undefined : IMAGE_QUALITY),
+    )
+    if (!blob || blob.size >= file.size) return null
+    return { blob, mime: outMime }
+  } catch (error) {
+    console.warn("[attachments] image optimize failed, using original:", error)
+    return null
+  }
+}
+
+const OPTIMIZE_TIMEOUT = 2000
+
+// Resolve to the value, or null if `p` doesn't settle within `ms`. Lets a slow or
+// hanging image-decode/canvas fall back to the original file without blocking the UI.
+function withTimeout<T>(p: Promise<T | null>, ms: number): Promise<T | null> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(null), ms)
+    p.then(
+      (value) => {
+        clearTimeout(timer)
+        resolve(value)
+      },
+      () => {
+        clearTimeout(timer)
+        resolve(null)
+      },
+    )
+  })
+}
 
 type PromptAttachmentsCoreInput = {
   capture: () => PromptTarget
@@ -51,13 +108,37 @@ export function createPromptAttachmentsCore(input: PromptAttachmentsCoreInput) {
       return false
     }
 
+    let finalMime = mime
+    let payload: Blob = file
+    if (mime.startsWith("image/")) {
+      const optimized = await withTimeout(optimizeImage(file, mime), OPTIMIZE_TIMEOUT)
+      if (optimized) {
+        finalMime = optimized.mime
+        payload = optimized.blob
+      } else {
+        console.warn("[attachments] image not optimized (timeout/fail/same-size), using original:", {
+          name: file.name,
+          mime,
+          size: file.size,
+        })
+      }
+    }
+
+    let blob: BlobReference | null = null
+    try {
+      blob = input.draftStore ? await input.draftStore.putBlob(payload) : await createBlobReference(payload)
+    } catch (error) {
+      console.warn("[attachments] putBlob failed, falling back to createBlobReference:", error)
+      blob = await createBlobReference(payload)
+    }
+
     const attachment: ImageAttachmentPart = {
       type: "image",
       id: uuid(),
       filename: file.name,
       sourcePath: input.getPathForFile?.(file) || undefined,
-      mime,
-      blob: input.draftStore ? await input.draftStore.putBlob(file) : await createBlobReference(file),
+      mime: finalMime,
+      blob,
     }
     target.prompt.set([...target.prompt.current(), attachment], target.cursor)
     return true
