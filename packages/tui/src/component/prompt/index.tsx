@@ -103,6 +103,10 @@ const money = new Intl.NumberFormat("en-US", {
 
 const DRAFT_RETENTION_MIN_CHARS = 20
 
+// How long submit waits for a reconnecting workspace to go live before
+// treating it as unavailable (see the workspace status guard in submitInner).
+const WAIT_FOR_WORKSPACE_TIMEOUT = 10_000
+
 function randomIndex(count: number) {
   if (count <= 0) return 0
   return Math.floor(Math.random() * count)
@@ -974,7 +978,7 @@ export function Prompt(props: PromptProps) {
     const workspaceSession = props.sessionID ? sync.session.get(props.sessionID) : undefined
     const workspaceID = workspaceSession?.workspaceID
     const status = () => (workspaceID ? project.workspace.status(workspaceID) : undefined)
-    if (status() === "error") {
+    const unavailable = () => {
       dialog.replace(() => (
         <DialogWorkspaceUnavailable
           onRestore={() => {
@@ -985,18 +989,23 @@ export function Prompt(props: PromptProps) {
       ))
       return false
     }
+    if (status() === "error") return unavailable()
     if (status() !== undefined && status() !== "connected") {
+      // Wait for the workspace to go live (reconnect after interrupt/restart)
+      // before treating it as unavailable. Bounded so a genuinely dead
+      // workspace still surfaces the chooser instead of hanging the prompt.
+      const deadline = Date.now() + WAIT_FOR_WORKSPACE_TIMEOUT
       await new Promise<void>((resolve) => {
         const interval = setInterval(() => {
           const s = status()
-          if (s === "connected" || s === "error") {
+          if (s === "connected" || s === "error" || Date.now() > deadline) {
             clearInterval(interval)
             resolve()
           }
         }, 100)
         onCleanup(() => clearInterval(interval))
       })
-      if (status() !== "connected") return false
+      if (status() !== "connected") return unavailable()
     }
 
     const variant = local.model.variant.current()
