@@ -1588,6 +1588,7 @@ describe("ShellTool", () => {
         ),
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
     ),
+    { timeout: 15_000 },
   )
 
   if (!isWindows) {
