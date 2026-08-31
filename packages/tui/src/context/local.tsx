@@ -1,7 +1,7 @@
 import { createStore } from "solid-js/store"
 import { dedupeWith } from "effect/Array"
 import { createSimpleContext } from "./helper"
-import { batch, createMemo, onCleanup } from "solid-js"
+import { batch, createMemo, createResource, onCleanup } from "solid-js"
 import { useEvent } from "./event"
 import path from "path"
 import { useTuiPaths } from "./runtime"
@@ -30,6 +30,22 @@ export function parseModel(model: string) {
     providerID: providerID,
     modelID: rest.join("/"),
   }
+}
+
+/**
+ * A session stored without a model runs on the server's default model, so the
+ * status line shows that effective model instead of claiming no provider is
+ * selected. "No provider selected" remains only when no usable default exists.
+ */
+export function withDefaultModelFallback(options: {
+  selection: (ModelPreferenceModel & { variant?: string }) | undefined
+  defaultModel: ModelPreferenceModel | undefined
+  isValid: (model: ModelPreferenceModel) => boolean
+  variantPreference: (model: ModelPreferenceModel) => string | undefined
+}) {
+  if (options.selection) return options.selection
+  if (!options.defaultModel || !options.isValid(options.defaultModel)) return undefined
+  return { ...options.defaultModel, variant: normalizeModelVariant(options.variantPreference(options.defaultModel)) }
 }
 
 export function recentModels(model: ModelPreferenceModel, recent: ModelPreferenceModel[]) {
@@ -217,8 +233,30 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         )
       })
 
+      const [serverDefaultModel] = createResource(
+        () => {
+          const ref = location.ref ?? data.location.default()
+          // Refetch when the catalog changes, such as a provider connecting.
+          return JSON.stringify([ref.directory, ref.workspaceID, models()?.length ?? -1])
+        },
+        async () => {
+          const ref = location.ref ?? data.location.default()
+          const response = await client.api.model
+            .default({ location: { directory: ref.directory, workspace: ref.workspaceID } })
+            .catch(() => undefined)
+          if (!response?.data) return undefined
+          return { providerID: response.data.providerID, modelID: response.data.id }
+        },
+      )
+
       const currentSelection = createMemo<ModelSelection | undefined>(() => {
-        if (route.data.type === "session") return sessionSelection(route.data.sessionID)
+        if (route.data.type === "session")
+          return withDefaultModelFallback({
+            selection: sessionSelection(route.data.sessionID),
+            defaultModel: serverDefaultModel(),
+            isValid: isModelValid,
+            variantPreference: (model) => preferences.variant[modelPreferenceKey(model)],
+          })
         const model = newSessionModel()
         if (!model) return
         return { ...model, variant: normalizeModelVariant(preferences.variant[modelPreferenceKey(model)]) }
