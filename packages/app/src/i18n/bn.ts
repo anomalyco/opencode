@@ -961,6 +961,8 @@ export const dict: Record<string, string> = {
     "কম্পোজারে এজেন্টদের মধ্যে স্যুইচ করুন। লুকানো হলে, বিল্ড এজেন্টে ডিফল্ট।",
   "settings.general.row.reasoningSummaries.title": "যুক্তির সারাংশ দেখান",
   "settings.general.row.reasoningSummaries.description": "টাইমলাইনে মডেল যুক্তির সারাংশ প্রদর্শন করুন",
+  "settings.general.row.collapsibleReasoning.title": "Collapsible reasoning",
+  "settings.general.row.collapsibleReasoning.description": "Display reasoning as collapsible cards in the timeline",
   "settings.general.row.shellToolPartsExpanded.title": "শেল টুল অংশ প্রসারিত",
   "settings.general.row.shellToolPartsExpanded.description": "টাইমলাইনে ডিফল্টরূপে প্রসারিত শেল টুল অংশগুলি দেখান",
   "settings.general.row.editToolPartsExpanded.title": "সম্পাদনা টুল অংশ প্রসারিত করুন",

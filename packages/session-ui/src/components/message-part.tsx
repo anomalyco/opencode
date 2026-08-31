@@ -203,6 +203,7 @@ export interface MessagePartProps {
   showAssistantCopyPartID?: string | null
   turnDurationMs?: number
   useV2Actions?: boolean
+  collapsibleReasoning?: boolean
 }
 
 function MessageActionButton(
@@ -1448,6 +1449,7 @@ export function Part(props: MessagePartProps) {
         showAssistantCopyPartID={props.showAssistantCopyPartID}
         turnDurationMs={props.turnDurationMs}
         useV2Actions={props.useV2Actions}
+        collapsibleReasoning={props.collapsibleReasoning}
       />
     </Show>
   )
@@ -1756,19 +1758,195 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   )
 }
 
-PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
+PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props: MessagePartProps) {
   const data = useData()
+  const i18n = useI18n()
   const part = () => props.part as ReasoningPart
   const streaming = createMemo(
     () => props.message.role === "assistant" && typeof (props.message as AssistantMessage).time.completed !== "number",
   )
   const text = () => readPartText(data.store.part_text_accum_delta, part())
+  const isCollapsible = () => props.collapsibleReasoning ?? false
 
-  return (
+  // plain mode - keep original behavior
+  const Plain = () => (
     <Show when={text()}>
       <div data-component="reasoning-part" data-timeline-part-id={part().id}>
         <PacedMarkdown text={text()} cacheKey={part().id} streaming={streaming()} />
       </div>
+    </Show>
+  )
+
+  const CollapsibleCard = () => {
+    const [open, setOpen] = createSignal(false)
+    const [userInteracted, setUserInteracted] = createSignal(false)
+    const [scrollRef, setScrollRef] = createSignal<HTMLDivElement>()
+    const [innerRef, setInnerRef] = createSignal<HTMLDivElement>()
+    const [autoFollow, setAutoFollow] = createSignal(true)
+    const subtitle = createMemo(() => {
+      const t = text() ?? ""
+      const firstLine = t.trim().split("\n")[0] ?? ""
+      return firstLine.slice(0, 80)
+    })
+    const isLastPart = createMemo(() => {
+      const parts = (data.store.part as Record<string, any[]>)[props.message.id] ?? []
+      if (!parts.length) return true
+      return parts.at(-1)?.id === part().id
+    })
+    createEffect(() => {
+      if (userInteracted()) return
+      if (streaming() && isLastPart()) {
+        setOpen(true)
+      } else {
+        setOpen(false)
+      }
+    })
+    const isActive = () => streaming() && isLastPart()
+    // when card opens, start following tail
+    createEffect(() => {
+      if (open()) {
+        setAutoFollow(true)
+        requestAnimationFrame(() => {
+          const el = scrollRef()
+          if (el) el.scrollTop = el.scrollHeight
+        })
+      }
+    })
+    // continuous auto-scroll while streaming and following — handles large gaps and paced rendering
+    createEffect(() => {
+      if (!open() || !streaming() || !autoFollow()) return
+      let raf: number
+      let lastHeight = -1
+      const tick = () => {
+        const el = scrollRef()
+        if (!el || !open() || !autoFollow()) return
+        if (el.scrollHeight !== lastHeight) {
+          lastHeight = el.scrollHeight
+          el.scrollTop = el.scrollHeight
+        } else if (el.scrollHeight - el.scrollTop - el.clientHeight > 2) {
+          el.scrollTop = el.scrollHeight
+        }
+        if (open() && streaming() && autoFollow()) {
+          raf = requestAnimationFrame(tick)
+        }
+      }
+      raf = requestAnimationFrame(tick)
+      onCleanup(() => cancelAnimationFrame(raf))
+    })
+    // fallback: also scroll on text growth
+    createEffect(() => {
+      void text()
+      void open()
+      void autoFollow()
+      void isLastPart()
+      void scrollRef()
+      const el = scrollRef()
+      if (!el || !open() || !autoFollow()) return
+      requestAnimationFrame(() => {
+        const e = scrollRef()
+        if (!e || !open() || !autoFollow()) return
+        e.scrollTop = e.scrollHeight
+      })
+    })
+    // observe inner content size and mutations (covers PacedMarkdown stepwise)
+    createEffect(() => {
+      const scroller = scrollRef()
+      const target = innerRef()
+      if (!scroller || !target) return
+      const scrollToBottom = () => {
+        const s = scrollRef()
+        if (!s || !open() || !autoFollow()) return
+        s.scrollTop = s.scrollHeight
+      }
+      const ro = new ResizeObserver(scrollToBottom)
+      ro.observe(target)
+      const mo = new MutationObserver(scrollToBottom)
+      mo.observe(target, { childList: true, subtree: true, characterData: true })
+      onCleanup(() => {
+        ro.disconnect()
+        mo.disconnect()
+      })
+    })
+    const handleScroll = () => {
+      const el = scrollRef()
+      if (!el) return
+      const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40
+      setAutoFollow(nearBottom)
+    }
+    const handleOpenChange = (value: boolean) => {
+      setUserInteracted(true)
+      setOpen(value)
+      if (value) setAutoFollow(true)
+    }
+    const handleCopy = async () => {
+      const t = text()
+      if (t) await writeClipboard(t)
+    }
+    return (
+      <Show when={text()}>
+        <div data-component="reasoning-part" data-timeline-part-id={part().id}>
+          <Collapsible open={open()} onOpenChange={handleOpenChange} class="tool-collapsible">
+            <Collapsible.Trigger>
+              <div data-component="tool-trigger" data-clickable="true">
+                <div data-slot="basic-tool-tool-trigger-content">
+                  <div data-slot="basic-tool-tool-info">
+                    <div data-slot="basic-tool-tool-info-structured">
+                      <div data-slot="basic-tool-tool-info-main">
+                        <span data-slot="basic-tool-tool-title">
+                          <Icon name="brain" size="small" />
+                          <span style={{ "margin-left": "6px" }}>
+                            <TextShimmer text={i18n.t("ui.sessionTurn.reasoning.title")} active={streaming() && isLastPart()} />
+                          </span>
+                        </span>
+                        <Show when={subtitle()}>
+                          <span data-slot="basic-tool-tool-subtitle">{subtitle()}</span>
+                        </Show>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <Collapsible.Arrow />
+              </div>
+            </Collapsible.Trigger>
+            <Collapsible.Content>
+              <div
+                ref={setScrollRef}
+                data-component="tool-output"
+                data-scrollable
+                tabIndex={0}
+                role="region"
+                aria-label={i18n.t("ui.scrollView.ariaLabel")}
+                style={{ "max-height": "320px", "overflow": "auto" }}
+                onScroll={handleScroll}
+              >
+                <div ref={setInnerRef}>
+                  <PacedMarkdown text={text()} cacheKey={part().id} streaming={streaming() && isLastPart()} />
+                </div>
+              </div>
+              <div style={{ display: "flex", "justify-content": "flex-end", padding: "4px 8px" }}>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    void handleCopy()
+                  }}
+                  aria-label={i18n.t("ui.message.copyResponse")}
+                  style={{ "font-size": "12px", opacity: "0.6" }}
+                >
+                  {i18n.t("ui.message.copyResponse")}
+                </button>
+              </div>
+            </Collapsible.Content>
+          </Collapsible>
+        </div>
+      </Show>
+    )
+  }
+
+  return (
+    <Show when={true}>
+      <Show when={!isCollapsible()} fallback={<CollapsibleCard />}>
+        <Plain />
+      </Show>
     </Show>
   )
 }

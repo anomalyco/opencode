@@ -782,6 +782,8 @@ export const dict = {
   "settings.general.row.reasoningSummaries.title": "Reasoning-Zusammenfassungen anzeigen",
   "settings.general.row.reasoningSummaries.description":
     "Zusammenfassungen des Modell-Reasonings in der Timeline anzeigen",
+    "settings.general.row.collapsibleReasoning.title": "Collapsible reasoning",
+  "settings.general.row.collapsibleReasoning.description": "Display reasoning as collapsible cards in the timeline",
   "settings.general.row.shellToolPartsExpanded.title": "Shell-Tool-Abschnitte ausklappen",
   "settings.general.row.shellToolPartsExpanded.description":
     "Shell-Tool-Abschnitte standardmäßig in der Timeline ausgeklappt anzeigen",

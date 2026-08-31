@@ -961,6 +961,8 @@ export const dict = {
     "بین عوامل در آهنگساز جابجا شوید. هنگامی که مخفی می شود، به طور پیش فرض بر روی Build agent قرار می گیرد.",
   "settings.general.row.reasoningSummaries.title": "نمایش خلاصه های استدلال",
   "settings.general.row.reasoningSummaries.description": "نمایش خلاصه های استدلال مدل در جدول زمانی",
+  "settings.general.row.collapsibleReasoning.title": "Collapsible reasoning",
+  "settings.general.row.collapsibleReasoning.description": "Display reasoning as collapsible cards in the timeline",
   "settings.general.row.shellToolPartsExpanded.title": "قطعات ابزار پوسته را گسترش دهید",
   "settings.general.row.shellToolPartsExpanded.description":
     "نمایش قطعات ابزار پوسته که به طور پیش‌فرض در تایم لاین گسترش یافته‌اند",

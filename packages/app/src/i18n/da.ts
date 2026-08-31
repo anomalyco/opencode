@@ -828,6 +828,8 @@ export const dict = {
     "Skift mellem agenter i promptfeltet. Når vælgeren er skjult, bruges Build-agenten som standard.",
   "settings.general.row.reasoningSummaries.title": "Vis ræsonneringsoversigter",
   "settings.general.row.reasoningSummaries.description": "Vis oversigter over modellens ræsonnering på tidslinjen",
+  "settings.general.row.collapsibleReasoning.title": "Collapsible reasoning",
+  "settings.general.row.collapsibleReasoning.description": "Display reasoning as collapsible cards in the timeline",
 
   "settings.general.row.shellToolPartsExpanded.title": "Udvid shell-værktøjsdele",
   "settings.general.row.shellToolPartsExpanded.description": "Vis shell-værktøjsdele udvidet som standard i tidslinjen",

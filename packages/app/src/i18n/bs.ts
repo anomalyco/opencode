@@ -951,6 +951,8 @@ export const dict = {
   "settings.general.row.showCustomAgents.description": "Prikaži izbor agenta u uređivaču poruke",
   "settings.general.row.reasoningSummaries.title": "Prikaži sažetke rasuđivanja",
   "settings.general.row.reasoningSummaries.description": "Prikaži sažetke rasuđivanja modela na vremenskoj traci",
+  "settings.general.row.collapsibleReasoning.title": "Collapsible reasoning",
+  "settings.general.row.collapsibleReasoning.description": "Display reasoning as collapsible cards in the timeline",
 
   "settings.general.row.shellToolPartsExpanded.title": "Proširi dijelove shell alata",
   "settings.general.row.shellToolPartsExpanded.description":

@@ -969,6 +969,8 @@ export const dict = {
     "Pārslēgties starp aģentiem redaktorā. Ja paslēpts, tiek izmantots Build aģents.",
   "settings.general.row.reasoningSummaries.title": "Rādīt pamatojuma kopsavilkumus",
   "settings.general.row.reasoningSummaries.description": "Rādīt modeļa pamatojuma kopsavilkumus laika joslā",
+  "settings.general.row.collapsibleReasoning.title": "Collapsible reasoning",
+  "settings.general.row.collapsibleReasoning.description": "Display reasoning as collapsible cards in the timeline",
   "settings.general.row.shellToolPartsExpanded.title": "Izvērst čaulas rīka daļas",
   "settings.general.row.shellToolPartsExpanded.description":
     "Pēc noklusējuma rādīt čaulas rīka daļas izvērstas laika joslā",

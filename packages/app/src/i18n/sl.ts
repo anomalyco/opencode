@@ -968,6 +968,8 @@ export const dict = {
     "Preklapljanje med agenti v skladatelju. Ko je skrit, je privzeto nastavljen na Build agent.",
   "settings.general.row.reasoningSummaries.title": "Prikažite povzetke sklepanja",
   "settings.general.row.reasoningSummaries.description": "Prikažite povzetke sklepanja modela na časovnici",
+  "settings.general.row.collapsibleReasoning.title": "Collapsible reasoning",
+  "settings.general.row.collapsibleReasoning.description": "Display reasoning as collapsible cards in the timeline",
   "settings.general.row.shellToolPartsExpanded.title": "Razširite dele orodja lupine",
   "settings.general.row.shellToolPartsExpanded.description":
     "Pokaži privzeto razširjene dele orodja lupine na časovnici",

@@ -959,6 +959,8 @@ export const dict = {
     "Helilooja agentide vahel vahetamine. Kui see on peidetud, on vaikimisi Agent.",
   "settings.general.row.reasoningSummaries.title": "Näita põhjenduste kokkuvõtteid",
   "settings.general.row.reasoningSummaries.description": "Kuva mudeli arutluskäigu kokkuvõtted ajaskaalal",
+  "settings.general.row.collapsibleReasoning.title": "Collapsible reasoning",
+  "settings.general.row.collapsibleReasoning.description": "Display reasoning as collapsible cards in the timeline",
   "settings.general.row.shellToolPartsExpanded.title": "Laienda shellitööriista osi",
   "settings.general.row.shellToolPartsExpanded.description":
     "Kuva shellitööriista osad ajaskaalal vaikimisi laiendatuna",

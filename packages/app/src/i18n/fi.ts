@@ -864,6 +864,8 @@ export const dict = {
     "Vaihda agenttien välillä viestikentässä. Kun valinta on piilotettu, Build-agenttia käytetään oletuksena.",
   "settings.general.row.reasoningSummaries.title": "Näytä päättelyn yhteenvedot",
   "settings.general.row.reasoningSummaries.description": "Näytä mallin päättelyn yhteenvedot aikajanalla",
+  "settings.general.row.collapsibleReasoning.title": "Collapsible reasoning",
+  "settings.general.row.collapsibleReasoning.description": "Display reasoning as collapsible cards in the timeline",
   "settings.general.row.shellToolPartsExpanded.title": "Laajenna shell-työkalun osat",
   "settings.general.row.shellToolPartsExpanded.description":
     "Näytä shell-työkalun osat oletuksena laajennettuina aikajanalla",

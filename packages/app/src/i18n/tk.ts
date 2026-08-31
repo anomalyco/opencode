@@ -966,6 +966,8 @@ export const dict = {
   "settings.general.row.reasoningSummaries.title": "Pikirleriň gysgaça mazmunyny görkeziň",
   "settings.general.row.reasoningSummaries.description":
     "Wagt görkezijisinde model pikirlenişiň gysgaça mazmunyny görkeziň",
+    "settings.general.row.collapsibleReasoning.title": "Collapsible reasoning",
+  "settings.general.row.collapsibleReasoning.description": "Display reasoning as collapsible cards in the timeline",
   "settings.general.row.shellToolPartsExpanded.title": "Shell gural böleklerini giňeltmek",
   "settings.general.row.shellToolPartsExpanded.description":
     "Wagt görkezijisinde deslapky görnüşde giňeldilen shell gural böleklerini görkeziň",

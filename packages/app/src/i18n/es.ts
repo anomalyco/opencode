@@ -959,6 +959,8 @@ export const dict = {
   "settings.general.row.reasoningSummaries.title": "Mostrar resúmenes de razonamiento",
   "settings.general.row.reasoningSummaries.description":
     "Mostrar resúmenes del razonamiento del modelo en la línea de tiempo",
+    "settings.general.row.collapsibleReasoning.title": "Collapsible reasoning",
+  "settings.general.row.collapsibleReasoning.description": "Display reasoning as collapsible cards in the timeline",
   "settings.general.row.shellToolPartsExpanded.title": "Expandir partes de la herramienta shell",
   "settings.general.row.shellToolPartsExpanded.description":
     "Mostrar las partes de la herramienta shell expandidas por defecto en la línea de tiempo",

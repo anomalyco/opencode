@@ -346,6 +346,18 @@ export const SettingsGeneralV2: Component<{
         </SettingsRowV2>
 
         <SettingsRowV2
+          title={language.t("settings.general.row.collapsibleReasoning.title")}
+          description={language.t("settings.general.row.collapsibleReasoning.description")}
+        >
+          <div data-action="settings-feed-collapsible-reasoning">
+            <Switch
+              checked={settings.general.collapsibleReasoning()}
+              onChange={(checked) => settings.general.setCollapsibleReasoning(checked)}
+            />
+          </div>
+        </SettingsRowV2>
+
+        <SettingsRowV2
           title={language.t("settings.general.row.shellToolPartsExpanded.title")}
           description={language.t("settings.general.row.shellToolPartsExpanded.description")}
         >

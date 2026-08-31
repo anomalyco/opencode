@@ -154,6 +154,8 @@ export const dict = {
   "ui.tool.websearch": "Búsqueda web",
   "ui.tool.websearch.provider": "{{provider}} Búsqueda web",
   "ui.tool.shell": "Shell",
+  "ui.sessionTurn.reasoning.title": "Reasoning",
+  "ui.sessionTurn.reasoning.subtitle": "Model reasoning",
   "ui.tool.patch": "Parche",
   "ui.tool.todos": "Tareas",
   "ui.tool.todos.read": "Leer tareas",

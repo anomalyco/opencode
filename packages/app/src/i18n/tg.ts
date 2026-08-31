@@ -969,6 +969,8 @@ export const dict = {
     "Гузариш байни агентҳо дар оҳангсоз. Ҳангоми пинҳон, пешфарз ба Сохтани агент.",
   "settings.general.row.reasoningSummaries.title": "Ҷамъбасти далелҳоро нишон диҳед",
   "settings.general.row.reasoningSummaries.description": "Дар ҷадвали вақт хулосаҳои далелҳои моделиро нишон диҳед",
+  "settings.general.row.collapsibleReasoning.title": "Collapsible reasoning",
+  "settings.general.row.collapsibleReasoning.description": "Display reasoning as collapsible cards in the timeline",
   "settings.general.row.shellToolPartsExpanded.title": "Қисмҳои shell асбобро васеъ кунед",
   "settings.general.row.shellToolPartsExpanded.description":
     "Дар ҷадвали вақт қисмҳои асбобҳои shell васеъшударо нишон диҳед",

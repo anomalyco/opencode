@@ -963,6 +963,8 @@ export const dict: Record<string, string> = {
     "कम्पोजरमा एजेन्टहरू बीच स्विच गर्नुहोस्। लुकेको बेला, बिल्ड एजेन्टमा पूर्वनिर्धारित हुन्छ।",
   "settings.general.row.reasoningSummaries.title": "तर्क सारांशहरू देखाउनुहोस्",
   "settings.general.row.reasoningSummaries.description": "टाइमलाइनमा मोडेल तर्क सारांशहरू प्रदर्शन गर्नुहोस्",
+  "settings.general.row.collapsibleReasoning.title": "Collapsible reasoning",
+  "settings.general.row.collapsibleReasoning.description": "Display reasoning as collapsible cards in the timeline",
   "settings.general.row.shellToolPartsExpanded.title": "शेल उपकरणका भागहरू विस्तार गर्नुहोस्",
   "settings.general.row.shellToolPartsExpanded.description":
     "टाइमलाइनमा पूर्वनिर्धारित रूपमा विस्तारित शेल उपकरण भागहरू देखाउनुहोस्",

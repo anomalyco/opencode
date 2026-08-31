@@ -973,6 +973,8 @@ export const dict = {
     "Váltás az ágensek között a zeneszerzőben. Ha rejtett, alapértelmezés szerint Build agent.",
   "settings.general.row.reasoningSummaries.title": "Mutasson érvelési összefoglalókat",
   "settings.general.row.reasoningSummaries.description": "Modell indoklási összefoglalók megjelenítése az idővonalon",
+  "settings.general.row.collapsibleReasoning.title": "Collapsible reasoning",
+  "settings.general.row.collapsibleReasoning.description": "Display reasoning as collapsible cards in the timeline",
   "settings.general.row.shellToolPartsExpanded.title": "Shelleszköz részeinek kibontása",
   "settings.general.row.shellToolPartsExpanded.description":
     "Alapértelmezés szerint kibontott shell eszközrészek megjelenítése az idővonalon",

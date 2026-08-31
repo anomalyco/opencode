@@ -976,6 +976,8 @@ export const dict = {
     "Chuyển đổi giữa các tác nhân trong trình soạn thảo. Khi ẩn, tác nhân mặc định là Build.",
   "settings.general.row.reasoningSummaries.title": "Hiển thị tóm tắt lý luận",
   "settings.general.row.reasoningSummaries.description": "Hiển thị tóm tắt lý luận mô hình trong dòng thời gian",
+  "settings.general.row.collapsibleReasoning.title": "Collapsible reasoning",
+  "settings.general.row.collapsibleReasoning.description": "Display reasoning as collapsible cards in the timeline",
   "settings.general.row.shellToolPartsExpanded.title": "Mở rộng các phần của công cụ shell",
   "settings.general.row.shellToolPartsExpanded.description":
     "Hiển thị các phần công cụ shell được mở rộng theo mặc định trong dòng thời gian",

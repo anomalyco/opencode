@@ -142,6 +142,8 @@ export const dict = {
   "ui.tool.websearch": "Търсене в мрежата",
   "ui.tool.websearch.provider": "{{provider}} Търсене в мрежата",
   "ui.tool.shell": "Shell",
+  "ui.sessionTurn.reasoning.title": "Reasoning",
+  "ui.sessionTurn.reasoning.subtitle": "Model reasoning",
   "ui.tool.patch": "Patch",
   "ui.tool.todos": "Задачи",
   "ui.tool.todos.read": "Прочетете задачи",

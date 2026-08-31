@@ -143,6 +143,8 @@ export const dict: Record<string, string> = {
   "ui.tool.websearch": "ویب تلاش",
   "ui.tool.websearch.provider": "{{provider}} ویب تلاش",
   "ui.tool.shell": "شیل",
+  "ui.sessionTurn.reasoning.title": "Reasoning",
+  "ui.sessionTurn.reasoning.subtitle": "Model reasoning",
   "ui.tool.patch": "پیچ",
   "ui.tool.todos": "زیر التوا کام",
   "ui.tool.todos.read": "زیر التوا کام پڑھیں",

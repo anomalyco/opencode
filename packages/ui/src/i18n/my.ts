@@ -143,6 +143,8 @@ export const dict = {
   "ui.tool.websearch": "ဝဘ်ရှာဖွေမှု",
   "ui.tool.websearch.provider": "{{provider}} ဝဘ်ရှာဖွေမှု",
   "ui.tool.shell": "Shell",
+  "ui.sessionTurn.reasoning.title": "Reasoning",
+  "ui.sessionTurn.reasoning.subtitle": "Model reasoning",
   "ui.tool.patch": "Patch",
   "ui.tool.todos": "လုပ်စရာများ",
   "ui.tool.todos.read": "လုပ်စရာများကို ဖတ်ပါ။",

@@ -970,6 +970,8 @@ export const dict = {
     "Փոխարկեք կոմպոզիտորի գործակալների միջև։ Երբ թաքնված է, կանխադրված է Build agent:",
   "settings.general.row.reasoningSummaries.title": "Ցույց տալ հիմնավորման ամփոփագրերը",
   "settings.general.row.reasoningSummaries.description": "Ցուցադրել մոդելի հիմնավորման ամփոփագրերը ժամանակացույցում",
+  "settings.general.row.collapsibleReasoning.title": "Collapsible reasoning",
+  "settings.general.row.collapsibleReasoning.description": "Display reasoning as collapsible cards in the timeline",
   "settings.general.row.shellToolPartsExpanded.title": "Ընդարձակել Shell գործիքի մասերը",
   "settings.general.row.shellToolPartsExpanded.description":
     "Ցուցադրել ժամանակացույցում լռելյայնորեն ընդլայնված shell գործիքի մասերը",

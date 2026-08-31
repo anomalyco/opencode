@@ -978,6 +978,8 @@ export const dict = {
     "Εναλλαγή μεταξύ πρακτόρων στον συνθέτη. Όταν είναι κρυφό, ορίζεται από προεπιλογή Build agent.",
   "settings.general.row.reasoningSummaries.title": "Εμφάνιση περιλήψεων συλλογισμών",
   "settings.general.row.reasoningSummaries.description": "Εμφάνιση περιλήψεων συλλογισμών μοντέλων στη γραμμή χρόνου",
+  "settings.general.row.collapsibleReasoning.title": "Collapsible reasoning",
+  "settings.general.row.collapsibleReasoning.description": "Display reasoning as collapsible cards in the timeline",
   "settings.general.row.shellToolPartsExpanded.title": "Ανάπτυξη εξαρτημάτων εργαλείου κελύφους",
   "settings.general.row.shellToolPartsExpanded.description":
     "Εμφάνιση εξαρτημάτων εργαλείου κελύφους που έχουν αναπτυχθεί από προεπιλογή στη γραμμή χρόνου",

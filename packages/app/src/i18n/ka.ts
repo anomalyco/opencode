@@ -963,6 +963,8 @@ export const dict = {
     "გადართვა კომპოზიტორში აგენტებს შორის. როდესაც დამალულია, ნაგულისხმევად არის Build აგენტი.",
   "settings.general.row.reasoningSummaries.title": "მსჯელობის შეჯამების ჩვენება",
   "settings.general.row.reasoningSummaries.description": "მოდელების მსჯელობის რეზიუმეების ჩვენება ვადებში",
+  "settings.general.row.collapsibleReasoning.title": "Collapsible reasoning",
+  "settings.general.row.collapsibleReasoning.description": "Display reasoning as collapsible cards in the timeline",
   "settings.general.row.shellToolPartsExpanded.title": "Shell ხელსაწყოს ნაწილების გაფართოება",
   "settings.general.row.shellToolPartsExpanded.description":
     "Shell ხელსაწყოს ნაწილების ნაგულისხმევად გაფართოებული ჩვენება ქრონოლოგიაში",

@@ -126,6 +126,8 @@ export const dict = {
   "ui.tool.websearch": "웹 검색",
   "ui.tool.websearch.provider": "{{provider}} 웹 검색",
   "ui.tool.shell": "셸",
+  "ui.sessionTurn.reasoning.title": "Reasoning",
+  "ui.sessionTurn.reasoning.subtitle": "Model reasoning",
   "ui.tool.patch": "패치",
   "ui.tool.todos": "할 일",
   "ui.tool.todos.read": "할 일 읽기",

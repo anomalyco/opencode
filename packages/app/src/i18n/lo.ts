@@ -956,6 +956,8 @@ export const dict = {
     "ສະຫຼັບລະຫວ່າງຕົວແທນໃນຕົວປະກອບ. ເມື່ອຖືກເຊື່ອງໄວ້, ເລີ່ມຕົ້ນທີ່ຈະສ້າງຕົວແທນ.",
   "settings.general.row.reasoningSummaries.title": "ສະແດງການສັງລວມເຫດຜົນ",
   "settings.general.row.reasoningSummaries.description": "ສະແດງສະຫຼຸບເຫດຜົນຂອງຕົວແບບໃນທາມລາຍ",
+  "settings.general.row.collapsibleReasoning.title": "Collapsible reasoning",
+  "settings.general.row.collapsibleReasoning.description": "Display reasoning as collapsible cards in the timeline",
   "settings.general.row.shellToolPartsExpanded.title": "ຂະຫຍາຍສ່ວນຂອງເຄື່ອງມື Shell",
   "settings.general.row.shellToolPartsExpanded.description":
     "ສະແດງສ່ວນຂອງເຄື່ອງມື Shell ແບບຂະຫຍາຍເປັນຄ່າເລີ່ມຕົ້ນໃນໄທມ໌ລາຍ",

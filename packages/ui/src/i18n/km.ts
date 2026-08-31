@@ -143,6 +143,8 @@ export const dict = {
   "ui.tool.websearch": "ការស្វែងរកតាមអ៊ីនធឺណិត",
   "ui.tool.websearch.provider": "{{provider}} ស្វែងរកគេហទំព័រ",
   "ui.tool.shell": "សែល",
+  "ui.sessionTurn.reasoning.title": "Reasoning",
+  "ui.sessionTurn.reasoning.subtitle": "Model reasoning",
   "ui.tool.patch": "បំណះ",
   "ui.tool.todos": "ការងារត្រូវធ្វើ",
   "ui.tool.todos.read": "អានការងារត្រូវធ្វើ",

@@ -1044,6 +1044,8 @@ export const dict = {
     "Beralih antaragen di penyusun. Saat disembunyikan, Agen Build digunakan sebagai bawaan.",
   "settings.general.row.reasoningSummaries.title": "Tampilkan ringkasan penalaran",
   "settings.general.row.reasoningSummaries.description": "Tampilkan ringkasan penalaran model di linimasa",
+  "settings.general.row.collapsibleReasoning.title": "Collapsible reasoning",
+  "settings.general.row.collapsibleReasoning.description": "Display reasoning as collapsible cards in the timeline",
   "settings.general.row.shellToolPartsExpanded.title": "Bentangkan bagian alat shell",
   "settings.general.row.shellToolPartsExpanded.description":
     "Tampilkan bagian alat shell yang dibentangkan secara bawaan di linimasa",

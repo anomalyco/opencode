@@ -166,6 +166,8 @@ export const dict = {
   "ui.tool.websearch": "بحث الويب",
   "ui.tool.websearch.provider": "{{provider}} بحث الويب",
   "ui.tool.shell": "Shell",
+  "ui.sessionTurn.reasoning.title": "Reasoning",
+  "ui.sessionTurn.reasoning.subtitle": "Model reasoning",
   "ui.tool.patch": "تطبيق رقعة",
   "ui.tool.todos": "المهام",
   "ui.tool.todos.read": "قراءة المهام",

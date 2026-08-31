@@ -942,6 +942,8 @@ export const dict = {
   "settings.general.row.showCustomAgents.description": "በአቀናባሪው ውስጥ ባሉ ወኪሎች መካከል ይቀያይሩ። ሲደበቅ፣ ለግንባታ ወኪል ነባሪዎች ይሆናሉ።",
   "settings.general.row.reasoningSummaries.title": "የምክንያት ማጠቃለያዎችን አሳይ",
   "settings.general.row.reasoningSummaries.description": "የሞዴል ማመዛዘኛ ማጠቃለያዎችን በጊዜ መስመር አሳይ",
+  "settings.general.row.collapsibleReasoning.title": "Collapsible reasoning",
+  "settings.general.row.collapsibleReasoning.description": "Display reasoning as collapsible cards in the timeline",
   "settings.general.row.shellToolPartsExpanded.title": "የሼል መሣሪያ ክፍሎችን ዘርጋ",
   "settings.general.row.shellToolPartsExpanded.description": "የሼል መሣሪያ ክፍሎችን በጊዜ መስመር በነባሪነት ያሳዩ",
   "settings.general.row.editToolPartsExpanded.title": "የመሳሪያ ክፍሎችን ዘርጋ",

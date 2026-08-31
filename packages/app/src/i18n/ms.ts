@@ -963,6 +963,8 @@ export const dict = {
     "Tukar antara ejen dalam penyusun. Jika disembunyikan, lalai kepada ejen Build.",
   "settings.general.row.reasoningSummaries.title": "Papar ringkasan penaakulan",
   "settings.general.row.reasoningSummaries.description": "Papar ringkasan penaakulan model dalam garis masa",
+  "settings.general.row.collapsibleReasoning.title": "Collapsible reasoning",
+  "settings.general.row.collapsibleReasoning.description": "Display reasoning as collapsible cards in the timeline",
   "settings.general.row.shellToolPartsExpanded.title": "Kembangkan bahagian alat shell",
   "settings.general.row.shellToolPartsExpanded.description":
     "Papar bahagian alat shell dikembangkan secara lalai dalam garis masa",

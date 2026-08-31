@@ -150,6 +150,8 @@ export const dict = {
   "ui.tool.websearch": "ค้นหาเว็บ",
   "ui.tool.websearch.provider": "{{provider}} ค้นหาเว็บ",
   "ui.tool.shell": "เชลล์",
+  "ui.sessionTurn.reasoning.title": "Reasoning",
+  "ui.sessionTurn.reasoning.subtitle": "Model reasoning",
   "ui.tool.patch": "แพตช์",
   "ui.tool.todos": "รายการงาน",
   "ui.tool.todos.read": "อ่านรายการงาน",
