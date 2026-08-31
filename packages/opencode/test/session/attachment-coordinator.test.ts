@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Deferred, Effect, Exit, Fiber } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber } from "effect"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { AttachmentCoordinator } from "@/session/attachment/coordinator"
 import { MessageID, PartID, SessionID } from "@/session/schema"
@@ -951,6 +951,100 @@ describe("attachment coordinator", () => {
         expect(scope.owns(late)).toBe(false)
         expect(selectedText(yield* scope.result(assistant(scope.sessionID, "wrong fallback")))).toBe("frozen return")
         yield* scope.close()
+      }),
+    )
+  })
+
+  // T-032-3 — the K14 oracle, and the reason CP-032 forbids landing B-1 without B-3.
+  //
+  // `Scope.result` latches its FIRST caller's message as the retained fallback and keeps it: every
+  // later scoped admission invalidates candidate and observed, but never the fallback. So a child
+  // that answered once, then took more work, is holding that earlier answer when it is cancelled.
+  //
+  // Which of the two gates that fallback reaches is decided entirely by the Exit its owner scope is
+  // finalized with — which is exactly what B-3 changed. The pair below drives the same fixture down
+  // both, and they produce opposite answers.
+  //
+  // Neither arm asserts private state. The fallback identity is established BY CONSTRUCTION (one
+  // `result` call precedes, so the retained fallback can only be that message), and candidate and
+  // observed absence is a PRECONDITION that holds in both arms rather than the thing under test.
+  const stale = "earlier distinctive answer"
+
+  // Deliberately not `Effect.fn`: that widens the requirements channel to `unknown`, and
+  // `runAttached` accepts exactly `Scope`. A plain generator lets R infer from `AttachmentCoordinator.make`.
+  const parkedOnEarlierAnswer = () =>
+    Effect.gen(function* () {
+      const coordinator = yield* AttachmentCoordinator.make
+      const scope = yield* coordinator.open(SessionID.create())
+      // A registered job with NO elected observer. Registration blocks the never-attached immediate
+      // resolution so `result` genuinely parks, while leaving `active` and `wakes` at zero — both
+      // gates park while either is positive, so without this the arms would hang rather than
+      // discriminate (CP-032 §9.3 step 3).
+      yield* scope.reserve(SessionID.create())
+      // A `Deferred<void>` signal plus a holder, rather than `Deferred<TaskSelectedReturn>`:
+      // `Deferred.succeed` is invariant in its value type, so the typed Deferred cannot be passed
+      // where the combinator expects `Deferred<unknown>`.
+      const settled = yield* Deferred.make<void>()
+      const answer: { value: TaskSelectedReturn | undefined } = { value: undefined }
+      yield* scope.result(assistant(scope.sessionID, stale)).pipe(
+        Effect.tap((value) =>
+          Effect.sync(() => {
+            answer.value = value
+          }),
+        ),
+        Effect.ensuring(Deferred.succeed(settled, undefined)),
+        Effect.forkChild,
+      )
+      // Let the waiter reach its park before anything else runs, or a mutant that never parks would
+      // survive this fixture.
+      yield* Effect.yieldNow
+      expect(yield* Deferred.isDone(settled)).toBe(false)
+      // A later scoped admission: invalidates candidate and observed, and leaves the fallback.
+      yield* scope.own(MessageID.ascending())
+      return { scope, settled, answer }
+    })
+
+  test("T-032-3: a cancelled owner scope returns cancellation, never the retained earlier answer", async () => {
+    await runAttached(
+      Effect.gen(function* () {
+        const { scope, settled, answer } = yield* parkedOnEarlierAnswer()
+
+        // What B-3 now supplies for a `cancelled` terminal. `finalizeScope` reads the interrupt and
+        // claims cancellation, so the cancellation-first gate resolves with no evidence fields and
+        // `complete` returns it WITHOUT reattaching the fallback.
+        yield* AttachmentCoordinator.finalizeScope(scope, Exit.failCause(Cause.interrupt()))
+
+        yield* Deferred.await(settled)
+        const resolved = answer.value
+        if (!resolved) throw new Error("the parked result never resolved")
+        expect(resolved.type).toBe("cancelled")
+        expect(selectedText(resolved)).toBeUndefined()
+        // The earlier answer is absent from the whole resolution, not merely unselected.
+        expect(JSON.stringify(resolved)).not.toContain(stale)
+      }),
+    )
+  })
+
+  test("T-032-3 control: finalizing a cancelled owner as success replays the earlier answer", async () => {
+    await runAttached(
+      Effect.gen(function* () {
+        const { scope, settled, answer } = yield* parkedOnEarlierAnswer()
+
+        // THE DEFECT, held as a passing negative control. This is precisely what the lifetime waiter
+        // did before B-3: every terminal, cancellation included, finalized as `Exit.void`. That is
+        // not neutral — it claims nothing and degrades nothing, so `closeNow` marks the unresolved
+        // scope degraded, the DEGRADED gate resolves with candidate and observed absent, `complete`
+        // reattaches the retained fallback, and `select` falls through to it.
+        yield* AttachmentCoordinator.finalizeScope(scope, Exit.void)
+
+        yield* Deferred.await(settled)
+        const resolved = answer.value
+        if (!resolved) throw new Error("the parked result never resolved")
+        // A cancelled task answering "completed" with text from before its cancellation.
+        expect(resolved.type).toBe("evidence")
+        if (resolved.type !== "evidence") return
+        expect(resolved.degraded).toBe(true)
+        expect(selectedText(resolved)).toBe(stale)
       }),
     )
   })

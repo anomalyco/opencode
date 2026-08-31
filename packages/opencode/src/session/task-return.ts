@@ -188,6 +188,22 @@ function select(input: Extract<TaskSelectedReturn, { type: "evidence" }>) {
   return { assistant: input.candidate.assistant, earlierObserved: input.observed.assistant }
 }
 
+/**
+ * The assistant a selected evidence result actually speaks for, by the same precedence the renderer
+ * uses. CP-032 files an answer at the CONTROLLING assistant position rather than at the run-final
+ * one, because eligibility can select an earlier message: a degraded resolution falls through to the
+ * retained fallback, and an observed non-clean turn outranks a later candidate. Filing at the
+ * run-final position would then key the answer on a message the caller never receives.
+ *
+ * This reuses `select` rather than restating it. A second copy of the precedence would be a second
+ * thing to keep in step, and the two disagreeing is exactly the defect it would be introduced to
+ * prevent. Cancellation has no controlling assistant: it carries no evidence and is not filed.
+ */
+export function controllingAssistant(selected: TaskSelectedReturn): SessionV1.WithParts | undefined {
+  if (selected.type !== "evidence") return undefined
+  return select(selected).assistant
+}
+
 function classify(sessionID: SessionID, selected: ReturnType<typeof select>) {
   const assistant = selected.assistant
   if (assistant.info.role !== "assistant") throw new Error("Task return does not contain an Assistant message")

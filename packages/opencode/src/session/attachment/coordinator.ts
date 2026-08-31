@@ -325,6 +325,7 @@ export const make = Effect.gen(function* () {
         candidate: state.candidate !== undefined,
         failed: state.degraded,
         cancelled: state.cancelled,
+        resolved: state.resolution !== undefined,
       }))
 
     const own: Scope["own"] = (messageID) =>

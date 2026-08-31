@@ -14,7 +14,14 @@ import type { SessionMutation } from "../session/closure/mutation"
 import type { SessionPhysical } from "../session/physical-interrupt"
 import { SessionAdmission } from "../session/closure/admission"
 import { AttachmentCoordinator } from "@/session/attachment/coordinator"
-import { renderCancelledTask, renderNotices, renderOutput, renderSelectedTask } from "@/session/task-return"
+import {
+  controllingAssistant,
+  renderCancelledTask,
+  renderNotices,
+  renderOutput,
+  renderSelectedTask,
+  type TaskSelectedReturn,
+} from "@/session/task-return"
 import { Config } from "@/config/config"
 import { Cause, Deferred, Effect, Exit, Schema, Scope } from "effect"
 import { EffectBridge } from "@/effect/bridge"
@@ -321,28 +328,76 @@ export const TaskTool = Tool.define(
       })
 
       /**
-       * The detected value is the message itself, because that is what each delivery surface needs
-       * in order to classify and render at the moment it delivers.
+       * The filed value is the SELECTED structural result, because that is what each delivery
+       * surface needs in order to classify and render at the moment it delivers — and both surfaces
+       * now consume the same one rather than the observer rebuilding fallback-only evidence.
        *
-       * `at` is the final assistant message's creation time — the chronology key that keeps ordering
-       * correct across the message-id wrap. ORDERING RESTS ON THAT KEY ALONE: the answer log inserts
-       * by `(at, position)`, and filing-ARRIVAL order is in-order too, for a reason outside this
-       * file — runs of one child session are runner-serialized (`effect/runner.ts`), and this
-       * detect-to-file span contains no await on an external event, so an earlier position cannot
-       * still be unfiled when a later one arrives. There is deliberately no detection-time announce.
-       * Putting a real await into this span would reopen the ordering window with no test failing,
-       * and would be the condition for reinstating an ordering mechanism.
+       * `position` and `at` come from the CONTROLLING selected assistant, not from the run-final
+       * message. Eligibility can select an earlier one: a degraded resolution falls through to the
+       * retained fallback, and an observed non-clean turn outranks a later candidate. `at` is still
+       * the creation-time chronology key that keeps `(at, position)` ordering correct across the
+       * message-id wrap.
+       *
+       * ORDERING NO LONGER RESTS ON THAT KEY ALONE. `eligible` below puts a real await into the
+       * detect-to-file span, which is exactly the condition recorded for reinstating an ordering
+       * mechanism. It is reinstated: a scoped run announces its unresolved sequence before parking,
+       * and the answer log withholds later sequences until that announcement clears.
        */
-      const toDetected = (result: SessionV1.WithParts) =>
+      const toDetected = (selected: TaskSelectedReturn, controlling: SessionV1.WithParts) =>
         ({
-          position: result.info.id,
-          at: result.info.time.created,
-          detected: result,
+          position: controlling.info.id,
+          at: controlling.info.time.created,
+          detected: selected,
         }) satisfies BackgroundJob.Detected
 
-      // A run detects its answer and hands it back. No selection, no rendering and no comparison
-      // happen here: a parked attachment scope affects the owner's render moment at the delivery
-      // surface, never the filing.
+      /**
+       * RETURN ELIGIBILITY — the one gate every run shape passes through (CP-032 B-1).
+       *
+       * A run-final assistant is turn evidence, not by itself an answer. With no attachment scope it
+       * is immediately eligible. With one — owner or supplemental alike — the scope decides, and
+       * while it is parked this run files NOTHING. That parked turn is the CP-021 yield, and filing
+       * it is what lost a child's real return while its attached grandchildren were still running:
+       * the yield was published as a completed answer, the lifetime terminalized on it, and the
+       * answer that actually came back had no observer left to reach.
+       *
+       * The announcement is ordering authority only and never becomes output. It is taken
+       * immediately after detection with NO await in between, which is what keeps the delivery floor
+       * sound: runs of one child session are runner-serialized, so an earlier sequence has always
+       * detected — and therefore announced — before a later one can resolve and try to deliver.
+       *
+       * A cancelled resolution files nothing. Cancellation carries no answer payload and travels the
+       * terminal route; filing it merely to satisfy the log shape would hand the caller a completed
+       * envelope for a cancelled task.
+       */
+      const eligible = (invocation: AttachmentCoordinator.Scope | undefined, result: SessionV1.WithParts) =>
+        Effect.gen(function* () {
+          // No scope, or a scope that has ALREADY published its resolution, means nothing is pending
+          // on this turn and it is immediately eligible.
+          //
+          // The gate is one-shot, and a scope outlives the run that resolved it (R-23 keeps an
+          // opened scope live through its descendants). So a second, sequential run on the same
+          // session can reach a scope that has already spoken for an EARLIER turn. Consuming that
+          // resolution would key this answer to the earlier turn position, where the filing guard
+          // would swallow it — the run would execute, produce a real answer, and deliver nothing.
+          //
+          // `locateBorrowable` refuses a scope already resolved at LOOKUP; this covers the scope
+          // that resolves while a borrowed run is still in flight. Immediate eligibility rather than
+          // refusal, because unlike the admission boundary this run has already produced a genuine
+          // answer: refusing here would discard it. Truthful too — a resolved scope accepts no new
+          // attachments, so this turn has no outstanding work on it to wait for.
+          if (!invocation || invocation.current().resolved) {
+            return toDetected({ type: "evidence", fallback: result, degraded: false }, result)
+          }
+          const announce = yield* BackgroundJob.Announce
+          yield* announce()
+          const selected = yield* invocation.result(result)
+          const controlling = controllingAssistant(selected)
+          if (!controlling) return undefined
+          return toDetected(selected, controlling)
+        })
+
+      // A run detects its turn result, then passes it through return eligibility before handing back
+      // anything fileable. No rendering and no comparison happen here.
       const detect = (input: { invocation?: AttachmentCoordinator.Scope; onAdmitted?: Effect.Effect<void> }) =>
         Effect.gen(function* () {
           const parts = yield* ops.resolvePromptParts(params.prompt)
@@ -363,7 +418,10 @@ export const TaskTool = Tool.define(
           if (failed?.type === "tool" && failed.state.status === "error") {
             return yield* Effect.fail(new Error(`Subagent failed (task_id: ${nextSession.id}): ${failed.state.error}`))
           }
-          return toDetected(result)
+          // Eligibility runs AFTER the owner error checks, so those exits announce nothing and leave
+          // no floor to clear. `executeSupplement` deliberately has no equivalent checks and reaches
+          // the same gate directly; that asymmetry is preserved, not copied.
+          return yield* eligible(input.invocation, result)
         })
 
       const causeReason = (cause: Cause.Cause<unknown>) => {
@@ -458,7 +516,10 @@ export const TaskTool = Tool.define(
                   ),
                 )
               if (outcome._tag === "note") return { note: outcome.note } satisfies BackgroundJob.SequenceOutcome
-              return toDetected(outcome.result)
+              // Same gate as the owner path. A supplement borrowing a live scope shares its
+              // resolution, so both waiters select one answer and the filing guard makes the second
+              // a no-op; a supplement that opened its own scope holds it through its descendants.
+              return yield* eligible(invocation, outcome.result)
             })
           if (!flags.experimentalBackgroundSubagents) return yield* attempt()
           // CP-032 R-08: BORROW, so this asks `locateBorrowable`, not raw `locate`. A scope that has
@@ -546,15 +607,18 @@ export const TaskTool = Tool.define(
       }
 
       // Each delivery is rendered from the retained answer at the moment it is delivered: the filed
-      // position carries the message, never a rendered form.
+      // position carries the selected structural result, never a rendered form.
+      //
+      // A-1: this used to REBUILD evidence as `{ fallback: <the message>, degraded: false }`, which
+      // discarded whatever the coordinator had actually resolved. Candidate/observed selection and
+      // the degraded warning were therefore unreachable on every observer route — an async child
+      // that degraded, or whose clean final turn followed an earlier observed error, was delivered
+      // fallback-only and silently lost that evidence. The filed record is now the selected result
+      // itself, so both delivery surfaces render the same facts.
       const renderAnswer = (answer: BackgroundJob.Answer) =>
         renderSelectedTask({
           sessionID: nextSession.id,
-          selected: {
-            type: "evidence",
-            fallback: answer.detected as SessionV1.WithParts,
-            degraded: false,
-          },
+          selected: answer.detected as TaskSelectedReturn,
           notes: answer.notes,
         })
 
@@ -772,11 +836,34 @@ export const TaskTool = Tool.define(
         // OWNER-SCOPE INVOCATIONS ONLY. Extensions never open one, and a synchronous non-promoted
         // caller still needs its scope after the terminal for the render moment at its delivery
         // surface — that window contains no parent turn, so it does not gate resumption.
+        // THE TERMINAL IS PROJECTED, NOT DISCARDED (CP-032 B-3).
+        //
+        // The lifetime waiter holds the one authoritative statement of how this child ended, so it
+        // finalizes the owner scope WITH that outcome. Finalizing every terminal as `Exit.void`
+        // closed a cancelled child as a mere degradation, and a degraded close resolves through the
+        // evidence gate: `complete()` then reattaches the retained `state.fallback` — an earlier
+        // successful turn — and `select()` returns it. A cancelled task would answer with stale text
+        // from before its cancellation (CP-023 K14).
+        //
+        // The Exit IS the carrier, because `AttachmentCoordinator.finalizeScope` already maps one:
+        // interrupts claim cancellation, other failures degrade, success closes normally. So this
+        // needs no new coordinator entry point (§3.4 allows either) and cannot drift from the
+        // mapping every other finalization site already obeys.
+        //
+        // No authoritative terminal means exactly that: `Exit.void` leaves an unresolved scope to
+        // degrade through `closeNow`, and never infers completion or cancellation.
         if (ownerScopeHolder.scope) {
           yield* Effect.gen(function* () {
             const handle = yield* handleSource
-            if (handle) yield* background.waitHandle({ handle })
-            yield* finalizeOwnerScope(Exit.void)
+            const waited = handle ? yield* background.waitHandle({ handle }) : undefined
+            const status = waited?.info?.status
+            yield* finalizeOwnerScope(
+              status === "cancelled"
+                ? Exit.failCause(Cause.interrupt())
+                : status === "error"
+                  ? Exit.fail(new Error(`Task lifetime ended in error (task_id: ${nextSession.id})`))
+                  : Exit.void,
+            )
           }).pipe(Effect.forkIn(scope, { startImmediately: true }))
         }
         if (!parentScope || !reservation) {
@@ -1130,13 +1217,13 @@ export const TaskTool = Tool.define(
             // call's own prompt produced - and it is rendered here, at the moment of delivery, in
             // owner context: the selection that may park for attached children, then classification.
             // Presence is the check rather than truthiness, because an empty answer is a real one.
-            const detected =
-              result && Object.hasOwn(result, "output") ? (result.output as SessionV1.WithParts) : undefined
-            const selected = detected
-              ? ownerScopeHolder.scope && !ownerScopeHolder.finalized
-                ? yield* ownerScopeHolder.scope.result(detected)
-                : ({ type: "evidence", fallback: detected, degraded: false } as const)
-              : undefined
+            // Eligibility and CP-028 selection already happened INSIDE the run, before filing
+            // (CP-032 B-1), so this consumes the selected record rather than resolving the scope a
+            // second time. Resolving again here would also be actively wrong now: `Scope.result`
+            // latches its argument as the retained fallback, and the argument available here is no
+            // longer a message.
+            const selected =
+              result && Object.hasOwn(result, "output") ? (result.output as TaskSelectedReturn) : undefined
             const rendered = selected
               ? renderSelectedTask({ sessionID: nextSession.id, selected, notes: result?.notes })
               : ""

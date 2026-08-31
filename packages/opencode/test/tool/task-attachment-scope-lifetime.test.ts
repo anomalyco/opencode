@@ -496,7 +496,12 @@ describe("task attachment owner-scope lifetime", () => {
    * the observer reads `terminal()`, which returns undefined on a closed scope; the degraded-scope
    * branch is reached first and routes the same content through ordinary notification.
    */
-  it.instance("a grandchild attached to the child still delivers after the child's scope is finalized", () =>
+  // T-032-1. This WAS "a grandchild attached to the child still delivers after the child's scope is
+  // finalized", and it asserted the incident as correct behaviour: the child lifetime completing on
+  // a yield, the owner scope disappearing while the grandchild ran, and the grandchild's result
+  // arriving through the degraded ordinary route with `attached: false`. Each of those is now the
+  // negative. Re-framed rather than patched, because every one of its outcomes moved.
+  it.instance("a child that yields with an attached grandchild files nothing until it is eligible", () =>
     Effect.gen(function* () {
       const jobs = yield* BackgroundJob.Service
       const sessions = yield* Session.Service
@@ -575,46 +580,70 @@ describe("task attachment owner-scope lifetime", () => {
       )
       expect(scope.current().attached).toBeGreaterThanOrEqual(1)
 
-      // The child's run ends while the grandchild is still running.
+      // PHASE 1 — the child ends a provider turn while its grandchild is still outstanding.
+      // CP-021 calls that turn-end a YIELD: the child owes its caller a final response and has not
+      // produced it yet.
       yield* Deferred.succeed(childRelease, undefined)
-      expect((yield* jobs.wait({ id: child, timeout: 5_000 })).info?.status).toBe("completed")
 
-      // The child's observer delivers into the (unparked) top-level parent and finishes, so the
-      // child's scope is finalized on the ordinary path.
+      // PHASE 2 — the yield is NOT an answer. This is the calibrating negative control, and it is
+      // the whole incident: CP-031 filed this turn, terminalized the outer lifetime on it, closed
+      // the owner scope, and the child's real return had no observer left to reach the parent.
+      //
+      // The lifetime stays non-terminal with NO wall-clock timeout, observer poll, or synthetic
+      // successor run forcing it. Duration cannot establish return eligibility, so this asserts a
+      // bounded settle rather than pretending to prove "indefinitely" — the absence of any polling
+      // or timeout mechanism is a source property, censused separately.
+      for (let attempt = 0; attempt < 500; attempt++) yield* Effect.yieldNow
+      const parked = yield* jobs.wait({ id: child, timeout: 250 })
+      expect(parked.timedOut).toBe(true)
+      expect(parked.info?.status).toBe("running")
+      expect(deliveries.filter((entry) => entry.sessionID === chat.id)).toHaveLength(0)
+
+      // PHASE 3 — the owner scope stays REGISTERED while eligibility is parked. The premature close
+      // is what unregistered it, and every `Task(task_id=child)` in that window then died on the
+      // coordinator's exclusive open.
+      const located = yield* coordinator.locate(child)
+      expect(located).toBeDefined()
+      expect(located?.id).toBe(scope.id)
+      expect(scope.current().resolved).toBe(false)
+
+      // PHASE 4 — the grandchild finishes and reaches the child through the STILL-LIVE attachment
+      // route, not the degraded ordinary one. The old oracle canonized `attached: false` here.
+      yield* Deferred.succeed(grandchildRelease, undefined)
+      const grandchild = grandchildID.value!
+      expect((yield* jobs.wait({ id: grandchild, timeout: 5_000 })).info?.status).toBe("completed")
+      yield* pollWithTimeout(
+        Effect.sync(() => (deliveries.some((entry) => entry.sessionID === child) ? true : undefined)),
+        "the grandchild result never reached the child",
+        "10 seconds",
+      )
+      const intoChild = deliveries.filter((entry) => entry.sessionID === child)
+      expect(intoChild).toHaveLength(1)
+      expect(intoChild[0]?.text).toContain("grandchild done")
+      expect(intoChild[0]?.attached).toBe(true)
+
+      // PHASE 5 — with the grandchild quiesced the child becomes eligible, terminalizes, and
+      // delivers EXACTLY ONE answer to the original parent: its final response, never the yield.
+      const settled = yield* jobs.wait({ id: child, timeout: 10_000 })
+      expect(settled.info?.status).toBe("completed")
+      yield* pollWithTimeout(
+        Effect.sync(() => (deliveries.some((entry) => entry.sessionID === chat.id) ? true : undefined)),
+        "the child's eligible answer never reached the original parent",
+        "10 seconds",
+      )
+      for (let attempt = 0; attempt < 200; attempt++) yield* Effect.yieldNow
+      const intoParent = deliveries.filter((entry) => entry.sessionID === chat.id)
+      expect(intoParent).toHaveLength(1)
+      expect(intoParent[0]?.text).toContain("child done")
+
+      // PHASE 6 — the scope is released on the LIFETIME terminal, and the child stays addressable.
       yield* pollWithTimeout(
         Effect.gen(function* () {
           return (yield* coordinator.locate(child)) === undefined ? true : undefined
         }),
-        "the child's owner scope never finalized",
+        "the child's owner scope never released after its lifetime terminalized",
         "10 seconds",
       )
-
-      // Now the grandchild finishes and its observer tries to reach back through the closed scope.
-      yield* Deferred.succeed(grandchildRelease, undefined)
-      const grandchild = grandchildID.value!
-      expect((yield* jobs.wait({ id: grandchild, timeout: 5_000 })).info?.status).toBe("completed")
-
-      // Settle: give the grandchild's observer room to run to completion before reading the result.
-      for (let attempt = 0; attempt < 2000 && !deliveries.some((d) => d.sessionID === child); attempt++) {
-        yield* Effect.yieldNow
-      }
-
-      // THE FINDING — and it is the opposite of what the source reading predicted.
-      //
-      // The grandchild's result STILL REACHES THE CHILD. Closing the child's scope does not strand
-      // it: `closeNow` marks the scope degraded, and the attached observer reads that and falls
-      // back to `deliverRetained(handle, undefined)` — the ORDINARY parent ingress, with no
-      // attachment scope. The delivery is downgraded, not lost.
-      //
-      // What the closed scope costs is the attachment DANCE, not the content: no terminal marker,
-      // no candidate/observed selection, no wake. The arriving text is the same rendered terminal.
-      const intoChild = deliveries.filter((entry) => entry.sessionID === child)
-      const intoParent = deliveries.filter((entry) => entry.sessionID === chat.id)
-      expect(intoParent.length).toBeGreaterThanOrEqual(1)
-      expect(intoChild).toHaveLength(1)
-      expect(intoChild[0]?.text).toContain("grandchild done")
-      // Delivered through the degraded/ordinary route rather than the attached one.
-      expect(intoChild[0]?.attached).toBe(false)
     }),
     // This case is about what happens to an attached grandchild's delivery, so the nesting it
     // exercises has to be permitted: at the default depth of 1 the grandchild is refused before any
