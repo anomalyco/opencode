@@ -42,11 +42,11 @@ const http = Layer.succeed(
 const permission = permissionLayer({ assert: (input) => Effect.sync(() => assertions.push(input)) })
 const toolLayer = (replacements: LayerNode.Replacements = []) =>
   AppNodeBuilder.build(LayerNode.group([Tool.node, webFetchToolNode]), [
-    [Permission.node, permission],
-    [Image.node, imagePassthrough],
+    Permission.node.replace(permission),
+    Image.node.replace(imagePassthrough),
     ...replacements,
   ])
-const it = testEffect(toolLayer([[LayerNodePlatform.httpClient, http]]))
+const it = testEffect(toolLayer([LayerNodePlatform.httpClient.replace(http)]))
 const live = testEffect(toolLayer())
 
 const reset = () => {

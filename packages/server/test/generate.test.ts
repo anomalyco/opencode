@@ -48,7 +48,7 @@ it.live("uses base configuration without depending on process.cwd()", () =>
         config: { directory: global },
         fs: { filewatcher: false },
       },
-      { overrides: [[Generate.node, generate]] },
+      { overrides: [Generate.node.replace(generate)] },
     )
 
     expect(global).not.toBe(process.cwd())

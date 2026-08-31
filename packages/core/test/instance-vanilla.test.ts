@@ -23,14 +23,13 @@ import { Bus } from "../src/bus"
 // Config the host hands the vanilla instance explicitly: a value and an
 // explicit plugin removal, both of which must survive discovery: false.
 const hostConfig: LayerNode.Replacements = [
-  [
-    Config.node,
+  Config.node.replace(
     Config.configured({
       project: false,
       global: false,
       content: JSON.stringify({ shell: "vanilla-host", plugins: ["-opencode.tool.shell"] }),
     }),
-  ],
+  ),
 ]
 
 // Same directory contents, two instances: one vanilla, one with discovery.
@@ -43,7 +42,7 @@ const instances = Layer.effect(
         // "bare" exercises the vanilla defaults themselves: no caller Config.
         discovery: name !== "vanilla" && name !== "bare",
         // Caller replacements win over the vanilla defaults.
-        replacements: [[Global.node, tempGlobalLayer], ...(name === "vanilla" ? hostConfig : [])],
+        replacements: [Global.node.replace(tempGlobalLayer), ...(name === "vanilla" ? hostConfig : [])],
       })
     },
     { idleTimeToLive: Duration.infinity },
@@ -52,8 +51,8 @@ const instances = Layer.effect(
 
 const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node]), [
-    [Global.node, tempGlobalLayer],
-    [LocationServiceMap.node, instances],
+    Global.node.replace(tempGlobalLayer),
+    LocationServiceMap.node.replace(instances),
   ]),
 )
 

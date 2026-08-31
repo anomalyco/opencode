@@ -22,8 +22,8 @@ const globalLayer = Layer.succeed(Global.Service, Global.Service.of(global))
 
 const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([Agent.node, Bus.node, Location.node]), [
-    [Global.node, globalLayer],
-    [Location.node, locationLayer],
+    Global.node.replace(globalLayer),
+    Location.node.replace(locationLayer),
   ]) as unknown as Layer.Layer<unknown, never>,
 )
 

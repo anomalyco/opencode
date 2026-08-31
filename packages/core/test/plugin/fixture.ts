@@ -88,12 +88,14 @@ export const PluginTestLayer = LayerNode.compile(
     Watcher.node,
     WebSearch.node,
   ]),
-  [
-    [Location.node, tempLocationLayer],
-    [Npm.node, npmLayer],
-    [Config.node, Config.testLayer()],
-    [Mcp.node, emptyMcpLayer],
-    [Generate.node, generateLayer],
-    [Permission.node, permissionLayer],
-  ],
+  {
+    replacements: [
+      Location.node.replace(tempLocationLayer),
+      Npm.node.replace(npmLayer),
+      Config.node.replace(Config.testLayer()),
+      Mcp.node.replace(emptyMcpLayer),
+      Generate.node.replace(generateLayer),
+      Permission.node.replace(permissionLayer),
+    ],
+  },
 ) as unknown as Layer.Layer<unknown, never>

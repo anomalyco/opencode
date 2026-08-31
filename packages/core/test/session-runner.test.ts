@@ -408,22 +408,22 @@ const layer = Layer.unwrap(
       },
     })
     const replacements: LayerNode.Replacements = [
-      [Snapshot.node, Snapshot.noopLayer],
-      [LayerNodePlatform.llmClient, TestLLM.clientLayer],
-      [SessionRunnerModel.node, models],
-      [InstructionBuiltIns.node, systemContext],
-      [InstructionDiscovery.node, instructionContext],
-      [Location.node, Location.boundNode({ directory: AbsolutePath.make("/project") })],
-      [SkillInstructions.node, skillInstructions],
-      [ReferenceInstructions.node, referenceInstructions],
-      [Permission.node, permission],
-      [Config.node, config],
-      [PluginSupervisor.node, pluginSupervisor],
-      [SessionModelTransport.node, modelTransport],
+      Snapshot.node.replace(Snapshot.noopLayer),
+      LayerNodePlatform.llmClient.replace(TestLLM.clientLayer.pipe(Layer.provide(testLLM))),
+      SessionRunnerModel.node.replace(models),
+      InstructionBuiltIns.node.replace(systemContext),
+      InstructionDiscovery.node.replace(instructionContext),
+      Location.node.replace(Location.boundNode({ directory: AbsolutePath.make("/project") })),
+      SkillInstructions.node.replace(skillInstructions),
+      ReferenceInstructions.node.replace(referenceInstructions),
+      Permission.node.replace(permission),
+      Config.node.replace(config),
+      PluginSupervisor.node.replace(pluginSupervisor),
+      SessionModelTransport.node.replace(modelTransport),
     ]
     const runnerLayer = AppNodeBuilder.build(SessionRunnerLLM.node, [
       ...replacements,
-      [McpInstructions.node, mcpInstructions],
+      McpInstructions.node.replace(mcpInstructions),
     ])
     const execution = Layer.effect(
       SessionExecution.Service,
@@ -485,10 +485,10 @@ const layer = Layer.unwrap(
       ]),
       [
         ...replacements,
-        [Bus.node, Bus.configured({ persist: true })],
-        [LocationServiceMap.node, promptLocationNode],
-        [Catalog.node, promptCatalog],
-        [SessionExecution.node, execution],
+        Bus.node.replace(Bus.configured({ persist: true })),
+        LocationServiceMap.node.replace(promptLocationNode),
+        Catalog.node.replace(promptCatalog),
+        SessionExecution.node.replace(execution),
       ],
     )
   }),

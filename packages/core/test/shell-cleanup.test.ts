@@ -14,7 +14,7 @@ const withStore = <A, E, R>(body: (fs: FSUtil.Interface, root: string) => Effect
     Effect.promise(() => tmpdir()),
     (tmp) => {
       const layer = AppNodeBuilder.build(LayerNode.group([FSUtil.node, Global.node]), [
-        [Global.node, Global.layerWith({ data: tmp.path })],
+        Global.node.replace(Global.layerWith({ data: tmp.path })),
       ])
       return Effect.gen(function* () {
         const fs = yield* FSUtil.Service

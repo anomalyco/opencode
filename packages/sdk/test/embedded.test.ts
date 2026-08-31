@@ -43,13 +43,15 @@ for (const selection of ["explicit", "default"] as const) {
         const llm = yield* TestLLM.Test.pipe(
           Effect.provide(TestLLM.testLayer({ fallback: TestLLM.text("ready", "answer") })),
         )
-        const supervisor = Layer.effect(
-          PluginSupervisor.Service,
-          Effect.gen(function* () {
-            const plugins = yield* PluginSupervisor.Service
-            return { flush: release.open.pipe(Effect.andThen(plugins.flush)) }
-          }),
-        ).pipe(Layer.provide(PluginSupervisor.layer))
+        const supervisor = PluginSupervisor.node.mapLayer((layer) =>
+          Layer.effect(
+            PluginSupervisor.Service,
+            Effect.gen(function* () {
+              const plugins = yield* PluginSupervisor.Service
+              return { flush: release.open.pipe(Effect.andThen(plugins.flush)) }
+            }),
+          ).pipe(Layer.provide(layer)),
+        )
         const opencode = yield* fixture.sdk.OpenCode.create(
           {
             config: {
@@ -71,8 +73,8 @@ for (const selection of ["explicit", "default"] as const) {
           },
           {
             overrides: [
-              [llmClient, Layer.succeed(LLMClient.Service, llm)],
-              [PluginSupervisor.node, { ...PluginSupervisor.node, implementation: supervisor }],
+              llmClient.replace(Layer.succeed(LLMClient.Service, llm)),
+              PluginSupervisor.node.replace(supervisor),
             ],
           },
         )
@@ -685,10 +687,7 @@ const workspaceModelScenario = (fixture: Fixture, policy: "eager" | "lazy") =>
         workspaceProviders: { fake: driver },
       },
       {
-        overrides: [
-          [llmClient, client],
-          [SessionRunnerModel.node, models],
-        ],
+        overrides: [llmClient.replace(client), SessionRunnerModel.node.replace(models)],
       },
     )
     const workspaceID = yield* opencode.workspace.create({ provider: "fake" })
@@ -790,8 +789,8 @@ it.live(
           },
           {
             overrides: [
-              [llmClient, Layer.succeed(LLMClient.Service, llm)],
-              [SessionRunnerModel.node, models],
+              llmClient.replace(Layer.succeed(LLMClient.Service, llm)),
+              SessionRunnerModel.node.replace(models),
             ],
           },
         )

@@ -77,8 +77,7 @@ it.live("maps a failing base provider to HTTP 503 instead of null metadata", () 
       { database: { path: ":memory:" }, config: { directory: tmp.path }, fs: { filewatcher: false } },
       {
         overrides: [
-          [
-            SdkPlugins.node,
+          SdkPlugins.node.replace(
             Layer.succeed(
               SdkPlugins.Service,
               SdkPlugins.Service.of({
@@ -106,7 +105,7 @@ it.live("maps a failing base provider to HTTP 503 instead of null metadata", () 
                 ],
               }),
             ),
-          ],
+          ),
         ],
       },
     )

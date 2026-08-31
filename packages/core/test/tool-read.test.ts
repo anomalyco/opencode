@@ -142,14 +142,14 @@ const unavailableImage = Layer.mock(Image.Service, {
 const readLayer = (imageLayer: Layer.Layer<Image.Service>) =>
   Layer.mergeAll(
     AppNodeBuilder.build(LayerNode.group([Tool.node, readToolNode]), [
-      [ReadToolFileSystem.node, reader],
-      [Permission.node, permission],
-      [Config.node, config],
-      [Image.node, imageLayer],
-      [LocationMutation.node, mutation],
-      [FSUtil.node, testFileSystem],
-      [Location.node, locationLayer],
-      [Global.node, Global.layerWith({ data: Global.Path.data })],
+      ReadToolFileSystem.node.replace(reader),
+      Permission.node.replace(permission),
+      Config.node.replace(config),
+      Image.node.replace(imageLayer),
+      LocationMutation.node.replace(mutation),
+      FSUtil.node.replace(testFileSystem),
+      Location.node.replace(locationLayer),
+      Global.node.replace(Global.layerWith({ data: Global.Path.data })),
     ]),
     // Merge by reference so Config.Test and Image.Service resolve to the memoized instances.
     config,

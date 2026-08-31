@@ -37,7 +37,7 @@ const it = testEffect(
       PluginHooks.node,
       Permission.node,
     ]),
-    [[Location.node, current]],
+    [Location.node.replace(current)],
   ),
 )
 

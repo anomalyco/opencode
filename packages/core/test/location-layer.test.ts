@@ -51,12 +51,12 @@ import { Tool } from "../src/tool"
 
 const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, LocationServiceMap.node]), [
-    [Global.node, tempGlobalLayer],
+    Global.node.replace(tempGlobalLayer),
   ]),
 )
 const itWithSdk = testEffect(
   AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node]), [
-    [Global.node, tempGlobalLayer],
+    Global.node.replace(tempGlobalLayer),
   ]),
 )
 const activityLocations = Layer.effect(
@@ -77,7 +77,7 @@ const activityLocations = Layer.effect(
 )
 const itWithActivity = testEffect(
   AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, LocationServiceMap.node, LocationActivity.node]), [
-    [LocationServiceMap.node, activityLocations],
+    LocationServiceMap.node.replace(activityLocations),
   ]),
 )
 

@@ -1,11 +1,11 @@
 export * as Session from "./session.js"
 
-import { DateTime, Effect, Fiber, Layer, Schema, Scope } from "effect"
+import { DateTime, Effect, Fiber, Schema, Scope } from "effect"
 import type { Agent } from "@opencode-ai/schema/agent"
 import type { Model } from "@opencode-ai/schema/model"
 import { Event } from "@opencode-ai/schema/event"
 import { Bus } from "../bus.js"
-import { Location } from "../location.js"
+import { Instance } from "../instance/service.js"
 import { PluginSupervisor } from "../plugin/supervisor-service.js"
 import { Shell } from "../shell.js"
 import { ShellResult } from "../shell/result.js"
@@ -33,26 +33,19 @@ import { SessionRevert } from "./revert.js"
 import { SessionSchema } from "./schema.js"
 import { SessionStore } from "./store.js"
 
-export type Services =
-  | PluginSupervisor.Service
-  | Reference.Service
-  | SessionPrompt.Service
-  | SessionRevert.Service
-  | Shell.Service
-  | Skill.Service
-
 type PromptRequest = SessionPrompt.Input & {
   id?: SessionMessage.ID
   resume?: boolean
 }
 
 /**
- * Build once in the host Scope: `const sessions = yield* Session.make(servicesFor)`.
+ * Build once in the host Scope: `const sessions = yield* Session.make()`.
  * Use `sessions.forSession(id)` for handles that share host services and reload current state.
  */
-export const make = Effect.fn("Session.make")(function* (servicesFor: (ref: Location.Ref) => Layer.Layer<Services>) {
+export const make = Effect.fn("Session.make")(function* () {
   const bus = yield* Bus.Service
   const store = yield* SessionStore.Service
+  const instances = yield* Instance.Service
   const execution = yield* SessionExecution.Service
   const admission = yield* SessionInbox.Service
   const scope = yield* Scope.Scope
@@ -174,7 +167,7 @@ export const make = Effect.fn("Session.make")(function* (servicesFor: (ref: Loca
               const preparation = yield* SessionPrompt.Service
               const references = yield* Reference.Service
               return { item: yield* preparation.prepare({ sessionID, messageID, input }), references }
-            }).pipe(Effect.provide(servicesFor(session.location))),
+            }).pipe(instances.provide(session)),
           )
           // Commit a staged revert only after preparation succeeds, before admitting new work.
           if (session.revert) yield* SessionRevert.commit(bus, session)
@@ -205,7 +198,7 @@ export const make = Effect.fn("Session.make")(function* (servicesFor: (ref: Loca
         const plugins = yield* PluginSupervisor.Service
         yield* plugins.flush
         return yield* Shell.Service
-      }).pipe(Effect.provide(servicesFor(session.location)))
+      }).pipe(instances.provide(session))
       const started = yield* shell
         .create({
           command: input.command,
@@ -256,7 +249,7 @@ export const make = Effect.fn("Session.make")(function* (servicesFor: (ref: Loca
     input: { id?: SessionMessage.ID; skill: Skill.ID; resume?: boolean },
   ) {
     const session = yield* get(sessionID)
-    const skills = yield* Skill.Service.pipe(Effect.provide(servicesFor(session.location)))
+    const skills = yield* Skill.Service.pipe(instances.provide(session))
     const skill = yield* skills.get(input.skill)
     if (!skill) return yield* new SkillNotFoundError({ skill: input.skill })
     yield* bus.publish(
@@ -355,14 +348,12 @@ export const make = Effect.fn("Session.make")(function* (servicesFor: (ref: Loca
     if (yield* execution.isActive(sessionID)) return yield* new BusyError({ sessionID })
     return yield* SessionRevert.Service.use((revert) =>
       revert.stage({ session, messageID: input.messageID, files: input.files }),
-    ).pipe(Effect.provide(servicesFor(session.location)))
+    ).pipe(instances.provide(session))
   })
   const clear = Effect.fn("Session.revert.clear")(function* (sessionID: SessionSchema.ID) {
     const session = yield* get(sessionID)
     if (yield* execution.isActive(sessionID)) return yield* new BusyError({ sessionID })
-    yield* SessionRevert.Service.use((revert) => revert.clear(session)).pipe(
-      Effect.provide(servicesFor(session.location)),
-    )
+    yield* SessionRevert.Service.use((revert) => revert.clear(session)).pipe(instances.provide(session))
     return yield* execution.wake(sessionID)
   })
   const commit = Effect.fn("Session.revert.commit")(function* (sessionID: SessionSchema.ID) {

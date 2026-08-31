@@ -27,7 +27,7 @@ import { testEffect } from "./lib/effect"
 const it = testEffect(
   Layer.merge(
     AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SessionProjector.node, ToolOutput.node]), [
-      [Bus.node, Bus.configured({ persist: true })],
+      Bus.node.replace(Bus.configured({ persist: true })),
     ]),
     TestLLM.testLayer(),
   ),

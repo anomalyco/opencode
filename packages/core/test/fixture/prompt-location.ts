@@ -26,9 +26,9 @@ export const promptLocationNode = makeGlobalNode({
           SessionPrompt.layer.pipe(
             Layer.provideMerge(
               Layer.mergeAll(
-                LayerNode.compile(LayerNode.group([PluginHooks.node, Image.node, Skill.node]), [
-                  [Bus.node, Layer.succeed(Bus.Service, bus)],
-                ]),
+                LayerNode.compile(LayerNode.group([PluginHooks.node, Image.node, Skill.node]), {
+                  replacements: [Bus.node.replace(Layer.succeed(Bus.Service, bus))],
+                }),
                 Layer.succeed(FSUtil.Service, fs),
                 Layer.succeed(PluginSupervisor.Service, { flush: Effect.void }),
                 Layer.mock(Reference.Service, { refresh: () => Effect.void }),

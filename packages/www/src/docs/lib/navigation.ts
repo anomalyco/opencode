@@ -95,23 +95,27 @@ export const docsSections: DocsSection[] = [
         items: [
           { title: "Overview", slug: "build/plugins" },
           { title: "RPC", slug: "build/plugins/rpc" },
-          { title: "Effect", slug: "build/plugins/effect" },
           { title: "CLI", slug: "build/plugins/cli" },
         ],
       },
       {
         title: "Client",
-        items: [
-          { title: "JavaScript", slug: "build/client" },
-          { title: "Effect", slug: "build/client/effect" },
-        ],
+        items: [{ title: "JavaScript", slug: "build/client" }],
       },
       {
         title: "SDK",
         items: [
           { title: "Overview", slug: "build/sdk" },
-          { title: "Effect", slug: "build/sdk/effect" },
           { title: "Cloudflare", slug: "build/sdk/cloudflare" },
+        ],
+      },
+      {
+        title: "Effect",
+        items: [
+          { title: "Plugins", slug: "build/plugins/effect" },
+          { title: "RPC", slug: "build/plugins/effect/rpc" },
+          { title: "Client", slug: "build/client/effect" },
+          { title: "SDK", slug: "build/sdk/effect" },
         ],
       },
     ],

@@ -43,10 +43,10 @@ const it = testEffect(
   AppNodeBuilder.build(
     LayerNode.group([Command.node, Bus.node, FSUtil.node, AppProcess.node, Location.node, ShellSelect.node]),
     [
-      [Mcp.node, emptyMcpLayer],
-      [Config.node, emptyConfigLayer],
-      [Location.node, testLocationLayer],
-      [ShellSelect.node, shellLayer],
+      Mcp.node.replace(emptyMcpLayer),
+      Config.node.replace(emptyConfigLayer),
+      Location.node.replace(testLocationLayer),
+      ShellSelect.node.replace(shellLayer),
     ],
   ),
 )
@@ -340,17 +340,16 @@ describeNative("ConfigCommandPlugin native watcher", () => {
               ShellSelect.node,
             ]),
             [
-              [
-                Location.node,
+              Location.node.replace(
                 Layer.succeed(
                   Location.Service,
                   Location.Service.of(location({ directory: AbsolutePath.make(path.join(tmp, "project")) })),
                 ),
-              ],
-              [Global.node, Global.layerWith({ config: global, home: path.join(global, "home") })],
-              [ShellSelect.node, shellLayer],
-              [Credential.node, emptyCredentialNode],
-              [WellKnown.node, emptyWellknownNode],
+              ),
+              Global.node.replace(Global.layerWith({ config: global, home: path.join(global, "home") })),
+              ShellSelect.node.replace(shellLayer),
+              Credential.node.replace(emptyCredentialNode),
+              WellKnown.node.replace(emptyWellknownNode),
             ],
           ),
         ),

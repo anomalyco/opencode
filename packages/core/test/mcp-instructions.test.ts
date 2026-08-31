@@ -23,13 +23,12 @@ const tool = (server: string, name = "search") => new Mcp.Tool({ server: Mcp.Ser
 
 const layer = (catalog: () => Mcp.ServerInstructions[], tools: () => Mcp.Tool[]) =>
   AppNodeBuilder.build(McpInstructions.node, [
-    [
-      Mcp.node,
+    Mcp.node.replace(
       Layer.mock(Mcp.Service, {
         instructions: () => Effect.succeed(catalog()),
         tools: () => Effect.succeed(tools()),
       }),
-    ],
+    ),
   ])
 
 describe("McpInstructions", () => {
