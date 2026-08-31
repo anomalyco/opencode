@@ -195,8 +195,8 @@ Redo a previously undone message. Only available after using `/undo`.
 Any file changes will also be restored.
 :::
 
-Internally, this uses Git to manage the file changes. So your project **needs to
-be a Git repository**.
+File changes are tracked with snapshots in an internal git repository, so they
+are restored whether or not your project itself is a Git repository.
 
 ```bash frame="none"
 /redo
@@ -262,8 +262,8 @@ Undo last message in the conversation. Removes the most recent user message, all
 Any file changes made will also be reverted.
 :::
 
-Internally, this uses Git to manage the file changes. So your project **needs to
-be a Git repository**.
+File changes are tracked with snapshots in an internal git repository, so they
+are reverted whether or not your project itself is a Git repository.
 
 ```bash frame="none"
 /undo

@@ -680,4 +680,90 @@ describe("revert + compact workflow", () => {
       { git: true },
     ),
   )
+
+  it.live(
+    "reverts file changes without git",
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const session = yield* Session.Service
+          const revert = yield* SessionRevert.Service
+          const snapshot = yield* Snapshot.Service
+
+          yield* write(path.join(dir, "a.txt"), "a0")
+          yield* write(path.join(dir, "b.txt"), "b0")
+
+          const info = yield* session.create({})
+          const sid = info.id
+
+          const turn = Effect.fn("test.turn")(function* (file: string, next: string) {
+            const u = yield* user(sid)
+            yield* text(sid, u.id, `${file}:${next}`)
+            const a = yield* assistant(sid, u.id, dir)
+            const before = yield* snapshot.track()
+            if (!before) throw new Error("expected snapshot")
+            yield* write(path.join(dir, file), next)
+            const patch = yield* snapshot.patch(before)
+            if (!patch.files.length) throw new Error("expected patch files")
+            yield* session.updatePart({
+              id: PartID.ascending(),
+              messageID: a.id,
+              sessionID: sid,
+              type: "step-start",
+              snapshot: before,
+            })
+            yield* session.updatePart({
+              id: PartID.ascending(),
+              messageID: a.id,
+              sessionID: sid,
+              type: "step-finish",
+              reason: "stop",
+              snapshot: before,
+              cost: 0,
+              tokens,
+            })
+            yield* session.updatePart({
+              id: PartID.ascending(),
+              messageID: a.id,
+              sessionID: sid,
+              type: "patch",
+              hash: patch.hash,
+              files: patch.files,
+            })
+            return u.id
+          })
+
+          const first = yield* turn("a.txt", "a1")
+          const second = yield* turn("b.txt", "b1")
+
+          yield* revert.revert({
+            sessionID: sid,
+            messageID: first,
+          })
+          expect((yield* session.get(sid)).revert?.messageID).toBe(first)
+          expect(yield* read(path.join(dir, "a.txt"))).toBe("a0")
+          expect(yield* read(path.join(dir, "b.txt"))).toBe("b0")
+
+          yield* revert.unrevert({
+            sessionID: sid,
+          })
+          expect((yield* session.get(sid)).revert).toBeUndefined()
+          expect(yield* read(path.join(dir, "a.txt"))).toBe("a1")
+          expect(yield* read(path.join(dir, "b.txt"))).toBe("b1")
+
+          yield* revert.revert({
+            sessionID: sid,
+            messageID: second,
+          })
+          expect((yield* session.get(sid)).revert?.messageID).toBe(second)
+          expect(yield* read(path.join(dir, "b.txt"))).toBe("b0")
+
+          const state = yield* session.get(sid)
+          yield* revert.cleanup(state)
+          const messages = yield* session.messages({ sessionID: sid })
+          expect(messages.length).toBe(2)
+        }),
+      { git: false },
+    ),
+  )
 })

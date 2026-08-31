@@ -84,6 +84,9 @@ const bootstrapScoped = Effect.fn("SnapshotTest.bootstrapScoped")(function* () {
 const scopedGitTmpdir = () =>
   tmpdirScoped({ git: true }).pipe(Effect.provide(LayerNode.compile(CrossSpawnSpawner.node)))
 
+const scopedPlainTmpdir = () =>
+  tmpdirScoped().pipe(Effect.provide(LayerNode.compile(CrossSpawnSpawner.node)))
+
 const cleanupWorktree = (repo: string, worktree: string, files: string[] = []) =>
   Effect.promise(async () => {
     await $`git worktree remove --force ${worktree}`.cwd(repo).quiet().nothrow()
@@ -1215,4 +1218,104 @@ it.instance(
     for (const file of fresh) expect(yield* exists(file)).toBe(false)
   }),
   { git: true },
+)
+
+it.live(
+  "tracks and reverts changes without git",
+  Effect.gen(function* () {
+    const dir = yield* scopedPlainTmpdir()
+    yield* write(`${dir}/a.txt`, "a0")
+    yield* write(`${dir}/b.txt`, "b0")
+    yield* Effect.gen(function* () {
+      const snapshot = yield* Snapshot.Service
+      const before = yield* snapshot.track()
+      expect(before).toBeTruthy()
+      yield* write(`${dir}/a.txt`, "a1")
+      yield* write(`${dir}/new.txt`, "new")
+      yield* rm(`${dir}/b.txt`)
+      const patch = yield* snapshot.patch(before!)
+      expect(patch.files).toContain(fwd(dir, "a.txt"))
+      expect(patch.files).toContain(fwd(dir, "new.txt"))
+      expect(patch.files).toContain(fwd(dir, "b.txt"))
+      yield* snapshot.revert([patch])
+      expect(yield* readText(`${dir}/a.txt`)).toBe("a0")
+      expect(yield* readText(`${dir}/b.txt`)).toBe("b0")
+      expect(yield* exists(`${dir}/new.txt`)).toBe(false)
+    }).pipe(provideInstance(dir))
+  }),
+)
+
+it.live(
+  "restores a snapshot without git",
+  Effect.gen(function* () {
+    const dir = yield* scopedPlainTmpdir()
+    yield* write(`${dir}/a.txt`, "a0")
+    yield* write(`${dir}/b.txt`, "b0")
+    yield* Effect.gen(function* () {
+      const snapshot = yield* Snapshot.Service
+      const before = yield* snapshot.track()
+      expect(before).toBeTruthy()
+      yield* write(`${dir}/a.txt`, "a1")
+      yield* rm(`${dir}/b.txt`)
+      yield* write(`${dir}/new.txt`, "new")
+      yield* snapshot.restore(before!)
+      expect(yield* readText(`${dir}/a.txt`)).toBe("a0")
+      expect(yield* readText(`${dir}/b.txt`)).toBe("b0")
+      expect(yield* exists(`${dir}/new.txt`)).toBe(true)
+    }).pipe(provideInstance(dir))
+  }),
+)
+
+it.live(
+  "respects gitignore and default excludes without git",
+  Effect.gen(function* () {
+    const dir = yield* scopedPlainTmpdir()
+    yield* write(`${dir}/.gitignore`, "*.log\nignored-dir/\n")
+    yield* Effect.gen(function* () {
+      const snapshot = yield* Snapshot.Service
+      const before = yield* snapshot.track()
+      expect(before).toBeTruthy()
+      yield* write(`${dir}/normal.txt`, "normal")
+      yield* write(`${dir}/x.log`, "log")
+      yield* mkdirp(`${dir}/ignored-dir`)
+      yield* write(`${dir}/ignored-dir/file.txt`, "ignored")
+      yield* mkdirp(`${dir}/node_modules/pkg`)
+      yield* write(`${dir}/node_modules/pkg/index.js`, "dep")
+      yield* write(`${dir}/node_modules/new-dep.js`, "dep2")
+      const patch = yield* snapshot.patch(before!)
+      expect(patch.files).toContain(fwd(dir, "normal.txt"))
+      expect(patch.files).not.toContain(fwd(dir, "x.log"))
+      expect(patch.files).not.toContain(fwd(dir, "ignored-dir", "file.txt"))
+      expect(patch.files).not.toContain(fwd(dir, "node_modules", "pkg", "index.js"))
+      expect(patch.files).not.toContain(fwd(dir, "node_modules", "new-dep.js"))
+    }).pipe(provideInstance(dir))
+  }),
+)
+
+it.live(
+  "snapshot state is isolated between non-git projects",
+  Effect.gen(function* () {
+    const dir1 = yield* scopedPlainTmpdir()
+    const dir2 = yield* scopedPlainTmpdir()
+    yield* write(`${dir1}/project1.txt`, "project1")
+    yield* write(`${dir2}/project2.txt`, "project2")
+    yield* Effect.gen(function* () {
+      const snapshot = yield* Snapshot.Service
+      const before1 = yield* snapshot.track()
+      expect(before1).toBeTruthy()
+      yield* write(`${dir1}/project1.txt`, "changed1")
+      const patch1 = yield* snapshot.patch(before1!)
+      expect(patch1.files).toContain(fwd(dir1, "project1.txt"))
+      expect(patch1.files).not.toContain(fwd(dir2, "project2.txt"))
+    }).pipe(provideInstance(dir1))
+    yield* Effect.gen(function* () {
+      const snapshot = yield* Snapshot.Service
+      const before2 = yield* snapshot.track()
+      expect(before2).toBeTruthy()
+      yield* write(`${dir2}/project2.txt`, "changed2")
+      const patch2 = yield* snapshot.patch(before2!)
+      expect(patch2.files).toContain(fwd(dir2, "project2.txt"))
+      expect(patch2.files).not.toContain(fwd(dir1, "project1.txt"))
+    }).pipe(provideInstance(dir2))
+  }),
 )
