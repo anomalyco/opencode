@@ -73,6 +73,63 @@ test("revalidates after an event overtakes an active session read", async () => 
   }
 })
 
+test("preserves a live session rename across concurrent session and family reads", async () => {
+  const family = Promise.withResolvers<void>()
+  const renamed = Promise.withResolvers<void>()
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  let requests = 0
+  const stale = { ...session(0), title: undefined }
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      if (!request.url.endsWith(`/api/session/${stale.id}`)) return Response.json({ data: [], cursor: {} })
+      requests++
+      await (requests === 1 ? family.promise : renamed.promise)
+      return Response.json({ data: stale })
+    },
+  })
+  const setup = createRoot((dispose) => ({
+    data: createData({
+      api: () => api,
+      directory: "/project",
+      event: {
+        on: () => () => {},
+        listen(handler) {
+          listeners.add(handler)
+          return () => listeners.delete(handler)
+        },
+      },
+    }),
+    dispose,
+  }))
+
+  try {
+    const initial = setup.data.session.sync(stale.id, { children: true })
+    await wait(() => requests === 1)
+    const event: OpenCodeEvent = {
+      id: "evt_renamed",
+      created: 1,
+      type: "session.renamed",
+      durable: { aggregateID: stale.id, seq: 1, version: 1 },
+      data: { sessionID: stale.id, title: "Generated title" },
+    }
+    listeners.forEach((listener) => listener({ name: event.type, details: event }))
+    await wait(() => requests === 2)
+    renamed.resolve()
+    await wait(() => setup.data.session.get(stale.id) !== undefined)
+    family.resolve()
+    await initial
+    await Bun.sleep(0)
+
+    expect(setup.data.session.get(stale.id)?.title).toBe("Generated title")
+  } finally {
+    family.resolve()
+    renamed.resolve()
+    setup.dispose()
+  }
+})
+
 test("updates authoritative cached project metadata from live events", async () => {
   const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
   const original: Project = {

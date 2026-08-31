@@ -25,6 +25,11 @@ import type { ComposerState } from "@/composer/persistence"
 import "./titlebar.css"
 import { newTabTooltipKeybind } from "@/shell/commands/tooltip-keybind"
 import { TitlebarRightMount } from "@/shell/titlebar/right-slot"
+import Drawer from "@corvu/drawer"
+import { sessionLabel } from "@/session/title"
+import { SessionTabAvatar } from "@/shell/layout/session-tab-avatar"
+import { projectForSession } from "@/shell/layout/helpers"
+import { useSettingsDialog } from "@/settings/command"
 
 const titlebarHeight = 36
 const windowsTitlebarHeight = 44 // Includes the content inset; matches the native Windows overlay.
@@ -47,6 +52,7 @@ export function Titlebar(props: {
   const command = useCommand()
   const language = useLanguage()
   const settings = useSettings()
+  const openSettings = useSettingsDialog()
   const navigate = useNavigate()
   const location = useLocation()
   const mobile = createMediaQuery("(max-width: 767px)")
@@ -138,6 +144,14 @@ export function Titlebar(props: {
         "order-last": bottom(),
       }}
       style={{
+        height:
+          platform.platform === "web"
+            ? bottom()
+              ? "calc(28px + max(8px, env(safe-area-inset-bottom, 0px)))"
+              : "calc(28px + max(8px, env(safe-area-inset-top, 0px)))"
+            : undefined,
+        "padding-top": bottom() ? "0px" : "env(safe-area-inset-top, 0px)",
+        "padding-bottom": bottom() ? "env(safe-area-inset-bottom, 0px)" : "0px",
         "min-height": minHeight(),
         // Keep native macOS traffic lights clear even when the desktop window is narrow.
         "padding-left": macTrafficLights() ? `${macTrafficLightsBaseWidth / zoom()}px` : 0,
@@ -336,116 +350,283 @@ export function Titlebar(props: {
               ].filter((v) => v !== undefined)
             })
 
+            const [mobileTabs, setMobileTabs] = createStore({ open: false, settings: false })
+            const currentProject = createMemo(() => {
+              const tab = currentTab()
+              const value = session()
+              if (!tab || !value) return
+              const conn = global.servers.list().find((item) => ServerConnection.key(item) === tab.server)
+              return projectForSession(value, conn ? global.ensureServerCtx(conn).projects.list() : [])
+            })
+            const currentTitle = () => {
+              const tab = currentTab()
+              if (!tab) return language.t("home.title")
+              if (tab.type === "draft") return language.t("command.session.new")
+              const value = session()
+              return value ? sessionLabel(value) : (tabs.info[tabKey(tab)]?.title ?? language.t("command.session.new"))
+            }
+            createEffect(() => {
+              path()
+              mobile()
+              setMobileTabs("open", false)
+            })
+
             return (
               <div
                 class="h-full flex-1 overflow-hidden flex flex-row items-center gap-1.5 px-2 md:pr-3"
                 classList={{
-                  "pt-2": !bottom() && !windows(),
-                  "pb-2": bottom(),
+                  "pt-[max(0px,calc(8px-env(safe-area-inset-top,0px)))]": !bottom() && !windows(),
+                  "pb-[max(0px,calc(8px-env(safe-area-inset-bottom,0px)))]": bottom(),
                   "md:pl-2": macTrafficLights(),
                   "md:pl-4": !macTrafficLights(),
                 }}
               >
-                <ChannelIndicator debugTools={props.debugTools} />
+                <Show when={!mobile()}>
+                  <ChannelIndicator debugTools={props.debugTools} />
+                </Show>
                 <Show when={windows() || linux()}>
                   <WindowsAppMenu command={command} platform={platform} />
                 </Show>
-                <Tooltip
-                  placement="bottom"
-                  value={
-                    <>
-                      {language.t("home.title")}
-                      <Keybind keys={command.keybindParts("home.toggle")} variant="neutral" />
-                    </>
-                  }
-                  class="shrink-0"
-                >
-                  <IconButton
-                    type="button"
-                    variant="ghost-muted"
-                    size="large"
-                    class="!w-9 shrink-0"
-                    icon={<Icon name="grid-plus" />}
-                    state={layout.route().type === "home" ? "pressed" : undefined}
-                    onClick={toggleHome}
-                    aria-label={language.t("home.title")}
-                    aria-pressed={layout.route().type === "home"}
-                  />
-                </Tooltip>
+                <Show when={!mobile()}>
+                  <Tooltip
+                    placement="bottom"
+                    value={
+                      <>
+                        {language.t("home.title")}
+                        <Keybind keys={command.keybindParts("home.toggle")} variant="neutral" />
+                      </>
+                    }
+                    class="shrink-0"
+                  >
+                    <IconButton
+                      type="button"
+                      variant="ghost-muted"
+                      size="large"
+                      class="!w-9 shrink-0"
+                      icon={<Icon name="grid-plus" />}
+                      state={layout.route().type === "home" ? "pressed" : undefined}
+                      onClick={toggleHome}
+                      aria-label={language.t("home.title")}
+                      aria-pressed={layout.route().type === "home"}
+                    />
+                  </Tooltip>
+                </Show>
 
                 <Show
-                  when={props.verticalTabs}
+                  when={!mobile()}
                   fallback={
-                    <>
-                      <TitlebarTabStrip
-                        tabs={tabsStore}
-                        currentTab={currentTab()}
-                        onNavigate={(tab, el) => {
-                          tabs.select(tab)
-                          el?.scrollIntoView({ behavior: "instant" })
-                        }}
-                        onClose={(tab) => {
-                          const index = tabsStore.findIndex((item) => tabKey(item) === tabKey(tab))
-                          if (index !== -1) tabsStoreActions.closeTab(index)
-                        }}
-                        onReorder={(keys) => tabsStoreActions.reorder(keys)}
-                      />
-                      <Tooltip
-                        placement="bottom"
-                        value={
-                          <>
-                            {language.t("command.session.new")}
-                            <Keybind keys={newTabTooltipKeybind(command)} variant="neutral" />
-                          </>
-                        }
+                    <Drawer
+                      open={mobileTabs.open}
+                      onOpenChange={(open) => setMobileTabs("open", open)}
+                      onContentPresentChange={(present) => {
+                        if (present || !mobileTabs.settings) return
+                        setMobileTabs("settings", false)
+                        openSettings()
+                      }}
+                      side="bottom"
+                    >
+                      <Drawer.Trigger
+                        data-slot="mobile-tabs-trigger"
+                        aria-expanded={mobileTabs.open}
+                        class="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-base focus-visible:outline-none [app-region:no-drag]"
+                        aria-label={language.t("titlebar.tabs")}
                       >
-                        <IconButton
-                          type="button"
-                          variant="ghost-muted"
-                          size="large"
-                          class="shrink-0"
-                          icon={<Icon name="plus" />}
-                          onClick={openNewTab}
-                          aria-label={language.t("command.session.new")}
-                        />
-                      </Tooltip>
-                    </>
-                  }
-                >
-                  {(vertical) => (
-                    <Show when={vertical().mount} keyed>
-                      {(mount) => (
-                        <Portal mount={mount}>
-                          <TitlebarTabStrip
-                            orientation="vertical"
-                            tabs={tabsStore}
-                            currentTab={currentTab()}
-                            onNavigate={(tab, el) => {
-                              tabs.select(tab)
-                              el?.scrollIntoView({ behavior: "instant", block: "nearest" })
-                            }}
-                            onClose={(tab) => {
-                              const index = tabsStore.findIndex((item) => tabKey(item) === tabKey(tab))
-                              if (index !== -1) tabsStoreActions.closeTab(index)
-                            }}
-                            onReorder={(keys) => tabsStoreActions.reorder(keys)}
-                          />
+                        <Show when={currentTab()} fallback={<Icon name="grid-plus" class="shrink-0" />}>
+                          {(tab) => (
+                            <span
+                              data-slot="project-avatar-slot"
+                              class="flex size-4 shrink-0 items-center justify-center"
+                            >
+                              <Show
+                                when={session()}
+                                fallback={
+                                  tab().type === "draft" ? (
+                                    <Icon name="edit" />
+                                  ) : (
+                                    <span
+                                      class="block size-4 rounded-[3px] border border-v2-border-border-muted"
+                                      aria-hidden="true"
+                                    />
+                                  )
+                                }
+                              >
+                                {(value) => (
+                                  <SessionTabAvatar
+                                    project={currentProject()}
+                                    directory={value().location.directory}
+                                    sessionId={value().id}
+                                    server={tab().server}
+                                    revealProjectOnHover={false}
+                                  />
+                                )}
+                              </Show>
+                            </span>
+                          )}
+                        </Show>
+                        <span dir="auto" class="min-w-0 flex-1 truncate text-start">
+                          {currentTitle()}
+                        </span>
+                        <span class="shrink-0 text-v2-text-text-muted">{tabsStore.length}</span>
+                      </Drawer.Trigger>
+                      <Drawer.Portal forceMount>
+                        <Drawer.Overlay data-slot="mobile-tabs-overlay" />
+                        <Drawer.Content forceMount data-slot="mobile-tabs-drawer" dir={language.direction()}>
+                          <Drawer.Label class="sr-only">{language.t("titlebar.tabs")}</Drawer.Label>
+                          <div data-slot="mobile-tabs-drag-handle" aria-hidden="true">
+                            <span />
+                          </div>
+                          <div data-slot="mobile-tabs-drawer-list" data-corvu-no-drag>
+                            <TitlebarTabStrip
+                              orientation="vertical"
+                              tabs={tabsStore}
+                              currentTab={currentTab()}
+                              onNavigate={(tab) => {
+                                tabs.select(tab)
+                                setMobileTabs("open", false)
+                              }}
+                              onClose={(tab) => {
+                                const index = tabsStore.findIndex((item) => tabKey(item) === tabKey(tab))
+                                if (index !== -1) tabsStoreActions.closeTab(index)
+                              }}
+                              onReorder={(keys) => tabsStoreActions.reorder(keys)}
+                            />
+                          </div>
                           <button
                             type="button"
-                            data-action="vertical-tabs-new-session"
-                            class="mt-1 flex h-7 w-full shrink-0 items-center gap-1.5 rounded-[6px] px-1.5 text-[13px] leading-4 text-v2-text-text-faint hover:bg-v2-background-bg-layer-02 hover:text-v2-text-text-base"
-                            onClick={openNewTab}
-                            aria-label={language.t("command.session.new")}
+                            data-corvu-no-drag
+                            data-action="mobile-tabs-new-session"
+                            class="flex h-7 w-full shrink-0 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-base hover:bg-v2-background-bg-layer-02 focus-visible:outline-none focus-visible:bg-v2-background-bg-layer-02"
+                            onClick={() => {
+                              openNewTab()
+                              setMobileTabs("open", false)
+                            }}
                           >
                             <Icon name="plus" />
                             {language.t("command.session.new")}
                           </button>
-                        </Portal>
-                      )}
-                    </Show>
-                  )}
+                          <div
+                            class="flex shrink-0 flex-col gap-1 border-t border-v2-border-border-muted pt-2"
+                            data-corvu-no-drag
+                          >
+                            <button
+                              type="button"
+                              data-action="mobile-tabs-home"
+                              data-state={layout.route().type === "home" ? "pressed" : undefined}
+                              aria-current={layout.route().type === "home" ? "page" : undefined}
+                              class="flex h-7 w-full items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-faint data-[state=pressed]:text-v2-text-text-base focus-visible:outline-none"
+                              onClick={() => {
+                                if (layout.route().type !== "home") toggleHome()
+                                setMobileTabs("open", false)
+                              }}
+                            >
+                              <Icon name="grid-plus" />
+                              {language.t("home.title")}
+                            </button>
+                            <div class="flex items-center gap-1">
+                              <button
+                                type="button"
+                                data-action="mobile-tabs-settings"
+                                class="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-faint hover:bg-v2-background-bg-layer-02 focus-visible:outline-none focus-visible:bg-v2-background-bg-layer-02"
+                                onClick={() => setMobileTabs({ open: false, settings: true })}
+                              >
+                                <Icon name="settings-gear" size="small" />
+                                {language.t("sidebar.settings")}
+                              </button>
+                              <button
+                                type="button"
+                                data-action="mobile-tabs-help"
+                                class="flex h-7 shrink-0 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-faint hover:bg-v2-background-bg-layer-02 focus-visible:outline-none focus-visible:bg-v2-background-bg-layer-02"
+                                onClick={() => {
+                                  setMobileTabs("open", false)
+                                  platform.openExternal("https://opencode.ai/desktop-feedback")
+                                }}
+                              >
+                                <Icon name="help" size="small" />
+                                {language.t("sidebar.help")}
+                              </button>
+                            </div>
+                          </div>
+                        </Drawer.Content>
+                      </Drawer.Portal>
+                    </Drawer>
+                  }
+                >
+                  <Show
+                    when={props.verticalTabs}
+                    fallback={
+                      <>
+                        <TitlebarTabStrip
+                          tabs={tabsStore}
+                          currentTab={currentTab()}
+                          onNavigate={(tab, el) => {
+                            tabs.select(tab)
+                            el?.scrollIntoView({ behavior: "instant" })
+                          }}
+                          onClose={(tab) => {
+                            const index = tabsStore.findIndex((item) => tabKey(item) === tabKey(tab))
+                            if (index !== -1) tabsStoreActions.closeTab(index)
+                          }}
+                          onReorder={(keys) => tabsStoreActions.reorder(keys)}
+                        />
+                        <Tooltip
+                          placement="bottom"
+                          value={
+                            <>
+                              {language.t("command.session.new")}
+                              <Keybind keys={newTabTooltipKeybind(command)} variant="neutral" />
+                            </>
+                          }
+                        >
+                          <IconButton
+                            type="button"
+                            variant="ghost-muted"
+                            size="large"
+                            class="shrink-0"
+                            icon={<Icon name="plus" />}
+                            onClick={openNewTab}
+                            aria-label={language.t("command.session.new")}
+                          />
+                        </Tooltip>
+                      </>
+                    }
+                  >
+                    {(vertical) => (
+                      <Show when={vertical().mount} keyed>
+                        {(mount) => (
+                          <Portal mount={mount}>
+                            <TitlebarTabStrip
+                              orientation="vertical"
+                              tabs={tabsStore}
+                              currentTab={currentTab()}
+                              onNavigate={(tab, el) => {
+                                tabs.select(tab)
+                                el?.scrollIntoView({ behavior: "instant", block: "nearest" })
+                              }}
+                              onClose={(tab) => {
+                                const index = tabsStore.findIndex((item) => tabKey(item) === tabKey(tab))
+                                if (index !== -1) tabsStoreActions.closeTab(index)
+                              }}
+                              onReorder={(keys) => tabsStoreActions.reorder(keys)}
+                            />
+                            <button
+                              type="button"
+                              data-action="vertical-tabs-new-session"
+                              class="mt-1 flex h-7 w-full shrink-0 items-center gap-1.5 rounded-[6px] px-1.5 text-[13px] leading-4 text-v2-text-text-faint hover:bg-v2-background-bg-layer-02 hover:text-v2-text-text-base"
+                              onClick={openNewTab}
+                              aria-label={language.t("command.session.new")}
+                            >
+                              <Icon name="plus" />
+                              {language.t("command.session.new")}
+                            </button>
+                          </Portal>
+                        )}
+                      </Show>
+                    )}
+                  </Show>
                 </Show>
-                <div class="flex-1" />
+                <Show when={!mobile()}>
+                  <div class="flex-1" />
+                </Show>
                 <TitlebarRight state={rightState()} />
               </div>
             )

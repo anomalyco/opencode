@@ -130,4 +130,41 @@ describe("Session.compact", () => {
       expect(yield* session.inbox(created.id)).toHaveLength(1)
     }),
   )
+
+  it.effect("commits a staged revert before admitting manual compaction", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const bus = yield* Bus.Service
+      const created = yield* session.create({ location })
+      const messageID = SessionMessage.ID.create()
+
+      yield* bus.publish(SessionEvent.InboxEnqueued, {
+        sessionID: created.id,
+        inboxID: messageID,
+        item: {
+          type: "user",
+          payload: { text: "Undo this prompt before compacting." },
+          delivery: "steer",
+        },
+      })
+      yield* bus.publish(SessionEvent.InboxDelivered, {
+        sessionID: created.id,
+        inboxID: messageID,
+      })
+      yield* bus.publish(SessionEvent.RevertEvent.Staged, {
+        sessionID: created.id,
+        revert: { messageID, files: [] },
+      })
+
+      expect((yield* session.get(created.id)).revert?.messageID).toBe(messageID)
+
+      const compacted = yield* session.compact({ sessionID: created.id })
+
+      expect((yield* session.get(created.id)).revert).toBeUndefined()
+      expect(yield* session.context(created.id)).toEqual([])
+      expect(yield* session.inbox(created.id)).toEqual([
+        expect.objectContaining({ id: compacted.id, type: "compaction" }),
+      ])
+    }),
+  )
 })

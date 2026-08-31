@@ -843,7 +843,7 @@ export function createPromptState(input: PromptInput): PromptState {
     }
   }
 
-  const select = (item?: PromptOption) => {
+  const select = (item?: PromptOption, delivery: RunDelivery = "steer") => {
     const next = item ?? options()[menu.selected()]
     if (!next || !area || area.isDestroyed) {
       return
@@ -920,7 +920,7 @@ export function createPromptState(input: PromptInput): PromptState {
       hide()
       syncDraft()
       if (!shell()) {
-        submitPrompt(promptCopy(draft))
+        submitPrompt(promptCopy(draft), delivery)
         return
       }
 
@@ -1047,7 +1047,7 @@ export function createPromptState(input: PromptInput): PromptState {
 
   Keymap.createLayer(() => ({
     priority: 1,
-    enabled: input.prompt() && !visible(),
+    enabled: input.prompt() && (!visible() || mode() === "slash"),
     commands: [
       {
         id: "prompt.queue",
@@ -1059,6 +1059,13 @@ export function createPromptState(input: PromptInput): PromptState {
           submitPrompt(promptCopy(draft), "queue")
         },
       },
+    ],
+  }))
+
+  Keymap.createLayer(() => ({
+    priority: 1,
+    enabled: input.prompt() && !visible(),
+    commands: [
       {
         id: "prompt.editor",
         title: "Open editor",
@@ -1201,7 +1208,7 @@ export function createPromptState(input: PromptInput): PromptState {
 
     if (visible()) {
       if (mode() !== "slash" || options().length > 0) {
-        select()
+        select(undefined, delivery)
         return
       }
 
