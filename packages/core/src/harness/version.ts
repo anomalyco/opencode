@@ -294,6 +294,33 @@ const layer = Layer.effect(
         !activeRow &&
         domainCategory !== "general"
       ) {
+        const variant = domainCategory.endsWith("s")
+          ? domainCategory.slice(0, -1)
+          : `${domainCategory}s`
+
+        activeRow = yield* db
+          .select()
+          .from(harness_version)
+          .where(
+            and(
+              eq(
+                harness_version.domain_category,
+                variant,
+              ),
+              eq(
+                harness_version.is_active,
+                true,
+              ),
+            ),
+          )
+          .get()
+          .pipe(Effect.orElseSucceed(() => undefined))
+      }
+
+      if (
+        !activeRow &&
+        domainCategory !== "general"
+      ) {
         activeRow = yield* db
           .select()
           .from(harness_version)
