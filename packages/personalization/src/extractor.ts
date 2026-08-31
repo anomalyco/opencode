@@ -163,6 +163,15 @@ export function extractSignalsWithLLM(input: {
   currentProfile?: UserProfileData
 }): Effect.Effect<ExtractedSignals> {
   return Effect.gen(function* () {
+    const isLLMModel =
+      input.model &&
+      typeof (input.model as any).route === "function" &&
+      typeof (input.model as any).id === "string"
+
+    if (!isLLMModel) {
+      return parseStructuredSignals(input.message)
+    }
+
     const res = yield* LLM.generateObject({
       model: input.model as Parameters<typeof LLM.generateObject>[0]["model"],
       system:
@@ -202,7 +211,7 @@ const decodeJson = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
 const decodeSignals = Schema.decodeUnknownOption(ExtractedSignalsSchema)
 
 /**
- * Parses structured JSON signals into valid ExtractedSignals using Effect Schema codecs.
+ * Parses structured JSON signals or natural language developer directives into valid ExtractedSignals.
  */
 export function parseStructuredSignals(data: unknown): ExtractedSignals {
   const target =
@@ -214,6 +223,111 @@ export function parseStructuredSignals(data: unknown): ExtractedSignals {
     const opt = decodeSignals(target)
     if (opt._tag === "Some") {
       return transformToSignals(opt.value)
+    }
+  }
+
+  if (typeof data === "string" && data.trim()) {
+    const text = data.trim()
+    const lower = text.toLowerCase()
+
+    const preferenceMemories: ExtractedSignals["preferenceMemories"] = []
+    const semanticMemories: ExtractedSignals["semanticMemories"] = []
+    const workingMemories: ExtractedSignals["workingMemories"] = []
+    const profileDelta: ProfileDelta = {}
+    const style: Record<string, number> = {}
+
+    const sentences = text.split(/(?<=[.!?\n])\s+/).filter(Boolean)
+    for (const sentence of sentences) {
+      const sLower = sentence.toLowerCase()
+      if (
+        sLower.includes("always") ||
+        sLower.includes("never") ||
+        sLower.includes("prefer") ||
+        sLower.includes("don't") ||
+        sLower.includes("do not") ||
+        sLower.includes("avoid") ||
+        sLower.includes("strictly") ||
+        sLower.includes("keep")
+      ) {
+        preferenceMemories.push({
+          tier: "preference",
+          category: sLower.includes("style") || sLower.includes("concise") ? "style" : "conventions",
+          content: sentence.trim(),
+          confidence: 0.9,
+        })
+      }
+    }
+
+    if (
+      preferenceMemories.length === 0 &&
+      (lower.includes("use ") || lower.includes("prefer") || lower.includes("concise") || lower.includes("strict"))
+    ) {
+      preferenceMemories.push({
+        tier: "preference",
+        category: "conventions",
+        content: text,
+        confidence: 0.85,
+      })
+    }
+
+    if (lower.includes("concise") || lower.includes("brief") || lower.includes("short")) {
+      style.verbosity = 0.1
+    } else if (lower.includes("detailed") || lower.includes("explain")) {
+      style.verbosity = 0.9
+    }
+
+    if (lower.includes("strict") || lower.includes("never use any") || lower.includes("strict typing")) {
+      style.typing_rigor = 0.95
+    }
+
+    if (
+      lower.includes("plain function") ||
+      lower.includes("functional") ||
+      lower.includes("no class") ||
+      lower.includes("don't use class")
+    ) {
+      style.abstraction_tolerance = 0.15
+      style.explicitness = 0.9
+    }
+
+    if (lower.includes("inline") || lower.includes("single-use")) {
+      style.inlining_preference = 0.95
+    }
+
+    if (Object.keys(style).length > 0) {
+      profileDelta.style = style
+    }
+
+    const languages: string[] = []
+    if (lower.includes("typescript") || lower.includes(".ts") || lower.includes("types")) languages.push("typescript")
+    if (lower.includes("python") || lower.includes("py")) languages.push("python")
+    if (lower.includes("go") || lower.includes("golang")) languages.push("go")
+    if (languages.length > 0) profileDelta.languages = languages
+
+    const frameworks: string[] = []
+    if (lower.includes("bun")) frameworks.push("bun")
+    if (lower.includes("effect")) frameworks.push("effect-ts")
+    if (lower.includes("vitest")) frameworks.push("vitest")
+    if (lower.includes("pytest")) frameworks.push("pytest")
+    if (frameworks.length > 0) {
+      profileDelta.frameworks = frameworks
+      for (const fw of frameworks) {
+        semanticMemories.push({
+          tier: "semantic",
+          category: "tech_stack",
+          content: `Project utilizes ${fw}`,
+          confidence: 0.9,
+        })
+      }
+    }
+
+    if (preferenceMemories.length > 0 || Object.keys(profileDelta).length > 0) {
+      return {
+        profileDelta: Object.keys(profileDelta).length > 0 ? profileDelta : undefined,
+        preferenceMemories,
+        semanticMemories,
+        workingMemories,
+      }
     }
   }
 
