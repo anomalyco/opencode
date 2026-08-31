@@ -63,7 +63,6 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     const renderer = useRenderer()
     const storage = useStorage()
     const enabled = () => config.tabs.enabled
-    const previews = () => config.experimental?.["session-preview-tabs"] === true
     const [focused, setFocused] = createSignal<boolean>()
     // Keyed reconcile keeps tab object identity across reorders, so strip rows move instead of
     // mutating in place, which per-row animations and drag state depend on.
@@ -178,7 +177,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     }
 
     createEffect(() => {
-      if (enabled() && previews()) return
+      if (enabled()) return
       promotedSession = undefined
       if (!preview.global && !preview.cwd) return
       updatePreview((draft) => {
@@ -203,10 +202,9 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
           history = recordSessionTabHistory(history, sessionID)
           if (state().tabs.some((tab) => tab.sessionID === sessionID)) return
           const fallback = newTab() ? NEW_SESSION_TAB_TITLE : undefined
-          const temporary = previews() && !permanent
-          const replaced = temporary ? previewID() : undefined
+          const replaced = permanent ? undefined : previewID()
           if (replaced) scrollAnchors.delete(replaced)
-          if (temporary) setPreview(sessionID)
+          if (!permanent) setPreview(sessionID)
           update((draft) => {
             if (cancelledTabs.has(sessionID)) return
             const tab = {
@@ -377,7 +375,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
         return state().tabs
       },
       isPreview(sessionID: string) {
-        return enabled() && previews() && previewID() === root(sessionID)
+        return enabled() && previewID() === root(sessionID)
       },
       newTab() {
         return newTab()
@@ -404,7 +402,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
         route.navigate({ type: "session", sessionID: root(sessionID) })
       },
       promote(sessionID: string) {
-        if (!enabled() || !previews()) return
+        if (!enabled()) return
         const session = root(sessionID)
         if (previewID() === session) {
           setPreview(undefined)
@@ -448,7 +446,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
         const tabs = result.tabs
         if (!tabs || !result.sessionID) return
         cancelledTabs.delete(result.sessionID)
-        if (previews()) promotedSession = result.sessionID
+        promotedSession = result.sessionID
         update((draft) => {
           draft.tabs = tabs
         })
