@@ -343,10 +343,14 @@ export const make = Effect.gen(function* () {
         // route — see `closure-task-boundaries.test.ts` "refuses the real Task result notifier
         // before scheduling its observer (K9 result)". Those scopes keep the historical no-op.
         //
-        // Refusing is not a lost prompt. The admission boundary converts `false` into the typed
-        // pre-admission `SessionScopeOwnRefused`, which CP-032 B-7 retains as a sanitized note;
-        // `supplementalAdmissionNote` discloses that the prompt may already be in the transcript,
-        // and `ownLatestUser` adopts an unowned latest User message on a later scoped run.
+        // Refusing is not a lost prompt. `promptAdmitted` converts `false` into the typed
+        // `SessionScopeOwnRefused`, which CP-032 B-7 retains as a sanitized note. The boundary is
+        // exact and narrower than "pre-admission": the refusal lands AFTER durable persistence of
+        // the User message and its Parts, but BEFORE Task's `onAdmitted` flag. That is why it
+        // classifies as a note rather than a post-admission failure, and why the cost is a
+        // persisted prompt rather than a lost one: `supplementalAdmissionNote` discloses that the
+        // prompt may already be in the transcript, and `ownLatestUser` adopts an unowned latest
+        // User message on a later scoped run.
         // Non-admission callers — the summary path and `ownLatestUser` itself — ignore the boolean.
         if (state.resolution) return false
         if (state.closed) return true

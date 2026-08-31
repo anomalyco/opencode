@@ -1188,8 +1188,12 @@ const layer = Layer.effect(
           // `revert.cleanup` and `createUserMessage`, so the scope can resolve in between. Without
           // this arm the supplement would proceed on a dead scope, `result()` would replay the
           // earlier resolution, and its own distinct answer would file into a position the guard
-          // already holds — lost with no note and no error. Refusing pre-admission instead routes it
-          // to the sanctioned supplemental note, because `onAdmitted` has not run yet.
+          // already holds — lost with no note and no error. Refusing here instead routes it to the
+          // sanctioned supplemental note. The boundary is exact and narrower than "pre-admission":
+          // this refusal lands AFTER durable persistence of the User message and its Parts, but
+          // BEFORE Task's `onAdmitted` flag below — which is what keeps it a note rather than a
+          // post-admission failure. The persisted message is disclosed, not hidden: see
+          // `supplementalAdmissionNote`, and `ownLatestUser` can adopt it on a later scoped run.
           Effect.flatMap((owned) =>
             owned
               ? Effect.void

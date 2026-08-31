@@ -555,10 +555,21 @@ describe("Task closure boundaries (CP-023 K82 and K9)", () => {
         // ones. Resolving the scope here also proves the atomic replacement in `open` is not a
         // sufficient answer on its own — it repairs a scope resolved at LOOKUP, and this one resolves
         // after the borrow decision has already been made.
+        // Counts crossings of the exact boundary this refusal sits on. `promptAdmitted` persists the
+        // User message and its Parts FIRST, then joins the scope, and only then fires `onAdmitted`.
+        // Wrapping the callback rather than replacing it keeps production classification intact
+        // while making "the refusal landed after durable persistence but before Task's `onAdmitted`
+        // flag" an assertion instead of an inference from the note alone.
+        const admitted = { value: 0 }
         const raced: TaskPromptOps["prompt"] = (input) =>
           Effect.gen(function* () {
             if (input.attachmentScope) yield* input.attachmentScope.result(settled(input.sessionID))
-            return yield* boot.capture.ops.prompt(input)
+            return yield* boot.capture.ops.prompt({
+              ...input,
+              onAdmitted: Effect.sync(() => {
+                admitted.value += 1
+              }).pipe(Effect.andThen(input.onAdmitted ?? Effect.void)),
+            })
           })
 
         const calls = yield* boot.llm.calls
@@ -590,10 +601,33 @@ describe("Task closure boundaries (CP-023 K82 and K9)", () => {
         // which is what makes a truthful refusal an accepted outcome rather than a silent loss.
         expect(notes[0]).toContain("The prompt may already be recorded in the task transcript.")
 
-        // No stale filing and no wrong execution: the refused supplement neither reached the
-        // provider nor filed an answer into the position the resolved scope already holds.
+        // The exact boundary. Production persisted the prompt and then refused the scope join, so
+        // the callback that would have reclassified this as a POST-admission failure never ran.
+        // Without this, the note above is consistent with a refusal anywhere upstream.
+        expect(admitted.value).toBe(0)
+
+        // Durable persistence really happened — this is the cost the note discloses, and it is
+        // what makes `ownLatestUser` able to adopt the message on a later scoped run rather than
+        // the prompt being silently dropped.
+        const transcript = yield* boot.sessions.messages({ sessionID: child.id })
+        const persisted = transcript.filter(
+          (message) =>
+            message.info.role === "user" &&
+            message.parts.some((part) => part.type === "text" && part.text.includes("more context")),
+        )
+        expect(persisted).toHaveLength(1)
+        expect(persisted[0]?.parts.some((part) => part.type === "text")).toBe(true)
+
+        // No wrong execution: the refused supplement never reached the provider, and the child
+        // produced no Assistant turn for it.
         expect((yield* boot.llm.calls) - calls).toBe(0)
+        expect(transcript.some((message) => message.info.role === "assistant")).toBe(false)
+
+        // No stale filing. The scope resolved holding "settled answer"; a supplement that ignored
+        // the refusal would replay that resolution and file it as this prompt's answer. It must
+        // appear in no delivered surface.
         expect(waited.info?.output).toBeUndefined()
+        expect(JSON.stringify({ notes, output: waited.info?.output })).not.toContain("settled answer")
       }),
     instance,
   )

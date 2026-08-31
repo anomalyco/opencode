@@ -403,8 +403,12 @@ export const TaskTool = Tool.define(
        * Classification consults an `admitted` flag set by its own hook, which fires after the prompt
        * is durably persisted and the conditional claim succeeds. An interrupt rethrows; a failure
        * after admission follows ordinary failure accounting rather than being laundered into an
-       * admission notice; and a failure before admission becomes a notice carried back on this run's
+       * admission notice; and a failure before that flag becomes a notice carried back on this run's
        * own return - no filing, no terminalization, and no interruption of the in-flight run.
+       *
+       * "Before the flag" is not "before anything happened": the scope-join refusal added by
+       * CP-032 R-08 lands after the User message and its Parts are durably persisted. That is the
+       * disclosed cost carried by `supplementalAdmissionNote`, not a silently dropped prompt.
        */
       const executeSupplement = () =>
         Effect.gen(function* () {

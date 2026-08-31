@@ -873,8 +873,9 @@ describe("attachment coordinator", () => {
         // Both halves hold at once. The settled answer stays immutable — had ownership been taken,
         // `invalidate()` would have cleared the candidate and this would read "stale replay" — and
         // the caller still gets a signal it can act on. `promptAdmitted` turns that `false` into
-        // `SessionScopeOwnRefused` before `onAdmitted` fires, so the supplement receives the
-        // sanctioned pre-admission note instead of filing into the earlier position.
+        // `SessionScopeOwnRefused` after durable persistence of the User message and its Parts but
+        // before Task's `onAdmitted` flag, so the supplement receives the sanctioned B-7 note
+        // instead of filing into the earlier position.
         expect(selectedText(yield* scope.result(assistant(sessionID, "stale replay")))).toBe("settled answer")
         expect(yield* coordinator.locateBorrowable(sessionID)).toBeUndefined()
       }),
