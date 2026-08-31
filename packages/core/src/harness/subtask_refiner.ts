@@ -1,11 +1,12 @@
 export * as SubtaskRefinerAgent from "./subtask_refiner"
 
 import { Context, Effect, Layer, Schema } from "effect"
-import { LLM, LLMError } from "@opencode-ai/llm"
+import { LLM, LLMError, LLMClient } from "@opencode-ai/llm"
 import { Database } from "../database/database"
 import { PartTable } from "../session/sql"
 import { SessionSchema } from "../session/schema"
 import { makeLocationNode } from "../effect/app-node"
+import { LayerNodePlatform } from "../effect/app-node-platform"
 import { harness_subtask_feedback } from "./schema"
 import { and, eq } from "drizzle-orm"
 
@@ -46,6 +47,7 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const { db } = yield* Database.Service
+    const llmClient = yield* LLMClient.Service
 
     // Specialized Agent Job: Analyze failed subtask, summarize tool trace from PartTable, and generate refined prompt
     const refine = Effect.fn("SubtaskRefinerAgent.refine")(function* (input: RefinementRequest, model: unknown) {
@@ -100,7 +102,9 @@ ${input.changesRequested ?? "Improve correctness and fulfill task criteria."}
         `.trim(),
         schema: RefinementResult,
         generation: { temperature: 0 },
-      })
+      }).pipe(
+        Effect.provideService(LLMClient.Service, llmClient),
+      )
 
       return res.object
     })
@@ -127,4 +131,4 @@ ${input.changesRequested ?? "Improve correctness and fulfill task criteria."}
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [Database.node] })
+export const node = makeLocationNode({ service: Service, layer, deps: [Database.node, LayerNodePlatform.llmClient] })

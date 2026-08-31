@@ -1,26 +1,52 @@
 export * as HarnessPlugin from "./plugin"
 
 import type { Hooks } from "@opencode-ai/plugin"
-import { Context, Effect, Layer } from "effect"
+import { Context, Effect, Layer, Schema } from "effect"
 import { HarnessVersion } from "./version"
 import { PromptFinalizer } from "./improving_prompt_finalizer"
+import { JudgeAgent } from "./judge"
 import { Database } from "../database/database"
 import { makeLocationNode } from "../effect/app-node"
+import { LayerNodePlatform } from "../effect/app-node-platform"
 import { harness_task, harness_subtask_feedback } from "./schema"
-import { eq, desc } from "drizzle-orm"
+import { SessionTable, PartTable } from "../session/sql"
+import { SessionSchema } from "../session/schema"
+import { SessionStore } from "../session/store"
+import { SessionRunnerModel } from "../session/runner/model"
+import { LocationServiceMap } from "../location-service-map"
+import { eq, desc, and } from "drizzle-orm"
+
+export const FeedbackClassification = Schema.Struct({
+  isFeedback: Schema.Boolean,
+  isSatisfied: Schema.Boolean,
+  feedbackSummary: Schema.String,
+}).annotate({ identifier: "HarnessPlugin.FeedbackClassification" })
+
+export type FeedbackClassification = typeof FeedbackClassification.Type
 
 export interface Interface {
-  readonly createHooks: (domainCategory: string) => Effect.Effect<Hooks>
+  readonly createHooks: (
+    domainCategory: string,
+  ) => Effect.Effect<Hooks>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/HarnessPlugin") {}
+export class Service extends Context.Service<Service, Interface>()(
+  "@opencode/v2/HarnessPlugin",
+) { }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value)
+  )
 }
 
-function parseRecord(text: string | null | undefined): Record<string, unknown> {
+function parseRecord(
+  text: string | null | undefined,
+): Record<string, unknown> {
   if (!text || !text.trim()) return {}
+
   try {
     const parsed: unknown = JSON.parse(text)
     return isRecord(parsed) ? parsed : {}
@@ -29,181 +55,650 @@ function parseRecord(text: string | null | undefined): Record<string, unknown> {
   }
 }
 
+function isClearlyActionableTask(text: string): boolean {
+  const normalized = text.trim()
+
+  if (!normalized) return false
+
+  return /^(?:please\s+)?(?:write|create|build|add|modify|change|update|fix|debug|refactor|run|test|implement|generate|solve|complete|develop|make)\b/i.test(
+    normalized,
+  )
+}
+
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const versionSvc = yield* HarnessVersion.Service
     const finalizerSvc = yield* PromptFinalizer.Service
+    const judge = yield* JudgeAgent.Service
     const { db } = yield* Database.Service
+    const sessionStore = yield* SessionStore.Service
+    const locations = yield* LocationServiceMap.Service
 
-    const createHooks = Effect.fn("HarnessPlugin.createHooks")(function* (domainCategory: string) {
-      const activeVersion = yield* versionSvc.getActiveVersion(domainCategory).pipe(Effect.orElseSucceed(() => undefined))
+    const createHooks = Effect.fn("HarnessPlugin.createHooks")(
+      function* (domainCategory: string) {
+        const activeVersion = yield* versionSvc
+          .getActiveVersion(domainCategory)
+          .pipe(Effect.orElseSucceed(() => undefined))
 
-      const hooks: Hooks = {
-        "chat.params": async (_input, output) => {
-          if (!activeVersion) return
-          if (typeof activeVersion.temperature === "number") output.temperature = activeVersion.temperature
-          if (typeof activeVersion.maxOutputTokens === "number") output.maxOutputTokens = activeVersion.maxOutputTokens
-          const extraOptions = parseRecord(activeVersion.modelOptions)
-          Object.assign(output.options, extraOptions)
-        },
+        const taskDecisions = new Map<string, boolean>()
 
-        "experimental.chat.system.transform": async (_input, output) => {
-          if (!activeVersion) return
-          if (activeVersion.systemPrompt) output.system.push(activeVersion.systemPrompt)
-          const rules = Array.isArray(activeVersion.extractedRules)
-            ? activeVersion.extractedRules
-                .filter((r): r is string => typeof r === "string")
-                .map((r) => `- ${r}`)
-                .join("\n")
-            : ""
-          if (rules) output.system.push(`EXTRACTED LESSONS:\n${rules}`)
-        },
+        const resolveActiveVersion = async (
+          sessionID?: string,
+        ) => {
+          if (!sessionID) return activeVersion
 
-        "experimental.text.complete": async (input, output) => {
-          if (output.text && !output.text.includes("Harness Quality & Evolution Feedback")) {
-            const auditBanner = `\n\n---\n### 📊 Harness Quality & Evolution Feedback\n**Are you satisfied with this subtask result? (Yes/No)**\n*Reply ` + "`Yes`" + ` to confirm or ` + "`No: <your explanation of how you expected it>`" + ` so the Harness can learn and extract rules for future runs.*`
-            output.text += auditBanner
-          }
-        },
-
-        "tool.definition": async (input, output) => {
-          if (!activeVersion) return
-          const toolOverrides = parseRecord(activeVersion.toolOverrides)
-          const override = toolOverrides[input.toolID]
-          if (isRecord(override) && typeof override.description === "string") {
-            output.description = override.description
-          }
-        },
-
-        "tool.execute.before": async (input, output) => {
-          if (!activeVersion) return
-          const toolArgRules = parseRecord(activeVersion.toolOverrides)
-          const toolRule = toolArgRules[input.tool]
-          if (isRecord(toolRule) && isRecord(toolRule._args) && isRecord(output.args)) {
-            Object.assign(output.args, toolRule._args)
-          }
-        },
-
-        "tool.execute.after": async (input, output) => {
-          if (!activeVersion) return
-          const toolNotes = parseRecord(activeVersion.toolOverrides)
-          const toolNote = toolNotes[input.tool]
-          if (isRecord(toolNote) && typeof toolNote.note === "string" && output.output) {
-            output.output = `${output.output}\n\n[HARNESS LESSON: ${toolNote.note}]`
-          }
-        },
-
-        "permission.ask": async (input, output) => {
-          if (!activeVersion) return
-          const permRules = parseRecord(activeVersion.toolOverrides)
-          const rawInput = input as Record<string, unknown>
-          const permissionKey = typeof input === "string"
-            ? input
-            : isRecord(input) && typeof rawInput.permission === "string"
-            ? rawInput.permission
-            : isRecord(input) && typeof rawInput.type === "string"
-            ? rawInput.type
-            : undefined
-          if (permissionKey && typeof permRules[permissionKey] === "string") {
-            const status = permRules[permissionKey]
-            if (status === "allow" || status === "deny" || status === "ask") {
-              output.status = status
-            }
-          }
-        },
-
-        "shell.env": async (_input, output) => {
-          if (!activeVersion) return
-          output.env["HARNESS_DOMAIN"] = domainCategory
-          output.env["HARNESS_VERSION_ID"] = activeVersion.versionID
-        },
-
-        "chat.message": async (input, output) => {
-          const text = output.parts
-            .map((p) => {
-              if (p.type === "text" && typeof p.text === "string") return p.text
-              return ""
-            })
-            .filter(Boolean)
-            .join("\n")
-            .trim()
-
-          if (!text) return
-
-          const yesMatch = /^(?:yes|y)\b/i.test(text)
-          const noMatch = /^(?:no|n)\s*:\s*(.+)/i.test(text)
-
-          if (!yesMatch && !noMatch) return
-
-          const recentTask = await Effect.runPromise(
+          const task = await Effect.runPromise(
             db
               .select()
               .from(harness_task)
-              .where(eq(harness_task.session_id, input.sessionID))
+              .where(eq(harness_task.session_id, sessionID))
               .orderBy(desc(harness_task.task_id))
               .get()
-              .pipe(Effect.orElseSucceed(() => undefined)),
+              .pipe(
+                Effect.orElseSucceed(() => undefined),
+              ),
           ).catch(() => undefined)
 
-          if (!recentTask) return
+          if (task?.task_type) {
+            const specificVer = await Effect.runPromise(
+              versionSvc
+                .getActiveVersion(task.task_type)
+                .pipe(
+                  Effect.orElseSucceed(() => null),
+                ),
+            ).catch(() => null)
 
-          const feedbackID = `feedback_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
-          const isYes = yesMatch
-          const explanation = noMatch ? text.replace(/^no\s*:\s*/i, "").trim() || "User reported dissatisfaction." : ""
-
-          await Effect.runPromise(
-            db
-              .insert(harness_subtask_feedback)
-              .values({
-                id: feedbackID,
-                task_id: recentTask.task_id,
-                subtask_content: "Overall task completion",
-                subtask_prompt: recentTask.task_prompt ?? "",
-                subtask_output: isYes ? "User confirmed satisfaction." : "User reported dissatisfaction.",
-                is_reiterated: false,
-                is_prompt_changed: false,
-                prompt_iteration_count: 1,
-                quality_score: isYes ? 5 : 1,
-                is_satisfied: isYes,
-                user_feedback: isYes ? "Yes" : "No",
-                changes_requested: isYes ? null : explanation,
-                created_at: Date.now(),
-              })
-              .run(),
-          ).catch(() => {})
-
-          // Update task status and satisfaction
-          await Effect.runPromise(
-            db
-              .update(harness_task)
-              .set({
-                task_status: isYes ? "completed" : "failed",
-                task_sub_status: isYes ? "satisfied" : "unsatisfied",
-              })
-              .where(eq(harness_task.task_id, recentTask.task_id))
-              .run(),
-          ).catch(() => {})
-
-          // Trigger asynchronous background evolution and regression testing
-          const targetModel = recentTask.task_model || "local-tpu/zai-org/GLM-5.2"
-          Effect.runPromise(
-            finalizerSvc.finalizeAndEvolve(recentTask.task_id, targetModel).pipe(
-              Effect.orElseSucceed(() => undefined),
-            ),
-          ).catch(() => {})
-        },
-
-        "experimental.session.compacting": async (_input, output) => {
-          if (!activeVersion) return
-          if (activeVersion.systemPrompt) {
-            output.context.push(`Harness Domain Context (${domainCategory}): ${activeVersion.systemPrompt}`)
+            if (specificVer) return specificVer
           }
-        },
-      }
 
-      return hooks
-    })
+          return activeVersion
+        }
+
+        const hooks: Hooks = {
+          "chat.params": async (input, output) => {
+            const currentVersion =
+              await resolveActiveVersion(input.sessionID)
+
+            if (!currentVersion) return
+
+            if (
+              typeof currentVersion.temperature === "number"
+            ) {
+              output.temperature =
+                currentVersion.temperature
+            }
+
+            if (
+              typeof currentVersion.maxOutputTokens ===
+              "number"
+            ) {
+              output.maxOutputTokens =
+                currentVersion.maxOutputTokens
+            }
+
+            const extraOptions = parseRecord(
+              currentVersion.modelOptions,
+            )
+
+            Object.assign(
+              output.options,
+              extraOptions,
+            )
+          },
+
+          "experimental.chat.system.transform": async (
+            input,
+            output,
+          ) => {
+            const currentVersion =
+              await resolveActiveVersion(input.sessionID)
+
+            if (!currentVersion) return
+
+            if (currentVersion.systemPrompt) {
+              output.system.push(
+                currentVersion.systemPrompt,
+              )
+            }
+
+            const modelOpts = parseRecord(currentVersion.modelOptions)
+            const hops = Array.isArray(modelOpts.workflowHops)
+              ? (modelOpts.workflowHops as unknown[])
+                  .filter((h): h is string => typeof h === "string")
+                  .map((h, i) => `Hop ${i + 1}: ${h}`)
+                  .join(" -> ")
+              : ""
+
+            if (hops) {
+              output.system.push(
+                `WORKFLOW EXECUTION HOPS (${currentVersion.domainCategory}):\n${hops}`,
+              )
+            }
+
+            if (
+              typeof modelOpts.communicationContracts === "string" &&
+              modelOpts.communicationContracts.trim()
+            ) {
+              output.system.push(
+                `COMMUNICATION CONTRACT (${currentVersion.domainCategory}):\n${modelOpts.communicationContracts}`,
+              )
+            }
+
+            const rules = Array.isArray(
+              currentVersion.extractedRules,
+            )
+              ? currentVersion.extractedRules
+                .filter(
+                  (r): r is string =>
+                    typeof r === "string",
+                )
+                .map((r) => `- ${r}`)
+                .join("\n")
+              : ""
+
+            if (rules) {
+              output.system.push(
+                `EXTRACTED LESSONS (${currentVersion.domainCategory}):\n${rules}`,
+              )
+            }
+          },
+
+          "experimental.text.complete": async (
+            input,
+            output,
+          ) => {
+            const isTaskDecision = taskDecisions.get(
+              input.sessionID,
+            )
+
+            taskDecisions.delete(input.sessionID)
+
+            // If explicitly marked false (e.g. feedback acknowledgment message), do not show banner
+            if (isTaskDecision === false) return
+
+            if (
+              output.text &&
+              !output.text.includes(
+                "Harness Quality & Evolution Feedback",
+              )
+            ) {
+              const auditBanner =
+                `\n\n---\n` +
+                `### 📊 Harness Quality & Evolution Feedback\n` +
+                `**Are you satisfied with this subtask result? (Yes/No)**\n` +
+                `*Reply ` +
+                "`Yes`" +
+                ` to confirm or ` +
+                "`No: <your explanation of how you expected it>`" +
+                ` so the Harness can learn and extract rules for future runs.*`
+
+              output.text += auditBanner
+            }
+          },
+
+          "tool.execute.before": async (
+            input,
+            output,
+          ) => {
+            const currentVersion =
+              await resolveActiveVersion(input.sessionID)
+
+            if (!currentVersion) return
+
+            const toolArgRules = parseRecord(
+              currentVersion.toolOverrides,
+            )
+
+            const toolRule =
+              toolArgRules[input.tool]
+
+            if (
+              isRecord(toolRule) &&
+              isRecord(toolRule._args) &&
+              isRecord(output.args)
+            ) {
+              Object.assign(
+                output.args,
+                toolRule._args,
+              )
+            }
+          },
+
+          "tool.execute.after": async (
+            input,
+            output,
+          ) => {
+            const currentVersion =
+              await resolveActiveVersion(input.sessionID)
+
+            if (!currentVersion) return
+
+            const toolNotes = parseRecord(
+              currentVersion.toolOverrides,
+            )
+
+            const toolNote =
+              toolNotes[input.tool]
+
+            if (
+              isRecord(toolNote) &&
+              typeof toolNote.note === "string" &&
+              output.output
+            ) {
+              output.output =
+                `${output.output}\n\n[HARNESS LESSON: ${toolNote.note}]`
+            }
+          },
+
+          "permission.ask": async (
+            input,
+            output,
+          ) => {
+            const currentVersion = activeVersion
+
+            if (!currentVersion) return
+
+            const permRules = parseRecord(
+              currentVersion.toolOverrides,
+            )
+
+            const rawInput =
+              input as Record<string, unknown>
+
+            const permissionKey =
+              typeof input === "string"
+                ? input
+                : isRecord(input) &&
+                  typeof rawInput.permission ===
+                  "string"
+                  ? rawInput.permission
+                  : isRecord(input) &&
+                    typeof rawInput.type ===
+                    "string"
+                    ? rawInput.type
+                    : undefined
+
+            if (
+              permissionKey &&
+              typeof permRules[permissionKey] ===
+              "string"
+            ) {
+              const status =
+                permRules[permissionKey]
+
+              if (
+                status === "allow" ||
+                status === "deny" ||
+                status === "ask"
+              ) {
+                output.status = status
+              }
+            }
+          },
+
+          "shell.env": async (
+            input,
+            output,
+          ) => {
+            const currentVersion =
+              await resolveActiveVersion(input.sessionID)
+
+            if (!currentVersion) return
+
+            output.env["HARNESS_DOMAIN"] =
+              currentVersion.domainCategory
+
+            output.env["HARNESS_VERSION_ID"] =
+              currentVersion.versionID
+          },
+
+          // IMPORTANT:
+          // This must be a normal async hook because
+          // this function uses await.
+          "chat.message": async (
+            input,
+            output,
+          ) => {
+            try {
+              const text = output.parts
+                .map((p) => {
+                  if (
+                    p.type === "text" &&
+                    typeof p.text === "string"
+                  ) {
+                    return p.text
+                  }
+
+                  return ""
+                })
+                .filter(Boolean)
+                .join("\n")
+                .trim()
+
+              const trimmed = text.trim()
+              const lower = trimmed.toLowerCase()
+
+              const isYes =
+                /^(?:yes|y|yeah|yep|looks good|perfect|satisfied|confirmed|approved|great|good|fine|ok|okay)(?:[!.\s]|$)/i.test(
+                  lower,
+                )
+
+              const isNo =
+                /^(?:no|n|nope|not good|unsatisfied|wrong|different|dislike|failed|needs work)(?:[:!.\s-]|$)/i.test(
+                  lower,
+                )
+
+              const isFeedback = isYes || isNo
+
+              if (isFeedback) {
+                // User is replying with feedback to the previous task, NOT starting a new task
+                taskDecisions.set(input.sessionID, false)
+                if (output && output.message) {
+                  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+                  ;(output.message as any).isFeedback = true
+                  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+                  ;(output.message as any).isSatisfied = isYes
+                }
+              } else {
+                // Normal user message: mark as task so experimental.text.complete displays the feedback banner
+                taskDecisions.set(input.sessionID, true)
+                return
+              }
+
+              const isSatisfied = isYes
+
+              const explanation = isNo
+                ? text
+                  .replace(
+                    /^(?:no|n|nope|not good|unsatisfied|wrong|different|dislike|failed|needs work)\s*[:\s-]*/i,
+                    "",
+                  )
+                  .trim() ||
+                "User reported dissatisfaction."
+                : "User confirmed satisfaction."
+
+              const selectedModel =
+                input.model
+                  ? `${input.model.providerID}/${input.model.modelID}`
+                  : "local-tpu/zai-org/GLM-5.2"
+
+              // 1. Find existing harness task
+              let recentTask =
+                await Effect.runPromise(
+                  db
+                    .select()
+                    .from(harness_task)
+                    .where(
+                      eq(
+                        harness_task.session_id,
+                        input.sessionID,
+                      ),
+                    )
+                    .orderBy(
+                      desc(harness_task.task_id),
+                    )
+                    .get()
+                    .pipe(
+                      Effect.orElseSucceed(
+                        () => undefined,
+                      ),
+                    ),
+                ).catch(() => undefined)
+
+              // 2. If not found in current session, look up most recent task in database
+              if (!recentTask) {
+                recentTask =
+                  await Effect.runPromise(
+                    db
+                      .select()
+                      .from(harness_task)
+                      .orderBy(
+                        desc(harness_task.task_id),
+                      )
+                      .get()
+                      .pipe(
+                        Effect.orElseSucceed(
+                          () => undefined,
+                        ),
+                      ),
+                  ).catch(() => undefined)
+              }
+
+              // 3. If still no task exists anywhere in database, stop here without creating dummy tasks
+              if (!recentTask) {
+                return
+              }
+
+              // 3. Save user feedback
+              const feedbackID =
+                `feedback_${Date.now()}_${Math.random()
+                  .toString(36)
+                  .slice(2, 7)}`
+
+              await Effect.runPromise(
+                db
+                  .insert(
+                    harness_subtask_feedback,
+                  )
+                  .values({
+                    id: feedbackID,
+                    task_id:
+                      recentTask.task_id,
+                    subtask_content:
+                      "Overall task completion",
+                    subtask_prompt:
+                      recentTask.task_prompt ??
+                      "",
+                    subtask_output:
+                      isSatisfied
+                        ? "User confirmed satisfaction."
+                        : explanation,
+                    is_reiterated:
+                      false,
+                    is_prompt_changed:
+                      false,
+                    prompt_iteration_count:
+                      1,
+                    quality_score:
+                      isSatisfied ? 5 : 1,
+                    is_satisfied:
+                      isSatisfied,
+                    user_feedback:
+                      isSatisfied
+                        ? "Yes"
+                        : "No",
+                    changes_requested:
+                      isSatisfied
+                        ? null
+                        : explanation,
+                    created_at:
+                      Date.now(),
+                  })
+                  .run()
+                  .pipe(Effect.orDie),
+              )
+
+              // 4. Update task status
+              await Effect.runPromise(
+                db
+                  .update(harness_task)
+                  .set({
+                    task_status:
+                      isSatisfied
+                        ? "completed"
+                        : "failed",
+                    task_sub_status:
+                      isSatisfied
+                        ? "satisfied"
+                        : "unsatisfied",
+                  })
+                  .where(
+                    eq(
+                      harness_task.task_id,
+                      recentTask.task_id,
+                    ),
+                  )
+                  .run()
+                  .pipe(Effect.orDie),
+              )
+
+              // 5. Store feedback in session metadata
+              const typedSessionID =
+                SessionSchema.ID.make(
+                  input.sessionID,
+                )
+
+              const sessionRow =
+                await Effect.runPromise(
+                  db
+                    .select({
+                      metadata:
+                        SessionTable.metadata,
+                    })
+                    .from(SessionTable)
+                    .where(
+                      eq(
+                        SessionTable.id,
+                        typedSessionID,
+                      ),
+                    )
+                    .get()
+                    .pipe(
+                      Effect.orElseSucceed(
+                        () => undefined,
+                      ),
+                    ),
+                ).catch(() => undefined)
+
+              if (sessionRow) {
+                const harnessFeedback = {
+                  taskID:
+                    recentTask.task_id,
+                  feedbackID,
+                  isSatisfied,
+                  score:
+                    isSatisfied ? 5 : 1,
+                  status:
+                    isSatisfied
+                      ? "satisfied"
+                      : "unsatisfied",
+                  userFeedback:
+                    isSatisfied
+                      ? "Yes"
+                      : "No",
+                  critique:
+                    explanation,
+                  evaluatedAt:
+                    Date.now(),
+                }
+
+                await Effect.runPromise(
+                  db
+                    .update(SessionTable)
+                    .set({
+                      metadata: {
+                        ...(sessionRow.metadata ??
+                          {}),
+                        harnessFeedback,
+                      },
+                    })
+                    .where(
+                      eq(
+                        SessionTable.id,
+                        typedSessionID,
+                      ),
+                    )
+                    .run()
+                    .pipe(Effect.orDie),
+                )
+              }
+
+              // 6. Resolve the actual model
+              const targetModel =
+                await Effect.runPromise(
+                  sessionStore
+                    .get(
+                      SessionSchema.ID.make(
+                        input.sessionID,
+                      ),
+                    )
+                    .pipe(
+                      Effect.flatMap(
+                        (session) =>
+                          session
+                            ? Effect.provide(
+                              SessionRunnerModel.Service.use(
+                                (
+                                  sessionModels,
+                                ) =>
+                                  sessionModels.resolve(
+                                    session,
+                                  ),
+                              ),
+                              locations.get(
+                                session.location,
+                              ),
+                            )
+                            : Effect.die(
+                              "Session not found",
+                            ),
+                      ),
+                      Effect.orDie,
+                    ),
+                ).catch((error) => {
+
+
+                  return undefined
+                })
+
+              if (!targetModel) return
+
+              // 7. Only evolve prompt harness if user requested changes / reported dissatisfaction
+              if (isSatisfied) {
+                // User confirmed satisfaction: existing harness is validated, no new version candidate needed
+                return
+              }
+
+              // 8. Run finalizer on negative feedback to extract lessons and evolve harness
+              const finalizerResult =
+                await Effect.runPromise(
+                  finalizerSvc.finalizeAndEvolve(
+                    recentTask.task_id,
+                    targetModel,
+                  ),
+                ).catch((error) => {
+                  return undefined
+                })
+
+              // If finalizer failed, stop here.
+              if (!finalizerResult) {
+                return
+              }
+
+              // 8. User feedback is processed: keep original user message clean without prompt rewriting
+            } catch {
+
+            }
+          },
+
+          "experimental.session.compacting": async (
+            _input,
+            output,
+          ) => {
+            if (!activeVersion) return
+
+            if (activeVersion.systemPrompt) {
+              output.context.push(
+                `Harness Domain Context (${domainCategory}): ${activeVersion.systemPrompt}`,
+              )
+            }
+          },
+        }
+
+        return hooks
+      },
+    )
 
     return Service.of({ createHooks })
   }),
@@ -212,6 +707,13 @@ const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [HarnessVersion.node, Database.node, PromptFinalizer.node],
+  deps: [
+    HarnessVersion.node,
+    Database.node,
+    PromptFinalizer.node,
+    JudgeAgent.node,
+    SessionStore.node,
+    LocationServiceMap.node,
+    LayerNodePlatform.llmClient,
+  ],
 })
-

@@ -7,7 +7,7 @@ import { SessionTodo } from "../session/todo"
 import { PartTable, SessionInputTable } from "../session/sql"
 import { SessionSchema } from "../session/schema"
 import { makeLocationNode } from "../effect/app-node"
-import { harness_subtask_feedback } from "./schema"
+import { FlexibleNumber, harness_subtask_feedback } from "./schema"
 import { asc, eq } from "drizzle-orm"
 
 export const SubtaskFeedbackItem = Schema.Struct({
@@ -16,8 +16,8 @@ export const SubtaskFeedbackItem = Schema.Struct({
   subtaskOutput: Schema.optional(Schema.String),
   isReiterated: Schema.optional(Schema.Boolean),
   isPromptChanged: Schema.optional(Schema.Boolean),
-  promptIterationCount: Schema.optional(Schema.Number),
-  quality_score: Schema.Number,
+  promptIterationCount: Schema.optional(FlexibleNumber),
+  quality_score: FlexibleNumber,
   isSatisfied: Schema.Boolean,
   userFeedback: Schema.optional(Schema.String),
   changesRequested: Schema.optional(Schema.String),
@@ -32,7 +32,7 @@ export const SubtaskFeedbackPromptItem = Schema.Struct({
   subtaskOutputSummary: Schema.String,
   isReiterated: Schema.Boolean,
   isPromptChanged: Schema.Boolean,
-  promptIterationCount: Schema.Number,
+  promptIterationCount: FlexibleNumber,
 }).annotate({ identifier: "FeedbackAgent.SubtaskFeedbackPromptItem" })
 
 export type SubtaskFeedbackPromptItem = typeof SubtaskFeedbackPromptItem.Type

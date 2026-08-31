@@ -1,11 +1,13 @@
 export * as RegressionRunner from "./regression_runner"
 
 import { Context, Effect, Layer, Schema } from "effect"
-import { LLM, LLMError } from "@opencode-ai/llm"
+import { LLM, LLMError, LLMClient } from "@opencode-ai/llm"
 import { Database } from "../database/database"
 import { HarnessVersion } from "./version"
 import { makeLocationNode } from "../effect/app-node"
+import { LayerNodePlatform } from "../effect/app-node-platform"
 import {
+  FlexibleNumber,
   harness_task,
   harness_subtask_feedback,
   harness_version,
@@ -20,16 +22,16 @@ export const RegressionTaskResult = Schema.Struct({
   taskID: Schema.String,
   taskPrompt: Schema.String,
   passed: Schema.Boolean,
-  score: Schema.Number,
+  score: FlexibleNumber,
   reasoning: Schema.String,
 }).annotate({ identifier: "RegressionRunner.RegressionTaskResult" })
 export type RegressionTaskResult = typeof RegressionTaskResult.Type
 
 export const RegressionSummary = Schema.Struct({
   versionID: Schema.String,
-  totalTasks: Schema.Number,
-  passedTasks: Schema.Number,
-  passRate: Schema.Number,
+  totalTasks: FlexibleNumber,
+  passedTasks: FlexibleNumber,
+  passRate: FlexibleNumber,
   promoted: Schema.Boolean,
   results: Schema.Array(RegressionTaskResult),
 }).annotate({ identifier: "RegressionRunner.RegressionSummary" })
@@ -47,6 +49,12 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const { db } = yield* Database.Service
     const versionSvc = yield* HarnessVersion.Service
+    // Capture the LLMClient.Service instance at layer construction time.
+    // runRegressionForCandidate may be invoked inside an Effect.runPromise
+    // call that has no AppRuntime context (via the plugin.ts async hook chain),
+    // so the dynamic `yield* LLMClient.Service` inside LLM.generateObject
+    // would fail. By capturing here we ensure the concrete client is available.
+    const llmClient = yield* LLMClient.Service
 
     // -------------------------------------------------------------------------
     // Run dry-eval regression for a staged candidate version.
@@ -89,14 +97,38 @@ const layer = Layer.effect(
         .where(
           and(
             eq(harness_task.task_type, candidate.domain_category),
-            inArray(harness_task.task_status, ["completed", "failed"]),
+            eq(harness_task.task_status, "completed"),
           ),
         )
         .all()
         .pipe(Effect.orElseSucceed(() => []))
 
-      if (!heldTasks.length) {
-        // No held tasks — auto-promote: no evidence of regression
+      // 3. Evaluate each task using stored trace from harness_subtask_feedback (concurrent)
+      const taskIDs = heldTasks.map((t) => t.task_id)
+
+      const allFeedback = taskIDs.length > 0
+        ? yield* db
+            .select()
+            .from(harness_subtask_feedback)
+            .where(inArray(harness_subtask_feedback.task_id, taskIDs))
+            .all()
+            .pipe(Effect.orElseSucceed(() => []))
+        : []
+
+      const feedbackByTask = new Map<string, typeof allFeedback>()
+      for (const fb of allFeedback) {
+        const list = feedbackByTask.get(fb.task_id) ?? []
+        list.push(fb)
+        feedbackByTask.set(fb.task_id, list)
+      }
+
+      // Filter strictly to completed benchmarks that have verified subtask execution traces
+      const validHeldTasks = heldTasks.filter(
+        (task) => (feedbackByTask.get(task.task_id)?.length ?? 0) > 0,
+      )
+
+      if (!validHeldTasks.length) {
+        // No verified completed benchmark tasks — auto-promote per RHI: no evidence of regression
         yield* versionSvc.promoteCandidate(versionID)
         return {
           versionID,
@@ -108,22 +140,8 @@ const layer = Layer.effect(
         } satisfies RegressionSummary
       }
 
-      // 3. Evaluate each task using stored trace from harness_subtask_feedback (concurrent)
-      const taskIDs = heldTasks.map((t) => t.task_id)
-
-      const allFeedback = yield* db
-        .select()
-        .from(harness_subtask_feedback)
-        .where(inArray(harness_subtask_feedback.task_id, taskIDs))
-        .all()
-        .pipe(Effect.orElseSucceed(() => []))
-
-      const feedbackByTask = new Map(
-        allFeedback.map((fb) => [fb.task_id, allFeedback.filter((f) => f.task_id === fb.task_id)]),
-      )
-
       const results = yield* Effect.forEach(
-        heldTasks,
+        validHeldTasks,
         (task) =>
           Effect.gen(function* () {
             const taskFeedbacks = feedbackByTask.get(task.task_id) ?? []
@@ -153,11 +171,17 @@ Task Error (if any): ${task.task_error ?? "None"}
               `.trim(),
               schema: Schema.Struct({
                 isSatisfied: Schema.Boolean,
-                score: Schema.Number,
+                score: FlexibleNumber,
                 reasoning: Schema.String,
               }),
               generation: { temperature: 0 },
-            }).pipe(Effect.map((r) => r.object))
+            }).pipe(
+              // Inject captured LLMClient.Service to ensure the dynamic
+              // service lookup inside LLMClient.generate succeeds regardless
+              // of which runtime context this Effect executes in.
+              Effect.provideService(LLMClient.Service, llmClient),
+              Effect.map((r) => r.object),
+            )
 
             const resultID = `reg_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
             yield* db
@@ -189,9 +213,7 @@ Task Error (if any): ${task.task_error ?? "None"}
       const passRate = results.length > 0 ? passedCount / results.length : 1
 
       // Regression check: any previously-completed task that now fails is a regression
-      const completedTaskIDs = new Set(
-        heldTasks.filter((t) => t.task_status === "completed").map((t) => t.task_id),
-      )
+      const completedTaskIDs = new Set(validHeldTasks.map((t) => t.task_id))
       const hasRegressions = results.some((r) => completedTaskIDs.has(r.taskID) && !r.passed)
 
       const shouldPromote = passRate >= PASS_RATE_THRESHOLD && !hasRegressions
@@ -254,4 +276,4 @@ Task Error (if any): ${task.task_error ?? "None"}
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [Database.node, HarnessVersion.node] })
+export const node = makeLocationNode({ service: Service, layer, deps: [Database.node, HarnessVersion.node, LayerNodePlatform.llmClient] })
