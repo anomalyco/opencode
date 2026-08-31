@@ -12,6 +12,7 @@ import { usePlatform } from "@/runtime/platform/platform"
 import { useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useSettings } from "@/settings/model"
+import { useSettingsSurface } from "@/settings/surface"
 import { WindowsAppMenu } from "./windows-menu"
 import { applyPath, backPath, forwardPath } from "./history"
 import { TitlebarTabStrip } from "@/shell/titlebar/tab-strip"
@@ -47,6 +48,7 @@ export function Titlebar(props: {
   const command = useCommand()
   const language = useLanguage()
   const settings = useSettings()
+  const surface = useSettingsSurface()
   const navigate = useNavigate()
   const location = useLocation()
   const mobile = createMediaQuery("(max-width: 767px)")
@@ -202,11 +204,11 @@ export function Titlebar(props: {
               }
             }
 
-            const currentTab = () => matchRoute(layout.route())
+            const currentTab = () => (surface.store.open ? undefined : matchRoute(layout.route()))
 
             createEffect(() => {
               const route = layout.route()
-              if (!tabs.ready()) return
+              if (!tabs.ready() || surface.store.open) return
               const tab = currentTab()
               if (tab) {
                 const current = session()
@@ -267,7 +269,7 @@ export function Titlebar(props: {
                   return
                 }
                 case "draft": {
-                  const activeTab = currentTab()
+                  const activeTab = matchRoute(route)
                   if (activeTab?.type !== "draft") return
 
                   const model = tabs.stateValue<ComposerState>(activeTab, "prompt")?.model.current()
@@ -381,6 +383,7 @@ export function Titlebar(props: {
                         tabs={tabsStore}
                         currentTab={currentTab()}
                         onNavigate={(tab, el) => {
+                          surface.close()
                           tabs.select(tab)
                           el?.scrollIntoView({ behavior: "instant" })
                         }}
@@ -421,6 +424,7 @@ export function Titlebar(props: {
                             tabs={tabsStore}
                             currentTab={currentTab()}
                             onNavigate={(tab, el) => {
+                              surface.close()
                               tabs.select(tab)
                               el?.scrollIntoView({ behavior: "instant", block: "nearest" })
                             }}
